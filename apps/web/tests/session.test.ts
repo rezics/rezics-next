@@ -1,9 +1,11 @@
+import { readSessionToken } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -191,54 +193,62 @@ function freePort(): Promise<number> {
   });
 }
 
-let child: ChildProcess | undefined;
+let custody: ProcessCustody | undefined;
 let started: Promise<string> | undefined;
+let teardownStarted = false;
 
 // The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: fake.url.origin,
-        AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId,
-        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-        API_RESOURCE: resource,
-        WEBSITE_SCOPES: scopes.join(' '),
-      },
-    });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
     const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
+    try {
+      if (teardownStarted) throw new Error('Session Vite acquisition began after suite teardown');
+      const child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+        cwd: app,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          KERNEL_ORIGIN: fake.url.origin,
+          PUBLIC_ORIGIN: origin,
+          AUTH_ISSUER: `${fake.url.origin}/auth`,
+          WEBSITE_CLIENT_ID: clientId,
+          WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+          API_RESOURCE: resource,
+          WEBSITE_SCOPES: scopes.join(' '),
+        },
+      });
+      custody = ownNodeProcess(child, { label: 'Session Vite server', outputLimit: 8000 });
+      const deadline = Date.now() + 150_000;
+      for (;;) {
+        if (teardownStarted) throw new Error('Session Vite readiness ended when suite teardown began');
+        if (child.exitCode !== null)
+          throw new Error(`dev server exited with ${child.exitCode}:\n${custody.diagnostics()}`);
+        try {
+          const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
+          if (response.status < 500) return origin;
+        } catch {}
+        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
+        await Bun.sleep(500);
+      }
+    } catch (error) {
+      if (!custody) throw error;
+      await withCleanup(async () => {
+        throw error;
+      }, [{ label: 'Session Vite startup', run: () => custody!.close(), timeoutMs: 7000 }]);
+      throw error;
     }
   })();
   return started;
 }
 
-afterAll(() => {
-  fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
+afterAll(async () => {
+  teardownStarted = true;
+  await cleanupAll([
+    { label: 'Session Vite server', run: () => custody?.close(), timeoutMs: 7000 },
+    { label: 'Session Auth and kernel fake', run: () => fake.stop(true), timeoutMs: 5000 },
+  ]);
 });
 
 const setCookie = (response: Response, name: string) =>
@@ -302,7 +312,7 @@ async function credentialOf(value?: string): Promise<string | null> {
 async function csrfTokenOf(origin: string, value: string): Promise<string> {
   const response = await fetch(`${origin}/en`, { headers: { cookie: `${session}=${value}` } });
   expect(response.status).toBe(200);
-  const token = /<meta\s+name="csrf-token"\s+content="([A-Za-z0-9_-]{22})"/.exec(await response.text())?.[1];
+  const token = await readSessionToken(origin, `${session}=${value}`);
   expect(token).toBeDefined();
   return token!;
 }

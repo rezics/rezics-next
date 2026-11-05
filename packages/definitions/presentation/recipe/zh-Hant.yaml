@@ -1,6 +1,41 @@
 types:
   schema:Recipe: 食譜
 properties:
+  schema:suitableForDiet: '適用飲食'
+  schema:recipeInstructions: 作法
   schema:recipeIngredient: 食材
   schema:cookTime: 烹調時間
   schema:recipeYield: 份量
+inverseProperties:
+  schema:suitableForDiet: '適用此飲食的食譜'
+libraryProfiles:
+  recipe.cooking:
+    states:
+      planned: '計劃'
+      in_progress: '進行中'
+      completed: '已完成'
+      paused: '暫停'
+      dropped: '放棄'
+    units:
+      scalar_amount:
+        minute:
+          label: '分鐘'
+          countForms:
+            other: '分鐘'
+    copyKinds:
+      physical: '實體'
+      digital: '數位'
+    copyStatuses:
+      physical:
+        owned: '擁有'
+        disposed: '已處置'
+      digital:
+        owned: '擁有'
+typeDescriptions:
+  schema:Recipe: '製作食物所需的步驟與食材，與食物本身及個人烹調紀錄分開。'
+propertyDescriptions:
+  schema:suitableForDiet: '表明食譜適用飲食的概念，例如素食；不可僅從食材名稱推定。'
+  schema:recipeInstructions: '撰寫的製作步驟文件，接受文件值，而非一般字串或 URL。'
+  schema:recipeIngredient: '帶語言的食材文字，例如麵粉 200 公克；結構化的食物連結另用材料關係。'
+  schema:cookTime: '實際烹調所需的時長，以分（wd:Q7727）為單位的非負整數數量記錄，例如 25；不是一天中的時刻，也不是包含備料與靜置的總時間。'
+  schema:recipeYield: '製作出的份數，以無單位且至少為 1 的整數數量記錄，例如 4；不是自由文字的分量說明。'

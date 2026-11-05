@@ -1,29 +1,42 @@
+import type { LibraryRestoreReceipt, LibraryRestoreResult } from './entries-read';
 import type { KernelClient } from '@rezics/client';
+import { m } from '../paraglide/messages.js';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import { configured, type SessionEnv } from '../session/client';
 import { cookie, SESSION_COOKIE, validId } from '../session/cookies';
-import { libraryFullQuery, libraryListQuery, readLibraryResult } from './reads';
+import { type LibraryEntryStateWrite } from './entries-read';
+import { libraryStateLabel, libraryStateOptions, type LibraryStateChoice } from './profiles';
+import { readRelease } from '../subject/definitions';
+import { requestLocale } from '../kernel/client';
+import { libraryFullQuery, readLibraryResult, StaleCursorError } from './reads';
+import { readSubjectLabelAssignments, type SubjectLabel } from './subject-labels.ts';
+import {
+  collectionCursor,
+  collectionReadFailure,
+  projectChooserPage,
+  projectPublicPage,
+  publicCountOf,
+  subjectCollectionListQuery,
+  type ChooserCollectionRow,
+  type ExactPublicCount,
+  type PublicCollectionRow,
+} from './subject-collection-journey';
 
-export type LibraryEntryState = 'planned' | 'in_progress' | 'completed' | 'paused' | 'dropped';
+export type { LibraryEntryStateWrite };
+export type LibraryEntryStateRead = string;
 export type SubjectSlotEntry = {
   subjectId: string;
-  state: LibraryEntryState;
+  state: LibraryEntryStateRead;
   revision: number;
+  incarnationId?: string | null;
 };
-export type SubjectSlotCollection = {
-  id: string;
-  curatorAccountId: string;
-  title: string;
-  memberCount: number;
-  curator: { id: string; handle: string | null; displayName: string | null } | null;
-};
-export type SubjectPublicCollection = {
-  id: string;
-  curatorAccountId: string;
-  title: string;
-  multiplicity: number;
-  curator: { id: string; handle: string | null; displayName: string | null } | null;
-};
+
+export function subjectSlotStateLabel(_state: LibraryEntryStateRead): string {
+  return m.library_other();
+}
+export type SubjectSlotCollection = ChooserCollectionRow;
+export type SubjectPublicCollection = PublicCollectionRow;
+export type { ExactPublicCount };
 export type SubjectLibrarySlotResult =
   | 'added'
   | 'saved'
@@ -31,52 +44,93 @@ export type SubjectLibrarySlotResult =
   | 'collection-full'
   | 'conflict'
   | 'closed'
-  | 'unavailable';
+  | 'unsupported_library_profile'
+  | 'unavailable'
+  | 'dynamic'
+  | 'label-capacity'
+  | 'label-restore-stale'
+  | 'label-restore-expired'
+  | 'label-restore-occupied'
+  | 'label-restore-capacity'
+  | 'label-removed';
+export type SubjectLabelUndo = { labelId: string; assignmentId: string; revision: number };
+/** Identity of the session actually used by this read, never an expected browser identity. */
+export type SubjectLibraryReadIdentity = { viewer: string; csrfToken: string | null };
+export type SubjectLibraryReadProvenance = SubjectLibraryReadIdentity & { subjectId: string; readId: string };
 export type SubjectLibrarySlotData = {
+  provenance?: SubjectLibraryReadProvenance;
   session: 'signed-in' | 'signed-out' | 'unavailable';
   csrfToken: string | null;
+  labelCreateKey?: string;
+  labelAssignKey?: string;
+  labelUndoKey?: string;
+  labelRemoveKeys?: Record<string, string>;
   entryAvailable: boolean;
   entry: SubjectSlotEntry | null;
+  stateOptions?: LibraryStateChoice[];
+  entryStateLabel?: string;
   publicCollections: SubjectPublicCollection[] | null;
   publicCollectionsNext: string | null;
+  publicCollectionsCount?: ExactPublicCount;
   collectionsLoaded: boolean;
   collections: SubjectSlotCollection[] | null;
+  collectionsNext?: string | null;
+  labels: SubjectLabel[] | null;
+  labelUndo?: SubjectLabelUndo;
+  labelResult?: SubjectLibrarySlotResult;
   result?: SubjectLibrarySlotResult;
+  undo?: LibraryRestoreReceipt;
+  restore?: LibraryRestoreResult;
 };
 
 export type SubjectLibraryMutation = {
   subjectId: string;
   intent: 'entry' | 'member';
+  expectedReader?: string;
+  expectedCredential?: string;
   action?: 'save' | 'clear';
-  state?: LibraryEntryState;
+  state?: LibraryEntryStateWrite;
   revision?: number;
+  incarnationId?: string | null;
   collectionId?: string;
   idempotencyKey: string;
 };
 export type SubjectLibraryMutationResponse = {
   result: SubjectLibrarySlotResult;
   entry?: SubjectSlotEntry | null;
+  undo?: Omit<LibraryRestoreReceipt, 'subjectId'>;
 };
 export type SubjectSlotCollectionsResult = {
-  state: 'loaded' | 'closed' | 'unavailable';
+  provenance?: SubjectLibraryReadIdentity;
+  state: 'loaded' | 'closed' | 'unavailable' | 'expired';
   collections: SubjectSlotCollection[] | null;
+  next?: string | null;
 };
 
-type EntryResult = { libraryEntry: SubjectSlotEntry };
-type PublicCollectionsResult = { collections: SubjectPublicCollection[]; next: string | null };
-type CollectionsResult = { collections: SubjectSlotCollection[]; next: string | null };
-type SlotSession =
-  | { state: 'signed-in'; subject: string; csrfToken: string; authorization: string }
-  | { state: 'signed-out' | 'unavailable'; csrfToken: null };
+export type SubjectPublicCollectionsResult = {
+  state: 'loaded' | 'closed' | 'unavailable' | 'expired';
+  collections: SubjectPublicCollection[] | null;
+  next: string | null;
+  count: ExactPublicCount;
+};
 
-async function readSlotSession(request: Request, sessionEnv: Partial<SessionEnv>): Promise<SlotSession> {
+type EntryResult = { libraryEntry: SubjectSlotEntry & { subject?: { type?: string } | null } };
+export type SubjectSlotSession =
+  | { state: 'signed-in'; subject: string; csrfToken: string | null; authorization: string }
+  | { state: 'signed-out'; csrfToken: null }
+  | { state: 'unavailable'; csrfToken: null; sessionUnavailable?: true };
+
+export async function readSubjectSlotSession(
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+): Promise<SubjectSlotSession> {
   if (!configured(sessionEnv)) return { state: 'unavailable', csrfToken: null };
   const id = cookie(request, SESSION_COOKIE);
   if (!validId(id)) return { state: 'signed-out', csrfToken: null };
   try {
     const credential = await sessionEnv.SESSIONS.get(sessionEnv.SESSIONS.idFromName(id)).credential();
     if (credential.status === 'absent') return { state: 'signed-out', csrfToken: null };
-    if (credential.status !== 'active') return { state: 'unavailable', csrfToken: null };
+    if (credential.status !== 'active') return { state: 'unavailable', csrfToken: null, sessionUnavailable: true };
     return {
       state: 'signed-in',
       subject: credential.subject,
@@ -84,7 +138,7 @@ async function readSlotSession(request: Request, sessionEnv: Partial<SessionEnv>
       authorization: `Bearer ${credential.accessToken}`,
     };
   } catch {
-    return { state: 'unavailable', csrfToken: null };
+    return { state: 'unavailable', csrfToken: null, sessionUnavailable: true };
   }
 }
 
@@ -92,7 +146,7 @@ async function readEntry(
   client: KernelClient,
   subjectId: string,
   authorization: string,
-): Promise<SubjectSlotEntry | null> {
+): Promise<(SubjectSlotEntry & { subject?: { type?: string } | null }) | null> {
   const result = await client.libraryEntries({ subjectId }).get({
     query: libraryFullQuery(),
     headers: { authorization },
@@ -101,38 +155,73 @@ async function readEntry(
   return readLibraryResult<EntryResult>(result as never).libraryEntry;
 }
 
-async function readPublicCollections(client: KernelClient, subjectId: string): Promise<PublicCollectionsResult> {
-  const result = await client.subjects({ id: subjectId }).collections.get({ query: libraryListQuery() });
-  return readLibraryResult<PublicCollectionsResult>(result as never);
+async function readPublicCollections(
+  client: KernelClient,
+  subjectId: string,
+  cursor?: string,
+): Promise<{ collections: SubjectPublicCollection[]; next: string | null; count: ExactPublicCount }> {
+  const result = await client.subjects({ id: subjectId }).collections.get({
+    query: subjectCollectionListQuery(cursor),
+  });
+  return projectPublicPage(readLibraryResult<unknown>(result as never));
 }
 
 async function readCollections(
   client: KernelClient,
   accountId: string,
   authorization: string,
-): Promise<SubjectSlotCollection[]> {
+  cursor?: string,
+): Promise<{ collections: SubjectSlotCollection[]; next: string | null }> {
   const result = await client.collections.get({
-    query: { ...libraryListQuery(), curatorAccountId: accountId },
+    query: { ...subjectCollectionListQuery(cursor), curatorAccountId: accountId },
     headers: { authorization },
   });
-  return readLibraryResult<CollectionsResult>(result as never).collections;
+  return projectChooserPage(readLibraryResult<unknown>(result as never));
 }
 
-/** Reads the viewer's first collections page for the add menu. */
+function collectionsFailure(error: unknown, provenance?: SubjectLibraryReadIdentity): SubjectSlotCollectionsResult {
+  const state =
+    collectionReadFailure(error) === 'expired' ? 'expired' : isPlatformClosedError(error) ? 'closed' : 'unavailable';
+  return { state, collections: null, next: null, ...(provenance ? { provenance } : {}) };
+}
+
+/** Reads one owner collections page for the add chooser, including later cursors. */
 export async function loadSubjectLibraryCollections(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
+  cursor?: string,
 ): Promise<SubjectSlotCollectionsResult> {
-  const identity = await readSlotSession(request, sessionEnv);
-  if (identity.state !== 'signed-in') return { state: 'unavailable', collections: null };
+  const identity = await readSubjectSlotSession(request, sessionEnv);
+  if (identity.state !== 'signed-in') return { state: 'unavailable', collections: null, next: null };
+  const provenance = { viewer: identity.subject, csrfToken: identity.csrfToken };
   try {
-    return {
-      state: 'loaded',
-      collections: await readCollections(client, identity.subject, identity.authorization),
-    };
+    collectionCursor(cursor);
+    const page = await readCollections(client, identity.subject, identity.authorization, cursor);
+    return { state: 'loaded', collections: page.collections, next: page.next, provenance };
   } catch (error) {
-    return { state: isPlatformClosedError(error) ? 'closed' : 'unavailable', collections: null };
+    return collectionsFailure(error, provenance);
+  }
+}
+
+/** Reads one public Collections page for this Subject, including later cursors. */
+export async function loadSubjectPublicCollections(
+  client: KernelClient,
+  subjectId: string,
+  cursor?: string,
+): Promise<SubjectPublicCollectionsResult> {
+  try {
+    collectionCursor(cursor);
+    const page = await readPublicCollections(client, subjectId, cursor);
+    return { state: 'loaded', collections: page.collections, next: page.next, count: page.count };
+  } catch (error) {
+    const state =
+      error instanceof StaleCursorError || collectionReadFailure(error) === 'expired'
+        ? 'expired'
+        : isPlatformClosedError(error)
+          ? 'closed'
+          : 'unavailable';
+    return { state, collections: null, next: null, count: publicCountOf(undefined) };
   }
 }
 
@@ -144,17 +233,30 @@ export async function loadSubjectLibrarySlot(
   subjectId: string,
   loadCollections = false,
   resultValue?: string,
+  labelResultValue?: string,
+  labelUndo?: SubjectLabelUndo,
+  subjectType?: string,
 ): Promise<SubjectLibrarySlotData> {
-  const identityPromise = readSlotSession(request, sessionEnv);
+  const identityPromise = readSubjectSlotSession(request, sessionEnv);
   const publicPromise = readPublicCollections(client, subjectId).then(
     (page) => ({ available: true as const, ...page }),
-    () => ({ available: false as const, collections: null, next: null }),
+    () => ({
+      available: false as const,
+      collections: null,
+      next: null,
+      count: publicCountOf(undefined),
+    }),
   );
   const [identity, publicResult] = await Promise.all([identityPromise, publicPromise]);
   let entryAvailable = false;
   let entry: SubjectSlotEntry | null = null;
+  let entryType = subjectType;
+  let stateOptions: LibraryStateChoice[] = [];
+  let entryStateLabel: string | undefined;
   let collections: SubjectSlotCollection[] | null = null;
+  let collectionsNext: string | null = null;
   let collectionsLoaded = false;
+  let labels: SubjectLabel[] | null = null;
   if (identity.state === 'signed-in') {
     const entryPromise = readEntry(client, subjectId, identity.authorization).then(
       (value) => ({ available: true as const, value }),
@@ -167,11 +269,34 @@ export async function loadSubjectLibrarySlot(
             () => ({ loaded: false as const, value: null }),
           )
         : Promise.resolve({ loaded: false as const, value: null });
-    const [entryResult, collectionResult] = await Promise.all([entryPromise, collectionPromise]);
+    const labelsPromise = client.platform.exposure
+      .get({ headers: { authorization: identity.authorization } })
+      .then((result) => result.data?.admitted?.includes('library_label.assignment_list') ?? false)
+      .catch(() => false)
+      .then((allowed) =>
+        allowed ? readSubjectLabelAssignments(client, subjectId, identity.authorization).catch(() => null) : null,
+      );
+    const [entryResult, collectionResult, labelsResult] = await Promise.all([
+      entryPromise,
+      collectionPromise,
+      labelsPromise,
+    ]);
     entryAvailable = entryResult.available;
     entry = entryResult.value;
+    entryType ??= entryResult.value?.subject?.type;
+    if (entryType) {
+      const release = await readRelease().catch(() => undefined);
+      if (release) {
+        const locale = requestLocale() ?? 'en';
+        stateOptions = libraryStateOptions(release, entryType, locale);
+        if (entry)
+          entryStateLabel = libraryStateLabel(release, entryType, entry.state, locale)?.text ?? m.library_other();
+      }
+    }
     collectionsLoaded = collectionResult.loaded;
-    collections = collectionResult.value;
+    collections = collectionResult.value?.collections ?? null;
+    collectionsNext = collectionResult.value?.next ?? null;
+    labels = labelsResult;
   }
   const result =
     resultValue === 'added' ||
@@ -180,18 +305,58 @@ export async function loadSubjectLibrarySlot(
     resultValue === 'collection-full' ||
     resultValue === 'conflict' ||
     resultValue === 'closed' ||
-    resultValue === 'unavailable'
+    resultValue === 'unsupported_library_profile' ||
+    resultValue === 'unavailable' ||
+    resultValue === 'dynamic' ||
+    resultValue === 'label-capacity' ||
+    resultValue === 'label-restore-stale' ||
+    resultValue === 'label-restore-expired' ||
+    resultValue === 'label-restore-occupied' ||
+    resultValue === 'label-restore-capacity' ||
+    resultValue === 'label-removed'
       ? resultValue
       : undefined;
+  const labelResult =
+    labelResultValue === 'label-capacity' ||
+    labelResultValue === 'label-restore-stale' ||
+    labelResultValue === 'label-restore-expired' ||
+    labelResultValue === 'label-restore-occupied' ||
+    labelResultValue === 'label-restore-capacity' ||
+    labelResultValue === 'label-removed' ||
+    labelResultValue === 'closed' ||
+    labelResultValue === 'unavailable'
+      ? labelResultValue
+      : undefined;
   return {
+    labelRemoveKeys: Object.fromEntries((labels ?? []).map((label) => [label.id, crypto.randomUUID()])),
+    labelCreateKey: crypto.randomUUID(),
+    labelAssignKey: crypto.randomUUID(),
+    labelUndoKey: crypto.randomUUID(),
     session: identity.state,
     csrfToken: identity.csrfToken,
+    ...(identity.state === 'signed-in'
+      ? {
+          provenance: {
+            viewer: identity.subject,
+            csrfToken: identity.csrfToken,
+            subjectId,
+            readId: crypto.randomUUID(),
+          },
+        }
+      : {}),
     entryAvailable,
     entry,
+    stateOptions,
+    ...(entryStateLabel === undefined ? {} : { entryStateLabel }),
     publicCollections: publicResult.available ? publicResult.collections : null,
     publicCollectionsNext: publicResult.next,
+    publicCollectionsCount: publicResult.available ? publicResult.count : publicCountOf(undefined),
     collectionsLoaded,
     collections,
+    collectionsNext,
+    labels,
+    ...(labelUndo ? { labelUndo } : {}),
+    ...(labelResult ? { labelResult } : {}),
     ...(result ? { result } : {}),
   };
 }

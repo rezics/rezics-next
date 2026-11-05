@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import releaseSchema from '../schema/release.json';
+import { bundledRelease } from '../src/bundled.ts';
 import { DATA_TYPES, RELEASE_FORMAT, releaseDigest, validateRelease, valueSchema, type Release } from '../src/index.ts';
 
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
@@ -160,9 +161,14 @@ test('each data type has exactly its own members and its fixed value schema', ()
     required: ['time', 'precision', 'calendarmodel'],
     additionalProperties: false,
     properties: {
-      time: { type: 'string', pattern: '^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$' },
+      time: { type: 'string', maxLength: 33, pattern: '^[+-][0-9]{4,16}-[0-9]{2}-[0-9]{2}T00:00:00Z$' },
       precision: { enum: [9, 10, 11] },
-      calendarmodel: { const: 'http://www.wikidata.org/entity/Q1985727' },
+      calendarmodel: {
+        enum: ['http://www.wikidata.org/entity/Q1985727', 'http://www.wikidata.org/entity/Q1985786'],
+      },
+      timezone: { type: 'integer', minimum: -9007199254740991, maximum: 9007199254740991 },
+      before: { type: 'integer', minimum: 0, maximum: 9007199254740991 },
+      after: { type: 'integer', minimum: 0, maximum: 9007199254740991 },
     },
   });
   expect(valueSchema('monolingualtext', { pattern: '^\\S' }).properties.text).toEqual({
@@ -193,4 +199,84 @@ test('patterns must be safe and releases are bounded', () => {
       };
   });
   expect(pointers(crowded)).toEqual(['limit /types']);
+});
+
+test('the bundled catalogue admits exact file hashes, byte size and directed file associations', () => {
+  const { types, properties } = bundledRelease;
+  expect(bundledRelease.catalogue.version).toBe('1.0.6');
+  expect(types['schema:Quotation']).toMatchObject({
+    iri: 'http://schema.org/Quotation',
+    bases: ['schema:Thing'],
+    mappings: ['wd:Q815341'],
+    properties: expect.arrayContaining([
+      'schema:text',
+      'schema:inLanguage',
+      'schema:spokenByCharacter',
+      'schema:about',
+      'schema:creator',
+      'schema:actor',
+    ]),
+  });
+  expect(properties['schema:text']).toMatchObject({
+    datatype: 'document',
+    multivalued: false,
+    value: { required: ['language', 'document'] },
+  });
+  expect(properties['schema:spokenByCharacter']).toMatchObject({
+    datatype: 'wikibase-item',
+    qualifiers: ['rezics:spoilerLevel'],
+    targets: ['wd:Q95074'],
+  });
+  expect(properties['schema:creator']?.targets).toEqual(['schema:Organization', 'schema:Person']);
+  expect(properties['schema:actor']?.targets).toEqual(['schema:Person']);
+  for (const locale of ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']) {
+    expect(types['schema:Quotation']?.labels[locale]).toBeTruthy();
+    for (const property of [
+      'schema:text',
+      'schema:spokenByCharacter',
+      'schema:about',
+      'schema:creator',
+      'schema:actor',
+    ])
+      expect(properties[property]?.labels[locale]).toBeTruthy();
+  }
+  expect(types['schema:MediaObject']?.properties).toEqual(
+    expect.arrayContaining([
+      'wdt:P4092',
+      'wdt:P3575',
+      'rezics:codec',
+      'rezics:fileQuality',
+      'schema:inLanguage',
+      'rezics:releaseGroup',
+      'schema:encodesCreativeWork',
+    ]),
+  );
+  expect(types['rezics:AnimeRelease']?.properties).toContain('schema:associatedMedia');
+  expect(types['rezics:ReleaseGroup']?.bases).toContain('schema:Organization');
+  expect(properties['wdt:P4092']).toMatchObject({ datatype: 'string', qualifiers: ['rezics:hashAlgorithm'] });
+  expect(properties['wdt:P3575']).toMatchObject({
+    datatype: 'quantity',
+    units: ['http://www.wikidata.org/entity/Q8799'],
+  });
+  expect(properties['rezics:releaseGroup']?.relation?.inverse).toBe('rezics:groupFiles');
+  expect(properties['schema:encodesCreativeWork']?.relation?.inverse).toBe('rezics:encodedByFile');
+  expect(properties['schema:associatedMedia']?.relation?.inverse).toBe('rezics:includedInRelease');
+  for (const type of ['rezics:CatalogueFile', 'wd:Q82753', 'wd:Q55327']) expect(types[type]).toBeUndefined();
+  for (const locale of ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']) {
+    for (const property of [
+      'wdt:P4092',
+      'wdt:P3575',
+      'rezics:hashAlgorithm',
+      'rezics:codec',
+      'rezics:fileQuality',
+      'rezics:releaseGroup',
+    ]) {
+      expect(properties[property]?.labels[locale]).toBeTruthy();
+      expect(properties[property]?.descriptions?.[locale]).toBeTruthy();
+    }
+    expect(types['schema:MediaObject']?.labels[locale]).toBeTruthy();
+    expect(types['schema:MediaObject']?.descriptions?.[locale]).toBeTruthy();
+    expect(types['rezics:ReleaseGroup']?.labels[locale]).toBeTruthy();
+    expect(types['rezics:ReleaseGroup']?.descriptions?.[locale]).toBeTruthy();
+  }
 });

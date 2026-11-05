@@ -1,2 +1,52 @@
 types:
   schema:MusicAlbum: Album
+  schema:MusicRelease: Musikveröffentlichung
+  schema:MusicRecording: Aufnahme
+
+  schema:Quotation: Zitat
+
+properties:
+  schema:releaseOf: Veröffentlichung von
+  schema:catalogNumber: Katalognummer
+  schema:recordLabel: Plattenlabel
+  schema:track: Titel
+  schema:byArtist: Interpret
+  wdt:P642: von
+
+  schema:text: Text
+  schema:spokenByCharacter: Sprecher
+  schema:about: Werk
+  schema:creator: genannte Urheberschaft
+  schema:actor: Stimme
+
+inverseProperties:
+  schema:releaseOf: Albumveröffentlichungen
+  schema:recordLabel: Veröffentlichungen dieses Labels
+  schema:track: Veröffentlichungen mit dieser Aufnahme
+  schema:byArtist: Aufnahmen dieses Interpreten
+
+  schema:spokenByCharacter: Gesprochene Zitate
+  schema:about: Zitate
+  schema:creator: Zugeschriebene Zitate
+  schema:actor: Vertonte Zitate
+
+typeDescriptions:
+  schema:MusicAlbum: 'Ein Musikalbum als Werk mit zusammengehörigen Titeln, unabhängig von einem bestimmten Exemplar oder einer vertriebenen Ausgabe.'
+  schema:MusicRelease: 'Eine bestimmte veröffentlichte Ausgabe eines Musikalbums mit Katalognummer, Format, Datum und geordneten Aufnahmen. Getrennt vom Albumwerk, persönlichem Exemplar, Wiedergabedatei und einzelner Aufnahme.'
+  schema:MusicRecording: 'Eine identifizierte aufgenommene Darbietung eines Musikwerks, etwa ein Song-Take. Getrennt von Albumgruppierung, veröffentlichter Ausgabe, Wiedergabedatei und persönlichem Exemplar.'
+
+  schema:Quotation: 'Ein verfasstes Zitat aus einem Werk, mit getrenntem Sprecher, genannter Urheberschaft und belegter Quelle.'
+
+propertyDescriptions:
+  schema:releaseOf: 'Das Musikalbum-Werk, das diese veröffentlichte Ausgabe realisiert; die Ausgabe ist kein neuer Name für das Album.'
+  schema:catalogNumber: 'Die vom herausgebenden Label vergebene Katalognummer dieser Ausgabe, als Quelltext gespeichert.'
+  schema:recordLabel: 'Die Organisation, die als Plattenlabel dieser Ausgabe genannt wird.'
+  schema:track: 'Eine identifizierte Aufnahme auf dieser Ausgabe. Position, Namensnennung, Rolle, Datum und Listenvorkommen trennen wiederholte Nutzungen derselben Aufnahme.'
+  schema:byArtist: 'Eine Person oder Organisation, die als Interpret dieser Aufnahme genannt wird, mit Namensnennung, Reihenfolge und genauer Rolle.'
+  wdt:P642: 'Das Listenvorkommen-Konzept, das zwei Zuordnungen zur selben Aufnahme in getrennten Slots hält. Es ist kein veröffentlichtes Tonträger- oder Seitenschema.'
+
+  schema:text: 'Das genaue verfasste Zitatdokument. Ein Dokumentwert, kein Beziehungslabel und kein anderes Textfeld.'
+  schema:spokenByCharacter: 'Die fiktive Figur, die dieses Zitat spricht. Keine genannte Urheberschaft und keine Stimme.'
+  schema:about: 'Das Werk, das dieses Zitat belegt. Die genaue Werk- oder Teilidentität gilt; eine Teilzeichenkette erzeugt keine Beziehung.'
+  schema:creator: 'Eine Person oder Organisation, der dieses Zitat zugeschrieben wird, getrennt vom fiktiven Sprecher.'
+  schema:actor: 'Eine optionale Stimme. Ein Sprecher impliziert ohne qualifizierte Quellenaussage keine Stimme.'

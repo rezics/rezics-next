@@ -3,11 +3,26 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
-import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
-import { runStoreCost, type Staged } from '../../../specs/imports-run-store-driver.ts';
+import {
+  countedSample,
+  countedViolations,
+  type CountedCheck,
+  type CountedSample,
+  type CountedValues,
+} from '../../kernel/test/support/growth-counters.ts';
+import { runStoreCounts, type Staged } from '../../../specs/imports-run-store-driver.ts';
 import { createImportRunStoreDriver } from './run-store-driver.ts';
 import { RunStore } from '../src/run-store.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
+
+const fixedCounts: CountedCheck = {
+  read: (counts) => counts as CountedValues,
+  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
+  slack: {
+    'sqlite returned rows': { absolute: 2, relative: 0.1 },
+    'sqlite statements': { absolute: 0, relative: 0 },
+  },
+};
 
 function record(key: string, revision: number): Staged {
   const projection: Staged['projection'] = [
@@ -58,7 +73,7 @@ const ack = (keys: string[]): BatchWriteResult => ({
 test('fixed run-state operations stay indexed at three scales', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'run-growth-'));
   const d = await createImportRunStoreDriver({ directory });
-  const samples = new Map<string, GrowthSample[]>();
+  const samples = new Map<string, { scale: number; counted: CountedSample }[]>();
   try {
     for (const scale of [32, 128, 512]) {
       // One deterministic population, same source and indexes, three historical versions.
@@ -82,11 +97,11 @@ test('fixed run-state operations stay indexed at three scales', async () => {
       }
       const measure = async <T>(name: string, operation: () => Promise<T>) => {
         const measured = await d.measure(operation);
-        const cost = runStoreCost(measured.evidence, 8);
-        expect(cost.rows).toBeLessThanOrEqual(64);
-        expect(cost.statements).toBeLessThanOrEqual(48);
+        const counts = runStoreCounts(measured.evidence, 8);
+        expect(counts['sqlite returned rows']).toBeLessThanOrEqual(64);
+        expect(counts['sqlite statements']).toBeLessThanOrEqual(48);
         const group = samples.get(name) ?? [];
-        group.push({ scale, cost });
+        group.push({ scale, counted: countedSample([counts]) });
         samples.set(name, group);
         return measured.value;
       };
@@ -128,8 +143,7 @@ test('fixed run-state operations stay indexed at three scales', async () => {
       }
       expect((await d.source('growth')).count).toBe(scale);
     }
-    for (const group of samples.values())
-      assertGrowth(group, { rows: 'constant', blocks: 'constant', statements: 'constant' });
+    for (const group of samples.values()) expect(countedViolations(fixedCounts, group)).toEqual([]);
   } finally {
     await d.close();
     await rm(directory, { recursive: true, force: true });
@@ -245,7 +259,7 @@ async function measureRunGrowth(
   page = false,
   status: 'staging' | 'ready' = 'ready',
 ) {
-  const samples: GrowthSample[] = [];
+  const samples: { scale: number; counted: CountedSample }[] = [];
   const plans: string[] = [];
   for (const scale of RUN_SCALES) {
     const directory = await mkdtemp(join(tmpdir(), 'run-store-growth-followup-'));
@@ -271,7 +285,7 @@ async function measureRunGrowth(
         const statements = measured.statements.map((event) => `${event.sql}\n${JSON.stringify(event.plan)}`).join('\n');
         throw new Error(`${name}: ${String(error)}\n${statements}`);
       }
-      samples.push({ scale, cost: measured.cost });
+      samples.push({ scale, counted: countedSample([measured.counts]) });
       plans.push(
         `scale ${scale}:\n${measured.statements.map((event) => `${event.sql}\n${JSON.stringify(event.plan)}`).join('\n')}`,
       );
@@ -281,15 +295,18 @@ async function measureRunGrowth(
     }
   }
   try {
-    assertGrowth(
-      samples,
-      {
-        rows: page ? 'linear' : 'constant',
-        blocks: 'constant',
-        statements: page ? 'linear' : 'constant',
-      },
-      { blocks: { absolute: 0, relative: 0 } },
-    );
+    expect(
+      countedViolations(
+        {
+          ...fixedCounts,
+          bounds: {
+            'sqlite returned rows': page ? 'linear' : 'constant',
+            'sqlite statements': page ? 'linear' : 'constant',
+          },
+        },
+        samples,
+      ),
+    ).toEqual([]);
   } catch (error) {
     throw new Error(`${name}: ${String(error)}\n${plans.join('\n')}`);
   }
@@ -331,6 +348,59 @@ test('Run omission check stays within its bound as R grows', async () => {
     }),
   );
 }, 120_000);
+
+test('prepared omission handoff returns the durable strongest proof without changing request bytes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'run-store-omission-handoff-'));
+  const store = new RunStore(`${directory}/runs.sqlite`);
+  try {
+    const run = store.begin(FIXTURE_SOURCE);
+    if (run === 'busy') throw new Error('Unexpected busy');
+    const staged = record('omission-handoff', 1);
+    staged.row.source = FIXTURE_SOURCE;
+    store.stage(run, staged);
+    expect(store.seal(run, { complete: true }).status).toBe('ready');
+    const original = command(staged);
+    store.prepare(run, staged.row.recordKey, { commands: [original] });
+    const stored = store.database
+      .prepare(
+        'SELECT bytes,keys_json FROM run_envelopes WHERE source=? AND run_id=? AND record_key=? AND envelope_index=0',
+      )
+      .get(FIXTURE_SOURCE, run.id, staged.row.recordKey) as { bytes: string; keys_json: string };
+
+    const first = store.prepareWithOmissions(run, staged.row.recordKey, {
+      commands: [],
+      omissions: [{ field_group: 'facts', disposition: 'fenced', securityRevision: '9' }],
+    });
+    expect(first).toEqual({
+      kind: 'new',
+      omissions: [{ field_group: 'facts', disposition: 'fenced', securityRevision: '9' }],
+    });
+    const next = store.prepareWithOmissions(run, staged.row.recordKey, {
+      commands: [],
+      omissions: [
+        { field_group: 'facts', disposition: 'fenced', securityRevision: '8' },
+        { field_group: 'cover', disposition: 'fenced', securityRevision: '10' },
+      ],
+    });
+    expect(next.omissions).toEqual([
+      { field_group: 'facts', disposition: 'fenced', securityRevision: '9' },
+      { field_group: 'cover', disposition: 'fenced', securityRevision: '10' },
+    ]);
+    expect(
+      store.database
+        .prepare(
+          'SELECT bytes,keys_json FROM run_envelopes WHERE source=? AND run_id=? AND record_key=? AND envelope_index=0',
+        )
+        .get(FIXTURE_SOURCE, run.id, staged.row.recordKey),
+    ).toEqual(stored);
+    expect(() =>
+      store.prepareWithOmissions({ ...run, lease: 'b'.repeat(48) }, staged.row.recordKey, { commands: [] }),
+    ).toThrow('Run capability is stale or terminal');
+  } finally {
+    store.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test('Run finalize stays within its bound as R grows', async () => {
   await measureRunGrowth('Run finalize', (store) => store.finalize(FIXTURE_RUN, 8), true);

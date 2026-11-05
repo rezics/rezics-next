@@ -1,0 +1,46 @@
+{
+  "status": 200,
+  "items": [
+    {
+      "realmId": "01a1a000-0000-7000-8000-000000000002",
+      "subjectId": "01a17973-16a7-7485-ad5f-692b696c34bc",
+      "publicationId": "01a1a000-0000-7000-8000-000000000031",
+      "subjectRevisionId": null,
+      "publishedAt": "2026-10-26T18:22:28.427Z",
+      "verdict": "adopt"
+    },
+    {
+      "realmId": "01a1a000-0000-7000-8000-000000000002",
+      "subjectId": "01a1a000-0000-7000-8000-000000000021",
+      "publicationId": "01a1a000-0000-7000-8000-000000000032",
+      "subjectRevisionId": null,
+      "publishedAt": "2026-10-26T18:22:28.427Z",
+      "verdict": "adopt"
+    },
+    {
+      "realmId": "01a1a000-0000-7000-8000-000000000002",
+      "subjectId": "01a1a000-0000-7000-8000-000000000022",
+      "publicationId": "01a1a000-0000-7000-8000-000000000033",
+      "subjectRevisionId": null,
+      "publishedAt": "2026-10-26T18:22:28.427Z",
+      "verdict": "adopt"
+    },
+    {
+      "realmId": "01a1a000-0000-7000-8000-000000000002",
+      "subjectId": "01a1a000-0000-7000-8000-000000000023",
+      "publicationId": "01a1a000-0000-7000-8000-000000000034",
+      "subjectRevisionId": null,
+      "publishedAt": "2026-10-26T18:22:28.427Z",
+      "verdict": "adopt"
+    },
+    {
+      "realmId": "01a1a000-0000-7000-8000-000000000002",
+      "subjectId": "01a1a000-0000-7000-8000-000000000024",
+      "publicationId": "01a1a000-0000-7000-8000-000000000035",
+      "subjectRevisionId": null,
+      "publishedAt": "2026-10-26T18:22:28.427Z",
+      "verdict": "adopt"
+    }
+  ],
+  "next": null
+}

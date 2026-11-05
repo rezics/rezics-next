@@ -1,5 +1,5 @@
 import type { Preview } from '@storybook/react-vite';
-import { LocaleProvider } from '@ark-ui/react/locale';
+import { LocaleProvider } from '../src/components/locale.tsx';
 import { configure } from 'storybook/test';
 import './preview.css';
 
@@ -18,7 +18,9 @@ const preview: Preview = {
   parameters: {
     a11y: { test: 'error' },
     viewport: {
-      viewports: {
+      options: {
+        phone390: { name: 'Phone 390', styles: { width: '390px', height: '844px' } },
+        desktop1280: { name: 'Desktop 1280', styles: { width: '1280px', height: '860px' } },
         phone: { name: 'Phone', styles: { width: '390px', height: '844px' } },
         desktop: { name: 'Desktop', styles: { width: '1280px', height: '860px' } },
       },

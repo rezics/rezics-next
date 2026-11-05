@@ -2,8 +2,37 @@ types:
   wd:Q689445: 비주얼 노벨
 properties:
   wdt:P144: 다음에 기반을 두었음
-  wdt:P156: 다음
   wdt:P1889: 다음과 다름
-  wdt:P2512: 스핀오프
   wdt:P361: 다음의 일부
-  wdt:P4969: 다음 작품은 이 작품을 바탕으로 함
+  rezics:spinOffOf: '스핀오프 원작'
+inverseProperties:
+  wdt:P144: '각색 작품'
+  wdt:P361: '구성 작품'
+  rezics:spinOffOf: '스핀오프 작품'
+libraryProfiles:
+  visual-novel.reading:
+    states:
+      planned: '예정'
+      in_progress: '진행 중'
+      completed: '완료'
+      paused: '일시 중지'
+      dropped: '중단'
+    units:
+      scalar_amount:
+        percent: '퍼센트'
+    copyKinds:
+      physical: '실물'
+      digital: '디지털'
+    copyStatuses:
+      physical:
+        owned: '소장'
+        disposed: '처분함'
+      digital:
+        owned: '소장'
+typeDescriptions:
+  wd:Q689445: '언어나 플랫폼별 출시판과 독립된 비주얼 노벨 작품입니다. 캐릭터와 제작진은 작품의 진술로 연결합니다.'
+propertyDescriptions:
+  wdt:P144: '이 비주얼 노벨의 바탕이 된 창작 작품입니다. 방향 없는 매체 간 연결 대신 원작을 특정합니다.'
+  wdt:P1889: '같은 배경이나 연속성을 가진 다른 비주얼 노벨입니다. 두 작품은 별개로 유지됩니다.'
+  wdt:P361: '이 작품을 포함하는 더 큰 작품입니다. 상위 이야기나 모음집 등을 가리킵니다.'
+  rezics:spinOffOf: '이 스핀오프 작품이 파생된 원래 작품입니다.'

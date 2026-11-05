@@ -33,14 +33,74 @@ import reserveImportedMedia from '../../src/content/reserve-import-media.sql';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population, type Row } from '../support/growth.ts';
 import { productionActions } from '../support/production-actions.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const db = await openGrowthDatabase();
 db.pool.options.max = 1;
 const productionActionCatalogue = productionActions();
 afterAll(() => db.close());
 
-const scales = [1, 8, 64] as const;
+const scales = [1, 4, 16] as const;
 const populationSize = 500;
+
+// Every relation a population in this file writes, with the rows one ordinal writes into it at most.
+const seededRelations = {
+  'access.account': 1,
+  'access.membership_inverse': 1,
+  'access.resource_grant': 12,
+  'access.resource_denial': 12,
+  'access.resource_role_grant': 6,
+  'content.imported_field': 1,
+  'content.media': 1,
+  'content.media_variant': 1,
+  'content.operation': 1,
+  'content.post': 1,
+  'content.revision': 1,
+  'content.source_fences': 1,
+  'core.outbox': 1,
+  'core.receipt': 1,
+  'editorial.write_basis': 1,
+  'semantic.context': 1,
+  'semantic.subject': 1,
+} as const;
+// The migrations seed the Global Context, which every platform authorization reads; populations write only communities.
+const globalContextFilter = "WHERE kind <> 'global'";
+const checkObservations: { start: Record<string, number>; end: Record<string, number> }[] = [];
+
+async function countSeededRelations(): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  for (const relation of Object.keys(seededRelations)) {
+    const result = await db.admin.query<{ total: number }>(
+      `SELECT count(*)::integer AS total FROM ${relation} ${relation === 'semantic.context' ? globalContextFilter : ''}`,
+    );
+    counts[relation] = result.rows[0]!.total;
+  }
+  return counts;
+}
+
+async function beginCheck(): Promise<void> {
+  // The disposable database holds only these fixtures. CASCADE reaches the tables whose foreign keys point at them, and
+  // replica mode skips the semantic tables' immutability triggers, which also refuse TRUNCATE. The Global Context stays.
+  const client = await db.admin.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL session_replication_role = replica');
+    const truncated = Object.keys(seededRelations).filter((relation) => relation !== 'semantic.context');
+    await client.query(`TRUNCATE TABLE ${truncated.join(', ')} CASCADE`);
+    await client.query(`DELETE FROM semantic.context ${globalContextFilter}`);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  checkObservations.push({ start: await countSeededRelations(), end: {} });
+}
+
+async function endCheck(): Promise<void> {
+  checkObservations.at(-1)!.end = await countSeededRelations();
+}
 
 type AccessPopulation = Readonly<{
   homeRoute: number;
@@ -247,6 +307,7 @@ const importedInput: ImportedFieldInput = {
 };
 
 test('Imported document append and read stays within its bound as P grows', async () => {
+  await beginCheck();
   const { actor, access } = await createActor(importedRoute, [importedAction]);
   await addGrant(importedRoute, importedSubject, actor.accountId, importedAction);
   const makeCommand = async (work: (tx: CommandTransaction) => Promise<unknown>) => {
@@ -340,11 +401,13 @@ test('Imported document append and read stays within its bound as P grows', asyn
       });
     },
   });
+  await endCheck();
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expectNoContentSequentialScans(report);
 }, 90_000);
 
 test('Report admission proof stays within its bound as T grows', async () => {
+  await beginCheck();
   const verifier = createTurnstileVerifier({
     secret: 'growth-secret',
     hostname: 'reports.example.test',
@@ -353,6 +416,7 @@ test('Report admission proof stays within its bound as T grows', async () => {
   });
   const report = await checkGrowth(db, {
     name: 'Report admission proof',
+    scales,
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
     grow: async () => {},
     operation: async () => {
@@ -363,6 +427,7 @@ test('Report admission proof stays within its bound as T grows', async () => {
       });
     },
   });
+  await endCheck();
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expect(report.samples.map(({ cost }) => [cost.rows, cost.blocks, cost.statements])).toEqual([
     [0, 0, 0],
@@ -373,6 +438,7 @@ test('Report admission proof stays within its bound as T grows', async () => {
 }, 90_000);
 
 test('Author erasure request stays within its bound as p grows', async () => {
+  await beginCheck();
   const route = 0x6a41;
   const threadId = newId(route);
   const { actor, access } = await createActor(route, ['post:erase', 'account:read']);
@@ -415,7 +481,13 @@ test('Author erasure request stays within its bound as p grows', async () => {
         {
           type: 'com.rezics.content.thread.created.v1',
           subject: threadId,
-          data: { threadId, itemId: firstPostId, revisionId: firstRevisionId, actorId: actor.accountId },
+          data: {
+            threadId,
+            itemId: firstPostId,
+            revisionId: firstRevisionId,
+            actorId: actor.accountId,
+            ...SUBJECT_THREAD_EVENT_FIELDS,
+          },
         },
       ],
     };
@@ -510,11 +582,13 @@ test('Author erasure request stays within its bound as p grows', async () => {
       expect(routeOf(result.value.operationId)).toBe(route);
     },
   });
+  await endCheck();
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expectNoContentSequentialScans(report);
 }, 90_000);
 
 test('Author erasure binding and status stays within its bound as P grows', async () => {
+  await beginCheck();
   const route = 0x6a42;
   const threadId = newId(route);
   const { actor, access } = await createActor(route, ['post:erase', 'account:read']);
@@ -548,7 +622,7 @@ test('Author erasure binding and status stays within its bound as P grows', asyn
         {
           type: 'com.rezics.content.thread.created.v1',
           subject: threadId,
-          data: { threadId, itemId: postId, revisionId, actorId: actor.accountId },
+          data: { threadId, itemId: postId, revisionId, actorId: actor.accountId, ...SUBJECT_THREAD_EVENT_FIELDS },
         },
       ],
     };
@@ -650,6 +724,7 @@ test('Author erasure binding and status stays within its bound as P grows', asyn
       expect(operation?.done).toBe(false);
     },
   });
+  await endCheck();
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expectNoContentSequentialScans(report);
 }, 90_000);
@@ -854,6 +929,7 @@ function mediaPopulationRows(
 }
 
 test('URL reservation stays within its bound as T grows', async () => {
+  await beginCheck();
   const route = 0;
   const { actor, access } = await createActor(route, mediaActions);
   await addGrant(route, mediaRoot.id, actor.accountId, 'media:import_from_url');
@@ -965,11 +1041,13 @@ test('URL reservation stays within its bound as T grows', async () => {
       expect(routeOf(result.value.mediaId)).toBe(route);
     },
   });
+  await endCheck();
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expectNoContentSequentialScans(report);
 }, 90_000);
 
 test('URL status stays within its bound as T grows', async () => {
+  await beginCheck();
   const { actor, deps } = await createMediaDependencies();
   const containerId = newId(mediaRoute);
   await db.admin.query(
@@ -1034,11 +1112,13 @@ test('URL status stays within its bound as T grows', async () => {
       expect(result?.media.id).toBe(mediaId);
     },
   });
+  await endCheck();
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expectNoContentSequentialScans(report);
 }, 90_000);
 
 test('Source fence takedown stays within its bound as T grows', async () => {
+  await beginCheck();
   let externalId = `growth-fence-anchor-${randomUUID()}`;
   while (partitionOf(tupleRoute(mediaRouteKey, 'catalogue', externalId)) !== partitionOf(mediaRoute))
     externalId = `growth-fence-anchor-${randomUUID()}`;
@@ -1113,11 +1193,13 @@ test('Source fence takedown stays within its bound as T grows', async () => {
       expect(result.replayed).toBe(false);
     },
   });
+  await endCheck();
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expectNoContentSequentialScans(report);
 }, 90_000);
 
 test('Committed media purge stays within its bound as T grows', async () => {
+  await beginCheck();
   const route = 42_064;
   const { actor } = await createActor(route, []);
   const containerId = newId(route);
@@ -1161,7 +1243,19 @@ test('Committed media purge stays within its bound as T grows', async () => {
       expect(result.outcome).toBe('purged');
     },
   });
+  await endCheck();
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   expectNoContentSequentialScans(report);
   expect(deletedPrefixes.every((prefix) => prefix === `m/${mediaId}/`)).toBe(true);
 }, 90_000);
+
+test('every growth-lifecycle check starts empty and seeds at most sixteen scale units', () => {
+  expect(checkObservations).toHaveLength(8);
+  for (const { start, end } of checkObservations) {
+    for (const [relation, perOrdinal] of Object.entries(seededRelations)) {
+      expect(start[relation], `${relation} before the first grow`).toBe(0);
+      // A check's own anchors and operations add a few rows beside the sixteen scale units its populations write.
+      expect(end[relation], `${relation} after the check`).toBeLessThanOrEqual(16 * populationSize * perOrdinal + 64);
+    }
+  }
+});

@@ -1,5 +1,5 @@
 import type { MemberNeighbors, MemberReordering } from './collection-model.ts';
-import { keyBetween, respacedKeys } from './ordinal.ts';
+import { keyBetween, localOrderKeys } from './ordinal.ts';
 
 export type MemberPlacement =
   | { readonly kind: 'key'; readonly ordinalKey: string }
@@ -7,11 +7,17 @@ export type MemberPlacement =
   | { readonly kind: 'respace'; readonly ordinalKey: string; readonly members: readonly MemberReordering[] };
 
 /** Place one member between neighbour keys. A gap with no key of the ordinal
- * limit becomes a full-collection respace once the caller supplies the order.
+ * limit may respace a bounded local window supplied with its boundary keys.
  */
 export function placeMember(
   neighbors: MemberNeighbors,
-  inserted?: { readonly orderedMemberIds: readonly string[]; readonly index: number; readonly memberId: string },
+  inserted?: {
+    readonly orderedMemberIds: readonly string[];
+    readonly index: number;
+    readonly memberId: string;
+    readonly before?: string | null;
+    readonly after?: string | null;
+  },
 ): MemberPlacement {
   const ordinalKey = keyBetween(neighbors.before, neighbors.after);
   if (ordinalKey !== null) return { kind: 'key', ordinalKey };
@@ -24,7 +30,8 @@ export function placeMember(
   }
   const ids = [...orderedMemberIds];
   ids.splice(index, 0, memberId);
-  const keys = respacedKeys(ids.length);
+  const keys = localOrderKeys(inserted.before ?? null, inserted.after ?? null, ids.length);
+  if (!keys) return { kind: 'respace' };
   return {
     kind: 'respace',
     ordinalKey: keys[index]!,

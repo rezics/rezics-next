@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { createAuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
+import { encodeCursor } from '../../src/tokens/cursor.ts';
 import { Pool } from 'pg';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -16,6 +17,7 @@ import { actionCatalogue } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { createAuthDatabase } from '../support/auth-database.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { seedReportGrowth, type ReportGrowthBoard, type ReportGrowthRow } from './support/report-growth.ts';
 
@@ -84,7 +86,9 @@ test('report routes publish closed schemas, shared report cost, actions and prob
   for (const path of paths) {
     const get = document.paths[path]?.get;
     expect(get).toBeDefined();
-    expect(get?.['x-action']).toBe('moderation:read_reports');
+    expect(get?.['x-action']).toBe(path === '/v1/reports/{id}' ? 'account:read' : 'moderation:read_reports');
+    if (path === '/v1/reports/{id}')
+      expect(get?.description).toContain('Moderators retain report inspection through moderation:read_reports');
     expect(get?.['x-rate-limit']).toBeUndefined();
     expect(get?.security).toEqual([{ bearerAuth: [] }]);
     expect(
@@ -149,7 +153,7 @@ describe('real migrated report HTTP and shared admission', () => {
       audience,
       secret: 'report-auth-test-secret-at-least-32-bytes',
       signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readAccount(id) {
           const row = await readAccount(db.admin, routeOf(id)!, id);
           return (
@@ -166,7 +170,7 @@ describe('real migrated report HTTP and shared admission', () => {
           if (!approvals.delete(reference)) throw new Error('Missing fixture provisioning approval');
           return { accountId: reference };
         },
-      },
+      }),
     });
     await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
     const access = (config: Parameters<typeof createAccess>[0]) =>
@@ -536,16 +540,225 @@ describe('real migrated report HTTP and shared admission', () => {
     }
   });
 
+  test('The default authorized moderation Reports journey filters by current status and target type and pages in selected time order with selection-bound cursors, sparse-page honesty and private viewer isolation', async () => {
+    await moderation(true);
+    const bearer = await issue(moderator);
+    const rows: ReportGrowthRow[] = Array.from({ length: 22 }, (_, index) => ({
+      reportId: newId(0x6234),
+      reportRoute: 0x6234,
+      targetKind: 'board',
+      targetId: board,
+      targetRoute: routeOf(board)!,
+      createdAt: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00.000000Z`,
+      transactionId: randomUUID(),
+      idempotencyKey: randomUUID(),
+    }));
+    // Two equal timestamps require the report-id tie-break in both traversal directions.
+    const tied = rows.slice(0, 2).sort((left, right) => left.reportId.localeCompare(right.reportId));
+    rows[0] = tied[0]!;
+    rows[1] = tied[1]!;
+    rows[0]!.createdAt = '2026-01-01T00:00:00.000000Z';
+    rows[1]!.createdAt = rows[0]!.createdAt;
+    await seedReportGrowth(db.admin, rows);
+    await db.admin.query(
+      `INSERT INTO content.board_report_candidate (route,board_id,report_route,report_id,target_kind,target_id,created_at)
+       SELECT $1,$2,report_route,report_id,target_kind,target_id,created_at FROM content.report_target
+       WHERE route=$1 AND target_kind='board' AND target_id=$2`,
+      [routeOf(board), board],
+    );
+    const read = (query = '', credential = bearer, target = board) =>
+      call('GET', `/v1/boards/${target}/reports${query ? `?${query}` : ''}`, undefined, { bearer: credential });
+    const first = await read('status=pending');
+    expect(first.response.status).toBe(200);
+    expect(first.response.headers.get('cache-control')).toBe('private, no-store');
+    expect(first.body.reports.map((row: { id: string }) => row.id)).toEqual(
+      rows
+        .slice(2)
+        .reverse()
+        .map((row) => row.reportId),
+    );
+    // No candidate is rewritten: selection must use the now-resolved report, not projection state.
+    await db.admin.query(
+      `UPDATE content.report SET outcome=CASE WHEN report_id=$4 THEN 'actioned' ELSE 'dismissed' END,
+         resolved_at=now(),resolved_by=$2,decision_id=CASE WHEN report_id=$4 THEN $5::uuid ELSE NULL END
+       WHERE route=$1 AND report_id=ANY($3::uuid[])`,
+      [0x6234, moderator, rows.slice(2).map((row) => row.reportId), rows[2]!.reportId, newId(0x4567)],
+    );
+    const sparse = await read('status=pending');
+    expect(sparse.response.status).toBe(200);
+    expect(sparse.body.reports).toEqual([]);
+    expect(typeof sparse.body.next).toBe('string');
+    const cursor = encodeURIComponent(sparse.body.next);
+    const tail = await read(`status=pending&cursor=${cursor}`);
+    expect(tail.body.reports.map((row: { id: string }) => row.id)).toEqual([rows[1]!.reportId, rows[0]!.reportId]);
+    expect(tail.body.next).toBeNull();
+    const resolved = await read('status=resolved&targetKind=board');
+    expect(resolved.body.reports.map((row: { id: string }) => row.id)).toEqual(
+      rows
+        .slice(2)
+        .reverse()
+        .map((row) => row.reportId),
+    );
+    const oldest = await read('order=oldest');
+    expect(oldest.body.reports.map((row: { id: string }) => row.id)).toEqual(
+      rows.slice(0, 20).map((row) => row.reportId),
+    );
+    const oldestTail = await read(`order=oldest&cursor=${encodeURIComponent(oldest.body.next)}`);
+    expect(oldestTail.body.reports.map((row: { id: string }) => row.id)).toEqual(
+      rows.slice(20).map((row) => row.reportId),
+    );
+    const oldestOne = await read('order=oldest&limit=1');
+    expect(oldestOne.body.reports.map((row: { id: string }) => row.id)).toEqual([rows[0]!.reportId]);
+    const oldestTwo = await read(`order=oldest&limit=1&cursor=${encodeURIComponent(oldestOne.body.next)}`);
+    expect(oldestTwo.body.reports.map((row: { id: string }) => row.id)).toEqual([rows[1]!.reportId]);
+    // Explicit defaults and omission bind identically; each changed selector refuses.
+    const omitted = await read();
+    expect(
+      (await read(`status=all&targetKind=all&order=newest&limit=20&cursor=${encodeURIComponent(omitted.body.next)}`))
+        .response.status,
+    ).toBe(200);
+    for (const change of [
+      'status=resolved',
+      'status=all',
+      'status=pending&targetKind=board',
+      'status=pending&order=oldest',
+      'status=pending&limit=19',
+    ]) {
+      const refused = await read(`${change}&cursor=${cursor}`);
+      expect(refused.response.status).toBe(400);
+      expect(refused.body.code).toBe('invalid_cursor');
+    }
+    await grant(other, 'moderation:read_reports');
+    for (const credential of [await issue(other), await issue(moderator, ['moderation:read_reports'])])
+      expect((await read(`status=pending&cursor=${cursor}`, credential)).body.code).toBe('invalid_cursor');
+    await moderation(true, secondBoard);
+    expect((await read(`status=pending&cursor=${cursor}`, bearer, secondBoard)).body.code).toBe('invalid_cursor');
+    const legacyRing = {
+      current: 1,
+      keys: new Map([[1, createHmac('sha256', routeKey).update('content.report.cursor.v1').digest()]]),
+    };
+    const partition = await db.admin.query('SELECT epoch FROM core.partition WHERE partition_no=$1', [
+      partitionOf(routeOf(board)!),
+    ]);
+    const legacy = encodeCursor(
+      legacyRing,
+      { operation: 'content.target-reports', parameters: { kind: 'board', id: board, actor: moderator } },
+      { epoch: Number(partition.rows[0].epoch), after: [rows[2]!.createdAt, rows[2]!.reportId] },
+    );
+    expect((await read(`cursor=${encodeURIComponent(legacy)}`)).body.code).toBe('invalid_cursor');
+    const typedEmpty = await read('targetKind=post');
+    expect(typedEmpty.body.reports).toEqual([]);
+    expect(typeof typedEmpty.body.next).toBe('string');
+    for (const invalid of ['status=open', 'targetKind=document', 'order=random', 'status=pending&status=resolved'])
+      expect((await read(invalid)).response.status).toBe(400);
+    await moderation(false);
+    const denied = await read(`status=pending&cursor=${cursor}`);
+    const unknown = await read('status=pending', bearer, newId(0x4567));
+    expect(denied.response.status).toBe(404);
+    const { request_id: deniedRequest, ...deniedProblem } = denied.body;
+    const { request_id: unknownRequest, ...unknownProblem } = unknown.body;
+    expect(deniedProblem).toEqual(unknownProblem);
+    expect(JSON.stringify(denied.body)).not.toContain(rows[0]!.reportId);
+  });
+
+  test('native target-kind selection intersects exact thread and post scopes and never widens them', async () => {
+    const thread = newId(0x6543);
+    const post = newId(0x6543);
+    const revision = newId(0x6543);
+    const fixture = await db.admin.connect();
+    try {
+      await fixture.query('BEGIN');
+      await fixture.query(
+        `INSERT INTO content.thread (route,thread_id,author_account_id,board_id,title,first_post_id,visibility,security_revision,recorded_transaction_id)
+         VALUES ($1,$2,$3,$4,'Reported thread',$5,'published',1,$6)`,
+        [0x6543, thread, author, board, post, randomUUID()],
+      );
+      await fixture.query(
+        `INSERT INTO content.post (route,thread_id,post_id,author_account_id,head_revision_id,visibility,security_revision,recorded_transaction_id)
+         VALUES ($1,$2,$3,$4,$5,'published',1,$6)`,
+        [0x6543, thread, post, author, revision, randomUUID()],
+      );
+      await fixture.query(
+        `INSERT INTO content.revision (route,thread_id,post_id,revision_id,licence,subject_ids,board_id,availability,recorded_transaction_id)
+         VALUES ($1,$2,$3,$4,'CC0-1.0','{}',$5,'erased',$6)`,
+        [0x6543, thread, post, revision, board, randomUUID()],
+      );
+      await fixture.query('COMMIT');
+    } catch (error) {
+      await fixture.query('ROLLBACK');
+      throw error;
+    } finally {
+      fixture.release();
+    }
+    for (const target of [thread, post]) {
+      await db.admin.query(
+        `INSERT INTO access.resource_grant (route,resource_id,subject_kind,subject_id,subject_role,action,valid,transaction_id)
+         VALUES ($1,$2,'identity',$3,'','access:grant','(,)'::tstzrange,$4)`,
+        [0x6543, target, grantor, randomUUID()],
+      );
+      await moderation(true, target);
+    }
+    await moderation(true);
+    const bearer = await issue(moderator);
+    const targets = [
+      { kind: 'board', id: board },
+      { kind: 'thread', id: thread },
+      { kind: 'post', id: post },
+    ] as const;
+    const ids: string[] = [];
+    for (const target of targets) {
+      const reportId = newId(0x6234);
+      ids.push(reportId);
+      await db.admin.query(
+        `INSERT INTO content.report (route,report_id,target_kind,target_id,reason,evidence,recorded_transaction_id)
+         VALUES ($1,$2,$3,$4,'spam','Private evidence',$5)`,
+        [0x6234, reportId, target.kind, target.id, randomUUID()],
+      );
+      await db.admin.query(
+        `INSERT INTO content.report_target (route,target_kind,target_id,report_route,report_id,created_at)
+         VALUES ($1,$2,$3,$4,$5,'2026-01-01T00:00:00Z')`,
+        [routeOf(target.id), target.kind, target.id, 0x6234, reportId],
+      );
+      await db.admin.query(
+        `INSERT INTO content.board_report_candidate (route,board_id,report_route,report_id,target_kind,target_id,created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,'2026-01-01T00:00:00Z')`,
+        [routeOf(board), board, 0x6234, reportId, target.kind, target.id],
+      );
+    }
+    const boardPosts = await call('GET', `/v1/boards/${board}/reports?targetKind=post`, undefined, { bearer });
+    expect(boardPosts.response.status).toBe(200);
+    expect(boardPosts.body.reports.map((row: { id: string }) => row.id)).toEqual([ids[2]]);
+    for (const [scope, target, expected] of [
+      ['threads', thread, ids[1]],
+      ['posts', post, ids[2]],
+    ] as const) {
+      const exact = await call('GET', `/v1/${scope}/${target}/reports?status=pending&order=oldest`, undefined, {
+        bearer,
+      });
+      expect(exact.response.status).toBe(200);
+      expect(exact.body.reports.map((row: { id: string }) => row.id)).toEqual([expected]);
+      const mismatch = await call('GET', `/v1/${scope}/${target}/reports?targetKind=board`, undefined, { bearer });
+      expect(mismatch.response.status).toBe(200);
+      expect(mismatch.body.reports).toEqual([]);
+      expect(mismatch.body.next).toBeNull();
+    }
+  });
+
   test('checkGrowth proves constant report HTTP work with unrelated and hot-partition growth at three scales', async () => {
     const report = await checkGrowth(db, {
+      // Verification itself uses no SQL. The stored HTTP create probes the board PK,
+      // inserts one report and adds C (receipt, partition, write basis and outbox).
+      // At fixed admitted input this is constant rows/statements and logarithmic indexed blocks.
       name: 'report HTTP admission and create',
       scales: [32, 256, 2048],
+      rule: 'series',
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
+        // At 64 rows per scale unit, board/report/command indexes start with 2,048 rows.
         // Setup is unmeasured. Half the targets share the real target's route.
         const rows: ReportGrowthRow[] = [];
         const distractorBoards: ReportGrowthBoard[] = [];
-        for (let ordinal = previous; ordinal < scale; ordinal++) {
+        for (let ordinal = previous * 64; ordinal < scale * 64; ordinal++) {
           const route = ordinal % 2 ? routeOf(board)! : (ordinal * 31) % 65536;
           const id = newId(route);
           distractorBoards.push({ id, route, subjectId: newId(0x5678), transactionId: randomUUID() });
@@ -579,6 +792,7 @@ describe('real migrated report HTTP and shared admission', () => {
         expect(JSON.stringify(await effects())).not.toContain(proof);
       },
     });
+    expect(report.rule).toBe('series');
     expect(report.samples).toHaveLength(3);
     for (const sample of report.samples) {
       expect(sample.cost.rows).toBeGreaterThan(0);

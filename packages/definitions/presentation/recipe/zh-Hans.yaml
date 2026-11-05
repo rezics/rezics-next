@@ -1,6 +1,41 @@
 types:
   schema:Recipe: 食谱
 properties:
+  schema:suitableForDiet: '适用饮食'
+  schema:recipeInstructions: 做法
   schema:recipeIngredient: 食材
   schema:cookTime: 烹饪时间
   schema:recipeYield: 份量
+inverseProperties:
+  schema:suitableForDiet: '适用此饮食的食谱'
+libraryProfiles:
+  recipe.cooking:
+    states:
+      planned: '计划'
+      in_progress: '进行中'
+      completed: '已完成'
+      paused: '暂停'
+      dropped: '放弃'
+    units:
+      scalar_amount:
+        minute:
+          label: '分钟'
+          countForms:
+            other: '分钟'
+    copyKinds:
+      physical: '实体'
+      digital: '数字'
+    copyStatuses:
+      physical:
+        owned: '拥有'
+        disposed: '已处置'
+      digital:
+        owned: '拥有'
+typeDescriptions:
+  schema:Recipe: '制作食物所需的步骤与食材，与食物本身及个人烹饪记录分开。'
+propertyDescriptions:
+  schema:suitableForDiet: '表明食谱适用饮食的概念，如素食；不可仅凭食材名称推定。'
+  schema:recipeInstructions: '撰写的制作步骤文档，接受文档值，不是普通字符串或 URL。'
+  schema:recipeIngredient: '带语言的食材文本，如面粉 200 克；结构化食物链接另用材料关系。'
+  schema:cookTime: '实际烹饪所需的时长，以分（wd:Q7727）为单位的非负整数数量记录，例如 25；不是一天中的时刻，也不是包含准备与静置的总时长。'
+  schema:recipeYield: '制作出的份数，以无单位且至少为 1 的整数数量记录，例如 4；不是自由文本的分量说明。'

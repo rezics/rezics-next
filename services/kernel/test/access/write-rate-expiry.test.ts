@@ -149,14 +149,27 @@ test('one native statement uses the route-led expiry index and remains bounded t
       parameter: 'route',
     });
     expect(product.raw).not.toMatch(/\b(?:OFFSET|COUNT|SUM)\s*\(?/i);
+    // Same partition as the measured route, never chosen by the population: hot rows
+    // are pinned to `route` and cold rows leave the hot partition.
+    const spareRoute = route + 1;
     const report = await checkGrowth(db, {
       name: 'counter-expiry',
       scales: [1, 4, 16],
       repetitions: 1,
-      warmups: 0,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       async grow(database, scale, previous) {
         await seed(database, population, { from: previous * 2048, to: scale * 2048 });
+        // One expiry batch the warmup can delete without taking the measured route's probe.
+        await database.admin.query(
+          `INSERT INTO access.write_rate_counter (route, identity_digest, family, count, expires_at)
+          SELECT $1, lpad(to_hex(i),64,'0'), 'write', 1, '2020-01-01'::timestamptz
+          FROM generate_series($2::integer,$3::integer) i`,
+          [spareRoute, 9_000_000 + previous * 1000, 9_000_000 + previous * 1000 + 999],
+        );
+        await database.admin.query('VACUUM (ANALYZE) access.write_rate_counter');
+      },
+      async warmup(database) {
+        expect(await expireWriteRateCounters(database.pool, spareRoute)).toBe(1000);
       },
       async operation(database) {
         const before = Number(
@@ -186,7 +199,10 @@ test('accounts registers once before shared launch, schedules one admitted route
     import { DBOS } from '@dbos-inc/dbos-sdk';
     import { createWorkClient } from './src/work/client.ts';
     import { composeWork } from './src/work/registry.ts';
-    import { KERNEL_WORK_MODULES } from './src/work/modules.ts';
+    import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
+    import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
+    import { createKernelWorkModules } from './src/work/modules.ts';
+    const KERNEL_WORK_MODULES = createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
     const accountsWorkModule = KERNEL_WORK_MODULES.find(m=>m.name==='accounts');
     assert.equal(KERNEL_WORK_MODULES.filter(m=>m.name==='accounts').length,1);
     assert.ok(accountsWorkModule);
@@ -203,6 +219,7 @@ test('accounts registers once before shared launch, schedules one admitted route
     await assert.rejects(composeWork([accountsWorkModule],options),/already composed/);
     await work.shutdown(); await client.close(); await pool.end();
   `;
+  // Two fresh processes each import the kernel work graph. That exceeds 30s once the suite is loaded.
   for (let restart = 0; restart < 2; restart++) {
     const child = Bun.spawn([process.execPath, '-e', program], {
       cwd: import.meta.dir + '/../..',
@@ -210,7 +227,11 @@ test('accounts registers once before shared launch, schedules one admitted route
       stdout: 'pipe',
       stderr: 'pipe',
     });
-    const [code, errors] = await Promise.all([child.exited, new Response(child.stderr).text()]);
-    expect(code, errors).toBe(0);
+    const [code, stdout, errors] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    expect(code, `${errors}${stdout}`).toBe(0);
   }
-}, 30000);
+}, 300000);

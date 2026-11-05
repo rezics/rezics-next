@@ -1,0 +1,88 @@
+import { Meta, Canvas } from '@storybook/addon-docs/blocks';
+import * as Queue from './board-report-queue.stories';
+
+<Meta of={Queue} />
+
+# Moderation report queue
+
+`BoardReportQueue` renders the real board moderation page's bounded report page. Each report is one native list item
+with a shared review frame, a localized target-kind heading and a separately labelled target identity. The full
+submitted reason and evidence, historical reported revision, and current target are separately labelled. A retained
+ID identifies a case; it does not grant permission to disclose its content or replace a missing title. Missing,
+refused and removed content stays neutral. There are no reporter identities, other-report summaries, copied bodies,
+stretched links over evidence or per-card detail requests.
+
+Open **Review report** to enter one takedown reason, or dismiss without a reason. The shared controls keep the draft
+when the panel closes. A request disables the form and announces submission. An unchanged retry retains its command
+key; edits and action changes create a new intent. Native denial, conflict and uncertain transport errors preserve
+the draft and never confirm success. Native conflict explains that the report or target changed; native denial
+explains the current permission failure without exposing private details. Both require an explicit current-state
+refresh and review before a new decision, which receives a new command key. A lost response alone offers an exact
+command retry to confirm its outcome. Its draft and decision controls stay locked until that outcome is known;
+editing cannot turn an uncertain submission into a second command. Unknown failures remain errors and offer a fresh
+read rather than a blind replay.
+
+A confirmed command stays visible until navigation. Takedown confirmation is distinct from a projected report
+outcome: the page does not claim that asynchronous report resolution has finished. It hides the current and revision
+bodies for that target across the returned page after a confirmed takedown. Dismissal preserves current content.
+Resolved read rows show the native disposition and resolution time, without an extra review action. Appeals keep their
+full original decision, current target, appeal statement and any native resolution outcome/date in their own case
+frames; resolution forms remain independent from the evidence and source links.
+
+## Dismiss selected loaded reports
+
+Labelled checkboxes select only pending Reports on this rendered native page, up to 20. **Select loaded pending
+reports** has that same bound; it never selects a continuation or all matching reports. Resolved reports and Appeals
+have no selection. Individual takedown, dismissal and evidence review remain available for unselected reports.
+Selected, submitted and uncertain items cannot also acquire an individual command; an individual intent likewise
+cannot enter the bulk selection.
+
+**Review dismissal** names the selected count and explains that dismissal closes each report without taking down
+content. Review receives keyboard focus. Cancel returns focus to the review trigger without submitting. Confirmation
+runs existing authorized native dismiss commands in rendered order, one at a time, each with its own immutable intent
+key. Results identify each selected row by its position and distinguish confirmed dismissal, refusal, failure,
+uncertainty and unattempted rows. There is no atomic result and no automatic continuation after a problem.
+
+Only explicit retry of the uncertain row reuses its exact original command and key. It never resumes later rows.
+Normal refresh follows confirmed effects when no command remains uncertain; while a result is uncertain, refresh
+waits for its explicit retry so the original intent remains available. A definitive refusal requires a fresh native
+read before a new decision. A failed refresh retains confirmed dismissal receipts and announces stale queue data;
+it cannot turn command success into failure. Receipts contain row positions and public outcomes, never evidence.
+
+Scope, selectors, tab, viewer, current session authority, page-data replacement, loading and navigation retire the
+selection and results. Refresh retires command scheduling; only completion receipts can remain while that same
+page's refresh fails. A late command may settle its private intent but cannot publish into a retired generation or
+schedule another report. Parent session isolation remains authoritative. Nothing is saved in browser storage. The
+cost is at most 20 sequential point commands per confirmed selection and the existing normal refresh, with no scans,
+new endpoints, background work or per-card discovery reads.
+
+<Canvas of={Queue.BulkSelected} />
+<Canvas of={Queue.BulkPartial} />
+<Canvas of={Queue.BulkUncertain} />
+
+An empty page with a continuation still offers Next page. It does not imply a total count or an exhausted queue.
+Loading and error states show no report details. The page uses its known board route for Back to board; it does not
+invent a community name or fetch one merely for the heading.
+
+<Canvas of={Queue.Open} />
+<Canvas of={Queue.Resolved} />
+<Canvas of={Queue.TargetUnavailable} />
+<Canvas of={Queue.RevisionDiffers} />
+<Canvas of={Queue.NativeDenied} />
+<Canvas of={Queue.UncertainRetry} />
+<Canvas of={Queue.RetryConfirmed} />
+<Canvas of={Queue.ConfirmedTakedown} />
+<Canvas of={Queue.ConfirmedDismissal} />
+<Canvas of={Queue.EmptyWithNext} />
+<Canvas of={Queue.Loading} />
+<Canvas of={Queue.Error} />
+
+Use the same IDs with the phone390 and desktop1280 viewport globals, light/dark theme and locale globals. Pattern
+IDs use `patterns-moderation-queue--` with suffixes `open`, `resolved`, `target-unavailable`, `revision-differs`,
+`native-denied`, `uncertain-retry`, `retry-confirmed`, `confirmed-takedown`, `confirmed-dismissal`, `empty-with-next`,
+`bulk-selected`, `bulk-partial`, `bulk-uncertain`, `loading`, `error`, `empty`, `pending-submission`, `stale-conflict` and `reason-validation`.
+
+Page IDs use `pages-community-moderation-reports--` with suffixes `open-reports`, `resolved-reports`,
+`target-unavailable`, `revision-differs`, `native-denied`, `uncertain-retry`, `empty-with-next`, `loading`, `error`
+and `appeals`. Pages reuse this composition inside the site shell. These fixtures and plays support Web review and
+Root screenshots at 390/1280; they establish neither native acceptance nor visual approval.

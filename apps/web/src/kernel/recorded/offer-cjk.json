@@ -1,0 +1,19 @@
+{
+  "offer": {
+    "id": "01a17a7a-4799-77d6-816a-c7326824c3b9",
+    "targetSubjectId": "01a17a79-d88a-77aa-a166-81d2b657df87",
+    "subject": {
+      "id": "01a17a79-d88a-77aa-a166-81d2b657df87",
+      "type": "schema:Book",
+      "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+      "label": { "value": "The Little Prince", "language": "en" },
+      "creativeWork": true,
+      "cover": null
+    },
+    "title": "小王子（全新註解・雙語對照・電子書典藏版）——附作者手繪水彩插圖、譯者導讀與版本考證",
+    "currency": "jpy",
+    "unitAmountMinor": 1800,
+    "state": "active"
+  },
+  "status": 200
+}

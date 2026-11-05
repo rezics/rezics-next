@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
 import { Value } from 'typebox/value';
@@ -6,6 +7,7 @@ import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { authoritativeTimeValue, IdempotencyConflictError } from '../../src/command/command.ts';
 import { CONTENT_EVENTS } from '../../src/content/events.ts';
 import { tupleRoute, type ImportedFieldGroup } from '../../src/content/imported-contract.ts';
+import fenceRead from '../../src/content/read-source-fences.sql';
 import { takedownSourceFence } from '../../src/content/source-fence-command.ts';
 import { readFences, type SourceFence, type SourceFenceTuple } from '../../src/content/source-fences.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
@@ -130,6 +132,199 @@ async function facts(body: ReturnType<typeof input>, database = { pool }) {
   });
 }
 
+async function storedTakedownPair(body: ReturnType<typeof input>) {
+  return (
+    await admin.query<{ takenDownAt: string; takedownId: string }>(
+      `SELECT taken_down_at::text AS "takenDownAt", takedown_id AS "takedownId"
+      FROM content.source_fences WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group=$4`,
+      Object.values(home(body)),
+    )
+  ).rows[0]!;
+}
+
+test('readFences returns the original takedown time and id for a taken-down fence, in one statement per partition, and omits both for a legacy or standing fence', async () => {
+  const f = await fixture();
+  const body = input();
+  const target = home(body);
+  const partition = partitionOf(target.route);
+  const deps = await f.dependencies();
+  const firstTime = new Date();
+  const first = await takedownSourceFence({ ...deps, clock: () => firstTime }, f.actor, body, context());
+  const repeated = await takedownSourceFence(
+    { ...deps, clock: () => new Date(firstTime.getTime() + 1000) },
+    f.actor,
+    body,
+    context(),
+  );
+  const original = (
+    await admin.query('SELECT data FROM core.outbox WHERE partition_no=$1 AND position=$2', [
+      first.partition,
+      first.position,
+    ])
+  ).rows[0].data;
+  expect(new Date(original.takenDownAt).toISOString()).toBe(firstTime.toISOString());
+  expect(routeOf(original.takedownId)).toBe(target.route);
+  const legacy = { ...target, field_group: 'facts' as const };
+  const standing = { ...target, field_group: 'cover' as const };
+  for (const [row, takenDown] of [
+    [legacy, true],
+    [standing, false],
+  ] as const)
+    await admin.query(
+      `INSERT INTO content.source_fences
+      (route,source,external_id,field_group,taken_down,security_revision,taken_down_at,takedown_id)
+      VALUES ($1,$2,$3,$4,$5,1,NULL,NULL)`,
+      [...Object.values(row), takenDown],
+    );
+  let missing: SourceFenceTuple;
+  do {
+    missing = home(input());
+  } while (partitionOf(missing.route) !== partition);
+  const tuples = [target, legacy, standing, missing];
+  const rows = await withConnection(pool, async (client) => {
+    await readPartition(client, partition);
+    const start = observer.records.length;
+    const result = await readFences(client, tuples);
+    expect(observer.records.slice(start).map(({ statement, parameters }) => ({ statement, parameters }))).toEqual([
+      { statement: fenceRead.sql, parameters: [partition, JSON.stringify(tuples)] },
+    ]);
+    return result;
+  });
+  const expected = [
+    {
+      ...target,
+      takenDown: true,
+      securityRevision: repeated.value.securityRevision,
+      takenDownAt: original.takenDownAt,
+      takedownId: original.takedownId,
+    },
+    { ...legacy, takenDown: true, securityRevision: '1' },
+    { ...standing, takenDown: false, securityRevision: '1' },
+    { ...missing, takenDown: false, securityRevision: null },
+  ];
+  expect(rows).toEqual(expected);
+});
+
+test('the first takedown records its command time and a takedown id, and later takedowns and every event keep both', async () => {
+  const f = await fixture();
+  const body = input();
+  const target = home(body);
+  const deps = await f.dependencies();
+  const firstTime = new Date();
+  const first = await takedownSourceFence({ ...deps, clock: () => firstTime }, f.actor, body, context());
+  const readRow = async () =>
+    (
+      await admin.query(
+        `SELECT taken_down_at::text AS "takenDownAt", takedown_id AS "takedownId"
+        FROM content.source_fences WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group=$4`,
+        Object.values(target),
+      )
+    ).rows[0];
+  const original = await readRow();
+  expect(new Date(original.takenDownAt).toISOString()).toBe(firstTime.toISOString());
+  expect(routeOf(original.takedownId)).toBe(target.route);
+  const second = await takedownSourceFence(
+    { ...deps, clock: () => new Date(firstTime.getTime() + 1000) },
+    f.actor,
+    body,
+    context(),
+  );
+  expect(BigInt(second.value.securityRevision)).toBeGreaterThan(BigInt(first.value.securityRevision));
+  expect(await readRow()).toEqual(original);
+  for (const outcome of [first, second]) {
+    const event = (
+      await admin.query('SELECT data FROM core.outbox WHERE partition_no=$1 AND position=$2', [
+        outcome.partition,
+        outcome.position,
+      ])
+    ).rows[0];
+    expect(event.data).toEqual({ ...target, securityRevision: outcome.value.securityRevision, ...original });
+    expect(Value.Check(CONTENT_EVENTS()[eventType], event.data)).toBe(true);
+  }
+});
+
+test('a fence taken down before the takedown fields existed reports neither, and nothing derives them', async () => {
+  const f = await fixture();
+  const body = input();
+  const row = home(body);
+  await admin.query(
+    `INSERT INTO content.source_fences
+    (route,source,external_id,field_group,taken_down,security_revision,taken_down_at,takedown_id)
+    VALUES ($1,$2,$3,$4,true,9007199254740993,NULL,NULL)`,
+    Object.values(row),
+  );
+  const outcome = await f.execute(body);
+  expect(outcome.value.securityRevision).toBe('9007199254740994');
+  expect(
+    (
+      await admin.query(
+        `SELECT taken_down_at,takedown_id FROM content.source_fences
+        WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group=$4`,
+        Object.values(row),
+      )
+    ).rows,
+  ).toEqual([{ taken_down_at: null, takedown_id: null }]);
+  const events = (
+    await admin.query('SELECT data FROM core.outbox WHERE partition_no=$1 AND position=$2', [
+      outcome.partition,
+      outcome.position,
+    ])
+  ).rows;
+  expect(events).toEqual([{ data: { ...row, securityRevision: outcome.value.securityRevision } }]);
+});
+
+test('source fence provenance is paired, immutable and recorded when an open fence transitions', async () => {
+  const f = await fixture();
+  const body = input();
+  const target = home(body);
+  await admin.query(
+    `INSERT INTO content.source_fences
+    (route,source,external_id,field_group,taken_down,security_revision) VALUES ($1,$2,$3,$4,false,1)`,
+    Object.values(target),
+  );
+  const outcome = await f.execute(body);
+  expect(outcome.value.securityRevision).toBe('2');
+  const client = await admin.connect();
+  try {
+    await client.query('BEGIN');
+    const where = ' WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group=$4';
+    for (const change of [
+      'taken_down_at=NULL',
+      'takedown_id=NULL',
+      'taken_down_at=NULL,takedown_id=NULL',
+      "taken_down_at=taken_down_at + interval '1 second'",
+      `takedown_id='${newId(target.route)}'`,
+      'taken_down=false,security_revision=security_revision+1',
+    ]) {
+      await client.query('SAVEPOINT invalid');
+      const error = await client
+        .query(`UPDATE content.source_fences SET ${change}${where}`, Object.values(target))
+        .catch((caught: unknown) => caught);
+      await client.query('ROLLBACK TO SAVEPOINT invalid');
+      expect(error).toMatchObject({ code: '23514' });
+    }
+    for (const values of [
+      [new Date(), null],
+      [null, newId(target.route)],
+    ]) {
+      await client.query('SAVEPOINT invalid');
+      const error = await client
+        .query(
+          `INSERT INTO content.source_fences
+          (route,source,external_id,field_group,taken_down,security_revision,taken_down_at,takedown_id)
+          VALUES ($1,$2,$3,$4,true,1,$5,$6)`,
+          [...Object.values(home(input())), ...values],
+        )
+        .catch((caught: unknown) => caught);
+      await client.query('ROLLBACK TO SAVEPOINT invalid');
+      expect(error).toMatchObject({ code: '23514' });
+    }
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+  }
+});
+
 test('native takedown authorizes the sole independently anchored Global root at attempt T before tuple checkout', async () => {
   const f = await fixture();
   const body = input();
@@ -172,11 +367,24 @@ test('native takedown authorizes the sole independently anchored Global root at 
   expect(trace.slice(begin).some((r) => /(?:FROM|JOIN) (?:access\.|semantic\.)/.test(r.statement))).toBe(false);
   const writes = trace.filter((r) => /INSERT INTO content.source_fences/.test(r.statement));
   expect(writes).toHaveLength(1);
-  expect(writes[0]!.parameters).toEqual([target.route, target.source, target.external_id, target.field_group]);
+  const storedProvenance = (
+    await admin.query(
+      `SELECT taken_down_at::text AS "takenDownAt", takedown_id AS "takedownId"
+      FROM content.source_fences WHERE route=$1 AND source=$2 AND external_id=$3 AND field_group=$4`,
+      Object.values(target),
+    )
+  ).rows[0];
+  expect(writes[0]!.parameters).toEqual([
+    ...Object.values(target),
+    storedProvenance.takenDownAt,
+    storedProvenance.takedownId,
+  ]);
   expect(trace.some((r) => /resource_initialization|resource_role_grant.*INSERT|creation_xid/.test(r.statement))).toBe(
     false,
   );
-  expect(await facts(body)).toEqual([{ ...target, takenDown: true, securityRevision: outcome.value.securityRevision }]);
+  expect(await facts(body)).toEqual([
+    { ...target, takenDown: true, securityRevision: outcome.value.securityRevision, ...storedProvenance },
+  ]);
   const events = (
     await admin.query('SELECT * FROM core.outbox WHERE partition_no=$1 AND position=$2', [
       outcome.partition,
@@ -190,7 +398,7 @@ test('native takedown authorizes the sole independently anchored Global root at 
     event_count: 1,
     data: { ...target, securityRevision: outcome.value.securityRevision },
   });
-  const schema = CONTENT_EVENTS[eventType];
+  const schema = CONTENT_EVENTS()[eventType];
   expect(Value.Check(schema, events[0]!.data)).toBe(true);
   for (const key of ['reason', 'body', 'title', 'snippet', 'subjectId', 'actor', 'unexpected'])
     expect(Value.Check(schema, { ...events[0]!.data, [key]: 'authored or private bytes' })).toBe(false);
@@ -220,11 +428,7 @@ test('real governance role grants work; missing grant, scope, suspended account 
       );
     if (mode === 'wrong-root') await f.grant(f.actorId, f.resource);
     if (mode === 'no-scope') actor = { ...f.actor, scopes: [] };
-    if (mode === 'suspended')
-      await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-        routeOf(f.actorId),
-        f.actorId,
-      ]);
+    if (mode === 'suspended') await suspendAccount(admin, f.actorId);
     if (mode === 'anonymous') actor = { kind: 'anonymous' };
     if (mode === 'missing-root')
       await admin.query('DELETE FROM semantic.context WHERE route=0 AND context_id=$1', [platform.id]);
@@ -287,7 +491,12 @@ test('authorized replay has one effect, conflict denies, and revoked replay cann
     observer.records.slice(start).some((r) => /core.receipt|^BEGIN ISOLATION LEVEL SERIALIZABLE/.test(r.statement)),
   ).toBe(false);
   expect(await facts(body)).toEqual([
-    { ...home(body), takenDown: true, securityRevision: first.value.securityRevision },
+    {
+      ...home(body),
+      takenDown: true,
+      securityRevision: first.value.securityRevision,
+      ...(await storedTakedownPair(body)),
+    },
   ]);
   expect(
     (
@@ -329,7 +538,12 @@ test('all field groups share the tuple home independently of subject merge histo
   );
   for (const [index, body] of bodies.entries())
     expect(await facts(body)).toEqual([
-      { ...home(body), takenDown: true, securityRevision: outcomes[index]!.value.securityRevision },
+      {
+        ...home(body),
+        takenDown: true,
+        securityRevision: outcomes[index]!.value.securityRevision,
+        ...(await storedTakedownPair(body)),
+      },
     ]);
   const body = bodies[0]!;
   const target = home(body);
@@ -340,7 +554,14 @@ test('all field groups share the tuple home independently of subject merge histo
   );
   const next = await f.execute(body);
   expect(BigInt(next.value.securityRevision)).toBeGreaterThan(9007199254740993n);
-  expect(await facts(body)).toEqual([{ ...target, takenDown: true, securityRevision: next.value.securityRevision }]);
+  expect(await facts(body)).toEqual([
+    {
+      ...target,
+      takenDown: true,
+      securityRevision: next.value.securityRevision,
+      ...(await storedTakedownPair(body)),
+    },
+  ]);
   expect(await facts({ ...body, external_id: `${external}-other` })).toEqual([
     { ...home({ ...body, external_id: `${external}-other` }), takenDown: false, securityRevision: null },
   ]);

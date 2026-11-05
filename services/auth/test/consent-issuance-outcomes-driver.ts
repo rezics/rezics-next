@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { createRequire } from 'node:module';
 import { setImmediate } from 'node:timers/promises';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -50,7 +51,7 @@ export type Evidence = {
   proof: { reference: string; operationKey: string; digest: string; previousEpoch: number; applied: boolean };
   /** Committed native Access fence receipt that Access returned to Auth. */
   receipt: { receiptId: string; accountId: string; minimumAuthnEpoch: string };
-  /** Native Access authentication floor of the reducing account. */
+  /** Native Access authentication floor of the reducing account: fenced from the barrier until Auth completes it. */
   account: { accountId: string; minimumAuthnEpoch: string; fenced: boolean; receiptId: string | null };
   /** Auth's recorded application of that receipt, absent until the consent CAS commits. */
   applied: { receiptId: string; purpose: string; minimumAuthnEpoch: number } | null;
@@ -109,7 +110,9 @@ export async function createNativeDriver(max = 4): Promise<ConsentIssuanceDriver
   const fixture = testDatabase();
   const authUrl = fixture.url;
   const kernelUrl = new URL(fixture.url);
-  kernelUrl.pathname = '/consent_access';
+  // One name per fixture: several drivers of one file share a server when the check runs it.
+  const accessDatabase = `${decodeURIComponent(kernelUrl.pathname.slice(1))}_access`;
+  kernelUrl.pathname = `/${accessDatabase}`;
   const pools: Pool[] = [];
   const open = (url: string, size: number, name: string) => {
     const pool = new Pool({ connectionString: url, max: size, connectionTimeoutMillis: 5000, application_name: name });
@@ -118,7 +121,7 @@ export async function createNativeDriver(max = 4): Promise<ConsentIssuanceDriver
   };
   try {
     const observer = open(authUrl, 1, 'consent-outcome-observer');
-    await observer.query('CREATE DATABASE consent_access');
+    await observer.query(`CREATE DATABASE ${accessDatabase}`);
     migrateKernel(kernelUrl.href);
     const database = open(authUrl, max, AUTH_APPLICATION);
     const kernel = open(kernelUrl.href, 4, 'consent-outcome-access');
@@ -178,7 +181,7 @@ async function nativeDriver(
   let hold = true;
   const paused = signal<Evidence>();
   const release = signal<'resume' | 'restart'>();
-  const trustedAccess: TrustedAccessPorts = {
+  const trustedAccess: TrustedAccessPorts = trustedAccessPorts({
     ...bindings,
     async authorizeProvisioning(reference) {
       // The host composes the native registration receipt with Auth's provisioning metadata.
@@ -225,7 +228,7 @@ async function nativeDriver(
       }
       return receipt;
     },
-  };
+  });
   const options: AuthServiceOptions = {
     database,
     issuer,
@@ -441,7 +444,7 @@ export function createReferenceDriver(behavior: 'correct' | 'stale' | 'deny-all'
       applied: false,
     },
     receipt: { receiptId: 'reference-receipt', accountId: 'reference-account', minimumAuthnEpoch: '2' },
-    account: { accountId: 'reference-account', minimumAuthnEpoch: '2', fenced: false, receiptId: 'reference-receipt' },
+    account: { accountId: 'reference-account', minimumAuthnEpoch: '2', fenced: true, receiptId: 'reference-receipt' },
     applied: null,
     consent: { revision: '2', scopes: [retained, removed] },
     events: ['committed-auth-proof', 'committed-access-receipt', 'paused-before-consent-cas'],
@@ -449,15 +452,21 @@ export function createReferenceDriver(behavior: 'correct' | 'stale' | 'deny-all'
   return {
     startReduction: async () => structuredClone(evidence),
     beginAttempt(identity, scopes) {
+      // The reducing account is fenced until the reduction completes, whatever the client.
+      const fenced = !finished && identity !== 'other-account';
       const denied =
-        behavior === 'deny-all' || (behavior !== 'stale' && identity === 'target' && scopes.includes(removed));
+        behavior === 'deny-all' ||
+        fenced ||
+        (behavior !== 'stale' && identity === 'target' && scopes.includes(removed));
       const jwt = denied ? null : `reference-token-${++issued}`;
       if (jwt) tokens.set(jwt, { identity, scopes });
       evidence.events.push('signin-http-start', 'signin-http-complete');
       if (!denied) evidence.events.push('token-http-complete');
       return {
         result: Promise.resolve({
-          signin: new Response('{}', { status: denied ? 401 : 200 }),
+          signin: new Response(denied ? JSON.stringify({ error: 'authentication_denied' }) : '{}', {
+            status: denied ? 401 : 200,
+          }),
           token: denied ? null : new Response(JSON.stringify({ access_token: jwt }), { status: 200 }),
           jwt,
         }),
@@ -467,6 +476,7 @@ export function createReferenceDriver(behavior: 'correct' | 'stale' | 'deny-all'
     async finish(mode) {
       finished = true;
       evidence.proof.applied = true;
+      evidence.account.fenced = false;
       evidence.applied = { receiptId: evidence.receipt.receiptId, purpose: 'consent-reduction', minimumAuthnEpoch: 2 };
       evidence.consent = { revision: '3', scopes: [retained] };
       if (mode === 'restart')

@@ -13,7 +13,7 @@ export type CursorResult =
 
 type CursorInput = { epoch: number; after: readonly CursorKey[] };
 
-function canonicalParameters(parameters: CursorBinding['parameters']): string {
+export function canonicalParameters(parameters: CursorBinding['parameters']): string {
   if (parameters === null || typeof parameters !== 'object' || Array.isArray(parameters))
     throw new TypeError('Cursor parameters must be an object');
   const entries: string[] = [];

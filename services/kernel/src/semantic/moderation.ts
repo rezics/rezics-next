@@ -1,13 +1,16 @@
+import { subjectPageSlot, recordSubjectPageDiff, invalidateSubjectPage } from './subject-page-publication-native.ts';
 import type { Pool } from 'pg';
-import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { currentCommand, runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import type { AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { readRelease } from './definitions.ts';
-import { LINKS_CHANGED } from './events.ts';
+import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
+import { LINKS_CHANGED, LINKS_VISIBILITY_CHANGED } from './events.ts';
 import changePartitionSubjectCount from './change-partition-subject-count.sql';
 import { factDataTypes, SubjectInputError, type FactRow, type Violation } from './item.ts';
-import { linkChanges } from './link-changes.ts';
+import { holderFacts } from './link-keys.ts';
+import { contextLinkChanges, linkChanges } from './link-changes.ts';
+import listRelationContexts from './relation-context-list.sql';
 import moderationBumpSecurity from './moderation-bump-security.sql';
 import moderationDeleteHidden from './moderation-delete-hidden.sql';
 import moderationHasLiveCandidate from './moderation-has-live-candidate.sql';
@@ -15,12 +18,12 @@ import moderationInsertStatement from './moderation-insert-statement.sql';
 import moderationInsertSubject from './moderation-insert-subject.sql';
 import moderationReadHidden from './moderation-read-hidden.sql';
 import moderationReadLiveCandidate from './moderation-read-live-candidate.sql';
-import moderationReadProperties from './moderation-read-properties.sql';
 import moderationReadSubject from './moderation-read-subject.sql';
 import moderationUpdateVisibility from './moderation-update-visibility.sql';
 import moderationUpsertHidden from './moderation-upsert-hidden.sql';
 import readRedirect from './read-redirect.sql';
 import readVisibility from './read-visibility.sql';
+import { recordPrivacyReduction } from './public-filter-source.ts';
 import { expandSlot, slotView } from './slots.ts';
 
 export type SubjectVisibility = 'visible' | 'hidden' | 'taken_down';
@@ -128,18 +131,11 @@ async function readModeratedSubject(
   return moderationReadSubject.run(tx, { route, subject_id: subject });
 }
 
-async function shownFacts(tx: CommandTransaction, subject: string, property?: string): Promise<FactRow[]> {
-  const properties = property
-    ? [property]
-    : (await moderationReadProperties.run(tx, { route: routeOf(subject)!, subject_id: subject })).map(
-        (row) => row.property,
-      );
-  const facts: FactRow[] = [];
-  for (const name of properties) facts.push(...(await slotView(tx, subject, name)).facts);
-  return facts;
+async function shownFacts(tx: CommandTransaction, subject: string, property: string, slot: string): Promise<FactRow[]> {
+  return (await slotView(tx, subject, property, GLOBAL_CONTEXT, {}, slot)).facts;
 }
 
-async function moderationLinks(
+export async function moderationLinks(
   tx: CommandTransaction,
   subject: string,
   revision: number,
@@ -147,11 +143,26 @@ async function moderationLinks(
   releaseDigest: string,
   before: FactRow[],
   after: FactRow[],
+  contexts: Map<string, { before: FactRow[]; after: FactRow[] }>,
 ): Promise<{ type: string; subject: string; data: unknown } | null> {
-  if (before.length === 0 && after.length === 0) return null;
+  if (before.length === 0 && after.length === 0 && contexts.size === 0) return null;
   const release = await readRelease(tx, releaseDigest);
   if (!release) throw new Error('Subject revision release is missing');
-  const changes = linkChanges(before, after, factDataTypes(release, [...before, ...after]));
+  const identity = await holderFacts(tx, subject, release);
+  const metadata = { subject, release, type: identity.type, identityFacts: identity.facts };
+  const changes = linkChanges(before, after, factDataTypes(release, [...before, ...after]), metadata);
+  for (const [context, facts] of contexts)
+    changes.push(
+      ...contextLinkChanges(
+        before,
+        facts.before,
+        facts.after,
+        factDataTypes(release, [...before, ...after, ...facts.before, ...facts.after]),
+        metadata,
+        context,
+        after,
+      ),
+    );
   if (changes.length === 0) return null;
   return {
     type: LINKS_CHANGED,
@@ -182,6 +193,7 @@ export async function moderateSubject(
     authorization: CommandAuthorization;
     deadline: number;
     clock?: () => Date;
+    routeKey?: Uint8Array;
   },
 ) {
   const route = routeOf(options.subject);
@@ -220,7 +232,6 @@ export async function moderateSubject(
       if (!allowed) throw new ModerationConflictError();
 
       const body = validateModerationBody(options.action, options.body);
-      const before = current.visibility === 'visible' ? await shownFacts(tx, options.subject) : [];
       const updated = await moderationUpdateVisibility.run(tx, {
         route,
         subject_id: options.subject,
@@ -240,6 +251,15 @@ export async function moderateSubject(
         body,
         transaction_id: transactionId,
       });
+      if (nextVisibility !== 'visible')
+        await recordPrivacyReduction(tx, {
+          partition: partitionOf(route),
+          transactionId,
+          time: currentCommand(tx).time,
+          cause: 'subject',
+          affected: [{ kind: 'subject', route, subject: options.subject }],
+          impacts: [{ kind: 'subject', route, subject: options.subject }],
+        });
       const securityRevision = Number(revision);
       const countDelta =
         current.visibility === 'visible' && nextVisibility !== 'visible'
@@ -249,24 +269,27 @@ export async function moderateSubject(
             : 0;
       if (countDelta !== 0 && !(await readRedirect.run(tx, { route, subject_id: options.subject })))
         await changePartitionSubjectCount.run(tx, { partition_no: partitionOf(route), delta: countDelta });
-      const after = nextVisibility === 'visible' ? await shownFacts(tx, options.subject) : [];
       const events: { type: string; subject: string; data: unknown }[] = [
         {
           type: 'com.rezics.subject.visibility_changed.v1',
           subject: options.subject,
           data: { id: options.subject, visibility: nextVisibility, security_revision: securityRevision },
         },
+        {
+          type: LINKS_VISIBILITY_CHANGED,
+          subject: options.subject,
+          data: {
+            subject: options.subject,
+            revision: current.revision,
+            security_revision: securityRevision,
+            release: current.release,
+            visible: nextVisibility === 'visible',
+            cursor: [],
+          },
+        },
       ];
-      const links = await moderationLinks(
-        tx,
-        options.subject,
-        current.revision,
-        securityRevision,
-        current.release,
-        before,
-        after,
-      );
-      if (links) events.push(links);
+      if ((current.visibility === 'visible') !== (nextVisibility === 'visible'))
+        await invalidateSubjectPage(tx, options.subject, transactionId, events);
       return {
         value: { subject: options.subject, visibility: nextVisibility, security_revision: securityRevision },
         events,
@@ -302,6 +325,7 @@ export async function moderateStatement(
     authorization: CommandAuthorization;
     deadline: number;
     clock?: () => Date;
+    routeKey?: Uint8Array;
   },
 ) {
   const route = routeOf(options.subject);
@@ -334,7 +358,8 @@ export async function moderateStatement(
         candidate_id: options.candidate,
       });
       const property = located?.property;
-      if (!current || property == null) throw new ModerationSubjectNotFoundError();
+      const slot = located?.slot_id;
+      if (!current || !located || property == null || slot == null) throw new ModerationSubjectNotFoundError();
       const hidden = await moderationReadHidden.run(tx, {
         route,
         subject_id: options.subject,
@@ -344,8 +369,25 @@ export async function moderateStatement(
       if (!statementTransition(options.action, currentVisibility)) throw new ModerationConflictError();
       const body = validateModerationBody(options.action, options.body);
       const nextVisibility = nextStatementVisibility(options.action);
-      const before = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property) : [];
-      await expandSlot(tx, options.subject, property, transactionId);
+      const publicationRelease = await readRelease(tx, current.release);
+      if (!publicationRelease) throw new Error('Subject release is missing');
+      const publicationBefore =
+        current.visibility === 'visible'
+          ? await subjectPageSlot(tx, options.subject, property, slot, publicationRelease, options.routeKey)
+          : new Map();
+      const before = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property, slot) : [];
+      const contexts = new Map<string, { before: FactRow[]; after: FactRow[] }>();
+      if (located.relation && current.visibility === 'visible')
+        for (const { context_id } of await listRelationContexts.run(tx, {
+          route,
+          subject_id: options.subject,
+          slot_id: slot,
+        }))
+          contexts.set(context_id, {
+            before: (await slotView(tx, options.subject, property, context_id, {}, slot)).facts,
+            after: [],
+          });
+      await expandSlot(tx, options.subject, property, transactionId, slot, located.relation);
       const updated = await moderationBumpSecurity.run(tx, {
         route,
         subject_id: options.subject,
@@ -378,9 +420,19 @@ export async function moderateStatement(
           visibility: nextVisibility,
           security_revision: revision,
         });
+        await recordPrivacyReduction(tx, {
+          partition: partitionOf(route),
+          transactionId,
+          time: currentCommand(tx).time,
+          cause: 'candidate',
+          affected: [{ kind: 'selection', route, subject: options.subject, slot, candidate: options.candidate }],
+          impacts: [{ kind: 'keys', route, subject: options.subject, keys: [{ kind: 'property', property }] }],
+        });
       }
       const securityRevision = Number(revision);
-      const after = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property) : [];
+      const after = current.visibility === 'visible' ? await shownFacts(tx, options.subject, property, slot) : [];
+      for (const [context, facts] of contexts)
+        facts.after = (await slotView(tx, options.subject, property, context, {}, slot)).facts;
       const events: { type: string; subject: string; data: unknown }[] = [
         {
           type: 'com.rezics.subject.statement_visibility_changed.v1',
@@ -401,8 +453,19 @@ export async function moderateStatement(
         current.release,
         before,
         after,
+        contexts,
       );
       if (links) events.push(links);
+      await recordSubjectPageDiff(
+        tx,
+        options.subject,
+        transactionId,
+        publicationBefore,
+        current.visibility === 'visible'
+          ? await subjectPageSlot(tx, options.subject, property, slot, publicationRelease, options.routeKey)
+          : new Map(),
+        events,
+      );
       return {
         value: {
           subject: options.subject,

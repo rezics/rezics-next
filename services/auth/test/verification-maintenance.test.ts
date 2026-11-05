@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { betterAuth, type BetterAuthOptions } from 'better-auth';
 import { getMigrations } from 'better-auth/db/migration';
@@ -69,14 +70,17 @@ beforeAll(async () => {
     audience: 'https://verification.api.test',
     secret,
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount() {
+        return null;
+      },
       async readAccount() {
         return null;
       },
       async authorizeProvisioning() {
         throw new Error('unused');
       },
-    },
+    }),
   };
   service = await createAuthService(serviceOptions);
   secondService = await createAuthService({ ...serviceOptions, database: secondPool });

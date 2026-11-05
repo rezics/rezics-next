@@ -1,3 +1,5 @@
+import { recoveryPage } from '../../../services/auth/src/recovery-page';
+import { nativeSignInProof } from './sign-in-fixture';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHmac, randomBytes } from 'node:crypto';
@@ -33,7 +35,7 @@ type Call = {
 const calls: Call[] = [];
 let startStatus: 200 | 400 | 429 | 503 = 200;
 let completeStatus: 200 | 400 | 401 | 429 | 503 = 200;
-let signInStatus: 200 | 401 | 429 | 503 = 200;
+let signInStatus: 200 | 401 | 403 | 429 | 503 = 200;
 
 // Copied from apps/auth/tests/recovery.test.ts's fake Auth and reduced to the browser HTTP contract.
 const fake = Bun.serve({
@@ -49,6 +51,11 @@ const fake = Bun.serve({
     };
     calls.push(call);
     const headers = new Headers({ 'cache-control': 'no-store' });
+    if (url.pathname === '/recovery/page' && request.method === 'POST')
+      return Response.json(
+        recoveryPage(JSON.parse(call.body).stage, { minPasswordLength: 8, maxPasswordLength: 128 }),
+        { headers },
+      );
 
     if (url.pathname === '/authorize' && request.method === 'GET') {
       if ((call.headers.cookie ?? '').split(';').some((cookie) => cookie.trim() === `auth_session=${session}`))
@@ -63,13 +70,13 @@ const fake = Bun.serve({
     if (url.pathname === '/signin' && request.method === 'POST') {
       if (signInStatus === 200) {
         headers.append('set-cookie', `auth_session=${session}; Path=/; HttpOnly; SameSite=Lax`);
-        return Response.json({ success: true }, { headers });
+        return Response.json(nativeSignInProof(JSON.parse(call.body)), { headers });
       }
       if (signInStatus === 429) headers.set('retry-after', String(retryAfter));
       return Response.json(
-        {
-          code: signInStatus === 401 ? 'authentication_denied' : signInStatus === 429 ? 'rate_limited' : 'unavailable',
-        },
+        signInStatus === 403
+          ? { error: 'account_suspended', code: 'ACCOUNT_SUSPENDED' }
+          : { error: signInStatus === 503 ? 'unavailable' : 'authentication_denied' },
         { status: signInStatus, headers },
       );
     }
@@ -130,7 +137,7 @@ function site(): Promise<string> {
         cwd: app,
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: { ...process.env, AUTH_ORIGIN: fake.url.origin },
+        env: { ...process.env, AUTH_ORIGIN: fake.url.origin, AUTH_SECURITY_SCOPE_CONFIGURATION: 'native-no-catalogue' },
       });
       let startError: Error | undefined;
       child.on('error', (error) => {
@@ -310,9 +317,9 @@ test(
 );
 
 test(
-  'a wrong password, rate limit or outage keeps the person on the page with a localized message',
+  'a credential refusal, suspension, rate limit or outage stays on the page with a localized message',
   async () => {
-    for (const status of [401, 429, 503] as const) {
+    for (const status of [401, 403, 429, 503] as const) {
       signInStatus = status;
       calls.length = 0;
       const { page, origin } = await open(`/step-up?${stepUpQuery}`);
@@ -329,7 +336,7 @@ test(
         expect(signIns()).toHaveLength(1);
         postedSignIn(signIns()[0], origin);
         expect(authorizations()).toEqual([]);
-        if (status === 401) {
+        if (status === 401 || status === 403) {
           expect(message).toMatch(/email\s+or\s+password/i);
           expect(message).toMatch(/incorrect|wrong|invalid/i);
           expect(message).not.toMatch(

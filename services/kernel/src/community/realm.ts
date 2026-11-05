@@ -1,3 +1,5 @@
+import { viewerActionEligibilityWork } from './eligibility-access-work.ts';
+import { bindRealmDiscoveryCommand } from './discovery-source.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import {
@@ -24,17 +26,25 @@ import {
 import { platformRootAnchor } from '../commerce/catalogue.ts';
 import { REACTION_KINDS } from '../content/events.ts';
 import { withConnection } from '../database/pool.ts';
+import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type Access, type Actor, type Resource } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { publicContextEligibility } from '../semantic/context.ts';
 import { ensureRealmMemberGrant } from './participation.ts';
+import { realmContinuityView, realmGovernanceAuthorization, type RealmContinuity } from './realm-continuity.ts';
 import type { RealmVotes } from './realm-votes.ts';
 import type { SpaceDependencies, SpaceContext } from './space.ts';
+import { emptyRealmPresentation, realmPresentation, type RealmPresentation } from './presentation.ts';
+import { claimRealmPresentationMedia } from '../content/realm-media.ts';
+import { prepareRealmRulesSelection } from '../content/community-presentation-rules.ts';
 import read from './realm-read.sql';
+import bindingRead from './container-lifecycle-binding.sql';
+import currentReadBan from './read-ban-current.sql';
 import insert from './realm-insert.sql';
 import append from './realm-revision.sql';
 import moveHead from './realm-head.sql';
 import host from './realm-space.sql';
+import { realmEligibilityAccessWork, realmReadBanAccounts } from './eligibility-access-work.ts';
 
 export type RealmDependencies = SpaceDependencies;
 export type RealmContext = SpaceContext;
@@ -54,6 +64,7 @@ export type RealmUpdate = Readonly<{
   visibility?: 'public' | 'protected';
   contextId?: string;
   votes?: RealmVotes;
+  presentation?: RealmPresentation;
 }>;
 type RealmRow = NonNullable<Awaited<ReturnType<typeof read.run>>>;
 export type Realm = Readonly<{
@@ -68,11 +79,13 @@ export type Realm = Readonly<{
   predecessor: string | null;
   title: string;
   summary: string;
+  presentation: RealmPresentation;
   revisionCreatedAt: string;
   author: string;
 }>;
 /** Head read used by HTTP. The scheme and vote weights travel on the same row. */
 export type RealmView = Realm &
+  RealmContinuity &
   Readonly<{
     boardSchemeId: string | null;
     votes: RealmVotes;
@@ -149,6 +162,7 @@ function options(
 }
 function record(row: RealmRow): RealmView {
   return {
+    ...realmContinuityView(row),
     realmId: row.realm_id,
     spaceId: row.space_id,
     state: row.state,
@@ -164,11 +178,25 @@ function record(row: RealmRow): RealmView {
     revisionCreatedAt: new Date(row.revision_created_at).toISOString(),
     author: row.author,
     votes: voteMap(row.votes, TypeError),
+    presentation: realmPresentation(row.presentation),
   };
 }
 
+/** Exact current source for a composed management read. The caller owns disclosure,
+ * management, partition and lifecycle checks on this same snapshot. */
+export async function readRealmSettingsHead(
+  client: Parameters<typeof read.run>[0],
+  realmId: string,
+  at: string,
+): Promise<RealmView | null> {
+  const route = routeOf(realmId);
+  if (route === null) return null;
+  const row = await read.run(client, { route, id: realmId, at });
+  return row ? record(row) : null;
+}
+
 /** One head seek at Access's authoritative T, with the native grant branch
- * required for protected Realms. Missing and denied resources both return null.
+ * and no current ban required for protected Realms. Missing and denied resources both return null.
  */
 export async function readRealm(
   deps: Pick<RealmDependencies, 'pool' | 'access'>,
@@ -190,24 +218,65 @@ export async function readRealm(
     { ...resource, eligibility },
     { pool: deps.pool, deadline: context.deadline },
   );
-  return withConnection(deps.pool, async (client) => {
-    if (!(await check(deadlineClient(client, context.deadline)))) return null;
-    return current ? record(current) : null;
-  });
+  try {
+    return await withConnection(deps.pool, async (client) => {
+      if (!(await check(deadlineClient(client, context.deadline)))) return null;
+      return current ? record(current) : null;
+    });
+  } catch (error) {
+    if (error instanceof Error && realmReadDenials.has(error)) return null;
+    throw error;
+  }
+}
+
+// Access and HTTP problem mapping share this module graph; construct the error only during a read.
+const realmReadDenials = new WeakSet<Error>();
+function realmReadDeniedError(): ProblemError {
+  const error = new ProblemError('not_found');
+  realmReadDenials.add(error);
+  return error;
 }
 
 function readEligibility(identity: Resource, observe?: (row: RealmRow | null) => void): ResourceEligibility {
   const resource = Object.freeze({ route: identity.route, id: identity.id });
+  const native = realmEligibilityAccessWork<{ binding: Awaited<ReturnType<typeof bindingRead.run>> }>(resource);
   return createResourcePublicEligibility({
     resource,
     action: 'realm:read',
-    async prepare() {
-      return resource;
+    work: native.work,
+    prepare(context) {
+      return native.prepare(context, async (dispatch) => {
+        const parameters = { ...resource, at: 'infinity', subject: null };
+        return {
+          binding: await dispatch(
+            native.bindingPlan,
+            parameters,
+            () => bindingRead.run(deadlineClient(context.pool, context.deadline), parameters),
+            true,
+          ),
+        };
+      });
     },
-    async verify({ client, at }) {
-      const row = await read.run(client, { route: resource.route, id: resource.id, at });
-      observe?.(row);
-      return row?.visibility === 'public';
+    verify(context) {
+      return native.verify(context, async (dispatch) => {
+        const { client, actor, at, evidence } = context;
+        const parameters = { ...resource, at };
+        const row = await dispatch(native.realmPlan, parameters, () => read.run(client, parameters));
+        const binding = { ...resource, at, subject: null };
+        const current = await dispatch(native.bindingPlan, binding, () => bindingRead.run(client, binding));
+        if (!row || !current || canonicalize(current) !== canonicalize(evidence.binding)) throw realmReadDeniedError();
+        if (row?.visibility === 'protected' && actor.kind === 'account') {
+          // Auth/Access validates the assignment reference. Its principal is a
+          // second fixed identity, never an expansion of grants or memberships.
+          const accountIds = realmReadBanAccounts(actor);
+          const ban = { route: resource.route, realm_id: resource.id, account_ids: accountIds, at };
+          if (await dispatch(native.banPlan(accountIds.length), ban, () => currentReadBan.run(client, ban)))
+            // A false floor alone would leave independent grants available.
+            throw realmReadDeniedError();
+        }
+        observe?.(row);
+        return row?.visibility === 'public';
+      });
     },
   });
 }
@@ -330,6 +399,7 @@ export async function createRealm(deps: RealmDependencies, actor: Actor, input: 
       authorization: combined.bound(authorization),
     },
     async (tx, command) => {
+      bindRealmDiscoveryCommand(tx);
       // An authorized receipt replay returns before this slot gate. New attempts
       // must have observed a free slot at T; the unique key arbitrates contenders.
       if (!available.get(command.time)) throw new GrantDeniedError();
@@ -359,6 +429,7 @@ export async function createRealm(deps: RealmDependencies, actor: Actor, input: 
         at,
         author: creator,
         votes: storedVotes,
+        presentation: emptyRealmPresentation,
       });
       inserted.add(tx);
       await initializeResourceGrants(tx, { resource, type: 'community.realm', creator });
@@ -378,6 +449,12 @@ export async function createRealm(deps: RealmDependencies, actor: Actor, input: 
 
 export async function updateRealm(deps: RealmDependencies, actor: Actor, input: RealmUpdate, context: RealmContext) {
   const author = account(actor).accountId;
+  let presentation: RealmPresentation | undefined;
+  try {
+    presentation = input.presentation === undefined ? undefined : realmPresentation(input.presentation);
+  } catch {
+    throw new RealmInputError();
+  }
   const votes = input.votes === undefined ? undefined : voteMap(input.votes, RealmInputError);
   const body = {
     realmId: input.realmId,
@@ -387,6 +464,7 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
     visibility: input.visibility,
     contextId: input.contextId,
     ...(votes === undefined ? {} : { votes }),
+    ...(presentation === undefined ? {} : { presentation }),
   };
   const route = routeOf(body.realmId);
   if (route === null) throw new RealmInputError();
@@ -411,9 +489,27 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
     deps.pool,
     {
       ...options(deps, actor, route, 'community.realm.update', body, context),
-      authorization: combined.bound(authorization),
+      authorization: (() => {
+        const base = realmGovernanceAuthorization(combined.bound(authorization), { route, id: body.realmId });
+        return {
+          ...base,
+          async prepare(attempt: Parameters<NonNullable<typeof base.prepare>>[0]) {
+            const proof = await base.prepare!(attempt);
+            if (presentation?.rules) {
+              try {
+                await prepareRealmRulesSelection(deps, actor, body.realmId, presentation.rules, context);
+              } catch (error) {
+                if (error instanceof TypeError) throw new RealmInputError();
+                throw error;
+              }
+            }
+            return proof;
+          },
+        };
+      })(),
     },
     async (tx, command) => {
+      bindRealmDiscoveryCommand(tx);
       const previous = current.get(command.time)!;
       if (routeOf(body.expectedHead) !== route) throw new RealmInputError();
       if (previous.headRevisionId !== body.expectedHead) throw new RealmConflictError();
@@ -422,6 +518,7 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
       const visibility = body.visibility === undefined ? previous.visibility : body.visibility,
         contextId = body.contextId === undefined ? previous.contextId : body.contextId;
       metadata(title, summary, visibility, contextId);
+      const selected = presentation ?? previous.presentation;
       const revision = newId(route);
       // No votes means the column default. The revision trigger then copies the predecessor.
       await append.run(tx, {
@@ -436,6 +533,7 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
         at: authoritativeTimeValue(command.time),
         author,
         votes: votes ?? inheritedVotes,
+        presentation: selected,
       });
       if (
         !(await moveHead.run(tx, {
@@ -448,6 +546,13 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
         }))
       )
         throw new RealmConflictError();
+      if (presentation && (presentation.avatarMediaId !== null || presentation.bannerMediaId !== null))
+        await claimRealmPresentationMedia(tx, {
+          realmId: body.realmId,
+          author: actor,
+          avatarMediaId: presentation.avatarMediaId,
+          bannerMediaId: presentation.bannerMediaId,
+        });
       if (visibility === 'protected') await ensureRealmMemberGrant(tx, { realmId: body.realmId });
       return {
         value: { realmId: body.realmId, revisionId: revision },
@@ -462,3 +567,37 @@ export async function updateRealm(deps: RealmDependencies, actor: Actor, input: 
     },
   );
 }
+
+/** The read route's exact identity/head eligibility, batched by supplied full keys. */
+export const realmViewerActionResource: import('../access/viewer-actions.ts').ViewerActionResource = {
+  readAction: 'realm:read',
+  async read(client, ids, at, _time, work) {
+    const dispatch = async () => {
+      const result = await client.query<{ id: string; public: boolean }>(
+        `SELECT row.* FROM unnest($1::integer[], $2::uuid[]) AS wanted(route,id)
+       CROSS JOIN LATERAL (
+         WITH identity AS MATERIALIZED (
+           SELECT h.* FROM community.realm h
+           WHERE h.route = wanted.route AND h.realm_id = wanted.id
+           ORDER BY h.route, h.realm_id LIMIT 1
+         )
+         SELECT h.realm_id AS id, h.visibility = 'public' AS public
+         FROM identity h
+         CROSS JOIN LATERAL (
+           SELECT r.created_at FROM community.realm_revision r
+           WHERE r.route = h.route AND r.realm_id = h.realm_id AND r.revision_id = h.head_revision_id
+           ORDER BY r.route, r.realm_id, r.revision_id LIMIT 1
+         ) r
+         WHERE h.state = 'active'
+           AND EXISTS (SELECT 1 FROM community.space s WHERE s.route=h.route AND s.space_id=h.space_id AND s.state='active')
+           AND h.created_at <= $3::timestamptz AND r.created_at <= $3::timestamptz
+       ) row`,
+        [ids.map((id) => routeOf(id)!), ids, at],
+      );
+      return Object.fromEntries(result.rows.map((row) => [row.id, row.public]));
+    };
+    return work
+      ? work.run('community.realm.viewer-resource', viewerActionEligibilityWork('realm', ids, at), dispatch)
+      : dispatch();
+  },
+};

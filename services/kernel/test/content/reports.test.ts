@@ -161,6 +161,15 @@ async function command<T>(
   return (await response.json()) as T;
 }
 
+async function readReportHttp(reportId: string, bearer: string): Promise<Response> {
+  const { response } = await system.transport.capture(
+    new Request(`https://content.test/v1/reports/${reportId}`, {
+      headers: { authorization: `Bearer ${bearer}` },
+    }),
+  );
+  return response;
+}
+
 async function grant(target: ReportTarget, actorId: string, action: string) {
   const result = await permission('/v1/grants', {
     resource: resource(target),
@@ -455,6 +464,88 @@ test('invalid exact revision leaves no partial record and later revisions do not
   expect(read.value).toMatchObject({ revisionId: f.input.revisionId, evidence: f.input.evidence });
 });
 
+test('reporters read only their own report through native account:read while moderators retain inspection', async () => {
+  const f = await fixture();
+  const result = await createReport(deps(), f.author, f.input, context());
+  const owner = await system.auth.issue({
+    accountId: f.author.accountId,
+    clientId: f.author.clientId,
+    scopes: ['account:read'],
+  });
+  const ownRead = await readReportHttp(result.value.reportId, owner.bearer);
+  expect(ownRead.status).toBe(200);
+  const ownBody = (await ownRead.json()) as { report: Record<string, unknown> };
+  expect(ownBody.report).toMatchObject({
+    id: result.value.reportId,
+    target: f.target,
+    reporterId: f.author.accountId,
+    reason: f.input.reason,
+    evidence: f.input.evidence,
+  });
+  expect(JSON.stringify(ownBody)).not.toContain('Original');
+
+  const noScope = await system.auth.issue({
+    accountId: f.author.accountId,
+    clientId: f.author.clientId,
+    scopes: [],
+  });
+  expect((await readReportHttp(result.value.reportId, noScope.bearer)).status).toBe(404);
+  expect((await readReportHttp(result.value.reportId, system.actors.other.bearer)).status).toBe(404);
+
+  const limitedClientId = `reports-read-${randomUUID()}`;
+  await system.nativeAuth.internal.registerClient({
+    clientId: limitedClientId,
+    firstParty: true,
+    scopes: ['moderation:read_reports'],
+  });
+  const limitedClient = await system.auth.issue({
+    accountId: f.author.accountId,
+    clientId: limitedClientId,
+    scopes: ['moderation:read_reports'],
+  });
+  expect((await readReportHttp(result.value.reportId, limitedClient.bearer)).status).toBe(404);
+  await expect(
+    system.auth.issue({
+      accountId: f.author.accountId,
+      clientId: limitedClientId,
+      scopes: ['account:read'],
+    }),
+  ).rejects.toThrow();
+
+  const unassignedRequest = `urn:rezics:request:${f.moderator.accountId}:${newId(routeOf(f.moderator.accountId)!)}`;
+  await expect(
+    system.auth.issue({
+      accountId: f.author.accountId,
+      clientId: f.author.clientId,
+      scopes: ['account:read'],
+      requestedBy: unassignedRequest,
+    }),
+  ).rejects.toThrow();
+
+  const moderator = await system.auth.issue({
+    accountId: f.moderator.accountId,
+    clientId: f.moderator.clientId,
+    scopes: ['moderation:read_reports'],
+  });
+  expect((await readReportHttp(result.value.reportId, moderator.bearer)).status).toBe(200);
+
+  const anonymous = await createReport(deps(), { kind: 'anonymous' }, f.input, {
+    ...context(),
+    botToken: proof(),
+  });
+  expect((await readReportHttp(anonymous.value.reportId, owner.bearer)).status).toBe(404);
+  expect((await readReport(deps(), anonymous.value.reportId, readContext({ kind: 'anonymous' }))).value).toBeNull();
+
+  await system.database.pool.query(
+    `UPDATE content.report
+     SET evidence=NULL, reporter_account_id=NULL, reporter_erased=true
+     WHERE route=$1 AND report_id=$2`,
+    [routeOf(result.value.reportId), result.value.reportId],
+  );
+  expect((await readReportHttp(result.value.reportId, owner.bearer)).status).toBe(404);
+  expect((await readReportHttp(result.value.reportId, system.actors.other.bearer)).status).toBe(404);
+});
+
 test('moderator inspection resolves anchored records without joining partitions', async () => {
   const f = await fixture();
   const other = await fixture();
@@ -470,10 +561,15 @@ test('moderator inspection resolves anchored records without joining partitions'
       partition: partitionOf(routeOf(result.value.reportId)!),
       target: current.target,
     });
-    for (const actor of [{ kind: 'anonymous' } as const, current.author, otherActor]) {
-      expect((await readReport(deps(), result.value.reportId, readContext(actor))).value).toBeNull();
+    expect((await readReport(deps(), result.value.reportId, readContext({ kind: 'anonymous' }))).value).toBeNull();
+    expect((await readReport(deps(), result.value.reportId, readContext(current.author))).value).toMatchObject({
+      id: result.value.reportId,
+      reporterId: current.author.accountId,
+      evidence: 'Evidence',
+    });
+    expect((await readReport(deps(), result.value.reportId, readContext(otherActor))).value).toBeNull();
+    for (const actor of [{ kind: 'anonymous' } as const, current.author, otherActor])
       expect((await listTargetReports(deps(), current.target, readContext(actor))).entries).toEqual([]);
-    }
     await revoke(current.target, current.moderator.accountId, 'moderation:read_reports');
     expect((await readReport(deps(), result.value.reportId, readContext(current.moderator))).value).toBeNull();
     expect((await listTargetReports(deps(), current.target, readContext(current.moderator))).entries).toEqual([]);
@@ -537,7 +633,7 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
   };
   try {
     const report = await checkGrowth(db, {
-      name: 'report create, reverse projection and bounded moderator inspection',
+      name: 'report create, reverse projection and bounded reporter and moderator inspection',
       scales: [32, 256, 2048],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       grow,
@@ -551,6 +647,8 @@ test('checkGrowth proves the declared three-scale machine-independent bound', as
           deadline: Date.now() + 30_000,
         });
         const result = await createReport(deps(observed.pool), author, f.input, context(`growth-${repetition}`));
+        const reporterRead = await readReport(deps(observed.pool), result.value.reportId, readContext(author));
+        expect(reporterRead.value?.reporterId).toBe(author.accountId);
         const exact = await readReport(deps(observed.pool), result.value.reportId, readContext(moderator));
         expect(exact.value?.id).toBe(result.value.reportId);
         const page = await listTargetReports(deps(observed.pool), f.target, readContext(moderator), undefined, 1);

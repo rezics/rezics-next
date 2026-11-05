@@ -185,7 +185,7 @@ test('copies stay within their bound as the copy list grows', async () => {
         expect(page.copies).toHaveLength(scale);
         expect(page.copies.some((copy) => 'subjectId' in copy)).toBe(false);
       } else if (operation === 'create') {
-        const created = await submitCopy(client, request, env, {
+        const draft = {
           subjectId,
           idempotencyKey,
           status: 'owned',
@@ -194,7 +194,19 @@ test('copies stay within their bound as the copy list grows', async () => {
           acquiredOn: '2030-01-01',
           disposedOn: null,
           note: 'Cost copy',
-        });
+        };
+        for (const write of [submitCopy, saveCopy]) {
+          for (const field of ['acquiredOn', 'disposedOn']) {
+            for (const day of ['0000-01-01', '1900-02-29', '2030', '2030-01', '2030-01-01\n', '2030-01-01T00:00:00Z']) {
+              expect(await write(client, request, env, { ...draft, id: copyId, revision: 3, [field]: day })).toEqual({
+                ok: false,
+                reason: 'invalid',
+              });
+            }
+          }
+        }
+        expect(counts).toEqual({ D: 0, K: 0, R: 0, A: 0 });
+        const created = await submitCopy(client, request, env, draft);
         expect(created).toMatchObject({ ok: true });
       } else if (operation === 'update') {
         const saved = await saveCopy(client, request, env, {

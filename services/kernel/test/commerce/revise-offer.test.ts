@@ -111,7 +111,7 @@ async function eventRows(transactionId: string) {
 
 test('offer owner revises active price, preserving order snapshots and idempotent receipts', async () => {
   const created = await offer();
-  const before = (await commands.createOrder(await actor(buyer), created.id, key())).value;
+  const before = (await commands.createOrder(await actor(buyer), created.id, created.revision, key())).value;
   const requestKey = key();
   const revised = await commands.reviseOffer(await actor(seller), created.id, { unitAmountMinor: 2400 }, requestKey);
 
@@ -121,7 +121,7 @@ test('offer owner revises active price, preserving order snapshots and idempoten
     state: 'active',
     revision: created.revision + 1,
   });
-  const after = (await commands.createOrder(await actor(buyer), created.id, key())).value;
+  const after = (await commands.createOrder(await actor(buyer), created.id, revised.value.revision, key())).value;
   expect(before).toMatchObject({ offerRevision: created.revision, unitAmountMinor: created.unitAmountMinor });
   expect(after).toMatchObject({ offerRevision: revised.value.revision, unitAmountMinor: 2400 });
 

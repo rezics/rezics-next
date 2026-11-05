@@ -1,0 +1,656 @@
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { ContentItemFrame } from '@rezics/ui/content-item';
+import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { m } from '../../paraglide/messages.js';
+import { coverSrc } from '../../media/cover-src';
+import { pageText } from '../pages/data';
+import { ViewHeadingActions } from '../pages/view-heading';
+import { candidateContext } from '../../subject/candidates';
+import type { CandidateTransport } from '../../subject/candidate-review';
+import type { RelationTransport } from '../../subject/relation-candidates';
+import { SubjectFacts } from './subject-facts-view';
+import type { FactsTransport } from './subject-facts';
+import { EditorFailure, PartValue } from './statement-editor-view';
+import { SubjectTermsEntry } from './subject-terms-entry';
+import { AuthoredFieldEntry } from './authored-field-entry';
+import { RelationEditor } from './relation-editor';
+import { FictionalReferenceDetails, FictionalWorkReference } from './fictional-work-reference';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
+import { CatalogueCurrentReading } from './editor-lifetime';
+import type { CreateResult } from './create-subject';
+import { CharacterProfileCreate } from './character-profile-create';
+import { CharacterClassifications } from './character-profile-classification';
+import { CharacterRelationshipsEntry } from './character-relationships/entry';
+import { DefinitionMeaning } from './definition-meaning';
+import { characterPublicReturnHref, globalCharacterCorrectionHref } from './character-correction-visit';
+import {
+  characterFacts,
+  characterGroups,
+  characterRelations,
+  characterType,
+  characterWorkDefinitions,
+  filterCharacterWorks,
+  characterWorkFields,
+  isCurrentCharacterRead,
+  type CharacterAddress,
+  type CharacterRead,
+  type CharacterTransport,
+} from './character-profile';
+
+export type CharacterProfileProps = CharacterAddress & {
+  locale: string;
+  label?: string;
+  session: string;
+  transport: CharacterTransport;
+  search: EntityPickerSearch;
+  facts: (id: string) => FactsTransport;
+  review: (id: string, property: string, session?: string) => CandidateTransport;
+  relations: (id: string) => RelationTransport;
+  classificationHandoffToken?: string;
+  handoffReader?: string;
+  handoffReaderLive?: () => boolean;
+};
+
+export const CharacterProfile = catalogueEditor(CharacterProfileLive);
+
+function CharacterProfileLive({
+  id: initialId,
+  work: initialWork,
+  context,
+  realm,
+  label: initialLabel,
+  locale,
+  session,
+  transport,
+  search,
+  facts,
+  review,
+  relations,
+  classificationHandoffToken,
+  handoffReader,
+  handoffReaderLive,
+}: CharacterProfileProps) {
+  const lifetime = useEditorLifetime();
+  const o = { locale: locale as never };
+  const createActionClass =
+    'h-auto min-h-11 min-w-11 max-w-full whitespace-normal [overflow-wrap:anywhere] py-2 md:pointer-fine:min-h-8';
+  const [id, setId] = useState(initialId);
+  const [work, setWork] = useState(initialWork);
+  const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
+  const [reading, setReading] = useState(false);
+  const [reloadPending, setReloadPending] = useState(false);
+  const reloadInFlight = useRef(false);
+  const reloadButton = useRef<HTMLButtonElement>(null);
+  const reloadResult = useRef<HTMLDivElement>(null);
+  const reloadFailure = useRef<HTMLDivElement>(null);
+  const keyboardReloadActivation = useRef(false);
+  const reloadFocusIntent = useRef<{
+    id: typeof initialId;
+    work: typeof initialWork;
+    context: typeof context;
+    realm: typeof realm;
+    locale: string;
+    session: string;
+    generation: typeof lifetime.generation;
+  } | null>(null);
+  const mounted = useRef(false);
+  const query = useQuery({
+    queryKey: [...['character-profile', id, work, context, realm, locale], lifetime.generation],
+    queryFn: () => transport.load({ id, work, context, realm }),
+    retry: false,
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const retained = useRef<Extract<CharacterRead, { ok: true }> | undefined>(undefined);
+  const result = query.data;
+  const currentRead = isCurrentCharacterRead(result, query, { id, work, context, realm });
+  if (currentRead) retained.current = result;
+  const reloadContext = { id, work, context, realm, locale, session, generation: lifetime.generation };
+  const currentReloadContext = useRef(reloadContext);
+  currentReloadContext.current = reloadContext;
+  useLayoutEffect(() => {
+    mounted.current = true;
+    const cancelFocusIntent = () => {
+      keyboardReloadActivation.current = false;
+      reloadFocusIntent.current = null;
+    };
+    const cancelOnFocusMovement = (event: FocusEvent) => {
+      if (event.target !== reloadButton.current) cancelFocusIntent();
+    };
+    document.addEventListener('pointerdown', cancelFocusIntent, true);
+    document.addEventListener('focusin', cancelOnFocusMovement, true);
+    return () => {
+      mounted.current = false;
+      cancelFocusIntent();
+      document.removeEventListener('pointerdown', cancelFocusIntent, true);
+      document.removeEventListener('focusin', cancelOnFocusMovement, true);
+    };
+  }, []);
+  useLayoutEffect(() => {
+    keyboardReloadActivation.current = false;
+    reloadFocusIntent.current = null;
+  }, [id, work, context, realm, locale, session, lifetime.generation]);
+  const reload = async (keyboard: boolean) => {
+    if (reloadInFlight.current || query.isFetching || !lifetime.active()) return;
+    reloadInFlight.current = true;
+    setReloadPending(true);
+    reloadFocusIntent.current =
+      keyboard && document.activeElement === reloadButton.current ? currentReloadContext.current : null;
+    try {
+      await query.refetch();
+    } catch {
+      // The query state renders the current failure.
+    } finally {
+      reloadInFlight.current = false;
+      if (!mounted.current) return;
+      setReloadPending(false);
+      const intent = reloadFocusIntent.current;
+      reloadFocusIntent.current = null;
+      const current = currentReloadContext.current;
+      if (
+        !intent ||
+        intent.id !== current.id ||
+        intent.work !== current.work ||
+        intent.context !== current.context ||
+        intent.realm !== current.realm ||
+        intent.locale !== current.locale ||
+        intent.session !== current.session ||
+        intent.generation !== current.generation ||
+        !lifetime.active()
+      )
+        return;
+      const button = reloadButton.current;
+      if (button?.isConnected && !button.disabled) {
+        button.focus();
+      } else {
+        const result = reloadResult.current;
+        const outcome = result && !result.hidden ? result : reloadFailure.current;
+        if (outcome?.isConnected && !outcome.closest('[hidden]')) outcome.focus();
+      }
+    }
+  };
+  const current = retained.current;
+  const character = current?.character;
+  const label = pageText(character?.subject.labels, locale);
+  const correctionLabel = (currentRead && character ? label.text : '') || initialLabel || '';
+  const globalHref = id
+    ? globalCharacterCorrectionHref({
+        id,
+        label: correctionLabel,
+        locale,
+        ...(work ? { work } : {}),
+        ...(classificationHandoffToken ? { classificationHandoff: classificationHandoffToken } : {}),
+      })
+    : undefined;
+  const publicHref =
+    currentRead && character
+      ? characterPublicReturnHref({
+          id: character.subject.id,
+          label: correctionLabel,
+          locale,
+          context: current.context,
+          ...(current.realm ? { realm: current.realm } : {}),
+        })
+      : undefined;
+  const globalMutation = currentRead && current?.context === candidateContext && !realm;
+  const groups = current ? characterGroups(current.release) : undefined;
+  const groupLabels = {
+    identity: m.character_identity({}, o),
+    traits: m.character_traits({}, o),
+    measurements: m.character_measurements({}, o),
+    identifiers: m.character_identifiers({}, o),
+  };
+  return (
+    <article className="mx-auto w-full min-w-0 max-w-4xl space-y-8 px-4 py-8 [overflow-wrap:anywhere] sm:px-6">
+      <ViewHeadingActions
+        label={m.character_title({}, o)}
+        headingClassName="font-sans"
+        actions={
+          currentRead &&
+          publicHref && (
+            <a href={publicHref} className={buttonVariants({ variant: 'outline' })}>
+              {m.candidate_view_public({}, o)}
+            </a>
+          )
+        }
+      />
+      <p className="text-muted-foreground">{m.character_intro({}, o)}</p>
+      {currentRead && character && (
+        <p className="text-sm text-muted-foreground">{m.character_visit_context({ context: current.context }, o)}</p>
+      )}
+      {currentRead && character && !globalMutation && (
+        <div role="status" className="space-y-2 rounded-lg border border-border p-4">
+          <p>{m.character_visit_unsupported({}, o)}</p>
+          {globalHref && (
+            <a className={buttonVariants({ variant: 'outline' })} href={globalHref}>
+              {m.character_visit_global({}, o)}
+            </a>
+          )}
+        </div>
+      )}
+      {query.data && !query.data.ok && query.data.selection === 'unsupported' && (
+        <div role="status" className="space-y-2 rounded-lg border border-border p-4">
+          <p>{m.character_visit_unsupported({}, o)}</p>
+          {globalHref && (
+            <a className={buttonVariants({ variant: 'outline' })} href={globalHref}>
+              {m.character_visit_global({}, o)}
+            </a>
+          )}
+        </div>
+      )}
+      {((query.isFetching && !currentRead) || reloadPending) && <p role="status">{m.candidate_loading({}, o)}</p>}
+      {(query.isError ||
+        (query.data && !query.data.ok && query.data.selection !== 'unsupported') ||
+        (query.isSuccess && !query.isFetching && query.data?.ok && !currentRead)) && (
+        <div ref={reloadFailure} tabIndex={-1}>
+          <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
+        </div>
+      )}
+      <Button
+        ref={reloadButton}
+        variant="outline"
+        aria-busy={reloadPending}
+        aria-disabled={reloadPending || query.isFetching}
+        onKeyDown={(event) => {
+          if (!reloadInFlight.current && (event.key === 'Enter' || event.key === ' '))
+            keyboardReloadActivation.current = true;
+        }}
+        onBlur={() => {
+          keyboardReloadActivation.current = false;
+          reloadFocusIntent.current = null;
+        }}
+        onClick={(event) => {
+          const keyboard = keyboardReloadActivation.current || event.detail === 0;
+          keyboardReloadActivation.current = false;
+          void reload(keyboard);
+        }}
+      >
+        {m.correction_reload({}, o)}
+      </Button>
+      {session === 'unavailable' ? (
+        <EditorFailure reason="unavailable" locale={locale} />
+      ) : (
+        session !== 'signed-in' &&
+        (character || created || !transport.eligibility) && (
+          <p role="status">
+            {session === 'signed-out' ? m.catalogue_create_signed_out({}, o) : m.candidate_loading({}, o)}
+          </p>
+        )
+      )}
+      {current && (
+        <div ref={reloadResult} hidden={!currentRead} tabIndex={-1} className="space-y-8">
+          <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
+            <h2 className="text-xl font-semibold">{m.character_identity({}, o)}</h2>
+            <p lang={pageText(current.release.types[characterType]!.labels, locale).lang}>
+              {pageText(current.release.types[characterType]!.labels, locale).text}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              <DefinitionMeaning values={current.release.types[characterType]!.descriptions} locale={locale} />
+            </p>
+            {character ? (
+              <>
+                <p className="text-lg font-medium" lang={label.lang}>
+                  {label.text || m.subject_value_unlabelled({}, o)}
+                </p>
+                {Object.entries(character.subject.descriptions).map(([language, text]) => (
+                  <p key={language} lang={language}>
+                    {text}
+                  </p>
+                ))}
+                <div className="flex flex-wrap gap-2">
+                  <SubjectTermsEntry id={character.subject.id} label={label.text} locale={locale} />
+                  {current.release.types[characterType]!.properties.includes('schema:abstract') &&
+                    current.release.properties['schema:abstract']?.datatype === 'document' && (
+                      <AuthoredFieldEntry id={character.subject.id} title={label.text} locale={locale} />
+                    )}
+                </div>
+                <p className="text-sm text-muted-foreground">{m.character_terms_help({}, o)}</p>
+              </>
+            ) : created ? (
+              <ContentItemFrame
+                as="div"
+                data-slot="character-created"
+                className="min-w-0 space-y-3 py-3 [overflow-wrap:anywhere]"
+              >
+                <p role="status">{m.character_created({}, o)}</p>
+                <details className="min-w-0 text-sm">
+                  <summary className="min-h-11 cursor-pointer py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+                    {m.catalogue_creation_technical_details({}, o)}
+                  </summary>
+                  <dl className="min-w-0">
+                    <dt>{m.specialist_identity_subject_id({}, o)}</dt>
+                    <dd>
+                      <code className="select-all [overflow-wrap:anywhere]">{created.id}</code>
+                    </dd>
+                  </dl>
+                </details>
+                {created.reader.state === 'ready' ? (
+                  <div className="flex flex-wrap gap-2">
+                    <a className={buttonVariants({ className: createActionClass })} href={created.reader.href}>
+                      {m.candidate_view_public({}, o)}
+                    </a>
+                    <a
+                      className={buttonVariants({ variant: 'outline', className: createActionClass })}
+                      href={`${created.reader.href}/character${work ? `?work=${encodeURIComponent(work)}` : ''}`}
+                    >
+                      {m.character_correct({}, o)}
+                    </a>
+                  </div>
+                ) : (
+                  <>
+                    <p>
+                      {created.reader.state === 'concealed'
+                        ? m.catalogue_create_concealed({}, o)
+                        : m.catalogue_create_reader_unavailable({}, o)}
+                    </p>
+                    <Button
+                      className={createActionClass}
+                      disabled={reading}
+                      onClick={async () => {
+                        if (!lifetime.active()) return;
+                        if (reading) return;
+                        setReading(true);
+                        try {
+                          const reader = await transport.read(created.id);
+                          if (!lifetime.active()) return;
+                          setCreated({ ...created, reader });
+                        } catch {
+                          if (!lifetime.active()) return;
+                          setCreated({ ...created, reader: { state: 'unavailable' } });
+                        } finally {
+                          if (!lifetime.active()) return;
+                          setReading(false);
+                        }
+                      }}
+                    >
+                      {m.correction_retry({}, o)}
+                    </Button>
+                  </>
+                )}
+              </ContentItemFrame>
+            ) : (
+              <AuthoringDepartureBoundary>
+                <CharacterSelection key={id ?? 'creation'} onSelect={setId}>
+                  {(select) => (
+                    <div hidden={session !== 'signed-in' && !transport.eligibility}>
+                      <EntityPicker
+                        label={m.character_choose_existing({}, o)}
+                        value={[]}
+                        src={coverSrc}
+                        search={async (text, signal) =>
+                          (await search(text, signal)).filter((entry) => entry.types.includes(characterType))
+                        }
+                        onValueChange={(items) => {
+                          const destination = items[0]?.id;
+                          if (destination) select(destination);
+                        }}
+                      />
+                      <CatalogueCurrentReading
+                        visible={currentRead}
+                        ready={currentRead && (session === 'signed-in' || !!transport.eligibility)}
+                        revision={`${query.dataUpdatedAt}`}
+                      >
+                        <CharacterProfileCreate
+                          release={current.release}
+                          locale={locale}
+                          session={session}
+                          href={`/${locale}/catalogue/character${work ? `?work=${encodeURIComponent(work)}` : ''}`}
+                          search={search}
+                          transport={transport}
+                          onCreated={setCreated}
+                          onRefreshDefinitions={async () => {
+                            // Refresh creation metadata independently of the public current-reading query.
+                            // Its failure must leave the entered private draft available for correction.
+                            const next = await transport.load({});
+                            if (!isCurrentCharacterRead(next, { isSuccess: true, isFetching: false }, {}))
+                              throw new Error('Character creation definitions unavailable');
+                            return next.release;
+                          }}
+                        />
+                      </CatalogueCurrentReading>
+                    </div>
+                  )}
+                </CharacterSelection>
+              </AuthoringDepartureBoundary>
+            )}
+            <FictionalReferenceDetails type={characterType} locale={locale} />
+          </section>
+          {character && groups && (
+            <>
+              {Object.entries(groups).map(([group, properties]) => (
+                <section key={group} className="space-y-4">
+                  <h2 className="text-xl font-semibold">{groupLabels[group as keyof typeof groupLabels]}</h2>
+                  <dl className="space-y-4">
+                    {properties.map((property) => (
+                      <div key={property} className="space-y-2 rounded-xl border border-border p-4">
+                        <dt
+                          className="font-medium"
+                          lang={pageText(current.release.properties[property]!.labels, locale).lang}
+                        >
+                          {pageText(current.release.properties[property]!.labels, locale).text}
+                        </dt>
+                        <dd className="space-y-3">
+                          {!character.subject.statements[property]?.length && (
+                            <p className="text-muted-foreground">{m.facts_no_value({}, o)}</p>
+                          )}
+                          {character.subject.statements[property]?.map((statement) => (
+                            <div key={statement.id} className="space-y-2">
+                              <PartValue
+                                part={statement}
+                                read={{ release: current.release, public: character }}
+                                locale={locale}
+                              />
+                              {statement.qualifiers.map((part, index) => (
+                                <p key={index} className="text-sm">
+                                  <span
+                                    lang={pageText(current.release.properties[part.property.id]?.labels, locale).lang}
+                                  >
+                                    {pageText(current.release.properties[part.property.id]?.labels, locale).text}
+                                  </span>
+                                  :{' '}
+                                  <PartValue
+                                    part={part}
+                                    read={{ release: current.release, public: character }}
+                                    locale={locale}
+                                  />
+                                </p>
+                              ))}
+                              {statement.references.map((reference, index) => (
+                                <div key={index} className="border-s-2 border-border ps-3 text-sm">
+                                  {reference.parts.map((part, at) => (
+                                    <PartValue
+                                      key={at}
+                                      part={part}
+                                      read={{ release: current.release, public: character }}
+                                      locale={locale}
+                                    />
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+              ))}
+              <div hidden={session !== 'signed-in' || !globalMutation}>
+                <SubjectFacts
+                  key={character.subject.id}
+                  initial={characterFacts(current)}
+                  locale={locale}
+                  transport={facts(character.subject.id)}
+                  review={(property, token) => review(character.subject.id, property, token)}
+                />
+              </div>
+              <div hidden={session !== 'signed-in' || !globalMutation} className="space-y-4">
+                <CatalogueCurrentReading
+                  visible={globalMutation}
+                  ready={globalMutation}
+                  revision={`${id}:${work ?? ''}:${context ?? ''}:${realm ?? ''}:${query.dataUpdatedAt}:${query.fetchStatus}`}
+                >
+                  <AuthoringDepartureBoundary>
+                    <CharacterClassifications
+                      key={character.subject.id}
+                      changedSetReview
+                      properties={groups.traits.filter(
+                        (property) =>
+                          current.release.properties[property]?.datatype === 'wikibase-item' &&
+                          current.release.properties[property]?.relation?.group === 'classification',
+                      )}
+                      read={{ ok: true, release: current.release, public: character, source: null }}
+                      locale={locale}
+                      search={search}
+                      transport={facts(character.subject.id)}
+                      review={(field, token) => review(character.subject.id, field, token)}
+                      {...(classificationHandoffToken ? { handoffToken: classificationHandoffToken } : {})}
+                      {...(handoffReader ? { handoffReader } : {})}
+                      {...(handoffReaderLive ? { handoffReaderLive } : {})}
+                    />
+                  </AuthoringDepartureBoundary>
+                </CatalogueCurrentReading>
+              </div>
+              <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
+                <h2 className="text-xl font-semibold">{m.character_relationships_title({}, o)}</h2>
+                <p>{m.character_relationships_profile_intro({}, o)}</p>
+                <CharacterRelationshipsEntry
+                  id={character.subject.id}
+                  label={label.text}
+                  locale={locale}
+                  {...(work ? { work } : {})}
+                />
+              </section>
+            </>
+          )}
+          <AuthoringDepartureBoundary>
+            <CharacterSelection key={work ?? 'work-picker'} onSelect={setWork}>
+              {(select) => (
+                <section className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6">
+                  <h2 className="text-xl font-semibold">{m.character_credits({}, o)}</h2>
+                  <p>{m.character_work_help({}, o)}</p>
+                  {current.workDescriptor &&
+                    !characterWorkFields(
+                      characterWorkDefinitions(current.workDescriptor),
+                      current.workDescriptor.typeId,
+                    ).some((id) => id !== 'schema:character' && id !== 'wdt:P725') && (
+                      <p role="status" className="text-sm text-muted-foreground">
+                        {m.character_actor_gap({}, o)}
+                      </p>
+                    )}
+                  {current.work ? (
+                    <>
+                      {currentRead && (
+                        <FictionalWorkReference
+                          subject={current.work.subject}
+                          locale={locale}
+                          onChooseAnother={session === 'signed-in' ? () => select(undefined) : undefined}
+                        />
+                      )}
+                      {character && (
+                        <div hidden={session !== 'signed-in'}>
+                          <RelationEditor
+                            key={current.work.subject.id}
+                            id={current.work.subject.id}
+                            locale={locale}
+                            search={search}
+                            transport={{
+                              ...relations(current.work.subject.id),
+                              read: async (...args) =>
+                                characterRelations(
+                                  await relations(current.work!.subject.id).read(...args),
+                                  characterWorkDefinitions(current.workDescriptor!),
+                                ),
+                            }}
+                          />
+                        </div>
+                      )}
+                      {created && !character && current.workDescriptor && (
+                        <div hidden={session !== 'signed-in'} data-slot="character-associate" className="space-y-3">
+                          <h3 className="text-lg font-semibold">{m.character_associate_title({}, o)}</h3>
+                          <p className="text-sm text-muted-foreground">{m.character_associate_intro({}, o)}</p>
+                          <RelationEditor
+                            key={`${current.work.subject.id}:${created.id}`}
+                            id={current.work.subject.id}
+                            locale={locale}
+                            search={search}
+                            initialProperty={
+                              characterWorkFields(
+                                characterWorkDefinitions(current.workDescriptor),
+                                current.workDescriptor.typeId,
+                              ).find((id) => id === 'schema:character') ??
+                              characterWorkFields(
+                                characterWorkDefinitions(current.workDescriptor),
+                                current.workDescriptor.typeId,
+                              )[0]
+                            }
+                            initialTarget={{
+                              id: created.id,
+                              title: created.id,
+                              types: [characterType],
+                            }}
+                            transport={{
+                              ...relations(current.work.subject.id),
+                              read: async (...args) =>
+                                characterRelations(
+                                  await relations(current.work!.subject.id).read(...args),
+                                  characterWorkDefinitions(current.workDescriptor!),
+                                ),
+                            }}
+                          />
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <EntityPicker
+                      label={m.character_choose_work({}, o)}
+                      value={[]}
+                      src={coverSrc}
+                      search={async (text, signal) =>
+                        filterCharacterWorks(
+                          await search(text, signal),
+                          transport.workType ?? (async () => ({ ok: false, reason: 'unavailable' })),
+                          signal,
+                        )
+                      }
+                      onValueChange={(items) => {
+                        const destination = items[0]?.id;
+                        if (destination) select(destination);
+                      }}
+                    />
+                  )}
+                </section>
+              )}
+            </CharacterSelection>
+          </AuthoringDepartureBoundary>
+        </div>
+      )}
+    </article>
+  );
+}
+
+/** Each local selector includes only the holder it replaces in the existing departure decision. */
+const CharacterSelection = catalogueEditor(function CharacterSelection({
+  onSelect,
+  children,
+}: {
+  onSelect: (destination: string | undefined) => void;
+  children: (select: (destination: string | undefined) => void) => ReactNode;
+}) {
+  const lifetime = useEditorLifetime();
+  const { requestNavigation } = useAuthoringDeparture(false, false, 'character-selection');
+  return children((destination) => {
+    if (!lifetime.active()) return;
+    requestNavigation(() => {
+      if (!lifetime.active()) return;
+      onSelect(destination);
+      // Retire descendants immediately, before the selected reading replaces their mounted workspace.
+      lifetime.retire();
+    });
+  });
+});

@@ -16,7 +16,14 @@ import { actionCatalogue, SESSION_HEADER } from '../../src/http/request.ts';
 import type { definitionRoutes } from '../../src/semantic/http/definitions.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+
+import { tupleRoute } from '../../src/content/imported-contract.ts';
+import {
+  assertGrowthPointPlans,
+  seedMediaCommandHistory,
+  type GrowthGlobalGrantIndexDefinition,
+} from './support/media-fixtures.ts';
 
 const platformId = '00000000-0000-8000-8000-000000000000';
 const route = 42000;
@@ -26,6 +33,7 @@ const containerId = newId(route);
 const routeKey = new Uint8Array(32).fill(7);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
 const actions = [
+  'account:read',
   'media:import_from_url',
   'source_fence:read',
   'media:read_reservation',
@@ -59,6 +67,7 @@ const input: MediaImportRequest = {
   },
 };
 let db: GrowthDatabase;
+let globalGrantIndex: GrowthGlobalGrantIndexDefinition;
 let app: ReturnType<typeof contentRoutes>;
 let root: ReturnType<typeof createKernel>;
 let bearer: string;
@@ -68,6 +77,23 @@ let charges: { family: string; units: number }[] = [];
 
 beforeAll(async () => {
   db = await openGrowthDatabase();
+  const nativeIndex = await db.admin.query<GrowthGlobalGrantIndexDefinition>(
+    `SELECT n.nspname AS schema,t.relname AS relation,c.relname AS "index",
+            pg_get_expr(i.indpred,i.indrelid) AS predicate
+       FROM pg_index i JOIN pg_class t ON t.oid=i.indrelid
+       JOIN pg_namespace n ON n.oid=t.relnamespace
+       JOIN pg_class c ON c.oid=i.indexrelid
+      WHERE i.indexrelid='access.resource_grant_pkey_lookup'::regclass`,
+  );
+  expect(nativeIndex.rows).toEqual([
+    {
+      schema: 'access',
+      relation: 'resource_grant',
+      index: 'resource_grant_pkey_lookup',
+      predicate: "((route = 0) AND (resource_id = '00000000-0000-8000-8000-000000000000'::uuid))",
+    },
+  ]);
+  globalGrantIndex = nativeIndex.rows[0]!;
   const keys = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(keys.publicKey)), alg: 'ES256', kid: 'media-import-http' };
   const issuer = 'https://auth.example.test';
@@ -229,9 +255,6 @@ test('literal custom methods mount once with closed portable OpenAPI and generat
   }
   const contract = await Bun.file('../../contracts/openapi.json').text();
   expect(contract).toContain('"/v1/media:importFromUrl"');
-  const client = await Bun.file('../../packages/client/src/kernel/http/kernel.d.ts').text();
-  expect(client).toContain('$importFromUrl');
-  expect(client).toContain('$importStatus');
   expect((await call('POST', '/v1/media/$importFromUrl', input)).response.status).toBe(404);
 });
 
@@ -243,6 +266,25 @@ test('malformed provenance rights and unknown fields reject before charging or r
     { ...input, provenance: { ...input.provenance, token: 'secret' } },
     { ...input, credit: { ...input.credit, license: 'invented-license' } },
     { ...input, credit: { ...input.credit, license: 'CC-BY-4.0', obligations: ['cc:Notice', 'cc:Notice'] } },
+  ]) {
+    const before = charges.length;
+    const result = await post(body);
+    expect(result.response.status).toBe(400);
+    expect(result.response.headers.get('content-type')).toContain('application/problem+json');
+    expect(result.body).toMatchObject({ code: 'invalid_request', effect_status: 'not_applied' });
+    expect(charges).toHaveLength(before);
+    expect(result.response.headers.get(SESSION_HEADER)).toBeNull();
+  }
+});
+
+test('authored crop and focal point requests return problem responses when malformed', async () => {
+  const valid = await post({ ...input, crop: 'xywh=10,20,300,400', focalPoint: { x: 0.3, y: 1 } });
+  expect(valid.response.status).toBe(202);
+  for (const body of [
+    { ...input, crop: 'xywh=percent:10,20,30,40' },
+    { ...input, crop: 'xywh=0,0,0,40' },
+    { ...input, focalPoint: { x: -0.1, y: 0.5 } },
+    { ...input, focalPoint: { x: 0.5, y: 1.1 } },
   ]) {
     const before = charges.length;
     const result = await post(body);
@@ -298,6 +340,16 @@ test('focused native outcomes preserve current authorization and partition bound
   expect((await poll(id, otherBearer)).response.status).toBe(404);
   const replay = await accepted(key);
   expect(replay.body).toEqual(result.body);
+  const history = await call('GET', '/v1/media');
+  expect(history.response.status).toBe(200);
+  const owned = (history.body as { entries: Array<Record<string, unknown>> }).entries.find((entry) => entry.id === id);
+  expect(owned).toMatchObject({
+    id,
+    purpose: 'cover',
+    state: 'reserved',
+    actions: { read: null, resume: null },
+  });
+  expect(JSON.stringify(owned)).not.toMatch(/"(?:key|sourceUrl|provenance|reservationRequestId)"\s*:/);
   expect(
     (
       await call(
@@ -333,9 +385,75 @@ test('production root forwards trusted import configuration to the actual native
   expect(result.body.media.containerId).toBe(containerId);
 });
 
+test('point probe proof accepts only the verified Global predicate and retains every variable index key', () => {
+  const variableKeys = ['subject_kind', 'subject_id', 'subject_role', 'action', 'valid'];
+  const keys = { 'access.resource_grant': ['route', 'resource_id', ...variableKeys] };
+  const condition =
+    "ROW(g.subject_kind, g.subject_id, g.subject_role, g.action, g.valid) >= ROW(k.subject_kind, k.subject_id, k.subject_role, 'source_fence:read', 'empty'::tstzrange)";
+  const node = {
+    Schema: 'access',
+    'Relation Name': 'resource_grant',
+    'Node Type': 'Index Only Scan',
+    'Index Name': 'resource_grant_pkey_lookup',
+    'Actual Loops': 2,
+    'Actual Rows': 0.5,
+    'Shared Hit Blocks': 5,
+    'Index Cond': condition,
+  };
+  const captured = { statements: [], plans: [node] };
+  expect(() => assertGrowthPointPlans(captured, keys, globalGrantIndex)).not.toThrow();
+  expect(() => assertGrowthPointPlans(captured, keys)).toThrow('Expected exact');
+  for (const invalid of [
+    { ...globalGrantIndex, predicate: null },
+    { ...globalGrantIndex, predicate: '(route = 0)' },
+    { ...globalGrantIndex, predicate: `(resource_id = '${platformId}'::uuid)` },
+    { ...globalGrantIndex, predicate: `((route = 1) AND (resource_id = '${platformId}'::uuid))` },
+    {
+      ...globalGrantIndex,
+      predicate: "((route = 0) AND (resource_id = '00000000-0000-8000-8000-000000000001'::uuid))",
+    },
+    { ...globalGrantIndex, schema: 'content' },
+    { ...globalGrantIndex, relation: 'resource_role_grant' },
+    { ...globalGrantIndex, index: 'another_index' },
+  ])
+    expect(() => assertGrowthPointPlans(captured, keys, invalid)).toThrow('Expected exact');
+  for (const column of variableKeys) {
+    const missing = { ...node, 'Index Cond': condition.replaceAll(column, 'omitted'), Filter: condition };
+    expect(() => assertGrowthPointPlans({ ...captured, plans: [missing] }, keys, globalGrantIndex)).toThrow(
+      'Expected exact',
+    );
+  }
+  for (const invalid of [
+    { ...node, 'Index Name': 'another_index' },
+    { ...node, 'Node Type': 'Seq Scan' },
+    { ...node, 'Index Cond': undefined, Filter: condition },
+  ])
+    expect(() => assertGrowthPointPlans({ ...captured, plans: [node, invalid] }, keys, globalGrantIndex)).toThrow(
+      'Expected exact',
+    );
+  expect(() =>
+    assertGrowthPointPlans(
+      { ...captured, plans: [{ ...node, Schema: 'other' }] },
+      { 'other.resource_grant': keys['access.resource_grant'] },
+      globalGrantIndex,
+    ),
+  ).toThrow('Expected exact');
+  expect(() =>
+    assertGrowthPointPlans({ ...captured, plans: [{ ...node, 'Actual Loops': 0 }] }, keys, globalGrantIndex),
+  ).toThrow('Missing executed point probe');
+});
+
 test('checkGrowth proves rows statements and buffers match declared cost', async () => {
+  const sourceRoute = tupleRoute(routeKey, input.provenance.source, input.provenance.external_id);
+  const operation = async () => {
+    const result = await accepted();
+    const status = await poll(result.body.media.id);
+    expect(status.response.status).toBe(200);
+    expect(checkMediaImportStatus(status.body)).toEqual([]);
+  };
   const report = await checkGrowth(db, {
     name: 'HTTP native media import and protected point poll',
+    rule: 'series',
     scales: [32, 256, 2048],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     repetitions: 3,
@@ -347,8 +465,55 @@ test('checkGrowth proves rows statements and buffers match declared cost', async
           name: 'unrelated and same-partition media',
           hotPartition: partitionOf(route),
           rows(placement) {
+            const actor = newId(placement.route);
             const id = newId(placement.route);
             return {
+              'access.account': [
+                { route: placement.route, account_id: actor, kind: 'actor', state: 'active', transaction_id: actor },
+              ],
+              'access.resource_grant': [
+                {
+                  route: 0,
+                  resource_id: platformId,
+                  subject_id: actor,
+                  action: 'media:import_from_url',
+                  valid: '(,)',
+                  transaction_id: actor,
+                },
+              ],
+              'access.resource_role_grant': [
+                {
+                  route: placement.route,
+                  resource_id: id,
+                  subject_id: accountId,
+                  grant_role: 'creator',
+                  valid: '(,)',
+                  transaction_id: actor,
+                },
+              ],
+              'access.resource_initialization': [
+                {
+                  route: placement.route,
+                  resource_id: id,
+                  resource_type: 'content.media',
+                  creator_id: accountId,
+                  initialized_at: '2026-01-01T00:00:00Z',
+                },
+              ],
+              'semantic.subject': [
+                { route: placement.route, subject_id: id, type: 'schema:Book', recorded_transaction_id: id },
+              ],
+              'semantic.context': [
+                { route: placement.route, context_id: id, kind: 'community', labels: {}, recorded_transaction_id: id },
+              ],
+              'content.source_fences': [placement.route, sourceRoute].map((home, index) => ({
+                route: home,
+                source: input.provenance.source,
+                external_id: `growth-${index}-${placement.ordinal}`,
+                field_group: 'cover',
+                taken_down: false,
+                security_revision: 1,
+              })),
               'content.media': [
                 {
                   route: placement.route,
@@ -364,17 +529,66 @@ test('checkGrowth proves rows statements and buffers match declared cost', async
                   transaction_id: id,
                 },
               ],
+              'content.media_variant': [
+                {
+                  route: placement.route,
+                  media_id: id,
+                  format: 'webp',
+                  width: 320,
+                  height: 200,
+                  media_type: 'image/webp',
+                  byte_count: 64,
+                  sha256: 'b'.repeat(64),
+                  key: `m/${id}/webp-320`,
+                  transaction_id: id,
+                },
+              ],
             };
           },
         },
-        { from: previous, to: scale },
+        { from: previous * 32, to: scale * 32 },
+      );
+      await seedMediaCommandHistory(
+        database,
+        route,
+        accountId,
+        'content.media.importFromUrl',
+        previous * 32,
+        scale * 32,
       );
     },
-    async operation() {
-      const result = await accepted();
-      const status = await poll(result.body.media.id);
-      expect(status.response.status).toBe(200);
-      expect(checkMediaImportStatus(status.body)).toEqual([]);
+    operation,
+    async warmup(database) {
+      const measured = await capture(database, operation);
+      assertGrowthPointPlans(
+        measured.capture,
+        {
+          'content.media': ['route', 'media_id'],
+          'content.media_variant': ['route', 'media_id'],
+          'content.source_fences': ['route', 'source', 'external_id', 'field_group'],
+          'access.resource_role_grant': [
+            'route',
+            'resource_id',
+            'subject_id',
+            'subject_kind',
+            'subject_role',
+            'grant_role',
+            'valid',
+          ],
+          'semantic.subject': ['route', 'subject_id'],
+          'semantic.context': ['route', 'context_id'],
+          'access.resource_grant': [
+            'route',
+            'resource_id',
+            'subject_id',
+            'subject_kind',
+            'subject_role',
+            'action',
+            'valid',
+          ],
+        },
+        globalGrantIndex,
+      );
     },
   });
   expect(report.samples).toHaveLength(3);

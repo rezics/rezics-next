@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { releaseDigest, valueSchema, type Release } from '@rezics/definitions';
 import { newId } from '../../src/route/route.ts';
@@ -11,7 +11,14 @@ import {
 } from '../../src/semantic/definitions.ts';
 import { checkTyped } from '../../src/semantic/rules.ts';
 import type { AccountActor } from '../../src/request/access.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import {
+  checkGrowth,
+  openGrowthDatabase,
+  placement,
+  seed,
+  type GrowthDatabase,
+  type Population,
+} from '../support/growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -54,6 +61,7 @@ const body = release('1.0.0');
 const digest = releaseDigest(body);
 const seededRelease = (ordinal: number): Release => release(`population-${String(ordinal).padStart(5, '0')}`);
 const ordinalsPerScale = 500;
+const scales = [1, 4, 16] as const;
 const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 const corePositionBase = BigInt(Date.now()) * 100_000n;
 let db: GrowthDatabase;
@@ -192,20 +200,64 @@ async function grow(database: GrowthDatabase, population: Population, scale: num
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
 });
-beforeEach(async () => {
-  await db.admin.query('TRUNCATE semantic.definition_activation, semantic.definition_release');
-});
 afterAll(async () => {
   await db?.close();
 });
 
-test('Definition publish stays within its bound as D grows', async () => {
+// Every relation this file seeds or writes through a command, including the command rows.
+const seededRelations = [
+  'semantic.definition_release',
+  'semantic.definition_activation',
+  'core.receipt',
+  'core.outbox',
+  'editorial.write_basis',
+] as const;
+type RowCounts = Record<(typeof seededRelations)[number], number>;
+type Observation = { title: string; before: RowCounts; after?: RowCounts };
+const observations: Observation[] = [];
+// Rows the anchor, warm-ups and measured runs of one check add beside its seeded population.
+const fixtureRows = 64;
+const maxScaleUnits = 16;
+
+async function rowCounts(): Promise<RowCounts> {
+  const counts = {} as RowCounts;
+  for (const relation of seededRelations) {
+    const { rows } = await db.admin.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${relation}`);
+    counts[relation] = rows[0]!.n;
+  }
+  return counts;
+}
+
+async function resetGrowthData() {
+  await db.admin.query(`TRUNCATE ${seededRelations.join(', ')}`);
+}
+
+/** Runs one growth check from the state `resetGrowthData` leaves, recording the seeded relations' row counts. */
+function growthTest(title: string, run: () => Promise<void>) {
+  test(
+    title,
+    async () => {
+      await resetGrowthData();
+      const observation: Observation = { title, before: await rowCounts() };
+      observations.push(observation);
+      try {
+        await run();
+      } finally {
+        observation.after = await rowCounts();
+      }
+    },
+    90_000,
+  );
+}
+
+growthTest('Definition publish stays within its bound as D grows', async () => {
   const database = db;
   const anchor = release('anchor-publish');
   await publishRelease(database.pool, { ...options(), release: anchor });
   const population = growthPopulation('publish-growth', { activations: false, command: true });
   const report = await checkGrowth(database, {
     name: 'Definition publish',
+    scales,
     bounds,
     grow: (d, scale, previous) => grow(d, population, scale, previous),
     operation: (d, _scale, repetition) =>
@@ -215,22 +267,23 @@ test('Definition publish stays within its bound as D grows', async () => {
         release: release(`measured-publish-${repetition}`),
       }),
   });
-  expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
-}, 90_000);
+  expect(report.samples.map((sample) => sample.scale)).toEqual([...scales]);
+});
 
-test('Definition activate stays within its bound as D grows', async () => {
+growthTest('Definition activate stays within its bound as D grows', async () => {
   const database = db;
   const anchor = release('anchor-activate');
   await publishRelease(database.pool, { ...options(), release: anchor });
   const anchorDigest = releaseDigest(anchor);
   const population = growthPopulation('activate-growth', { command: true });
-  const scaleStartRepetition = (scale: number) => (scale === 1 ? 0 : scale === 8 ? 6 : 12);
+  const scaleStartRepetition = (scale: number) => (scale === 1 ? 0 : scale === 4 ? 6 : 12);
   const lastSeededHead = (scale: number) => {
     const ordinal = scale * ordinalsPerScale - 1;
     return ordinal + 2 + Math.floor(ordinal / ordinalsPerScale) * 1_000;
   };
   await checkGrowth(database, {
     name: 'Definition activate',
+    scales,
     bounds,
     grow: (d, scale, previous) => grow(d, population, scale, previous),
     operation: (d, scale, repetition) =>
@@ -241,54 +294,78 @@ test('Definition activate stays within its bound as D grows', async () => {
         expectedHead: lastSeededHead(scale) + repetition - scaleStartRepetition(scale),
       }),
   });
-}, 90_000);
+});
 
-test('Definition read stays within its bound as D grows', async () => {
+growthTest('Definition read stays within its bound as D grows', async () => {
   const database = db;
   const anchor = release('anchor-read');
   await publishRelease(database.pool, { ...options(), release: anchor });
   const population = growthPopulation('read-growth', { activations: false });
   await checkGrowth(database, {
     name: 'Definition read',
+    scales,
     bounds,
     grow: (d, scale, previous) => grow(d, population, scale, previous),
     operation: (d) => readRelease(d.pool, releaseDigest(anchor)),
   });
-}, 90_000);
+});
 
-test('Active definition lookup stays within its bound as D grows', async () => {
+growthTest('Active definition lookup stays within its bound as D grows', async () => {
   const database = db;
   await bootstrapRelease(database.pool, release('anchor-active'));
   const population = growthPopulation('active-growth');
   await checkGrowth(database, {
     name: 'Active definition lookup',
+    scales,
     bounds,
     grow: (d, scale, previous) => grow(d, population, scale, previous),
     operation: (d) => activeRelease(d.pool),
     repetitions: 1,
   });
-}, 90_000);
+});
 
-test('Definition bootstrap stays within its bound as D grows', async () => {
+growthTest('Definition bootstrap stays within its bound as D grows', async () => {
   const database = db;
   const anchor = release('anchor-bootstrap');
   await bootstrapRelease(database.pool, anchor);
   const population = growthPopulation('bootstrap-growth', { command: true, receipt: false });
   await checkGrowth(database, {
     name: 'Definition bootstrap',
+    scales,
     bounds,
     grow: (d, scale, previous) => grow(d, population, scale, previous),
     operation: (d) => bootstrapRelease(d.pool, anchor),
   });
-}, 90_000);
+});
 
-test('Typed validation stays within its bound as D grows', async () => {
+growthTest('Typed validation stays within its bound as D grows', async () => {
   const database = db;
   const population = growthPopulation('typed-validation-growth', { activations: false });
   await checkGrowth(database, {
     name: 'Typed validation',
+    scales,
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
     grow: (d, scale, previous) => grow(d, population, scale, previous),
     operation: async () => checkTyped(body, digest, { type: 'schema:Person', statements: {} }),
   });
-}, 90_000);
+});
+
+test('every growth-definitions check starts empty and seeds at most sixteen scale units', async () => {
+  const population = growthPopulation('rows-per-ordinal', { command: true });
+  const perOrdinal = Object.fromEntries(
+    Object.entries(population.rows!(placement(population, 0))).map(([relation, rows]) => [relation, rows.length]),
+  ) as Record<(typeof seededRelations)[number], number>;
+  const problems: string[] = [];
+  expect(observations).toHaveLength(6);
+  for (const { title, before, after } of observations) {
+    for (const relation of seededRelations) {
+      if (before[relation] !== 0)
+        problems.push(`${title}: ${relation} holds ${before[relation]} rows before its first grow`);
+      const limit = maxScaleUnits * ordinalsPerScale * perOrdinal[relation] + fixtureRows;
+      const rows = after?.[relation];
+      if (rows === undefined || rows > limit)
+        problems.push(`${title}: ${relation} holds ${rows} rows after its check, more than ${limit}`);
+    }
+  }
+  expect(problems).toEqual([]);
+});

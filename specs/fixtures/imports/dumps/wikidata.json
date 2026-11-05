@@ -1,4 +1,22 @@
 [
-{"type":"item","id":"Q1","lastrevid":101,"labels":{"en":{"language":"en","value":"Lantern 🌙"}},"descriptions":{"en":{"language":"en","value":"Public synopsis"}},"aliases":{},"claims":{},"sitelinks":{}},
-{"type":"item","id":"Q2","lastrevid":102,"labels":{"en":{"language":"en","value":"Harbor"}},"descriptions":{},"aliases":{},"claims":{},"sitelinks":{}}
+  {
+    "type": "item",
+    "id": "Q1",
+    "lastrevid": 101,
+    "labels": { "en": { "language": "en", "value": "Lantern 🌙" } },
+    "descriptions": { "en": { "language": "en", "value": "Public synopsis" } },
+    "aliases": {},
+    "claims": {},
+    "sitelinks": {}
+  },
+  {
+    "type": "item",
+    "id": "Q2",
+    "lastrevid": 102,
+    "labels": { "en": { "language": "en", "value": "Harbor" } },
+    "descriptions": {},
+    "aliases": {},
+    "claims": {},
+    "sitelinks": {}
+  }
 ]

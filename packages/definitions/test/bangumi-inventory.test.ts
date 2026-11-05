@@ -228,12 +228,21 @@ const enumerations: Record<string, (string | number)[]> = {
 type Decision = {
   status: 'existing' | 'proposed' | 'omitted';
   term?: string;
+  inverse?: true;
+  canonicalByReverse?: Record<string, { term: string }>;
   on?: string;
   qualifies?: string;
   wikidata?: string;
   meaning?: string;
   reason?: string;
   sources?: string[];
+  recordCheck?: {
+    subject: number;
+    related: number;
+    forward: number;
+    reverse: number | null;
+    observation: string;
+  };
   licence?: { id: string; url: string };
   qualifiers?: Record<string, Decision>;
   value?: Decision;
@@ -252,6 +261,162 @@ type Inventory = {
 
 const inventory = () =>
   Bun.YAML.parse(readFileSync(new URL('../sources/bangumi.yaml', import.meta.url), 'utf8')) as Inventory;
+
+const subjectRelations = () =>
+  inventory().enumerations.filter(({ id }) => ['relation.1', 'relation.2', 'relation.4'].includes(id));
+const relationsDocument = `https://github.com/bangumi/common/blob/${snapshot.commonCommit}/subject_relations.yml`;
+const archiveAsset = `https://github.com/bangumi/Archive/releases/download/archive/${snapshot.asset}`;
+
+// Independently checked subject-relations.jsonlines rows in the SHA-256-pinned asset.
+// Code, subject_id, related_subject_id, reciprocal code, canonical property, related holder.
+// Parent Story uses the reciprocal's more specific property so that both rows store one fact.
+const checkedRelations: Record<string, [number, number, number, number | null, string, boolean?][]> = {
+  'relation.1': [
+    [1, 1, 296317, 1, 'rezics:crossMediaCounterpart'],
+    [1002, 26, 499, 1003, 'wdt:P179'],
+    [1003, 495, 90, 1002, 'wdt:P179', true],
+    [1004, 10, 497, 1004, 'rezics:artbookCounterpart'],
+    [1005, 31, 30, 1006, 'wdt:P155'],
+    [1006, 30, 31, 1005, 'wdt:P155', true],
+    [1007, 49, 51234, 1008, 'rezics:sideStoryOf', true],
+    [1008, 1236, 7791, 1007, 'rezics:sideStoryOf'],
+    [1010, 29, 326025, 1010, 'rezics:editionCounterpart'],
+    [1011, 335, 41336, 1011, 'rezics:sameCharacters'],
+    [1012, 76, 77, 1012, 'rezics:sameSetting'],
+    [1013, 505, 17326, 1013, 'rezics:alternativeSetting'],
+    [1014, 1674, 147362, 1014, 'rezics:collaborationWith'],
+    [1015, 5110, 132876, 1015, 'rezics:alternativeVersion'],
+    [1099, 11, 497, 1099, 'rezics:bangumiRelatedTo'],
+  ],
+  'relation.2': [
+    [1, 12, 497, 1, 'rezics:crossMediaCounterpart'],
+    [2, 8, 793, 3, 'wdt:P155'],
+    [3, 51, 876, 2, 'wdt:P155', true],
+    [4, 8, 99952, 5, 'rezics:summaryOf', true],
+    [5, 1999, 975, 4, 'rezics:summaryOf'],
+    [6, 8, 35866, 12, 'rezics:sideStoryOf', true],
+    [7, 12, 2478, 7, 'rezics:sameCharacters'],
+    [8, 50, 985, 8, 'rezics:sameSetting'],
+    [9, 8, 199228, 9, 'rezics:alternativeSetting'],
+    [10, 8, 199229, 10, 'rezics:alternativeVersion'],
+    [11, 50, 106834, 12, 'rezics:spinOffOf', true],
+    [12, 314, 24274, 6, 'rezics:sideStoryOf'],
+    [14, 47, 515, 7, 'rezics:collaborationWith'],
+    [99, 150, 458009, 99, 'rezics:bangumiRelatedTo'],
+  ],
+  'relation.4': [
+    [1, 13, 51, 1, 'rezics:crossMediaCounterpart'],
+    [4002, 4, 9944, 4003, 'wdt:P155'],
+    [4003, 9, 20482, 4002, 'wdt:P155', true],
+    [4006, 13, 3660, 4012, 'rezics:sideStoryOf', true],
+    [4007, 13, 1172, 4007, 'rezics:sameCharacters'],
+    [4008, 40, 43, 4008, 'rezics:sameSetting'],
+    [4009, 143, 329302, 4009, 'rezics:alternativeSetting'],
+    [4010, 40, 41, 4010, 'rezics:alternativeVersion'],
+    [4012, 123, 300296, 4006, 'rezics:sideStoryOf'],
+    [4013, 122686, 563561, 4013, 'rezics:bangumiLegacyVersion'],
+    [4014, 6, 20810, 4014, 'rezics:collaborationWith'],
+    [4015, 171, 30448, 4015, 'rezics:expansionCounterpart'],
+    [4016, 40, 492287, 4017, 'schema:exampleOfWork', true],
+    [4017, 124, 84156, 4016, 'schema:exampleOfWork'],
+    [4018, 6, 108488, 4019, 'wdt:P361'],
+    [4019, 3681, 608727, 4018, 'wdt:P361', true],
+    [4099, 52, 472985, 4099, 'rezics:bangumiRelatedTo'],
+  ],
+};
+
+test('every Bangumi subject relation type maps to a directed or symmetric release property', () => {
+  for (const group of subjectRelations()) {
+    for (const entry of group.values) {
+      const mapping = entry.mapping;
+      if (group.id === 'relation.1' && entry.id === 1003) {
+        expect(mapping.status).toBe('omitted');
+        expect(mapping.reason).toContain("member's part-of-the-series statement");
+        continue;
+      }
+      expect(mapping.status).not.toBe('omitted');
+      const property = bundledRelease.properties[mapping.term ?? ''];
+      expect(property?.datatype).toBe('wikibase-item');
+      expect(property?.relation).toBeDefined();
+      expect(property!.relation!.inverse).not.toBe('none');
+      expect(property!.relation!.symmetric || property!.relation!.inverse).toBeTruthy();
+      if (mapping.inverse) expect(property!.relation!.symmetric).not.toBe(true);
+    }
+  }
+});
+
+test('each mapped Bangumi relation direction is checked against a cited record', () => {
+  for (const group of subjectRelations()) {
+    exactIds(
+      group.values,
+      checkedRelations[group.id]!.map(([code]) => code),
+    );
+    for (const entry of group.values) {
+      const mapping = entry.mapping;
+      expect(mapping.sources).toContain(relationsDocument);
+      const check = mapping.recordCheck;
+      expect(check).toBeDefined();
+      expect(check!.subject).toBeGreaterThan(0);
+      expect(check!.related).toBeGreaterThan(0);
+      expect(check!.subject).not.toBe(check!.related);
+      expect(check!.forward).toBe(Number(entry.id));
+      expect(check!.reverse === null || Number.isInteger(check!.reverse)).toBe(true);
+      expect(check!.observation.trim().length).toBeGreaterThan(40);
+      const [code, subject, related, reverse, term, inverse = false] = checkedRelations[group.id]!.find(
+        ([code]) => code === entry.id,
+      )!;
+      expect(check).toMatchObject({ subject, related, forward: code, reverse });
+      expect(mapping.sources).toContain(
+        `${archiveAsset}#subject-relations.jsonlines/${check!.subject}/${check!.related}`,
+      );
+      if (mapping.status === 'omitted') continue;
+      const canonical = mapping.canonicalByReverse?.[String(reverse)] ?? mapping;
+      expect(canonical.term).toBe(term);
+      expect(mapping.inverse ?? false).toBe(inverse);
+    }
+  }
+});
+
+test('reciprocal parent-story codes resolve to one specific canonical statement', () => {
+  const mappings = subjectRelations().flatMap(({ values }) => values);
+  for (const code of [12, 1008, 4012]) {
+    const mapping = mappings.find(({ id }) => id === code)!.mapping;
+    expect(mapping.term).toBe('wdt:P361');
+    expect(mapping.inverse).toBeUndefined();
+    expect(mapping.canonicalByReverse).toEqual({
+      6: { term: 'rezics:sideStoryOf' },
+      1007: { term: 'rezics:sideStoryOf' },
+      4006: { term: 'rezics:sideStoryOf' },
+      11: { term: 'rezics:spinOffOf' },
+    });
+    for (const [reverse, canonical] of Object.entries(mapping.canonicalByReverse!)) {
+      const reciprocal = mappings.find(({ id }) => id === Number(reverse))!.mapping;
+      expect(reciprocal).toMatchObject({ term: canonical.term, inverse: true });
+    }
+  }
+});
+
+test('source distinctions remain readable on all work profiles in every locale', () => {
+  const locales = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'];
+  for (const group of subjectRelations()) {
+    for (const { mapping } of group.values) {
+      if (mapping.status === 'omitted') continue;
+      const property = bundledRelease.properties[mapping.term!]!;
+      expect(Object.keys(property.labels).sort()).toEqual(locales);
+      if (mapping.term!.startsWith('rezics:')) {
+        expect(property.targets).toContain('schema:CreativeWork');
+        for (const type of Object.values(bundledRelease.types)) {
+          if (type.bases.includes('schema:CreativeWork')) expect(type.properties).toContain(mapping.term!);
+        }
+      }
+    }
+  }
+  for (const term of ['rezics:sameSetting', 'rezics:alternativeVersion', 'rezics:sameCharacters'])
+    expect(bundledRelease.properties[term]?.relation).toMatchObject({ symmetric: true, group: 'world' });
+  for (const term of ['rezics:summaryOf', 'rezics:sideStoryOf'])
+    expect(bundledRelease.properties[term]?.relation?.acyclic).toBe(true);
+  expect(bundledRelease.properties['rezics:bangumiRelatedTo']?.labels.en).toBe('Related (Bangumi)');
+});
 
 function exactIds(entries: { id: string | number }[], expected: (string | number)[]) {
   const ids = entries.map(({ id }) => String(id));
@@ -289,6 +454,7 @@ const primaryTerms: Record<string, string[]> = {
   'schema:Episode': ['wd:Q1983062'],
   'schema:Game': ['wd:Q11410'],
   'schema:Movie': ['wd:Q11424'],
+  'schema:MusicAlbum': ['wd:Q482994'],
   'schema:Organization': ['wd:Q43229'],
   'schema:Person': ['wd:Q5'],
   'schema:TVSeries': ['wd:Q5398426'],
@@ -349,8 +515,11 @@ const primaryTerms: Record<string, string[]> = {
   'wdt:P179': ['wd:P179'],
   'wdt:P1853': ['wd:P1853'],
   'wdt:P1932': ['wd:P1932'],
+  'wdt:P2512': ['wd:P2512'],
   'wdt:P2635': ['wd:P2635'],
   'wdt:P287': ['wd:P287'],
+  'wdt:P361': ['wd:P361'],
+  'wdt:P527': ['wd:P527'],
   'wdt:P31': ['wd:P31'],
   'wdt:P3831': ['wd:P3831'],
   'wdt:P408': ['wd:P408'],
@@ -375,12 +544,36 @@ function validate(mapping: Decision) {
     return;
   }
   expect(mapping.meaning?.trim().length).toBeGreaterThan(10);
+  let sourceTerm = mapping.term ?? '';
+  if (mapping.inverse !== undefined) {
+    expect(mapping.inverse).toBe(true);
+    const property = bundledRelease.properties[sourceTerm];
+    expect(property?.datatype).toBe('wikibase-item');
+    expect(property?.relation?.inverse).toBeDefined();
+    expect(property?.relation?.inverse).not.toBe('none');
+    expect(mapping.qualifies).toBeUndefined();
+    sourceTerm = property!.relation!.inverse!;
+  }
+  if (mapping.term?.startsWith('rezics:') && mapping.wikidata === undefined) {
+    expect(mapping.status).toBe('existing');
+    const property = bundledRelease.properties[mapping.term];
+    expect(property?.datatype).toBe('wikibase-item');
+    expect(property?.relation).toBeDefined();
+    expect(property?.relation?.inverse).not.toBe('none');
+    expect(bundledRelease.types[mapping.on ?? '']?.properties).toContain(mapping.term);
+    expect(Object.keys(property!.labels).sort()).toEqual(['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant']);
+    expect(mapping.sources).toContain(relationsDocument);
+    return;
+  }
   expect(mapping.wikidata).toMatch(/^wd:[PQ][1-9][0-9]*$/);
-  expect(primaryTerms[mapping.term ?? '']).toContain(mapping.wikidata);
+  expect(primaryTerms[sourceTerm]).toContain(mapping.wikidata);
   if (mapping.status === 'existing') {
     const type = bundledRelease.types[mapping.on ?? ''];
     expect(type).toBeDefined();
-    if (mapping.qualifies) {
+    if (mapping.inverse) {
+      const targets = bundledRelease.properties[mapping.term!]!.targets!;
+      expect([mapping.on!, ...type!.bases].some((term) => targets.includes(term))).toBe(true);
+    } else if (mapping.qualifies) {
       expect(type!.properties).toContain(mapping.qualifies);
       expect(bundledRelease.properties[mapping.qualifies]?.qualifiers).toContain(mapping.term);
     } else {
@@ -393,9 +586,9 @@ function validate(mapping: Decision) {
     );
     const wikidataPage = `https://www.wikidata.org/wiki/${mapping.wikidata!.replace('wd:P', 'Property:P').replace('wd:Q', 'Q')}`;
     expect(mapping.sources).toContain(wikidataPage);
-    if (mapping.term!.startsWith('schema:'))
-      expect(mapping.sources).toContain(`https://schema.org/${mapping.term!.slice(7)}`);
-    if (mapping.term!.startsWith('wdt:')) expect(mapping.wikidata).toBe(mapping.term!.replace('wdt:', 'wd:'));
+    if (sourceTerm.startsWith('schema:'))
+      expect(mapping.sources).toContain(`https://schema.org/${sourceTerm.slice(7)}`);
+    if (sourceTerm.startsWith('wdt:')) expect(mapping.wikidata).toBe(sourceTerm.replace('wdt:', 'wd:'));
     if (mapping.term!.startsWith('wd:')) expect(mapping.wikidata).toBe(mapping.term);
     if (mapping.term!.startsWith('skos:'))
       expect(mapping.sources).toContain(`https://www.w3.org/2004/02/skos/core#${mapping.term!.slice(5)}`);
@@ -412,9 +605,54 @@ function validate(mapping: Decision) {
   for (const qualifier of Object.values(mapping.qualifiers ?? {})) validate(qualifier);
 }
 
+test('reverse Bangumi relations retain their source meaning through canonical mappings', () => {
+  const data = inventory();
+  for (const [group, id, term, wikidata] of [
+    ['relation.2', 3, 'wdt:P155', 'wd:P156'],
+    ['relation.1', 1006, 'wdt:P155', 'wd:P156'],
+    ['relation.4', 4003, 'wdt:P155', 'wd:P156'],
+    ['relation.4', 4016, 'schema:exampleOfWork', 'wd:P747'],
+  ] as const) {
+    const mapping = data.enumerations
+      .find((entry) => entry.id === group)!
+      .values.find((entry) => entry.id === id)!.mapping;
+    expect(mapping).toMatchObject({ term, inverse: true, wikidata });
+    expect(mapping.meaning).toBeTruthy();
+  }
+});
+
 test('every inventoried Bangumi term is bundled, proposed by the vocabulary rules, or omitted with a reason', () => {
   const data = inventory();
   conceptIds.clear();
+  const group = (id: string) => data.enumerations.find((entry) => entry.id === id)!.values;
+  for (const id of ['staff.3', 'staff.6', 'relation.3'])
+    for (const entry of group(id)) expect(entry.mapping.status).toBe('omitted');
+  const liveActionRelations = group('relation.6');
+  expect(liveActionRelations.find((entry) => entry.id === 1)!.mapping).toMatchObject({
+    status: 'existing',
+    term: 'rezics:crossMediaCounterpart',
+    on: 'schema:TVSeries',
+  });
+  for (const entry of liveActionRelations.filter((entry) => entry.id !== 1))
+    expect(entry.mapping.status).toBe('omitted');
+  const counterpart = bundledRelease.properties['rezics:crossMediaCounterpart']!;
+  expect(bundledRelease.types['schema:TVSeries']?.properties).toContain('rezics:crossMediaCounterpart');
+  for (const type of ['schema:Movie', 'schema:TVSeries']) {
+    const pending = [type];
+    const seen = new Set<string>();
+    let admitted = false;
+    while (pending.length) {
+      const next = pending.pop()!;
+      if (seen.has(next)) continue;
+      seen.add(next);
+      const profile = bundledRelease.types[next];
+      if (!profile) continue;
+      admitted ||= profile.properties.includes('rezics:crossMediaCounterpart');
+      pending.push(...profile.bases);
+    }
+    expect(counterpart.datatype).toBe('wikibase-item');
+    expect(admitted).toBe(true);
+  }
   for (const file of data.files) {
     validate(file.type);
     for (const field of file.fields) validate(field.mapping);
@@ -424,11 +662,18 @@ test('every inventoried Bangumi term is bundled, proposed by the vocabulary rule
   for (const template of data.infobox) for (const field of template.fields) validate(field.mapping);
   for (const group of data.enumerations) for (const entry of group.values) validate(entry.mapping);
   for (const mapping of data.vocabulary) validate(mapping);
-  const group = (id: string) => data.enumerations.find((entry) => entry.id === id)!.values;
-  for (const id of ['staff.3', 'staff.6', 'platform.music', 'platform.real', 'relation.3', 'relation.6'])
-    for (const entry of group(id)) expect(entry.mapping.status).toBe('omitted');
-  for (const id of [3, 6])
-    expect(group('subject.type').find((entry) => entry.id === id)!.mapping.status).toBe('omitted');
+  expect(group('subject.type').find((entry) => entry.id === 3)!.mapping).toMatchObject({
+    status: 'existing',
+    term: 'schema:MusicAlbum',
+    on: 'schema:MusicAlbum',
+  });
+  expect(group('subject.type').find((entry) => entry.id === 6)!.mapping.status).toBe('omitted');
+  expect(group('platform.real').find((entry) => entry.id === 6002)!.mapping.profile?.term).toBe('schema:Movie');
+  for (const id of [0, 1, 2, 3, 6001, 6003, 6004])
+    expect(group('platform.real').find((entry) => entry.id === id)!.mapping.profile?.term).toBe('schema:TVSeries');
+  expect(group('platform.music').find((entry) => entry.id === 0)!.mapping.profile?.term).toBe('schema:MusicAlbum');
+  for (const id of [3001, 3002, 3003, 3004])
+    expect(group('platform.music').find((entry) => entry.id === id)!.mapping.status).toBe('omitted');
   for (const file of data.files)
     for (const field of file.fields)
       if (/^(tags|favorite|score|score_details|rank|comments|collects)(\.|$)/.test(String(field.id)))

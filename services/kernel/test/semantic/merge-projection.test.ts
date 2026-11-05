@@ -16,6 +16,7 @@ const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill
 afterAll(() => pool.end());
 let nextRoute = (2000 + Math.floor(Math.random() * 1000)) * 16;
 const partition = (id: string) => partitionOf(routeOf(id)!);
+const testRelease = `sha256:${'0'.repeat(64)}`;
 
 async function subjects(count: number) {
   const ids: string[] = [];
@@ -28,6 +29,11 @@ async function subjects(count: number) {
         "INSERT INTO semantic.subject (route, subject_id, type, recorded_transaction_id) VALUES ($1, $2, 'schema:Person', $3)",
         [route, id, transactionId],
       );
+      await tx.query(
+        `INSERT INTO semantic.revision(route,subject_id,revision,kind,release,recorded_transaction_id)
+         VALUES ($1,$2,1,'create',$3,$4)`,
+        [route, id, testRelease, transactionId],
+      );
       return { value: null, events: [{ type: 'com.rezics.subject.created.v1', subject: id, data: { id } }] };
     });
     ids.push(id);
@@ -37,6 +43,16 @@ async function subjects(count: number) {
 
 async function merge(id: string, survivor: string) {
   return runCommand(pool, { partition: partition(id) }, async (tx, { transactionId }) => {
+    const latest = await tx.query(
+      'SELECT revision, release FROM semantic.revision WHERE route=$1 AND subject_id=$2 ORDER BY revision DESC LIMIT 1',
+      [routeOf(id), id],
+    );
+    const previous = latest.rows[0] as { revision: number; release: string } | undefined;
+    await tx.query(
+      `INSERT INTO semantic.revision(route,subject_id,revision,kind,release,recorded_transaction_id)
+       VALUES ($1,$2,$3,'merge',$4,$5)`,
+      [routeOf(id), id, Number(previous?.revision ?? 1) + 1, previous?.release ?? testRelease, transactionId],
+    );
     await tx.query(
       'INSERT INTO semantic.redirect (route, subject_id, sequence, target, recorded_transaction_id) VALUES ($1, $2, 1, $3, $4)',
       [routeOf(id), id, survivor, transactionId],
@@ -63,8 +79,54 @@ async function seedLinks(id: string, count: number) {
   return rows;
 }
 
+async function seedOutboundRelations(id: string, count: number) {
+  const route = routeOf(id)!;
+  const nil = '00000000-0000-0000-0000-000000000000';
+  const rows = Array.from({ length: count }, (_, index) => ({
+    target: newId(route),
+    statement: randomUUID(),
+    slot: randomUUID(),
+    order_key: String(index).padStart(8, '0'),
+  }));
+  await runCommand(pool, { partition: partition(id) }, async (tx, { transactionId }) => {
+    const values = JSON.stringify(rows);
+    await tx.query(
+      `INSERT INTO semantic.outbound_link
+       (route, subject_id, property, filter_value, order_key, target_subject_id, statement_id, slot_id, relation,
+        source_type, source_order_key, outbound_order, source_revision, source_security_revision, target_revision,
+        target_type, external, value, present, recorded_transaction_id)
+       SELECT $1, $2, 'schema:author', $3, r.order_key, r.target, r.statement, r.slot, true,
+              'schema:Person', '', 'name', 1, 0, 0, 'schema:Person', NULL, 'value', true, $4
+       FROM jsonb_to_recordset($5::jsonb) r(target uuid, statement uuid, slot uuid, order_key text)`,
+      [route, id, nil, transactionId, values],
+    );
+    await tx.query(
+      `INSERT INTO semantic.outbound_link_count(route,subject_id,property,filter_value,value)
+       VALUES ($1,$2,'schema:author',$3,$4)`,
+      [route, id, nil, count],
+    );
+    await tx.query(
+      `INSERT INTO semantic.inbound_link
+       (route, subject_id, property, source_subject_id, statement_id, source_revision, source_security_revision,
+        present, source_type, order_key, filter_value, recorded_transaction_id)
+       SELECT $1, r.target, 'schema:author', $2, r.statement, 1, 0, true, 'schema:Person', '', $3, $4
+       FROM jsonb_to_recordset($5::jsonb) r(target uuid, statement uuid)`,
+      [route, id, nil, transactionId, values],
+    );
+    await tx.query(
+      `INSERT INTO semantic.inbound_link_count(route,subject_id,property,filter_value,value)
+       SELECT $1, r.target, 'schema:author', $2, 1
+       FROM jsonb_to_recordset($3::jsonb) r(target uuid)`,
+      [route, nil, JSON.stringify(rows.map(({ target }) => ({ target })))],
+    );
+    return { value: null, events: [{ type: 'com.rezics.subject.created.v1', subject: id, data: { id } }] };
+  });
+  return rows;
+}
+
 const links = (id: string, seen: Parameters<typeof listSubjectLinks>[2]['seen'] = [], cursor?: string) =>
   listSubjectLinks(pool, tokens, {
+    routeKey: new Uint8Array(32).fill(1),
     subject: id,
     property: null,
     limit: 100,
@@ -84,6 +146,7 @@ test('a merge moves more than one page and remains behind until its last page', 
   expect(first.freshness.caught_up).toBe(false);
   await projection.run(partition(survivor));
   expect((await links(survivor, seen)).freshness.caught_up).toBe(false);
+  await projection.run(partition(survivor));
   await projection.run(partition(survivor));
   const final = await links(survivor, seen);
   expect(final.freshness.caught_up).toBe(true);
@@ -111,6 +174,41 @@ test('a merge moves more than one page and remains behind until its last page', 
     (await pool.query('SELECT * FROM semantic.redirect WHERE route = $1 AND subject_id = $2', [routeOf(id), id])).rows,
   ).toEqual(before.rows);
 }, 15_000);
+
+test('a merge removes 3,000 outbound relation projections in bounded pages', async () => {
+  const [survivor, id] = (await subjects(2)) as [string, string];
+  await seedOutboundRelations(id, 3_000);
+  const merged = await merge(id, survivor);
+  await projection.run(partition(id));
+
+  let previous = 3_000;
+  let pages = 0;
+  for (; pages < 40 && previous > 0; pages++) {
+    await projection.run(partition(survivor));
+    const result = await pool.query(
+      'SELECT count(*)::integer AS value FROM semantic.outbound_link WHERE route=$1 AND subject_id=$2 AND present',
+      [routeOf(id), id],
+    );
+    const remaining = Number(result.rows[0]?.value ?? 0);
+    expect(previous - remaining).toBeLessThanOrEqual(100);
+    previous = remaining;
+  }
+  expect(previous).toBe(0);
+  expect(pages).toBeGreaterThanOrEqual(30);
+  const mirrors = await pool.query(
+    `SELECT count(*)::integer AS value FROM semantic.inbound_link
+     WHERE route=$1 AND source_subject_id=$2 AND present`,
+    [routeOf(id), id],
+  );
+  expect(mirrors.rows[0]?.value).toBe(0);
+  const count = await pool.query(
+    `SELECT value::integer FROM semantic.outbound_link_count
+     WHERE route=$1 AND subject_id=$2 AND property='schema:author' AND filter_value='00000000-0000-0000-0000-000000000000'`,
+    [routeOf(id), id],
+  );
+  expect(count.rows[0]?.value).toBe(0);
+  expect(merged.partition).toBe(partition(id));
+}, 30_000);
 
 test('a survivor merged while its event is in flight forwards the move and repoints all members', async () => {
   const [smallest, middle, largest, member] = (await subjects(4)) as [string, string, string, string];

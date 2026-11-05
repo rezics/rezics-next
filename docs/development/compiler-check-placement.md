@@ -1,0 +1,138 @@
+# Compiler entrypoint placement
+
+Root `bun scripts/typecheck.ts`, Kernel `bun run --cwd services/kernel typecheck` and Auth
+`bun run --cwd services/auth typecheck` share one physical admission boundary. SQL-mapped compiler work, including
+database preparation and Kernel construction, runs only on approved hosts a/b. Missing hosts, native nonzero exit,
+transport status 75 and cancellation are terminal results; none authorizes local replay. Local/off environment
+markers do not change this rule.
+
+`recognizeCheckHostRun` checks the entrypoint's own source directory using the existing
+[physical receiving predicate](check-host-recognition.md). Root overrides, database URLs and environment markers
+cannot select its evidence. Admitted execution continues inside the same run without another host admission. The
+optional recognition/placement/database dependencies are inert test seams, never environment configuration. A null
+placement response without physical recognition is refused with status 75.
+
+The root entrypoint computes affected workspaces and their transitive dependent closure before admission. An empty
+selection returns zero; selected pure workspaces execute locally without host or database work. A selection containing
+SQL work relocates in its entirety before any database or workspace process starts. The remote command carries a
+versioned JSON `--selection=` argv element with the exact changed-file list, or null for all workspaces. This preserves
+both `TYPECHECK_CHANGED` and the programmatic changedFiles option. Decoding accepts only the two declared fields,
+version 1, at most 4096 relative paths of at most 4096 characters and at most 65536 encoded bytes. Control characters,
+absolute paths and traversal segments are rejected. Empty lists and an absent list remain distinct. Arguments are
+data, never shell commands or evaluated code. Arbitrary source-root overrides are unavailable for production SQL
+runs; the source checkout and its pinned Bun continue to own execution.
+
+An explicit developer `DATABASE_URL` is used unchanged only within already admitted custody. Outside that custody,
+status 75 explicitly refuses relocation: the current producer has no declared safe representation for these precise
+credentials and SQL semantics. It neither copies credentials nor substitutes a fresh database. A normal admitted
+root run prepares one database with both schemas, shares it with the selected workspaces and removes it after all
+consumers finish. Direct Kernel and Auth retain their existing migration, SQL analysis, construct, diagnostic,
+failure-status and cleanup behavior. SQL content mappers and the selected tsconfig are unchanged.
+
+Repository-relative `REYLO_CONFIG` is a bounded explicit `--reylo-config=` argv input, revalidated by the receiving
+entrypoint. Paths resolve from each selected SQL workspace and must remain inside the checkout. External/absolute
+projects are explicitly unsupported. Kernel's core or existing module `--emit-schema=` modes declare their bounded
+schema.sql returns. Disposable compiler analyses are consumed within the same run, not returned recursively.
+`--emit-client` declares the closed [Kernel client output profile](../../services/kernel/README.md#client-declaration-output-placement).
+Its bounded versioned bundle uses the existing physical return pipeline. Source, attempt and complete byte custody
+must validate before whole-tree publication, including deletions. Already admitted direct execution and nested placement
+use that same profile; external projects remain unsupported.
+
+## Authored acceptance and execution receipts
+
+The root composition regression was committed before implementation. It exercises the real selection and database
+branches and composes both direct wrappers with fake compiler executables. Placement, database and physical evidence
+are inert fixtures. Coverage includes a/b filtering through the real placement helper, native statuses and cancellation,
+forged markers and explicit URLs, one database through SQL/construct and cleanup, exact diagnostics, pure dependent
+closure, empty selection and bounded input rejection. Existing compiler diagnostic/output/cleanup assertions retain
+their checks under injected physical admission instead of their obsolete environment-only bypasses.
+
+The canonical three-file acceptance command is **UNRUN** under the current source-only execution policy: original
+acceptance is deferred, and scripts/typecheck.test.ts still includes the existing real Docker/PostgreSQL relation
+acceptance. That assertion has not been weakened, removed or relabeled as mocked proof. Only explicitly bounded
+database-free unit invocations and the required foreground workspace typing are eligible during this attempt.
+
+The one bounded unit invocation, `bun test scripts/root-typecheck-placement.test.ts scripts/typecheck-placement.test.ts`,
+ran at implementation commit 30d0d76ae5: exit 1, 41 passed, 2 failed, 457 expectations, 5.08 seconds. All 26 direct
+wrapper tests passed. The new root diagnostic test incorrectly required stdout/stderr adjacency despite native Bun
+script-launcher lines; it now asserts the complete original block including those lines. The new root/direct
+composition fixture returned 1: its package launcher could prepend real ancestor executable directories ahead of the
+fixture PATH. The receiving fixture now confines both process and child executable lookup to its inert bin directory.
+That first fixture did not establish exclusively fake compiler execution; it must not be reported as a pure compiler
+or physical proof. Database preparation was injected throughout. No database or remote transport was intentionally
+started by these units. The corrections were committed; the bounded invocation was not repeated. The final root
+fixture corrections and the untouched live relation acceptance remain unverified by execution.
+
+Required foreground workspace typing ran sequentially from the worktree root at source commit 2ee6a0f9ae, using the
+supported placement and existing foreground session handles until each terminal result:
+
+| Command                                   | Host | Terminal status | Remote command duration | Reported peak memory |
+| ----------------------------------------- | ---- | --------------- | ----------------------- | -------------------- |
+| `bun run --cwd services/kernel typecheck` | b    | 0               | 361.939 s               | 9180 MiB             |
+| `bun run --cwd services/auth typecheck`   | b    | 0               | 332.244 s               | 5073 MiB             |
+
+Kernel's receipt includes `bun scripts/construct.ts`; Auth's includes its compiler database owner message. Both runs
+used the normal producer and physical receiving code, not injected evidence, local/off overrides or a replacement
+compiler. The unchanged source continued in the admitted run and returned zero. Neither command has a detached check
+ID. No original stopped consumer was started or retried, and neither compiler was interrupted or duplicated.
+
+These are actual direct-workspace typing receipts, separate from the authored acceptance. They do not prove root
+selected-workspace relocation on a physical host, schema/client output transport, the existing live relation
+acceptance, historical consumer failures or full native/browser behavior. Original acceptance/native/browser
+verification, stopped consumer retries and Goal closure remain deferred. The final receipt-only documentation commit
+does not change the typed source.
+
+## Scope decisions and source reading
+
+The explicit URL policy chooses unsupported relocation rather than inventing a credential producer interface. The
+selection descriptor carries changed files rather than guessed workspace names so dependency closure remains the
+entrypoint's existing authority. A full descriptor overrides destination-side selection environment. Config input is
+explicit argv because the producer deliberately leaves caller environment behind. No transport/producer/gate/control
+plane/release files were changed.
+
+Read the manager's performance instruction and approved-run-recognition normal-result decision, the receiving
+predicate and stack-run/remote producer interfaces, root compiler/database code, both direct wrappers and workspace
+commands, repository workflow and Goal definitions. The reference index was inspected; no cited upstream reference
+source governs this entrypoint repair and no new external research was required.
+
+Outside the seven declared paths, services/kernel/README.md and services/auth/README.md change only their command
+paragraphs: they previously promised environment-only execution and local fallback, contradicting the repaired
+entrypoints. They now point here for compiler policy.
+
+The read-only shared scripts/README.md still contains a superseded Auth URL-bypass sentence in its check-host section;
+this launch contract and the compiler policy above govern the entrypoints. That shared transport document was left
+closed alongside the producer/placement files.
+
+## Bounded launch and preparation
+
+Official remote launches carry the generated command/source envelope on SSH stdin. Only a fixed Python receiver,
+byte length and SHA-256 digest occupy the SSH command argument. The receiver accepts at most 1 MiB, requires the
+complete exact-length digest before execution, and executes an anonymous script file with command stdin closed.
+The lifetime monitor and systemd scope execute run-owned script files, so moving bytes off SSH argv does not merely
+move E2BIG to another process boundary. The original command arguments, source checks, run identity, physical terminal
+receipt, cancellation, output-tree receiving (including deletion) and verified run-directory cleanup still apply.
+The 1 MiB bound is a launch-input bound; existing command/source and output limits remain unchanged.
+
+Preparation keeps its absolute three-minute deadline. Bounded failure diagnostics add `stalledPhase`,
+`phaseElapsedMs` and up to 16 owned process PID/state/kernel-wait records to the existing infrastructure failure.
+The last phase is atomically recorded under run scratch before base refresh, runtime verification/download,
+Git restoration, source validation, source/native cache locking/verification, frozen installation, publication and
+restore. Both the stream supervisor and independent lifetime monitor capture evidence before reaping descendants;
+no command arguments or environment values enter these diagnostics. Empty package observations remain unknown.
+Historical SSH/disk/memory observations do not identify the cause of a preparation stall; flock/rsync contention
+requires actual phase/wait evidence. A preparation failure remains compiler-not-started, never a typing result.
+
+Decision: use a bounded length/digest-verified stdin envelope and run-owned script files; diagnose preparation with
+phase/wait evidence while retaining the existing deadline and controller recovery protocol.
+
+The Web focused adapter selects a separate clean committed driver with `WEB_CHECK_DRIVER_ROOT`. Its head must already
+be an ancestor of canonical dev in the same Git repository. Controller integration must precede selecting the corrected
+snapshot and resuming existing sessions. Preserve unrelated dirty checkouts; create a separate clean snapshot instead.
+Expired preparations require controller repair/replacement before fresh preparation under the original session/check
+protocol. Queued recoveries and failed run identities remain intact; no repeated consumer or compiler producer follows
+from unit tests. Rating's coherent increment proceeds through ordinary controller landing guards, with its verification
+limitation retained. Consumer/native/browser acceptance and physical host diagnosis remain controller follow-up work.
+
+Sources for this correction: the linked Performance and worker-autonomy owner documents, agent conduct, this placement
+contract, the integrated bounded-output commit, remote-check/check-run implementation and fixtures, and Web focused
+placement's clean-driver selection. The reference index names no upstream source for this transport surface.

@@ -1,16 +1,139 @@
 types:
+  rezics:AnimeRelease: 'Anime-Veröffentlichung'
   schema:Episode: Episode
   schema:Movie: Film
   schema:TVSeason: Staffel
   schema:TVSeries: Fernsehserie
+  schema:MediaObject: 'Medienobjekt'
 properties:
+  bf:hasPart: 'enthaltenes Werk'
+  marcrel:fds: 'Filmverleih'
   schema:copyrightNotice: Urheberrechtshinweis
   schema:duration: Dauer
-  schema:endDate: Endzeitpunkt
   schema:episodeNumber: Episodennummer
   schema:isPartOf: ist Teil von
   schema:numberOfEpisodes: Episodenanzahl
-  schema:startDate: Startdatum
   wdt:P449: Sender der Erstausstrahlung
-  wdt:P7937: künstlerische Form
   wdt:P973: beschrieben in URL
+  schema:associatedMedia: 'zugehörige Medien'
+  schema:encodesCreativeWork: 'kodiert diese Episode'
+inverseProperties:
+  bf:hasPart: 'Veröffentlichungen mit diesem Werk'
+  marcrel:fds: 'Filmveröffentlichungen'
+  schema:isPartOf: 'Episoden'
+  wdt:P449: 'Erstausstrahlungen'
+  schema:associatedMedia: 'Veröffentlichungen mit dieser Datei'
+  schema:encodesCreativeWork: 'Dateien mit dieser Episode'
+typeDescriptions:
+  rezics:AnimeRelease: 'Eine eigenständig identifizierte Veröffentlichung oder Vertriebsversion von Anime-Inhalten. Getrennt von Werk, Folge, Wiedergabedatei und persönlichem Exemplar; Sprachen und Formate allein erzeugen keine weiteren Veröffentlichungen.'
+  schema:Episode: 'Eine eigenständig identifizierte Folge eines Anime-Werks, etwa Folge 3 oder ein Special; weder Wiedergabedatei noch ganze Staffel.'
+  schema:Movie: 'Ein animierter Lang- oder Kurzfilm als Werk, unabhängig von seinen veröffentlichten Ausgaben.'
+  schema:TVSeason: 'Eine gesondert identifizierte Staffel einer animierten Fernsehserie, getrennt von Gesamtserie und einzelner Folge.'
+  schema:TVSeries: 'Eine animierte Fernsehserie als Werk mit ihren Staffeln und Folgen, unabhängig von einer bestimmten Veröffentlichung.'
+  schema:MediaObject: 'Eine unabhängig identifizierte Katalogdatei. Ihre Metadaten belegen weder Besitz noch Downloadberechtigung, Wiedergabe oder gesehenen Fortschritt.'
+libraryProfiles:
+  anime.series:
+    states:
+      planned: 'Geplant'
+      in_progress: 'In Arbeit'
+      completed: 'Abgeschlossen'
+      paused: 'Pausiert'
+      dropped: 'Abgebrochen'
+    units:
+      scalar_amount:
+        episode:
+          label: 'Folge'
+          countForms:
+            one: 'Folge'
+            other: 'Folgen'
+    copyKinds:
+      physical: 'Physisch'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Im Besitz'
+        disposed: 'Abgegeben'
+      digital:
+        owned: 'Im Besitz'
+  anime.season:
+    states:
+      planned: 'Geplant'
+      in_progress: 'In Arbeit'
+      completed: 'Abgeschlossen'
+      paused: 'Pausiert'
+      dropped: 'Abgebrochen'
+    units:
+      scalar_amount:
+        episode:
+          label: 'Folge'
+          countForms:
+            one: 'Folge'
+            other: 'Folgen'
+    copyKinds:
+      physical: 'Physisch'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Im Besitz'
+        disposed: 'Abgegeben'
+      digital:
+        owned: 'Im Besitz'
+  anime.episode:
+    states:
+      planned: 'Geplant'
+      in_progress: 'In Arbeit'
+      completed: 'Abgeschlossen'
+      paused: 'Pausiert'
+      dropped: 'Abgebrochen'
+    units:
+      scalar_amount:
+        minute:
+          label: 'Minute'
+          countForms:
+            one: 'Minute'
+            other: 'Minuten'
+    copyKinds:
+      physical: 'Physisch'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Im Besitz'
+        disposed: 'Abgegeben'
+      digital:
+        owned: 'Im Besitz'
+  anime.film:
+    states:
+      planned: 'Geplant'
+      in_progress: 'In Arbeit'
+      completed: 'Abgeschlossen'
+      paused: 'Pausiert'
+      dropped: 'Abgebrochen'
+    units:
+      scalar_amount:
+        minute:
+          label: 'Minute'
+          countForms:
+            one: 'Minute'
+            other: 'Minuten'
+    copyKinds:
+      physical: 'Physisch'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Im Besitz'
+        disposed: 'Abgegeben'
+      digital:
+        owned: 'Im Besitz'
+propertyDescriptions:
+  bf:hasPart: 'Ein eigenständig identifiziertes Anime-Werk in dieser Sammelveröffentlichung; die tatsächliche Serie, den Film, die Staffel oder Folge verknüpfen.'
+  marcrel:fds: 'Eine Person oder Organisation, die für den Vertrieb dieser Filmveröffentlichung genannt wird; keine fremden Werk-Credits übernehmen.'
+  schema:copyrightNotice: 'Der Urheberrechtshinweis aus der Quelle; er begründet keine Lizenz zur Weiterverwendung.'
+  schema:duration: 'Die angegebene Laufzeit als nichtnegative ganzzahlige Menge in Sekunden (wd:Q11574), etwa 1440 für 24 Minuten.'
+  schema:episodeNumber: 'Die Folgennummer aus der Quelle als Text, auch 0, Specials oder Bruchzahlen; getrennt von der Folgenkennung.'
+  schema:isPartOf: 'Die Fernsehserie oder Staffel, zu der diese Folge gehört.'
+  schema:numberOfEpisodes: 'Die Folgenzahl dieses Werks oder dieser Staffel als nichtnegative, einheitenlose ganzzahlige Menge.'
+  wdt:P449: 'Die von der Quelle als ursprünglicher Sender bezeichnete Organisation, nicht jeder spätere Vertrieb.'
+  wdt:P973: 'Eine URL zu einer beschreibenden Seite über dieses Anime-Werk; kein automatischer Identitätsnachweis.'
+
+  schema:associatedMedia: 'Eine Katalogdatei, die dieser identifizierten Anime-Veröffentlichung zugeordnet ist; die Verknüpfung macht die Datei nicht zur Veröffentlichung.'
+  schema:encodesCreativeWork: 'Die Episode, die diese genaue Katalogdatei enthält; die Beziehung belegt weder Besitz noch einen Gesehen-Status.'

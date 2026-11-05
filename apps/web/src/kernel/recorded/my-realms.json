@@ -1,0 +1,21 @@
+{
+  "status": 200,
+  "items": [
+    {
+      "realmId": "01a1a000-0000-7000-8000-000000000002",
+      "name": "The Quiet Novel Club",
+      "role": "member"
+    },
+    {
+      "realmId": "01a1a000-0000-7000-8000-000000000051",
+      "name": "Night Shift Translators",
+      "role": "member"
+    },
+    {
+      "realmId": "01a1a000-0000-7000-8000-000000000052",
+      "name": "Hearth and Skillet",
+      "role": "member"
+    }
+  ],
+  "next": null
+}

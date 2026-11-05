@@ -5,12 +5,14 @@ import {
   MAX_PROFILE_BYTES,
   MAX_PROFILE_TEMPLATES,
   PROFILE_FORMAT,
+  type CompositionDocument,
   type PresentationProfile,
   platformRegistry,
   profileDigest,
   resolveTemplate,
   validateProfile,
 } from '../src/index.ts';
+import platform from '../profiles/platform.json' with { type: 'json' };
 
 const page = (id: string, text: string) => ({
   root: { props: {} },
@@ -94,14 +96,45 @@ test('profile keys are checked, sorted and unique', () => {
 
 test('every template is validated with pointers into the profile', () => {
   const value = profile();
-  value.generic.content[0]!.props.text = '<script>alert(1)</script>';
-  value.types[1]!.document.content[0]!.type = 'Script';
-  value.routes[0]!.document.content[0]!.props.level = 9;
+  const only = (entry: { document?: CompositionDocument | undefined }) => entry.document!;
+  (value.generic as CompositionDocument).content[0]!.props.text = '<script>alert(1)</script>';
+  only(value.types[1]!).content[0]!.type = 'Script';
+  // The platform Heading level is a literal enumeration, rather than an Integer range.
+  only(value.routes[0]!).content[0]!.props.level = 9;
   expect(validateProfile(platformRegistry, value)).toEqual([
     { pointer: '/generic/content/0/props/text', code: 'unsafe' },
     { pointer: '/routes/0/document/content/0/props/level', code: 'invalid' },
     { pointer: '/types/1/document/content/0/type', code: 'unknown_type' },
   ]);
+});
+
+test('numeric limits retain their classification and exact pointers through every profile template', () => {
+  const list = (limit: unknown): CompositionDocument => ({
+    root: { props: {} },
+    content: [{ type: 'SubjectList', props: { id: 'works', title: 'Works', property: 'schema:author', limit } }],
+  });
+  const withLimit = (limit: unknown): PresentationProfile => ({
+    format: PROFILE_FORMAT,
+    generic: list(limit),
+    bases: [{ base: 'schema:CreativeWork', document: list(limit) }],
+    types: [{ type: 'schema:Book', views: { overview: list(limit) } }],
+    routes: [{ route: '/', document: list(limit) }],
+  });
+  for (const limit of [1, 24]) expect(validateProfile(platformRegistry, withLimit(limit))).toEqual([]);
+  for (const [limit, code] of [
+    [0, 'limit'],
+    [25, 'limit'],
+    ['25', 'invalid'],
+    [1.5, 'invalid'],
+    [25.5, 'invalid'],
+  ] as const) {
+    expect(validateProfile(platformRegistry, withLimit(limit))).toEqual([
+      { pointer: '/bases/0/document/content/0/props/limit', code },
+      { pointer: '/generic/content/0/props/limit', code },
+      { pointer: '/routes/0/document/content/0/props/limit', code },
+      { pointer: '/types/0/views/overview/content/0/props/limit', code },
+    ]);
+  }
 });
 
 test('a profile past its size or template limit stops validation', () => {
@@ -125,7 +158,7 @@ test('a profile past its size or template limit stops validation', () => {
       },
     },
   ];
-  large.generic.content[0]!.props.text = '<b>never reached</b>';
+  (large.generic as CompositionDocument).content[0]!.props.text = '<b>never reached</b>';
   expect(canonicalize(large)!.length).toBeGreaterThan(MAX_PROFILE_BYTES);
   expect(validateProfile(platformRegistry, large)).toEqual([{ pointer: '', code: 'limit' }]);
 });
@@ -160,4 +193,23 @@ test('templates resolve by route, then type, then structural bases nearest first
   expect(pick({ type: 'schema:Person' })).toEqual({ scope: 'generic', key: null, id: 'generic' });
   expect(pick({ route: '/unknown' })).toEqual({ scope: 'generic', key: null, id: 'generic' });
   expect(pick({})).toEqual({ scope: 'generic', key: null, id: 'generic' });
+});
+
+test('the shipped platform profile validates against the shared registry and lists each launch vertical', () => {
+  const value = platform as PresentationProfile;
+  expect(validateProfile(platformRegistry, value)).toEqual([]);
+  const home = resolveTemplate(value, { route: '/' });
+  expect(home).toMatchObject({ scope: 'route', key: '/' });
+  expect(
+    home.document.content
+      .filter((node) => node.type === 'TypeList')
+      .map((node) => [node.props.id, node.props.types, node.props.limit]),
+  ).toEqual([
+    ['books', ['schema:Book'], 12],
+    ['anime', ['schema:TVSeries', 'schema:Movie'], 12],
+    ['visual-novels', ['wd:Q689445'], 12],
+    ['recipes', ['schema:Recipe'], 12],
+  ]);
+  expect(resolveTemplate(value, { type: 'schema:Recipe' }).scope).toBe('generic');
+  expect(resolveTemplate(value, { type: 'schema:Book', bases: ['schema:CreativeWork'] }).scope).toBe('base');
 });

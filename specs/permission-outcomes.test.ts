@@ -14,17 +14,28 @@ const operation: Operation = { kind: 'resource', resourceId: 'document', action:
 const login: Login = { actorId: 'agent', clientId: 'third-party', scopes: ['read'], requestedBy: 'assignment' };
 const directLogin: Login = { actorId: 'agent', clientId: 'third-party', scopes: ['read'] };
 const grant = (id: string, accountId: string): Grant => ({
-  id, subject: { accountId }, resourceId: 'document', actions: ['read'], effect: 'allow', valid,
+  id,
+  subject: { accountId },
+  resourceId: 'document',
+  actions: ['read'],
+  effect: 'allow',
+  valid,
 });
 
 function fixture(): Facts {
   return {
-    accounts: ['agent', 'principal', 'other'].map(id => ({
-      id, kind: 'actor', state: 'active', minimumAuthnEpoch: 1,
+    accounts: ['agent', 'principal', 'other'].map((id) => ({
+      id,
+      kind: 'actor',
+      state: 'active',
+      minimumAuthnEpoch: 1,
       ...(id === 'agent' ? { operatorId: 'principal' } : {}),
     })),
     resources: ['document', 'other-document'],
-    clients: [{ id: 'third-party', party: 'third' }, { id: 'first-party', party: 'first' }],
+    clients: [
+      { id: 'third-party', party: 'third' },
+      { id: 'first-party', party: 'first' },
+    ],
     consents: [{ actorId: 'agent', clientId: 'third-party', scopes: ['read'] }],
     grants: [grant('actor-grant', 'agent'), grant('principal-grant', 'principal')],
     memberships: [],
@@ -88,34 +99,54 @@ test('actor grant AND consented scope AND principal grant permit the same action
   expect(await product().execute(session, operation)).toBe('permitted');
 });
 test('revoking only the actor grant denies', async () => {
-  await denies(f => { f.grants = f.grants.filter(g => g.id !== 'actor-grant'); });
+  await denies((f) => {
+    f.grants = f.grants.filter((g) => g.id !== 'actor-grant');
+  });
 });
 test('revoking only client consent denies an already authenticated request', async () => {
-  await denies(f => { f.consents = []; });
+  await denies((f) => {
+    f.consents = [];
+  });
 });
 test('revoking only the principal grant denies', async () => {
-  await denies(f => { f.grants = f.grants.filter(g => g.id !== 'principal-grant'); });
+  await denies((f) => {
+    f.grants = f.grants.filter((g) => g.id !== 'principal-grant');
+  });
 });
 test('an actor grant for a different actor does not match', async () => {
-  await denies(f => { f.grants[0]!.subject = { accountId: 'other' }; });
+  await denies((f) => {
+    f.grants[0]!.subject = { accountId: 'other' };
+  });
 });
 test('an actor grant for a different resource does not match', async () => {
-  await denies(f => { f.grants[0]!.resourceId = 'other-document'; });
+  await denies((f) => {
+    f.grants[0]!.resourceId = 'other-document';
+  });
 });
 test('a principal grant for a different actor does not match', async () => {
-  await denies(f => { f.grants[1]!.subject = { accountId: 'other' }; });
+  await denies((f) => {
+    f.grants[1]!.subject = { accountId: 'other' };
+  });
 });
 test('a principal grant for a different resource does not match', async () => {
-  await denies(f => { f.grants[1]!.resourceId = 'other-document'; });
+  await denies((f) => {
+    f.grants[1]!.resourceId = 'other-document';
+  });
 });
 test('a different actor grant action does not match', async () => {
-  await denies(f => { f.grants[0]!.actions = ['write']; });
+  await denies((f) => {
+    f.grants[0]!.actions = ['write'];
+  });
 });
 test('a different principal grant action does not match', async () => {
-  await denies(f => { f.grants[1]!.actions = ['write']; });
+  await denies((f) => {
+    f.grants[1]!.actions = ['write'];
+  });
 });
 test('a different consented scope does not match', async () => {
-  await denies(f => { f.consents[0]!.scopes = ['write']; });
+  await denies((f) => {
+    f.consents[0]!.scopes = ['write'];
+  });
 });
 test('consent for another actor or client does not match', async () => {
   for (const field of ['actorId', 'clientId'] as const) {
@@ -130,29 +161,38 @@ test('consent for another actor or client does not match', async () => {
 test('without a principal actor grants and consent suffice', async () => {
   for (const operand of ['grant', 'consent']) {
     facts = fixture();
-    await replace(f => { f.grants = [grant('actor-grant', 'agent')]; f.delegatedRequests = []; });
+    await replace((f) => {
+      f.grants = [grant('actor-grant', 'agent')];
+      f.delegatedRequests = [];
+    });
     const direct = await authenticate(directLogin);
     expect(await product().execute(direct, operation)).toBe('permitted');
-    await replace(f => { if (operand === 'grant') f.grants = []; else f.consents = []; });
+    await replace((f) => {
+      if (operand === 'grant') f.grants = [];
+      else f.consents = [];
+    });
     expect(await product().execute(direct, operation)).toBe('denied');
   }
 });
 test('operator rights never automatically grant agent rights', async () => {
   const direct = await authenticate(directLogin);
   expect(await product().execute(direct, operation)).toBe('permitted');
-  await replace(f => { f.grants = [grant('operator-grant', 'principal')]; });
+  await replace((f) => {
+    f.grants = [grant('operator-grant', 'principal')];
+  });
   expect(await product().execute(direct, operation)).toBe('denied');
 });
 test('unknown actions fail closed', async () => {
   // Supply all three operands so a missing allow cannot mask an open action registry.
-  await replace(f => {
+  await replace((f) => {
     for (const g of f.grants) g.actions.push('unknown:action');
     f.consents[0]!.scopes.push('unknown:action');
   });
   expect(await product().execute(session, operation)).toBe('permitted');
   // Auth may reject the unregistered scope, or execution must reject the action.
-  expect(await attempt({ ...login, scopes: ['read', 'unknown:action'] },
-    { ...operation, action: 'unknown:action' })).toBe('denied');
+  expect(
+    await attempt({ ...login, scopes: ['read', 'unknown:action'] }, { ...operation, action: 'unknown:action' }),
+  ).toBe('denied');
 });
 test('missing authoritative evidence fails closed', async () => {
   await evidenceDenies('missing');
@@ -162,7 +202,15 @@ test('unresolved authoritative evidence fails closed', async () => {
 });
 async function evidenceDenies(failure: 'missing' | 'unavailable') {
   // Each source gets a fresh positive control, without relying on earlier failures.
-  for (const source of ['accounts', 'resources', 'clients', 'grants', 'consents', 'delegatedRequests', 'memberships'] as const) {
+  for (const source of [
+    'accounts',
+    'resources',
+    'clients',
+    'grants',
+    'consents',
+    'delegatedRequests',
+    'memberships',
+  ] as const) {
     if (source !== 'accounts') {
       await product().close();
       driver = undefined;
@@ -179,28 +227,38 @@ test('suspended and deleted actors fail closed', async () => {
     facts = fixture();
     await product().replaceFacts(facts);
     expect(await product().execute(session, operation)).toBe('permitted');
-    await denies(f => { f.accounts[0]!.state = state; });
+    await denies((f) => {
+      f.accounts[0]!.state = state;
+    });
   }
 });
 test('raising minimum authn_epoch rejects the stale session', async () => {
-  await denies(f => { f.accounts[0]!.minimumAuthnEpoch = 2; });
+  await denies((f) => {
+    f.accounts[0]!.minimumAuthnEpoch = 2;
+  });
 });
 test('active explicit denies override each account grant', async () => {
   for (const account of ['agent', 'principal']) {
     facts = fixture();
     await product().replaceFacts(facts);
     expect(await product().execute(session, operation)).toBe('permitted');
-    await denies(f => { f.grants.push({ ...grant('explicit-deny', account), effect: 'deny' }); });
+    await denies((f) => {
+      f.grants.push({ ...grant('explicit-deny', account), effect: 'deny' });
+    });
   }
 });
 test('first-party preconsent supplies no resource grant', async () => {
   const first = await authenticate({ ...login, clientId: 'first-party' });
   expect(await product().execute(first, operation)).toBe('permitted');
-  await replace(f => { f.grants = f.grants.filter(g => g.id !== 'actor-grant'); });
+  await replace((f) => {
+    f.grants = f.grants.filter((g) => g.id !== 'actor-grant');
+  });
   expect(await product().execute(first, operation)).toBe('denied');
 });
 test('requested_by must reference a request created by that principal', async () => {
-  await replace(f => { f.delegatedRequests[0]!.createdBy = 'other'; });
+  await replace((f) => {
+    f.delegatedRequests[0]!.createdBy = 'other';
+  });
   expect(await attempt(login)).toBe('denied');
   expect(await product().execute(session, operation)).toBe('denied');
 });
@@ -208,12 +266,17 @@ test('an actor cannot self-assert a principal instead of a request reference', a
   expect(await attempt({ ...login, requestedBy: 'principal' })).toBe('denied');
 });
 test('an actor cannot use a request assigned to another actor', async () => {
-  await replace(f => { f.delegatedRequests[0]!.assignedTo = 'other'; });
+  await replace((f) => {
+    f.delegatedRequests[0]!.assignedTo = 'other';
+  });
   expect(await attempt(login)).toBe('denied');
 });
 test('untrusted identity client principal and scope cannot expand authenticated authority', async () => {
   for (const claims of [
-    { actorId: 'principal' }, { clientId: 'first-party' }, { scopes: ['read'] }, { requestedBy: 'assignment' },
+    { actorId: 'principal' },
+    { clientId: 'first-party' },
+    { scopes: ['read'] },
+    { requestedBy: 'assignment' },
   ]) {
     facts = fixture();
     await product().replaceFacts(facts);
@@ -247,7 +310,9 @@ test('untrusted identity client principal and scope cannot expand authenticated 
     if ('requestedBy' in claims) {
       target = await authenticate({ ...login, requestedBy: 'other-assignment' });
       expect(await product().execute(target, operation)).toBe('permitted');
-      await replace(f => { f.grants = f.grants.filter(g => g.id !== 'other-principal-grant'); });
+      await replace((f) => {
+        f.grants = f.grants.filter((g) => g.id !== 'other-principal-grant');
+      });
     }
     expect(await product().execute(target, operation, claims)).toBe('denied');
   }
@@ -257,9 +322,13 @@ test('each grant starts inclusively and expires at the exact authoritative end',
     facts = fixture();
     facts.grants[1 - index]!.valid = { start: '2029-01-01T00:00:00.000Z', end: '2031-01-01T00:00:00.000Z' };
     await product().replaceFacts(facts);
-    for (const [instant, expected] of [[now, 'permitted'], [start, 'permitted'],
-      ['2029-12-31T23:59:59.999Z', 'denied'], [end, 'denied'],
-      ['2030-01-01T00:00:02.001Z', 'denied']] as const) {
+    for (const [instant, expected] of [
+      [now, 'permitted'],
+      [start, 'permitted'],
+      ['2029-12-31T23:59:59.999Z', 'denied'],
+      [end, 'denied'],
+      ['2030-01-01T00:00:02.001Z', 'denied'],
+    ] as const) {
       await product().setAuthoritativeTime(instant);
       expect(await product().execute(session, operation)).toBe(expected);
     }
@@ -269,13 +338,17 @@ test('each grant starts inclusively and expires at the exact authoritative end',
 test('future and expired denies do not block but an active deny does', async () => {
   for (const account of ['agent', 'principal']) {
     facts = fixture();
-    await replace(f => {
+    await replace((f) => {
       for (const g of f.grants) g.valid = { start: '2029-01-01T00:00:00.000Z', end: '2031-01-01T00:00:00.000Z' };
       f.grants.push({ ...grant('temporary-deny', account), effect: 'deny' });
     });
-    for (const [instant, expected] of [['2029-12-31T23:59:59.999Z', 'permitted'],
-      [start, 'denied'], [now, 'denied'], [end, 'permitted'],
-      ['2030-01-01T00:00:02.001Z', 'permitted']] as const) {
+    for (const [instant, expected] of [
+      ['2029-12-31T23:59:59.999Z', 'permitted'],
+      [start, 'denied'],
+      [now, 'denied'],
+      [end, 'permitted'],
+      ['2030-01-01T00:00:02.001Z', 'permitted'],
+    ] as const) {
       await product().setAuthoritativeTime(instant);
       expect(await product().execute(session, operation)).toBe(expected);
     }
@@ -298,17 +371,35 @@ test('organizations cannot be authenticated actors', async () => {
 });
 test('organization-role grants require an eligible human member with the specified role', async () => {
   const mutations: ((f: Facts) => void)[] = [
-    f => { f.memberships = []; }, f => { f.memberships[0]!.role = 'member'; },
-    f => { f.memberships[0]!.actorId = 'other'; },
-    f => { f.memberships[0]!.organizationId = 'other-organization'; },
-    f => { f.accounts[0]!.operatorId = 'principal'; },
-    f => { f.memberships[0]!.valid = { start: '2029-01-01T00:00:00.000Z', end: now }; },
-    f => { f.memberships[0]!.valid = { start: end, end: '2031-01-01T00:00:00.000Z' }; },
+    (f) => {
+      f.memberships = [];
+    },
+    (f) => {
+      f.memberships[0]!.role = 'member';
+    },
+    (f) => {
+      f.memberships[0]!.actorId = 'other';
+    },
+    (f) => {
+      f.memberships[0]!.organizationId = 'other-organization';
+    },
+    (f) => {
+      f.accounts[0]!.operatorId = 'principal';
+    },
+    (f) => {
+      f.memberships[0]!.valid = { start: '2029-01-01T00:00:00.000Z', end: now };
+    },
+    (f) => {
+      f.memberships[0]!.valid = { start: end, end: '2031-01-01T00:00:00.000Z' };
+    },
   ];
-  for (const mutation of mutations) { await organizationGrant(); await denies(mutation); }
+  for (const mutation of mutations) {
+    await organizationGrant();
+    await denies(mutation);
+  }
 });
 test('grant administration cannot delegate actions the grantor lacks', async () => {
-  await replace(f => {
+  await replace((f) => {
     f.grants = [grant('actor-grant', 'agent'), { ...grant('administration', 'agent'), actions: ['grant:manage'] }];
     f.grants[0]!.actions = ['read', 'write'];
     f.consents[0]!.scopes = ['read', 'write', 'grant:manage'];
@@ -321,7 +412,9 @@ test('grant administration cannot delegate actions the grantor lacks', async () 
   expect(await product().execute(recipient, write)).toBe('permitted');
   // Reseed the same pre-administration fixture, removing only the grantor's write.
   // The recipient grant produced by the positive command is also cleared.
-  await replace(f => { f.grants[0]!.actions = ['read']; });
+  await replace((f) => {
+    f.grants[0]!.actions = ['read'];
+  });
   expect(await product().execute(administrator, delegation)).toBe('denied');
   expect(await product().execute(recipient, write)).toBe('denied');
 });

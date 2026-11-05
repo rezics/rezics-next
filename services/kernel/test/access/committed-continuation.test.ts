@@ -1,3 +1,4 @@
+import { actionDeclarations } from './native-account-bindings-fixture.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
@@ -18,6 +19,7 @@ import { createNativeAccountBindings } from '../../src/access/native-account-bin
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import {
   COMMITTED_CONTINUATION_ACTIONS,
+  COMMITTED_CONTINUATION_RESUME_BUDGET_MS,
   CONTINUATION_NAMESPACE,
   ContinuationDeniedError,
   deletionAllowlist,
@@ -35,6 +37,7 @@ const scopes = [
   'account:update',
   'account:delete',
   'account:renew_cleanup',
+  'account:suspend',
   ...WORKFLOW_APPROVAL_ACTIONS.keys(),
 ].sort();
 const source = new URL(process.env.DATABASE_URL ?? '');
@@ -56,12 +59,9 @@ const routeKey = randomBytes(32);
 const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
 const stagingKey = randomBytes(32);
 const secret = randomBytes(48).toString('base64url');
-const actions = new Map([
-  ...LIFECYCLE_ACTIONS,
-  ...COMMITTED_CONTINUATION_ACTIONS,
-  ...scopes.map((scope) => [scope, { anonymous: false }] as const),
-]);
+const actions = new Map([...LIFECYCLE_ACTIONS, ...COMMITTED_CONTINUATION_ACTIONS, ...actionDeclarations(scopes)]);
 let frozen: Date | null = null;
+let expiryGovernor: Awaited<ReturnType<typeof person>> | undefined;
 const clock = () => frozen ?? new Date();
 const admin = new Pool({ connectionString: connection('postgres') });
 const kernel = createPool(kernelUrl);
@@ -220,7 +220,10 @@ async function continuationRow(accountId: string, operationKey: string) {
     document: Record<string, unknown>;
   }>(
     `SELECT c.barrier_transaction_id::text AS barrier, f.transaction_id::text AS fence,
-            c.committed_expires_at = c.created_at + interval '300 seconds' AS ttl,
+            c.committed_expires_at = LEAST(c.created_at + interval '300 seconds',
+              (SELECT a.expires_at FROM access.workflow_approval a
+               WHERE a.operation_key = c.operation_key AND a.digest = c.operation_digest
+               ORDER BY a.created_at DESC LIMIT 1) - interval '10 seconds') AS ttl,
             c.expires_at = c.committed_expires_at AS live, row_to_json(c) AS document
      FROM access.committed_continuation c
      JOIN access.lifecycle_fence_receipt f
@@ -310,8 +313,8 @@ test('a plain deletion commits erase and redirect only, and the continuation por
   const outcome = await userResult(
     workflows().deleteAccount({ key, authorization: approval.reference, accountId: human.accountId }),
   );
-  expect(outcome).toEqual({ outcome: 'denied' });
-  expect(outcome).not.toHaveProperty('accountId');
+  // The deletion removes the caller's own standing: the workflow's outcome is the answer.
+  expect(outcome).toEqual({ accountId: human.accountId });
   const view = required(await readyBindings().continuations.read(key, human.accountId), 'Missing continuation');
   expect(view).not.toHaveProperty('response');
   expect(view).not.toHaveProperty('value');
@@ -405,10 +408,84 @@ test('cleanup finishes from the continuation after the caller loses authority an
   expect(await continuationRow(subject.accountId, key)).toEqual(finished);
 });
 
+test('approval expiry bounds cleanup with a protected step left and an exhausted budget refuses the barrier', async () => {
+  const governor = await person();
+  expiryGovernor = governor;
+  const operator = await person();
+  const subject = await person();
+  const responsibility = await link(operator.accountId, subject.accountId);
+  await bootstrapGovernance(kernel, governor.accountId);
+  const operation = { kind: 'fence-operator' as const, accountId: operator.accountId, authorization: 'bound-input' };
+  const operationKey = randomUUID();
+  const approval = await readyApprovals().approve(
+    await bearer(governor.caller),
+    { operationKey, operation },
+    { pool: kernel, deadline: Date.now() + 10_000 },
+  );
+  const resolved = await readyApprovals().resolve(approval.reference, operation, {
+    pool: kernel,
+    deadline: Date.now() + 10_000,
+  });
+  const suspendApproved = (request: typeof resolved) =>
+    required(
+      (request as typeof resolved & { suspendOperator?: () => Promise<unknown> }).suspendOperator,
+      'Resolved fencing operation has no native suspension',
+    )();
+  await suspendApproved(resolved);
+  const view = required(await readyBindings().continuations.read(operationKey, operator.accountId), 'Missing root');
+  expect(Date.parse(view.expiresAt)).toBe(Date.parse(approval.expiresAt) - COMMITTED_CONTINUATION_RESUME_BUDGET_MS);
+  expect((await continuationRow(operator.accountId, operationKey))?.ttl).toBe(true);
+  frozen = new Date(view.expiresAt);
+  try {
+    await expect(readyBindings().continuations.continueCommitted(view.reference)).rejects.toThrow(
+      ContinuationDeniedError,
+    );
+    const resumed = await readyApprovals().resolve(approval.reference, operation, {
+      pool: kernel,
+      deadline: Date.now() + 10_000,
+    });
+    expect(await suspendApproved(resumed)).toEqual(await suspendApproved(resolved));
+    expect(
+      (
+        await facts.query('SELECT 1 FROM access.lifecycle_coordination WHERE reservation_id=$1', [
+          responsibility.reservationId,
+        ])
+      ).rowCount,
+    ).toBe(1);
+  } finally {
+    frozen = null;
+  }
+
+  const untouched = await person();
+  const lateOperation = { ...operation, accountId: untouched.accountId };
+  const lateKey = randomUUID();
+  const late = await readyApprovals().approve(
+    await bearer(governor.caller),
+    { operationKey: lateKey, operation: lateOperation },
+    { pool: kernel, deadline: Date.now() + 10_000 },
+  );
+  frozen = new Date(Date.parse(late.expiresAt) - COMMITTED_CONTINUATION_RESUME_BUDGET_MS);
+  try {
+    const request = await readyApprovals().resolve(late.reference, lateOperation, {
+      pool: kernel,
+      deadline: Date.now() + 10_000,
+    });
+    await expect(suspendApproved(request)).rejects.toThrow();
+    expect(await readyBindings().continuations.read(lateKey, untouched.accountId)).toBeNull();
+    const account = await facts.query(
+      'SELECT state, authn_fenced FROM access.account WHERE route=$1 AND account_id=$2',
+      [routeOf(untouched.accountId), untouched.accountId],
+    );
+    expect(account.rows[0]).toEqual({ state: 'active', authn_fenced: false });
+  } finally {
+    frozen = null;
+  }
+});
+
 test('an expired continuation stays until current governance renews the same unfinished steps', async () => {
   const operator = await person();
   const subject = await person();
-  const governor = await person();
+  const governor = expiryGovernor ?? (await person());
   const responsibility = await link(operator.accountId, subject.accountId);
   const { key, approval } = await approveDelete(subject.caller, subject.accountId, responsibility);
   const outsider = await bearer(operator.caller);

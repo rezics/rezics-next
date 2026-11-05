@@ -73,22 +73,55 @@ async function hidden(path: string, unknown: string, as: Persona) {
 function pagePath(path: string, limit: number, cursor?: string) {
   return `${path}${path.includes('?') ? '&' : '?'}limit=${limit}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
 }
-async function page<T>(path: string, plural: string, as: Persona = 'owner') {
+type SubjectCollectionCount = { value: number; exact: true };
+type LibraryPage<T> = { items: T[]; next: string | null; count?: SubjectCollectionCount };
+async function page<T>(
+  path: string,
+  plural: string,
+  as: Persona = 'owner',
+  extraKeys: readonly string[] = [],
+): Promise<LibraryPage<T>> {
   const result = await body<Record<string, unknown>>(await get(path, as));
-  expect(Object.keys(result).sort()).toEqual([plural, 'next'].sort());
+  expect(Object.keys(result).sort()).toEqual([plural, 'next', ...extraKeys].sort());
   expect(Array.isArray(result[plural])).toBe(true);
   expect(result.next === null || typeof result.next === 'string').toBe(true);
-  return { items: result[plural] as T[], next: result.next as string | null };
+  let count: Record<string, unknown> | undefined;
+  if (extraKeys.includes('count')) {
+    expect(result.count).not.toBeNull();
+    expect(result.count).toBeDefined();
+    count = result.count as Record<string, unknown>;
+    expect(count.exact).toBe(true);
+    expect(Number.isInteger(count.value) && (count.value as number) >= 0).toBe(true);
+  }
+  return {
+    items: result[plural] as T[],
+    next: result.next as string | null,
+    ...(count ? { count: count as SubjectCollectionCount } : {}),
+  };
 }
-async function all<T>(path: string, plural: string, as: Persona = 'owner', limit = 2) {
+async function all<T>(
+  path: string,
+  plural: string,
+  as: Persona = 'owner',
+  limit = 2,
+  options: { extraKeys?: readonly string[]; countMatchesItems?: boolean } = {},
+) {
   const result: T[] = [];
   const seen = new Set<string>();
+  let currentCount: SubjectCollectionCount | undefined;
   let cursor: string | undefined;
-  for (let count = 0; count < 3000; count++) {
-    const current = await page<T>(pagePath(path, limit, cursor), plural, as);
+  for (let pageNumber = 0; pageNumber < 3000; pageNumber++) {
+    const current: LibraryPage<T> = await page<T>(pagePath(path, limit, cursor), plural, as, options.extraKeys);
+    if (current.count) {
+      if (currentCount) expect(current.count).toEqual(currentCount);
+      currentCount = current.count;
+    }
     expect(current.items.length).toBeLessThanOrEqual(limit);
     result.push(...current.items);
-    if (current.next === null) return result;
+    if (current.next === null) {
+      if (options.countMatchesItems) expect(currentCount?.value).toBe(result.length);
+      return result;
+    }
     expect(current.items.length).toBeGreaterThan(0);
     expect(seen.has(current.next)).toBe(false);
     seen.add(current.next);
@@ -140,15 +173,19 @@ async function member(collectionId: string, subjectId: string, options: { after?
 }
 const membersPath = (id: string) => `/v1/collections/${id}/members`;
 const members = (id: string) => all<MemberView>(membersPath(id), 'members');
-async function entry(subjectId: string, state: EntryState, revision?: number) {
+async function entry(subjectId: string, state: EntryState, current?: EntryView) {
   const value = (
     await body<{ libraryEntry: EntryView }>(
-      await write('PUT', `/v1/libraryEntries/${subjectId}`, { state, ...(revision === undefined ? {} : { revision }) }),
-      revision === undefined ? 201 : 200,
+      await write('PUT', `/v1/libraryEntries/${subjectId}`, {
+        state,
+        ...(current === undefined ? {} : { revision: current.revision, incarnationId: current.incarnationId }),
+      }),
+      current === undefined ? 201 : 200,
     )
   ).libraryEntry;
   expect(value).toMatchObject({
     subjectId,
+    incarnationId: expect.any(String),
     state,
     revision: expect.any(Number),
     createdAt: expect.any(String),
@@ -208,6 +245,7 @@ async function copy(subjectId: string) {
     await body<{ copy: CopyView }>(
       await write('POST', '/v1/copies', {
         subjectId,
+        kind: 'physical',
         status: 'owned',
         location: 'Study',
         source: 'Bookshop',
@@ -234,7 +272,10 @@ async function follow(targetId: string) {
   return (await body<{ follow: FollowView }>(await get(`/v1/follows/${targetId}`))).follow;
 }
 async function publicCollections(subjectId: string) {
-  return all<PublicCollectionView>(`/v1/subjects/${subjectId}/collections`, 'collections', 'anonymous');
+  return all<PublicCollectionView>(`/v1/subjects/${subjectId}/collections`, 'collections', 'anonymous', 2, {
+    extraKeys: ['count'],
+    countMatchesItems: true,
+  });
 }
 async function publish(sessionId: string) {
   return (
@@ -455,7 +496,7 @@ test('library entry states are exclusive and missing stale or unknown revisions 
   for (const state of states) {
     await driver.setTime(`2030-01-0${states.indexOf(state) + 3}T00:00:00.000Z`);
     const previous = current;
-    current = await entry(subject.id, state, current.revision);
+    current = await entry(subject.id, state, current);
     expect(current.revision).toBe(previous.revision + 1);
     expect(current.createdAt).toBe(previous.createdAt);
     for (const filter of states) {
@@ -466,11 +507,17 @@ test('library entry states are exclusive and missing stale or unknown revisions 
   }
   await driver.settle();
   const before = await driver.inspect();
-  for (const payload of [{ state: 'planned' }, { state: 'planned', revision: current.revision - 1 }]) {
+  for (const payload of [
+    { state: 'planned' },
+    { state: 'planned', revision: current.revision - 1, incarnationId: current.incarnationId },
+  ]) {
     await problem(await write('PUT', `/v1/libraryEntries/${subject.id}`, payload), 409, 'conflict');
   }
   await problem(
-    await write('DELETE', `/v1/libraryEntries/${subject.id}?revision=${current.revision - 1}`),
+    await write(
+      'DELETE',
+      `/v1/libraryEntries/${subject.id}?revision=${current.revision - 1}&incarnationId=${encodeURIComponent(current.incarnationId)}`,
+    ),
     409,
     'conflict',
   );
@@ -481,7 +528,12 @@ test('library entry states are exclusive and missing stale or unknown revisions 
   );
   expect(await driver.inspect()).toEqual(before);
   expect(await entryView(subject.id)).toEqual(current);
-  await ok(await write('DELETE', `/v1/libraryEntries/${subject.id}?revision=${current.revision}`));
+  await ok(
+    await write(
+      'DELETE',
+      `/v1/libraryEntries/${subject.id}?revision=${current.revision}&incarnationId=${encodeURIComponent(current.incarnationId)}`,
+    ),
+  );
   await hidden(`/v1/libraryEntries/${subject.id}`, `/v1/libraryEntries/${driver.unknown.subjectId}`, 'owner');
   expect(await all('/v1/libraryEntries', 'libraryEntries')).toEqual([]);
 });
@@ -494,8 +546,81 @@ test('entries list newest updates first once each through cursor pages', async (
   const b = await entry(second.id, 'completed');
   expect(await all('/v1/libraryEntries', 'libraryEntries', 'owner', 1)).toEqual([b, a]);
   await driver.setTime('2030-01-04T00:00:00.000Z');
-  const newer = await entry(first.id, 'paused', a.revision);
+  const newer = await entry(first.id, 'paused', a);
   expect(await all('/v1/libraryEntries', 'libraryEntries', 'owner', 1)).toEqual([newer, b]);
+});
+
+test('entry incarnation guards reject missing foreign and ABA writes while exact receipts retain their captured guards', async () => {
+  const subject = await driver.provisionSubject();
+  const foreignSubject = await driver.provisionSubject();
+  const first = await entry(subject.id, 'planned');
+  const foreign = await entry(foreignSubject.id, 'planned');
+  const path = `/v1/libraryEntries/${subject.id}`;
+  const deletePath = (captured: EntryView) =>
+    `${path}?revision=${captured.revision}&incarnationId=${encodeURIComponent(captured.incarnationId)}`;
+  expect(first.incarnationId).not.toBe(foreign.incarnationId);
+  await driver.settle();
+  const before = await driver.inspect();
+  for (const payload of [
+    { state: 'paused', revision: first.revision },
+    { state: 'paused', revision: first.revision, incarnationId: foreign.incarnationId },
+  ])
+    await problem(await write('PUT', path, payload), 409, 'conflict');
+  await problem(await write('DELETE', `${path}?revision=${first.revision}`), 409, 'conflict');
+  await problem(
+    await write(
+      'DELETE',
+      `${path}?revision=${first.revision}&incarnationId=${encodeURIComponent(foreign.incarnationId)}`,
+    ),
+    409,
+    'conflict',
+  );
+  expect(await driver.inspect()).toEqual(before);
+
+  const requestKey = key();
+  const originalInput = { state: 'paused', revision: first.revision, incarnationId: first.incarnationId };
+  const changed = (
+    await body<{ libraryEntry: EntryView }>(await write('PUT', path, originalInput, 'owner', requestKey))
+  ).libraryEntry;
+  const current = await entry(subject.id, 'completed', changed);
+  expect(await body(await write('PUT', path, originalInput, 'owner', requestKey))).toEqual({ libraryEntry: changed });
+  expect(await entryView(subject.id)).toEqual(current);
+
+  const racing = await Promise.all([
+    write('PUT', path, { state: 'paused', revision: current.revision, incarnationId: current.incarnationId }),
+    write('PUT', path, { state: 'dropped', revision: current.revision, incarnationId: current.incarnationId }),
+  ]);
+  expect(racing.map((response) => response.status).sort()).toEqual([200, 409]);
+  const winner = (await body<{ libraryEntry: EntryView }>(racing.find((response) => response.status === 200)!))
+    .libraryEntry;
+  await problem(
+    racing.find((response) => response.status === 409)!,
+    409,
+    'conflict',
+  );
+  expect(winner.revision).toBe(current.revision + 1);
+  expect(await entryView(subject.id)).toEqual(winner);
+
+  const deleteKey = key();
+  const deleted = await write('DELETE', deletePath(winner), undefined, 'owner', deleteKey);
+  expect(deleted.status).toBe(204);
+  expect(await deleted.text()).toBe('');
+  const recreated = await entry(subject.id, 'planned');
+  expect(recreated.revision).toBe(first.revision);
+  expect(recreated.incarnationId).not.toBe(first.incarnationId);
+  await driver.settle();
+  const afterRecreate = await driver.inspect();
+  await problem(
+    await write('PUT', path, { state: 'paused', revision: first.revision, incarnationId: first.incarnationId }),
+    409,
+    'conflict',
+  );
+  await problem(await write('DELETE', deletePath(first)), 409, 'conflict');
+  const deleteReplay = await write('DELETE', deletePath(winner), undefined, 'owner', deleteKey);
+  expect(deleteReplay.status).toBe(204);
+  expect(await deleteReplay.text()).toBe('');
+  expect(await driver.inspect()).toEqual(afterRecreate);
+  expect(await entryView(subject.id)).toEqual(recreated);
 });
 
 test('in_progress follows by library and explicit unfollow survives later entry transitions', async () => {
@@ -508,12 +633,12 @@ test('in_progress follows by library and explicit unfollow survives later entry 
     state: 'following',
     reason: 'library',
   });
-  current = await entry(subject.id, 'completed', current.revision);
+  current = await entry(subject.id, 'completed', current);
   await driver.settle();
   expect((await follow(subject.id)).state).toBe('following');
   await ok(await write('DELETE', `/v1/follows/${subject.id}`));
   expect(await follow(subject.id)).toMatchObject({ state: 'unfollowed', reason: 'explicit' });
-  await entry(subject.id, 'in_progress', current.revision);
+  await entry(subject.id, 'in_progress', current);
   await driver.settle();
   expect(await follow(subject.id)).toMatchObject({ state: 'unfollowed', reason: 'explicit' });
   expect(await all('/v1/follows', 'follows')).toEqual([]);
@@ -685,7 +810,7 @@ test('two copies of one edition remain independent through revision updates and 
   expect((await all<CopyView>('/v1/copies', 'copies', 'owner', 1)).map((item) => item.id).sort()).toEqual(
     [first.id, second.id].sort(),
   );
-  await ok(await write('DELETE', `/v1/copies/${first.id}`));
+  await ok(await write('DELETE', `/v1/copies/${first.id}?revision=${changed.revision}`));
   await hidden(`/v1/copies/${first.id}`, `/v1/copies/${driver.unknown.copyId}`, 'owner');
   expect(await body(await get(`/v1/copies/${second.id}`))).toEqual({ copy: second });
   expect(await all('/v1/copies', 'copies')).toEqual([second]);
@@ -835,7 +960,7 @@ test('published logs are anonymous immutable snapshots and only their owner can 
   expect(await driver.inspect()).toEqual(before);
   await driver.setTime('2030-01-03T00:00:00.000Z');
   await ok(await write('POST', `/v1/progressSessions/${current.id}:complete`, { revision: current.revision }));
-  await entry(subject.id, 'completed', ownedEntry.revision);
+  await entry(subject.id, 'completed', ownedEntry);
   await driver.settle();
   expect((await sessionView(current.id)).completedAt).toBe(driver.now());
   for (const as of ['owner', 'other', 'anonymous'] as const) {
@@ -873,9 +998,12 @@ test('suspended credentials refuse every library write and private read without 
     {
       method: 'PUT',
       path: `/v1/libraryEntries/${subject.id}`,
-      body: { state: 'planned', revision: ownedEntry.revision },
+      body: { state: 'planned', revision: ownedEntry.revision, incarnationId: ownedEntry.incarnationId },
     },
-    { method: 'DELETE', path: `/v1/libraryEntries/${subject.id}?revision=${ownedEntry.revision}` },
+    {
+      method: 'DELETE',
+      path: `/v1/libraryEntries/${subject.id}?revision=${ownedEntry.revision}&incarnationId=${encodeURIComponent(ownedEntry.incarnationId)}`,
+    },
     {
       method: 'POST',
       path: '/v1/progressSessions',
@@ -896,9 +1024,9 @@ test('suspended credentials refuse every library write and private read without 
       path: `/v1/progressSessions/${ownedSession.id}:abandon`,
       body: { revision: ownedSession.revision },
     },
-    { method: 'POST', path: '/v1/copies', body: { subjectId: subject.id, status: 'ordered' } },
+    { method: 'POST', path: '/v1/copies', body: { subjectId: subject.id, kind: 'physical', status: 'owned' } },
     { method: 'PATCH', path: `/v1/copies/${ownedCopy.id}`, body: { revision: ownedCopy.revision, status: 'disposed' } },
-    { method: 'DELETE', path: `/v1/copies/${ownedCopy.id}` },
+    { method: 'DELETE', path: `/v1/copies/${ownedCopy.id}?revision=${ownedCopy.revision}` },
     { method: 'PUT', path: `/v1/follows/${shelf.id}` },
     { method: 'DELETE', path: `/v1/follows/${shelf.id}` },
     { method: 'POST', path: '/v1/publishedLogs', body: { sessionId: ownedSession.id } },
@@ -993,6 +1121,7 @@ test('member insert members page entry write entries page and unit record use eq
     const updated = await driver.measure(() =>
       write('PUT', `/v1/libraryEntries/${subject.id}`, {
         revision: ownedEntry.revision,
+        incarnationId: ownedEntry.incarnationId,
         state: nextState,
       }),
     );

@@ -1,5 +1,7 @@
+import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { expect, test } from 'bun:test';
-import { createAuthConsentReader } from '../../src/access/auth-consent.ts';
+import { createAuthConsentReader, readAuthConsentConfig } from '../../src/access/auth-consent.ts';
+import { ConfigError } from '../../src/commerce/config.ts';
 import { AccessUnavailableError } from '../../src/access/index.ts';
 
 const url = 'https://auth.private.test/internal/v1/consents:read';
@@ -34,13 +36,13 @@ test('missing/forged/malformed/oversized/error responses fail closed', async () 
     { ...consent, clientId: 'other' },
     { ...consent, email: 'private@example.test' },
     { ...consent, scopes: ['bad scope'] },
-    { ...consent, scopes: Array(101).fill('read') },
+    { ...consent, scopes: Array(MAX_CONSENTED_SCOPES + 1).fill('read') },
     { ...consent, scopes: ['x'.repeat(129)] },
   ]) {
     expect(await createAuthConsentReader({ ...config, fetch: async () => Response.json(value) })(input)).toBeNull();
   }
   for (const response of [
-    new Response('x'.repeat(32769)),
+    new Response('x'.repeat(MAX_CONSENTED_SCOPE_OCTETS + 2 * MAX_CONSENTED_SCOPES + 4 * 1024 + 129)),
     new Response('not JSON'),
     new Response(null, { status: 302, headers: { location: 'https://evil.test' } }),
     new Response('secret', { status: 503 }),
@@ -102,7 +104,7 @@ test('streamed oversized bodies and stalled JSON streams cancel within the deadl
   const oversized = new Response(
     new ReadableStream({
       start(controller) {
-        controller.enqueue(new Uint8Array(32769));
+        controller.enqueue(new Uint8Array(MAX_CONSENTED_SCOPE_OCTETS + 2 * MAX_CONSENTED_SCOPES + 4 * 1024 + 129));
       },
       cancel() {
         cancellations++;
@@ -128,4 +130,85 @@ test('streamed oversized bodies and stalled JSON streams cancel within the deadl
     createAuthConsentReader({ ...config, fetch: async () => stalled })({ ...input, deadline: Date.now() + 20 }),
   ).rejects.toBeInstanceOf(AccessUnavailableError);
   expect(cancellations).toBe(2);
+});
+
+const consentEnv = {
+  KERNEL_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
+  CF_ACCESS_CLIENT_ID: 'access-client-id',
+  CF_ACCESS_CLIENT_SECRET: 'access-client-secret',
+};
+
+test('the shared Auth consent group is absent or complete and errors name only variables', () => {
+  expect(readAuthConsentConfig({})).toBeNull();
+  expect(readAuthConsentConfig({ CONTENT_SOURCE_HOSTS: 'ignored' })).toBeNull();
+  const complete = readAuthConsentConfig(consentEnv);
+  expect(complete).toEqual({
+    url: consentEnv.KERNEL_AUTH_CONSENT_URL,
+    serviceTokenId: consentEnv.CF_ACCESS_CLIENT_ID,
+    serviceTokenSecret: consentEnv.CF_ACCESS_CLIENT_SECRET,
+  });
+  expect(Object.isFrozen(complete)).toBe(true);
+  expect(() => readAuthConsentConfig({ CF_ACCESS_CLIENT_ID: consentEnv.CF_ACCESS_CLIENT_ID })).toThrow(
+    'KERNEL_AUTH_CONSENT_URL',
+  );
+  expect(() =>
+    readAuthConsentConfig({
+      KERNEL_AUTH_CONSENT_URL: consentEnv.KERNEL_AUTH_CONSENT_URL,
+      CF_ACCESS_CLIENT_SECRET: consentEnv.CF_ACCESS_CLIENT_SECRET,
+    }),
+  ).toThrow('CF_ACCESS_CLIENT_ID');
+  expect(() =>
+    readAuthConsentConfig({
+      KERNEL_AUTH_CONSENT_URL: consentEnv.KERNEL_AUTH_CONSENT_URL,
+      CF_ACCESS_CLIENT_ID: consentEnv.CF_ACCESS_CLIENT_ID,
+    }),
+  ).toThrow('CF_ACCESS_CLIENT_SECRET');
+
+  for (const key of Object.keys(consentEnv) as (keyof typeof consentEnv)[]) {
+    expect(() => readAuthConsentConfig({ ...consentEnv, [key]: '' })).toThrow(key);
+  }
+
+  let consentFailure: unknown;
+  try {
+    readAuthConsentConfig({
+      ...consentEnv,
+      KERNEL_AUTH_CONSENT_URL: 'https://consent-user-secret:hidden@consent.example.test/internal/v1/consents:read',
+    });
+  } catch (error) {
+    consentFailure = error;
+  }
+  expect(consentFailure).toBeInstanceOf(ConfigError);
+  expect(String(consentFailure)).toContain('KERNEL_AUTH_CONSENT_URL');
+  expect(String(consentFailure)).not.toContain('consent-user-secret');
+  expect(String(consentFailure)).not.toContain('hidden');
+});
+
+test('Auth consent configuration preserves exact private HTTPS endpoint and visible ASCII bounds', () => {
+  for (const target of [
+    'not-a-url',
+    'http://127.0.0.1/internal/v1/consents:read',
+    'https://auth.private.test/',
+    `${url}/other`,
+    `${url}?secret=hidden`,
+    `${url}#hidden`,
+    url.replace('https://', 'https://hidden@'),
+  ]) {
+    expect(() => readAuthConsentConfig({ ...consentEnv, KERNEL_AUTH_CONSENT_URL: target })).toThrow(
+      'KERNEL_AUTH_CONSENT_URL',
+    );
+  }
+  for (const variable of Object.keys(consentEnv) as (keyof typeof consentEnv)[]) {
+    for (const value of [' secret', 'secret ', 'secret\n', '\u79d8\u5bc6', 'x'.repeat(1025)]) {
+      let failure: unknown;
+      try {
+        readAuthConsentConfig({ ...consentEnv, [variable]: value });
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(ConfigError);
+      expect(String(failure)).toContain(variable);
+      expect(String(failure)).not.toContain(value);
+    }
+  }
+  expect(readAuthConsentConfig({ ...consentEnv, CF_ACCESS_CLIENT_SECRET: 'x'.repeat(1024) })).not.toBeNull();
 });

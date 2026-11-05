@@ -2,7 +2,6 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
@@ -10,16 +9,20 @@ import { createRealAccess } from './real-access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
+import { linksCaughtUp } from '../../src/semantic/link-freshness.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { openGrowthDatabase } from '../support/growth.ts';
+import { captureUnforcedIndexes } from './planner-fixtures.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-const pool = createPool(databaseUrl);
+const growth = await openGrowthDatabase(databaseUrl);
+const pool = growth.pool;
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const relays = startRelays(pool, [linkProjection(pool)], { intervalMs: 50 });
 afterAll(async () => {
   await relays.stop();
-  await pool.end();
+  await growth.close();
   await admin.end();
 });
 
@@ -93,10 +96,26 @@ const edition = (title: string, workId: string, statements: Record<string, unkno
     labels: { en: title },
     statements: { 'schema:exampleOfWork': [statement('schema:exampleOfWork', workId)], ...statements },
   });
-const linkOf = (source: Record<string, any>, property: string) => ({
+const linkOf = (source: Record<string, any>, property: string, includeLabels = true) => ({
   subject: source.id as string,
   property,
   statement: source.statements[property][0].id as string,
+  ...(includeLabels
+    ? {
+        type: source.type as string,
+        label: source.labels.en as string,
+        summary: {
+          id: source.id,
+          type: source.type,
+          types: [source.type, ...bundledRelease.types[source.type]!.bases],
+          label: { value: source.labels.en, language: 'en' },
+          creativeWork:
+            bundledRelease.types[source.type]!.bases.includes('schema:CreativeWork') ||
+            source.type === 'schema:CreativeWork',
+          cover: null,
+        },
+      }
+    : {}),
 });
 const fresh = (caught_up: boolean) => ({ consistency: 'eventual', target_seconds: 10, caught_up });
 async function links(id: string, persona?: string, query = '') {
@@ -122,11 +141,28 @@ test('an item-valued statement becomes an incoming link in the target partition 
     expect(await inbound(kokoro.id)).toEqual([]);
     expect(await links(kokoro.id)).toEqual({ links: [], freshness: fresh(true), next: null });
     const started = performance.now();
-    const stale = await links(kokoro.id, 'editor');
+    const stale = await captureUnforcedIndexes(
+      growth,
+      'stale links freshness check',
+      1,
+      () => links(kokoro.id, 'editor'),
+      {
+        'core.consumer_checkpoint': ['consumer_checkpoint_pkey', 'consumer_checkpoint_consumer_idx'],
+      },
+    );
     expect(performance.now() - started).toBeLessThan(3_000);
     expect(stale).toEqual({ links: [], freshness: fresh(false), next: null });
     relays.resume();
-    expect(await links(kokoro.id, 'editor')).toEqual({ links: [link], freshness: fresh(true), next: null });
+    const caughtUp = await captureUnforcedIndexes(
+      growth,
+      'fresh incoming link checkpoint and pending-merge probes',
+      1,
+      () => linksCaughtUp(pool, [], kokoro.id, undefined, [penguin.id]),
+      {},
+    );
+    expect(caughtUp).toBe(true);
+    const current = await links(kokoro.id, 'editor');
+    expect(current).toEqual({ links: [link], freshness: fresh(true), next: null });
     expect(await inbound(kokoro.id)).toEqual([
       {
         route: routeOf(kokoro.id),
@@ -176,7 +212,7 @@ test('a stale links read leaves at least half of the request deadline to authori
   }
 });
 
-test('a Global adoption moves the link to the new work and replaying the whole log never brings the old one back', async () => {
+test('a Global adoption is scoped to the target slot and replaying the whole log keeps both links', async () => {
   const kokoro = await work('Kokoro');
   const botchan = await work('Botchan');
   const penguin = await edition('Kokoro, Penguin Classics', kokoro.id);
@@ -203,27 +239,28 @@ test('a Global adoption moves the link to the new work and replaying the whole l
     body: {
       context: GLOBAL_CONTEXT,
       property: 'schema:exampleOfWork',
+      target: botchan.id,
       mode: 'replace',
       selection: [{ candidate, rank: 'normal' }],
-      expected_head: 1,
+      expected_head: null,
     },
   });
   expect(adopted.response.status).toBe(200);
-  const moved = { subject: penguin.id, property: 'schema:exampleOfWork', statement: candidate };
-  expect(await links(kokoro.id, 'acceptor')).toEqual({ links: [], freshness: fresh(true), next: null });
+  const moved = { ...original, statement: candidate };
+  expect(await links(kokoro.id, 'acceptor')).toEqual({ links: [original], freshness: fresh(true), next: null });
   expect(await links(botchan.id, 'acceptor')).toEqual({ links: [moved], freshness: fresh(true), next: null });
   await relays.pause();
   await admin.query("UPDATE core.consumer_checkpoint SET epoch = NULL, position = 0 WHERE consumer = 'semantic_links'");
   relays.resume();
   expect(await links(botchan.id, 'acceptor')).toEqual({ links: [moved], freshness: fresh(true), next: null });
-  expect(await links(kokoro.id, 'acceptor')).toEqual({ links: [], freshness: fresh(true), next: null });
+  expect(await links(kokoro.id, 'acceptor')).toEqual({ links: [original], freshness: fresh(true), next: null });
   expect((await inbound(kokoro.id)).map((row) => [row.statement_id, row.present])).toEqual([
-    [original.statement, false],
+    [original.statement, true],
   ]);
   expect((await inbound(botchan.id)).map((row) => [row.statement_id, row.present])).toEqual([[candidate, true]]);
 });
 
-test('links are filtered by property and paged in property, subject and statement order', async () => {
+test('links are filtered by property and paged in declared order', async () => {
   const soseki = await created({ type: 'schema:Person', labels: { en: 'Natsume Sōseki' } });
   const books: Record<string, any>[] = [];
   for (const title of ['Kokoro', 'Botchan', 'Sanshirō']) {
@@ -233,24 +270,31 @@ test('links are filtered by property and paged in property, subject and statemen
     'schema:translator': [statement('schema:translator', soseki.id)],
   });
   const authored = books
-    .map((book) => linkOf(book, 'schema:author'))
+    .map((book) => linkOf(book, 'schema:author', true))
     .sort((a, b) => (a.subject < b.subject ? -1 : a.subject > b.subject ? 1 : 0));
-  const translation = linkOf(translated, 'schema:translator');
+  const translation = linkOf(translated, 'schema:translator', true);
   expect(await links(soseki.id, 'editor')).toEqual({
     links: [...authored, translation],
     freshness: fresh(true),
     next: null,
   });
   const first = await links(soseki.id, 'editor', '?property=schema%3Aauthor&limit=2');
-  expect(first.links).toEqual(authored.slice(0, 2));
-  expect(first.next).toEqual(expect.any(String));
+  expect(first).toEqual({
+    links: authored.slice(0, 2),
+    freshness: fresh(true),
+    next: expect.any(String),
+  });
   const cursor = encodeURIComponent(first.next);
   expect(await links(soseki.id, 'editor', `?property=schema%3Aauthor&limit=2&cursor=${cursor}`)).toEqual({
     links: authored.slice(2),
     freshness: fresh(true),
     next: null,
   });
-  expect((await links(soseki.id, 'editor', '?property=schema%3Atranslator')).links).toEqual([translation]);
+  expect(await links(soseki.id, 'editor', '?property=schema%3Atranslator')).toEqual({
+    links: [translation],
+    freshness: fresh(true),
+    next: null,
+  });
   expect((await links(books[0]!.id, 'editor')).links).toEqual([linkOf(translated, 'schema:exampleOfWork')]);
   for (const query of [
     `?property=schema%3Atranslator&cursor=${cursor}`,
@@ -280,4 +324,97 @@ test('the kernel contract documents the links read', () => {
   const operation = openApiDocument(kernel).paths['/v1/subjects/{id}/links']!.get!;
   expect(operation.operationId).toBe('subject.links');
   expect(Object.keys(operation.responses!)).toEqual(expect.arrayContaining(['200', '400', '401', '404', '503']));
+});
+
+test('command-created community suppressions preserve forward and inverse page continuations', async () => {
+  const pageActions = [...actions, 'context:create'];
+  const pageAccess = await createRealAccess(admin, { editor: newId(30_000) }, pageActions);
+  for (const action of pageActions) {
+    await pageAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  }
+  const pageKernel = createKernel({
+    pool,
+    access: pageAccess.access,
+    writeRate: pageAccess.writeRate,
+    tokens,
+    routeKey: new Uint8Array(32).fill(4),
+  });
+  let session: string | null = null;
+  const request = async (method: string, path: string, body?: unknown) => {
+    const response = await pageKernel.handle(
+      new Request(`http://kernel.test${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${pageAccess.bearer('editor')}`,
+          ...(session ? { 'rezics-session-token': session } : {}),
+          ...(body === undefined ? {} : { 'content-type': 'application/json', 'idempotency-key': key() }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+    session = response.headers.get('rezics-session-token') ?? session;
+    const result = (await response.json()) as any;
+    expect({ method, path, status: response.status, code: result.code }).toEqual({
+      method,
+      path,
+      status: method === 'POST' && !path.endsWith(':adopt') ? 201 : 200,
+      code: undefined,
+    });
+    return result;
+  };
+  const create = async (item: unknown) => {
+    const subject = (await request('POST', '/v1/subjects', item)).subject;
+    await pageAccess.grant({ route: routeOf(subject.id)!, id: subject.id }, 'editor', 'subject:read');
+    return subject;
+  };
+  const context = (await request('POST', '/v1/contexts', { labels: { en: 'Page seek Context' } })).context.id;
+  const people = [];
+  for (const name of ['A', 'B', 'C']) {
+    people.push(await create({ type: 'schema:Person', labels: { en: name } }));
+  }
+  const book = await create({
+    type: 'schema:Book',
+    labels: { en: 'Page seek book' },
+    statements: { 'schema:author': people.map((person) => statement('schema:author', person.id)) },
+  });
+  const others = [];
+  for (const name of ['Other A', 'Other B']) {
+    others.push(
+      await create({
+        type: 'schema:Book',
+        labels: { en: name },
+        statements: { 'schema:author': [statement('schema:author', people[0].id)] },
+      }),
+    );
+  }
+  await request('POST', `/v1/subjects/${book.id}:adopt`, {
+    context,
+    property: 'schema:author',
+    target: people[0].id,
+    mode: 'suppress',
+    selection: [],
+    expected_head: null,
+  });
+  const base = `property=schema%3Aauthor&context=${context}&limit=1`;
+  const forward = `/v1/subjects/${book.id}/relations`;
+  const first = await request('GET', `${forward}?${base}`);
+  expect(first.relations.map((row: any) => row.target)).toEqual([people[1].id]);
+  expect(first.next).toEqual(expect.any(String));
+  const last = await request('GET', `${forward}?${base}&cursor=${encodeURIComponent(first.next)}`);
+  expect(last.relations.map((row: any) => row.target)).toEqual([people[2].id]);
+  expect(last.next).toBeNull();
+  const inverse = `/v1/subjects/${people[0].id}/links`;
+  const incoming = await request('GET', `${inverse}?${base}`);
+  expect(incoming.next).toEqual(expect.any(String));
+  const incomingLast = await request('GET', `${inverse}?${base}&cursor=${encodeURIComponent(incoming.next)}`);
+  expect(incomingLast.next).toBeNull();
+  expect([...incoming.links, ...incomingLast.links].map((row: any) => row.subject)).toEqual(
+    others.map((subject) => subject.id).sort(),
+  );
+  const globalForward = await request('GET', `${forward}?property=schema%3Aauthor`);
+  expect(globalForward.relations.map((row: any) => row.target)).toEqual(people.map((person) => person.id));
+  const globalInverse = await request('GET', `${inverse}?property=schema%3Aauthor`);
+  expect(globalInverse.links.map((row: any) => row.subject)).toEqual(
+    [book, ...others].map((subject) => subject.id).sort(),
+  );
 });

@@ -1,5 +1,6 @@
 import type { Release } from '@rezics/definitions';
 import type { Pool } from 'pg';
+import { deadlineFor } from '../request/deadline.ts';
 import { installStandingParentGrant } from '../access/index.ts';
 import type { Access, AccountActor } from '../request/access.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from './definitions.ts';
@@ -31,7 +32,7 @@ export async function setupSemantic(pool: Pool, release: Release): Promise<strin
       return found !== null;
     },
   };
-  const context = { pool, deadline: Date.now() + 30_000, actor };
+  const context = { pool, deadline: deadlineFor(30_000), actor };
   const authority = {
     action: 'semantic.setup',
     resource: parent.resource,

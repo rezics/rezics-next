@@ -1,0 +1,59 @@
+import { useCallback, useEffect } from 'react';
+import { useLocation, useNavigate } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { getLocale } from '../../paraglide/runtime.js';
+import { searchFormFields, searchLoaderDeps } from '../search-params';
+import { searchResourceScopeAction, searchResourceScopeName } from '../advanced-scope';
+import { m } from '../../paraglide/messages.js';
+import { useSession } from '../../session/query';
+import { recentBucket } from '../recent-history';
+import { useRecentHistory } from '../recent-history-hook';
+import { HeaderSearch } from './header-search';
+import { loadScopedHeaderSuggestions } from './suggestions';
+import type { SearchScope } from './types';
+import { currentHeaderSearchSession, observeHeaderSearchSession } from './session-key';
+
+/** One responsive owner in AppShell. Route filters register their real controls through the provider. */
+export function ShellSearch({ scope }: { scope?: SearchScope } = {}) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const session = useSession();
+  const client = useQueryClient();
+  const readSession = useCallback(() => currentHeaderSearchSession(client), [client]);
+  const observeSession = useCallback((retire: () => void) => observeHeaderSearchSession(client, retire), [client]);
+  const bucket = recentBucket(session.state, session.subject);
+  const history = useRecentHistory(bucket);
+  useEffect(() => {
+    if (scope) history.remember('', scope);
+  }, [scope, bucket]);
+  const onSearchPage = /(?:^|\/)search\/?$/.test(location.pathname);
+  const params = location.search as Record<string, unknown>;
+  const searchState = searchLoaderDeps(params);
+  const routeScope: SearchScope | undefined = searchState.resourceScope
+    ? {
+        kind: searchState.resourceScope.kind === 'realm' ? 'Realm' : 'Collection',
+        id: searchState.resourceScope.id,
+        name: searchResourceScopeName(searchState.resourceScope),
+        searchAction: searchResourceScopeAction(getLocale(), searchState.resourceScope),
+      }
+    : searchState.invalidInput?.key === 'filter'
+      ? { kind: 'Realm', id: '', name: m.search_history_unavailable({}, { locale: getLocale() as never }) }
+      : undefined;
+  return (
+    <HeaderSearch
+      keyboardShortcut
+      locale={getLocale()}
+      history={history}
+      loadScopedSuggestions={loadScopedHeaderSuggestions}
+      session={session}
+      readSession={readSession}
+      observeSession={observeSession}
+      scope={scope ?? (onSearchPage ? routeScope : undefined)}
+      initialQuery={onSearchPage && typeof params.q === 'string' ? params.q : ''}
+      fields={onSearchPage ? searchFormFields(params) : []}
+      onNavigate={(href) => {
+        void navigate({ href });
+      }}
+    />
+  );
+}

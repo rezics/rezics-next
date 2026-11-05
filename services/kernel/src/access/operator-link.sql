@@ -4,6 +4,10 @@ WITH input AS NOT MATERIALIZED (
          NULLIF(:old_operator_id::text, '')::uuid AS old_operator_id,
          :version::bigint AS version, :transaction_id::uuid AS transaction_id,
          :deadline::timestamptz AS deadline
+), counter_time AS MATERIALIZED (
+  -- The account projection trigger uses exactly this command's T. The setting
+  -- is transaction-local and is discarded on both commit and rollback.
+  SELECT set_config('rezics.operator_at', :at::text, true)
 ), slot AS (
   INSERT INTO access.operator_relation_slot
     (route, subject_account_id, reservation_id, operator_account_id, terminal, transaction_id)
@@ -13,7 +17,7 @@ WITH input AS NOT MATERIALIZED (
 UPDATE access.account a
 SET operator_account_id = i.operator_id, operator_reservation_id = i.reservation_id,
     transaction_id = i.transaction_id
-FROM input i
+FROM input i CROSS JOIN counter_time
 WHERE a.route = i.route AND a.account_id = i.subject_id
   AND a.operator_account_id IS NOT DISTINCT FROM i.old_operator_id
   AND a.operator_relation_version = i.version AND clock_timestamp() < i.deadline

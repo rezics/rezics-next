@@ -1,15 +1,35 @@
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
 import { createAuthService } from '@rezics/auth';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createDelegationCommands, type AssignmentInput } from '../../src/access/delegation-commands.ts';
 import { routeOf } from '../../src/route/route.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
+
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `assignment_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
 
 /** Positive verifier fixtures need the same principal command provenance as production. */
 export async function delegatedAssignmentFixture(pool: Pool) {
-  const fixture = testDatabase();
+  const fixture = await cloneAuthDatabase();
   const database = new Pool({ connectionString: fixture.url });
   const issuer = 'https://assignment-fixture.auth.test';
   const password = 'correct horse battery staple';
@@ -28,7 +48,7 @@ export async function delegatedAssignmentFixture(pool: Pool) {
       audience: 'https://api.rezics.test',
       secret: 'assignment-fixture-secret-with-at-least-thirty-two-characters',
       signing: { activeKid: key.kid, privateKeys: [key] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readAccount(id) {
           const account = await readAccount(pool, routeOf(id)!, id);
           return (
@@ -46,7 +66,7 @@ export async function delegatedAssignmentFixture(pool: Pool) {
           if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
           return { accountId: reference };
         },
-      },
+      }),
     });
     await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: [action] });
     const access = createAccess({
@@ -102,12 +122,12 @@ export async function delegatedAssignmentFixture(pool: Pool) {
       },
       async close() {
         await database.end();
-        fixture.close();
+        await fixture.close();
       },
     };
   } catch (error) {
     await database.end();
-    fixture.close();
+    await fixture.close();
     throw error;
   }
 }

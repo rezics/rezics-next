@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { setImmediate } from 'node:timers/promises';
@@ -79,8 +80,10 @@ async function fixture() {
     const advance = barriers.trustedAccess.invalidateAccount!;
     let onInvalidate: ((input: Parameters<Invalidate>[0], advance: Invalidate) => ReturnType<Invalidate>) | undefined;
     let onConsume: ((proof: SessionProof) => Promise<void>) | undefined;
-    const ports: TrustedAccessPorts = {
+    const ports: TrustedAccessPorts = trustedAccessPorts({
       ...bindings,
+      // Auth confirms each barrier receipt with Access and completes the barrier it fenced.
+      ...barriers.trustedAccess,
       async authorizeProvisioning(reference) {
         const approval = await bindings.authorizeProvisioning(reference);
         const receipt = await registration.verifyProvisioningReceipt(reference);
@@ -111,7 +114,10 @@ async function fixture() {
         // No fabricated approval: an absent native effect coordinator denies.
         return bindings.consumeAuthorization!(input);
       },
-    };
+      async revalidateCredentialEffect() {
+        throw new Error('Credential revalidation is unavailable');
+      },
+    });
     const key = {
       ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
       kid: 'native',
@@ -205,6 +211,7 @@ async function fixture() {
       db,
       authPool,
       ports,
+      barriers,
       proofs,
       lifecycle,
       target,
@@ -263,7 +270,8 @@ test('pending ceiling survives native restart, expired proof collection and abse
     expect((await f.grant(f.target.session, [])).status).toBe(401);
     expect((await f.pending()).pending_reference).toBe(input.proofReference);
     expect((await f.signin(f.target.accountId, 'external')).headers.getSetCookie()).toEqual([]);
-    expect((await f.signin(f.target.accountId, 'external', [retained])).status).toBe(200);
+    // Access fenced the account at the barrier and Auth never completed it, so no sign-in succeeds yet.
+    expect((await f.signin(f.target.accountId, 'external', [retained])).status).toBe(401);
     // Expiry and the bounded collector cannot restore the removed scope.
     while (
       !(
@@ -281,6 +289,19 @@ test('pending ceiling survives native restart, expired proof collection and abse
     expect((await f.lifecycle.readFenceState(f.target.accountId))?.minimumAuthnEpoch).toBe(
       String(receipt.minimumAuthnEpoch),
     );
+    // Auth completes the barrier with that receipt: the fence clears at the new floor and sign-in succeeds.
+    await f.barriers.trustedAccess.completeBarrier({
+      accountId: f.target.accountId,
+      purpose: 'consent-reduction',
+      operationKey: input.operationKey!,
+      receiptId: receipt.receiptId,
+      minimumAuthnEpoch: receipt.minimumAuthnEpoch,
+    });
+    expect(await f.lifecycle.readFenceState(f.target.accountId)).toMatchObject({
+      fenced: false,
+      minimumAuthnEpoch: String(receipt.minimumAuthnEpoch),
+    });
+    expect((await f.signin(f.target.accountId, 'external', [retained])).status).toBe(200);
     // A later actual current human consent can supersede the abandoned request.
     const fresh = await f.signin(f.target.accountId);
     expect(fresh.status).toBe(200);
@@ -333,11 +354,18 @@ test('all current native issuance paths deny removed scope before cookie, JWT or
       expect(await f.use(retainedJwt, retained)).toBe(true);
       expect(await f.use(retainedJwt, removed)).toBe(false);
     };
+    const unavailable = await f.auth.internal.stageCredentialEffect({
+      key: 'unavailable-native-coordinator',
+      subjectAccountId: f.target.accountId,
+      credential: { kind: 'password', password: null },
+      headers: new Headers({ cookie: fullCookie }),
+    });
     await expect(
-      f.auth.internal.setCredential({
+      f.auth.internal.applyCredentialEffect({
         authorization: 'unavailable-native-coordinator',
+        effectRef: unavailable.effectRef,
+        key: unavailable.key,
         subjectAccountId: f.target.accountId,
-        credential: { kind: 'password', password: null },
         headers: new Headers({ cookie: fullCookie }),
       }),
     ).rejects.toThrow();
@@ -358,9 +386,11 @@ for (const change of ['client-reduction', 'first-party'] as const) {
     try {
       const before = await f.pending();
       let reference: string | undefined;
+      let barrier: { operationKey: string; receiptId: string; minimumAuthnEpoch: number } | undefined;
       f.invalidate = async (input, advance) => {
         const receipt = await advance(input);
         reference = input.proofReference;
+        barrier = { operationKey: input.operationKey!, ...receipt };
         if (change === 'client-reduction')
           await f.auth.internal.beginClientReduction({
             clientId: 'external',
@@ -373,12 +403,13 @@ for (const change of ['client-reduction', 'first-party'] as const) {
           const denied = await f.signin(f.target.accountId, 'external');
           expect(denied.status).toBe(401);
           expect(denied.headers.getSetCookie()).toEqual([]);
+          // The barrier fenced the account, so even the retained scope is refused until Auth completes it.
           const login = await f.signin(f.target.accountId, 'external', [retained]);
-          expect(login.status).toBe(200);
-          expect((await f.request('/token', {}, cookie(login))).status).toBe(200);
+          expect(login.status).toBe(401);
+          expect(login.headers.getSetCookie()).toEqual([]);
           expect(await f.pending()).toEqual({ ...before, pending_reference: reference, pending_scopes: [retained] });
         }
-        expect((await f.signin(f.target.accountId, 'unrelated')).status).toBe(200);
+        expect((await f.signin(f.target.accountId, 'unrelated')).status).toBe(401);
         expect((await f.signin(f.other.accountId, 'unrelated')).status).toBe(200);
         return receipt;
       };
@@ -387,6 +418,18 @@ for (const change of ['client-reduction', 'first-party'] as const) {
       await f.restart();
       expect((await f.grant(f.target.session, [retained])).status).not.toBe(200);
       expect((await f.pending()).pending_reference).toBe(reference);
+      // Once Auth completes the barrier the fence clears and a fresh sign-in succeeds at the new floor.
+      await f.barriers.trustedAccess.completeBarrier({
+        accountId: f.target.accountId,
+        purpose: 'consent-reduction',
+        ...barrier!,
+      });
+      expect((await f.signin(f.target.accountId, 'unrelated')).status).toBe(200);
+      if (change === 'first-party') {
+        const login = await f.signin(f.target.accountId, 'external', [retained]);
+        expect(login.status).toBe(200);
+        expect((await f.request('/token', {}, cookie(login))).status).toBe(200);
+      }
     } finally {
       await f.close();
     }
@@ -516,40 +559,54 @@ test('checkGrowth captures complete native consent transactions, pending issuanc
             FROM generate_series(1,63) i`,
             [f.target.accountId],
           );
+          let barrier!: Awaited<ReturnType<Invalidate>>;
           f.invalidate = async (input, advance) => {
             const receipt = await advance(input);
+            barrier = receipt;
             const before = await f.pending();
             expect(before.pending_reference).toBe(input.proofReference);
             expect(before.scopes).toEqual(scopes);
+            // The barrier fenced the account: nothing signs in until Auth completes it.
             const wrong = await f.signin(f.target.accountId, 'external');
             expect(wrong.status).toBe(401);
             expect(wrong.headers.getSetCookie()).toEqual([]);
-            const login = await f.signin(f.target.accountId, 'external', [retained]);
-            expect(login.status).toBe(200);
-            const selected = cookie(login);
-            expect((await f.request('/session', undefined, selected)).status).toBe(200);
-            const token = await f.request('/token', {}, selected);
-            expect(token.status).toBe(200);
-            const jwt = (await token.json()).access_token;
-            expect(decodeJwt(jwt).scope).toBe(retained);
-            expect(decodeJwt(jwt).authn_epoch).toBe(receipt.minimumAuthnEpoch);
-            f.consume = async (proof) => {
-              const live = await f.auth.internal.accessTokenForProof(proof);
-              expect(decodeJwt(live).scope).toBe(retained);
-              expect(decodeJwt(live).authn_epoch).toBe(receipt.minimumAuthnEpoch);
-            };
-            await expect(
-              f.auth.internal.setCredential({
-                authorization: 'absent-native-coordinator',
-                subjectAccountId: f.target.accountId,
-                credential: { kind: 'password', password: null },
-                headers: new Headers({ cookie: selected }),
-              }),
-            ).rejects.toThrow();
+            const fenced = await f.signin(f.target.accountId, 'external', [retained]);
+            expect(fenced.status).toBe(401);
+            expect(fenced.headers.getSetCookie()).toEqual([]);
             return receipt;
           };
           expect((await f.grant(session, [retained])).status).toBe(200);
           expect((await f.pending()).pending_reference).toBeNull();
+          // Auth completed the barrier, so the fresh sign-in succeeds at the new floor.
+          const login = await f.signin(f.target.accountId, 'external', [retained]);
+          expect(login.status).toBe(200);
+          const selected = cookie(login);
+          expect((await f.request('/session', undefined, selected)).status).toBe(200);
+          const token = await f.request('/token', {}, selected);
+          expect(token.status).toBe(200);
+          const jwt = (await token.json()).access_token;
+          expect(decodeJwt(jwt).scope).toBe(retained);
+          expect(decodeJwt(jwt).authn_epoch).toBe(barrier.minimumAuthnEpoch);
+          f.consume = async (proof) => {
+            const live = await f.auth.internal.accessTokenForProof(proof);
+            expect(decodeJwt(live).scope).toBe(retained);
+            expect(decodeJwt(live).authn_epoch).toBe(barrier.minimumAuthnEpoch);
+          };
+          const absent = await f.auth.internal.stageCredentialEffect({
+            key: 'absent-native-coordinator',
+            subjectAccountId: f.target.accountId,
+            credential: { kind: 'password', password: null },
+            headers: new Headers({ cookie: selected }),
+          });
+          await expect(
+            f.auth.internal.applyCredentialEffect({
+              authorization: 'absent-native-coordinator',
+              effectRef: absent.effectRef,
+              key: absent.key,
+              subjectAccountId: f.target.accountId,
+              headers: new Headers({ cookie: selected }),
+            }),
+          ).rejects.toThrow();
         },
       });
       expect(report.samples.map((s) => s.scale)).toEqual([1, 8, 64]);

@@ -246,6 +246,16 @@ test('editor ID repair preserves existing unique units and does not mutate sourc
   expect(parseStoredDocument('{"type":"paragraph","text":"authored JSON"}')).toBeNull();
 });
 
+test('moving existing document units retains their IDs while a copied unit gets a fresh ID', () => {
+  const first = paragraph('first', 'First unit');
+  const second = paragraph('second', 'Second unit');
+  const copiedFirst = structuredClone(first);
+  const moved = withDocumentIds({ type: 'doc', content: [second, first, copiedFirst] }, () => 'copied-first');
+
+  expect(moved.content?.map((unit) => unit.attrs?.id)).toEqual(['second', 'first', 'copied-first']);
+  expect(checkDocument({ version: documentVersion, profile: 'blocks', doc: moved })).toBe(true);
+});
+
 test('published schemas match their source declaration', async () => {
   for (const profile of ['core', 'text', 'blocks'] as const) {
     const schema = await Bun.file(
@@ -331,7 +341,7 @@ test('serialization is canonical JSON of the normalized snapshot, and its text r
 test('the runtime node checker accepts exactly what the published schema accepts', async () => {
   const { Compile } = await import('typebox/compile');
   const { DocumentSnapshotSchema, topLevelNodeNames, wireNodeChecker } = await import('../src/schema.ts');
-  const reference = Compile(DocumentSnapshotSchema);
+  const compiledSchema = Compile(DocumentSnapshotSchema);
   const rich: DocumentNode[] = [
     {
       type: 'heading',
@@ -420,11 +430,14 @@ test('the runtime node checker accepts exactly what the published schema accepts
         for (const index of path) target = target.content![index]!;
         mutate(target as unknown as Record<string, unknown>);
         const value = snapshot(copy.content!, profile);
-        expect(runtime(value)).toBe(reference.Check(value));
+        const compiledResult = compiledSchema.Check(value);
+        expect(runtime(value)).toBe(compiledResult);
         compared++;
       }
     }
-    expect(runtime(snapshot(rich, profile))).toBe(reference.Check(snapshot(rich, profile)));
+    const unmutated = snapshot(rich, profile);
+    const compiledResult = compiledSchema.Check(unmutated);
+    expect(runtime(unmutated)).toBe(compiledResult);
   }
   expect(compared).toBeGreaterThan(300);
   // The reference is the published schema compiled once.

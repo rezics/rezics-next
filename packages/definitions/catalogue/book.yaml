@@ -3,6 +3,7 @@ name: book
 version: 1.0.0
 description: Book work and edition profile terms.
 prefixes:
+  rezics: https://rezics.com/vocab/
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
@@ -20,6 +21,7 @@ classes:
     exact_mappings:
       - wd:Q47461344
     slots:
+      - representativeEdition
       - author
       - abstract
       - openLibraryId
@@ -29,8 +31,40 @@ classes:
       - genre
       - keywords
       - partOfSeries
+      - wordCount
+      - workFormat
     annotations:
-      facets: author genre keywords partOfSeries datePublished contributor inLanguage
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:author, schema:datePublished, schema:wordCount]
+      library:
+        id: book.reading
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: page
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
+      facets: author genre keywords partOfSeries datePublished contributor inLanguage wordCount workFormat
+      schema_org_type: https://schema.org/Book
   Edition:
     is_a: CreativeWork
     class_uri: bf:Instance
@@ -38,6 +72,15 @@ classes:
     exact_mappings:
       - wd:Q3331189
     slots:
+      - contributor
+      - voiceActor
+      - developer
+      - screenwriter
+      - productionCompany
+      - producer
+      - musicBy
+      - director
+      - illustrator
       - author
       - exampleOfWork
       - openLibraryId
@@ -47,9 +90,201 @@ classes:
       - numberOfPages
       - inLanguage
       - translator
+      - creativeWorkStatus
     annotations:
-      facets: exampleOfWork author translator publisher datePublished numberOfPages contributor inLanguage
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:author, schema:datePublished, schema:numberOfPages]
+      library:
+        id: book.edition
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: page
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
+      facets: exampleOfWork author translator publisher datePublished numberOfPages contributor inLanguage illustrator director musicBy producer productionCompany screenwriter developer voiceActor
+      schema_org_type: https://schema.org/Book
+  LegacyFixedProfile:
+    abstract: true
+    annotations:
+      library:
+        id: legacy-fixed-v1
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - { id: page, minimum: '0', totalPolicy: optional, identity: { kind: none }, structure: { kind: none } }
+                - {
+                    id: chapter,
+                    minimum: '0',
+                    totalPolicy: optional,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: episode,
+                    minimum: '0',
+                    totalPolicy: optional,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: volume,
+                    minimum: '0',
+                    totalPolicy: optional,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: minute,
+                    minimum: '0',
+                    totalPolicy: optional,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: percent,
+                    dimension: percent,
+                    minimum: '0',
+                    maximum: '100',
+                    totalPolicy: optional,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+            - mode: cursor_position
+              units:
+                - {
+                    id: page,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: chapter,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: episode,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: volume,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: minute,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: percent,
+                    dimension: percent,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: none },
+                    structure: { kind: none },
+                  }
+            - mode: completed_units
+              units:
+                - {
+                    id: page,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: session_local },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: chapter,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: session_local },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: episode,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: session_local },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: volume,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: session_local },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: minute,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: session_local },
+                    structure: { kind: none },
+                  }
+                - {
+                    id: percent,
+                    dimension: percent,
+                    minimum: '0',
+                    totalPolicy: forbidden,
+                    identity: { kind: session_local },
+                    structure: { kind: none },
+                  }
+        copies:
+          kinds:
+            - id: legacy-unspecified
+              statuses: [{ id: ordered }, { id: owned }, { id: lent }, { id: disposed }]
+        importSources: []
 slots:
+  wordCount:
+    slot_uri: schema:wordCount
+    description: The exact number of words asserted for the book work, not characters or edition pages.
+    range: integer
+    minimum_value: 0
+    exact_mappings:
+      - wd:P6570
+    annotations:
+      datatype: quantity
+      units: '1'
+      exact: true
   exampleOfWork:
     slot_uri: schema:exampleOfWork
     description: The creative work represented by this edition.
@@ -58,7 +293,11 @@ slots:
       - wd:P629
     annotations:
       datatype: wikibase-item
-      qualifiers: openLibraryId sameAs
+      qualifiers: openLibraryId sameAs releaseType
+      relation_group: derivation
+      inverse: schema:workExample
+      relation_order: date
+      acyclic: true
   isbn:
     slot_uri: schema:isbn
     description: The ISBN-13 identifier of the edition.
@@ -78,7 +317,11 @@ slots:
       - wd:P123
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole vndbId sameAs
+      qualifiers: creditedAs position detailedRole vndbId sameAs appliesToPart
+      relation_group: credit
+      inverse: rezics:publisherOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
   numberOfPages:
     slot_uri: schema:numberOfPages
     description: The number of pages in the edition.
@@ -100,4 +343,8 @@ slots:
       - wd:P655
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole openLibraryId sameAs
+      qualifiers: creditedAs position detailedRole openLibraryId sameAs appliesToPart
+      relation_group: credit
+      inverse: rezics:translatorOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]

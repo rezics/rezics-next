@@ -23,6 +23,7 @@ test('native public media and registered jobs stay bounded as hot media and unre
       application: GrowthSample[];
       worker: GrowthSample[];
       auth: GrowthSample[];
+      workflowBaselineRows: number;
       floors: Record<string, number>;
       raw: { worker: Capture; auth: Capture }[];
       sourceBytes: number;
@@ -59,7 +60,7 @@ test('native public media and registered jobs stay bounded as hot media and unre
       expect(sample.cost.relations?.['dbos.workflow_status']).toBeDefined();
       expect(sample.cost.relations?.['dbos.workflow_status']?.sequentialScans).toBe(0);
     }
-    expect(report.baseline.every((b) => b.executedJobs <= 16 && b.sourceBytes > 0)).toBe(true);
+    expect(report.workflowBaselineRows).toBeGreaterThanOrEqual(2_000);
     expect(report.raw.every((r) => r.worker.plans.length > 0)).toBe(true);
     expect(report.capture.executedJobs).toBeLessThanOrEqual(16);
     expect(report.capture.sourceRequests.length).toBeLessThanOrEqual(64);

@@ -1,0 +1,307 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { createAccess } from '../../src/access/index.ts';
+import { createLifecycleCommands, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import * as semantic from '../../src/semantic/index.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { createDeletionFixture } from './support/deletion-fixture.ts';
+
+const fixture = await createDeletionFixture();
+beforeAll(fixture.setup);
+afterAll(fixture.close);
+const {
+  pool,
+  admin,
+  accounts,
+  clock,
+  auth,
+  bearer,
+  actions,
+  real,
+  call,
+  status,
+  snak,
+  cited,
+  person,
+  proposal,
+  path,
+  accept,
+  adopt,
+  current,
+  revisions,
+  caughtUp,
+  retention,
+  drain,
+  absentPayload,
+  setNow,
+} = fixture;
+const day = 86_400_000;
+
+test('semantic takedown withholds only covered fields and retains reversible data', async () => {
+  const record = await proposal(await person('Unaffected label'));
+  await accept(record);
+  await adopt(record, null);
+  status(
+    await call('POST', `${path(record)}:takedown`, 'platform', {
+      notice: { complaint: 'Only the URL value', received_at: clock().toISOString(), scope: '/value' },
+    }),
+    200,
+  );
+  const shown = JSON.stringify(await current(record.subject));
+  expect(shown).toContain('Unaffected label');
+  expect(shown).not.toContain(record.payload);
+  const listed = await call('GET', `/v1/subjects/${record.subject}/candidates?property=schema%3Aurl`, 'owner');
+  status(listed, 200);
+  expect(listed.body.candidates).toContainEqual(expect.objectContaining({ id: record.candidate }));
+  expect(JSON.stringify(listed.body)).toContain('https://example.test/evidence');
+  setNow(new Date(clock().getTime() + 60 * day));
+  await drain(record.subject);
+  expect(
+    (await admin.query('SELECT statement FROM semantic.candidate WHERE candidate_id=$1', [record.candidate])).rows[0]
+      .statement.value.content,
+  ).toBe(record.payload);
+  status(await call('POST', `${path(record)}:restore`, 'platform', { reason: 'Counter-notice accepted' }), 200);
+  expect(JSON.stringify(await current(record.subject))).toContain(record.payload);
+});
+
+test('ordinary owners and early platform purge cannot destroy retained takedown evidence', async () => {
+  const record = await proposal(await person());
+  status(
+    await call('POST', `${path(record)}:takedown`, 'platform', {
+      notice: { complaint: 'Retain covered field', received_at: clock().toISOString(), scope: '/value' },
+    }),
+    200,
+  );
+  status(await call('POST', `${path(record)}:purge`, 'owner', { reason: 'early' }), 403);
+  status(await call('POST', `${path(record)}:purge`, 'platform', { reason: 'early' }), 409);
+  status(await call('POST', `${path(record)}:hold`, 'platform', { held: true, reason: 'Evidence hold' }), 200);
+  status(
+    await call('POST', `${path(record)}:purge`, 'platform', { reason: 'legal_order', order: 'order-reference' }),
+    200,
+  );
+  setNow(new Date(clock().getTime() + 60 * day));
+  await drain(record.subject);
+  const held = await admin.query('SELECT statement FROM semantic.candidate WHERE candidate_id=$1', [record.candidate]);
+  expect(JSON.stringify(held.rows)).toContain(record.payload);
+  status(await call('POST', `${path(record)}:hold`, 'platform', { held: false, reason: 'Released' }), 200);
+  await drain(record.subject);
+  await absentPayload(record.payload);
+});
+
+test('semantic purge removes minimum personal payload in bounded durable pages while retaining nonpersonal skeleton', async () => {
+  const record = await proposal(await person());
+  await accept(record);
+  await adopt(record, null);
+  const before = await revisions(record.subject);
+  status(await call('DELETE', path(record), 'owner'), 200);
+  setNow(new Date(clock().getTime() + 30 * day));
+  const job = retention();
+  const key = randomUUID();
+  const input = { partition: partitionOf(routeOf(record.subject)!), limit: 2, key };
+  const committed = await job.step(input);
+  expect(committed.examined).toBeLessThanOrEqual(2);
+  // A new adapter instance represents restart after commit but before acknowledgement.
+  expect(await retention().step(input)).toEqual(committed);
+  await drain(record.subject);
+  await absentPayload(record.payload);
+  expect((await revisions(record.subject)).slice(0, before.length)).toEqual(before);
+  const skeleton = await call('GET', `/v1/subjects/${record.subject}/candidates?property=schema%3Aurl`, 'owner');
+  status(skeleton, 200);
+  expect(skeleton.body.candidates).toContainEqual(expect.objectContaining({ id: record.candidate, deleted: true }));
+  expect((await current(record.subject)).type).toBe('schema:Person');
+});
+
+test('early purge is separate platform authority and a legal hold suspends automatic purge', async () => {
+  const record = await proposal(await person());
+  status(await call('DELETE', path(record), 'owner'), 200);
+  status(await call('POST', `${path(record)}:purge`, 'owner', { reason: 'early' }), 403);
+  status(await call('POST', `${path(record)}:hold`, 'platform', { held: true, reason: 'Preserve evidence' }), 200);
+  setNow(new Date(clock().getTime() + 31 * day));
+  await drain(record.subject);
+  expect(
+    (await admin.query('SELECT statement FROM semantic.candidate WHERE candidate_id=$1', [record.candidate])).rows[0]
+      .statement.value.content,
+  ).toBe(record.payload);
+  status(await call('POST', `${path(record)}:hold`, 'platform', { held: false, reason: 'Released' }), 200);
+  await drain(record.subject);
+  await absentPayload(record.payload);
+  const earlyPrivacy = await proposal(await person());
+  status(await call('DELETE', path(earlyPrivacy), 'owner'), 200);
+  status(await call('POST', `${path(earlyPrivacy)}:purge`, 'platform', { reason: 'early' }), 200);
+  await drain(earlyPrivacy.subject);
+  await absentPayload(earlyPrivacy.payload);
+  const early = await proposal(await person());
+  status(
+    await call('POST', `${path(early)}:purge`, 'platform', { reason: 'legal_order', order: 'order-reference' }),
+    200,
+  );
+  await drain(early.subject);
+  await absentPayload(early.payload);
+});
+
+test('paused consumers do not disclose a revoked source in inverse links or publicly live counts', async () => {
+  const target = await person('Foreign target');
+  const created = await call('POST', '/v1/subjects', 'owner', {
+    type: 'schema:Book',
+    labels: { en: 'Revocable source' },
+    statements: { 'schema:author': [cited('schema:author', target)] },
+  });
+  status(created, 201);
+  const subject = created.body.subject.id;
+  await caughtUp(subject);
+  const inverse = () => call('GET', `/v1/subjects/${target}/links?property=schema%3Aauthor`);
+  const initial = await inverse();
+  status(initial, 200);
+  expect(initial.body.links).toHaveLength(1);
+  if (Object.hasOwn(initial.body, 'count')) expect(initial.body.count).toEqual({ value: 1, exact: true });
+  status(
+    await call('POST', `/v1/subjects/${subject}:takedown`, 'platform', {
+      notice: { complaint: 'Whole source', received_at: clock().toISOString() },
+    }),
+    200,
+  );
+  // No projection.run or relay runs after the authoritative revocation.
+  const withheld = await inverse();
+  status(withheld, 200);
+  // Skeleton storage is retained even when its public number lacks current proof.
+  const stored = await admin.query(
+    `SELECT value::int FROM semantic.inbound_link_count
+     WHERE route=$1 AND subject_id=$2 AND context_id=$3 AND property='schema:author'
+       AND filter_value='00000000-0000-0000-0000-000000000000'`,
+    [routeOf(target), target, GLOBAL_CONTEXT],
+  );
+  expect(stored.rows).toEqual([{ value: 1 }]);
+  expect(withheld.body.links).toEqual([]);
+  expect(Object.hasOwn(withheld.body, 'count'), JSON.stringify(withheld.body)).toBe(false);
+});
+
+test('account erasure de-identifies retained public contributions and automatically purges private assertions', async () => {
+  const record = await proposal(await person());
+  await accept(record);
+  await adopt(record, null);
+  const privateName = `Private account name ${randomUUID()}`;
+  await semantic.ensureAccountAgent(pool, { account: accounts.owner, kind: 'person', name: privateName });
+  const agent = semantic.accountAgentId(accounts.owner);
+  const holder = await person('Private assertion holder');
+  const proposed = await call('POST', `/v1/subjects/${holder}/candidates`, 'owner', {
+    statement: snak('rezics:penNameOf', agent),
+  });
+  status(proposed, 201);
+  const privateCandidate = proposed.body.candidate;
+  const access = createAccess({ actions: LIFECYCLE_ACTIONS, auth, clock });
+  await real.grant({ route: routeOf(accounts.owner)!, id: accounts.owner }, 'owner', 'account:delete');
+  const actor = await access.authenticate(await bearer(accounts.owner, actions), { pool, deadline: Date.now() + 5000 });
+  const commands = createLifecycleCommands({ pool, access, clock });
+  await commands.tombstone({ actor, deadline: Date.now() + 5000 }, { accountId: accounts.owner, key: randomUUID() });
+  const confirmedAt = clock().toISOString();
+  // First-scope confirmation is final: start native cleanup at the same T,
+  // without borrowing the individual-record restoration window.
+  // Source and account partitions progress independently through native durable work.
+  for (const subject of [accounts.owner, holder, record.subject]) await drain(subject);
+  expect(clock().toISOString()).toBe(confirmedAt);
+  await absentPayload(privateName);
+  const retained = await call('GET', `/v1/subjects/${record.subject}/candidates?property=schema%3Aurl`);
+  status(retained, 200);
+  expect(JSON.stringify(retained.body)).toContain(record.payload);
+  expect(JSON.stringify(retained.body)).not.toContain(privateName);
+  const privateRow = await admin.query('SELECT statement FROM semantic.candidate WHERE candidate_id=$1', [
+    privateCandidate,
+  ]);
+  expect(JSON.stringify(privateRow.rows)).not.toContain(agent);
+  const identity = await call('GET', `/v1/subjects/${agent}`);
+  expect(JSON.stringify(identity.body)).not.toContain(privateName);
+});
+
+test('explicit account-agent name clear is immediate and does not create record deletion', async () => {
+  const account = accounts.stranger;
+  const name = `Clear-only name ${randomUUID()}`;
+  const agent = semantic.accountAgentId(account);
+  await semantic.ensureAccountAgent(pool, { account, kind: 'person', name });
+  const before = await revisions(agent);
+  await semantic.ensureAccountAgent(pool, { account, kind: 'person', name: null });
+  await absentPayload(name);
+  expect((await revisions(agent)).slice(0, before.length)).toEqual(before);
+  const cleared = await call('GET', `/v1/subjects/${agent}`);
+  status(cleared, 200);
+  expect(cleared.body.subject.labels).toEqual({});
+  await semantic.ensureAccountAgent(pool, { account, kind: 'person', name: 'New explicit name' });
+  const restored = await call('GET', `/v1/subjects/${agent}`);
+  status(restored, 200);
+  expect(restored.body.subject.labels).toEqual({ und: 'New explicit name' });
+});
+
+test('retention failure before receipt commit leaves payload intact and the same page can retry', async () => {
+  // Use another real principal because account deletion above is terminal.
+  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
+  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'statement:propose');
+  const created = await call('POST', '/v1/subjects', 'editor', {
+    type: 'schema:Person',
+    labels: { en: 'Crash fixture' },
+  });
+  status(created, 201);
+  const subject = created.body.subject.id;
+  const payload = `https://example.test/crash/${randomUUID()}`;
+  const proposed = await call('POST', `/v1/subjects/${subject}/candidates`, 'editor', {
+    statement: cited('schema:url', payload),
+  });
+  status(proposed, 201);
+  const record = { subject, candidate: proposed.body.candidate };
+  status(await call('DELETE', path(record), 'editor'), 200);
+  setNow(new Date(clock().getTime() + 31 * day));
+  const input = { partition: partitionOf(routeOf(subject)!), limit: 2, key: randomUUID() };
+  // A native command failure after its writes must roll back payload and checkpoint together.
+  await admin.query(`CREATE FUNCTION public.reject_semantic_retention_receipt() RETURNS trigger LANGUAGE plpgsql
+    AS $$ BEGIN RAISE EXCEPTION 'retention receipt fault'; END $$`);
+  await admin.query(`CREATE TRIGGER reject_semantic_retention_receipt BEFORE INSERT ON core.receipt
+    FOR EACH ROW EXECUTE FUNCTION public.reject_semantic_retention_receipt()`);
+  try {
+    await expect(retention().step(input)).rejects.toThrow('retention receipt fault');
+    const row = await admin.query('SELECT statement FROM semantic.candidate WHERE candidate_id=$1', [record.candidate]);
+    expect(JSON.stringify(row.rows)).toContain(payload);
+  } finally {
+    await admin.query('DROP TRIGGER reject_semantic_retention_receipt ON core.receipt');
+    await admin.query('DROP FUNCTION public.reject_semantic_retention_receipt()');
+  }
+  await retention().step(input);
+  await drain(subject);
+  await absentPayload(payload);
+});
+
+test('account-agent erasure still clears personal names when its stored type leaves the current release', async () => {
+  for (const action of ['definitions:publish', 'definitions:activate'])
+    await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  const release = {
+    ...bundledRelease,
+    types: {
+      ...bundledRelease.types,
+      'schema:SoftwareApplication': {
+        iri: 'http://schema.org/SoftwareApplication',
+        labels: { en: 'Software application' },
+        mappings: [],
+        bases: ['schema:Thing'],
+        properties: [],
+        facets: [],
+      },
+    },
+  };
+  const published = await call('POST', '/v1/definitions/releases', 'editor', { release });
+  status(published, 201);
+  const digest = published.body.digest;
+  status(await call('POST', `/v1/definitions/releases/${digest}:activate`, 'editor', { expected_head: 1 }), 200);
+  const account = newId(21004);
+  const name = `Retired type personal name ${randomUUID()}`;
+  try {
+    await semantic.ensureAccountAgent(pool, { account, kind: 'software', name });
+  } finally {
+    status(
+      await call('POST', `/v1/definitions/releases/${bundledDigest}:activate`, 'editor', { expected_head: 2 }),
+      200,
+    );
+  }
+  const cleared = await semantic.ensureAccountAgent(pool, { account, kind: 'software', name: null });
+  expect(cleared.subject.type).toBe('schema:SoftwareApplication');
+  expect(cleared.subject.labels).toEqual({});
+  await absentPayload(name);
+});

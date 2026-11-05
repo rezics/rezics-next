@@ -24,7 +24,10 @@ const worker = await composeWork(
   [
     createCommerceWork({
       stripe,
-      checkout: { successUrl: 'https://example.test/success', cancelUrl: 'https://example.test/cancel' },
+      checkout: {
+        successUrl: process.env.WORK_SUCCESS_URL ?? 'https://example.test/success',
+        cancelUrl: process.env.WORK_CANCEL_URL ?? 'https://example.test/cancel',
+      },
     }),
   ],
   { pool, client, databaseUrl, executorId: 'commerce-test' },

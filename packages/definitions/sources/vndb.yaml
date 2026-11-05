@@ -1,5 +1,6 @@
 # Inventory of the official VNDB 2026-10-25 dump.
 # Snapshot field and column names are frozen from schema_vndbid.sql.
+# The Kana /vn API's tags.rating is a separate aggregate in (0,3]; tags_vn.vote is one user's vote.
 source: https://dl.vndb.org/dump/vndb-db-2026-10-25.tar.zst
 snapshot:
   dump: https://dl.vndb.org/dump/vndb-db-2026-10-25.tar.zst
@@ -881,6 +882,7 @@ enumerations:
   vn_relation: &id041
     - {
         value: seq,
+        status: existing,
         term: 'wdt:P155',
         mapping: 'wdt:P155',
         meaning: The subject work follows the target work.,
@@ -888,13 +890,16 @@ enumerations:
       }
     - {
         value: preq,
-        term: 'wdt:P156',
+        status: existing,
+        term: 'wdt:P155',
+        inverse: true,
         mapping: 'wdt:P156',
         meaning: The subject work is followed by the target work.,
         citations: ['https://www.wikidata.org/wiki/Property:P156'],
       }
     - {
         value: set,
+        status: existing,
         term: 'wdt:P361',
         mapping: 'wdt:P361',
         meaning: The works share a setting or belong to a set.,
@@ -902,6 +907,7 @@ enumerations:
       }
     - {
         value: alt,
+        status: existing,
         term: 'wdt:P1889',
         mapping: 'wdt:P1889',
         meaning: The target is an alternative telling in the same setting with the same characters.,
@@ -909,6 +915,7 @@ enumerations:
       }
     - {
         value: char,
+        status: existing,
         term: 'wdt:P361',
         mapping: 'wdt:P361',
         meaning: The works share character appearances; no Wikidata property directly models this work-to-work relation.,
@@ -916,6 +923,7 @@ enumerations:
       }
     - {
         value: side,
+        status: existing,
         term: 'wdt:P144',
         mapping: 'wdt:P144',
         meaning: The subject work is a side story based on the target parent story.,
@@ -923,7 +931,9 @@ enumerations:
       }
     - {
         value: par,
-        term: 'wdt:P4969',
+        status: existing,
+        term: 'wdt:P144',
+        inverse: true,
         mapping: 'wdt:P4969',
         meaning: The target work is a side story derived from the subject parent story.,
         citations: ['https://www.wikidata.org/wiki/Property:P4969'],
@@ -939,13 +949,16 @@ enumerations:
       }
     - {
         value: fan,
-        term: 'wdt:P2512',
+        status: existing,
+        term: 'rezics:spinOffOf',
+        inverse: true,
         mapping: 'wdt:P2512',
         meaning: The target work is a fandisc spin-off of the subject work.,
         citations: ['https://www.wikidata.org/wiki/Property:P2512'],
       }
     - {
         value: orig,
+        status: existing,
         term: 'wdt:P144',
         mapping: 'wdt:P144',
         meaning: The subject work is a fandisc based on the target original game.,
@@ -956,6 +969,8 @@ enumerations:
         value: old,
         term: 'wdt:P1365',
         mapping: 'wdt:P1365',
+        status: omitted,
+        reason: Predecessor claims remain separately unadmitted.,
         meaning: The current producer was formerly known as the selected producer.,
         citations: ['https://www.wikidata.org/wiki/Property:P1365'],
       }
@@ -963,27 +978,34 @@ enumerations:
         value: new,
         term: 'wdt:P1366',
         mapping: 'wdt:P1366',
+        status: omitted,
+        reason: Successor claims remain separately unadmitted.,
         meaning: The selected producer succeeded the current producer.,
         citations: ['https://www.wikidata.org/wiki/Property:P1366'],
       }
     - {
         value: sub,
-        term: 'wdt:P355',
+        term: 'wdt:P749',
         mapping: 'wdt:P355',
-        meaning: The selected producer is a subsidiary of the current producer.,
-        citations: ['https://www.wikidata.org/wiki/Property:P355'],
+        status: existing,
+        meaning: The selected producer is a subsidiary of the current producer. Dictionary P355 is not admitted; this is stored losslessly as pid → current id under released wdt:P749,
+        without fabricating a reciprocal source row.,
+        citations: ['https://www.wikidata.org/wiki/Property:P355', 'https://www.wikidata.org/wiki/Property:P749'],
       }
     - {
         value: par,
         term: 'wdt:P749',
         mapping: 'wdt:P749',
-        meaning: The selected producer is the parent organization of the current producer.,
+        status: existing,
+        meaning: The selected producer is the parent organization of the current producer; emitted as current id → pid under released wdt:P749.,
         citations: ['https://www.wikidata.org/wiki/Property:P749'],
       }
     - {
         value: imp,
         term: 'wdt:P527',
         mapping: 'wdt:P527',
+        status: omitted,
+        reason: Imprint membership is not an admitted producer-parent statement.,
         meaning: The selected producer is an imprint brand used by the same group as the current producer.,
         citations: ['https://www.wikidata.org/wiki/Property:P527'],
       }
@@ -991,6 +1013,8 @@ enumerations:
         value: ipa,
         term: 'wdt:P361',
         mapping: 'wdt:P361',
+        status: omitted,
+        reason: Imprint-parent brand claims remain unadmitted.,
         meaning: The selected producer is the parent brand of the current imprint.,
         citations: *id008,
       }
@@ -998,6 +1022,8 @@ enumerations:
         value: spa,
         term: 'wdt:P361',
         mapping: 'wdt:P361',
+        status: omitted,
+        reason: Former-member origin claims remain unadmitted.,
         meaning: The selected producer was formed by former members of the current producer; no Wikidata property directly models this origin relation.,
         citations: *id008,
       }
@@ -1005,6 +1031,8 @@ enumerations:
         value: ori,
         term: 'wdt:P361',
         mapping: 'wdt:P361',
+        status: omitted,
+        reason: Former-member origin claims remain unadmitted.,
         meaning: The current producer was formed by former members of the selected producer; no Wikidata property directly models this origin relation.,
         citations: *id008,
       }
@@ -1029,6 +1057,28 @@ enumerations:
         mapping: 'wdt:P31',
         meaning: Trial release of the linked work.,
         citations: *id010,
+      }
+  development_status:
+    - {
+        value: 0,
+        term: 'schema:keywords',
+        mapping: 'skos:Concept',
+        meaning: Finished development status.,
+        citations: ['https://api.vndb.org/kana'],
+      }
+    - {
+        value: 1,
+        term: 'schema:keywords',
+        mapping: 'skos:Concept',
+        meaning: In-development status.,
+        citations: ['https://api.vndb.org/kana'],
+      }
+    - {
+        value: 2,
+        term: 'schema:keywords',
+        mapping: 'skos:Concept',
+        meaning: Cancelled development status.,
+        citations: ['https://api.vndb.org/kana'],
       }
   tag_category: &id036
     - {
@@ -1132,7 +1182,7 @@ table_types:
     meaning: A quotation record.
     citations: ['https://schema.org/Quotation', 'https://www.wikidata.org/wiki/Q815341']
   schema:SoftwareApplication:
-    status: proposed
+    status: existing
     mapping: wd:Q166142
     meaning: Software application or game-engine record.
     citations: ['https://schema.org/SoftwareApplication', 'https://www.wikidata.org/wiki/Q166142']
@@ -1237,12 +1287,22 @@ table_types:
   schema:sameAs:
     status: existing
     mapping: wdt:P2888
-    meaning: Link to an external identity or URL.
+    meaning: Dictionary heading for external-link tables. It supplies no identity authority, sameAs claim, or cross-provider resolution; selected website values map through extlinks.value as schema:url.
     citations:
       [
         'https://schema.org/sameAs',
         'https://www.wikidata.org/wiki/Property:2888',
         'https://www.wikidata.org/wiki/Property:P2888',
+      ]
+  schema:url:
+    status: existing
+    mapping: wdt:P856
+    meaning: Source-listed website URL inherited from Thing.url on Person, Organization and Release.
+    citations:
+      [
+        'https://schema.org/url',
+        'https://www.wikidata.org/wiki/Property:856',
+        'https://www.wikidata.org/wiki/Property:P856',
       ]
   wd:Q1107:
     status: proposed
@@ -1283,8 +1343,17 @@ table_types:
   wdt:P155:
     status: existing
     mapping: wdt:P155
-    meaning: Predecessor or superseded-release relation.
+    meaning: Prior item in a sequence (follows); it does not mean replacement.
     citations: &id030 ['https://www.wikidata.org/wiki/Property:155', 'https://www.wikidata.org/wiki/Property:P155']
+  rezics:releaseSupersedes:
+    status: existing
+    mapping: rezics:releaseSupersedes
+    meaning: >-
+      Native exact directed release replacement: current release id supersedes the exact release rid. It is not P155
+      chronology or Organization replacement.
+    citations: &id046
+      - https://g.blicky.net/vndb.git/tree/sql/schema.sql?id=3ffec03b6b7cb8967d920ec9b8fd90f78bd8ec41
+      - https://www.wikidata.org/wiki/Property:P155
   wdt:P1552:
     status: proposed
     mapping: wdt:P1552
@@ -1317,12 +1386,14 @@ table_types:
     meaning: Voice actor assigned to a character.
     citations: &id042 ['https://www.wikidata.org/wiki/Property:725', 'https://www.wikidata.org/wiki/Property:P725']
   wdt:P749:
-    status: proposed
+    status: existing
     mapping: wdt:P749
-    meaning: Parent-organization relationship.
+    meaning: Released parent-organization relationship; VNDB par emits current→pid and sub emits pid→current under this property.
     citations: ['https://www.wikidata.org/wiki/Property:749', 'https://www.wikidata.org/wiki/Property:P749']
   wdt:P156:
     status: existing
+    term: wdt:P155
+    inverse: true
     mapping: wdt:P156
     meaning: The work that follows this visual novel.
     citations: ['https://www.wikidata.org/wiki/Property:P156']
@@ -1333,6 +1404,8 @@ table_types:
     citations: ['https://www.wikidata.org/wiki/Property:P1889']
   wdt:P2512:
     status: existing
+    term: rezics:spinOffOf
+    inverse: true
     mapping: wdt:P2512
     meaning: A spin-off work relation.
     citations: ['https://www.wikidata.org/wiki/Property:P2512']
@@ -1348,6 +1421,8 @@ table_types:
     citations: ['https://www.wikidata.org/wiki/Property:P31']
   wdt:P4969:
     status: existing
+    term: wdt:P144
+    inverse: true
     mapping: wdt:P4969
     meaning: A derivative work relation.
     citations: ['https://www.wikidata.org/wiki/Property:P4969']
@@ -1431,19 +1506,36 @@ tables:
             'https://www.wikidata.org/wiki/Property:P21',
           ]
       - name: spoil_gender
+        status: omitted
+        reason: The source spoiler variant is a char_gender enum, not a numeric spoiler level. The admitted native contract cannot preserve this variant, so it is withheld without an unqualified gender fallback.
+        citations:
+          - https://api.vndb.org/nyan
+          - https://g.blicky.net/vndb.git/tree/sql/schema.sql?id=55866ce6cb150d2de85e5f204828eafae5e50bc5
+      - name: main
+        status: existing
+        term: rezics:relatedCharacterIdentity
+        'on': wd:Q95074
+        mapping: rezics:relatedCharacterIdentity
+        meaning: >-
+          Directed identity association to another Character endpoint identified by this source key; not a merge,
+          redirect, class instance, combined biography or the appearance role code main.
+        citations: ['https://vndb.org/d14#3', 'https://api.vndb.org/kana#post-character']
+        qualifiers:
+          - status: existing
+            'on': wd:Q95074
+            term: rezics:spoilerLevel
+            mapping: wdt:P1552
+            source_column: main_spoil
+            meaning: Spoiler disclosure qualifier on the identity association.
+            citations: *id015
+      - name: main_spoil
         status: existing
         term: rezics:spoilerLevel
         'on': wd:Q95074
-        qualifies: schema:gender
+        qualifies: rezics:relatedCharacterIdentity
         mapping: wdt:P1552
-        meaning: Platform mechanism for disclosing the spoiler level of a gender value; no standard property represents this qualifier.
+        meaning: Platform mechanism for disclosing the spoiler level of this identity association; no standard property represents this qualifier.
         citations: *id015
-      - name: main
-        status: omitted
-        reason: Related-character key used to mark a main-character relation; the source relation is not a standalone profile field.
-      - name: main_spoil
-        status: omitted
-        reason: Spoiler qualifier for the source main-character relation; omit with that unmodeled source relation.
       - name: s_bust
         status: omitted
         reason: Source-specific bust measurement has no selected profile property.
@@ -1482,7 +1574,9 @@ tables:
           ]
       - name: age
         status: omitted
-        reason: Age is source-specific fictional-character metadata without a stable date of birth.
+        reason: >-
+          Source-wide character age has no work scope in this dump; it must not become the appearance-age qualifier
+          on schema:character. Work-scoped age uses wdt:P3629 on an actual appearance statement.
       - name: description
         status: omitted
         reason: Character description is creative text with separate source conditions and is not included in the profile.
@@ -1722,8 +1816,16 @@ tables:
         status: omitted
         reason: Source site code selects URL parsing rules and is not a profile statement.
       - name: value
-        status: omitted
-        reason: VNDB extlinks.value is source-specific technical or organizational metadata with no selected profile statement.
+        status: proposed
+        term: schema:url
+        mapping: wdt:P856
+        meaning: A source-listed website URL on the selected staff Person, producer Organization or Person, or release, joined through staff_extlinks, producers_extlinks or releases_extlinks. schema:url is the inherited Thing.url fact; it is not an official-site claim, sameAs identity, cross-provider resolution, redirect equivalence, or an instruction to fetch. The table-level schema:sameAs label is a dictionary heading and supplies no identity authority. Unsupported site codes stay addressable source losses; site-specific identifiers are never guessed into URLs. VN work websites remain vn_extlinks. Bangumi identity remains the independent cited-provider bridge.
+        citations:
+          [
+            'https://schema.org/url',
+            'https://www.wikidata.org/wiki/Property:856',
+            'https://www.wikidata.org/wiki/Property:P856',
+          ]
   - name: image_votes
     type: wdt:P1352
     columns:
@@ -1834,7 +1936,7 @@ tables:
         reason: Related producer key used as the relation target.
       - name: relation
         status: omitted
-        reason: VNDB producers_relations.relation is source-specific technical or organizational metadata with no selected profile statement.
+        reason: The relation code is not an independent statement; par and sub select released wdt:P749 orientation, and other inventoried codes stay omitted.
         values: *id023
   - name: quotes
     type: schema:Quotation
@@ -1889,7 +1991,7 @@ tables:
         term: schema:datePublished
         'on': wd:Q20631656
         mapping: wdt:P577
-        meaning: Release publication date.
+        meaning: Year, month or day precision is retained. TBA and unknown remain distinct source states; absent dates and unadmitted states are reported as exact field gaps, never guessed calendar days.
         citations:
           [
             'https://schema.org/datePublished',
@@ -1910,8 +2012,16 @@ tables:
         term: wdt:P2899
         'on': wd:Q20631656
         mapping: wdt:P2899
-        meaning: Minimum age associated with the release's age rating, in years.
-        citations: ['https://www.wikidata.org/wiki/Property:P2899', 'https://api.vndb.org/kana#filters']
+        meaning: >-
+          Minimum age associated with the release's age rating, in years. Explicit values 0 through 18 are
+          years; 0 means all ages, and null or absent means unknown. Only canonical dump integers and API
+          integers are admitted; malformed, nonintegral and out-of-range values are withheld.
+        citations:
+          [
+            'https://www.wikidata.org/wiki/Property:P2899',
+            'https://api.vndb.org/kana#filters',
+            'https://api.vndb.org/nyan',
+          ]
       - name: ani_story
         status: omitted
         reason: Source animation quantity code is release-technical metadata.
@@ -2179,16 +2289,20 @@ tables:
         developer: wdt:P178
         publisher: schema:publisher
   - name: releases_supersedes
-    type: wdt:P155
+    type: rezics:releaseSupersedes
     columns:
       - name: id
         status: omitted
-        reason: Release key anchoring the supersession statement.
-      - name: rid
-        status: omitted
         reason: >-
-          This value links to another release, while the shared follows term targets creative works; the profile does not
-          represent this release-to-release relation.
+          Superseding Release subject key. Each row is directed from this release to the exact superseded release in rid.
+      - name: rid
+        status: existing
+        term: rezics:releaseSupersedes
+        'on': wd:Q20631656
+        mapping: rezics:releaseSupersedes
+        meaning: >-
+          Exact superseded software-release endpoint; the row's id is the current release that supersedes rid.
+        citations: *id046
   - name: releases_titles
     type: schema:name
     columns:
@@ -2237,8 +2351,9 @@ tables:
         status: existing
         term: wdt:P31
         'on': wd:Q20631656
+        qualifies: schema:exampleOfWork
         mapping: wdt:P31
-        meaning: Completeness class of this release-to-work link.
+        meaning: Completeness of this release for the linked work, as a Concept qualifier on the work association.
         citations: ['https://www.wikidata.org/wiki/Property:31', 'https://www.wikidata.org/wiki/Property:P31']
         values: *id032
   - name: rlists
@@ -2409,7 +2524,7 @@ tables:
         reason: User identifier is personal data and is excluded.
       - name: vote
         status: omitted
-        reason: User tag vote is a rating statistic.
+        reason: An individual user's tag vote, not the aggregate tags.rating from the Kana /vn API; never convert or average it into source weight.
       - name: spoiler
         status: proposed
         term: rezics:spoilerLevel
@@ -2591,13 +2706,13 @@ tables:
         values: *id017
       - name: c_votecount
         status: omitted
-        reason: Community vote count is a popularity statistic.
+        reason: Retained only as the count in the licensed VNDB source statistic with c_average, never as native votes.
       - name: c_rating
         status: omitted
-        reason: Community Bayesian rating is a vote statistic.
+        reason: Community Bayesian rating is omitted; the separate VNDB source statistic uses c_average and c_votecount.
       - name: c_average
         status: omitted
-        reason: Community vote average is a vote statistic.
+        reason: Retained only as the mean in the licensed VNDB source statistic with c_votecount, never as native votes.
       - name: c_length
         status: omitted
         reason: Community-estimated length is a vote statistic.
@@ -2608,8 +2723,12 @@ tables:
         status: omitted
         reason: VNDB length bucket is not a duration and cannot be mapped to schema:timeRequired.
       - name: devstatus
-        status: omitted
-        reason: Source development-status code has no selected profile property.
+        status: existing
+        term: schema:creativeWorkStatus
+        'on': wd:Q689445
+        value: skos:Concept
+        meaning: Exact VNDB development-status concept on the visual-novel work, distinct from release completeness.
+        citations: [https://schema.org/creativeWorkStatus, https://api.vndb.org/kana]
       - name: alias
         status: existing
         term: schema:alternateName

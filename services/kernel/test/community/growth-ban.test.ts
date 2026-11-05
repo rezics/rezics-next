@@ -20,6 +20,10 @@ import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
+import { withConnection } from '../../src/database/pool.ts';
+import currentBan from '../../src/community/ban-current.sql';
+import currentReadBan from '../../src/community/read-ban-current.sql';
 
 const issuer = 'https://realm-ban.auth.test';
 const audience = 'https://realm-ban.api.test';
@@ -54,12 +58,14 @@ function workerStream(stream: ReadableStream<Uint8Array> | number | undefined): 
 }
 
 /** Auth and the kernel worker each launch DBOS. The worker runs in its own process. */
-async function startKernelWorker(env: Record<string, string>): Promise<Bun.Subprocess> {
+async function startKernelWorker(env: Record<string, string | undefined>): Promise<Bun.Subprocess> {
   const childEnv: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (typeof value === 'string') childEnv[key] = value;
   }
-  Object.assign(childEnv, env);
+  for (const [key, value] of Object.entries(env)) {
+    if (typeof value === 'string') childEnv[key] = value;
+  }
   const child = Bun.spawn(['bun', 'src/worker.ts'], {
     cwd: resolve(import.meta.dir, '../..'),
     env: childEnv,
@@ -215,25 +221,15 @@ beforeAll(async () => {
   // Auth's current consent, served over HTTPS from this process: the worker restores initiators from it.
   const consentReader = createCurrentConsentReader({ database: authPool });
   consent = await startConsentServer(async (input) => (await consentReader.readCurrentConsent(input))?.scopes ?? null);
-  const workerEnv = {
+  const workerEnv = workerTestEnv({
     DATABASE_URL: url,
-    KERNEL_ROUTE_KEY: Buffer.from(routeKey).toString('base64url'),
-    KERNEL_SESSION_KEYS: `1:${Buffer.from(sessionKey).toString('base64url')}`,
-    AUTH_ISSUER: issuer,
-    AUTH_AUDIENCE: audience,
-    AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
     STRIPE_SECRET_KEY: 'sk_test_realm_ban_worker',
     STRIPE_MANAGED_PAYMENTS: 'false',
     CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
     CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
-    CONTENT_R2_ENDPOINT: `https://${'a'.repeat(32)}.r2.cloudflarestorage.com`,
-    CONTENT_R2_BUCKET: 'content-media',
-    CONTENT_R2_ACCESS_KEY_ID: 'private-access-id',
-    CONTENT_R2_SECRET_ACCESS_KEY: 'private-secret',
-    CONTENT_SOURCE_HOSTS: 'images.example.org',
     ...consent.env,
     OPENSEARCH_URL: '',
-  };
+  });
   worker = await startKernelWorker(workerEnv);
   work = await createWorkClient(url);
   kernel = createKernel({
@@ -576,6 +572,76 @@ test.serial(
         ),
       ),
     ).toEqual(new Set([listed.accountId, second.accountId]));
+  },
+  600_000,
+);
+
+test.serial(
+  'protected read and admission ban probes stay bounded as bans in one Realm grow',
+  async () => {
+    const route = 0x7160;
+    const realmId = newId(route);
+    const accountId = newId(route);
+    const absentId = newId(route);
+    const at = '2026-01-01T00:00:00.000Z';
+    await admin.query(
+      `INSERT INTO community.realm_ban (route,realm_id,account_id,valid,reason,actor,transaction_id)
+     VALUES ($1,$2,$3,'[2020-01-01,)','Probe',$3,$4)`,
+      [route, realmId, accountId, newId(route)],
+    );
+    const report = await checkGrowth(db, {
+      name: 'Protected Realm read and admission ban point read',
+      scales: [256, 1024, 4096],
+      bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+      async grow(_db, scale, previous) {
+        await seed(
+          db,
+          {
+            name: 'same-realm-bans',
+            hotPartition: partitionOf(route),
+            hotShare: 1,
+            rows: () => ({
+              'community.realm_ban': [
+                {
+                  route,
+                  realm_id: realmId,
+                  account_id: newId(route),
+                  valid: '[2020-01-01,)',
+                  reason: 'Neighbour',
+                  actor: accountId,
+                  transaction_id: newId(route),
+                },
+              ],
+            }),
+          },
+          { from: previous, to: scale },
+        );
+      },
+      async operation() {
+        await withConnection(db.pool, async (client) => {
+          expect(await currentBan.run(client, { route, realm_id: realmId, account_id: accountId, at })).toEqual({
+            banned: true,
+          });
+          expect(await currentBan.run(client, { route, realm_id: realmId, account_id: absentId, at })).toBeNull();
+          // The same protected-read statement checks both identities, regardless
+          // of which one is banned, without a query per grant or board.
+          for (const account_ids of [[accountId], [accountId, absentId], [absentId, accountId]]) {
+            expect(await currentReadBan.run(client, { route, realm_id: realmId, account_ids, at })).toEqual({
+              banned: true,
+            });
+          }
+          expect(
+            await currentReadBan.run(client, { route, realm_id: realmId, account_ids: [absentId, newId(route)], at }),
+          ).toBeNull();
+        });
+      },
+    });
+    expect(report.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
+    for (const { cost } of report.samples) {
+      expect(cost.statements).toBe(6);
+      expect(cost.rows).toBe(4);
+      for (const relation of Object.values(cost.relations ?? {})) expect(relation.sequentialScans).toBe(0);
+    }
   },
   600_000,
 );

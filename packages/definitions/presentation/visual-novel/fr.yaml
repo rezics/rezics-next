@@ -2,8 +2,37 @@ types:
   wd:Q689445: Visual novel
 properties:
   wdt:P144: basé sur
-  wdt:P156: suivi par
   wdt:P1889: à ne pas confondre avec
-  wdt:P2512: série dérivée
   wdt:P361: partie de
-  wdt:P4969: œuvre dérivée
+  rezics:spinOffOf: 'Dérivé de'
+inverseProperties:
+  wdt:P144: 'Adaptations'
+  wdt:P361: 'Parties'
+  rezics:spinOffOf: 'Œuvres dérivées'
+libraryProfiles:
+  visual-novel.reading:
+    states:
+      planned: 'Prévu'
+      in_progress: 'En cours'
+      completed: 'Terminé'
+      paused: 'En pause'
+      dropped: 'Abandonné'
+    units:
+      scalar_amount:
+        percent: 'pourcentage'
+    copyKinds:
+      physical: 'Physique'
+      digital: 'Numérique'
+    copyStatuses:
+      physical:
+        owned: 'Possédé'
+        disposed: 'Cédé'
+      digital:
+        owned: 'Possédé'
+typeDescriptions:
+  wd:Q689445: 'Un roman visuel en tant qu’œuvre, indépendant de ses éditions par langue ou plateforme ; personnages et équipe sont liés par les énoncés de l’œuvre.'
+propertyDescriptions:
+  wdt:P144: 'L’œuvre sur laquelle repose ce roman visuel ; identifie la source plutôt qu’un lien indéterminé entre médias.'
+  wdt:P1889: 'Un autre roman visuel dans le même univers ou la même continuité ; les deux restent des œuvres distinctes.'
+  wdt:P361: 'L’œuvre plus vaste contenant celle-ci, par exemple un récit principal ou une compilation.'
+  rezics:spinOffOf: 'L’œuvre d’origine dont dérive cette œuvre secondaire.'

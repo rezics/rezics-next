@@ -1,7 +1,23 @@
 types:
+  wd:Q2095: 食品
+  wd:Q2620972: 'ストーリー編'
   schema:Person: 人物
   schema:Organization: 組織
+  schema:SoftwareApplication: ソフトウェアアプリケーション
+  rezics:ReleaseGroup: 'リリースグループ'
+  schema:Place: '場所'
+  schema:AdministrativeArea: '行政区域'
+  schema:Event: 'イベント'
 properties:
+  rezics:penNameOf: '筆名の使用者'
+  wdt:P186: 材料
+  wdt:P1114: 数量
+  rezics:note: 注記
+  rezics:listSection: リストの区分
+  rezics:storyArc: 'ストーリー編'
+  rezics:firstPart: '開始話・章'
+  rezics:lastPart: '終了話・章'
+  wdt:P518: '対象の編'
   schema:url: URL
   schema:name: 名前
   schema:sameAs: 完全に一致
@@ -14,6 +30,11 @@ properties:
   schema:dateModified: 最終更新日
   schema:inLanguage: 言語
   schema:abstract: アブストラクト
+  wdt:P106: 職業
+  schema:knowsLanguage: 使用言語
+  wdt:P749: 親組織
+  wdt:P1365: 前身
+  wdt:P1366: 後継
   schema:image: 画像
   wdt:P648: Open Library識別子
   wdt:P5732: 番組計画主題識別子
@@ -34,4 +55,138 @@ properties:
   schema:character: '登場キャラクター'
   wdt:P179: 'シリーズ'
   rezics:spoilerLevel: 'ネタバレ度'
+  wdt:P3629: '登場時の年齢'
   schema:alternateName: 別名
+  rezics:representativeEdition: '代表版'
+  rezics:crossMediaCounterpart: '別メディアの関連作品'
+  rezics:summaryOf: '総集編の本編'
+  rezics:sideStoryOf: '外伝の本編'
+  rezics:sameCharacters: '同じキャラクター・別の物語'
+  rezics:sameSetting: '同じ世界観'
+  rezics:alternativeSetting: '異なる世界観'
+  rezics:alternativeVersion: '異なる描き方'
+  rezics:collaborationWith: 'キャラクターのコラボ'
+  rezics:bangumiRelatedTo: '関連（Bangumi）'
+  rezics:artbookCounterpart: '画集と関連作品'
+  rezics:editionCounterpart: '書籍の別バージョン'
+  rezics:bangumiLegacyVersion: '別バージョン（Bangumi旧コード）'
+  rezics:expansionCounterpart: '拡張版・本編ゲーム'
+  wdt:P4092: 'チェックサム'
+  wdt:P3575: 'ファイルサイズ'
+  rezics:hashAlgorithm: 'ハッシュアルゴリズム'
+  rezics:codec: 'コーデック'
+  rezics:fileQuality: 'ファイル品質'
+  rezics:releaseGroup: 'リリースグループ'
+  schema:containedInPlace: '所在場所'
+  schema:location: '場所'
+  schema:startDate: '開始日'
+  schema:endDate: '終了日'
+inverseProperties:
+  rezics:penNameOf: '筆名'
+  wdt:P186: 使用先
+  rezics:storyArc: 'この編を含む作品'
+  schema:author: '著作'
+  schema:illustrator: 'イラスト担当作品'
+  schema:director: '監督作品'
+  schema:musicBy: '作曲作品'
+  schema:producer: 'プロデュース作品'
+  schema:productionCompany: '制作作品'
+  wdt:P58: '脚本担当作品'
+  wdt:P178: '開発作品'
+  wdt:P725: '声の出演作品'
+  schema:contributor: '参加作品'
+  schema:character: '登場作品'
+  wdt:P179: 'シリーズの構成作品'
+  rezics:summaryOf: '総集編'
+  rezics:sideStoryOf: '外伝'
+  rezics:bangumiRelatedTo: '関連元（Bangumi）'
+  wdt:P749: 子組織
+  wdt:P1365: 後継
+  wdt:P1366: 前身
+
+  rezics:releaseGroup: 'このリリースグループのファイル'
+  schema:containedInPlace: '含まれる場所'
+propertyDescriptions:
+  rezics:penNameOf: 'この筆名または共同名義を使用する人物または組織。'
+  wdt:P186: '材料や構成要素として使う食品または調理済みのレシピ。数量やリスト内の順序を修飾できます。'
+  wdt:P1114: '文の対象となるものの分量。単位を付け、出典に範囲があれば下限と上限も記録します。'
+  rezics:note: 'この文についての言語付きの補足。材料の代用品などを記します。'
+  rezics:listSection: 'この項目が属するリストの節の見出し。ソース用などの名前を言語付きで記します。'
+  rezics:storyArc: 'この作品に属する物語の区間。修飾子で順序と最初・最後のエピソード番号や章番号を示します。'
+  rezics:firstPart: '区間の最初のエピソード番号または章番号。作品の番号表記をそのまま使います。'
+  rezics:lastPart: '区間の最後のエピソード番号または章番号。作品の番号表記をそのまま使います。'
+  wdt:P518: 'この出演やクレジットが対象とする物語の区間。'
+  schema:url: 'この対象を識別するURL。'
+  schema:name: '出典の題名や名前を言語付きテキストとして提案する文。表示ラベルへ自動で採用されるものではありません。'
+  schema:sameAs: '別のデータセットで同じ実体を表す正規URI。単に関連するページとは区別します。'
+  schema:birthDate: '明記された生年月日を、判明している精度で記録します。年のない誕生日を完全な生年月日にはしません。'
+  schema:deathDate: '明記された没年月日。出典の日付の精度を保ちます。'
+  schema:author: 'この作品や刊行物の著者としてクレジットされた人物または組織。'
+  schema:position: 'リスト内の1から始まる順序。1や2などを文字列として保存します。'
+  schema:datePublished: 'この作品やリリースの公表日。出典に示された日付の精度で記録します。'
+  schema:version: '出典レコードの改訂識別子。作品の編集版や刊行版を示す名前ではありません。'
+  schema:dateModified: '出典レコードが最後に更新された日付。作品の公表日とは別です。'
+  schema:inLanguage: 'enやjaなど、リソースの言語コード。画面の表示言語とは区別します。'
+  schema:abstract: '執筆された要約のドキュメント。通常は言語ごとに一つを用い、単なる文字列ではなくドキュメント値を指定します。'
+  wdt:P106: 'この人物の職業を示す概念。監督や作家など。作品クレジットはこの事実を供給しません。'
+  schema:knowsLanguage: 'この人物が知る言語を、採用済みの概念として記録します。会話能力でも、クレジットされた作品の言語でもありません。'
+  wdt:P749: 'この制作組織の親組織。文は子側に保存し、開始日・終了日と出典を付けられます。'
+  wdt:P1365: 'この制作組織が置き換える組織。値は前身です。単なる年代順の隣接点ではなく、方向のある交代です。'
+  wdt:P1366: 'この制作組織を置き換える組織。値は後継であり、前身の文とは独立した方向として保ちます。'
+  schema:image: '対象を描いたアップロード済みのメディア。外部画像のURLではなくメディア値を指定します。'
+  wdt:P648: 'OL45804W、OL7353617M、OL23919AなどのOpen Library識別子。ページのURLではありません。'
+  wdt:P5732: '123など、Bangumiの作品を表す数字の識別子。人物やキャラクターのIDとは別です。'
+  wdt:P6298: 'Bangumiの人物を表す数字の識別子。作品やキャラクターのIDとは区別します。'
+  wdt:P3180: 'v17、r123、p1、s1など、種別の接頭辞を含むVNDB識別子。URLではありません。'
+  schema:illustrator: 'この作品や刊行物の挿絵担当としてクレジットされた人物または組織。'
+  schema:director: 'この作品や刊行物の監督としてクレジットされた人物または組織。'
+  schema:musicBy: '音楽の作曲担当としてクレジットされた人物または組織。'
+  schema:producer: 'プロデュース担当としてクレジットされた人物または組織。'
+  schema:productionCompany: '制作会社としてクレジットされた人物または組織。'
+  wdt:P58: '脚本担当としてクレジットされた人物または組織。'
+  wdt:P178: '開発担当としてクレジットされた人物または組織。'
+  wdt:P725: '声の出演者。演じたキャラクターはキャラクター役の修飾子で示します。'
+  schema:contributor: 'その他の仕事でクレジットされた人物または組織。具体的な職務は詳細役割の概念で指定します。'
+  wdt:P1932: '出典で文の対象を呼んでいる表記。クレジット名などを原文どおりに記します。'
+  wdt:P3831: '具体的なスタッフの職務や登場時の役割を示す概念。自由記述のクレジット名とは区別します。'
+  wdt:P453: 'この声の出演で演じられた架空のキャラクター。'
+  schema:character: 'この作品に登場するキャラクター。役割、クレジット名、ネタバレ度、区間、年齢、典拠を修飾できます。'
+  wdt:P3629: 'この登場に限った年齢を0以上の年数（wd:Q577）で示します。出典全体の年齢はこの修飾子ではありません。'
+  wdt:P179: 'この項目が属するシリーズ。位置の修飾子でシリーズ内の番号を記録します。'
+  rezics:spoilerLevel: '単位のない整数で示す開示段階。0はネタバレなし、1は軽微、2は重大なネタバレです。'
+  schema:alternateName: '別題や別名を言語付きテキストで記録します。元の綴りと言語を保ちます。'
+  rezics:representativeEdition: '修飾された言語でこの作品を代表する版やリリース。言語ごとに一つを選びます。'
+  rezics:crossMediaCounterpart: '同じフランチャイズに属する別媒体の作品。この関連だけでは翻案の方向を示しません。'
+  rezics:summaryOf: 'この総集編や要約作品が内容をまとめた、元の物語作品全体。'
+  rezics:sideStoryOf: 'この補足的な外伝が属する本編の作品。'
+  rezics:sameCharacters: 'キャラクターを共有しつつ、独立した物語を描く作品。'
+  rezics:sameSetting: '世界や時間軸を共有し、主要人物が異なる作品。'
+  rezics:alternativeSetting: '同じ主要人物を別の世界や時間軸に置いた作品。'
+  rezics:alternativeVersion: '同じ世界とキャラクターで描く、別の語り方の作品。'
+  rezics:collaborationWith: 'キャラクターのクロスオーバーで結ばれた作品。ゲストや受け入れ先の作品はこの関連だけでは特定しません。'
+  rezics:bangumiRelatedTo: 'Bangumiが明示した「その他」の作品間関連。関係の種類を推測せず、その出典の主張を保持します。'
+  rezics:artbookCounterpart: '作品とその関連画集の組合せ。どちらが画集かはこの関連だけでは示しません。'
+  rezics:editionCounterpart: '書籍の別版や別バージョンを対称的に結ぶ関連。原版や作品から版への方向は示しません。'
+  rezics:bangumiLegacyVersion: '廃止されたBangumiのMain Versionコード4013に由来する対称的な版の関連。原版の方向は定めません。'
+  rezics:expansionCounterpart: '基本ゲームと追加作品を方向なしで結ぶ関連。拡張する側が明確なら、方向のある拡張関係を使います。'
+  wdt:P4092: 'チェックサムの正確な文字列です。ハッシュアルゴリズムは別に保存し、同じ値でもファイルを識別または統合しません。'
+  wdt:P3575: 'ソースが示したファイルサイズを、バイト単位の正確な十進数量で保存します。'
+  rezics:hashAlgorithm: 'チェックサムのアルゴリズムを示すソースコードをそのまま保存し、未知のコードも確認用に残します。'
+  rezics:codec: 'ソースが示したコーデックコードをそのまま保存し、未認識のコードも保持します。'
+  rezics:fileQuality: 'ソースが示した品質コードをそのまま保存し、未認識のコードも保持します。'
+  rezics:releaseGroup: 'このファイルに関連付けられた AniDB のソースグループです。刊行リリースや個人の所有物とは別に読めます。'
+  schema:containedInPlace: 'この場所を直接含む場所です。行政区域などを記録します。'
+  schema:location: 'このイベントが行われる場所です。イベントや個々の公演そのものを指すものではありません。'
+  schema:startDate: '対象期間の開始として情報源に示された日付です。精度と暦を保ちます。'
+  schema:endDate: '対象期間の終了として情報源に示された日付です。精度と暦を保ちます。'
+typeDescriptions:
+  wd:Q2095: '小麦粉などの食品や食用の物質。調理方法を記すレシピとは別の対象です。'
+  wd:Q2620972: '作品内のエピソードや章を順にまとめた、名前のある物語の区間。最初と最後の番号で範囲を示します。'
+  schema:Person: '著者など、カタログで識別される実在の人物。架空のキャラクターとは区別します。'
+  schema:Organization: '出版社や制作スタジオなどの組織、またはクレジットに記載された団体。'
+  schema:SoftwareApplication: '閲覧ツールなど、個別に識別できるアプリケーション。ゲーム作品とそのリリースには別の型があります。'
+
+  rezics:ReleaseGroup: 'AniDB が識別し、配布するファイルと関連付けるソースグループです。各ファイルや刊行リリースとは別の識別対象です。'
+  schema:Place: '地理上または建造物として特定できる場所です。そこで行われるイベントとは別の対象です。'
+  schema:AdministrativeArea: '場所として表す名称のある行政区域です。その区域内の会場とは別の対象です。'
+  schema:Event: '独自の識別対象となる期間の定まった出来事です。場所や参加者とは別に記録します。'

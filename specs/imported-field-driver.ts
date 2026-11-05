@@ -12,22 +12,50 @@ import type { DocumentSnapshot } from '../packages/document/src/types';
  * Fetch fixtures replace ONLY the external network boundary with real encoded bytes.
  */
 export type Persona = 'anonymous' | 'account' | 'importer' | 'governance';
-export interface Tuple { source: string; externalId: string; fieldGroup: string }
+export interface Tuple {
+  source: string;
+  externalId: string;
+  fieldGroup: string;
+}
 export interface Provenance extends Tuple {
-  recordRevision: string; digest: string; converterRevision: string; references: string[];
+  recordRevision: string;
+  digest: string;
+  converterRevision: string;
+  references: string[];
   rights: { spdx: string; obligations: string[]; attribution: string };
 }
-export interface Field extends Provenance { subjectId: string; document: DocumentSnapshot }
-export interface Reply { status: number; body: unknown }
+export interface Field extends Provenance {
+  subjectId: string;
+  document: DocumentSnapshot;
+}
+export interface Reply {
+  status: number;
+  body: unknown;
+}
 export interface Contribution {
-  id: string; revision: string; documentId: string; digest: string; bytes: Uint8Array;
-  provenance: Provenance; partition: number; transactionId: string;
+  id: string;
+  revision: string;
+  documentId: string;
+  digest: string;
+  bytes: Uint8Array;
+  provenance: Provenance;
+  partition: number;
+  transactionId: string;
   semantic: { documentId: string; digest: string; body: null; transactionId: string; adoption: 'proposal' };
 }
 export interface Media {
-  id: string; uploaderId: string; partition: number; state: 'available' | 'rejected';
-  transitions: string[]; bytes: Uint8Array; storedKeys: string[]; claimedAt: string | null;
-  role: 'cover'; credit: string; sourceLink: string; imageLicence: string | null;
+  id: string;
+  uploaderId: string;
+  partition: number;
+  state: 'available' | 'rejected';
+  transitions: string[];
+  bytes: Uint8Array;
+  storedKeys: string[];
+  claimedAt: string | null;
+  role: 'cover';
+  credit: string;
+  sourceLink: string;
+  imageLicence: string | null;
 }
 export interface Trace {
   writes: { partition: number; transactionId: string }[];
@@ -35,9 +63,20 @@ export interface Trace {
   fenceChecks: { tuple: Tuple; authoritativeTime: string; beforeReceiptAndBody: boolean }[];
   authorization: { action: string; anchor: string; at: string; allowed: boolean }[];
 }
-export interface ImageInput { sourceUrl: string; credit: string; provenance: Provenance }
-export type FetchCase = 'valid' | 'unallowed-host' | 'unsafe-redirect' | 'redirect-limit' |
-  'byte-limit' | 'timeout' | 'over-pixel' | 'malformed';
+export interface ImageInput {
+  sourceUrl: string;
+  credit: string;
+  provenance: Provenance;
+}
+export type FetchCase =
+  | 'valid'
+  | 'unallowed-host'
+  | 'unsafe-redirect'
+  | 'redirect-limit'
+  | 'byte-limit'
+  | 'timeout'
+  | 'over-pixel'
+  | 'malformed';
 export interface ImportedFieldDriver {
   readonly importerId: string;
   readonly platformResource: string;
@@ -77,16 +116,35 @@ export interface ImportedFieldDriver {
   rejectedImport(key: string): Promise<{ media: Media | null; storedKeys: string[]; pendingPurge: boolean }>;
   fetchEvidence(key: string): Promise<{ unallowedRequests: string[]; unsafeRequests: string[] }>;
   imageEvidence(key: string): Promise<{
-    sub: string; principalKind: string; websiteSession: boolean; tokenExchange: boolean;
-    scopes: string[]; sharpVersion: string; sharedPipeline: boolean; limitInputPixels: number;
+    sub: string;
+    principalKind: string;
+    websiteSession: boolean;
+    tokenExchange: boolean;
+    scopes: string[];
+    sharpVersion: string;
+    sharedPipeline: boolean;
+    limitInputPixels: number;
     decoded: { format: string; width: number; height: number; metadata: string[] };
     configuredCaps: { bytes: number; redirects: number; milliseconds: number };
-    fetches: string[]; clientActor: boolean;
+    fetches: string[];
+    clientActor: boolean;
   }>;
   /** Actual semantic proposal using AVAILABLE media ID, cover role and credit; no URL value. */
-  cover(as: Persona, mediaId: string, key: string, fault?: 'invalid-proposal' | 'before-commit' | 'non-cover-role'): Promise<Reply>;
-  coverReference(key: string): Promise<{ mediaId: string; role: string; credit: string; sourceLink: string;
-    partition: number; claimTransactionId: string; commandTransactionId: string }>;
+  cover(
+    as: Persona,
+    mediaId: string,
+    key: string,
+    fault?: 'invalid-proposal' | 'before-commit' | 'non-cover-role',
+  ): Promise<Reply>;
+  coverReference(key: string): Promise<{
+    mediaId: string;
+    role: string;
+    credit: string;
+    sourceLink: string;
+    partition: number;
+    claimTransactionId: string;
+    commandTransactionId: string;
+  }>;
   download(as: Persona, mediaId: string, ifNoneMatch?: string): Promise<Reply>;
   setContainer(mode: 'public' | 'private' | 'taken-down'): Promise<void>;
   rightsTakedown(mediaId: string, tuple: Tuple): Promise<void>;
@@ -104,10 +162,20 @@ export interface ImportedFieldDriver {
    * canned counts or mere self-reported pass. Return the harness's observed samples.
    */
   checkGrowth(input: { scales: [32, 256, 2048]; changedRows: [1, 4]; documentBytes: number }): Promise<{
-    harness: 'checkGrowth'; seedCalls: number[]; passed: boolean;
-    samples: { scale: number; changedRows: number; operation: 'hook' | 'fence' | 'reference' | 'import' | 'job';
-      rows: number; statements: number; buffers: number; documentBytes: number; imageBytes: number;
-      samePartition: boolean }[];
+    harness: 'checkGrowth';
+    seedCalls: number[];
+    passed: boolean;
+    samples: {
+      scale: number;
+      changedRows: number;
+      operation: 'hook' | 'fence' | 'reference' | 'import' | 'job';
+      rows: number;
+      statements: number;
+      buffers: number;
+      documentBytes: number;
+      imageBytes: number;
+      samePartition: boolean;
+    }[];
   }>;
   close(): Promise<void>;
 }

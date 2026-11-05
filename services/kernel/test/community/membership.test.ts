@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -881,7 +882,7 @@ test('a revoked, suspended or fenced initiator is denied at the workflow step wi
     {
       name: 'suspended',
       change: async (installed) => {
-        await admin.query("UPDATE access.account SET state = 'suspended' WHERE account_id = $1", [installed.memberId]);
+        await suspendAccount(admin, installed.memberId);
       },
     },
     {
@@ -960,6 +961,36 @@ test('a ban removal restores the moderator and needs their own realm:ban at the 
      VALUES ($1,$2,$3,'realm:ban','(,)',$3)`,
     [installed.route, installed.realmId, moderatorId],
   );
+  for (const role of ['community.realm.owner', 'community.realm.moderator']) {
+    const pending = await removal();
+    await admin.query(
+      `INSERT INTO access.resource_role_grant (route, resource_id, subject_id, grant_role, valid, transaction_id)
+       VALUES ($1,$2,$3,$4,'(,)',$3)`,
+      [installed.route, installed.realmId, installed.memberId, role],
+    );
+    await expect(removal()).rejects.toThrow('Remove the Realm owner or moderator role first');
+    await expect(runSealed(installed, pending)).rejects.toThrow('Membership workflow step failed: publish');
+    expect(await memberRows(installed.realmId, installed.memberId)).toEqual([{ open: true }]);
+    await admin.query('DELETE FROM access.resource_role_grant WHERE resource_id=$1 AND subject_id=$2', [
+      installed.realmId,
+      installed.memberId,
+    ]);
+  }
   expect(await runSealed(installed, await removal())).toMatchObject({ status: 'completed' });
   expect(await memberRows(installed.realmId, installed.memberId)).toEqual([{ open: false }]);
+}, 120_000);
+
+test('a join accepted before a ban cannot publish membership when delivered later or repeated', async () => {
+  const installed = await install(0x2390, 'public');
+  consent.set(installed.memberId, scopes);
+  const pending = await accept(installed, installed.memberId);
+  await admin.query(
+    `INSERT INTO community.realm_ban (route, realm_id, account_id, valid, reason, actor, transaction_id)
+     VALUES ($1,$2,$3,'(,)','Late ban',$4,$4)`,
+    [installed.route, installed.realmId, installed.memberId, installed.managerId],
+  );
+  for (let delivery = 0; delivery < 2; delivery++) {
+    await expect(runSealed(installed, pending)).rejects.toThrow('Membership workflow step failed: publish');
+    expect(await memberRows(installed.realmId, installed.memberId)).toEqual([]);
+  }
 }, 120_000);

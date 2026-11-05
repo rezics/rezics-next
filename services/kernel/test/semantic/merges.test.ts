@@ -7,10 +7,12 @@ import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { createRealAccess } from './real-access.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
+import { tupleRoute } from '../../src/content/imported-contract.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -30,6 +32,7 @@ const accounts = {
 };
 const actions = [
   'subject:create',
+  'subject:batch_write',
   'subject:read',
   'statement:propose',
   'context:accept',
@@ -39,6 +42,7 @@ const actions = [
 const realAccess = await createRealAccess(admin, accounts, actions);
 beforeAll(async () => {
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:create');
+  await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:batch_write');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'statement:propose');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:accept');
   await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'context:adopt');
@@ -51,6 +55,7 @@ const kernel = createKernel({
   pool,
   access: realAccess.access,
   tokens,
+  receiptKeys: testReceiptKeys(),
   routeKey: new Uint8Array(32).fill(4),
   writeRate: realAccess.writeRate,
 });
@@ -145,13 +150,17 @@ test('a merge redirects the larger id to the smallest with one revision in the r
   const token = key();
   const body = { subjects: [first.id, second.id] };
   const merged = await merge(body, { key: token });
-  expect(merged.response.status).toBe(200);
-  expect(merged.body).toEqual({ survivor: survivor.id, redirected: redirected.id, revision: 2 });
+  expect(merged.response.status).toBe(202);
+  expect(merged.body).toEqual({ operation: { id: expect.any(String) } });
+  expect(merged.response.headers.get('location')).toBe(`/v1/subjectIdentityOperations/${merged.body.operation.id}`);
   expect(realAccess.checks.at(-1)).toEqual({
     persona: 'acceptor',
     action: 'subject:merge',
     resource: { route: 0, id: GLOBAL_CONTEXT },
   });
+  const pending = await call('GET', `/v1/subjectIdentityOperations/${merged.body.operation.id}`, { as: 'acceptor' });
+  expect(pending.response.status).toBe(200);
+  expect(pending.body).toEqual({ operation: { id: merged.body.operation.id, done: false } });
   const redirect = await call('GET', `/v1/subjects/${redirected.id}?context=${GLOBAL_CONTEXT}`);
   expect(redirect.response.status).toBe(308);
   expect(redirect.response.headers.get('location')).toBe(`/v1/subjects/${survivor.id}?context=${GLOBAL_CONTEXT}`);
@@ -160,7 +169,13 @@ test('a merge redirects the larger id to the smallest with one revision in the r
   expect([plain.response.status, plain.response.headers.get('location')]).toEqual([308, `/v1/subjects/${survivor.id}`]);
   const read = await call('GET', `/v1/subjects/${book.id}`);
   expect(read.body.subject.statements).toEqual(book.statements);
-  expect(read.body.related[redirected.id]).toEqual({ redirect: survivor.id, labels: survivor.labels });
+  expect(read.body.related[redirected.id]).toEqual({
+    redirect: survivor.id,
+    labels: survivor.labels,
+    type: 'schema:Person',
+    types: ['schema:Person', 'schema:Thing'],
+    cover: null,
+  });
   expect(await revisions(survivor.id)).toEqual(survivorBefore);
   expect((await revisions(redirected.id)).map((row) => [row.revision, row.kind, row.route])).toEqual([
     [1, 'create', routeOf(redirected.id)],
@@ -188,7 +203,7 @@ test('merges are refused for redirected, identical, mismatched and unknown subje
     body: { statement: { ...statement('schema:url', 'https://www.aozora.gr.jp/'), references: [reference] } },
   });
   expect(proposal.response.status).toBe(201);
-  expect((await merge({ subjects: [survivor.id, redirected.id] })).response.status).toBe(200);
+  expect((await merge({ subjects: [survivor.id, redirected.id] })).response.status).toBe(202);
   const subjects = [survivor, redirected, third, book];
   const before = await Promise.all(subjects.map((subject) => revisions(subject.id)));
   for (const [pair, status, code] of [
@@ -260,7 +275,7 @@ test('the survivor gathers the links of the redirected subject, whose own links 
   expect((await links(soseki.id, 'editor')).links).toEqual(
     sorted([linkOf(kept, 'schema:author'), linkOf(gone, 'schema:author')]),
   );
-  expect((await merge({ subjects: [gone.id, kept.id] })).response.status).toBe(200);
+  expect((await merge({ subjects: [gone.id, kept.id] })).response.status).toBe(202);
   const later = await edition('Kokoro, Vintage', gone.id);
   expect(later.statements['schema:exampleOfWork'][0].value.content).toBe(gone.id);
   expect(await links(soseki.id, 'acceptor')).toEqual({
@@ -284,6 +299,9 @@ test('the survivor gathers the links of the redirected subject, whose own links 
   expect((await call('GET', `/v1/subjects/${later.id}`)).body.related[gone.id]).toEqual({
     redirect: kept.id,
     labels: kept.labels,
+    type: 'schema:Book',
+    types: ['schema:Book', 'schema:CreativeWork', 'schema:Thing'],
+    cover: null,
   });
 });
 
@@ -296,16 +314,12 @@ test('merging a survivor again repoints every redirect to the final survivor', a
   ];
   const book = await work('Kokoro', largest);
   expect((await links(largest.id, 'editor')).links).toEqual([linkOf(book, 'schema:author')]);
-  expect((await merge({ subjects: [largest.id, middle.id] })).body).toEqual({
-    survivor: middle.id,
-    redirected: largest.id,
-    revision: 2,
-  });
-  expect((await merge({ subjects: [middle.id, smallest.id] })).body).toEqual({
-    survivor: smallest.id,
-    redirected: middle.id,
-    revision: 2,
-  });
+  const firstMerge = await merge({ subjects: [largest.id, middle.id] });
+  expect(firstMerge.response.status).toBe(202);
+  expect(firstMerge.body).toEqual({ operation: { id: expect.any(String) } });
+  const secondMerge = await merge({ subjects: [middle.id, smallest.id] });
+  expect(secondMerge.response.status).toBe(202);
+  expect(secondMerge.body).toEqual({ operation: { id: expect.any(String) } });
   expect(await links(smallest.id, 'acceptor')).toEqual({
     links: [linkOf(book, 'schema:author')],
     freshness: fresh,
@@ -322,6 +336,9 @@ test('merging a survivor again repoints every redirect to the final survivor', a
   expect((await call('GET', `/v1/subjects/${book.id}`)).body.related[largest.id]).toEqual({
     redirect: smallest.id,
     labels: smallest.labels,
+    type: 'schema:Person',
+    types: ['schema:Person', 'schema:Thing'],
+    cover: null,
   });
   expect((await revisions(largest.id)).map((row) => row.kind)).toEqual(['create', 'merge']);
   const refused = await merge({ subjects: [largest.id, smallest.id] });
@@ -332,8 +349,198 @@ test('the kernel contract documents merges and redirects', () => {
   const paths = openApiDocument(kernel).paths;
   const operation = paths['/v1/subjects:merge']!.post!;
   expect(operation.operationId).toBe('subject.merge');
-  expect(Object.keys(operation.responses!).sort()).toEqual(['200', '400', '401', '403', '404', '409', '422', '503']);
+  expect(Object.keys(operation.responses!).sort()).toEqual(['202', '400', '401', '403', '404', '409', '422', '503']);
+  expect(paths['/v1/subjectIdentityOperations/{id}']!.get!.operationId).toBe('subject_identity_operation.get');
   for (const path of ['/v1/subjects/{id}', '/v1/subjects/{id}/links']) {
     expect([path, Object.keys(paths[path]!.get!.responses!)]).toEqual([path, expect.arrayContaining(['308'])]);
+  }
+});
+
+test('reviewed original Person GET and native merge preserve ordered evidence, stale refusal and authorized replay', async () => {
+  const routeKey = new Uint8Array(32).fill(4);
+  const number = String(Date.now());
+  const sources = [
+    { source: 'bangumi', externalId: `person:${number}` },
+    { source: 'vndb', externalId: '' },
+  ];
+  const partition = partitionOf(tupleRoute(routeKey, sources[0]!.source, sources[0]!.externalId));
+  // Derive actual co-resident tuple homes with the installed route key; never fabricate claims/routes.
+  for (let i = 1; i <= 100000; i++) {
+    const externalId = `s${number}${i}`;
+    if (partitionOf(tupleRoute(routeKey, 'vndb', externalId)) === partition) {
+      sources[1]!.externalId = externalId;
+      break;
+    }
+  }
+  expect(sources[1]!.externalId).not.toBe('');
+  const properties = ['wdt:P6298', 'wdt:P3180'];
+  const values = [number, sources[1]!.externalId];
+  const batch = await call('POST', '/v1/subjects:batchWrite', {
+    as: 'editor',
+    body: {
+      commands: sources.map((source, index) => ({
+        op: 'create',
+        key: randomUUID(),
+        source: {
+          source: source.source,
+          external_id: source.externalId,
+          record_revision: '1',
+          digest: 'c'.repeat(64),
+          converter_revision: 'review@1',
+          field_group: 'facts',
+        },
+        subject: {
+          type: 'schema:Person',
+          labels: { en: 'Reviewed Person' },
+          statements: { [properties[index]!]: [statement(properties[index]!, values[index])] },
+        },
+      })),
+    },
+  });
+  expect(batch.response.status).toBe(200);
+  expect(batch.body.results.map((result: any) => result.status)).toEqual([201, 201]);
+  const subjects = batch.body.results.map((result: any) => result.value.id) as [string, string];
+  const query = (index: number) =>
+    new URLSearchParams({
+      reviewIdentitySource: sources[index]!.source,
+      reviewIdentityExternalId: sources[index]!.externalId,
+      includeViewerActions: 'true',
+    });
+  const reads = await Promise.all(subjects.map((id, index) => call('GET', `/v1/subjects/${id}?${query(index)}`)));
+  for (const [index, read] of reads.entries()) {
+    expect(read.response.status).toBe(200);
+    expect(read.response.headers.get('cache-control')).toBe('private, no-store');
+    expect(read.body.reviewedIdentity).toEqual({
+      subject: subjects[index],
+      revision: 1,
+      securityRevision: expect.stringMatching(/^[1-9][0-9]*$/),
+      ...sources[index],
+      property: properties[index],
+      value: values[index],
+      claimTransactionId: expect.any(String),
+    });
+  }
+  for (const suffix of [
+    'reviewIdentitySource=bangumi',
+    'reviewIdentityExternalId=person:1',
+    'reviewIdentitySource=bangumi&reviewIdentityExternalId=person:01',
+  ])
+    expect((await call('GET', `/v1/subjects/${subjects[0]}?${suffix}`)).response.status).toBe(400);
+  const missing = await call(
+    'GET',
+    `/v1/subjects/${subjects[0]}?reviewIdentitySource=bangumi&reviewIdentityExternalId=person:1`,
+  );
+  expect(missing.body.reviewedIdentity).toBeNull();
+  const body = { subjects, expectedIdentity: { endpoints: reads.map((read) => read.body.reviewedIdentity) } };
+  const before = await Promise.all(subjects.map(revisions));
+  for (const field of ['revision', 'securityRevision', 'claimTransactionId'] as const) {
+    const stale = structuredClone(body);
+    stale.expectedIdentity.endpoints[0][field] =
+      field === 'revision' ? 2 : field === 'securityRevision' ? '9999999999999999999' : randomUUID();
+    expect((await merge(stale)).response.status).toBe(409);
+  }
+  const swapped = structuredClone(body);
+  swapped.expectedIdentity.endpoints.reverse();
+  expect((await merge(swapped)).response.status).toBe(400);
+  const extra = structuredClone(body);
+  extra.expectedIdentity.endpoints[0].grant = true;
+  expect((await merge(extra)).response.status).toBe(400);
+  expect(await Promise.all(subjects.map(revisions))).toEqual(before);
+  const token = key();
+  const result = await merge(body, { key: token });
+  expect(result.response.status).toBe(202);
+  expect(result.body).toEqual({ operation: { id: expect.any(String) } });
+  expect(result.response.headers.get('location')).toBe(`/v1/subjectIdentityOperations/${result.body.operation.id}`);
+  expect((await merge(body, { key: token })).body).toEqual(result.body);
+  expect((await merge({ subjects }, { key: token })).response.status).toBe(422);
+  const changed = structuredClone(body);
+  changed.expectedIdentity.endpoints[0].revision++;
+  expect((await merge(changed, { key: token })).response.status).toBe(422);
+  const [, redirectedId] = [...subjects].sort();
+  const redirectedIndex = subjects.indexOf(redirectedId!);
+  const redirected = await call('GET', `/v1/subjects/${subjects[redirectedIndex]}?${query(redirectedIndex)}`);
+  expect(redirected.response.status).toBe(308);
+  expect(redirected.body.reviewedIdentity).toBeUndefined();
+  const poll = await call('GET', `/v1/subjectIdentityOperations/${result.body.operation.id}`, { as: 'acceptor' });
+  expect(poll.response.status).toBe(200);
+  expect(poll.body.operation.id).toBe(result.body.operation.id);
+  expect(poll.body.operation.done).toBe(false);
+  await realAccess.revoke({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'subject:merge');
+  try {
+    expect((await merge(body, { key: token })).response.status).toBe(403);
+    const deniedPoll = await call('GET', `/v1/subjectIdentityOperations/${result.body.operation.id}`, {
+      as: 'acceptor',
+    });
+    expect(deniedPoll.response.status).toBe(404);
+  } finally {
+    await realAccess.grant({ route: 0, id: GLOBAL_CONTEXT }, 'acceptor', 'subject:merge');
+  }
+});
+
+test('reviewed Person merge refuses absent claims, wrong types, malformed selection and writes nothing', async () => {
+  const people = [await person('One'), await person('Two')];
+  const book = await work('Kokoro', people[0]!);
+  const before = await Promise.all([...people, book].map((subject) => revisions(subject.id)));
+  const absent = await merge({
+    subjects: [people[0]!.id, people[1]!.id],
+    expectedIdentity: {
+      endpoints: [
+        {
+          subject: people[0]!.id,
+          revision: 1,
+          securityRevision: '1',
+          source: 'bangumi',
+          externalId: 'person:1',
+          claimTransactionId: randomUUID(),
+          property: 'wdt:P6298',
+          value: '1',
+        },
+        {
+          subject: people[1]!.id,
+          revision: 1,
+          securityRevision: '1',
+          source: 'vndb',
+          externalId: 's1',
+          claimTransactionId: randomUUID(),
+          property: 'wdt:P3180',
+          value: 's1',
+        },
+      ],
+    },
+  });
+  expect([absent.response.status, absent.body.code]).toEqual([409, 'conflict']);
+  const wrongType = await merge({ subjects: [people[0]!.id, book.id] });
+  expect([wrongType.response.status, wrongType.body.code]).toEqual([409, 'conflict']);
+  const malformed = await merge({
+    subjects: [people[0]!.id, people[1]!.id],
+    expectedIdentity: { endpoints: [{ subject: people[0]!.id }, { subject: people[1]!.id }] },
+  });
+  expect(malformed.response.status).toBe(400);
+  expect(await Promise.all([...people, book].map((subject) => revisions(subject.id)))).toEqual(before);
+});
+
+test('a held subject lock times out competing merge and leaves no effect until release', async () => {
+  const people = [await person('Lock A'), await person('Lock B')].sort(byId) as [
+    Record<string, any>,
+    Record<string, any>,
+  ];
+  const held = await admin.connect();
+  let open = true;
+  try {
+    await held.query('BEGIN');
+    await held.query('SET LOCAL lock_timeout = 200');
+    await held.query('SELECT subject_id FROM semantic.subject WHERE subject_id = $1 FOR UPDATE', [people[1]!.id]);
+    const started = Date.now();
+    const blocked = await merge({ subjects: [people[0]!.id, people[1]!.id] });
+    expect(Date.now() - started).toBeGreaterThanOrEqual(150);
+    expect(blocked.response.status).toBe(503);
+    expect(await revisions(people[1]!.id)).toEqual(expect.arrayContaining([expect.objectContaining({ revision: 1 })]));
+    await held.query('ROLLBACK');
+    open = false;
+    expect((await merge({ subjects: [people[0]!.id, people[1]!.id] })).response.status).toBe(202);
+    expect((await revisions(people[1]!.id)).map((row) => row.kind)).toEqual(['create', 'merge']);
+  } finally {
+    if (open) await held.query('ROLLBACK');
+    held.release();
   }
 });

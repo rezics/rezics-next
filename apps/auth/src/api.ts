@@ -1,19 +1,77 @@
 import { m } from './paraglide/messages.js';
+import { readJsonBounded } from './private-auth-json';
 
 export const RECOVERY_COMPLETE_NOTICE_KEY = 'auth.recovery.complete';
+// Match Auth's existing five-second issuer transport bound, including JSON consumption.
+export const AUTH_POST_TIMEOUT_MS = 5000;
 
 export type AuthPostResult<Body = unknown> =
   | { ok: true; body: Body }
-  | { ok: false; status: number; code: string; retryAfter: string | null };
+  | { ok: false; status: number; code: string; retryAfter: string | null; effectStatus?: 'not_applied' };
+
+export type BoundedAuthPostResult =
+  | { ok: true; body: unknown }
+  | { ok: false; status: number; body: unknown; retryAfter: string | null };
+
+/** One finite command reply, including headers and body, within the existing POST lifetime. */
+export async function authPostBounded(
+  path: string,
+  body: unknown,
+  maxBytes: number,
+  caller?: AbortSignal,
+): Promise<BoundedAuthPostResult> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancel: () => void = () => {};
+  const cancelled = new Promise<BoundedAuthPostResult>((resolve) => {
+    cancel = () => {
+      controller.abort(caller?.reason);
+      resolve({ ok: false, status: 503, body: null, retryAfter: null });
+    };
+  });
+  if (caller?.aborted) cancel();
+  else caller?.addEventListener('abort', cancel, { once: true });
+  const deadline = new Promise<BoundedAuthPostResult>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve({ ok: false, status: 503, body: null, retryAfter: null });
+    }, AUTH_POST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([postBounded(path, body, maxBytes, controller.signal), deadline, cancelled]);
+  } finally {
+    clearTimeout(timer);
+    caller?.removeEventListener('abort', cancel);
+  }
+}
 
 export async function authPost<Body = unknown>(path: string, body: unknown): Promise<AuthPostResult<Body>> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<AuthPostResult<Body>>((resolve) => {
+    timer = setTimeout(() => {
+      // Settle waiting even if the transport does not honour abort. Native work may still finish.
+      resolve({ ok: false, status: 503, code: 'timeout', retryAfter: null });
+      controller.abort();
+    }, AUTH_POST_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([post<Body>(path, body, controller.signal), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function post<Body>(path: string, body: unknown, signal: AbortSignal): Promise<AuthPostResult<Body>> {
   try {
     const response = await fetch(path, {
       method: 'POST',
       credentials: 'same-origin',
       redirect: 'error',
+      cache: 'no-store',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal,
     });
     if (response.status === 200) return { ok: true, body: (await response.json()) as Body };
 
@@ -26,15 +84,53 @@ export async function authPost<Body = unknown>(path: string, body: unknown): Pro
             ? errorBody.error
             : ''
         : '';
+    const effectStatus =
+      errorBody &&
+      typeof errorBody === 'object' &&
+      'effect_status' in errorBody &&
+      errorBody.effect_status === 'not_applied'
+        ? 'not_applied'
+        : undefined;
     const header = response.headers.get('Retry-After');
     return {
       ok: false,
       status: response.status,
       code: errorCode,
       retryAfter: header && /^\d+$/.test(header) ? header : null,
+      ...(effectStatus ? { effectStatus } : {}),
     };
   } catch {
     return { ok: false, status: 503, code: 'unavailable', retryAfter: null };
+  }
+}
+
+async function postBounded(
+  path: string,
+  body: unknown,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<BoundedAuthPostResult> {
+  try {
+    const response = await fetch(path, {
+      method: 'POST',
+      credentials: 'same-origin',
+      redirect: 'error',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    });
+    const responseBody = await readJsonBounded(response, maxBytes, signal);
+    if (response.status === 200) return { ok: true, body: responseBody };
+    const header = response.headers.get('Retry-After');
+    return {
+      ok: false,
+      status: response.status,
+      body: responseBody,
+      retryAfter: header && /^\d+$/.test(header) ? header : null,
+    };
+  } catch {
+    return { ok: false, status: 503, body: null, retryAfter: null };
   }
 }
 

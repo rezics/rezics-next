@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -11,29 +12,39 @@ import { takedownMedia } from './media-moderation.ts';
 import type { ModerationDependencies } from './moderation.ts';
 import type { sourceFenceGovernanceRoutes } from './source-fence-governance-routes.ts';
 
-const body = strictContentSchema(
-  t.Object(
-    {
-      reason: t.String({ minLength: 1, maxLength: 1024 }),
-    },
-    { additionalProperties: false },
-  ),
-);
+function body() {
+  return memoizedValue(body, () =>
+    strictContentSchema(
+      t.Object(
+        {
+          reason: t.String({ minLength: 1, maxLength: 1024 }),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  );
+}
 export interface MediaTakedownResponse {
   readonly securityRevision: string;
 }
 
-const response = strictContentSchema(
-  t.Unsafe<MediaTakedownResponse>(
-    t.Object(
-      {
-        securityRevision: t.String({ pattern: '^[1-9][0-9]*$' }),
-      },
-      { additionalProperties: false },
+function response() {
+  return memoizedValue(response, () =>
+    strictContentSchema(
+      t.Unsafe<MediaTakedownResponse>(
+        t.Object(
+          {
+            securityRevision: t.String({ pattern: '^[1-9][0-9]*$' }),
+          },
+          { additionalProperties: false },
+        ),
+      ),
     ),
-  ),
-);
-const writeRate = defineRateLimit({ family: 'write', units: 1 });
+  );
+}
+function writeRate() {
+  return memoizedValue(writeRate, () => defineRateLimit({ family: 'write', units: 1 }));
+}
 
 /** Bounded transport into the exact native media command, O(A + log M).
  * Authorization and receipt replay belong to that command. It retains bytes for
@@ -91,9 +102,9 @@ export function mediaModerationRoutes(
         if (oversized.delete(request)) throw new ProblemError('content_too_large');
       },
       headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
-      body,
+      body: body(),
       response: {
-        200: withHeaders(response, { [SESSION_HEADER]: t.String(), 'cache-control': t.String() }),
+        200: withHeaders(response(), { [SESSION_HEADER]: t.String(), 'cache-control': t.String() }),
         400: problemSchema('invalid_request'),
         401: problemSchema('authentication_required', 'invalid_credentials'),
         403: problemSchema('forbidden'),
@@ -115,7 +126,7 @@ export function mediaModerationRoutes(
         operationId: 'media.takedown',
         'x-exposure': 'public',
         'x-action': 'moderation:takedown',
-        'x-rate-limit': writeRate,
+        'x-rate-limit': writeRate(),
         security: [{ bearerAuth: [] }],
       },
     },

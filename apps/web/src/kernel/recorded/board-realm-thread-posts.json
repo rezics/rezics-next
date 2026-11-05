@@ -1,0 +1,77 @@
+{
+  "posts": [
+    {
+      "id": "01a17ce8-2850-71fd-a965-456770eeb71b",
+      "threadId": "01a17ce8-2850-71fc-a89f-4567d66fb443",
+      "route": 17767,
+      "authorId": "01a17ce6-e011-7711-aefd-74fbf0a3eaa9",
+      "parentId": null,
+      "licence": "MIT",
+      "subjectIds": [],
+      "boardId": "01a17ce8-284e-719b-a9ea-69f9a6a873b5",
+      "visibility": "published",
+      "securityRevision": "1",
+      "createdAt": "2026-10-24T00:00:00.000Z",
+      "revisedAt": "2026-10-27T10:29:11.888Z",
+      "mediaIds": [],
+      "voteCitation": null,
+      "revisionId": "01a17ce8-2850-71fe-874d-456738b8034a",
+      "body": {
+        "doc": {
+          "content": [
+            {
+              "attrs": { "dir": null, "id": "edition-question", "lang": null, "textAlign": null },
+              "content": [
+                { "text": "I have never read it. Is there an edition you would start with?", "type": "text" }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "profile": "blocks",
+        "version": "rezics-document-v1"
+      },
+      "sha256": "202316b9a3a19fc38e62d7a33eebc80e95f18c2a1f2dbd1dbd3228cafdc5bec1",
+      "availability": "available",
+      "reactions": {}
+    },
+    {
+      "id": "01a17ce8-2850-71ff-b66a-45671309837c",
+      "threadId": "01a17ce8-2850-71fc-a89f-4567d66fb443",
+      "route": 17767,
+      "authorId": "01a17ce6-e011-7711-aefd-74fbf0a3eaa9",
+      "parentId": "01a17ce8-2850-71fd-a965-456770eeb71b",
+      "licence": "MIT",
+      "subjectIds": [],
+      "boardId": "01a17ce8-284e-719b-a9ea-69f9a6a873b5",
+      "visibility": "published",
+      "securityRevision": "1",
+      "createdAt": "2026-10-24T00:01:00.000Z",
+      "revisedAt": "2026-10-27T10:29:11.888Z",
+      "mediaIds": [],
+      "voteCitation": null,
+      "revisionId": "01a17ce8-2850-7200-ab05-45672c7ef08b",
+      "body": {
+        "doc": {
+          "content": [
+            {
+              "attrs": { "dir": null, "id": "edition-answer", "lang": null, "textAlign": null },
+              "content": [{ "text": "Start with the one you can find; they all have the fox.", "type": "text" }],
+              "type": "paragraph"
+            }
+          ],
+          "type": "doc"
+        },
+        "profile": "blocks",
+        "version": "rezics-document-v1"
+      },
+      "sha256": "327277d188c6b0c99cb12c49d83aa06b6b3d39c0fb9077abd5b0099dba9ce7c8",
+      "availability": "available",
+      "reactions": {}
+    }
+  ],
+  "next": null,
+  "reactionsAsOf": null,
+  "status": 200
+}

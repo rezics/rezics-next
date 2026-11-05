@@ -75,6 +75,8 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
       'access.governance_bootstrap',
       'access.resource_role_grant',
       'access.resource_grant',
+      'access.operator_fence_page',
+      'access.committed_continuation',
       'access.account',
       'core.receipt',
       'core.outbox',
@@ -87,16 +89,64 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
       "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES (4660,$1,'actor','active',$3),(9029,$2,'actor','active',$3)",
       [person, other, transaction],
     );
-    // Warm only native transport/schema metadata; measured CLI processes stay cold.
+    // Establish the installation no-op and refusal replay against. First-install
+    // clears it again. Measured CLI processes stay one cold child per scale.
     await bootstrapGovernance(db.pool, person);
     if (mode === 'first') await clearInstallation();
     const children: GrowthSample[] = [];
+    // Same in-process statements as the measured call. Clearing around a first
+    // install keeps that probe fresh; the child CLI is not part of this warm-up.
+    const native = async (database: GrowthDatabase) => {
+      if (mode === 'first') await clearInstallation();
+      const id = mode === 'refusal' ? other : person;
+      if (mode === 'refusal') await expect(bootstrapGovernance(database.pool, id)).rejects.toThrow();
+      else expect((await bootstrapGovernance(database.pool, id)).replayed).toBe(mode === 'no-op');
+      if (mode === 'first') await clearInstallation();
+    };
     const report = await checkGrowth(db, {
       name: `governance bootstrap ${mode}`,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       repetitions: 1,
-      warmups: 1,
+      warmup: native,
       async grow(database, scale, previous) {
+        // Fixed unrelated rows, present at every scale, so the smallest sample is
+        // already past the sequential-scan crossover. Scale growth stays 500 per unit.
+        if (previous === 0) {
+          const background = Array.from({ length: 4000 }, () => newId(0));
+          const backgroundTransaction = newId(0);
+          await database.admin.query(
+            `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+            SELECT 0,id,'actor','active',$2 FROM unnest($1::uuid[]) id`,
+            [background, backgroundTransaction],
+          );
+          await database.admin.query(
+            `INSERT INTO semantic.context(route,context_id,kind,labels)
+            SELECT 0,id,'community','{}' FROM unnest($1::uuid[]) id`,
+            [background],
+          );
+          await database.admin.query(
+            `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
+            SELECT 0,id,id,'unrelated.reader','(,)',$2 FROM unnest($1::uuid[]) id`,
+            [background, backgroundTransaction],
+          );
+          await database.admin.query(
+            `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+            SELECT 0,id,id,'subject:read','(,)',$2 FROM unnest($1::uuid[]) id`,
+            [background, backgroundTransaction],
+          );
+          await database.admin.query(
+            `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+            SELECT 0,'account',id,'unrelated.command',id::text,$2,1,1,$3,'{}'
+            FROM unnest($1::uuid[]) id`,
+            [background, Buffer.alloc(32), backgroundTransaction],
+          );
+          await database.admin.query(
+            `INSERT INTO core.outbox(partition_no,position,event_seq,event_count,epoch,id,type,data)
+            SELECT 0,2000000+n,0,1,1,id,'com.rezics.subject.created.v1',jsonb_build_object('id',id)
+            FROM unnest($1::uuid[]) WITH ORDINALITY a(id,n)`,
+            [background],
+          );
+        }
         const ids = Array.from({ length: (scale - previous) * 500 }, () => newId(0));
         await database.admin.query(
           `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
@@ -139,14 +189,11 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
           'core.outbox',
           'semantic.context',
         ])
-          await database.admin.query(`ANALYZE ${table}`);
+          await database.admin.query(`VACUUM (ANALYZE) ${table}`);
       },
-      async operation(database, scale, repetition) {
-        if (mode === 'first') await clearInstallation();
+      async operation(database, scale) {
+        await native(database);
         const id = mode === 'refusal' ? other : person;
-        if (mode === 'refusal') await expect(bootstrapGovernance(database.pool, id)).rejects.toThrow();
-        else expect((await bootstrapGovernance(database.pool, id)).replayed).toBe(mode === 'no-op');
-        if (mode === 'first') await clearInstallation();
         const output = resolve(directory, `capture-${mode}-${scale}.json`);
         const child = Bun.spawn(['bun', 'services/kernel/scripts/bootstrap-governance.ts', '--account', id], {
           cwd: root,
@@ -167,8 +214,7 @@ for (const mode of ['first', 'no-op', 'refusal'] as const) {
         const cost = costOf(raw);
         expect(cost.statements, stderr).toBeGreaterThan(0);
         expect(cost.plans).toBeGreaterThan(0);
-        // One warm-up precedes the one measured run at each scale.
-        if (repetition % 2 === 1) children.push({ scale, cost });
+        children.push({ scale, cost });
         const state = await database.admin.query(
           `SELECT
           (SELECT count(*)::int FROM access.governance_bootstrap WHERE route=0 AND resource_id=$1) markers,

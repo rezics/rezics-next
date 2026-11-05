@@ -22,6 +22,7 @@ SELECT
   outbox.type,
   outbox.subject,
   outbox.data,
+  outbox.payload_state,
   to_char(outbox.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS time
 FROM head
 CROSS JOIN input

@@ -1,17 +1,21 @@
 import type { ReactNode, Ref } from 'react';
-import { useState } from 'react';
-import { EllipsisIcon, FlagIcon, LinkIcon, PencilIcon, Trash2Icon } from 'lucide-react';
-import { Button } from './button.tsx';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { EllipsisIcon, LoaderCircleIcon } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
+  AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-} from './alert-dialog.tsx';
-import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from './menu.tsx';
+  AlertDialogTitle,
+} from '@rezics/ui/shadcn/alert-dialog';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Menu, type MenuEntry } from './menu.tsx';
 import { ReportDialog, type ReportDialogLabels, type ReportSubmission } from './report-dialog.tsx';
+
+const useClientLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 export const contentActionsLabels = {
   moreActions: 'More actions',
@@ -32,6 +36,7 @@ interface ContentActionsCommonProps {
   onCopyLink: () => void | Promise<void>;
   labels?: Partial<ContentActionsLabels>;
   triggerRef?: Ref<HTMLButtonElement>;
+  extraEntries?: MenuEntry[];
 }
 
 export interface OwnerContentActionsProps extends ContentActionsCommonProps {
@@ -50,97 +55,174 @@ export interface OtherContentActionsProps extends ContentActionsCommonProps {
   verification?: ReactNode;
   maxDetails?: number;
   reportLabels?: Partial<ReportDialogLabels>;
+  /** Supply `reportOpen` and this callback when the host owns the dialog's open state. */
+  reportOpen?: boolean;
+  onReportOpenChange?: (open: boolean) => void;
 }
 
 export type ContentActionsProps = OwnerContentActionsProps | OtherContentActionsProps;
 
-/** The owner sees editing and deletion actions; everyone else can report the content. */
+/**
+ * The overflow menu of a piece of content. It composes the shared `Menu`, `alert-dialog` for confirming deletion,
+ * and the report dialog. The owner sees editing and deletion actions;
+ * everyone else can report the content, so reporting never needs a visible button.
+ */
 export function ContentActions(props: ContentActionsProps) {
-  const [reportOpen, setReportOpen] = useState(false);
+  const [internalReportOpen, setInternalReportOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
   const [deleteFailure, setDeleteFailure] = useState('');
   const labels = { ...contentActionsLabels, ...props.labels };
+  const reportOpen = props.ownsContent === false ? (props.reportOpen ?? internalReportOpen) : false;
+  const deleteAvailable = props.ownsContent === true && Boolean(props.onDelete);
+  const deleteIncarnation = useRef(0);
+  const deleteMounted = useRef(false);
+  const deleteOpenRef = useRef(deleteOpen);
+  const deleteAvailableRef = useRef(deleteAvailable);
+  const deletePendingRef = useRef(false);
+  const deleteOperationRef = useRef<object | null>(null);
+  const deleteFailureLabelRef = useRef(labels.deleteFailure);
+
+  useClientLayoutEffect(() => {
+    deleteFailureLabelRef.current = labels.deleteFailure;
+  });
+
+  useClientLayoutEffect(() => {
+    deleteMounted.current = true;
+    deleteOpenRef.current = deleteOpen;
+    deleteAvailableRef.current = deleteAvailable;
+    deleteIncarnation.current += 1;
+    deleteOperationRef.current = null;
+    deletePendingRef.current = false;
+
+    if (!deleteAvailable) {
+      setDeleteOpen(false);
+      setDeletePending(false);
+      setDeleteFailure('');
+    }
+
+    return () => {
+      deleteMounted.current = false;
+      deleteOpenRef.current = false;
+      deleteIncarnation.current += 1;
+      deleteOperationRef.current = null;
+      deletePendingRef.current = false;
+    };
+  }, [deleteAvailable, deleteOpen]);
+
+  const changeReportOpen = (open: boolean) => {
+    if (props.ownsContent !== false) return;
+    if (props.reportOpen === undefined) setInternalReportOpen(open);
+    props.onReportOpenChange?.(open);
+  };
 
   const confirmDelete = async () => {
-    if (props.ownsContent !== true || !props.onDelete || deletePending) return;
+    if (
+      props.ownsContent !== true ||
+      !props.onDelete ||
+      !deleteMounted.current ||
+      !deleteAvailableRef.current ||
+      !deleteOpenRef.current ||
+      deletePendingRef.current
+    )
+      return;
 
+    const onDelete = props.onDelete;
+    const operation = {};
+    const operationIncarnation = deleteIncarnation.current;
+    deleteOperationRef.current = operation;
+    deletePendingRef.current = true;
     setDeletePending(true);
     setDeleteFailure('');
+    const isCurrent = () =>
+      deleteMounted.current &&
+      deleteAvailableRef.current &&
+      deleteOpenRef.current &&
+      deleteIncarnation.current === operationIncarnation &&
+      deleteOperationRef.current === operation;
+
     try {
-      await props.onDelete();
+      await onDelete();
+      if (!isCurrent()) return;
       setDeleteOpen(false);
     } catch (error) {
+      if (!isCurrent()) return;
       const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-      setDeleteFailure(message || labels.deleteFailure);
+      setDeleteFailure(message || deleteFailureLabelRef.current);
     } finally {
-      setDeletePending(false);
+      if (isCurrent()) {
+        deleteOperationRef.current = null;
+        deletePendingRef.current = false;
+        setDeletePending(false);
+      }
     }
   };
 
   return (
     <>
-      <Menu>
-        <MenuTrigger asChild>
+      <Menu
+        title={labels.moreActions}
+        backLabel={labels.cancel}
+        trigger={
           <Button aria-label={labels.moreActions} ref={props.triggerRef} size="icon-sm" variant="ghost">
             <EllipsisIcon aria-hidden="true" />
           </Button>
-        </MenuTrigger>
-        <MenuContent>
-          <MenuItem onClick={props.onCopyLink} value="copy-link">
-            <LinkIcon aria-hidden="true" />
-            {labels.copyLink}
-          </MenuItem>
-          {props.ownsContent ? (
-            <>
-              <MenuItem onClick={props.onEdit} value="edit">
-                <PencilIcon aria-hidden="true" />
-                {labels.edit}
-              </MenuItem>
-              {props.onDelete ? (
-                <>
-                  <MenuSeparator />
-                  <MenuItem onClick={() => setDeleteOpen(true)} value="delete">
-                    <Trash2Icon aria-hidden="true" />
-                    {labels.delete}
-                  </MenuItem>
-                </>
-              ) : null}
-            </>
-          ) : (
-            <MenuItem onClick={() => setReportOpen(true)} value="report">
-              <FlagIcon aria-hidden="true" />
-              {labels.report}
-            </MenuItem>
-          )}
-        </MenuContent>
-      </Menu>
+        }
+        entries={[
+          { type: 'item', label: `${labels.copyLink}`, onSelect: props.onCopyLink },
+          ...(props.extraEntries?.length ? [...props.extraEntries, { type: 'separator' as const }] : []),
+          ...(props.ownsContent
+            ? [{ type: 'item' as const, label: labels.edit, onSelect: props.onEdit }]
+            : [{ type: 'item' as const, label: labels.report, onSelect: () => changeReportOpen(true) }]),
+          ...(props.ownsContent && props.onDelete
+            ? [
+                { type: 'separator' as const },
+                {
+                  type: 'destructive' as const,
+                  label: labels.delete,
+                  onSelect: () => {
+                    setDeleteFailure('');
+                    setDeleteOpen(true);
+                  },
+                },
+              ]
+            : []),
+        ]}
+      />
 
       {props.ownsContent ? (
         props.onDelete ? (
           <AlertDialog
-            onOpenChange={({ open }) => {
+            onOpenChange={(open, details) => {
+              // A deletion in flight finishes before the dialog may close.
+              if (!open && deletePendingRef.current) {
+                details.cancel();
+                return;
+              }
               setDeleteOpen(open);
               if (!open) setDeleteFailure('');
             }}
             open={deleteOpen}
-            pending={deletePending}
           >
             <AlertDialogContent size="sm">
-              <AlertDialogHeader description={labels.deleteDescription} title={labels.deleteTitle} />
+              <AlertDialogHeader>
+                <AlertDialogTitle>{labels.deleteTitle}</AlertDialogTitle>
+                <AlertDialogDescription>{labels.deleteDescription}</AlertDialogDescription>
+              </AlertDialogHeader>
               {deleteFailure ? (
-                <p className="px-6 text-sm" role="alert">
+                <p className="text-destructive text-sm" role="alert">
                   {deleteFailure}
                 </p>
               ) : null}
               <AlertDialogFooter>
                 <AlertDialogCancel disabled={deletePending}>{labels.cancel}</AlertDialogCancel>
                 <AlertDialogAction
+                  aria-busy={deletePending}
                   disabled={deletePending}
-                  isLoading={deletePending}
                   onClick={confirmDelete}
                   variant="destructive"
                 >
+                  {deletePending ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : null}
                   {labels.confirmDelete}
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -150,7 +232,7 @@ export function ContentActions(props: ContentActionsProps) {
       ) : (
         <ReportDialog
           {...(props.maxDetails === undefined ? {} : { maxDetails: props.maxDetails })}
-          onOpenChange={setReportOpen}
+          onOpenChange={changeReportOpen}
           onSubmit={props.onReport}
           open={reportOpen}
           verified={props.verified}

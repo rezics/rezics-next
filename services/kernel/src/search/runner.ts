@@ -1,16 +1,47 @@
+import { createReviewDiscoveryReceiving } from './review-discovery-receiving.ts';
+import type { ReviewDiscoverySource } from '../content/index.ts';
+import { withConnection } from '../database/pool.ts';
+import { readErasureStatus, resolveLateErasureItem } from '../access/erasure.ts';
+import {
+  nativeDiscoveryRegistry,
+  createDiscoveryProjection,
+  registerRetiredErasure,
+  copyLocator,
+} from './account-discovery.ts';
+import {
+  advanceDiscovery,
+  discoveryGenerations,
+  discoveryConsumer,
+  DiscoveryProducerCoverageError,
+  type DiscoveryGeneration,
+} from './generations.ts';
+import { createDiscoveryIndexer } from './indexer.ts';
+import { CollectionDiscoveryReadinessError } from './collection-discovery.ts';
+import { resolveDiscoveryOwnerAdapters } from './discovery-owner-registry.ts';
+import { discoveryIndexName, discoveryIndexUuid } from './indices.ts';
+import type { PublicPreparation } from './public-preparation.ts';
 import type { Pool } from 'pg';
 import { startRelays } from '../events/relays.ts';
-import { OpenSearchError, type OpenSearch } from './opensearch.ts';
+import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
 import retire from './retire.sql';
-import { createSubjectIndex, subjectGenerations, subjectIndexName, subjectAlias } from './indices.ts';
+import {
+  createSubjectIndex,
+  ensureSubjectActivationMetadata,
+  ensureSubjectRatingMapping,
+  observedWrite,
+  readSubjectCalendarMappingFormat,
+  readSubjectActivationTime,
+  subjectGenerations,
+  subjectIndexName,
+  subjectAlias,
+} from './indices.ts';
 import { createSubjectIndexer } from './indexer.ts';
+import { createSearchWriterGuard } from './writer-guard.ts';
 import type { SubjectListingSource, SubjectSource } from './source.ts';
+import type { DiscoveryProducerEntry } from './index.ts';
 
-export function subjectConsumer(prefix: string, generation: number): string {
-  const consumer = `search_${prefix.replaceAll('-', '_')}subjects_g${generation}`;
-  if (!/^[a-z][a-z0-9_]{0,62}$/.test(consumer)) throw new RangeError('consumer name is invalid');
-  return consumer;
-}
+import { subjectConsumer } from './consumer-name.ts';
+export { subjectConsumer } from './consumer-name.ts';
 
 export async function startSearchIndexing(options: {
   pool: Pool;
@@ -22,12 +53,27 @@ export async function startSearchIndexing(options: {
   discoverMs?: number;
   concurrency?: number;
   retireAfterMs?: number;
+  discovery?: {
+    routeKey: Uint8Array;
+    requiredKinds?: readonly string[];
+    producers: DiscoveryProducerEntry;
+  };
+  publicPreparation?: PublicPreparation;
 }): Promise<{ pause(): Promise<void>; resume(): void; stop(): Promise<void>; refresh(): Promise<void> }> {
   const discoverMs = options.discoverMs ?? 5000;
   if (!Number.isInteger(discoverMs) || discoverMs < 1) throw new RangeError('discoverMs must be a positive integer');
   const retireAfterMs = options.retireAfterMs ?? 15 * 60_000;
   if (!Number.isFinite(retireAfterMs) || retireAfterMs < 0)
     throw new RangeError('retireAfterMs must be a non-negative finite number');
+  const mixed = options.discovery
+    ? startDiscoveryIndexing({
+        ...options,
+        routeKey: options.discovery.routeKey,
+        source: options.discovery.producers.subjects,
+        producers: options.discovery.producers,
+        ...(options.discovery.requiredKinds ? { requiredKinds: options.discovery.requiredKinds } : {}),
+      })
+    : undefined;
   let current: ReturnType<typeof startRelays> | undefined;
   let currentGenerations: number[] | undefined;
   const pendingRetirements = new Set<number>();
@@ -35,34 +81,81 @@ export async function startSearchIndexing(options: {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let discovery = Promise.resolve();
+  let pauseDrain = Promise.resolve();
+  let resumeAfter: Promise<void> | undefined;
+  let closing: Promise<void> | undefined;
+  const clearSchedule = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  };
 
   const discover = async () => {
     if (stopped) return;
     try {
       let state = await subjectGenerations(options.search, options.prefix);
+      if (stopped) return;
       if (state.generations.length === 0) {
         await createSubjectIndex(options.search, options.prefix, 1);
-        await options.search.request('PUT', `/${subjectIndexName(options.prefix, 1)}/_mapping`, {
-          _meta: { activated_at: new Date().toISOString() },
-        });
-        await options.search.request('POST', '/_aliases', {
-          actions: [{ add: { index: subjectIndexName(options.prefix, 1), alias: subjectAlias(options.prefix) } }],
-        });
-        state = { generations: [1], active: 1 };
+        if (stopped) return;
+        state = await subjectGenerations(options.search, options.prefix);
+        if (!state.generations.includes(1))
+          throw new SearchUnavailableError('Subject generation allocation could not be observed');
       }
 
+      const confirmedRatingMappings = new Set<number>();
+      if (!options.publicPreparation && state.active === null) {
+        if (state.generations.length !== 1 || state.generations[0] !== 1)
+          throw new SearchUnavailableError('Subject bootstrap activation is unavailable');
+        await ensureSubjectRatingMapping(options.search, options.prefix, 1);
+        confirmedRatingMappings.add(1);
+        if (stopped) return;
+        await ensureSubjectActivationMetadata(options.search, options.prefix, 1);
+        if (stopped) return;
+        await observedWrite(
+          () =>
+            options.search.request('POST', '/_aliases', {
+              actions: [{ add: { index: subjectIndexName(options.prefix, 1), alias: subjectAlias(options.prefix) } }],
+            }),
+          async () => {
+            const observed = await subjectGenerations(options.search, options.prefix);
+            return observed.generations.includes(1) && observed.active === 1;
+          },
+          'Subject bootstrap activation could not be established',
+        );
+        if (stopped) return;
+        state = await subjectGenerations(options.search, options.prefix);
+        if (state.active !== 1 || !state.generations.includes(1))
+          throw new SearchUnavailableError('Subject bootstrap activation is unavailable');
+      }
+
+      if (options.publicPreparation) {
+        for (const generation of state.generations)
+          if (state.active === null || generation > state.active)
+            await options.publicPreparation.initialize(generation);
+        await options.publicPreparation.discover();
+      }
       let activatedAt: number | undefined;
       if (state.active !== null) {
-        const index = subjectIndexName(options.prefix, state.active);
-        const { body } = await options.search.request<
-          Record<string, { mappings?: { _meta?: { activated_at?: unknown } } }>
-        >('GET', `/${index}/_mapping`);
-        const value = body[index]?.mappings?._meta?.activated_at;
-        if (typeof value === 'string') {
-          const parsed = Date.parse(value);
-          if (Number.isFinite(parsed)) activatedAt = parsed;
+        if (options.publicPreparation) {
+          const index = subjectIndexName(options.prefix, state.active);
+          const { body } = await options.search.request<
+            Record<string, { mappings?: { _meta?: { activated_at?: unknown } } }>
+          >('GET', `/${index}/_mapping`);
+          if (stopped) return;
+          const value = body[index]?.mappings?._meta?.activated_at;
+          if (typeof value === 'string') {
+            const parsed = Date.parse(value);
+            if (Number.isFinite(parsed)) activatedAt = parsed;
+          }
+        } else {
+          const observed = await readSubjectActivationTime(options.search, options.prefix, state.active);
+          if (observed === null) throw new SearchUnavailableError('Active Subject generation metadata is unavailable');
+          activatedAt = observed;
         }
       }
+
+      if (!options.publicPreparation && state.active === null)
+        throw new SearchUnavailableError('Subject bootstrap activation is unavailable');
 
       const liveGenerations = state.generations.filter((generation) => {
         if (state.active === null) return true;
@@ -76,30 +169,57 @@ export async function startSearchIndexing(options: {
       }
 
       if (!currentGenerations || liveGenerations.join(',') !== currentGenerations.join(',')) {
+        // Strict mappings on generations created before public rating fields need the two
+        // compatible additions before any relay can bulk a rating-bearing document.
+        for (const generation of liveGenerations) {
+          if (stopped) return;
+          if (!confirmedRatingMappings.has(generation))
+            await ensureSubjectRatingMapping(options.search, options.prefix, generation);
+        }
+        if (stopped) return;
         const previous = current;
         current = undefined;
         currentGenerations = undefined;
         if (previous) await previous.stop();
-        const relays = liveGenerations.map((generation) =>
-          createSubjectIndexer({
-            pool: options.pool,
-            search: options.search,
-            source: options.source,
-            listing: options.listing,
-            index: subjectIndexName(options.prefix, generation),
-            consumer: subjectConsumer(options.prefix, generation),
+        if (stopped) return;
+        const relays = await Promise.all(
+          liveGenerations.map(async (generation) => {
+            const calendarFormat = await readSubjectCalendarMappingFormat(options.search, options.prefix, generation);
+            return createSubjectIndexer({
+              pool: options.pool,
+              search: options.search,
+              source: options.source,
+              listing: options.listing,
+              index: subjectIndexName(options.prefix, generation),
+              consumer: subjectConsumer(options.prefix, generation),
+              ...(calendarFormat === null ? {} : { calendarFormat }),
+              writer: createSearchWriterGuard({
+                consumer: subjectConsumer(options.prefix, generation),
+                pool: options.pool,
+                search: options.search,
+                source: options.source,
+                listing: options.listing,
+                index: subjectIndexName(options.prefix, generation),
+                ...(calendarFormat === null ? {} : { calendarFormat }),
+              }),
+              ...(options.publicPreparation ? { aroundApply: options.publicPreparation.writer(generation) } : {}),
+            });
           }),
         );
         const next = startRelays(options.pool, relays, {
+          // A replacement must inherit intent before its first partition scan can run.
+          paused,
           ...(options.intervalMs === undefined ? {} : { intervalMs: options.intervalMs }),
           ...(options.concurrency === undefined ? {} : { concurrency: options.concurrency }),
         });
         current = next;
         currentGenerations = liveGenerations;
-        if (paused) await next.pause();
       }
 
+      // Native retained-copy custody must drain before default retirement can delete an exact target.
+      if (options.publicPreparation) return;
       for (const generation of pendingRetirements) {
+        if (stopped) return;
         try {
           try {
             await options.search.request('DELETE', `/${subjectIndexName(options.prefix, generation)}`);
@@ -117,37 +237,365 @@ export async function startSearchIndexing(options: {
     }
   };
 
-  const refresh = async () => {
+  const refresh = () => {
+    if (stopped) return Promise.resolve();
     const next = discovery.then(discover, discover);
     discovery = next;
-    await next;
+    return next;
   };
   await refresh();
   const schedule = () => {
-    if (stopped) return;
+    if (stopped || paused || timer !== undefined) return;
     timer = setTimeout(() => {
-      void refresh().finally(schedule);
+      timer = undefined;
+      if (stopped || paused) return;
+      void refresh().then(schedule, schedule);
     }, discoverMs);
   };
   schedule();
 
   return {
-    async pause() {
+    pause() {
       paused = true;
-      await current?.pause();
+      resumeAfter = undefined;
+      clearSchedule();
+      const projection = Promise.all([current?.pause(), mixed?.pause()]);
+      const preparing = options.publicPreparation?.pause();
+      // Discovery owns any relay set being replaced. Its successor is born paused;
+      // drain both that admitted chain and the current projection before resuming.
+      pauseDrain = Promise.all([discovery, projection, preparing]).then(async () => {
+        await current?.pause();
+      });
+      return pauseDrain;
     },
     resume() {
-      if (!paused || stopped) return;
-      paused = false;
-      current?.resume();
+      if (!paused || stopped || resumeAfter) return;
+      const after = pauseDrain;
+      resumeAfter = after;
+      void after.then(
+        () => {
+          if (stopped || resumeAfter !== after) return;
+          resumeAfter = undefined;
+          paused = false;
+          options.publicPreparation?.resume();
+          current?.resume();
+          mixed?.resume();
+          schedule();
+        },
+        (error) => {
+          if (resumeAfter === after) resumeAfter = undefined;
+          console.error(`Search runner resume failed for ${options.prefix}`, error);
+        },
+      );
     },
-    async stop() {
+    stop() {
+      if (closing) return closing;
       stopped = true;
-      if (timer) clearTimeout(timer);
-      await discovery;
-      await current?.stop();
-      current = undefined;
+      paused = true;
+      resumeAfter = undefined;
+      clearSchedule();
+      const previous = current;
+      const projection = Promise.all([previous?.stop(), mixed?.stop()]);
+      const preparing = options.publicPreparation?.stop();
+      closing = Promise.all([discovery, projection, preparing]).then(async () => {
+        if (current && current !== previous) await current.stop();
+        current = undefined;
+        currentGenerations = undefined;
+      });
+      return closing;
     },
-    refresh,
+    async refresh() {
+      await Promise.all([refresh(), mixed?.refresh()]);
+    },
   };
+}
+
+/** Default mixed-family lifecycle. Population and relays share the exact native projection/writer. */
+export function startDiscoveryIndexing(options: {
+  pool: Pool;
+  search: OpenSearch;
+  source: SubjectSource;
+  listing: SubjectListingSource;
+  prefix: string;
+  routeKey: Uint8Array;
+  intervalMs?: number;
+  concurrency?: number;
+  requiredKinds?: readonly string[];
+  producers?: DiscoveryProducerEntry;
+  reviewSource?: ReviewDiscoverySource;
+}) {
+  const receivers = new Map<number, ReturnType<typeof createReviewDiscoveryReceiving>>();
+  const incarnations = new Map<number, string>();
+  const relays = new Map<number, ReturnType<typeof startRelays>>();
+  let stopped = false,
+    paused = false,
+    timer: ReturnType<typeof setTimeout> | undefined;
+  let running = Promise.resolve(),
+    pauseDrain = Promise.resolve(),
+    resumeAfter: Promise<void> | undefined,
+    closing: Promise<void> | undefined,
+    delay = options.intervalMs ?? 100;
+  const clearSchedule = () => {
+    if (timer !== undefined) clearTimeout(timer);
+    timer = undefined;
+  };
+  const step = async () => {
+    if (stopped || paused) return;
+    const producers = options.producers;
+    const ownerAdapters = producers ? await resolveDiscoveryOwnerAdapters(producers) : undefined;
+    const registry = await nativeDiscoveryRegistry(
+      options.pool,
+      options.routeKey,
+      options.source,
+      ownerAdapters && producers
+        ? {
+            ownerAdapters: ownerAdapters.ownerAdapters,
+            accounts: producers.accounts,
+            omittedKinds: ownerAdapters.omittedKinds,
+          }
+        : undefined,
+    );
+    const metadataProducers = ownerAdapters?.metadataProducers;
+    const reviewSource = producers?.reviewSource ?? options.reviewSource;
+    let readiness: Error | undefined;
+    try {
+      await advanceDiscovery({
+        ...options,
+        registry,
+        requiredKinds: options.requiredKinds ?? Object.keys(metadataProducers ?? {}),
+        ...(metadataProducers ? { metadataProducers } : {}),
+        ...(ownerAdapters ? { capabilityWitnesses: ownerAdapters.capabilityWitnesses } : {}),
+      });
+    } catch (error) {
+      if (!(error instanceof DiscoveryProducerCoverageError) && !(error instanceof CollectionDiscoveryReadinessError))
+        throw error;
+      readiness = error;
+    }
+    const generations = await discoveryGenerations(options.pool, options.prefix);
+    delay =
+      !readiness && generations.some((row) => !['active', 'retiring', 'quarantined'].includes(row.state))
+        ? 0
+        : (options.intervalMs ?? 100);
+    for (const target of generations) {
+      if (!target.uuid || ['allocated', 'retired', 'quarantined', 'retiring'].includes(target.state)) continue;
+      const binding = `${target.uuid}:${target.incarnation}`;
+      if (incarnations.has(target.generation) && incarnations.get(target.generation) !== binding) {
+        await relays.get(target.generation)?.stop();
+        relays.delete(target.generation);
+        receivers.delete(target.generation);
+      }
+      if (!relays.has(target.generation)) {
+        incarnations.set(target.generation, binding);
+        const projection = createDiscoveryProjection({
+          ...options,
+          target,
+          registry,
+          ...(metadataProducers ? { metadataProducers } : {}),
+        });
+        if (
+          reviewSource &&
+          registry.ownerAdapters?.review?.readiness === 'ready' &&
+          (await projection.hasMetadataPopulation?.('review'))
+        )
+          receivers.set(
+            target.generation,
+            createReviewDiscoveryReceiving({
+              ...options,
+              projection,
+              source: reviewSource,
+            }),
+          );
+        relays.set(
+          target.generation,
+          startRelays(
+            options.pool,
+            [createDiscoveryIndexer(options.pool, projection, discoveryConsumer(options.prefix, target.generation))],
+            {
+              paused,
+              intervalMs: options.intervalMs ?? 100,
+              concurrency: options.concurrency ?? 2,
+            },
+          ),
+        );
+      }
+    }
+    // One finite current-review page per live target, sharing this supervisor's lifecycle and transport.
+    for (const target of generations) {
+      if (target.uuid && !['allocated', 'retiring', 'retired', 'quarantined'].includes(target.state))
+        await receivers.get(target.generation)?.next();
+    }
+    for (const target of generations.filter((row) => row.state === 'retiring')) {
+      await relays.get(target.generation)?.stop();
+      relays.delete(target.generation);
+      receivers.delete(target.generation);
+      incarnations.delete(target.generation);
+      await retireDiscovery(
+        options.pool,
+        options.search,
+        target,
+        generations.find((row) => row.state === 'active'),
+      );
+    }
+    for (const [generation, relay] of relays)
+      if (!generations.some((row) => row.generation === generation && row.state !== 'quarantined')) {
+        await relay.stop();
+        relays.delete(generation);
+        receivers.delete(generation);
+        incarnations.delete(generation);
+      }
+    if (readiness) throw readiness;
+  };
+  const refresh = () => {
+    const next = running.then(step);
+    running = next.catch((error) => {
+      console.error('Discovery maintenance failed', error);
+    });
+    return next;
+  };
+  const schedule = (waitMs: number) => {
+    if (stopped || paused || timer !== undefined) return;
+    timer = setTimeout(() => {
+      timer = undefined;
+      void refresh().then(
+        () => schedule(delay),
+        () => schedule(options.intervalMs ?? 100),
+      );
+    }, waitMs);
+  };
+  schedule(0);
+  return {
+    refresh,
+    pause() {
+      paused = true;
+      resumeAfter = undefined;
+      clearSchedule();
+      const projection = Promise.all([...relays.values()].map((relay) => relay.pause()));
+      // Finish in-flight maintenance and relay drains, then apply the current
+      // pause intent to every retained or newly created relay.
+      pauseDrain = Promise.all([running, projection]).then(async () => {
+        if (stopped) return;
+        await Promise.all([...relays.values()].map((relay) => relay.pause()));
+      });
+      return pauseDrain;
+    },
+    resume() {
+      if (!paused || stopped || resumeAfter) return;
+      const after = pauseDrain;
+      resumeAfter = after;
+      void after.then(
+        () => {
+          if (stopped || resumeAfter !== after) return;
+          resumeAfter = undefined;
+          paused = false;
+          for (const relay of relays.values()) relay.resume();
+          schedule(0);
+        },
+        (error) => {
+          if (resumeAfter === after) resumeAfter = undefined;
+          console.error('Discovery runner resume failed', error);
+        },
+      );
+    },
+    stop() {
+      if (closing) return closing;
+      stopped = true;
+      paused = true;
+      resumeAfter = undefined;
+      clearSchedule();
+      return (closing = running.then(async () => {
+        await Promise.all([...relays.values()].map((relay) => relay.stop()));
+        relays.clear();
+        receivers.clear();
+        incarnations.clear();
+      }));
+    },
+  };
+}
+
+async function retireDiscovery(
+  pool: Pool,
+  search: OpenSearch,
+  target: DiscoveryGeneration,
+  active: DiscoveryGeneration | undefined,
+) {
+  const due = await withConnection(
+    pool,
+    async (client) =>
+      (
+        await client.query<{ due: boolean }>(
+          `SELECT (activated_at IS NULL OR EXISTS (
+             SELECT 1 FROM search.discovery_generation a WHERE a.partition_no=0 AND a.prefix=$1
+               AND a.generation=$3 AND a.state='active' AND a.activated_at < clock_timestamp()-interval '15 minutes'
+           )) AS due FROM search.discovery_generation
+           WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='retiring'`,
+          [target.prefix, target.generation, active?.generation ?? null],
+        )
+      ).rows[0]?.due,
+  );
+  if (!due) return;
+  const index = discoveryIndexName(target.prefix, target.generation);
+  await withConnection(pool, async (client) => {
+    await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))', [index]);
+    try {
+      try {
+        if ((await discoveryIndexUuid(search, index)) !== target.uuid)
+          throw new Error('Discovery retirement incarnation mismatch');
+        await search.request('DELETE', `/${index}`);
+      } catch (error) {
+        if (!(error instanceof OpenSearchError && error.status === 404)) throw error;
+      }
+    } finally {
+      await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))', [index]);
+    }
+  });
+  // Reclaim a bounded locator page only after physical deletion. Late erasure items still resolve through Access.
+  const copies = await withConnection(
+    pool,
+    async (client) =>
+      (
+        await client.query<{ route: number; id: string; kind: string }>(
+          `SELECT route,source_id::text AS id,kind FROM search.discovery_copy WHERE prefix=$1 AND generation=$2 ORDER BY route,source_id,kind LIMIT 100`,
+          [target.prefix, target.generation],
+        )
+      ).rows,
+  );
+  for (const copy of copies) {
+    if (copy.kind === 'account') {
+      const status = await withConnection(pool, (client) => readErasureStatus(client, copy.id));
+      if (status) {
+        await registerRetiredErasure(pool, target, copy.id);
+        await resolveLateErasureItem(
+          { pool },
+          { accountId: copy.id, participant: 'search', locator: copyLocator(target) },
+        );
+      }
+    }
+    await withConnection(pool, (client) =>
+      client.query(
+        'DELETE FROM search.discovery_copy WHERE route=$1 AND source_id=$2 AND prefix=$3 AND generation=$4 AND kind=$5',
+        [copy.route, copy.id, target.prefix, target.generation, copy.kind],
+      ),
+    );
+  }
+  if (copies.length) return;
+  await withConnection(pool, async (client) => {
+    await client.query('BEGIN');
+    try {
+      await client.query('DELETE FROM search.discovery_population WHERE prefix=$1 AND generation=$2', [
+        target.prefix,
+        target.generation,
+      ]);
+      await client.query('DELETE FROM core.consumer_checkpoint WHERE consumer=$1', [
+        discoveryConsumer(target.prefix, target.generation),
+      ]);
+      await client.query(
+        "UPDATE search.discovery_generation SET state='retired' WHERE partition_no=0 AND prefix=$1 AND generation=$2 AND state='retiring'",
+        [target.prefix, target.generation],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    }
+  });
 }

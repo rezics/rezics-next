@@ -1,13 +1,32 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createAuthService, createBarrierProofVerifier, type AuthService, type TrustedAccessPorts } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { Client, Pool } from 'pg';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { createAuthBarrierCapabilities } from '../../src/access/auth-barriers.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
 import { createRecoveryCompletion } from '../../src/access/recovery-completion.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `auth_barriers_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const lifecycle = createLifecycleInternals({
@@ -16,7 +35,7 @@ const lifecycle = createLifecycleInternals({
   provisioningEvidence: async () => null,
   recoveryEvidence: async () => null,
 });
-let fixture: ReturnType<typeof testDatabase>;
+let fixture: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let database: Pool;
 let service: AuthService;
 let barriers: ReturnType<typeof createAuthBarrierCapabilities>;
@@ -60,7 +79,7 @@ async function startRecovery() {
 }
 
 beforeAll(async () => {
-  fixture = testDatabase();
+  fixture = await cloneAuthDatabase();
   database = new Pool({ connectionString: fixture.url });
   barriers = createAuthBarrierCapabilities({ lifecycle, proofs: createBarrierProofVerifier({ database }) });
   access = {
@@ -134,10 +153,10 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool.end();
   await database?.end();
-  fixture?.close();
+  await fixture?.close();
 });
 
-test('native consent commits an exact floor barrier before Auth effects without fencing new sign-in', async () => {
+test('native consent commits an exact floor barrier before Auth effects and sign-in resumes once Auth completes it', async () => {
   const cookie = await login();
   expect((await request('/consent', { client_id: 'external', scope: ['read', 'write'] }, cookie)).status).toBe(200);
   failConsent = 'after';
@@ -293,7 +312,7 @@ test('native attempt denies changed eligibility, stale proof and later floor sup
   fail = null;
 });
 
-test('consent native update preserves an already raised persistent fence', async () => {
+test('a consent barrier advances the floor without taking over an already raised persistent fence', async () => {
   const original = (await lifecycle.raiseFence({ accountId: other, key: 'consent-existing-fence' })).value;
   // Isolated fixture toggles let a real authenticated consent receipt reach the
   // command while its persistent native fence is raised, without a new floor.
@@ -311,10 +330,62 @@ test('consent native update preserves an already raised persistent fence', async
   ]);
   const receipt = await barriers.invalidateAccount(consent);
   expect(receipt!.minimumAuthnEpoch).toBe(String(Number(original.minimumAuthnEpoch) + 1));
-  expect(await lifecycle.readFenceState(other)).toMatchObject({
-    fenced: true,
-    receiptId: receipt!.receiptId,
-    minimumAuthnEpoch: receipt!.minimumAuthnEpoch,
-  });
+  const kept = { fenced: true, receiptId: original.receiptId, minimumAuthnEpoch: receipt!.minimumAuthnEpoch };
+  expect(await lifecycle.readFenceState(other)).toMatchObject(kept);
+  // Auth completes the barrier with its own receipt; the fence it did not raise stays with its receipt.
   failConsent = null;
+  await barriers.trustedAccess.completeBarrier({
+    accountId: other,
+    purpose: 'consent-reduction',
+    operationKey: consent.operationKey!,
+    receiptId: receipt!.receiptId,
+    minimumAuthnEpoch: Number(receipt!.minimumAuthnEpoch),
+  });
+  expect(await lifecycle.readFenceState(other)).toMatchObject(kept);
+});
+
+test('barrier confirmation propagates an unavailable Access lifecycle and preserves genuine negative receipts', async () => {
+  const input = {
+    accountId: human,
+    purpose: 'consent-reduction' as const,
+    operationKey: 'unavailable-confirmation',
+    receiptId: newId(routeOf(human)!),
+    minimumAuthnEpoch: 1,
+  };
+  const failure = new Error('Access connection terminated unexpectedly');
+  const before = await floor();
+  const unavailable = createAuthBarrierCapabilities({
+    lifecycle: {
+      ...lifecycle,
+      confirmBarrier: async () => {
+        throw failure;
+      },
+    },
+    proofs: createBarrierProofVerifier({ database }),
+  });
+  await expect(unavailable.trustedAccess.confirmBarrier(input)).rejects.toBe(failure);
+  expect(await barriers.trustedAccess.confirmBarrier(input)).toBe(false);
+  expect(await floor()).toEqual(before);
+});
+
+test('a failed Auth proof read propagates before any native barrier mutation', async () => {
+  const failure = new Error('Auth unavailable');
+  const before = await floor();
+  const unavailable = createAuthBarrierCapabilities({
+    lifecycle,
+    proofs: {
+      verify: async () => {
+        throw failure;
+      },
+    },
+  });
+  await expect(
+    unavailable.authorizeRecovery({
+      accountId: human,
+      proofEpoch: Number(before!.minimumAuthnEpoch),
+      proofReference: 'a'.repeat(64),
+      operationKey: 'unavailable-proof',
+    }),
+  ).rejects.toBe(failure);
+  expect(await floor()).toEqual(before);
 });

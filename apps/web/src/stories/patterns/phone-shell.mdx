@@ -1,0 +1,40 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as Stories from './phone-shell.stories';
+
+<Meta of={Stories} />
+
+# Phone Shell
+
+The actual AppShell mounts one query owner. At phone390 its header contains Menu and one wide search pill;
+Home, Library, Create, Inbox and You stay above the safe area. At desktop1280 the existing rail, search and
+account/display controls remain. Use the viewport, locale and theme globals for every state.
+
+Search opens the elevated composer, preserves its query and scope on dismissal, and returns focus. Filters
+opens SearchPage's registered native controls. Create offers the currently exposed Collection route, shared
+`AppShellProps.navigation` creation entries, and contextual `useRegisterPhoneCreationActions` contributions.
+Shared entries retain the same session, operation and native route checks as desktop navigation.
+You includes Settings and the reusable display region.
+
+Exact IDs: `patterns-phone-shell--rest`, `--unread`, `--unread-unavailable`, `--search-empty`, `--search-recent`,
+`--search-trending`, `--search-loading`, `--search-unavailable`, `--search-closed`, `--search-typing`,
+`--search-filters-open`, `--creation-sheet`, `--you-settings`.
+The prefix `patterns-phone-shell` applies to every suffix. Review phone390/desktop1280 using locale/theme globals.
+
+Web owns the RecentPanel/header placement and visible-page lifecycle. Content alone owns
+`community/realm-discovery/index.ts` (`RealmDiscoverySection`, `loadRealmDiscovery` and their types).
+The existing global empty-query region mounts its trending section once, with limit20; retry and Next each
+request one page, replacing the visible page. Dismissal, scope/query and locale changes discard old completions.
+Recent and native Trending searches retain their own adapters and ownership.
+
+The search stories inject **interface fakes**, including empty, pending, ready-with-next (SearchTrending),
+unavailable/retry and closed. They share the same IDs at phone390/desktop1280 and locale/theme globals.
+Content's module is absent in this source snapshot: the local typed consumer boundary reports unavailable,
+never renders successful cards, and never invents a GET adapter. SearchTrending explicitly checks that boundary
+until the real exports replace it. These states prove no native discovery or avatar readiness.
+
+Performance can import `AppearanceControls` and `AppearanceControlsProps` from
+`apps/web/src/shell/appearance-controls.tsx`. This region uses the existing language cookie/locale protocol and
+theme cookie/system preference. The settings page remains with its owner.
+
+These plays and fixture states await integration execution and Root screenshot review. Worker verification is
+limited to local type checks; no capture, publication or native proof is claimed here.

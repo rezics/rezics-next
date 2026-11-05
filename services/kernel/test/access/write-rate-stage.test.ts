@@ -209,6 +209,9 @@ test('createKernel subject:read POST custom search authorizes without a write ch
       async facets() {
         throw new Error('unused');
       },
+      async releaseGroups() {
+        throw new Error('unused');
+      },
     },
   });
   const send = (body: unknown) =>

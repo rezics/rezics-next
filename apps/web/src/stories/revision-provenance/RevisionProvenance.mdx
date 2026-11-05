@@ -1,0 +1,20 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as RevisionProvenanceStories from './revision-provenance.stories';
+
+<Meta of={RevisionProvenanceStories} />
+
+# Revision provenance
+
+The thread page, exact-revision page and every history entry reuse this reading region inside their shared
+`ContentItemFrame`. The standalone pattern story shows the same region beneath a shared level-two heading. Licence,
+subject references and vote citation come from that revision. Labels use one existing bounded page-level Semantic
+lookup; unresolved labels retain the recorded reference ID as neutral text. No controls change the licence or citation.
+
+Recorded exercises keyboard navigation to a resolved subject. ChangedVote shows the stored revision citation and
+the separately supplied author's private comparison, including a current vote of zero. UnchangedVote and
+PrivateReadUnavailable omit that comparison. Unscored keeps
+reviews without a citation readable. UnavailableReference contains no link or inferred subject label.
+
+Use phone390 and desktop1280 with the locale and theme globals. These are explicit native-DTO UI examples;
+post-integration acceptance and Web/Root visual review remain pending. The existing Pages/Community/Thread
+Revision history story exercises the surrounding page and history controls through their loader.

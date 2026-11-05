@@ -3,13 +3,13 @@
 WITH input AS NOT MATERIALIZED (
   SELECT :route::integer AS route, :id::uuid AS id, :at::timestamptz AS at
 ), identity AS MATERIALIZED (
-  SELECT h.route, space_id, state, head_revision_id, created_at, creator,
+  SELECT h.route, space_id, h.lifecycle_version, state, head_revision_id, created_at, creator,
          h.xmin::text = pg_current_xact_id_if_assigned()::text AS inserted_here,
          i.at
   FROM community.space AS h CROSS JOIN input i
   WHERE h.route = i.route AND space_id = i.id AND state = 'active'
 )
-SELECT s.space_id, s.state, s.head_revision_id, s.created_at::text, s.creator,
+SELECT s.space_id, s.lifecycle_version::text, s.state, s.head_revision_id, s.created_at::text, s.creator,
        r.predecessor, r.address, r.title, r.summary, r.created_at::text AS revision_created_at, r.author,
        s.inserted_here AND r.xmin::text = pg_current_xact_id_if_assigned()::text AS inserted_here
 FROM identity s

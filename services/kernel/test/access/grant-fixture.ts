@@ -1,3 +1,4 @@
+import { actionDeclarations } from './native-account-bindings-fixture.ts';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, importJWK, SignJWT, decodeJwt } from 'jose';
 import { createAuthService } from '@rezics/auth';
@@ -6,10 +7,14 @@ import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { accessCheck } from '../../src/request/access.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 /** Real Auth issuance and production Access; SQL below is privileged fixture setup. */
-export async function grantFixture(extraActions: readonly string[] = []) {
+export async function grantFixture(
+  extraActions: readonly string[] = [],
+  policyProfile?: Readonly<{ action: string; resourceType: string }>,
+) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
   const pool = createPool(url);
@@ -43,7 +48,7 @@ export async function grantFixture(extraActions: readonly string[] = []) {
     audience,
     secret: 'test-only-better-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(reader, routeOf(id)!, id);
         return (
@@ -60,7 +65,7 @@ export async function grantFixture(extraActions: readonly string[] = []) {
         if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
   await auth.internal.registerClient({ clientId: 'other-client', firstParty: true, scopes: actions });
@@ -73,8 +78,26 @@ export async function grantFixture(extraActions: readonly string[] = []) {
     await auth.internal.provisionPassword({ authorization: id, email: `${id}@example.test`, password });
     await reader.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [routeOf(id), id]);
   }
+  const declaredActions = actionDeclarations(actions);
+  if (policyProfile) {
+    const metadata = declaredActions.get(policyProfile.action)!;
+    declaredActions.set(policyProfile.action, {
+      ...metadata,
+      'x-resource-types': [policyProfile.resourceType],
+    });
+  }
   const access = createAccess({
-    actions: new Map(actions.map((action) => [action, { anonymous: false }])),
+    actions: declaredActions,
+    ...(policyProfile
+      ? {
+          resourceRoles: {
+            roles: { 'fixture.permission.reader': [policyProfile.action] },
+            types: {
+              [policyProfile.resourceType]: { owner: 'fixture.permission.reader', standing: [] },
+            },
+          },
+        }
+      : {}),
     auth: {
       issuer,
       audience,

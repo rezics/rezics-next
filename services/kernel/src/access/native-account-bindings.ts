@@ -1,3 +1,25 @@
+import { createAccountDeletionPageAccess, type AccountDeletionPageAccess } from './account-deletion-page-source.ts';
+import { createOperatorOpeningPageAccess, type OperatorOpeningPageAccess } from './operator-opening-page-source.ts';
+import {
+  createOrganizationDeletionAccess,
+  type OrganizationDeletionPageAccess,
+} from './organization-deletion-source.ts';
+import { createOperatorTransferPageAccess, type OperatorTransferPageAccess } from './operator-transfer-page-source.ts';
+import { createAutomatedOperatorAccess, type AutomatedOperatorAccess } from './automated-operator-source.ts';
+import {
+  createAccountProfileAccess,
+  type AccountProfileAccess,
+  type RenameAccountPageAccess,
+} from './account-profile-source.ts';
+import { readOriginalLifecycleResult } from './native-lifecycle-results.ts';
+import { createManagementMembershipAccess, type ManagementMembershipAccess } from './management-membership-source.ts';
+import {
+  createOrganizationMembershipPageAccess,
+  type OrganizationMembershipPageAccess,
+} from './organization-membership-page-source.ts';
+import { createAuthHistoryProofBindings } from './shared-history-auth.ts';
+import { accessClock, installAccessClock } from './access-clock.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import type {
   AccountWorkflowPorts,
   AccountOperation,
@@ -8,6 +30,7 @@ import type {
   TrustedAccessPorts,
   BarrierProofPort,
   ProvisioningEvidencePort,
+  OriginalLifecycleRequest,
 } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access, ActionCatalogue } from '../request/access.ts';
@@ -29,12 +52,22 @@ import { createRegistrationProofBindings } from './registration-proof.ts';
 import { createAuthBarrierCapabilities } from './auth-barriers.ts';
 import { createCredentialCapability } from './auth-credential-capability.ts';
 import { createOperatorSessionCapability } from './auth-session-capability.ts';
-import { createCommittedContinuations, ContinuationDeniedError } from './committed-continuations.ts';
-import { createWorkflowApprovals, workflowApprovalBinding } from './workflow-approvals.ts';
+import {
+  createCommittedContinuations,
+  ContinuationDeniedError,
+  COMMITTED_CONTINUATION_RESUME_BUDGET_MS,
+} from './committed-continuations.ts';
+import {
+  createWorkflowApprovals,
+  workflowApprovalBinding,
+  WorkflowApprovalUnavailableError,
+} from './workflow-approvals.ts';
 import { readAccount } from './account-data.ts';
 import { routeOf } from '../route/route.ts';
 import { seal, unseal } from '../tokens/seal.ts';
 import { ResourceAccessWriteDeniedError } from './resource-denials.ts';
+import { IdempotencyConflictError } from '../command/command.ts';
+import { readNativeCopyActors, readNativeCreationContext } from './native-creation-context.ts';
 
 /** Auth-host-owned receipt/staging point-read closures, never request fields or
  * fixture maps. Persist the real createPending command reference under the exact
@@ -74,7 +107,7 @@ export type NativeAccountBindingsConfig = {
 };
 
 export type NativeAccountBindings = {
-  trustedAccess: TrustedAccessPorts;
+  trustedAccess: TrustedAccessPorts & AutomatedOperatorAccess & OperatorTransferPageAccess;
   workflowPorts: AccountWorkflowPorts<LifecycleRequest>;
   lifecycle: ReturnType<typeof createLifecycleCommands>;
   internalLifecycle: ReturnType<typeof createLifecycleInternals>;
@@ -97,7 +130,8 @@ export class NativeAccountBindingsUnavailableError extends Error {
  * createAccountWorkflows registration. Registration records the real pending
  * command reference, uses actual Auth committed provisioning evidence, then
  * executes native claimHandle and activate commands. Protected workflow steps
- * resolve native persisted approvals to LifecycleRequest inside each step;
+ * resolve native persisted approvals to LifecycleRequest inside each step that
+ * takes a new effect, and never again to complete an effect already committed;
  * neither bearer tokens nor request contexts enter DBOS or approval Maps.
  *
  * Automated creation proves its operator relation and pending receipt before
@@ -137,7 +171,8 @@ function translateNativeRefusal(error: unknown): never {
     error instanceof DelegationDeniedError ||
     error instanceof ResourceAccessWriteDeniedError ||
     error instanceof OperatorDeniedError ||
-    error instanceof ContinuationDeniedError
+    error instanceof ContinuationDeniedError ||
+    error instanceof IdempotencyConflictError
   )
     throw new AuthBindingDeniedError();
   throw error;
@@ -171,24 +206,26 @@ function authWorkflowBoundary<T extends object>(ports: T): T {
  * retained only by the live session capability and is never called here. */
 export function createNativeAccountBindings(config: NativeAccountBindingsConfig): NativeAccountBindings {
   const { pool, access, actions, referenceKeys, proofs } = config;
+  if (config.clock) installAccessClock(access, config.clock);
   const workflow = proofs.workflow as AuthWorkflowProofPorts;
   const internalLifecycle = createLifecycleInternals({
     pool,
     routeKey: config.routeKey,
-    ...(config.clock ? { clock: config.clock } : {}),
+    access,
+    clock: accessClock(access),
     provisioningEvidence: (evidence) => proofs.provisioning.resolve(evidence),
     recoveryEvidence: (evidence) => proofs.recoveryEvidence?.(evidence) ?? Promise.resolve(null),
   });
   const lifecycle = createLifecycleCommands({
     pool,
     access,
-    ...(config.clock ? { clock: config.clock } : {}),
+    clock: accessClock(access),
   });
   const continuations = createCommittedContinuations({
     pool,
     access,
     referenceKeys,
-    ...(config.clock ? { clock: config.clock } : {}),
+    clock: accessClock(access),
   });
   const operators = createOperatorCommands({
     pool,
@@ -199,8 +236,8 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
   });
   const grants = createGrantCommands({ pool, access, managementAction: 'access:grant' });
   const delegations = createDelegationCommands({ pool, access, action: 'access:delegate' });
-  const registration = createRegistrationProofBindings({ pool, referenceKeys });
-  const barriers = createAuthBarrierCapabilities({ lifecycle: internalLifecycle, proofs: proofs.barriers });
+  const registration = createRegistrationProofBindings({ pool, access, referenceKeys });
+  const barriers = createAuthBarrierCapabilities({ lifecycle: internalLifecycle, access, proofs: proofs.barriers });
   const session = createOperatorSessionCapability({
     pool,
     access,
@@ -229,15 +266,72 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
       verifyCredentialEffect: (reference, expected) =>
         config.auth().internal.verifyCredentialEffect(reference, expected),
     }));
-  const boundary = () => ({ pool, deadline: Date.now() + 10000 });
-  const trustedAccess: TrustedAccessPorts = {
-    ...createAuthBindings({
+  const boundary = () => ({ pool, deadline: deadlineFor(COMMITTED_CONTINUATION_RESUME_BUDGET_MS) });
+  const creationContext: NonNullable<TrustedAccessPorts['readNativeCreationContext']> = (input) =>
+    readNativeCreationContext({ pool, access, approvals }, input, boundary());
+  const organizationDeletion = createOrganizationDeletionAccess({
+    pool,
+    access,
+    accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+  });
+  const trustedAccess: TrustedAccessPorts &
+    ManagementMembershipAccess &
+    OrganizationMembershipPageAccess &
+    AutomatedOperatorAccess &
+    AccountProfileAccess &
+    RenameAccountPageAccess &
+    OrganizationDeletionPageAccess &
+    AccountDeletionPageAccess &
+    OperatorOpeningPageAccess &
+    OperatorTransferPageAccess = {
+    ...createAccountDeletionPageAccess({
       pool,
+      access,
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+    }),
+    ...createOperatorOpeningPageAccess({
+      pool,
+      access,
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+    }),
+    ...createAccountProfileAccess({
+      pool,
+      access,
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+    }),
+    ...organizationDeletion,
+    ...createOperatorTransferPageAccess({ pool, access }),
+    readNativeCreationContext: creationContext,
+    readOriginalLifecycleResult: (input) =>
+      readOriginalLifecycleResult({ pool, referenceKeys, source: workflow }, input),
+    ...createAutomatedOperatorAccess({
+      pool,
+      access,
+      clock: accessClock(access),
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+    }),
+    ...createManagementMembershipAccess({
+      pool,
+      access,
+      clock: accessClock(access),
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+    }),
+    ...createOrganizationMembershipPageAccess({
+      pool,
+      access,
+      tokens: referenceKeys,
+      clock: accessClock(access),
+      accessTokenForProof: (proof) => config.auth().internal.accessTokenForProof(proof),
+    }),
+    ...createAuthBindings({
+      ...createAuthHistoryProofBindings(pool, () => config.auth().internal.receivingClosure),
+      pool,
+      access,
       ...createRecoveryCompletion({
         pool,
         routeKey: config.routeKey,
         auth: config.auth,
-        ...(config.clock ? { clock: config.clock } : {}),
+        clock: accessClock(access),
       }),
       ...registration,
       consumeAuthAuthorization: (input) =>
@@ -290,9 +384,12 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     approveCredentialEffect: (input) => credentialCapability().approveCredentialEffect(input),
     revalidateCredentialEffect: (input) => credentialCapability().revalidateCredentialEffect(input),
     advanceCredentialFloor: (input) => credentialCapability().advanceCredentialFloor(input),
-    readAssignment: (requestedBy, assignedActorId) => readAssignment(pool, requestedBy, assignedActorId),
+    readAssignment: (requestedBy, assignedActorId) =>
+      readAssignment(pool, requestedBy, assignedActorId, accessClock(access)),
   };
   const workflowPorts: AccountWorkflowPorts<LifecycleRequest> = authWorkflowBoundary({
+    readOriginalLifecycleResult: (input: OriginalLifecycleRequest) =>
+      readOriginalLifecycleResult({ pool, referenceKeys, source: workflow }, input),
     ...internalLifecycle,
     ...operators,
     ...lifecycle,
@@ -339,10 +436,14 @@ export function createNativeAccountBindings(config: NativeAccountBindingsConfig)
     },
     provisioningEvidence: (input) => workflow.provisioningEvidence(input),
     authorizeOperation: (reference, operation) => approvals.resolve(reference, operation, boundary()),
-    authorizeUnprotectedOperation: async (operation) => {
-      await approvals.resolve('', operation, boundary());
+    authorizeUnprotectedOperation: async () => {
+      // Native workflows provide no authority capability for unapproved operations.
+      throw new WorkflowApprovalUnavailableError();
     },
     actorAccountId: (context) => context.actor.accountId,
+    readOrganizationForDeletion: organizationDeletion.readOrganizationForDeletion,
+    readNativeCreationContext: creationContext,
+    copyActors: (context) => readNativeCopyActors({ pool, access }, context),
     stableCommandKey: (context, phase) => `${required(workflowApprovalBinding(context)).commandKeyPrefix}:${phase}`,
     approvalBinding: (context) => workflowApprovalBinding(context),
     readContinuation: (operationKey, accountId) => continuations.read(operationKey, accountId),

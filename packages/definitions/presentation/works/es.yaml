@@ -1,2 +1,52 @@
 types:
   schema:MusicAlbum: álbum
+  schema:MusicRelease: edición musical
+  schema:MusicRecording: grabación
+
+  schema:Quotation: cita
+
+properties:
+  schema:releaseOf: edición de
+  schema:catalogNumber: número de catálogo
+  schema:recordLabel: sello discográfico
+  schema:track: pista
+  schema:byArtist: intérprete
+  wdt:P642: de
+
+  schema:text: texto
+  schema:spokenByCharacter: locutor
+  schema:about: obra
+  schema:creator: creador acreditado
+  schema:actor: voz
+
+inverseProperties:
+  schema:releaseOf: Ediciones del álbum
+  schema:recordLabel: Ediciones de este sello
+  schema:track: Ediciones que incluyen esta grabación
+  schema:byArtist: Grabaciones de este intérprete
+
+  schema:spokenByCharacter: Citas habladas
+  schema:about: Citas
+  schema:creator: Citas acreditadas a
+  schema:actor: Citas interpretadas
+
+typeDescriptions:
+  schema:MusicAlbum: 'Un álbum musical como obra que agrupa pistas, independiente de un ejemplar o edición distribuida concreta.'
+  schema:MusicRelease: 'Una edición publicada concreta de un álbum musical, con su número de catálogo, formato, fecha y grabaciones ordenadas. Distinta de la obra-álbum, un ejemplar personal, un archivo de reproducción o una grabación.'
+  schema:MusicRecording: 'Una interpretación grabada e identificada de una obra musical, como una toma de una canción. Distinta de la agrupación del álbum, una edición publicada, un archivo de reproducción o un ejemplar personal.'
+
+  schema:Quotation: 'Una cita escrita de una obra, con orador, creador acreditado y fuente citados por separado.'
+
+propertyDescriptions:
+  schema:releaseOf: 'La obra-álbum que esta edición publicada realiza; la edición no es un nombre nuevo para ese álbum.'
+  schema:catalogNumber: 'El número de catálogo que el sello asignó a esta edición, guardado como texto de la fuente.'
+  schema:recordLabel: 'La organización acreditada como sello discográfico que publicó esta edición.'
+  schema:track: 'Una grabación identificada en esta edición. La posición, el nombre acreditado, el rol, la fecha y la ocurrencia de listado distinguen usos repetidos de la misma grabación.'
+  schema:byArtist: 'Una persona u organización acreditada como intérprete de esta grabación, con nombre acreditado, orden y rol detallado.'
+  wdt:P642: 'El concepto de ocurrencia de listado que mantiene en ranuras distintas dos asociaciones a la misma grabación. No es un soporte o cara publicado.'
+
+  schema:text: 'El documento exacto de la cita. Use un valor de documento, no una etiqueta de relación ni otro campo de texto.'
+  schema:spokenByCharacter: 'El personaje ficticio que pronuncia esta cita. No es el creador acreditado ni un actor de voz.'
+  schema:about: 'La obra que cita esta cita. Se exige la identidad exacta de la obra o parte; una coincidencia parcial no crea relación.'
+  schema:creator: 'Una persona u organización acreditada por esta cita, distinta del locutor ficticio.'
+  schema:actor: 'Una voz interpretativa opcional. Un locutor no implica un actor de voz sin una afirmación de fuente cualificada.'

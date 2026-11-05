@@ -5,14 +5,16 @@ import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { createRealAccess } from './real-access.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+const projection = linkProjection(pool);
 afterAll(async () => {
   await pool.end();
   await admin.end();
@@ -68,6 +70,12 @@ const source = { parts: [{ property: { id: 'schema:url' }, value: value('https:/
 async function created(body: unknown): Promise<Record<string, any>> {
   const answer = await call('POST', '/v1/subjects', { token: 'editor', key: key(), body });
   expect(answer.response.status).toBe(201);
+  const route = routeOf(answer.body.subject.id as string)!;
+  for (let step = 0; step < 200; step++) {
+    const projected = await projection.run(partitionOf(route));
+    if (projected.status !== 'busy' && projected.envelopes === 0) break;
+    if (step === 199) throw new Error('Semantic link projection did not catch up');
+  }
   return answer.body.subject;
 }
 const person = (name: string) => created({ type: 'schema:Person', labels: { en: name } });

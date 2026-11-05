@@ -11,8 +11,10 @@ import { newCsrfToken } from '../src/session/csrf.ts';
 import type { SessionStore } from '../src/session/store.ts';
 
 const sessionId = 'a'.repeat(43);
-const sizes = [1, 10, 100];
+const sizes = [5, 500];
 const bound = { D: 1, K: 1, R: 0, A: 0 };
+// A library page reads one bounded owner page at every collection scale.
+const overviewBound = { D: 1, K: 1, R: 0, A: 0 };
 const subjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000011';
 const stamp = '2026-04-02T15:04:05.000Z';
 const idempotencyKey = '10203040-5060-4070-8090-102030405060';
@@ -21,6 +23,7 @@ const csrf = newCsrfToken();
 test('personal library view and state change stay within their bounds as entries grow', async () => {
   const counts = { D: 0, K: 0, R: 0, A: 0 };
   let size = 1;
+  let tab = false;
   const paths: string[] = [];
   const unrelated: string[] = [];
   const client = withPlatformClosedRecognition(
@@ -38,13 +41,15 @@ test('personal library view and state change stay within their bounds as entries
         expect(unrelated.some((id) => url.pathname.includes(id))).toBe(false);
         if (url.pathname === '/v1/libraryEntries' && request.method === 'GET') {
           expect(url.searchParams.get('view')).toBe('FULL');
-          expect(url.searchParams.get('limit')).toBe('100');
           expect(url.searchParams.get('cursor')).toBeNull();
-          expect(url.searchParams.get('state')).toBeNull();
+          const state = url.searchParams.get('state');
+          expect(state).toBe(tab ? 'planned' : null);
+          expect(url.searchParams.get('limit')).toBe('20');
+          const limit = 20;
           return Response.json({
-            libraryEntries: Array.from({ length: size }, (_, index) => ({
+            libraryEntries: Array.from({ length: Math.min(size, limit) }, (_, index) => ({
               subjectId: `subject-${index}`,
-              state: 'planned',
+              state,
               revision: 1,
               createdAt: stamp,
               updatedAt: stamp,
@@ -135,9 +140,30 @@ test('personal library view and state change stay within their bounds as entries
     );
     expect(unrelated).toHaveLength(scale);
     if (!view.signedIn) throw new Error('expected a signed-in library');
-    expect(view.entries).toHaveLength(scale);
+    if (view.state !== undefined) throw new Error('expected all tracked entries');
+    expect(view.entries).toHaveLength(Math.min(scale, 20));
     expect(paths.map((path) => path.split('?')[0])).toEqual(['GET /v1/libraryEntries']);
     expect(paths.some((path) => path.includes('/subjects/') || unrelated.some((id) => path.includes(id)))).toBe(false);
+    expect(counts).toEqual(overviewBound);
+
+    tab = true;
+    counts.D = 0;
+    counts.K = 0;
+    counts.R = 0;
+    counts.A = 0;
+    paths.length = 0;
+    const planned = await loadPersonalLibrary(
+      client,
+      new Request('https://site.example.test/en/library?state=planned', {
+        headers: { cookie: `__Host-rezics_session=${sessionId}` },
+      }),
+      env,
+      { state: 'planned' },
+    );
+    tab = false;
+    if (!planned.signedIn || planned.state !== 'planned') throw new Error('expected the planned filter');
+    expect(planned.entries).toHaveLength(Math.min(scale, 20));
+    expect(paths.map((path) => path.split('?')[0])).toEqual(['GET /v1/libraryEntries']);
     expect(counts).toEqual(bound);
 
     counts.D = 0;

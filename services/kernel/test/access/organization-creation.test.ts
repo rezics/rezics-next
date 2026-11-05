@@ -1,3 +1,4 @@
+import { setFixtureAccountState, suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -277,17 +278,14 @@ if (Bun.main === import.meta.path) {
     const future = await h.human();
     for (const person of [creator, future]) expect(await h.allowed(person.token)).toBe(true);
     for (const state of ['pending', 'suspended', 'deleted']) {
-      await h.db.admin.query('UPDATE access.account SET state=$3 WHERE route=$1 AND account_id=$2', [
-        routeOf(future.accountId),
-        future.accountId,
-        state,
-      ]);
+      await setFixtureAccountState(h.db.admin, future.accountId, state);
       await expect(h.allowed(future.token)).rejects.toThrow();
     }
     await h.db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
       routeOf(future.accountId),
       future.accountId,
     ]);
+    future.token = await h.bearer(future.email);
     expect(await h.allowed(future.token)).toBe(true);
   });
 
@@ -296,8 +294,7 @@ if (Bun.main === import.meta.path) {
       const person = await h.human();
       const token = fact === 'scope' ? await h.bearer(person.email, 'organization-no-scope') : person.token;
       const f = await h.approve(person.token);
-      if (fact === 'suspended')
-        await h.db.admin.query("UPDATE access.account SET state='suspended' WHERE account_id=$1", [person.accountId]);
+      if (fact === 'suspended') await suspendAccount(h.db.admin, person.accountId);
       if (fact === 'fenced')
         await h.bindings.internalLifecycle.raiseFence({ accountId: person.accountId, key: randomUUID() });
       if (fact === 'epoch-stale')

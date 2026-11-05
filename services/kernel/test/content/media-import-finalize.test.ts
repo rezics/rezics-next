@@ -2,17 +2,41 @@ import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { createAuthService } from '@rezics/auth';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { Client, Pool } from 'pg';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import * as accessPorts from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import type { CommandAttempt } from '../../src/command/command.ts';
-import { importMediaFromUrl, type MediaImportDependencies } from '../../src/content/media-import.ts';
+import {
+  importMediaFromUrl,
+  MediaImportConflictError,
+  type MediaImportDependencies,
+} from '../../src/content/media-import.ts';
 import { tupleRoute } from '../../src/content/imported-contract.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
+
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `media_import_fin_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
 
 const root = '00000000-0000-8000-8000-000000000000';
 const route = 42000;
@@ -46,7 +70,7 @@ const request: MediaImportRequest = {
   },
 };
 let db: GrowthDatabase;
-let authFixture: ReturnType<typeof testDatabase>;
+let authFixture: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let authPool: Pool;
 let actor: AccountActor;
 let deps: MediaImportDependencies;
@@ -65,7 +89,7 @@ const context = (key = Bun.randomUUIDv7()) => ({
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1; // Independent anchors must release before the target checkout.
-  authFixture = testDatabase();
+  authFixture = await cloneAuthDatabase();
   authPool = new Pool({ connectionString: authFixture.url });
   await db.admin.query(
     `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
@@ -85,7 +109,7 @@ beforeAll(async () => {
     audience: 'https://api.rezics.test',
     secret: 'media-finalize-fixture-secret-at-least-thirty-two-characters',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(db.admin, routeOf(id)!, id);
         return (
@@ -104,7 +128,7 @@ beforeAll(async () => {
         provisioning = false;
         return { accountId };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'importer', firstParty: true, scopes: actions });
   await auth.internal.provisionPassword({
@@ -205,7 +229,7 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const restorer of restorers) restorer.mockRestore();
   await authPool?.end();
-  authFixture?.close();
+  await authFixture?.close();
   await db?.close();
 });
 async function grant(action: string) {
@@ -311,20 +335,22 @@ test('receipt replay performs no initializer/finalizer/body, revoked authority d
     expect(denied.capture.statements.some((s) => /FROM core.receipt/.test(s))).toBe(false);
     await grant(action);
   }
-  await db.admin.query(`UPDATE content.source_fences SET taken_down=true,security_revision=2 WHERE route=$1`, [
-    sourceRoute,
-  ]);
+  await db.admin.query(
+    `UPDATE content.source_fences SET taken_down=true,taken_down_at=now(),takedown_id=gen_random_uuid(),security_revision=2 WHERE route=$1`,
+    [sourceRoute],
+  );
   try {
     const denied = await capture(db, async () => {
       await expect(importMediaFromUrl(deps, actor, request, context(attempt.idempotencyKey))).rejects.toBeInstanceOf(
-        GrantDeniedError,
+        MediaImportConflictError,
       );
     });
     expect(denied.capture.statements.some((s) => /FROM core.receipt/.test(s))).toBe(false);
   } finally {
-    await db.admin.query(`UPDATE content.source_fences SET taken_down=false,security_revision=3 WHERE route=$1`, [
-      sourceRoute,
-    ]);
+    await db.admin.query(
+      `UPDATE content.source_fences SET taken_down=false,taken_down_at=NULL,takedown_id=NULL,security_revision=3 WHERE route=$1`,
+      [sourceRoute],
+    );
   }
   expect([initialized, finalized]).toEqual(calls);
 });

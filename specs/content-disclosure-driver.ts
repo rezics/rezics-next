@@ -30,7 +30,7 @@ export type Persona = 'anonymous' | 'author' | 'unrelated' | 'moderator' | 'susp
 export type Target = { kind: 'board' | 'thread' | 'post'; id: string };
 export interface Revision {
   id: string;
-  hash: string;
+  hash: string | null;
   body: string | null;
   availability: 'available' | 'erased';
 }
@@ -212,6 +212,4 @@ export interface ContentDisclosureDriver {
   verifiedBotToken(): Promise<string>;
   inspectReports(persona: Persona, target: Target): Promise<Reply<Report[]>>;
   observe(target: Target): Promise<Observation>;
-  /** Real search/projection API; drain is an explicit bounded worker barrier. */
-  search(persona: Persona, query: string): Promise<Reply<Page>>;
 }

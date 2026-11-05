@@ -1,0 +1,670 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHash, randomInt, randomUUID } from 'node:crypto';
+import pg from 'pg';
+import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { DEFAULT_REQUEST_DEADLINE_MS, type CommandAuthorization } from '../../src/command/command.ts';
+import { createPool } from '../../src/database/pool.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
+import { fullView } from '../../src/library/views.ts';
+import { SESSION_HEADER } from '../../src/http/request.ts';
+import { accessCheck, actorOf, type AccountActor } from '../../src/request/access.ts';
+import { withRequestDeadline } from '../../src/request/deadline.ts';
+import { newId, routeOf } from '../../src/route/route.ts';
+import { ensureAccountAgent } from '../../src/semantic/account-agents.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import {
+  listSubjectLinks,
+  listSubjectRelations,
+  linkProjection,
+  type SubjectLinksPage,
+  type SubjectRelationsPage,
+} from '../../src/semantic/links.ts';
+import { subjectReadEligibility } from '../../src/semantic/eligibility.ts';
+import { mergeSubjects } from '../../src/semantic/merges.ts';
+import { moveMergePage } from '../../src/semantic/merge-moves.ts';
+import { createSubject } from '../../src/semantic/subject.ts';
+import { readStatementAs, withPublicStatementReader } from '../../src/semantic/statement-disclosure.ts';
+import { encodeSession } from '../../src/tokens/session.ts';
+import readCheckpoint from '../../src/semantic/read-link-checkpoint.sql';
+import readPending from '../../src/semantic/merge-read-projection-pending.sql';
+import readPermissionTime from '../../src/access/permission-time.sql';
+import readSubjectIdentity from '../../src/semantic/read-subject-identity.sql';
+import readSubject from '../../src/semantic/read-subject.sql';
+import readVisibility from '../../src/semantic/read-visibility.sql';
+import { observeSql, type SqlObserver } from '../content/support/sql-observer.ts';
+import { capture, openGrowthDatabase } from '../support/growth.ts';
+import { testRouteKey, TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
+import { createRealAccess } from './real-access.ts';
+
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
+const pool = createPool(databaseUrl);
+const admin = new pg.Pool({ connectionString: databaseUrl, max: 3 });
+const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(87)]]) };
+const accounts = {
+  owner: newId(randomInt(65536)),
+  reader: newId(randomInt(65536)),
+  moderator: newId(randomInt(65536)),
+};
+const actions = ['subject:create', 'subject:read', 'subject:merge', 'moderation:hide'];
+const real = await createRealAccess(admin, accounts, actions);
+const access = real.access({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
+const kernel = createKernel({
+  pool,
+  routeKey: testRouteKey(),
+  requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
+  access: real.access,
+  tokens,
+  writeRate: real.writeRate,
+});
+const projection = linkProjection(pool);
+const property = 'rezics:penNameOf';
+let agent: string;
+const digest = (id: string) => createHash('sha256').update(id).digest();
+const partition = () => randomInt(1000, 4000);
+
+beforeAll(async () => {
+  await bootstrapRelease(pool, bundledRelease);
+  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'subject:create');
+  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'owner', 'subject:merge');
+  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:hide');
+  const owner = await actor('owner');
+  agent = (await ensureAccountAgent(pool, { account: owner.accountId, kind: 'person', name: 'Evidence owner' })).subject
+    .id;
+});
+afterAll(async () => {
+  await pool.end();
+  await admin.end();
+});
+
+async function actor(persona: keyof typeof accounts) {
+  return (await actorOf(
+    access,
+    new Request('https://kernel.test', { headers: { authorization: `Bearer ${real.bearer(persona)}` } }),
+    { pool, deadline: Date.now() + DEFAULT_REQUEST_DEADLINE_MS },
+  )) as AccountActor;
+}
+async function create(part: number, label: string, target?: string, privateStatement = false) {
+  const owner = await actor('owner');
+  const route = part * 16;
+  const id = newId(route);
+  const authorize = await accessCheck(
+    access,
+    owner,
+    'subject:create',
+    { route: 0, id: GLOBAL_CONTEXT },
+    { pool, deadline: Date.now() + DEFAULT_REQUEST_DEADLINE_MS },
+  );
+  const result = await createSubject(pool, {
+    actor: owner,
+    target: { route, id },
+    idempotencyKey: randomUUID(),
+    digest: digest(id),
+    release: { digest: bundledDigest, release: bundledRelease },
+    authorize,
+    item: {
+      type: 'schema:Person',
+      labels: { en: label },
+      ...(target
+        ? {
+            statements: {
+              [property]: [
+                {
+                  property: { id: property },
+                  value: { type: 'value', content: target },
+                  qualifiers: [],
+                  references: privateStatement
+                    ? []
+                    : [
+                        {
+                          parts: [
+                            {
+                              property: { id: 'schema:url' },
+                              value: { type: 'value', content: 'https://example.test/evidence' },
+                            },
+                          ],
+                        },
+                      ],
+                },
+              ],
+            },
+          }
+        : {}),
+    },
+  });
+  for (const persona of ['owner', 'reader', 'moderator'] as const)
+    await real.grant({ route, id }, persona, 'subject:read');
+  return { id, route, component: result.component };
+}
+async function catchUp(part: number) {
+  for (let i = 0; i < 200; i++) {
+    const result = await projection.run(part);
+    if (result.status === 'busy') {
+      await Bun.sleep(5);
+      continue;
+    }
+    if (!result.envelopes) return;
+  }
+  throw new Error('Native link projection did not catch up');
+}
+async function call(
+  path: string,
+  persona: keyof typeof accounts,
+  component: { partition: number; epoch: number; position: bigint },
+  reader: ReturnType<typeof createKernel> = kernel,
+) {
+  const response = await reader.handle(
+    new Request(`https://kernel.test/v1/subjects/${path}`, {
+      headers: {
+        authorization: `Bearer ${real.bearer(persona)}`,
+        [SESSION_HEADER]: encodeSession(tokens, `account:${accounts[persona]}`, [component]),
+      },
+    }),
+  );
+  return { status: response.status, body: (await response.json()) as Record<string, any> };
+}
+async function expireIssuedProof(observer: SqlObserver, waitStarted: string) {
+  const issued = observer.records.filter(({ statement }) => statement === readPermissionTime.sql).at(-1);
+  // HTTP list routes already wait before preparing evidence. Native list callers and
+  // subject reads issue real evidence before this barrier, whose lifetime must expire.
+  const expires = Date.parse(issued?.executedAt ?? waitStarted) + 1100;
+  while (Date.now() < expires) await Bun.sleep(Math.min(20, expires - Date.now()));
+}
+async function held<T>(
+  observer: SqlObserver,
+  statement: string,
+  run: () => Promise<T>,
+  during: () => Promise<void>,
+  boundary: 'before' | 'after' = 'after',
+) {
+  const barrier = observer.hold({ statement }, boundary);
+  const result = run();
+  try {
+    const boundary = await Promise.race([
+      barrier.entered,
+      result.then(() => {
+        throw new Error('Read completed before native barrier');
+      }),
+    ]);
+    await expireIssuedProof(observer, boundary.executedAt);
+    await during();
+  } finally {
+    barrier.release();
+  }
+  return result;
+}
+
+for (const persona of ['owner', 'reader', 'moderator'] as const) {
+  test(`subject and relation HTTP reads refresh ${persona} audience after native projection waits outlive proof`, async () => {
+    const part = partition();
+    const holder = await create(part, 'Private evidence holder', agent, true);
+    await real.grant({ route: routeOf(agent)!, id: agent }, persona, 'subject:read');
+    for (const suffix of ['', `/relations?property=${encodeURIComponent(property)}`]) {
+      // Real pending outbox work and a missing checkpoint, never a replacement projection result.
+      await admin.query("DELETE FROM core.consumer_checkpoint WHERE partition_no=$1 AND consumer='semantic_links'", [
+        part,
+      ]);
+      const observer = observeSql(pool);
+      try {
+        const result = await held(
+          observer,
+          readCheckpoint.sql,
+          () => call(`${holder.id}${suffix}`, persona, holder.component),
+          () => catchUp(part),
+        );
+        expect(result.status, JSON.stringify(result.body)).toBe(200);
+        const rows = suffix ? result.body.relations : (result.body.subject.statements[property] ?? []);
+        expect(rows).toHaveLength(persona === 'reader' ? 0 : 1);
+        const reads = observer.records;
+        const wait = reads.findIndex(({ statement }) => statement === readCheckpoint.sql);
+        expect(reads.slice(wait + 1).some(({ statement }) => statement === readPermissionTime.sql)).toBe(true);
+      } finally {
+        await observer.close();
+      }
+    }
+  }, 60_000);
+}
+
+for (const kind of ['links', 'relations'] as const) {
+  test(`native ${kind} prepares primary and moderator evidence after its internal freshness wait`, async () => {
+    const part = partition();
+    const target = await create(part, 'Native evidence target');
+    const holder = await create(part, 'Native evidence holder', target.id);
+    const subject = kind === 'links' ? target : holder;
+    const as = await actor('moderator');
+    const observer = observeSql(pool);
+    try {
+      const result = await held(
+        observer,
+        readCheckpoint.sql,
+        () =>
+          withRequestDeadline(Date.now() + DEFAULT_REQUEST_DEADLINE_MS, async () => {
+            const deadline = Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
+            const prepareAuthorization = () =>
+              accessCheck(
+                access,
+                as,
+                'subject:read',
+                { route: subject.route, id: subject.id, eligibility: subjectReadEligibility(subject) },
+                { pool, deadline },
+              );
+            const check = await prepareAuthorization();
+            return readStatementAs<SubjectLinksPage | SubjectRelationsPage>(pool, access, as, deadline, () => {
+              const options = {
+                routeKey: new Uint8Array(32).fill(88),
+                subject: subject.id,
+                property,
+                limit: 20,
+                release: bundledRelease,
+                authorize: check,
+                prepareAuthorization,
+                seen: [holder.component],
+                includeLabels: false,
+              };
+              return kind === 'links'
+                ? listSubjectLinks(pool, tokens, options)
+                : listSubjectRelations(pool, tokens, options);
+            });
+          }),
+        () => catchUp(part),
+        // Dispatch the real probe after catch-up. Holding an already stale result
+        // past the reserved wait ceiling correctly reports caught_up=false.
+        'before',
+      );
+      if ('links' in result) expect(result.links).toHaveLength(1);
+      else expect(result.relations).toHaveLength(1);
+      expect(result.freshness.caught_up).toBe(true);
+      const wait = observer.records.findIndex(({ statement }) => statement === readCheckpoint.sql);
+      const visibility = observer.records.findIndex(({ statement }) => statement === readVisibility.sql);
+      expect(visibility).toBeGreaterThan(wait);
+      const snapshot = observer.records
+        .slice(0, visibility)
+        .findLastIndex(({ statement }) => statement === 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      expect(snapshot).toBeGreaterThan(wait);
+      expect(
+        observer.records.slice(0, wait).filter(({ statement }) => statement === readPermissionTime.sql),
+      ).toHaveLength(2);
+      // Preparation occurs outside RR. The two authoritative permission times
+      // inside the final snapshot are evaluations, not additional preparations.
+      expect(
+        observer.records.slice(wait + 1, snapshot).filter(({ statement }) => statement === readPermissionTime.sql),
+      ).toHaveLength(2);
+      expect(
+        observer.records.slice(snapshot).filter(({ statement }) => statement === readPermissionTime.sql),
+      ).toHaveLength(2);
+    } finally {
+      await observer.close();
+    }
+  }, 60_000);
+}
+
+test('pending inbound merge member retry prepares fresh primary and audience evidence for the second snapshot', async () => {
+  const part = partition();
+  const target = await create(part, 'Pending member target');
+  const first = await create(part, 'Pending member first', target.id);
+  const second = await create(part, 'Pending member second', target.id);
+  await catchUp(part);
+  const [survivor, merged] = [first.id, second.id].sort() as [string, string];
+  const owner = await actor('owner');
+  const deadline = Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
+  const mergeCheck = await accessCheck(
+    access,
+    owner,
+    'subject:merge',
+    { route: 0, id: GLOBAL_CONTEXT },
+    { pool, deadline },
+  );
+  const authorization: CommandAuthorization = {
+    action: 'subject:merge',
+    resource: { route: 0, id: GLOBAL_CONTEXT },
+    denied: () => new Error('Merge denied'),
+    authorize: async (client, attempt) => {
+      if (!(await mergeCheck(client, attempt.time))) throw new Error('Merge denied');
+      return 'execute';
+    },
+  };
+  await mergeSubjects(pool, {
+    subjects: [first.id, second.id],
+    survivor,
+    actor: owner,
+    idempotencyKey: randomUUID(),
+    digest: digest(merged),
+    release: { digest: bundledDigest, release: bundledRelease },
+    authorization,
+    deadline,
+  });
+  const observer = observeSql(pool);
+  try {
+    const result = await held(
+      observer,
+      readPending.sql,
+      () => call(`${target.id}/links?property=${encodeURIComponent(property)}`, 'moderator', target.component),
+      async () => {
+        await moveMergePage(pool, merged, survivor);
+        await catchUp(part);
+      },
+    );
+    expect(result.status, JSON.stringify(result.body)).toBe(200);
+    expect(result.body.links.length).toBeGreaterThan(0);
+    expect(result.body.links.every((link: { subject: string }) => link.subject === survivor)).toBe(true);
+    expect(result.body.links[0].subject).toBe(survivor);
+    expect(result.body.freshness.caught_up).toBe(true);
+    expect(observer.records.filter(({ statement }) => statement === readPending.sql).length).toBeGreaterThan(1);
+  } finally {
+    await observer.close();
+  }
+}, 60_000);
+
+test('forced public audience survives a long native wait with the same authenticated moderator', async () => {
+  const part = partition();
+  const holder = await create(part, 'Public evidence holder', agent, true);
+  const observer = observeSql(pool);
+  try {
+    const result = await held(
+      observer,
+      readCheckpoint.sql,
+      () => withPublicStatementReader(() => call(holder.id, 'moderator', holder.component)),
+      () => catchUp(part),
+    );
+    expect(result.status, JSON.stringify(result.body)).toBe(200);
+    expect(result.body.subject.statements[property] ?? []).toHaveLength(0);
+    expect(JSON.stringify(result.body)).not.toContain(agent);
+  } finally {
+    await observer.close();
+  }
+}, 60_000);
+
+test('an inbound pending-member wait that stays behind cannot return an earlier authorization', async () => {
+  const part = partition();
+  const target = await create(part, 'Unsettled pending target');
+  const first = await create(part, 'Unsettled pending first', target.id);
+  const second = await create(part, 'Unsettled pending second', target.id);
+  await catchUp(part);
+  const [survivor, merged] = [first.id, second.id].sort() as [string, string];
+  const owner = await actor('owner');
+  const deadline = Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
+  const check = await accessCheck(access, owner, 'subject:merge', { route: 0, id: GLOBAL_CONTEXT }, { pool, deadline });
+  await mergeSubjects(pool, {
+    subjects: [first.id, second.id],
+    survivor,
+    actor: owner,
+    idempotencyKey: randomUUID(),
+    digest: digest(merged),
+    release: { digest: bundledDigest, release: bundledRelease },
+    deadline,
+    authorization: {
+      action: 'subject:merge',
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      denied: () => new Error('Merge denied'),
+      authorize: async (client, attempt) => {
+        if (!(await check(client, attempt.time))) throw new Error('Merge denied');
+        return 'execute';
+      },
+    },
+  });
+  const denial = randomUUID();
+  const observer = observeSql(pool);
+  try {
+    const result = await held(
+      observer,
+      readPending.sql,
+      () => call(`${target.id}/links?property=${encodeURIComponent(property)}`, 'reader', target.component),
+      async () => {
+        await real.revoke(target, 'reader', 'subject:read');
+        await admin.query(
+          `INSERT INTO access.resource_denial
+           (route,resource_id,subject_id,subject_role,action,reason,valid,transaction_id)
+           VALUES ($1,$2,$3,'','subject:read','resource','(,)'::tstzrange,$4)`,
+          [target.route, target.id, accounts.reader, denial],
+        );
+        // Leave the real merge work pending: this exercises the not-caught-up exit.
+      },
+    );
+    expect(result.status, JSON.stringify(result.body)).toBe(404);
+    expect(result.body).not.toHaveProperty('links');
+    expect(result.body).not.toHaveProperty('redirect');
+    const waits = observer.records.filter(({ statement }) => statement === readPending.sql);
+    expect(waits.length).toBeGreaterThan(1);
+    const lastWait = observer.records.findLastIndex(({ statement }) => statement === readPending.sql);
+    expect(observer.records.slice(lastWait + 1).some(({ statement }) => statement === readVisibility.sql)).toBe(true);
+  } finally {
+    await admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);
+    await observer.close();
+  }
+}, 60_000);
+
+test('a final native source read held beyond the original HTTP deadline returns the exact GET deadline problem', async () => {
+  const part = partition();
+  const subject = await create(part, 'Expired final source snapshot');
+  await catchUp(part);
+  let originalDeadline: number | undefined;
+  // Keep the production ceiling for this intentional expiry control. Observe the
+  // actual preparation context while forwarding the native proof unchanged.
+  const expiringKernel = createKernel({
+    pool,
+    tokens,
+    routeKey: new Uint8Array(32).fill(88),
+    writeRate: real.writeRate,
+    access(config) {
+      const native = real.access(config);
+      return deriveAccess(native, {
+        async prepare(actor, action, resource, context) {
+          originalDeadline = context.deadline;
+          return native.prepare!(actor, action, resource, context);
+        },
+      });
+    },
+  });
+  const observer = observeSql(pool);
+  const barrier = observer.hold({ statement: readVisibility.sql }, 'after');
+  const response = call(
+    `${subject.id}/links?property=${encodeURIComponent(property)}`,
+    'reader',
+    subject.component,
+    expiringKernel,
+  );
+  try {
+    try {
+      await Promise.race([
+        barrier.entered,
+        response.then(() => {
+          throw new Error('Read completed before final source barrier');
+        }),
+      ]);
+      if (originalDeadline === undefined) throw new Error('Native authorization did not expose its request deadline');
+      while (Date.now() <= originalDeadline) await Bun.sleep(Math.min(20, originalDeadline - Date.now() + 1));
+    } finally {
+      barrier.release();
+    }
+    const result = await response;
+    expect(result.status, JSON.stringify(result.body)).toBe(503);
+    expect(result.body).toMatchObject({
+      status: 503,
+      code: 'deadline_exceeded',
+      retryable: true,
+      effect_status: 'not_applicable',
+    });
+    expect(result.body).not.toHaveProperty('links');
+    expect(result.body).not.toHaveProperty('redirect');
+  } finally {
+    barrier.release();
+    await response.catch(() => {});
+    await observer.close();
+  }
+}, 60_000);
+
+for (const kind of ['links', 'relations'] as const) {
+  for (const change of ['hide', 'revoke', 'redirect'] as const) {
+    test(`${kind} final HTTP authorization observes ${change} during a native wait beyond evidence lifetime`, async () => {
+      const part = partition();
+      const target = await create(part, 'Changed evidence target');
+      const holder = await create(part, 'Changed evidence holder', target.id);
+      const subject = kind === 'links' ? target : holder;
+      const mate = change === 'redirect' ? await create(part, 'Redirect mate') : null;
+      const denial = randomUUID();
+      const observer = observeSql(pool);
+      let redirect: string | undefined;
+      try {
+        const result = await held(
+          observer,
+          readCheckpoint.sql,
+          () => call(`${subject.id}/${kind}?property=${encodeURIComponent(property)}`, 'reader', holder.component),
+          async () => {
+            if (change === 'revoke') {
+              await real.revoke(subject, 'reader', 'subject:read');
+              await admin.query(
+                `INSERT INTO access.resource_denial
+                (route,resource_id,subject_id,subject_role,action,reason,valid,transaction_id)
+                VALUES ($1,$2,$3,'','subject:read','resource','(,)'::tstzrange,$4)`,
+                [subject.route, subject.id, accounts.reader, denial],
+              );
+            } else if (change === 'hide') {
+              const response = await kernel.handle(
+                new Request(`https://kernel.test/v1/subjects/${subject.id}:hide`, {
+                  method: 'POST',
+                  headers: {
+                    authorization: `Bearer ${real.bearer('moderator')}`,
+                    'content-type': 'application/json',
+                    'idempotency-key': `"${randomUUID()}"`,
+                  },
+                  body: JSON.stringify({ reason: 'Fresh evidence visibility race' }),
+                }),
+              );
+              expect(response.status).toBe(200);
+            } else {
+              if (!mate) throw new Error('Redirect mate is missing');
+              const owner = await actor('owner');
+              const check = await accessCheck(
+                access,
+                owner,
+                'subject:merge',
+                { route: 0, id: GLOBAL_CONTEXT },
+                { pool, deadline: Date.now() + DEFAULT_REQUEST_DEADLINE_MS },
+              );
+              await mergeSubjects(pool, {
+                subjects: [subject.id, mate.id],
+                survivor: mate.id,
+                actor: owner,
+                idempotencyKey: randomUUID(),
+                digest: digest(subject.id),
+                release: { digest: bundledDigest, release: bundledRelease },
+                deadline: Date.now() + DEFAULT_REQUEST_DEADLINE_MS,
+                authorization: {
+                  action: 'subject:merge',
+                  resource: { route: 0, id: GLOBAL_CONTEXT },
+                  denied: () => new Error('Merge denied'),
+                  authorize: async (client, attempt) => {
+                    if (!(await check(client, attempt.time))) throw new Error('Merge denied');
+                    return 'execute';
+                  },
+                },
+              });
+              redirect = mate.id;
+              await moveMergePage(pool, subject.id, mate.id);
+            }
+            await catchUp(part);
+          },
+        );
+        expect(result.status, JSON.stringify(result.body)).toBe(change === 'redirect' ? 308 : 404);
+        if (redirect) expect(result.body.redirect).toEqual({ from: subject.id, to: redirect });
+        else expect(result.body).not.toHaveProperty('redirect');
+      } finally {
+        await admin.query('DELETE FROM access.resource_denial WHERE transaction_id=$1', [denial]);
+        await observer.close();
+      }
+    }, 60_000);
+  }
+}
+
+test('a native relations retry cannot reuse a formerly allowed moderator audience after its grant is revoked', async () => {
+  const part = partition();
+  const holder = await create(part, 'Revoked moderator private holder', agent, true);
+  const as = await actor('moderator');
+  const observer = observeSql(pool);
+  try {
+    const result = await held(
+      observer,
+      readCheckpoint.sql,
+      () =>
+        withRequestDeadline(Date.now() + DEFAULT_REQUEST_DEADLINE_MS, async () => {
+          const deadline = Date.now() + DEFAULT_REQUEST_DEADLINE_MS;
+          const prepareAuthorization = () =>
+            accessCheck(
+              access,
+              as,
+              'subject:read',
+              { ...holder, eligibility: subjectReadEligibility(holder) },
+              { pool, deadline },
+            );
+          const check = await prepareAuthorization();
+          return readStatementAs(pool, access, as, deadline, () =>
+            listSubjectRelations(pool, tokens, {
+              routeKey: new Uint8Array(32).fill(88),
+              subject: holder.id,
+              property,
+              limit: 20,
+              release: bundledRelease,
+              authorize: check,
+              prepareAuthorization,
+              seen: [holder.component],
+            }),
+          );
+        }),
+      async () => {
+        await real.revoke({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:hide');
+        await catchUp(part);
+      },
+    );
+    expect(result.relations).toHaveLength(0);
+    expect(result.count).toEqual({ value: 0, exact: true });
+  } finally {
+    await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'moderator', 'moderation:hide');
+    await observer.close();
+  }
+}, 60_000);
+
+test('FULL display records every backend and the fixed preflight and late preparation cost', async () => {
+  const part = partition();
+  const subject = await create(part, 'Full read cost evidence');
+  await catchUp(part);
+  const growth = await openGrowthDatabase(databaseUrl);
+  try {
+    const reader = (await actorOf(
+      access,
+      new Request('https://kernel.test', { headers: { authorization: `Bearer ${real.bearer('reader')}` } }),
+      { pool: growth.pool, deadline: Date.now() + DEFAULT_REQUEST_DEADLINE_MS },
+    )) as AccountActor;
+    const measured = await capture(
+      growth,
+      () =>
+        withRequestDeadline(Date.now() + DEFAULT_REQUEST_DEADLINE_MS, () =>
+          fullView({ routeKey: new Uint8Array(32).fill(88), pool: growth.pool, access, tokens }, reader, 'FULL', {
+            entries: [{ subjectId: subject.id }],
+          }),
+        ),
+      { includeBackends: true },
+    );
+    expect(measured.value.entries[0]!.subject).toMatchObject({ id: subject.id });
+    expect(measured.capture.statementBackends).toHaveLength(measured.capture.statements.length);
+    expect(measured.capture.statements.filter((statement) => statement === readSubjectIdentity.sql)).toHaveLength(1);
+    expect(measured.capture.statements.filter((statement) => statement === readSubject.sql)).toHaveLength(1);
+    // Preserve the complete capture, including control/catalog statements and
+    // all backend plans, so the additional point is independently auditable.
+    console.log(
+      'READ_ORDER_PROFILE',
+      JSON.stringify({
+        callsite: 'library/views.ts ViewReader.subject -> semantic/subject.ts readSubject',
+        files: {
+          identity: { file: 'semantic/read-subject-identity.sql', sql: readSubjectIdentity.sql },
+          final: { file: 'semantic/read-subject.sql', sql: readSubject.sql },
+          preparationAndEvaluation: { file: 'access/permission-time.sql', sql: readPermissionTime.sql },
+          checkpoint: { file: 'semantic/read-link-checkpoint.sql', sql: readCheckpoint.sql },
+        },
+        capture: measured.capture,
+      }),
+    );
+  } finally {
+    await growth.close();
+  }
+}, 60_000);

@@ -1,0 +1,189 @@
+# Private library bulk operations
+
+## Bounded preview and confirmation
+
+Commerce decision L2 supersedes the earlier cross-home confirmation-cut protocol and its capture/funding
+requirements. Preview explicit targets or a query against one explicit source Collection once, persist the exact
+target rows, and confirm that manifest. Query capture uses the installed Collection descriptor and Members
+readers, follows every page under stable source identity/revision/exposure and binds the caller's current viewer
+authority plus canonical filter/order and full selected population digest. It admits at most 100 pages/10,000 raw
+candidate rows and refuses the 1,001st unique Subject or occurrence effect; at most 1,000 effects may belong to an
+operation. The whole request is capped at 64 KiB. Pending source preparation remains `202 {preparing:true}` and
+missing source authority remains `503 dependency_unavailable`, never a fabricated empty result. Confirmation never
+reruns a filter or adds new matches.
+
+Use the existing occurrence selection, removal and Undo commands and UI. Preserve selected occurrence identity
+and multiplicity. Each effect compares the captured revision/incarnation in its actual native write. Record a
+changed entry as `conflict/revision_mismatch`, displayed as “Changed since preview; skipped”; continue the other
+targets. This is a per-target outcome, not rejection of confirmation. Native authorization, command receipts,
+durable initiator capture/restoration and account lifecycle checks continue to govern every action and read.
+
+Decision: the header retains action and source/filter/capture provenance without a second explicit ID array;
+installed `bulk_target` rows are the sole persisted effect manifest. A new preview gets a new operation identity.
+Retry retains the same operation and per-target receipt identities. Completed effects and their outcomes must
+commit together on the same home; remote commands must reconcile their original native receipts before any further
+attempt.
+
+## Native storage boundary
+
+Decision: each add-to-Collection Subject target captures its exact Collection; its action receipt lives on that Collection's partition, while the operation manifest remains on the operation route. Target commands carry the durable initiator's original client/request basis and verify it against current native initiator evidence before use.
+
+[`collection-bulk-store.ts`](collection-bulk-store.ts) implements the internal native transaction seam:
+
+- `collectCollectionBulkTargets` asks an admitted source for bounded useful pages, stopping at 1,001 matches.
+  Source cursors and authorization belong to the source; the collector invents neither a filter nor preparation.
+- `previewCollectionBulk` inserts one `bulk_operation` header and all `bulk_target` rows in the surrounding native
+  command transaction. It freezes action, initiator, creation receipt, target expectations and deterministic
+  per-target receipt locators. Reusing an operation identity with different intent refuses rather than replacing
+  membership. Canonical subjects are unique; distinct occurrence members preserve duplicate subjects.
+- `confirmCollectionBulk` transitions the operation once. Its caller must emit the registered Core outbox event
+  in that same native command. Zero-target previews complete on confirmation without an effect.
+- `readCollectionBulk` and `pageCollectionBulkManifest` use source route, operation and owner keys. They are
+  internal readers; the API must independently authorize the current caller and enforce results retention.
+- `applyCollectionBulkTarget` serializes same-home effects with the operation lock and stores terminal outcomes
+  in the same native command transaction. Replays return the original outcome, including resulting member ID.
+  Its native executor must atomically check the captured expectation and return the original native events.
+  It is not a remote effect dispatcher and must never wrap a network command in a local transaction.
+
+The operation header has full-key owner, due and expiry indexes. The installed manifest keeps its subject and
+occurrence uniqueness, state and pending indexes; no second manifest or scheduler is added. Existing
+`pageBulkOutcomes` remains the bounded reader for wire outcomes after native authorization and cursor validation.
+
+Decision: captured native occurrence expectations bind `member_revision`, `transaction_id` and `added_at` together;
+the older incarnation/sequence-only scaffold cannot authorize removal and fails with `evidence_missing`.
+
+`executeCollectionRemoveTarget` delegates to `collection-bulk-remove.ts`. It restores the initiating actor during
+each native command attempt, checks current Collection and Subject access, locks the exact member and compares
+those stamps before calling the existing retained batch-removal producer with the current parent CAS. No Subject
+population is scanned. Native member events, ordering and explicit Undo are preserved. The receipt response retains
+the original deletion identity, revision and Undo deadline. Same-home applied state/evidence commits with the removal;
+no-effect/conflict receipts contain terminal results without another personal write. The operation owner acknowledges
+those results and all cross-home results. Occurrence receipt locators use the actual Collection home.
+
+Current authority refusal creates no command receipt or effect and returns denied evidence with a null transaction
+identity. Only private source-bound accounting may recover an earlier exact receipt after refusal. This internal
+accounting result grants neither another effect nor public disclosure. Missing original receipt evidence on an
+already terminal target fails closed. The operation owner still installs its durable source reader/restorer and
+owns lifecycle, result authorization, retention and Accounts erasure composition.
+
+The mounted native API is `POST /v1/libraryOperations` (preview), `POST /v1/libraryOperations/:id:confirm`,
+`GET /v1/libraryOperations/:id`, `GET /v1/libraryOperations/:id/outcomes` and
+`POST /v1/libraryOperations/:id:cancel`. Creation returns a `preview` phase and a stable operation ID; only
+confirmation emits the Core execution intent. Reads require current `library_entry:list`; commands and restored
+status effects require current `library_entry:update`, the personal-library gate and native account lifecycle.
+The wire preview advertises `set_status`, `add_to_collection`, `remove_from_collection` and `remove_from_library`.
+Query selection carries `sourceId`, optional canonical `filter` and optional `sort:'id'`; the response exposes the
+source revision/exposure, digest, filter/order and bounded candidate/Subject counts. All four actions use their
+existing native admission and effect writers.
+
+Decision: explicit status changes existing tracked entries only; a missing entry is individually skipped with
+`conflict/missing_target`, and no preview or status operation creates an entry. Present targets bind the actual
+native incarnation and revision; the historical discovery sequence is zero for this explicit path and grants no
+creation authority. Unstamped legacy entries refuse preview until native incarnation cutover supplies the stamp.
+Canonical duplicates collapse to one target in first-selection order; empty selections refuse as invalid.
+
+The existing Library WorkModule consumes the registered confirmation outbox event with a deterministic operation
+workflow ID. Each step attempts at most 100 stored targets, and each segment at most ten pages. Ordinary native
+command admission applies; no funding or chunk ledger is added. Status effects, entry events, per-target command
+receipts and terminal evidence commit on the account home in one transaction. Private reconciliation verifies
+the exact committed receipt and its write basis without restoring authority or exposing results.
+Decision: existing action executors honor a legacy chunk admission hook when supplied; its absence does not replace or bypass native current-authority admission.
+A completed header with pending rows is an irreversible stop marker under the same lock as effects; pending
+outcomes drain in pages of 100. Cancellation never rolls back a completed effect. Expired execution cancels the
+remaining targets; result reads close at 48 hours. The indexed expiry workflow removes at most 100 manifest rows
+and one root per command. Accounts' existing `bulk_target` erasure phase also drains empty operation roots using
+its existing 100-row budget; it remains the erasure authority.
+
+## Further action composition
+
+The explicit status, curated Collection add and occurrence removal paths install native commands, routes, worker
+delivery and lifecycle cleanup. Web owns its consumer journey.
+
+## Collection add preview receiving
+
+Add preview accepts an explicit selection of canonical Subjects and one explicitly chosen active curated Collection
+that the initiating actor can update. Admission resolves current Subject identity and captures the native personal
+entry expectation required by the installed add executor; that expectation is not Collection membership evidence.
+The immutable manifest stores the chosen Collection on every target, with each target receipt on that Collection's
+partition. Preview does not read or change membership. Confirmation dispatches the installed executor, which checks
+current authority and membership at the stored destination and records skip-present, capacity and conflict outcomes
+per target. Ordinary Collection member addition remains duplicate-permitting.
+
+## Collection occurrence removal preview receiving
+
+Decision: occurrence removal previews accept unique explicit member IDs or a native filtered source's Subjects
+against an active curated target Collection; every matching live target row is retained by its member ID, so
+duplicate Subjects remain separate targets.
+
+Admission captures the selected native member revision, transaction ID and addedAt together with each exact Subject,
+member and Collection identity. Preview does not remove members. The persisted manifest binds that exact population
+to the durable initiator and native source. Confirmation uses only those stored targets and the installed per-target
+executor, which skips a changed occurrence individually. Query expansion uses the installed Collection Members
+reader and captures all matching target occurrences before the common operation is sealed.
+
+Future actions extend the installed preview, confirmation and result API only when their native executors are
+available. Filtered capture uses the source's installed Members authority and existing preparation implementation.
+
+Native executors must retain the real entry/occurrence CAS, live authorization, native domain events and exact
+remote receipt reconciliation. Reuse the delivered occurrence removal/Undo journey. Expose durable operation URLs
+for Web preview, explicit confirmation and per-target results; navigation and retry must recover the same operation.
+Retain the installed indexed cleanup and Accounts erasure composition when adding action-specific private state.
+
+## Personal Library removal executor
+
+`executeLibraryRemovalTarget` now delegates to `collection-bulk-library-removal.ts`; other action ports retain
+their existing implementation status. It removes only the captured personal entry through the ordinary native
+deletion transition and event. Copies, sessions, Collection occurrences and financial facts remain independent.
+The same owner transaction stores terminal target evidence and its original command receipt. `TargetEvidence`
+adds optional `deletion: { deletionId, revision, restoreUntil }` for successful removals, preserving the original
+720-hour deadline. Undo remains a separate admitted command.
+
+Decision: present `admissionSequence` is native `entry.owner_write_seq`; absent `slotGeneration` is the captured
+`owner_write_counter.seq`, conservatively conflicting on any intervening owner state write, including create/clear ABA.
+Missing native sequence evidence conflicts rather than being replaced with a synthetic value.
+
+Decision: explicit Library removal previews retain absent canonical subjects as no-effect candidates only while the captured owner-write counter remains unchanged.
+
+The internal source-bound recovery path verifies the exact persisted manifest, initiating record and original
+native receipt against terminal evidence. It may return private accounting after revocation; callers must still
+authorize every public result read. It neither acknowledges another home's outcome nor authorizes another effect.
+Personal removals are same-home; the executor installs no remote dispatcher, scheduler, public route or erasure path.
+It uses the operation owner's installed durable reader/restorer and chunk limiter; admission, confirmation and
+worker composition remain owned by the integration delivery.
+
+## Reopened removal results
+
+Decision: outcome pages return nullable `deletion` and `memberDeletion` fields from stored, source-bound terminal evidence; unavailable evidence stays null and GET never reconstructs a deletion from current state.
+
+The mounted typed outcomes route preserves personal `{ deletionId, revision, restoreUntil }` and occurrence
+`{ deletionId, revision, purgeAfter }` values exactly. Each receipt must match the stored operation digest,
+ordinal, Subject, occurrence and native command identity. Only an actual applied removal with terminal evidence
+can disclose one. Pending, skipped, no-effect and other actions carry null fields. Projection exposes no durable
+initiating actor, command credential or private accounting record.
+
+Every page requires the current independent operation owner, personal Library admission and Subject disclosure;
+Collection actions additionally require current native Collection read authority. Operation/state-bound cursors,
+20-row pages and private/no-store responses remain unchanged. Reads neither capture nor execute Undo: Web retains
+the restore command, and the native restore endpoint still independently admits current authority. The original
+restore expiry is never renewed by replay or later reads. The operation's 48-hour result lifetime governs access
+to this evidence separately from its restore deadline; existing Accounts erasure deletes the same manifest rows.
+
+## Static bounds
+
+The separately owned command envelope admits at most 64 KiB. The stored-value ceilings below bound internal
+persistence; they do not enlarge that envelope or admit an oversized command.
+
+One preview holds at most 1,000 targets, each at most 4,096 canonical JSON bytes, and request and initiator at most
+131,072 bytes each. Stored JSON whitespace has a separate finite SQL ceiling. An admitted source is read in pages
+of at most 100, with a final remaining-plus-one probe; sources returning one useful target per page need at most
+1,001 calls. Every source retains its own finite indexed per-call bound. Enumeration stops before persistence if
+the extra target exists. Manifest persistence uses one header insert, one multirow target insert and one header
+read; replay uses one header insert attempt and one read. Header insertion and target insertion are atomic.
+
+Manifest pages seek by `(route,operation_id,ordinal)` and emit at most 100 targets, using the installed pending
+partial index for pending work. A same-home attempt performs at most five full-key/indexed statements plus its
+native executor's static bound: header lock/read, target lock, target transition, indexed pending existence and
+header completion update (the last two share a statement). No runtime quotes, funding or no-refill ledger applies.
+Execution expires 24 hours after preview and results are retained for 48 hours. Retention never substitutes for
+current authorization or authorizes erasure by itself. Whole composed admission and worker ceilings must include
+the existing native command, Access, source and executor bounds when those adapters are installed.

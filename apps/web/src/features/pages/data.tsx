@@ -1,9 +1,72 @@
-import { pickText, planReads, platformRegistry, shownProperties, type CompositionDocument } from '@rezics/composition';
-import { createContext, useContext, type ComponentType, type ReactNode } from 'react';
-import type { Related, Subject } from '../../subject/types';
+import { Members } from './member-list';
+import type { MemberPageTarget } from './member-list-query';
+import {
+  pickLanguage,
+  pickText,
+  pageDocumentReferences,
+  planReads,
+  platformRegistry,
+  shownProperties,
+  type CompositionDocument,
+  type SelectedContext,
+  type PageContinuation,
+} from '@rezics/composition';
+import { type CoverRatio } from '@rezics/ui/cover';
+import { MetaLine } from '@rezics/ui/meta-line';
+import { TypeList, TypeListContext } from './type-list';
+import type { TypeListTarget } from './type-list-model';
+import { createContext, useContext, type ReactNode } from 'react';
+import { coverSrc } from '../../media/cover-src';
+import { coverOf, coverSubject } from '../../media/summary';
+import { m } from '../../paraglide/messages.js';
+import { languageName, LANGUAGE_PROPERTY, originalLanguage, originalTitle } from '../../subject/language';
+import { defaultReader, type Reader } from '../../subject/reader';
+import type { RelationDefinition } from '../../subject/relations';
+import type { ReleasedRelationDirectionResult } from '@rezics/definitions';
+import type { Related, Subject, Summary } from '../../subject/types';
+import { subjectHref } from '../../subject/subject-href';
+import { quantityPresentation } from '../../subject/quantity-presentation';
+import { timePresentation } from '../../subject/time-presentation';
 import type { PageDocument } from './render';
+import { statementDocument } from './documents';
+import * as accounts from './account';
+import { accountOf } from './account-read';
+import * as overview from './overview';
+import { SubjectPageCover } from './subject-page-cover';
+import { SubjectArtwork, SubjectArtworkBoundary } from '../catalogue/subject-artwork/view';
+import { CharacterRelationshipsSlot, SubjectPurchaseSlot } from './subject-slots';
+import { StatementCorrectionLink } from '../catalogue/statement-editor-link';
+import { ValueExplanationEntry } from '../catalogue/value-explanation-entry';
+import { SourceTagWeight } from '../catalogue/source-tag-weight';
+import {
+  bindDisclosedClassificationAssociation,
+  disclosedClassificationAssociations,
+  type DisclosedClassificationAssociation,
+} from './subject-classification-assessment';
+import {
+  ClassificationAssessControl,
+  classificationChangesHref,
+  classificationInspectHref,
+} from './subject-classification-assessment-view';
+import {
+  bestRank,
+  ExternalValue,
+  fieldLabel,
+  isRecord,
+  linkClass,
+  linkColor,
+  pageText,
+  PlainLink,
+  spoilerLevel,
+  webUrl,
+  type PageLink,
+  type Snak,
+  type Sources,
+  type Stmt,
+} from './shared';
+import { DocumentValue, LanguageTag, SPOILER_PROPERTY, SpoilerGate, type ValueLabels } from './values';
 
-export type PageMessages = {
+type CoreMessages = {
   unknown: string;
   none: string;
   unlabelled: string;
@@ -11,80 +74,119 @@ export type PageMessages = {
   aliases: string;
   search: string;
 };
+type SubjectMessages = {
+  cover: string;
+  coverCredit: string;
+  coverReveal: string;
+  coverWithheld: string;
+  coverVia: string;
+  details: string;
+  documentSpoiler: string;
+  licence: string;
+  source: string;
+  spoilerShow: string;
+};
+/** The subject page's own strings are optional so that a host that has none yet still renders the page. */
+export type PageMessages = CoreMessages & Partial<SubjectMessages>;
+const subjectMessages: SubjectMessages = {
+  cover: 'Cover',
+  coverCredit: 'Cover credit',
+  coverReveal: 'Show cover',
+  coverWithheld: 'Sensitive cover',
+  coverVia: 'via',
+  details: 'Details',
+  documentSpoiler: 'Reveal spoiler',
+  licence: 'Licence',
+  source: 'Source',
+  spoilerShow: 'Show spoilers',
+};
 
-type LinkProps = { href: string; lang?: string; children: ReactNode };
-type PageLink = ComponentType<LinkProps>;
-type Options = { locale: string; messages: PageMessages; link: PageLink };
-type Snak = { property: { id: string; data_type: string }; value: { type: string; content?: unknown } };
-type SubjectRead = { subject: Subject; related: Related };
-type SearchRead = { subjects: Pick<Subject, 'id' | 'labels'>[] };
-type PreparedRead = { header?: ReactNode; groups?: Map<string, ReactNode>; more?: ReactNode[]; list?: ReactNode[] };
+export { pageText };
+type Frame = { typeLabel?: string; ratio?: CoverRatio };
+type Options = {
+  locale: string;
+  subject?: string;
+  messages: CoreMessages & SubjectMessages;
+  link: PageLink;
+  reader: Reader;
+  frame: Frame;
+  labels: ValueLabels;
+  overview?: boolean;
+  headerActions?: ReactNode;
+};
+type SubjectRead = {
+  subject: Subject;
+  related: Related;
+  documents?: unknown;
+  summary?: Summary | null;
+};
+type PreparedRead = {
+  header?: ReactNode;
+  groups?: Map<string, ReactNode>;
+  more?: ReactNode[];
+  /** The subject's tags, as chips; a tag above the reader's spoiler level waits behind a reveal. */
+  tags?: ReactNode;
+  sources?: Sources;
+  classifications?: DisclosedClassificationAssociation[];
+};
 
-const PageContext = createContext<{ locale: string; messages: PageMessages; nodes: Map<string, PreparedRead> }>({
+/** A Zone's `cover` appearance token chooses the frame shared by its rows. */
+const tokenRatios: Record<string, CoverRatio> = {
+  portrait: '5:7',
+  square: '1:1',
+  landscape: '4:3',
+};
+
+const PageContext = createContext<{
+  locale: string;
+  messages: PageMessages;
+  nodes: Map<string, PreparedRead>;
+  ratio?: CoverRatio;
+  subject: string | null;
+  /** Whether the page shows the account's own presentation as its header. */
+  agentHeader: boolean;
+  sources: Sources | null;
+  link: PageLink;
+}>({
   locale: 'en',
-  messages: { unknown: '', none: '', unlabelled: '', sources: '', aliases: '', search: '' },
+  messages: {
+    unknown: '',
+    none: '',
+    unlabelled: '',
+    sources: '',
+    aliases: '',
+    search: '',
+    ...subjectMessages,
+  },
   nodes: new Map(),
+  subject: null,
+  agentHeader: false,
+  sources: null,
+  link: PlainLink,
 });
-const linkClass = 'text-link underline decoration-link/30 underline-offset-4 hover:decoration-current';
 const listClass = 'space-y-5 in-data-[density=compact]:space-y-3';
 
 export function usePageLocale(): string {
   return useContext(PageContext).locale;
 }
 
+/** Layout-only editor previews use the selected language without acquiring page data or read authority. */
+export function PageLocaleProvider({ locale, children }: { locale: string; children: ReactNode }) {
+  const context = useContext(PageContext);
+  return <PageContext.Provider value={{ ...context, locale }}>{children}</PageContext.Provider>;
+}
+
 export function usePageMessages(): PageMessages {
   return useContext(PageContext).messages;
-}
-
-/** Localized props and read text share the composition fallback policy. */
-export function pageText(value: unknown, locale: string) {
-  const safe = typeof value === 'string' || isRecord(value) ? value : '';
-  const picked = pickText(safe as string | Record<string, string>, locale);
-  return {
-    text: typeof picked.text === 'string' ? picked.text : '',
-    lang: picked.lang && picked.lang !== locale ? picked.lang : undefined,
-  };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function PlainLink({ href, lang, children }: LinkProps) {
-  return (
-    <a href={href} lang={lang}>
-      {children}
-    </a>
-  );
-}
-
-/** Only absolute web URLs become external links, including in references. */
-function webUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:';
-  } catch {
-    return false;
-  }
-}
-
-function ExternalValue({ value }: { value: string }) {
-  return webUrl(value) ? (
-    <a className={`${linkClass} break-all`} href={value}>
-      {value}
-    </a>
-  ) : (
-    <span>{value}</span>
-  );
 }
 
 function itemLink(id: string, labels: unknown, options: Options) {
   const label = pageText(labels, options.locale);
   const Link = options.link;
   return (
-    <span className={label.text ? linkClass : `${linkClass} text-muted-foreground`}>
+    <span className={`${linkClass} ${label.text ? linkColor : 'text-muted-foreground'}`}>
       <Link
-        href={`/${encodeURIComponent(options.locale)}/subjects/${encodeURIComponent(id)}`}
+        href={subjectHref({ id, label: label.text || options.messages.unlabelled }, options.locale).href}
         {...(label.lang ? { lang: label.lang } : {})}
       >
         {label.text || options.messages.unlabelled}
@@ -93,21 +195,8 @@ function itemLink(id: string, labels: unknown, options: Options) {
   );
 }
 
-function timeText(value: Record<string, unknown>, locale: string): string | null {
-  if (typeof value.time !== 'string') return null;
-  const match = /^([+-]?\d{4,})-(\d{2})-(\d{2})T/.exec(value.time);
-  if (!match || ![9, 10, 11].includes(value.precision as number)) return value.time;
-  const date = new Date(0);
-  // Kernel dates use 00 for the month/day omitted at year/month precision.
-  // setUTCFullYear also preserves years 0–99 instead of adding 1900.
-  date.setUTCFullYear(Number(match[1]), Math.max(1, Number(match[2])) - 1, Math.max(1, Number(match[3])));
-  if (!Number.isFinite(date.getTime())) return value.time;
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: 'UTC',
-    year: 'numeric',
-    ...(value.precision === 10 || value.precision === 11 ? { month: 'long' } : {}),
-    ...(value.precision === 11 ? { day: 'numeric' } : {}),
-  }).format(date);
+function timeText(value: unknown, locale: string): string {
+  return timePresentation(value, locale).text;
 }
 
 function inlineValue(snak: Snak, related: Related, options: Options): ReactNode {
@@ -123,65 +212,255 @@ function inlineValue(snak: Snak, related: Related, options: Options): ReactNode 
   const content = value.content;
   if (property.data_type === 'wikibase-item' && typeof content === 'string') {
     const entry = Object.hasOwn(related, content) ? related[content] : undefined;
+    if (TAG_PROPERTY_SET.has(property.id)) {
+      const label = pageText(entry?.labels, options.locale);
+      if (!entry || !label.text) return null;
+    }
     return itemLink(entry?.redirect ?? content, entry?.labels, options);
   }
-  if (property.data_type === 'quantity' && isRecord(content) && typeof content.amount === 'string') {
-    const amount = Number(content.amount);
-    const formatted = Number.isFinite(amount) ? new Intl.NumberFormat(options.locale).format(amount) : content.amount;
+  if (property.data_type === 'quantity') {
+    const quantity = quantityPresentation(content, related, options.locale);
+    if (!quantity) return null;
+    const unit = quantity.unitLabel ?? m.quantity_unit_unavailable({}, { locale: options.locale as never });
     return (
       <span>
-        {formatted}
-        {typeof content.unit === 'string' && content.unit !== '1' ? ` ${content.unit}` : ''}
+        {quantity.numbers}
+        {unit ? ` ${unit}` : ''}
       </span>
     );
   }
-  if (property.data_type === 'time' && isRecord(content)) return <span>{timeText(content, options.locale)}</span>;
+  if (property.data_type === 'time') return <span>{timeText(content, options.locale)}</span>;
   if (property.data_type === 'monolingualtext' && isRecord(content) && typeof content.language === 'string') {
     const text = pageText({ [content.language]: content.text }, options.locale);
     return <span lang={text.lang}>{text.text}</span>;
   }
-  if (typeof content !== 'string') return null;
+  if (typeof content !== 'string' || content === '') return null;
+  // A media id or a document is shown by the statement's own view; as a qualifier it has no reading form.
+  if (property.data_type === 'media') return null;
+  if (property.id === LANGUAGE_PROPERTY) {
+    const name = languageName(content, options.locale);
+    return name === undefined ? null : <span>{name}</span>;
+  }
   return property.data_type === 'url' ? <ExternalValue value={content} /> : <span>{content}</span>;
 }
 
-function subjectHeader(subject: Subject, options: Options) {
-  const label = pageText(subject.labels, options.locale);
-  const description = pageText(subject.descriptions, options.locale);
-  // Select a language for the alias list with the same policy as scalar text.
-  const aliasLanguage = pickText(
-    Object.fromEntries(Object.keys(subject.aliases).map((lang) => [lang, lang])),
-    options.locale,
-  ).lang;
-  const aliases = aliasLanguage ? (subject.aliases[aliasLanguage] ?? []) : [];
+/** Reuse ordinary field rendering in the private candidate comparison, without exposing raw JSON or ids. */
+export function CandidateValue({
+  snak,
+  related,
+  locale,
+  subject,
+  documents,
+  documentUnavailable,
+  link = PlainLink,
+}: {
+  snak: Snak & { id?: string };
+  related: Related;
+  locale: string;
+  subject?: string;
+  /** Authorized responses from this comparison's current read, never draft envelopes or a shared cache. */
+  documents?: unknown;
+  /** Profile readers can name an unavailable authored field without treating it like an ordinary scalar. */
+  documentUnavailable?: ReactNode;
+  link?: PageLink;
+}) {
+  const messages = {
+    ...subjectMessages,
+    unknown: m.subject_value_unknown({}, { locale: locale as never }),
+    none: m.subject_value_none({}, { locale: locale as never }),
+    unlabelled: m.subject_value_unlabelled({}, { locale: locale as never }),
+    sources: '',
+    aliases: '',
+    search: '',
+  };
+  const content = snak.value.type === 'value' ? snak.value.content : undefined;
+  if (snak.value.type === 'somevalue' || snak.value.type === 'novalue')
+    return (
+      <span className="text-muted-foreground">
+        {snak.value.type === 'somevalue' ? messages.unknown : messages.none}
+      </span>
+    );
+  if (snak.value.type === 'value' && snak.property.data_type === 'document') {
+    const document = statementDocument(subject ?? '', snak, documents);
+    if (document && isRecord(content))
+      return (
+        <DocumentValue
+          document={document}
+          lang={typeof content.language === 'string' ? content.language : undefined}
+          locale={locale}
+          labels={{
+            documentSpoiler: m.thread_reveal_spoiler({}, { locale: locale as never }),
+            spoilerShow: '',
+            cover: { withheld: '', reveal: '', credit: '', via: '' },
+          }}
+        />
+      );
+    return documentUnavailable ?? <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
+  }
+  if (snak.property.data_type === 'media')
+    return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
+  if (snak.property.data_type === 'quantity') {
+    const quantity = quantityPresentation(content, related, locale);
+    if (!quantity) return <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>;
+    const unit = quantity.unitLabel ?? m.quantity_unit_unavailable({}, { locale: locale as never });
+    return (
+      <span>
+        {quantity.numbers}
+        {unit ? ` ${unit}` : ''}
+      </span>
+    );
+  }
   return (
-    <header className="min-w-0 space-y-3 in-data-[density=compact]:space-y-2">
-      <h1
-        lang={label.lang}
-        className={`font-serif text-4xl font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-5xl${label.text ? '' : ' text-muted-foreground'}`}
-      >
-        {label.text || options.messages.unlabelled}
-      </h1>
-      {description.text && (
-        <p lang={description.lang} className="max-w-prose text-pretty leading-7 text-muted-foreground">
-          {description.text}
-        </p>
-      )}
-      {aliases.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-muted-foreground">{options.messages.aliases}</h2>
-          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-            {aliases.map((alias, index) => {
-              const text = pageText({ [aliasLanguage!]: alias }, options.locale);
-              return (
-                <li key={index} lang={text.lang}>
-                  {text.text}
-                </li>
-              );
-            })}
-          </ul>
+    inlineValue(snak, related, {
+      locale,
+      messages,
+      link,
+      reader: defaultReader,
+      frame: {},
+      labels: { documentSpoiler: '', spoilerShow: '', cover: { withheld: '', reveal: '', credit: '', via: '' } },
+    }) ?? <span>{m.candidate_value_unavailable({}, { locale: locale as never })}</span>
+  );
+}
+
+type Creator = { id: string; name: string; node: ReactNode };
+
+/** The properties that name a subject's principal creators, in the order the first one present is used. */
+const CREATOR_PROPERTIES = ['schema:author', 'schema:creator', 'schema:director', 'schema:musicBy'];
+const DATE_PROPERTIES = ['schema:datePublished', 'schema:startDate', 'schema:dateCreated'];
+const MAX_CREATORS = 4;
+const TAG_PROPERTIES = ['schema:keywords', 'schema:genre'] as const;
+const TAG_PROPERTY_SET = new Set<string>(TAG_PROPERTIES);
+const SOURCE_TAG_WEIGHT_PROPERTIES = new Set(['rezics:sourceTagWeight', 'rezics:sourceTagWeightMetric']);
+
+/** A name compared as written: no case, one space for any run of whitespace. */
+function foldName(text: string): string {
+  return text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function subjectHeader(read: SubjectRead, creators: Creator[], date: string | null, options: Options) {
+  const { subject, summary } = read;
+  const original = originalLanguage(subject);
+  const label = pageText(subject.labels, options.locale, original);
+  const title = label.text || options.messages.unlabelled;
+  const first = originalTitle(subject);
+  const quiet = first && label.text && first.text !== label.text ? first : undefined;
+  // The title and the original title are shown already, so an alternate name equal to either is left out.
+  const known = new Set([label.text, first?.text].filter((name): name is string => !!name).map(foldName));
+  const alternates = Object.fromEntries(
+    Object.entries(subject.aliases).map(([lang, names]) => [lang, names.filter((name) => !known.has(foldName(name)))]),
+  );
+  // Select a language for the alias list with the same policy as scalar text.
+  const aliasLanguage = pickLanguage(
+    Object.keys(alternates).filter((lang) => alternates[lang]?.length),
+    options.locale,
+    original,
+  );
+  const aliases = aliasLanguage ? (alternates[aliasLanguage] ?? []) : [];
+  const coverFor = {
+    ...coverSubject(subject.id, title, summary, subject.type),
+    ...(creators[0] ? { byline: creators[0].name } : {}),
+  };
+  const cover = (size: 'sm' | 'lg') => (
+    <SubjectPageCover
+      subject={coverFor}
+      cover={coverOf(summary)}
+      size={size}
+      src={coverSrc}
+      suitability={options.reader.suitability}
+      labels={options.labels.cover}
+      title={title}
+      via={options.messages.coverVia}
+      openLabel={m.subject_cover_open({ title }, { locale: options.locale as never })}
+      closeLabel={m.subject_cover_close({}, { locale: options.locale as never })}
+      locale={options.locale}
+      ratio={options.frame.ratio ?? '5:7'}
+      {...(size === 'lg' ? { priority: true } : { decorative: true })}
+    />
+  );
+  const facts = [options.frame.typeLabel, date].filter((fact): fact is string => !!fact);
+  return (
+    <div
+      id="subject-identity"
+      data-slot="subject-header"
+      className="min-w-0 space-y-4 in-data-[density=compact]:space-y-3"
+    >
+      <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-3 sm:gap-x-6">
+        <div className="shrink-0 sm:row-span-2">
+          <div className="sm:hidden">{cover('sm')}</div>
+          <div className="hidden w-60 sm:block">{cover('lg')}</div>
         </div>
+        <div data-slot="subject-identity" className="min-w-0 space-y-2 in-data-[density=compact]:space-y-1.5">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h1
+              lang={label.lang}
+              className={`min-w-0 break-words font-sans text-2xl font-semibold tracking-tight text-balance sm:text-4xl in-data-[heading-scale=lg]:sm:text-5xl${label.text ? '' : ' text-muted-foreground'}`}
+            >
+              {title}
+            </h1>
+            {label.text && <LanguageTag lang={label.lang} locale={options.locale} />}
+          </div>
+          {quiet && (
+            <p lang={quiet.lang} className="break-words text-base text-muted-foreground">
+              {quiet.text}
+            </p>
+          )}
+          {facts.length > 0 && (
+            <p className="text-sm text-muted-foreground">
+              <MetaLine items={facts} />
+            </p>
+          )}
+          {creators.length > 0 && (
+            <p data-slot="subject-creators" className="text-sm font-medium">
+              {creators.map((creator, index) => (
+                <span key={creator.id}>
+                  {index > 0 && ', '}
+                  {creator.node}
+                </span>
+              ))}
+            </p>
+          )}
+        </div>
+        <div
+          data-slot="subject-primary-actions"
+          className="col-span-full grid min-w-0 grid-cols-1 gap-3 sm:col-span-1 sm:col-start-2 sm:grid-cols-[minmax(0,1fr)_auto]"
+        >
+          {options.headerActions}
+        </div>
+        {aliases.length > 0 && (
+          <dl
+            data-slot="subject-aliases"
+            className="col-span-full grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,3fr)] gap-x-4 gap-y-1 text-sm sm:col-start-2 sm:col-span-1"
+          >
+            <dt className="font-semibold text-muted-foreground">{options.messages.aliases}</dt>
+            <dd className="min-w-0 break-words">
+              <MetaLine
+                items={aliases.map((alias, index) => {
+                  const text = pageText({ [aliasLanguage!]: alias }, options.locale);
+                  return (
+                    <span key={index} lang={text.lang}>
+                      {text.text}
+                    </span>
+                  );
+                })}
+              />
+            </dd>
+          </dl>
+        )}
+      </div>
+      {options.subject === subject.id && (
+        <>
+          <SubjectPurchaseSlot context={{ subjectId: subject.id, subjectType: subject.type, locale: options.locale }} />
+          <CharacterRelationshipsSlot
+            context={{
+              subjectId: subject.id,
+              subjectType: subject.type,
+              locale: options.locale,
+              label: title,
+            }}
+          />
+        </>
       )}
-    </header>
+    </div>
   );
 }
 
@@ -190,112 +469,485 @@ function prepareSubject(read: SubjectRead, options: Options, shown: Set<string>)
   const groups = new Map<string, ReactNode>();
   const relatedLabel = (id: string) =>
     pageText(Object.hasOwn(read.related, id) ? read.related[id]?.labels : {}, options.locale);
-  for (const [property, statements] of Object.entries(read.subject.statements)) {
-    const preferred: typeof statements = [];
-    const normal: typeof statements = [];
-    for (const statement of statements) {
-      if (statement.rank === 'preferred') preferred.push(statement);
-      else if (statement.rank === 'normal') normal.push(statement);
+  const { reader } = options;
+  const original = originalLanguage(read.subject);
+  const headerMedia = read.summary?.cover?.media;
+  const urls = new Set<string>();
+  const records = (() => {
+    const value: unknown = Reflect.get(read.subject, 'sourceRecords');
+    return Array.isArray(value) ? value : [];
+  })();
+  const identifiers: Sources['identifiers'] = [];
+  const named: Record<string, Creator[]> = {};
+  const dates: Record<string, string> = {};
+
+  const presentable = (statement: Stmt): ReactNode => {
+    const { value, property } = statement;
+    if (value.type === 'value' && property.data_type === 'media') {
+      // Keep the header's selected cover singular; every other assertion owns its actual media.
+      if (value.content === headerMedia) return null;
+      const label = fieldLabel(relatedLabel(property.id), options.locale);
+      return (
+        <SubjectArtwork
+          subject={read.subject.id}
+          statement={statement}
+          title={pageText(read.subject.labels, options.locale, original).text || options.messages.unlabelled}
+          propertyLabel={label.text || options.messages.unlabelled}
+          suitability={reader.suitability}
+          locale={options.locale}
+        />
+      );
     }
-    const chosen = preferred.length ? preferred : normal;
+    if (value.type === 'value' && property.data_type === 'document') {
+      const content = value.content;
+      const document = statementDocument(read.subject.id, statement, read.documents);
+      if (!isRecord(content) || document === undefined || typeof content.language !== 'string')
+        return <span>{m.candidate_value_unavailable({}, { locale: options.locale as never })}</span>;
+      const lang = content.language === options.locale ? undefined : content.language;
+      return (
+        <div className="space-y-1">
+          <DocumentValue document={document} lang={lang} locale={options.locale} labels={options.labels} />
+          <LanguageTag lang={content.language} locale={options.locale} />
+        </div>
+      );
+    }
+    return inlineValue(statement, read.related, options);
+  };
+
+  for (const [property, all] of Object.entries(read.subject.statements)) {
+    let chosen: Stmt[];
+    if (all.some((statement) => statement.property.data_type === 'document')) {
+      const candidate = pageDocumentReferences(read.subject, [property], options.locale)[0]?.candidate;
+      chosen = candidate ? (all as unknown as Stmt[]).filter((statement) => statement.id === candidate) : [];
+    } else {
+      chosen = bestRank(all as unknown as Stmt[]);
+    }
     if (!chosen.length) continue;
+    // A document-valued property contributes only its selected public candidate to the page.
+    const documents = chosen.flatMap((statement) =>
+      statement.value.type === 'value' &&
+      statement.property.data_type === 'document' &&
+      isRecord(statement.value.content) &&
+      typeof statement.value.content.language === 'string'
+        ? [statement.value.content.language]
+        : [],
+    );
+    if (documents.length > 1) {
+      const language = pickLanguage(documents, options.locale, original);
+      chosen = chosen.filter((statement) => {
+        const content = statement.value.content;
+        return !isRecord(content) || content.language === language;
+      });
+    }
     const label = relatedLabel(property);
-    const sources = new Set<string>();
-    const values = chosen.map((statement) => {
-      for (const reference of statement.references) {
-        for (const part of reference.parts) {
-          if (
-            part.property.data_type === 'url' &&
-            part.value.type === 'value' &&
-            typeof part.value.content === 'string'
-          )
-            sources.add(part.value.content);
+    const values = (options.overview ? chosen.slice(0, 3) : chosen).flatMap((statement) => {
+      // A value the page cannot present, such as a language with no name, stays out of the reading view.
+      const value = presentable(statement);
+      if (value === null) return [];
+      const gated = spoilerLevel(statement) > reader.spoilerLevel;
+      const content = statement.value.type === 'value' ? statement.value.content : undefined;
+      if (!gated) {
+        for (const reference of statement.references) {
+          for (const part of reference.parts) {
+            if (
+              part.property.data_type === 'url' &&
+              part.value.type === 'value' &&
+              typeof part.value.content === 'string'
+            )
+              urls.add(part.value.content);
+          }
+        }
+        if (statement.property.data_type === 'external-id' && typeof content === 'string')
+          identifiers.push({ label, value: content });
+        if (CREATOR_PROPERTIES.includes(property) && statement.property.data_type === 'wikibase-item') {
+          if (typeof content === 'string') {
+            const entry = Object.hasOwn(read.related, content) ? read.related[content] : undefined;
+            const id = entry?.redirect ?? content;
+            const name = pageText(entry?.labels, options.locale).text;
+            (named[property] ??= []).push({
+              id,
+              name,
+              node: itemLink(id, entry?.labels, options),
+            });
+          }
+        }
+        if (DATE_PROPERTIES.includes(property) && isRecord(content) && !(property in dates)) {
+          const date = timeText(content, options.locale);
+          if (date) dates[property] = date;
         }
       }
-      return (
-        <dd key={statement.id} className="min-w-0 space-y-2 break-words sm:col-start-2">
-          {inlineValue(statement, read.related, options)}
-          {statement.qualifiers.length > 0 && (
-            <dl className="ms-4 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm text-muted-foreground">
-              {statement.qualifiers.map((qualifier, index) => {
-                const name = relatedLabel(qualifier.property.id);
+      const qualifiers = statement.qualifiers.flatMap((qualifier) => {
+        if (qualifier.property.id === SPOILER_PROPERTY || SOURCE_TAG_WEIGHT_PROPERTIES.has(qualifier.property.id))
+          return [];
+        const shownValue = inlineValue(qualifier, read.related, options);
+        return shownValue === null ? [] : [{ qualifier, shownValue }];
+      });
+      const body = (
+        <>
+          {value}
+          {!TAG_PROPERTY_SET.has(property) && <SourceTagWeight statement={statement} locale={options.locale} />}
+          {qualifiers.length > 0 && (
+            <dl className="ms-4 min-w-0 space-y-2 text-sm text-muted-foreground">
+              {qualifiers.map(({ qualifier, shownValue }, index) => {
+                const name = fieldLabel(relatedLabel(qualifier.property.id), options.locale);
                 return (
-                  <div className="contents" key={index}>
-                    <dt lang={name.lang}>{name.text || options.messages.unlabelled}</dt>
-                    <dd>{inlineValue(qualifier, read.related, options)}</dd>
+                  <div
+                    className="grid min-w-0 grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]"
+                    key={index}
+                  >
+                    <dt lang={name.lang} className="min-w-0 [overflow-wrap:anywhere]">
+                      {name.text || options.messages.unlabelled}
+                    </dt>
+                    <dd className="min-w-0 [overflow-wrap:anywhere]">{shownValue}</dd>
                   </div>
                 );
               })}
             </dl>
           )}
-        </dd>
+        </>
       );
+      const actions = (
+        <div className="flex min-w-0 flex-wrap items-start gap-x-3 [&_a]:ms-0">
+          <StatementCorrectionLink
+            id={read.subject.id}
+            title={pageText(read.subject.labels, options.locale).text}
+            statement={statement.id}
+            property={property}
+            datatype={statement.property.data_type}
+            locale={options.locale}
+          />
+          <ValueExplanationEntry
+            id={read.subject.id}
+            title={pageText(read.subject.labels, options.locale, original).text}
+            statement={statement.id}
+            property={property}
+            context={read.subject.context}
+            locale={options.locale}
+          />
+          {(() => {
+            const bound = bindDisclosedClassificationAssociation({
+              subjectId: read.subject.id,
+              contextId: read.subject.context,
+              statement,
+              related: read.related,
+            });
+            if ('kind' in bound) return null;
+            return <ClassificationAssessControl identity={bound} locale={options.locale} />;
+          })()}
+        </div>
+      );
+      const wholeRecipe = read.subject.type === 'schema:Recipe' && gated;
+      return [
+        <dd
+          key={statement.id}
+          {...(read.subject.type === 'schema:Recipe' && !gated
+            ? { 'data-recipe-current-statement': statement.id }
+            : {})}
+          tabIndex={read.subject.type === 'schema:Recipe' ? -1 : undefined}
+          className="min-w-0 space-y-2 [overflow-wrap:anywhere] sm:col-start-2 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:min-w-11 [&_a]:max-w-full [&_a]:items-center [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-ring [&_a]:focus-visible:outline-offset-2"
+        >
+          {wholeRecipe ? (
+            <SpoilerGate
+              key={JSON.stringify([
+                read.subject.id,
+                read.subject.context,
+                options.locale,
+                reader.spoilerLevel,
+                statement.id,
+                statement.property,
+                statement.value,
+                statement.qualifiers,
+              ])}
+              label={options.messages.spoilerShow}
+              hideLabel={options.labels.spoilerHide}
+            >
+              {body}
+              {actions}
+            </SpoilerGate>
+          ) : (
+            <>
+              {gated ? (
+                <SpoilerGate
+                  key={JSON.stringify([
+                    read.subject.id,
+                    read.subject.context,
+                    options.locale,
+                    reader.spoilerLevel,
+                    statement.id,
+                    statement.property,
+                    statement.value,
+                    statement.qualifiers,
+                  ])}
+                  label={options.messages.spoilerShow}
+                  hideLabel={options.labels.spoilerHide}
+                >
+                  {body}
+                </SpoilerGate>
+              ) : (
+                body
+              )}
+              {actions}
+            </>
+          )}
+        </dd>,
+      ];
     });
+    if (!values.length) continue;
     groups.set(
       property,
       <div
         key={property}
-        className="grid gap-y-2 border-b border-border/60 pb-5 last:border-0 last:pb-0 sm:grid-cols-[minmax(10rem,1fr)_3fr] sm:gap-x-6 in-data-[density=compact]:pb-3"
+        className="grid min-w-0 gap-y-2 border-b border-border/60 pb-5 last:border-0 last:pb-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,3fr)] sm:gap-x-6 in-data-[density=compact]:pb-3"
       >
-        <dt lang={label.lang} className="font-semibold">
-          {label.text || options.messages.unlabelled}
+        <dt lang={label.lang} className="min-w-0 font-semibold [overflow-wrap:anywhere]">
+          {fieldLabel(label, options.locale).text || options.messages.unlabelled}
         </dt>
         {values}
-        {sources.size > 0 && (
-          <dd className="min-w-0 space-y-1 text-sm sm:col-start-2">
-            <span className="font-medium text-muted-foreground">{options.messages.sources}</span>
-            <ul className="list-disc space-y-1 ps-5">
-              {[...sources].map((source) => (
-                <li key={source}>
-                  <ExternalValue value={source} />
-                </li>
-              ))}
-            </ul>
-          </dd>
-        )}
       </div>,
     );
   }
+  const keywords = TAG_PROPERTIES.flatMap((property) =>
+    bestRank(
+      (Object.hasOwn(read.subject.statements, property) ? read.subject.statements[property] : []) as Stmt[],
+    ).flatMap((statement) => {
+      if (statement.value.type !== 'value' || typeof statement.value.content !== 'string') return [];
+      const id = statement.value.content;
+      const entry = Object.hasOwn(read.related, id) ? read.related[id] : undefined;
+      const label = pageText(entry?.labels, options.locale);
+      if (!entry || !label.text) return [];
+      return [{ statement, text: label.text, node: itemLink(entry.redirect ?? id, entry.labels, options) }];
+    }),
+  );
+  const visibleKeywords = keywords.filter(({ statement }) => spoilerLevel(statement) <= reader.spoilerLevel);
+  const spoilerKeywords = keywords.filter(({ statement }) => spoilerLevel(statement) > reader.spoilerLevel);
+  const spoilerKeywordPreview = options.overview ? spoilerKeywords.slice(0, 6) : spoilerKeywords;
+  const spoilerKeywordIdentity = spoilerKeywordPreview
+    .map(
+      ({ statement, text }) =>
+        [statement.id, text, spoilerLevel(statement), statement.qualifiers, statement.references] as const,
+    )
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+  const spoilerKeywordKey = JSON.stringify([
+    read.subject.id,
+    read.subject.context,
+    options.locale,
+    reader.spoilerLevel,
+    spoilerKeywordIdentity,
+  ]);
+  const tagList = (items: typeof keywords, slot: string) => (
+    <ul
+      data-slot={slot}
+      aria-label={m.subject_tags({}, { locale: options.locale as never })}
+      className="flex flex-wrap gap-2"
+    >
+      {items.map(({ statement, node }) => (
+        <li key={statement.id}>
+          <span className="inline-flex flex-wrap items-center gap-x-2 rounded-full border border-border px-2.5 py-0.5 text-sm">
+            {node}
+            <SourceTagWeight statement={statement} locale={options.locale} />
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+  const tags = keywords.length ? (
+    <>
+      {visibleKeywords.length
+        ? tagList(options.overview ? visibleKeywords.slice(0, 6) : visibleKeywords, 'subject-tags')
+        : null}
+      {spoilerKeywords.length ? (
+        <SpoilerGate
+          key={spoilerKeywordKey}
+          label={options.messages.spoilerShow}
+          hideLabel={options.labels.spoilerHide}
+        >
+          {tagList(spoilerKeywordPreview, 'subject-spoiler-tags')}
+        </SpoilerGate>
+      ) : null}
+    </>
+  ) : null;
+  const creators = (named[CREATOR_PROPERTIES.find((property) => named[property]?.length) ?? ''] ?? []).slice(
+    0,
+    MAX_CREATORS,
+  );
+  const date = dates[DATE_PROPERTIES.find((property) => property in dates) ?? ''] ?? null;
   return {
-    header: subjectHeader(read.subject, options),
+    header: subjectHeader(read, creators, date, options),
     groups,
+    tags,
     more: [...groups].filter(([property]) => !shown.has(property)).map(([, group]) => group),
+    classifications: disclosedClassificationAssociations({
+      subjectId: read.subject.id,
+      contextId: read.subject.context,
+      statements: read.subject.statements,
+      related: read.related,
+      propertyLabel: (propertyId) => fieldLabel(relatedLabel(propertyId), options.locale).text,
+      targetLabel: (targetId) =>
+        pageText(Object.hasOwn(read.related, targetId) ? read.related[targetId]?.labels : {}, options.locale).text,
+      inspectHref: (identity) =>
+        classificationInspectHref(
+          identity,
+          pageText(read.subject.labels, options.locale, original).text,
+          options.locale,
+        ),
+      changesHref: classificationChangesHref(
+        read.subject.id,
+        pageText(read.subject.labels, options.locale, original).text,
+        options.locale,
+      ),
+    }),
+    sources: {
+      credit: read.summary?.cover?.credit ?? null,
+      records,
+      urls: [...urls].filter((url) => !records.some((record) => isRecord(record) && record.url === url)),
+      identifiers,
+    },
   };
+}
+
+/** The nodes of one type anywhere in the document, in document order. */
+function nodesOfType(content: readonly unknown[], type: string): { id: string; props: Record<string, unknown> }[] {
+  return content.flatMap((node) => {
+    if (!isRecord(node) || !isRecord(node.props)) return [];
+    const nested = Object.values(node.props).flatMap((value) => (Array.isArray(value) ? nodesOfType(value, type) : []));
+    return [
+      ...(node.type === type && typeof node.props.id === 'string' ? [{ id: node.props.id, props: node.props }] : []),
+      ...nested,
+    ];
+  });
 }
 
 export function PageData({
   locale,
   subject = null,
+  subjectLabel,
+  currentHref,
+  pageTarget,
+  context,
+  continuation,
+  viewer,
+  releaseDigest,
+  propertyLabels,
+  listTarget,
+  fullList,
+  listCursor,
+  realm,
+  cacheReader,
+  account,
+  operator,
+  base,
   document,
   reads,
   messages,
   link = PlainLink,
+  reader = defaultReader,
+  typeLabel,
+  ratio,
+  relations = {},
+  directions,
+  headerActions,
+  readingView,
+  artworkSource,
   children,
 }: {
   locale: string;
   subject?: string | null;
+  subjectLabel?: string;
+  currentHref?: string | undefined;
+  pageTarget?: MemberPageTarget | undefined;
+  context?: SelectedContext | undefined;
+  continuation?: PageContinuation | undefined;
+  viewer?: {
+    state: 'anonymous' | 'account';
+    account?: string;
+    context: string;
+    actions: { statementPropose: 'allowed' | 'denied' | 'unavailable' };
+  };
+  releaseDigest?: string;
+  propertyLabels?: Record<string, { labels?: Record<string, string> }> | undefined;
+  listTarget?: TypeListTarget | undefined;
+  fullList?: string | undefined;
+  listCursor?: string | undefined;
+  realm?: string | undefined;
+  cacheReader?: string | null | undefined;
+  /** The account of an agent page, and the address of its overview. */
+  account?: { id: string; handle: string };
+  operator?: { id: string; handle: string | null; displayName: string | null };
+  base?: string;
   document: PageDocument;
-  reads: Record<string, { status: number; body: unknown }>;
+  reads: Record<string, { status: number; body: unknown; retryAt?: number }>;
   messages: PageMessages;
   link?: PageLink;
+  reader?: Reader;
+  typeLabel?: string;
+  ratio?: Frame['ratio'];
+  /** How each relation property reads from this page, from the definition release. */
+  relations?: Record<string, RelationDefinition>;
+  /** Native admission for the page's exact released relation directions. */
+  directions?: ReleasedRelationDirectionResult[];
+  /** Subject-only actions placed alongside the title in its header. */
+  headerActions?: ReactNode;
+  /** Only Overview bounds fact previews; Details retains every admitted value. */
+  readingView?: string;
+  /** The authentic caller source retires non-cover image state even when metadata is identical. */
+  artworkSource?: object;
   children?: ReactNode;
 }) {
   // Page documents have already passed the composition contract at the kernel boundary.
   const composition = document as CompositionDocument;
-  const plan = planReads(platformRegistry, composition, { subject });
+  const plan = planReads(platformRegistry, composition, {
+    subject,
+    account: account ?? null,
+    ...(context ? { context } : {}),
+    ...(continuation ? { continuation } : {}),
+  });
   const shown = new Set(shownProperties(composition));
-  const options = { locale, messages, link };
+  const resolved = { ...subjectMessages, ...messages };
+  const labels: ValueLabels = {
+    spoilerShow: resolved.spoilerShow,
+    spoilerHide: m.subject_spoiler_hide({}, { locale: locale as never }),
+    documentSpoiler: resolved.documentSpoiler,
+    cover: {
+      withheld: resolved.coverWithheld,
+      reveal: resolved.coverReveal,
+      credit: resolved.coverCredit,
+      via: resolved.coverVia,
+    },
+  };
+  const options: Options = {
+    locale,
+    ...(subject ? { subject } : {}),
+    messages: resolved,
+    link,
+    reader,
+    frame: { ...(typeLabel ? { typeLabel } : {}), ...(ratio ? { ratio } : {}) },
+    labels,
+    overview: readingView === 'overview',
+    ...(headerActions ? { headerActions } : {}),
+  };
   const prepared = new Map<string, PreparedRead>();
+  let overviewSubjectLabel = subjectLabel;
+  let overviewRelated: Related | undefined;
+  let sources: Sources | null = null;
+  let artworkRelease: unknown;
+  let artworkContext: unknown;
   for (const [key, planned] of Object.entries(plan.reads)) {
     const result = Object.hasOwn(reads, key) ? reads[key] : undefined;
     if (result?.status !== 200 || !isRecord(result.body)) continue;
     if (planned.kind === 'subject' && isRecord(result.body.subject) && isRecord(result.body.related)) {
-      prepared.set(key, prepareSubject(result.body as SubjectRead, options, shown));
-    } else if (planned.kind === 'search' && Array.isArray(result.body.subjects)) {
-      const subjects = (result.body as SearchRead).subjects.slice(0, planned.body.limit);
-      prepared.set(key, {
-        list: subjects.map((item) => <li key={item.id}>{itemLink(item.id, item.labels, options)}</li>),
-      });
+      const read = prepareSubject(result.body as SubjectRead, options, shown);
+      prepared.set(key, read);
+      if (planned.id === subject) {
+        artworkRelease = (result.body as SubjectRead).subject.release;
+        artworkContext = (result.body as SubjectRead).subject.context;
+        overviewRelated = result.body.related as Related;
+        sources = read.sources ?? null;
+        if (overviewSubjectLabel === undefined) {
+          const body = result.body as SubjectRead;
+          overviewSubjectLabel =
+            pageText(body.subject.labels, locale, originalLanguage(body.subject)).text || resolved.unlabelled;
+        }
+      }
     }
   }
   const nodes = new Map<string, PreparedRead>();
@@ -303,24 +955,206 @@ export function PageData({
     const read = prepared.get(key);
     if (read) nodes.set(id, read);
   }
-  return <PageContext.Provider value={{ locale, messages, nodes }}>{children}</PageContext.Provider>;
+  const appearance = isRecord(composition.root.props.appearance) ? composition.root.props.appearance : {};
+  const token =
+    typeof appearance.cover === 'string' && Object.hasOwn(tokenRatios, appearance.cover) ? appearance.cover : '';
+  const zoneRatio = token ? tokenRatios[token] : undefined;
+  const sections = new Map<string, overview.Section>();
+  for (const [id, key] of Object.entries(plan.nodes)) {
+    const planned = plan.reads[key];
+    const result = Object.hasOwn(reads, key) ? reads[key] : undefined;
+    if (!planned) continue;
+    sections.set(
+      id,
+      result?.status === 200 && isRecord(result.body)
+        ? {
+            ok: true,
+            read: planned,
+            body: result.body,
+            ...(prepared.get(key)?.sources ? { sources: prepared.get(key)!.sources! } : {}),
+          }
+        : {
+            ok: false,
+            status: result?.status,
+            ...(result?.retryAt !== undefined ? { retryAt: result.retryAt } : {}),
+          },
+    );
+  }
+  const profile = Object.entries(plan.reads).flatMap(([key, planned]) =>
+    planned.kind === 'account' && reads[key]?.status === 200 ? [accountOf(reads[key].body)] : [],
+  )[0];
+  // About gathers the first Statements node's facts and the tags after the summary, when the page places a Summary.
+  const firstStatements = nodesOfType(composition.content, 'Statements')[0];
+  const aboutRead = firstStatements ? nodes.get(firstStatements.id) : undefined;
+  const about =
+    firstStatements && nodesOfType(composition.content, 'Summary').length > 0
+      ? {
+          statements: firstStatements.id,
+          facts: statementList(
+            aboutRead,
+            options.overview && Array.isArray(firstStatements.props.properties)
+              ? firstStatements.props.properties.slice(0, 8)
+              : firstStatements.props.properties,
+            'subject-facts',
+          ),
+          tags: aboutRead?.tags ?? null,
+        }
+      : undefined;
+  const overviewValue: overview.OverviewValue = {
+    locale,
+    // Public pages intentionally use a null reader partition; do not interpret that as a missing page identity.
+    cacheReader: cacheReader ?? null,
+    pageTarget: pageTarget ?? listTarget,
+    subject,
+    ...(currentHref !== undefined ? { currentHref } : {}),
+    ...(overviewSubjectLabel !== undefined ? { subjectLabel: overviewSubjectLabel } : {}),
+    ...(account ? { account } : {}),
+    ...(base !== undefined ? { agentBase: base } : {}),
+    ...(profile ? { profile } : {}),
+    ...(operator ? { operator } : {}),
+    link,
+    reader,
+    labels,
+    unlabelled: resolved.unlabelled,
+    spoilerShow: resolved.spoilerShow,
+    details: resolved.details,
+    cover: resolved.cover,
+    coverVia: resolved.coverVia,
+    source: resolved.source,
+    licence: resolved.licence,
+    sources: resolved.sources,
+    sections,
+    ...(context ? { context } : {}),
+    ...(realm ? { realm } : {}),
+    ...(about ? { about } : {}),
+    ...(aboutRead?.classifications?.length ? { classifications: aboutRead.classifications } : {}),
+    relations,
+    ...(directions !== undefined ? { relationDirections: directions } : {}),
+    relationNodes: nodesOfType(composition.content, 'RelationGroups'),
+    ...(viewer ? { viewer } : {}),
+    ...(releaseDigest ? { releaseDigest } : {}),
+    ...(overviewRelated
+      ? {
+          renderCandidateValue: (snak: Snak & { id?: string }, candidateSubject: string, candidateLink?: PageLink) => (
+            <CandidateValue
+              snak={snak}
+              related={overviewRelated!}
+              locale={locale}
+              subject={candidateSubject}
+              link={candidateLink ?? link}
+            />
+          ),
+          candidatePropertyLabel: (propertyId: string) => {
+            const released =
+              propertyLabels && Object.hasOwn(propertyLabels, propertyId)
+                ? pageText(propertyLabels[propertyId]?.labels, locale)
+                : undefined;
+            if (released?.text) return fieldLabel(released, locale).text;
+            const relatedLabels = Object.hasOwn(overviewRelated!, propertyId)
+              ? overviewRelated![propertyId]?.labels
+              : {};
+            return fieldLabel(pageText(relatedLabels, locale), locale).text || resolved.unlabelled;
+          },
+        }
+      : {}),
+    ...(zoneRatio ? { ratio: zoneRatio } : {}),
+    ...(ratio ? { frameRatio: ratio } : {}),
+  };
+  return (
+    <SubjectArtworkBoundary
+      source={artworkSource ?? reads}
+      identity={JSON.stringify([
+        subject,
+        context,
+        artworkContext,
+        continuation,
+        artworkRelease,
+        cacheReader,
+        reader,
+        locale,
+        readingView,
+      ])}
+      label={overviewSubjectLabel || resolved.unlabelled}
+    >
+      <overview.OverviewContext.Provider value={overviewValue}>
+        <TypeListContext.Provider
+          value={{
+            ...(listTarget ? { target: listTarget } : {}),
+            ...(fullList ? { full: fullList } : {}),
+            ...(listCursor !== undefined ? { cursor: listCursor } : {}),
+          }}
+        >
+          <PageContext.Provider
+            value={{
+              locale,
+              messages: resolved,
+              nodes,
+              subject,
+              agentHeader: profile !== undefined,
+              sources,
+              link,
+              ...(zoneRatio ? { ratio: zoneRatio } : {}),
+            }}
+          >
+            {children}
+          </PageContext.Provider>
+        </TypeListContext.Provider>
+      </overview.OverviewContext.Provider>
+    </SubjectArtworkBoundary>
+  );
+}
+
+/** The overview's last section: the cover's credit, the sources of the facts shown, identifiers, and Details. */
+export function SubjectSources() {
+  const { sources } = useContext(PageContext);
+  const value = useContext(overview.OverviewContext);
+  if (!value?.subject || !sources) return null;
+  return <overview.SourcesSection value={value} sources={sources} />;
+}
+
+/** Entry to the current, public per-field explanation, even when no citations were supplied. */
+export function SubjectSourcesLink() {
+  const { subject, locale, link: Link } = useContext(PageContext);
+  const value = useContext(overview.OverviewContext);
+  if (!subject) return null;
+  const href = subjectHref({ id: subject, label: value?.subjectLabel ?? '' }, locale).href;
+  return (
+    <p className="text-sm">
+      <Link className="text-primary underline underline-offset-4" href={`${href}/sources`}>
+        {m.sources_open_detail({}, { locale: locale as never })}
+      </Link>
+    </p>
+  );
 }
 
 function useNodeRead(id: unknown) {
   return useContext(PageContext).nodes.get(typeof id === 'string' ? id : '');
 }
 
+/** The subject's header, unless the page is an agent's and shows the account's own presentation instead. */
 function SubjectHeader(props: Record<string, unknown>) {
-  return useNodeRead(props.id)?.header ?? null;
+  const read = useNodeRead(props.id);
+  return useContext(PageContext).agentHeader ? null : (read?.header ?? null);
+}
+
+/** The rows of the named properties the subject holds, in the order the template names them. */
+function statementList(read: PreparedRead | undefined, properties: unknown, slot: string): ReactNode {
+  const named = Array.isArray(properties) ? properties : [];
+  const groups = named.flatMap((property) =>
+    typeof property === 'string' && read?.groups?.has(property) ? [read.groups.get(property)] : [],
+  );
+  return groups.length ? (
+    <dl data-slot={slot} className={listClass}>
+      {groups}
+    </dl>
+  ) : null;
 }
 
 function Statements(props: Record<string, unknown>) {
   const read = useNodeRead(props.id);
-  const properties = Array.isArray(props.properties) ? props.properties : [];
-  const groups = properties.flatMap((property) =>
-    typeof property === 'string' && read?.groups?.has(property) ? [read.groups.get(property)] : [],
-  );
-  return groups.length ? <dl className={listClass}>{groups}</dl> : null;
+  // About shows the facts of the first Statements node when the page has a summary.
+  if (useContext(overview.OverviewContext)?.about?.statements === props.id) return null;
+  return statementList(read, props.properties, 'subject-facts');
 }
 
 function MoreStatements(props: Record<string, unknown>) {
@@ -328,30 +1162,26 @@ function MoreStatements(props: Record<string, unknown>) {
   return groups?.length ? <dl className={listClass}>{groups}</dl> : null;
 }
 
-function SubjectList(props: Record<string, unknown>) {
-  return <TypeListContent {...props} />;
-}
-
-function TypeList(props: Record<string, unknown>) {
-  return <TypeListContent {...props} />;
-}
-
-function TypeListContent(props: Record<string, unknown>) {
-  const list = useNodeRead(props.id)?.list;
-  const locale = usePageLocale();
-  const title = pageText(props.title, locale);
-  if (!list?.length) return null;
-  return (
-    <section className="min-w-0 space-y-4 in-data-[density=compact]:space-y-3">
-      <h2
-        lang={title.lang}
-        className="text-2xl leading-snug font-semibold tracking-tight text-balance in-data-[heading-scale=lg]:text-3xl"
-      >
-        {title.text}
-      </h2>
-      <ul className="space-y-2 break-words leading-7">{list}</ul>
-    </section>
-  );
-}
-
-export const dataComponents = { SubjectHeader, Statements, MoreStatements, SubjectList, TypeList };
+export const dataComponents = {
+  Members,
+  Cover: overview.Cover,
+  AccountIdentity: accounts.AccountIdentity,
+  AccountPosts: accounts.AccountPosts,
+  AccountThreads: accounts.AccountThreads,
+  AccountCollections: accounts.AccountCollections,
+  Summary: overview.Summary,
+  RelationGroups: overview.RelationGroups,
+  OutgoingRelations: overview.OutgoingRelations,
+  Appearances: overview.Appearances,
+  Credits: overview.Credits,
+  RatingSummary: overview.RatingSummary,
+  ThreadList: overview.ThreadList,
+  ReviewList: overview.ReviewList,
+  CollectionList: overview.CollectionList,
+  Sources: overview.Sources,
+  SubjectHeader,
+  Statements,
+  MoreStatements,
+  SubjectList: overview.SubjectList,
+  TypeList,
+};

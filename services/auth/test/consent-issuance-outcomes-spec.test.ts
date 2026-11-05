@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { runPlacedTests } from '../scripts/placed-tests.ts';
 
 // Spec verifier. Synthetic reference drivers prove that each outcome assertion
 // rejects a demonstrably wrong behaviour and admits a correct one; they are not
@@ -14,11 +15,10 @@ async function suite(reference: string | null, filter: string) {
   delete env.SPEC_STRICT;
   if (reference) env.CONSENT_OUTCOME_REFERENCE = reference;
   if (reference || strict) env.SPEC_STRICT = '1';
-  const child = Bun.spawn([process.execPath, 'test', suiteFile, '--test-name-pattern', filter], {
-    env,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
+  const command = [process.execPath, 'test', suiteFile, '--test-name-pattern', filter];
+  // Reference drivers have no native fixture; keep their execution synthetic.
+  if (!reference) return runPlacedTests(command, { env, timeout: 240_000 });
+  const child = Bun.spawn(command, { env, stdout: 'pipe', stderr: 'pipe' });
   const [stdout, stderr, code] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),

@@ -3,6 +3,8 @@ import { Type, type Static } from 'typebox';
 const UUID = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 
 export const MODERATION_EVENTS = {
+  'com.rezics.content.moderation.appeal-created.v1': Type.Object({ appealId: UUID }, { additionalProperties: false }),
+  'com.rezics.content.moderation.appeal-resolved.v1': Type.Object({ appealId: UUID }, { additionalProperties: false }),
   'com.rezics.content.moderation.takedown.v1': Type.Object(
     {
       targetKind: Type.Union([Type.Literal('board'), Type.Literal('thread'), Type.Literal('post')]),
@@ -12,8 +14,20 @@ export const MODERATION_EVENTS = {
     },
     { additionalProperties: false },
   ),
+  'com.rezics.content.moderation.restored.v1': Type.Object(
+    {
+      targetKind: Type.Union([Type.Literal('thread'), Type.Literal('post')]),
+      targetId: UUID,
+      securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }),
+    },
+    { additionalProperties: false },
+  ),
   'com.rezics.content.post.erased.v1': Type.Object(
-    { postId: UUID, securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }) },
+    {
+      postId: UUID,
+      securityRevision: Type.String({ pattern: '^[1-9][0-9]*$' }),
+      accountErasure: Type.Optional(Type.Literal(true)),
+    },
     { additionalProperties: false },
   ),
   'com.rezics.content.moderation.erasure.v1': Type.Object(

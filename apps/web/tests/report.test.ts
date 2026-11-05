@@ -7,6 +7,7 @@ import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 
 import { chromium, type Browser, type Page, type Request as BrowserRequest } from 'playwright';
 import type { KernelClient } from '@rezics/client';
+import { threadHref } from '../src/threads/thread-href';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -57,7 +58,7 @@ type Posts = Data<ThreadResource['posts']['get']>;
 type Problem = NonNullable<Awaited<ReturnType<ThreadResource['posts']['post']>>['error']>['value'];
 type Snapshot = NonNullable<Posts['posts'][number]['body']>;
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
-const threadPath = (locale = 'en') => `/${locale}/threads/${id(2)}`;
+const threadPath = (locale = 'en') => `/${locale}${threadHref({ id: id(2), title: 'A shared reading' })}`;
 const licence = 'LicenseRef-rezics-terms';
 const metadata = {
   route: 0,
@@ -292,7 +293,7 @@ const fake = Bun.serve({
       method: request.method,
       path: url.pathname,
       body,
-      key: request.headers.get('idempotency-key'),
+      key: JSON.parse(request.headers.get('idempotency-key') ?? 'null'),
       authorization: request.headers.get('authorization'),
     });
     if (request.method === 'GET') {
@@ -620,6 +621,7 @@ test(
     const { page } = await open(threadPath());
     try {
       await page.getByRole('button', { name: 'More actions', exact: true }).nth(1).click();
+      await page.getByRole('menuitem', { name: 'Copy link', exact: true }).waitFor();
       expect(await page.getByRole('menuitem', { name: 'Copy link', exact: true }).count()).toBe(1);
       expect(await page.getByRole('menuitem', { name: 'Report', exact: true }).count()).toBe(0);
       expect(writes()).toHaveLength(0);

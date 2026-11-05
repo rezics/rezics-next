@@ -6,10 +6,10 @@ import { join, resolve } from 'node:path';
 const app = join(import.meta.dir, '..');
 const root = resolve(app, '../..');
 // Documented names are `<story id>.<locale>.<theme>.png`.
-// The documented viewport is 1280×720 CSS pixels. A full-page capture of the subject page at that
-// viewport is 1280×721: the shell header's bottom border sits outside the 4rem offset from 100dvh.
-const story = 'pages-subject--signed-out';
-const pngSize = { width: 1280, height: 721 };
+// The documented viewport is 1280×720 CSS pixels. A full-page capture of a page that fits the viewport, such as the
+// missing-subject page, is 1280×720: the shell fills the viewport exactly, so a short page does not scroll.
+const story = 'pages-subjects-missing-subject--signed-out';
+const pngSize = { width: 1280, height: 720 };
 const names = ['en', 'ja'].flatMap((locale) =>
   (['light', 'dark'] as const).map((theme) => `${story}.${locale}.${theme}.png`),
 );
@@ -122,7 +122,7 @@ test('a story render error fails capture with its story id and the page error', 
   const settle = screenshotSettle();
   const page = {
     waitForFunction: async () => undefined,
-    evaluate: async () => 'errored',
+    evaluate: async () => ({ storyId: id, cycle: 1, phase: 'errored', status: 'error', errors: [] }),
   };
   const message = await settle(page, id, ['Synthetic render failure']).then(
     () => '',

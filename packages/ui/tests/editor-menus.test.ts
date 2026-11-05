@@ -35,6 +35,7 @@ test('the rich-text editor formats a selection from a keyboard-reachable menu an
     expect(outcomes).toEqual([
       'Block Commands: passed',
       'Edit And Remove Link: passed',
+      'Inline Lifetime Journey: passed',
       'Insert Link: passed',
       'Keyboard Reach: passed',
       'Mark Commands: passed',

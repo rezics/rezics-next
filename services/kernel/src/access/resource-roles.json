@@ -4,6 +4,7 @@
     "community.realm.owner": [
       "realm:read",
       "realm:manage",
+      "realm:restore",
       "realm:ban",
       "realm:publish",
       "board:create",
@@ -11,22 +12,41 @@
       "moderation:takedown"
     ],
     "community.realm.member": ["realm:read", "realm:participate"],
-    "community.realm.moderator": ["realm:read", "realm:ban", "realm:publish", "board:create", "moderation:takedown"],
-    "community.space.owner": ["space:read", "space:manage"],
+    "community.realm.moderator": [
+      "realm:read",
+      "realm:ban",
+      "realm:publish",
+      "realm:restore",
+      "board:create",
+      "moderation:takedown"
+    ],
+    "community.space.owner": ["space:read", "space:manage", "space:restore"],
     "community.space.standing": ["space:read"],
     "content.board.owner": ["board:read", "thread:create"],
     "content.board.standing": ["thread:create", "report:create"],
     "content.thread.owner": ["thread:read", "post:create", "media:create"],
     "content.thread.standing": ["post:create", "media:create", "reaction:set", "report:create"],
     "content.post.owner": ["post:read", "post:revise", "post:erase", "media:create"],
+    "content.edition.owner": ["edition:read", "edition:sell", "edition:unpublish"],
     "content.post.standing": ["reaction:set", "report:create"],
+    "content.authored_field.owner": ["document:erase"],
     "content.media.owner": ["media:read_reservation", "media:read", "media:complete", "media:erase"],
     "commerce.offer.owner": ["offer:read", "offer:manage", "order:create"],
     "commerce.offer.standing": ["order:create"],
     "commerce.payout.owner": ["payout_statement:list", "payout_statement:read"],
-    "semantic.context.owner": ["context:accept", "context:adopt", "access:grant"],
+    "semantic.context.owner": ["context:accept", "context:adopt", "access:grant", "context:delete", "context:restore"],
+    "semantic.revision.author": ["statement:delete", "statement:restore"],
+    "semantic.subject.classification_ballot_standing": ["classification_ballot:set", "classification_ballot:read_own"],
     "semantic.context.moderator": ["context:accept"],
-    "library.collection.owner": ["collection:read", "collection:update", "collection:delete"]
+    "library.collection.owner": ["collection:read", "collection:update", "collection:delete"],
+    "semantic.zone.owner": [
+      "zone:read",
+      "zone:configure",
+      "zone:publish",
+      "zone:delete",
+      "zone:restore",
+      "access:grant"
+    ]
   },
   "types": {
     "community.realm": {
@@ -49,6 +69,14 @@
       "owner": "content.post.owner",
       "standing": ["content.post.standing"]
     },
+    "content.edition": {
+      "owner": "content.edition.owner",
+      "standing": []
+    },
+    "content.authored_field": {
+      "owner": "content.authored_field.owner",
+      "standing": []
+    },
     "content.media": {
       "owner": "content.media.owner",
       "standing": []
@@ -64,8 +92,19 @@
       "owner": "semantic.context.owner",
       "standing": []
     },
+    "semantic.revision": {
+      "owner": "semantic.revision.author",
+      "standing": []
+    },
+    "semantic.subject": {
+      "standing": ["semantic.subject.classification_ballot_standing"]
+    },
     "library.collection": {
       "owner": "library.collection.owner",
+      "standing": []
+    },
+    "semantic.zone": {
+      "owner": "semantic.zone.owner",
       "standing": []
     }
   }

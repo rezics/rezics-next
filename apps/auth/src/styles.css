@@ -18,6 +18,10 @@ body {
 }
 
 .auth-shell {
+  /* Error text uses the same ink blue as other interface text. */
+  --destructive: var(--primary);
+  --destructive-foreground: var(--primary);
+  --destructive-solid: var(--primary);
   min-height: 100vh;
   background: var(--background);
   background-image:
@@ -39,7 +43,7 @@ body {
 }
 
 .auth-header {
-  height: 4rem;
+  min-height: 4rem;
   border-bottom: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
 }
 
@@ -47,8 +51,47 @@ body {
   display: flex;
   align-items: center;
   width: min(100% - 2.5rem, 72rem);
-  height: 100%;
+  min-height: 4rem;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  padding-block: 0.5rem;
   margin-inline: auto;
+}
+
+.auth-locale-choice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.auth-locale-label,
+.auth-locale-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.auth-locale-choice [data-slot='native-select'] {
+  min-height: 2.75rem;
+  max-width: 13rem;
+  border-color: var(--border);
+}
+
+.auth-locale-status {
+  flex-basis: 100%;
+  max-width: 30rem;
+  margin: 0;
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.auth-locale-status:empty {
+  display: none;
 }
 
 .auth-brand {
@@ -77,6 +120,7 @@ body {
 
 .auth-main {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-height: calc(100vh - 4rem);
   min-height: calc(100svh - 4rem);
   place-items: center;
@@ -84,6 +128,10 @@ body {
 }
 
 .auth-card {
+  display: block;
+  overflow: visible;
+  min-width: 0;
+  max-width: 100%;
   width: min(100%, 34rem);
   padding: 3.25rem 2rem;
   border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
@@ -91,6 +139,112 @@ body {
   background: color-mix(in oklab, var(--card) 92%, transparent);
   box-shadow: var(--aura-shadow-card);
   text-align: center;
+  overflow-wrap: anywhere;
+}
+
+/* Bound nested grid and flex items at the caller, without hiding content or focus rings. */
+.auth-card :where(form, section, div, fieldset, label, nav, ul, li, dl, dd, p, h2, h3) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.auth-card :where(input, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.auth-card :where([data-slot='button'], a[data-slot='button'], nav a) {
+  height: auto;
+  min-height: 2.75rem;
+  min-width: 0;
+  max-width: 100%;
+  flex-shrink: 1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.auth-card :where([data-slot='badge'], [data-slot='field-label']) {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.auth-card [data-slot='field-label']:has(input[type='checkbox']) {
+  min-height: 2.75rem;
+  align-items: flex-start;
+  padding-block: 0.625rem;
+}
+
+.auth-card input[type='checkbox'] {
+  flex-shrink: 0;
+}
+
+.auth-card dd {
+  margin-inline-start: 0;
+}
+
+.auth-card textarea {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.auth-operation-exit {
+  margin-top: 1rem;
+  text-align: start;
+}
+
+.auth-operation-exit a {
+  display: inline-flex;
+  align-items: center;
+  padding-block: 0.625rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.auth-account-operation-success a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-block: 0.625rem;
+}
+
+.auth-operation-exit a:focus-visible,
+.auth-account-operation-requirements a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+
+.auth-operation-exit p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.auth-account-operation-requirements a {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-block: 0.625rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+@media (max-width: 639px) {
+  .auth-card :where([data-slot='input'], [data-slot='input-group']) {
+    min-height: 2.75rem;
+  }
+
+  .auth-card [data-slot='input-group'] button {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+
+  .auth-card [data-slot='input-group-addon'][data-align='inline-end'] {
+    padding-inline-end: 0;
+  }
+
+  .auth-card [data-slot='input-group-control'] {
+    min-height: 2.625rem;
+  }
 }
 
 .auth-card:has(.auth-security-page) {
@@ -103,6 +257,11 @@ body {
   text-align: start;
 }
 
+/* The heading sits one section gap above the first section, like the sections do from each other. */
+.auth-card:has(.auth-security-page) h1 {
+  margin-bottom: 2.25rem;
+}
+
 .auth-security-page h2 {
   margin: 0;
   font-size: 1.25rem;
@@ -110,8 +269,217 @@ body {
   letter-spacing: -0.02em;
 }
 
-.auth-security-page section {
+.auth-card:has(.auth-account-identity) h1 {
+  margin-bottom: 1.25rem;
+}
+
+.auth-account-identity {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 2.25rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+
+.auth-account-identity h2 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.auth-account-identity-value {
+  font-size: 1.125rem;
+  font-weight: 650;
+}
+
+.auth-account-identity-secondary,
+.auth-account-identity details {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.auth-account-identity summary {
+  min-height: 2.75rem;
+  padding-block: 0.625rem;
+  cursor: pointer;
+}
+
+.auth-account-identity summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+  border-radius: 0.25rem;
+}
+
+.auth-card:has(.auth-account-home) {
+  width: min(100%, 42rem);
+}
+
+.auth-card:has(.auth-account-home) h1 {
+  margin-bottom: 1.25rem;
+}
+
+.auth-account-home {
+  display: grid;
+  gap: 1.75rem;
+  text-align: start;
+}
+
+.auth-account-home-intro,
+.auth-home-settings > p,
+.auth-home-entries > p {
+  color: var(--muted-foreground);
+}
+
+.auth-account-home-status:focus {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+  border-radius: 0.25rem;
+}
+
+.auth-account-home-email {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.auth-account-home-email dt {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.auth-account-home-email dd {
+  font-weight: 600;
+}
+
+.auth-account-home details p {
+  overflow-wrap: anywhere;
+}
+
+.auth-home-settings,
+.auth-home-entries {
+  display: grid;
+  gap: 0.875rem;
+}
+
+.auth-home-settings h2,
+.auth-home-entries h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.auth-home-settings nav,
+.auth-home-entries nav {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.auth-home-link,
+.auth-home-entries nav a {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in oklab, var(--card) 92%, transparent);
+  color: var(--foreground);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.auth-home-link:hover,
+.auth-home-entries nav a:hover {
+  background: color-mix(in oklab, var(--accent) 50%, var(--card));
+}
+
+.auth-home-link:focus-visible,
+.auth-home-entries nav a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.auth-home-link > span:first-child {
+  display: grid;
+  gap: 0.25rem;
   min-width: 0;
+}
+
+.auth-home-link small {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.auth-home-link[aria-current='page'] {
+  border-color: color-mix(in oklab, var(--ring) 55%, var(--border));
+  background: color-mix(in oklab, var(--accent) 38%, var(--card));
+}
+
+.auth-home-current {
+  flex: none;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.auth-security-page section {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.auth-security-page section .auth-login-form {
+  margin-top: 0;
+}
+
+.auth-security-hint {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+.auth-account-operation-copy {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  text-align: start;
+}
+
+.auth-account-operation-copy p {
+  margin: 0;
+}
+
+.auth-account-operation-requirements {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding-inline-start: 1.5rem;
+  color: var(--muted-foreground);
+}
+
+.auth-account-operation-success {
+  margin-top: 2rem;
+  text-align: start;
+}
+
+.auth-account-operation-success p {
+  margin: 0 0 1rem;
+}
+
+.auth-account-operation-success a,
+.auth-security-page nav a {
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.auth-account-operation-success a:focus-visible,
+.auth-security-page nav a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
 }
 
 .auth-card h1 {
@@ -130,6 +498,40 @@ body {
   gap: 1.25rem;
   margin-top: 2rem;
   text-align: start;
+}
+
+.auth-route-failure {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+  text-align: start;
+}
+
+.auth-route-failure > p {
+  margin: 0;
+}
+
+.auth-route-failure nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 1.25rem;
+}
+
+.auth-route-failure nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding-block: 0.625rem;
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.auth-route-failure :where(a, button):focus-visible,
+.auth-route-failure h1:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
 }
 
 .auth-login-alert {

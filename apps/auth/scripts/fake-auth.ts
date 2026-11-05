@@ -1,5 +1,10 @@
+import { recoveryPage } from '../../../services/auth/src/recovery-page';
+import { AUTH_PAGE_OPERATION_CLIENT_ID, AUTH_PAGE_OPERATION_SCOPES } from '@rezics/auth-contract';
+
 const accountId = 'screenshot-account';
 const now = Date.now();
+
+export const fakePrivacyContactUrl = 'mailto:privacy@example.test';
 
 export type FakeAuthRequest = {
   method: string;
@@ -10,7 +15,41 @@ export type FakeAuthRequest = {
 
 type FakeAuthOptions = {
   onRequest?: (request: FakeAuthRequest) => void | Promise<void>;
+  state?: FakeAuthState;
 };
+
+export type FakeAuthState = {
+  signedOut: boolean;
+  sessionFresh: boolean;
+  signInSucceeds: boolean;
+  signInAccountId: string;
+  sessionAccountId: string;
+  sessionClientId: string;
+  sessionScopes: string[];
+  organizationsOpen: boolean;
+  denyAccountOperation: boolean;
+  dropFirstExecuteResponse: boolean;
+  sessionCount: number;
+  organizationCount: number;
+};
+
+export function createFakeAuthState(overrides: Partial<FakeAuthState> = {}): FakeAuthState {
+  return {
+    signedOut: false,
+    sessionFresh: true,
+    signInSucceeds: false,
+    signInAccountId: accountId,
+    sessionAccountId: accountId,
+    sessionClientId: 'login',
+    sessionScopes: [],
+    organizationsOpen: true,
+    denyAccountOperation: false,
+    dropFirstExecuteResponse: false,
+    sessionCount: 4,
+    organizationCount: 1,
+    ...overrides,
+  };
+}
 
 const sessions = [
   {
@@ -50,6 +89,12 @@ const sessions = [
 ];
 
 export function startFakeAuth(options: FakeAuthOptions = {}) {
+  process.env.PRIVACY_CONTACT_URL ??= fakePrivacyContactUrl;
+  const state = options.state ?? createFakeAuthState();
+  const approvals = new Map<string, { operation: unknown; reference: string }>();
+  const results = new Map<string, { operation: unknown; result: { accountId: string } }>();
+  let droppedExecuteResponse = false;
+
   return Bun.serve({
     hostname: '127.0.0.1',
     port: 0,
@@ -64,8 +109,73 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
         headers: Object.fromEntries(request.headers.entries()),
       });
 
-      if (url.pathname === '/signin' && request.method === 'POST')
+      if (url.pathname === '/recovery/page' && request.method === 'POST')
+        return Response.json(
+          recoveryPage(
+            JSON.parse(body).stage,
+            { minPasswordLength: 8, maxPasswordLength: 128 },
+            state.signedOut
+              ? { kind: 'signed-out' }
+              : { kind: 'signed-in', account_id: state.sessionAccountId, email: null },
+          ),
+          { headers },
+        );
+
+      if (url.pathname === '/signin' && request.method === 'POST') {
+        // The page's authPost and Auth's bodyOf use JSON. Native form submissions
+        // are unsupported by Auth and must not establish a scoped session here.
+        if (request.headers.get('content-type')?.split(';')[0]?.trim() !== 'application/json')
+          return Response.json({ error: 'invalid_request' }, { status: 415, headers });
+        if (new TextEncoder().encode(body).byteLength > 16384)
+          return Response.json({ error: 'invalid_request' }, { status: 413, headers });
+        let payload: unknown;
+        try {
+          payload = JSON.parse(body);
+        } catch {
+          return Response.json({ error: 'invalid_request' }, { status: 400, headers });
+        }
+        if (
+          !payload ||
+          typeof payload !== 'object' ||
+          Array.isArray(payload) ||
+          Object.keys(payload).some((key) => !['email', 'password', 'client_id', 'scope'].includes(key)) ||
+          !('email' in payload) ||
+          typeof payload.email !== 'string' ||
+          !payload.email ||
+          payload.email.length > 1024 ||
+          !('password' in payload) ||
+          typeof payload.password !== 'string' ||
+          !payload.password ||
+          payload.password.length > 1024 ||
+          !('client_id' in payload) ||
+          typeof payload.client_id !== 'string' ||
+          !('scope' in payload) ||
+          !Array.isArray(payload.scope) ||
+          !payload.scope.every((scope): scope is string => typeof scope === 'string')
+        )
+          return Response.json({ error: 'invalid_request' }, { status: 400, headers });
+        // Auth normalizes JSON scope arrays as sorted sets, never form strings.
+        const scopes = [...new Set(payload.scope)].sort();
+        const profileValid =
+          payload.client_id === 'login'
+            ? scopes.length === 0
+            : payload.client_id === AUTH_PAGE_OPERATION_CLIENT_ID &&
+              Object.values(AUTH_PAGE_OPERATION_SCOPES).some(
+                (allowed) =>
+                  allowed.length === scopes.length && allowed.every((scope, index) => scope === scopes[index]),
+              );
+        if (!profileValid) return Response.json({ error: 'invalid_scope' }, { status: 400, headers });
+        if (state.signInSucceeds) {
+          state.signedOut = false;
+          state.sessionFresh = true;
+          state.sessionAccountId = state.signInAccountId;
+          state.sessionClientId = payload.client_id;
+          state.sessionScopes = scopes;
+          headers.append('set-cookie', 'auth_session=fake-fresh-session; Path=/; HttpOnly; SameSite=Lax');
+          return Response.json({ success: true }, { headers });
+        }
         return Response.json({ error: 'authentication_denied' }, { status: 401, headers });
+      }
 
       if (url.pathname === '/consent/screenshot-client' && request.method === 'GET')
         return Response.json(
@@ -73,15 +183,148 @@ export function startFakeAuth(options: FakeAuthOptions = {}) {
             client_id: 'screenshot-client',
             display_name: 'REZICS Reading Companion',
             scopes: ['openid', 'offline_access'],
+            requested: [...new Set((url.searchParams.get('scope') ?? '').split(' ').filter(Boolean))],
             granted: ['openid'],
+            pending_reduction: false,
+            acting_account: { account_id: state.sessionAccountId, email: 'person@example.test' },
+            decisions: { allow: true, decline: true, switch_account: true },
           },
           { headers },
         );
 
-      if (url.pathname === '/session' && request.method === 'GET')
-        return Response.json({ account_id: accountId }, { headers });
+      if (url.pathname === '/session' && request.method === 'GET') {
+        if (state.signedOut) return Response.json({ error: 'authentication_required' }, { status: 401, headers });
+        return Response.json(
+          {
+            account_id: state.sessionAccountId,
+            client_id: state.sessionClientId,
+            scope: state.sessionScopes,
+            holdings: { sessions: state.sessionCount, organizations: state.organizationCount },
+          },
+          { headers },
+        );
+      }
 
-      if (url.pathname === '/sessions' && request.method === 'GET') return Response.json({ sessions }, { headers });
+      if (url.pathname === '/account-management/deletion-page' && request.method === 'POST') {
+        if (state.signedOut) return Response.json({ kind: 'signed-out' }, { headers });
+        if (
+          state.sessionClientId !== AUTH_PAGE_OPERATION_CLIENT_ID ||
+          state.sessionScopes.length !== 1 ||
+          state.sessionScopes[0] !== AUTH_PAGE_OPERATION_SCOPES.delete[0]
+        )
+          return Response.json({ kind: 'authentication-required', accountId: state.sessionAccountId }, { headers });
+        return Response.json(
+          {
+            kind: 'review',
+            accountId: state.sessionAccountId,
+            email: 'reader@example.test',
+            action: 'available',
+            policy: 'personal-deletion',
+          },
+          { headers },
+        );
+      }
+
+      if (url.pathname === '/security-page' && request.method === 'GET') {
+        if (state.signedOut) return Response.json({ error: 'authentication_required' }, { status: 401, headers });
+        return Response.json(
+          {
+            viewer: {
+              account_id: state.sessionAccountId,
+              session_id: 'current-session',
+              client_id: state.sessionClientId,
+            },
+            sessions: {
+              kind: 'ready',
+              rows: sessions.slice(0, state.sessionCount).map((row) => ({
+                ...row,
+                client_display_name: 'client_display_name' in row ? row.client_display_name : null,
+                revoke: 'allowed',
+              })),
+              limit: 64,
+              truncated: false,
+            },
+            passkeys: { kind: 'ready', rows: [], limit: 32, truncated: false },
+            actions: { change_password: 'allowed', register_passkey: 'allowed' },
+          },
+          { headers },
+        );
+      }
+
+      if (url.pathname === '/sessions' && request.method === 'GET') {
+        if (state.signedOut) return Response.json({ error: 'authentication_required' }, { status: 401, headers });
+        return Response.json(
+          { sessions: sessions.slice(0, Math.min(sessions.length, state.sessionCount)) },
+          { headers },
+        );
+      }
+
+      if (url.pathname === '/account-operations/approve' && request.method === 'POST') {
+        const payload = JSON.parse(body) as { operationKey?: string; operation?: unknown };
+        const operationKey = payload.operationKey ?? '';
+        const operation = payload.operation as { kind?: string } | undefined;
+        if (state.signedOut) return Response.json({ error: 'authentication_required' }, { status: 401, headers });
+        if (!state.sessionFresh)
+          return Response.json({ error: 'step_up_required', effect_status: 'not_applied' }, { status: 401, headers });
+        const requiredScope = operation?.kind === 'organization' ? 'organization:create' : 'account:delete';
+        if (
+          state.sessionClientId !== AUTH_PAGE_OPERATION_CLIENT_ID ||
+          state.sessionScopes.length !== 1 ||
+          state.sessionScopes[0] !== requiredScope ||
+          (operation?.kind === 'delete' &&
+            'accountId' in operation &&
+            (operation as { accountId: string }).accountId !== state.sessionAccountId)
+        )
+          return Response.json(
+            { error: 'account_operation_denied', effect_status: 'not_applied' },
+            { status: 403, headers },
+          );
+        if (operation?.kind === 'organization' && !state.organizationsOpen)
+          return Response.json({ error: 'platform_closed', effect_status: 'not_applied' }, { status: 403, headers });
+        if (state.denyAccountOperation)
+          return Response.json(
+            { error: 'account_operation_denied', effect_status: 'not_applied' },
+            { status: 409, headers },
+          );
+        const reference =
+          operation?.kind === 'delete' ? `bmF0aXZl.${'a'.repeat(43)}` : `approval-${operationKey}.${'a'.repeat(43)}`;
+        approvals.set(operationKey, { operation: payload.operation, reference });
+        return Response.json({ reference, expiresAt: new Date(Date.now() + 60_000).toISOString() }, { headers });
+      }
+
+      if (url.pathname === '/account-operations/execute' && request.method === 'POST') {
+        const payload = JSON.parse(body) as { operationKey?: string; operation?: unknown; reference?: string };
+        const operationKey = payload.operationKey ?? '';
+        const approved = approvals.get(operationKey);
+        const previous = results.get(operationKey);
+        if (!previous && (!approved || approved.reference !== payload.reference))
+          return Response.json({ error: 'account_operation_denied' }, { status: 403, headers });
+        const operation = payload.operation as { kind?: string; accountId?: string } | undefined;
+        if (
+          JSON.stringify(previous?.operation ?? approved?.operation) !== JSON.stringify(payload.operation) ||
+          (approved && approved.reference !== payload.reference)
+        )
+          return Response.json({ error: 'account_operation_denied' }, { status: 403, headers });
+        if (previous) {
+          if (operation?.kind === 'delete') {
+            state.signedOut = true;
+            headers.append('set-cookie', 'auth_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+          }
+          return Response.json(previous.result, { headers });
+        }
+        const result = {
+          accountId: operation?.kind === 'delete' ? (operation.accountId ?? accountId) : 'created-account',
+        };
+        results.set(operationKey, { operation: payload.operation, result });
+        if (operation?.kind === 'delete') state.signedOut = true;
+        if (state.dropFirstExecuteResponse && !droppedExecuteResponse) {
+          droppedExecuteResponse = true;
+          return Response.json({ error: 'unavailable' }, { status: 503, headers });
+        }
+        if (operation?.kind === 'delete')
+          headers.append('set-cookie', 'auth_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+        return Response.json(result, { headers });
+      }
 
       if (url.pathname === '/sessions/revoke' && request.method === 'POST') {
         const payload = JSON.parse(body) as { session_id?: string };

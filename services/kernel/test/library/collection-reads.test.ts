@@ -1,3 +1,4 @@
+import { reinstateAccount, suspendAccount } from '../support/native-suspension-driver.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -5,9 +6,17 @@ import type { Pool } from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { createAccess } from '../../src/access/index.ts';
 import { PROBLEMS, ProblemError } from '../../src/http/problem.ts';
-import { createCollectionReads } from '../../src/library/collection-reads.ts';
+import {
+  createCollectionReads,
+  type CollectionResourceView,
+  type CollectionView,
+} from '../../src/library/collection-reads.ts';
 import type { Collection, CollectionMember, CollectionVisibility } from '../../src/library/collection-model.ts';
 import { createCollectionCommands } from '../../src/library/collections.ts';
+import { createWorkClient } from '../../src/work/client.ts';
+import { composeWork } from '../../src/work/registry.ts';
+import { libraryWorkModule } from '../../src/library/work-module.ts';
+import type { CloudEvent } from '../../src/events/log.ts';
 import { syncSubjectListing } from '../../src/library/listing.ts';
 import type { Access, AccountActor, Actor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -35,6 +44,8 @@ const key = () => randomUUID();
 
 let growth: GrowthDatabase;
 let pool: Pool;
+let workClient: Awaited<ReturnType<typeof createWorkClient>>;
+let worker: Awaited<ReturnType<typeof composeWork>>;
 let access: Access;
 let signing: Awaited<ReturnType<typeof generateKeyPair>>;
 let commands: ReturnType<typeof createCollectionCommands>;
@@ -53,6 +64,14 @@ const clock = () => new Date(now);
 beforeAll(async () => {
   growth = await openGrowthDatabase(databaseUrl);
   pool = growth.pool;
+  workClient = await createWorkClient(pool.options.connectionString!);
+  worker = await composeWork([libraryWorkModule], {
+    databaseUrl: pool.options.connectionString!,
+    pool,
+    client: workClient,
+    env: {},
+  });
+  await worker.launch();
   signing = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'library', alg: 'ES256' };
   access = createAccess({
@@ -98,6 +117,8 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
+  await worker?.shutdown();
+  await workClient?.close();
   if (growth) await growth.close();
 });
 
@@ -111,10 +132,14 @@ async function insertAccount(id: string): Promise<void> {
 }
 
 async function authenticate(id: string, scopes: readonly string[]): Promise<AccountActor> {
+  const current = await pool.query(
+    'SELECT minimum_authn_epoch::text AS epoch FROM access.account WHERE route=$1 AND account_id=$2',
+    [routeOf(id), id],
+  );
   const token = await new SignJWT({
     client_id: 'web',
     scope: scopes.join(' '),
-    authn_epoch: 1,
+    authn_epoch: Number(current.rows[0].epoch),
     auth_time: Math.floor(Date.now() / 1000),
     amr: ['pwd'],
   })
@@ -143,7 +168,8 @@ async function makeSubject(actor: AccountActor, label: string): Promise<string> 
 }
 
 async function setState(id: string, state: 'active' | 'suspended'): Promise<void> {
-  await pool.query(`UPDATE access.account SET state = $2 WHERE account_id = $1`, [id, state]);
+  if (state === 'suspended') await suspendAccount(pool, id);
+  else await reinstateAccount(pool, id);
 }
 
 async function denySubjectRead(subjectId: string, accountId: string): Promise<void> {
@@ -190,15 +216,21 @@ async function add(
   return created.value;
 }
 
-function viewOf(collection: Collection) {
+function viewOf(collection: Collection): CollectionView {
   return {
     id: collection.id,
     curatorAccountId: collection.curatorAccountId,
     title: collection.title,
+    presentationKind: null,
+    presentationKindSource: 'mixed',
+    cover: null,
+    coverSource: collection.memberCount === 0 ? 'none' : 'pending',
     description: collection.description,
     visibility: collection.visibility,
     revision: collection.revision,
     memberCount: collection.memberCount,
+    membershipKind: 'curated',
+    orderEpoch: collection.orderEpoch,
     createdAt: collection.createdAt,
     updatedAt: collection.updatedAt,
   };
@@ -255,11 +287,15 @@ test('public and unlisted Collections read for anyone and a private one matches 
   }
   expect(await reads.readCollection(owner, hidden.id)).toEqual(viewOf(hidden));
   expect(Object.keys(await reads.readCollection(owner, hidden.id)).sort()).toEqual([
+    'cover',
+    'coverSource',
     'createdAt',
     'curatorAccountId',
     'description',
     'id',
     'memberCount',
+    'presentationKind',
+    'presentationKindSource',
     'revision',
     'title',
     'updatedAt',
@@ -287,19 +323,15 @@ test('public and unlisted Collections read for anyone and a private one matches 
   const ownHidden = await create(suspendedActor, { title: 'Suspended hidden', visibility: 'private' });
   await setState(suspendedActor.accountId, 'suspended');
   try {
-    expect(await reads.readCollection(suspendedActor, published.id)).toEqual(viewOf(published));
-    expect(await reads.readCollection(suspendedActor, quiet.id)).toEqual(viewOf(quiet));
-    expect(await reads.readCollection(suspendedActor, ownPublic.id)).toEqual(viewOf(ownPublic));
-    expect(await reads.readCollection(suspendedActor, ownQuiet.id)).toEqual(viewOf(ownQuiet));
-    expect(await refusal(reads.readCollection(suspendedActor, hidden.id))).toEqual(unknownRefusal);
-    expect(await refusal(reads.readCollection(suspendedActor, ownHidden.id))).toEqual(unknownRefusal);
-    expect(await reads.listCollections(suspendedActor, { curatorAccountId: suspendedActor.accountId })).toEqual({
-      collections: [viewOf(ownPublic)],
+    // collection-source.md: no valid suspended bearer exists. Known-ID public readability
+    // is anonymous authority, whereas active-unfenced curator discovery hides suspension.
+    expect(await reads.readCollection(anonymous, ownPublic.id)).toEqual(viewOf(ownPublic));
+    expect(await reads.readCollection(anonymous, ownQuiet.id)).toEqual(viewOf(ownQuiet));
+    expect(await refusal(reads.readCollection(anonymous, ownHidden.id))).toEqual(unknownRefusal);
+    expect(await reads.listCollections(anonymous, { curatorAccountId: suspendedActor.accountId })).toEqual({
+      collections: [],
       next: null,
     });
-    expect(JSON.stringify(await refusal(reads.readCollection(suspendedActor, ownHidden.id)))).not.toContain(
-      ownHidden.id,
-    );
   } finally {
     await setState(suspendedActor.accountId, 'active');
   }
@@ -331,43 +363,84 @@ test('a curator lists every active Collection and everyone else lists only publi
   expect(listed.map((collection) => collection.id)).not.toContain(hidden.id);
   expect(listed.map((collection) => collection.id)).not.toContain(quiet.id);
 
-  async function walk(viewer: Actor, expected: Collection[]) {
+  const withoutManagementAdvice = <T extends { allowedVisibilityActions?: unknown }>(value: T) => {
+    const { allowedVisibilityActions: _actions, ...collection } = value;
+    return collection;
+  };
+  async function walk(viewer: Actor, expected: Collection[], management = false) {
     const seen: string[] = [];
+    const logical: string[] = [];
+    let stored = 0;
     let cursor: string | null = null;
     do {
-      const page = await reads.listCollections(viewer, {
+      const page: { collections: CollectionResourceView[]; next: string | null } = await reads.listCollections(viewer, {
         curatorAccountId: curatorId,
         limit: 1,
+        ...(management ? { ownerManagement: true } : {}),
         ...(cursor === null ? {} : { cursor }),
       });
-      expect(page.collections).toHaveLength(Math.min(1, expected.length - seen.length));
+      expect(page.collections.length).toBeLessThanOrEqual(1);
       for (const collection of page.collections) {
-        expect(collection).toEqual(viewOf(expected[seen.length]!));
-        expect(Object.keys(collection)).not.toContain('orderEpoch');
+        if ('builtinKind' in collection) {
+          expect(collection).toMatchObject({
+            membershipKind: 'dynamic',
+            visibility: 'private',
+            ...(management ? { allowedVisibilityActions: [] } : {}),
+          });
+          logical.push(collection.id);
+          seen.push(collection.id);
+          continue;
+        }
+        expect(withoutManagementAdvice(collection)).toEqual(viewOf(expected[stored]!));
+        expect(collection).toMatchObject({ membershipKind: 'curated', orderEpoch: expected[stored]!.orderEpoch });
+        if (management)
+          expect(collection.allowedVisibilityActions).toEqual(
+            (['private', 'unlisted', 'public'] as const).filter(
+              (visibility) => visibility !== expected[stored]!.visibility,
+            ),
+          );
+        else expect(collection).not.toHaveProperty('allowedVisibilityActions');
         expect(Object.keys(collection)).not.toContain('state');
         seen.push(collection.id);
+        stored++;
       }
       expect(page.collections).not.toContainEqual(expect.objectContaining({ id: removed.id }));
       cursor = page.next;
     } while (cursor);
-    expect(seen).toEqual(expected.map((collection) => collection.id));
+    expect(seen.filter((id) => expected.some((collection) => collection.id === id))).toEqual(
+      expected.map((collection) => collection.id),
+    );
+    if (management) expect(logical.length).toBeGreaterThan(0);
   }
 
-  await walk(curator, active);
+  await walk(curator, active, true);
   for (const viewer of [other, anonymous, unscoped, suspendedActor]) await walk(viewer, listed);
 
-  const first = await reads.listCollections(curator, { curatorAccountId: curatorId });
-  expect(first.collections).toEqual(active.slice(0, 20).map(viewOf));
+  const first = await reads.listCollections(curator, { curatorAccountId: curatorId, ownerManagement: true });
+  const firstStored = first.collections.filter((collection) => !('builtinKind' in collection));
+  const firstLogical = first.collections.filter((collection) => 'builtinKind' in collection);
+  expect(firstStored.map(withoutManagementAdvice)).toEqual(active.slice(0, 20 - firstLogical.length).map(viewOf));
+  expect(firstLogical.every((collection) => collection.allowedVisibilityActions?.length === 0)).toBe(true);
+  expect(first).toMatchObject({ ownerManagement: 'owner', ownerAccountId: curatorId });
   expect(first.next).toBeTruthy();
-  const second = await reads.listCollections(curator, { curatorAccountId: curatorId, cursor: first.next });
-  expect(second.collections).toEqual(active.slice(20).map(viewOf));
+  const second = await reads.listCollections(curator, {
+    curatorAccountId: curatorId,
+    ownerManagement: true,
+    cursor: first.next,
+  });
+  expect(second.collections.map(withoutManagementAdvice)).toEqual(active.slice(firstStored.length).map(viewOf));
   expect(second.next).toBeNull();
-  const explicit = await reads.listCollections(curator, { curatorAccountId: curatorId, limit: 20, cursor: null });
+  const explicit = await reads.listCollections(curator, {
+    curatorAccountId: curatorId,
+    ownerManagement: true,
+    limit: 20,
+    cursor: null,
+  });
   expect(explicit.collections).toEqual(first.collections);
 
   const ownerBinding = {
     operation: 'library.collection.list',
-    parameters: { curatorAccountId: curatorId, fullView: true },
+    parameters: { curatorAccountId: curatorId, fullView: true, ownerManagement: true },
   };
   const publicBinding = {
     operation: 'library.collection.list',
@@ -382,6 +455,7 @@ test('a curator lists every active Collection and everyone else lists only publi
     status: 409,
   });
   const publicPage = await reads.listCollections(anonymous, { curatorAccountId: curatorId, limit: 1 });
+  expect(publicPage).not.toHaveProperty('ownerManagement');
   expect(
     await refusal(reads.listCollections(anonymous, { curatorAccountId: curatorId, cursor: first.next })),
   ).toMatchObject({ code: 'invalid_cursor', status: 400 });
@@ -403,11 +477,78 @@ test('a curator lists every active Collection and everyone else lists only publi
     collections: [],
     next: null,
   });
+  const publicFace = await reads.listAccountCollections(curator, { curatorAccountId: curatorId, limit: 100 });
+  expect(publicFace.collections.map((collection) => collection.id)).toEqual(listed.map((collection) => collection.id));
+  expect(publicFace.collections.map((collection) => collection.id)).not.toContain(hidden.id);
+  expect(publicFace.collections.map((collection) => collection.id)).not.toContain(quiet.id);
+  expect(publicFace).not.toHaveProperty('ownerManagement');
+  await pool.query(
+    `UPDATE access.account SET public_views = jsonb_set(public_views, '{collections}', 'false'::jsonb)
+     WHERE route=$1 AND account_id=$2`,
+    [routeOf(curatorId), curatorId],
+  );
+  try {
+    expect(await reads.listAccountCollections(other, { curatorAccountId: curatorId })).toEqual({
+      collections: [],
+      next: null,
+    });
+    const hiddenOwnerFace = await reads.listAccountCollections(curator, { curatorAccountId: curatorId, limit: 100 });
+    expect(hiddenOwnerFace.collections.map((collection) => collection.id)).toEqual(
+      listed.map((collection) => collection.id),
+    );
+    expect(hiddenOwnerFace.collections.map((collection) => collection.id)).not.toContain(hidden.id);
+    const hiddenOwnerFullView = await reads.listCollections(curator, { curatorAccountId: curatorId, limit: 100 });
+    expect(
+      hiddenOwnerFullView.collections.filter((collection) => !('builtinKind' in collection)).map(({ id }) => id),
+    ).toEqual(active.map(({ id }) => id));
+  } finally {
+    await pool.query(
+      `UPDATE access.account SET public_views = jsonb_set(public_views, '{collections}', 'true'::jsonb)
+       WHERE route=$1 AND account_id=$2`,
+      [routeOf(curatorId), curatorId],
+    );
+  }
+  const readOnlyCurator = await authenticate(curatorId, ['collection:read']);
+  const readOnly = await reads.listCollections(readOnlyCurator, {
+    curatorAccountId: curatorId,
+    ownerManagement: true,
+    limit: 5,
+  });
+  expect(readOnly).toMatchObject({ ownerManagement: 'owner', ownerAccountId: curatorId });
+  expect(readOnly.collections.every((collection) => collection.allowedVisibilityActions?.length === 0)).toBe(true);
   await expect(reads.listCollections(curator, { curatorAccountId: curatorId, limit: 0 })).rejects.toThrow(RangeError);
   await expect(reads.listCollections(curator, { curatorAccountId: curatorId, limit: 101 })).rejects.toThrow(RangeError);
   await expect(
     reads.listCollections(curator, { curatorAccountId: curatorId, surprise: true } as { curatorAccountId: string }),
   ).rejects.toThrow(TypeError);
+});
+
+test('owner management keeps saved dynamic and logical builtin identities distinct', async () => {
+  const saved = await commands.createCollection(
+    owner,
+    {
+      membershipKind: 'dynamic',
+      title: 'Saved rule',
+      visibility: 'private',
+      rule: { filter: { owner: { presence: true } } },
+    },
+    key(),
+  );
+  const page = await reads.listCollections(owner, {
+    curatorAccountId: owner.accountId,
+    limit: 100,
+    ownerManagement: true,
+  });
+  expect(page.collections.find((collection) => collection.id === saved.value.id)).toMatchObject({
+    membershipKind: 'dynamic',
+    revision: saved.value.revision,
+    allowedVisibilityActions: ['unlisted', 'public'],
+  });
+  const builtins = page.collections.filter(
+    (collection): collection is Extract<CollectionResourceView, { builtinKind: string }> => 'builtinKind' in collection,
+  );
+  expect(builtins.map((collection) => collection.builtinKind)).toEqual(expect.arrayContaining(['everything', 'liked']));
+  expect(builtins.every((collection) => collection.allowedVisibilityActions?.length === 0)).toBe(true);
 });
 
 test('member pages follow ordinal order, omit unreadable subjects, and keep a cursor past them', async () => {
@@ -561,6 +702,7 @@ test("a subject's public Collections page shows only Collections that are public
   const ranked = [alpha, beta].sort((left, right) => left.id.localeCompare(right.id));
   const hidden = ranked[0]!;
   const shown = ranked[1]!;
+  const prior = await reads.listSubjectCollections(owner, subjectId, { limit: 1 });
   const concealed = await commands.updateCollection(
     owner,
     hidden.id,
@@ -573,6 +715,41 @@ test("a subject's public Collections page shows only Collections that are public
   );
   expect(pair.rows).toHaveLength(1);
 
+  expect(await refusal(reads.listSubjectCollections(owner, subjectId, { limit: 1 }))).toMatchObject({
+    code: 'dependency_unavailable',
+  });
+  // The command is source-local; the maintained count becomes visible after native publication.
+  const event = (
+    await pool.query(
+      "SELECT * FROM core.outbox WHERE subject=$1 AND type='com.rezics.library.collection.listing.changed.v1' ORDER BY position DESC LIMIT 1",
+      [hidden.id],
+    )
+  ).rows[0]!;
+  const notification: CloudEvent = {
+    specversion: '1.0',
+    id: event.id,
+    source: `urn:rezics:log:${event.partition_no}.${event.epoch}`,
+    type: event.type,
+    subject: hidden.id,
+    time: event.recorded_at.toISOString(),
+    sequence: String(event.position).padStart(19, '0'),
+    datacontenttype: 'application/json',
+    data: event.data,
+  };
+  await (
+    await workClient.enqueue(
+      {
+        workflowName: 'effect',
+        queueName: 'effects',
+        workflowID: randomUUID(),
+        queuePartitionKey: String(event.partition_no),
+      },
+      'library_collection_listing',
+      notification,
+    )
+  ).getResult();
+  await workClient.retrieveWorkflow(notification.id).getResult();
+
   const view = (collection: Collection, multiplicity: number) => ({
     id: collection.id,
     curatorAccountId: collection.curatorAccountId,
@@ -580,9 +757,17 @@ test("a subject's public Collections page shows only Collections that are public
     multiplicity,
   });
   const first = await reads.listSubjectCollections(owner, subjectId, { limit: 1 });
-  expect(first).toEqual({ collections: [], next: expect.any(String) });
-  const second = await reads.listSubjectCollections(anonymous, subjectId, { limit: 1, cursor: first.next });
-  expect(second).toEqual({ collections: [view(shown, shown.id === alpha.id ? 2 : 1)], next: null });
+  expect(first).toEqual({
+    collections: [view(shown, shown.id === alpha.id ? 2 : 1)],
+    count: { value: 1, exact: true },
+    next: null,
+  });
+  const second = await reads.listSubjectCollections(anonymous, subjectId, { limit: 1, cursor: prior.next });
+  expect(second).toEqual({
+    collections: [view(shown, shown.id === alpha.id ? 2 : 1)],
+    count: { value: 1, exact: true },
+    next: null,
+  });
   expect(Object.keys(second.collections[0]!).sort()).toEqual(['curatorAccountId', 'id', 'multiplicity', 'title']);
   expect(JSON.stringify(second)).not.toContain(hidden.id);
 
@@ -599,6 +784,7 @@ test("a subject's public Collections page shows only Collections that are public
   );
   expect(await reads.listSubjectCollections(anonymous, denied)).toEqual({
     collections: [view(visible, 1)],
+    count: { value: 1, exact: true },
     next: null,
   });
 
@@ -606,18 +792,18 @@ test("a subject's public Collections page shows only Collections that are public
     code: 'invalid_cursor',
     status: 400,
   });
-  const binding = { operation: 'library.subject.collections', parameters: { subjectId } };
-  const decoded = decodeCursor(tokens, binding, first.next!);
+  const binding = { operation: 'library.subject.collections', parameters: { subjectId, limit: 1, view: 'BASIC' } };
+  const decoded = decodeCursor(tokens, binding, prior.next!);
   expect(decoded.ok).toBe(true);
   if (!decoded.ok) return;
   const stale = encodeCursor(tokens, binding, { epoch: decoded.epoch + 1, after: decoded.after });
-  expect(await refusal(reads.listSubjectCollections(owner, subjectId, { cursor: stale }))).toMatchObject({
+  expect(await refusal(reads.listSubjectCollections(owner, subjectId, { limit: 1, cursor: stale }))).toMatchObject({
     code: 'stale_cursor',
     status: 409,
   });
   const foreign = encodeCursor(
     tokens,
-    { operation: 'library.subject.collections', parameters: { subjectId: denied } },
+    { operation: 'library.subject.collections', parameters: { subjectId: denied, limit: 1, view: 'BASIC' } },
     { epoch: decoded.epoch, after: decoded.after },
   );
   expect(await refusal(reads.listSubjectCollections(anonymous, subjectId, { cursor: foreign }))).toMatchObject({

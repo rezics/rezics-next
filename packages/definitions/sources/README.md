@@ -17,6 +17,12 @@ Each column entry has one of these statuses:
   `citations` to the relevant schema.org term page, when used, and Wikidata mapping page.
 - `omitted`: `reason` explains why the field does not become a profile statement.
 
+A relation mapping may set `inverse: true`. Its `term` names the canonical bundled property, and the related subject
+holds the statement pointing to the source subject. `on` still identifies the source subject's profile; it must be an
+admitted target of the canonical property. Without `inverse`, the source subject holds the statement. The external
+`mapping` or `wikidata`, meaning and citations describe the source direction. A `table_types` entry keyed by a source
+term may supply an explicit canonical `term` alongside `inverse: true`. Omitted mappings are not converted.
+
 A column may also have `licence` when its data has a licence or source condition different from the dump's default.
 Enumerated fields include a `values` list with every source value, its term, Wikidata mapping, meaning, and citations.
 Shared YAML anchors keep repeated enumerations identical across columns. The `table_types` section describes the type
@@ -27,9 +33,12 @@ SKOS concept or relation.
 
 Propose a schema.org class or property when its meaning matches the source field. Otherwise propose the matching
 Wikidata class (`wd:Q…`) or property (`wdt:P…`). Every proposal includes its Wikidata mapping and citations to the
-relevant schema.org and Wikidata pages. Use `rezics:` only for platform mechanisms; the source-specific
+relevant schema.org and Wikidata pages. Use `rezics:` for platform mechanisms and inverse relations with no matching
+standard term; the source-specific
 `rezics:spoilerLevel` qualifier records spoiler disclosure because no standard property covers that platform
-mechanism.
+mechanism. The narrowly adopted
+[AnimeRelease exception](../README.md#anime-publication-releases) does not broaden
+this rule into general permission for local domain vocabulary.
 
 A credit uses its role property as the main value: `schema:author`, `schema:illustrator`, `schema:director`,
 `schema:musicBy`, a voice-actor relation, `schema:translator`, or the general `schema:contributor`. Qualify credits
@@ -40,6 +49,83 @@ A character appearance is `schema:character` (Wikidata `P674`) qualified by its 
 `skos:Concept`s in a `skos:ConceptScheme` for each tree, with parent links represented by `skos:broader`. Map the
 SKOS terms to their Wikidata equivalents while retaining the SKOS semantic term in the inventory.
 
-Omit vote and list statistics, user data, and internal bookkeeping with an explicit reason. Image identifiers that
-represent profile artwork feed the cover group; the identifier is not itself an image URL or a grant to republish the
-image. Record separate image or prose source conditions on the affected columns.
+Omit user vote records, list statistics, user data, and internal bookkeeping with an explicit reason. A source's
+aggregate score may be imported as a source statistic when its licence covers the ratings; it stays separate from
+profile fields and is never turned into native votes. Image identifiers that represent profile artwork feed the cover
+group; the identifier is not itself an image URL or a grant to republish the image. Record separate image or prose
+source conditions on the affected columns.
+
+## Reviewed binding and producer status
+
+The owning [classification and measurement contract](../README.md#public-classification-and-genuine-measurements)
+is the sole authority for count meanings and word-count discovery eligibility. The
+[mapping report](../../../docs/research/catalogue-filter-data-mappings.md) records
+revision/source evidence. Inventory statuses describe a pinned schema, not released
+property admission, native Concept adoption receipts, executable conversion, admitted
+producer inputs, complete projections or admitted indexed execution.
+
+- Bangumi public harem binds `schema:keywords` to the exact editor-maintained public
+  subject `meta_tags` member `后宫`, using the adopted source Concept in the scheme
+  with external key `https://rezics.com/schemes/bangumi/public-tags`. A configured
+  trusted source alias may bind it, but its spelling proves no identity. The filter
+  names that source scope and actual Concept; Q690342 stays close until boundaries
+  and reverse-harem equivalence are reconciled. Source/canonical Concepts are not
+  merged by label or implicitly expanded through close mappings.
+- Missing, empty or withheld metadata has no fallback. Ordinary/popularity tags,
+  votes, private/personal Collection tags, arbitrary infobox strings and novel
+  platform supply no public harem/light-novel facts. The pinned inventory admits
+  `meta_tags` as proposed; it does not prove an observed archived 后宫 Book row or a
+  delivered converter. No explicit Bangumi light-novel public category is demonstrated.
+- Light novel uses existing `workFormat` / `wdt:P7937`, exact P7937, with Q747381
+  exact only for the adopted Japanese literary-form meaning. Book stays work;
+  `bf:Instance` stays edition/translation. Wikidata P7937=Q747381 or a trusted cited
+  explicit assertion needs actual holder and adopted Concept bindings first.
+  Genre's exact P136 remains distinct from keywords; P921 stays close inventory
+  correspondence, never executable exact mapping or automatic double-emission.
+- Words use `schema:wordCount`, exact P6570; characters require a distinct named
+  local property without an invented external exact mapping. Word-count discovery
+  requires admitted producer input that machine-readably declares whole-holder
+  coverage, exact holder identity, language and version; a text-supplied input also
+  carries its digest. An actual reviewed producer may declare its own whole-work or
+  serial total, including a web-novel platform's 字数 convention or a publisher's
+  stated length, without full-text ingestion. Do not infer the declaration from a
+  source label, platform name, alias, title, genre or excerpt. Partial, unknown or
+  unsupported multilingual coverage omits the evidence; a summary count covers only
+  that summary. Missing evidence cannot mean false absence or a positive exclusion
+  under `NOT`. Exact amount structure and property mapping alone establish no scope or
+  producer eligibility. Character counts, pages and estimates never become words.
+  Preserve every actual measurement qualifier losslessly on the same statement, or
+  withhold the entire measurement if any qualifier would be skipped, unsupported,
+  unresolved or semantically narrowed. Current item-qualifier dropping makes enabling
+  P6570 alone unsafe. Narou character metadata is not an approved word-count producer.
+
+At the report pin no harem metadata-tag converter, explicit light-novel producer,
+qualifying native million-word Book batch or genuine character producer is delivered.
+Trusted contributor/publisher cited assertions through propose/adopt are feasible
+future producers, not existing measurements. Wikidata executable mappings come from
+catalogue exact mappings; no separate Wikidata inventory registry is introduced.
+Concepts/schemes use ordinary create/resolve/adopt and external claims, with returned
+real IDs/receipts and same-ID replay before binding conversion. Use actual
+`record-bindings`/`resolvedReferences`; optional identifier lookup is not CLI wiring.
+QIDs, source URLs, labels and arbitrary fixture numbers prove neither native identity
+nor measured data. Release YAML is not a second Concept authority; personal-library
+import is not expanded.
+
+Anime release identity follows its [owner contract](../README.md#anime-publication-releases),
+and Recipe diet/time follows its [owner contract](../README.md#recipe-diet-and-cooking-time).
+Their research reports
+supply evidence, not actual source bindings or native data. No anime-release provider,
+QID or Source ID is guessed. VegetarianDiet needs an actual adopted Concept explicitly
+corresponding to `https://schema.org/VegetarianDiet`; private labels and ingredient
+names do not classify public Recipes.
+
+Source URL/catalogued ID references retain upstream `schema:version` and
+`schema:dateModified` when available, at native precision. Missing dates remain absent;
+never invent ingestion/current/publication dates. Missing revision uses Source
+`record_revision: unversioned` plus an actual SHA-256 digest, separate from converter
+and REZICS revisions. Available VNDB `lastmod` must not be dropped; its correction
+belongs to Imports. The four-part Open Library example is available-data illustration;
+old direct fixtures and Bangumi records without dates remain valid. Source name/URL/
+licence attribution is distinct from facts-rights. General source-record metadata
+production/read admission is not delivered; no registry or licence inference is added.
+Facts-rights rejection and separate summary/cover rights remain unchanged.

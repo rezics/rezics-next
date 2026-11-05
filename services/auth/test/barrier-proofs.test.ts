@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
@@ -170,7 +171,10 @@ beforeAll(async () => {
     secret: 'persistent-barrier-test-secret-at-least-32-bytes',
     audience: 'https://api.test',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+      },
       readAccount,
       readRecoveryAccount: readAccount,
       authorizeProvisioning: async (accountId) => ({ accountId }),
@@ -193,7 +197,7 @@ beforeAll(async () => {
           throw new Error('Invalid completion');
         await database.query('INSERT INTO test_recovery_clear VALUES ($1) ON CONFLICT DO NOTHING', [reference]);
       },
-    },
+    }),
     recoveryDelivery: {
       async deliver({ token }) {
         delivery = token;

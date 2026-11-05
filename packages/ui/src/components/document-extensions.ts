@@ -73,18 +73,22 @@ const block = (name: string, tag: string, extra: Attribute = {}, parseHTML: TagP
                       ? 'text*'
                       : 'inline*';
   const isLeaf = ['horizontalRule', 'image', 'media', 'extensionBlock'].includes(name);
+  const isDraggable = !nestedOnly;
 
   return Node.create({
     name,
     ...(nestedOnly ? {} : { group: 'block' }),
     content,
+    ...(name === 'codeBlock' ? { marks: '' } : {}),
     atom: isLeaf,
+    draggable: isDraggable,
     addAttributes: () => ({ ...common, ...extra }),
-    parseHTML: () => parseHTML,
+    parseHTML: () => parseHTML.map((rule) => ({ ...rule, preserveWhitespace: 'full' })),
     renderHTML: ({ node, HTMLAttributes }) => {
       const outputTag = name === 'heading' ? `h${node.attrs.level}` : tag;
-      if (name === 'table') return ['table', HTMLAttributes, ['tbody', 0]];
-      return isLeaf ? [outputTag, HTMLAttributes] : [outputTag, HTMLAttributes, 0];
+      const attributes = isDraggable ? { ...HTMLAttributes, draggable: 'true' } : HTMLAttributes;
+      if (name === 'table') return ['table', attributes, ['tbody', 0]];
+      return isLeaf ? [outputTag, attributes] : [outputTag, attributes, 0];
     },
   });
 };
@@ -98,6 +102,33 @@ const HardBreak = Node.create({
   atom: true,
   parseHTML: () => tags('br'),
   renderHTML: () => ['br'],
+});
+
+const Mention = Node.create({
+  name: 'mention',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  addAttributes: () => ({
+    accountId: {
+      default: null,
+      parseHTML: (element: HTMLElement) => element.getAttribute('data-mention-account-id'),
+      renderHTML: (attrs: Attribute) => ({ 'data-mention-account-id': attrs.accountId }),
+    },
+  }),
+  parseHTML: () => [
+    {
+      tag: 'span[data-mention-account-id]',
+      getAttrs: (element) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+          element.getAttribute('data-mention-account-id') ?? '',
+        )
+          ? {}
+          : false,
+    },
+  ],
+  renderHTML: ({ HTMLAttributes }) => ['span', HTMLAttributes, '@'],
+  renderText: () => '@',
 });
 
 const Ruby = Node.create({
@@ -463,6 +494,7 @@ export const documentExtensions: Extensions = [
   codeBlock,
   horizontalRule,
   HardBreak,
+  Mention,
   Ruby,
   table,
   tableRow,

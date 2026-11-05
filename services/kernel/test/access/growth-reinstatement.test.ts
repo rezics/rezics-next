@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
 import { createRegistrationPorts } from '../support/registration-ports.ts';
@@ -14,6 +14,25 @@ import { capture, checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `growth_reinstate_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
+
 const issuer = 'https://reinstatement-growth.auth.test';
 const audience = 'https://reinstatement-growth.api.test';
 const password = 'native grant routes registration password';
@@ -21,7 +40,7 @@ const routeKey = new Uint8Array(32).fill(71);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(72)]]) };
 const factor = 24;
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
-let authDatabase: ReturnType<typeof testDatabase>;
+let authDatabase: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let authPool: Pool;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
@@ -125,7 +144,7 @@ beforeAll(async () => {
   });
   const actions = actionCatalogue(kernel);
   scopes = [...actions.keys()].filter((action) => action !== 'media:complete');
-  authDatabase = testDatabase();
+  authDatabase = await cloneAuthDatabase();
   authPool = new Pool({ connectionString: authDatabase.url });
   const signingKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -184,7 +203,7 @@ beforeAll(async () => {
 }, 180000);
 afterAll(async () => {
   await host?.stop();
-  authDatabase?.close();
+  await authDatabase?.close();
   await seedPool?.end();
   await db?.close();
 });

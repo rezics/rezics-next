@@ -1,3 +1,6 @@
 types:
-  schema:ComicSeries: 日本系列漫画
+  schema:ComicSeries: '漫画'
   schema:PublicationVolume: 卷
+typeDescriptions:
+  schema:ComicSeries: '独立于各出版卷的漫画系列作品，不限于日本创作的漫画。'
+  schema:PublicationVolume: '可独立引用的漫画出版卷，通过所属系列关联作品，以位置记录卷号。'

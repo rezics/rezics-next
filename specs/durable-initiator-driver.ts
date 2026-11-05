@@ -63,8 +63,15 @@ export type Snapshot = {
     digest: string;
     operation: Anchor;
   };
-  /** Complete native protected writes, stably ordered, including stored replies.
-   * Exclude DBOS scheduling/terminal-denial bookkeeping, not domain effects. */
+  /** Native writes that physically complete logical erasures already committed:
+   * cleanup command receipts, their events and outbox rows, and the bodies/media
+   * they change, stably ordered. Classify them by native receipt kind, never by
+   * adapter policy. */
+  cleanup: unknown[];
+  /** Writes of protected points, each committed under the restored initiator at
+   * its own authoritative T, excluding cleanup. Complete native writes, stably
+   * ordered, including stored replies. Exclude DBOS scheduling/terminal-denial
+   * bookkeeping, not domain effects. */
   protected: { receipts: unknown[]; effects: unknown[]; outbox: unknown[]; resources: unknown[] };
   /** Complete persisted operation, DBOS inputs/checkpoints/results, receipts/events.
    * No adapter redaction or hand-counted credential/authority summaries. */
@@ -167,20 +174,22 @@ export interface DurableInitiatorDriver {
    * Use enough real erasure targets for >=2 protected native batches. Also retain
    * an unrelated public post in that thread: no private read grant or read scope
    * for the initiator; native domain eligibility supplies its public read floor. */
-  /** missing-action omits the native result-disclosure action from the real JWT
-   * ceiling, while retaining creation/step scopes and full CURRENT consent. */
-  seed(mode?: SeedMode, ceiling?: 'full' | 'missing-action'): Promise<Fixture>;
+  seed(mode?: SeedMode): Promise<Fixture>;
   /** Authenticate accessToken and run actual begin/commit. No actor JSON input.
    * Park the actual native worker before its first protected step. */
   create(fixture: Fixture): Promise<Denied | { outcome: 'committed'; operation: Anchor }>;
   inspect(operation: Anchor): Promise<Snapshot>;
-  /** Actual native checkpoint registry: all protected batches plus live and cached
-   * result disclosures. No manufactured checkpoints or alternate scheduler. */
+  /** Actual native checkpoints registered so far, in workflow order: reached
+   * protected batches, then live and cached result disclosures. A protected batch
+   * appears once the workflow has read its page. No manufactured checkpoints or
+   * alternate scheduler. */
   points(operation: Anchor): Promise<Point[]>;
   /** Advance earlier steps under unchanged authority, then park immediately BEFORE
    * this protected boundary; cached-result first materializes the native result. */
   park(operation: Anchor, pointId: string): Promise<void>;
-  /** Only exact operation locator and native checkpoint ID enter the worker. It
+  /** Run exactly this point, then let the worker run its unprotected steps and
+   * stop before the next protected boundary, which it has then registered.
+   * Only exact operation locator and native checkpoint ID enter the worker. It
    * obtains server T itself and re-reads committed identity. No Fixture/caller
    * Actor/token/time/approval is passed here, including via DBOS context. */
   advance(operation: Anchor, pointId: string): Promise<Attempt>;

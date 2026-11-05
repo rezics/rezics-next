@@ -22,6 +22,7 @@ import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const issuer = 'https://realm-ban.auth.test';
 const audience = 'https://realm-ban.api.test';
@@ -59,11 +60,7 @@ function workerStream(stream: ReadableStream<Uint8Array> | number | undefined): 
 
 /** Auth and the kernel worker each launch DBOS. The worker runs in its own process. */
 async function startKernelWorker(env: Record<string, string>): Promise<Bun.Subprocess> {
-  const childEnv: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (typeof value === 'string') childEnv[key] = value;
-  }
-  Object.assign(childEnv, env);
+  const childEnv = workerTestEnv({ ...process.env, ...env });
   const child = Bun.spawn(['bun', 'src/worker.ts'], {
     cwd: resolve(import.meta.dir, '../..'),
     env: childEnv,
@@ -557,7 +554,11 @@ test.serial(
     ).toBe(204);
     expect(await denials(realm, member)).toEqual([]);
     expect(await openMemberships(realm.realmId, member.accountId)).toEqual([]);
-    expect((await call('GET', path, { bearer: mod.bearer })).value).toEqual({ items: [], next: null });
+    expect((await call('GET', path, { bearer: mod.bearer })).value).toMatchObject({
+      items: [],
+      next: null,
+      selected: { state: 'not-requested' },
+    });
     expect(
       (await call('GET', `/v1/realms/${realm.realmId}/participation`, { bearer: member.bearer })).response.status,
     ).toBe(204);

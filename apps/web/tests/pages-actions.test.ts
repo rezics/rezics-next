@@ -23,7 +23,22 @@ async function kokoroPage() {
   return loaded.page;
 }
 
-test('the site renders its subject controls in the header actions slot', async () => {
+function subjectHeader(html: string): string {
+  const marker = 'data-slot="subject-header"';
+  const markerIndex = html.indexOf(marker);
+  if (markerIndex < 0) throw new Error('subject header missing');
+  const start = html.lastIndexOf('<div', markerIndex);
+  const tags = /<\/?div\b[^>]*>/g;
+  tags.lastIndex = start;
+  let depth = 0;
+  for (let match = tags.exec(html); match; match = tags.exec(html)) {
+    depth += match[0].startsWith('</') ? -1 : 1;
+    if (depth === 0) return html.slice(start, tags.lastIndex);
+  }
+  throw new Error('subject header did not close');
+}
+
+test('the site renders its subject controls after the primary heading inside SubjectHeader', async () => {
   const page = await kokoroPage();
   const inputs: SubjectActionsInput[] = [];
   const actions = (subject: SubjectActionsInput) => {
@@ -32,11 +47,11 @@ test('the site renders its subject controls in the header actions slot', async (
   };
   const html = renderToString(createElement(SubjectPage, { page, locale: 'en', messages, actions }));
   expect(inputs).toEqual([{ id: kokoro, type: 'schema:Book', locale: 'en' }]);
-  expect(html).toMatch(/<div[^>]*data-slot="actions"[^>]*>\s*<button[^>]*data-test="collect"/);
   expect(html.match(/data-test="collect"/g)).toHaveLength(1);
-  const heading = html.indexOf('<h1');
+  const header = subjectHeader(html);
+  const heading = header.indexOf('<h1');
   expect(heading).toBeGreaterThan(-1);
-  expect(html.indexOf('data-slot="actions"')).toBeGreaterThan(heading);
+  expect(header.indexOf('data-test="collect"')).toBeGreaterThan(heading);
 });
 
 test('without site controls the actions slot leaves no markup', async () => {

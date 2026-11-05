@@ -41,7 +41,9 @@ export declare function createApp({ pool, requestDeadlineMs, admission, access, 
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: import("../request/access.ts").Actor;
+        readonly actor: import("../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: SessionComponent[];
             record(component: SessionComponent): void;
@@ -79,7 +81,9 @@ export declare function createApp({ pool, requestDeadlineMs, admission, access, 
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: import("../request/access.ts").Actor;
+            readonly actor: import("../request/access.ts").AccountActor | {
+                kind: 'anonymous';
+            };
             readonly session: {
                 readonly components: SessionComponent[];
                 record(component: SessionComponent): void;
@@ -103,7 +107,9 @@ export declare function createApp({ pool, requestDeadlineMs, admission, access, 
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: import("../request/access.ts").Actor;
+    readonly actor: import("../request/access.ts").AccountActor | {
+        kind: 'anonymous';
+    };
     readonly session: {
         readonly components: SessionComponent[];
         record(component: SessionComponent): void;

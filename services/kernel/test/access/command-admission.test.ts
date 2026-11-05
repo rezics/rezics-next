@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -195,10 +196,7 @@ for (const local of [false, true]) {
     statements.length = 0;
     expect((await execute(f, key, local)).replayed).toBe(false);
     assertOneRead(f);
-    await admin.query(`UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2`, [
-      routeOf(f.id),
-      f.id,
-    ]);
+    await suspendAccount(admin, f.id);
     for (const attemptKey of [Bun.randomUUIDv7(), key]) {
       statements.length = 0;
       await denied(execute(f, attemptKey, local));
@@ -324,10 +322,7 @@ test('parent creation forwards trusted attempt admission without duplicate refre
     return { value: 'created', events: [{ type: 'com.rezics.test.admission-created.v1', data: {} }] };
   });
   assertOneRead(f);
-  await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(f.id),
-    f.id,
-  ]);
+  await suspendAccount(admin, f.id);
   await denied(run({ ...f, resource: child }, authorization, Bun.randomUUIDv7()));
 });
 test('operator opening refreshes admission per attempt through the same Access evaluator', async () => {
@@ -390,14 +385,11 @@ test('read snapshot is bounded by actual authentication observation, original de
   } finally {
     Date.now = realNow;
   }
+  await Bun.sleep(1000 - (Date.now() % 1000));
   const now = Math.floor(Date.now() / 1000);
-  const expiring = await access.authenticate(await signed(f.id, { exp: now + 30 }), f.context);
-  try {
-    Date.now = () => (now + 30) * 1000 + 1;
-    await denied(execute(f, Bun.randomUUIDv7(), true, expiring));
-  } finally {
-    Date.now = realNow;
-  }
+  const expiring = await access.authenticate(await signed(f.id, { exp: now + 1 }), f.context);
+  await Bun.sleep(Math.max(0, (now + 1) * 1000 - Date.now()));
+  await denied(execute(f, Bun.randomUUIDv7(), true, expiring));
 });
 
 test('target-local stable check uses fresh evidence and T after a serialization retry', async () => {

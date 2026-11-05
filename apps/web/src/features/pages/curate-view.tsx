@@ -1,266 +1,132 @@
-import { platformRegistry, validateProfile, type CompositionDocument } from '@rezics/composition';
-import { ClientOnly, useLocation } from '@tanstack/react-router';
-import { lazy, Suspense, useState, type CSSProperties, type FormEvent } from 'react';
+import { subjectVisitReturn } from './subject-visit-navigation';
+import { m } from '../../paraglide/messages.js';
+import { candidateSession } from '../../subject/candidate-lifetime';
+import { useLocation } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { useContext, useLayoutEffect, useRef, useCallback } from 'react';
 import { getLocale } from '../../paraglide/runtime';
-import { ErrorPage } from '../../shell/shell';
-import { csrfHeaders, SignInPrompt } from '../../threads/composer';
-import { profileTemplates, withTemplate, type CurationFailure, type Template } from './curate';
-import { publishCuration, readCuration, type CurationRead } from './curate-actions';
+import { csrfHeaders } from '../../threads/composer';
+import {
+  activateCuration,
+  publishCuration,
+  publishCurationOnly,
+  readCuration,
+  readCurationActive,
+  readDraftPreview,
+  type CurationRead,
+} from './curate-actions';
+import { confirmSubjectCandidate, readSubjectCandidates } from './curate-actions';
+import { changeOwnContribution, rereadOwnContribution } from '../catalogue/contribution-lifecycle-actions';
+import { editorRequest } from '../catalogue/editor-request';
+import { CandidateReview } from '../../subject/candidate-review';
+import { useSession } from '../../session/query';
+import { PresentationViewEditor, type CurationEditorTransport } from './curate-view-editor';
+import { PresentationPreviewPanel, PresentationPreviewContext } from './presentation-preview-view';
+import { readPresentationPreview } from './curate-actions';
+import { CurationReaderAdmission } from './curation-reader-admission';
+import type { PresentationPreviewRead } from './presentation-preview';
 
-const PageEditor = lazy(() => import('./editor').then((module) => ({ default: module.PageEditor })));
-const control =
-  'min-h-11 rounded-lg border border-border bg-background px-3 text-foreground focus-visible:outline-2 focus-visible:outline-ring';
-const button = `${control} hover:bg-muted disabled:opacity-50`;
-const editorTheme = {
-  '--puck-color-surface': 'var(--card)',
-  '--puck-color-surface-muted': 'var(--muted)',
-  '--puck-color-surface-subtle': 'var(--background)',
-  '--puck-color-border': 'var(--border)',
-  '--puck-color-border-muted': 'var(--border)',
-  '--puck-color-text': 'var(--foreground)',
-  '--puck-color-text-secondary': 'var(--muted-foreground)',
-  '--puck-color-text-muted': 'var(--muted-foreground)',
-  '--puck-color-interactive': 'var(--primary)',
-  '--puck-color-interactive-neutral-hover': 'var(--muted)',
-  '--puck-color-interactive-soft': 'var(--muted)',
-  '--puck-button-primary-color-text': 'var(--primary-foreground)',
-  '--puck-button-primary-color-bg-hover': 'var(--primary)',
-  '--puck-button-primary-color-bg-active': 'var(--primary)',
-  '--puck-font-family': 'var(--font-interface)',
-} as CSSProperties;
+const publicationTransport: CurationEditorTransport = {
+  previewDraft: (input, signal) => readDraftPreview({ data: input, headers: csrfHeaders(), signal }),
+  read: (expectedReader) => readCurationActive({ data: { expectedReader }, headers: csrfHeaders() }),
+  publish: (intent, expectedReader) => publishCuration({ data: { intent, expectedReader }, headers: csrfHeaders() }),
+  publishOnly: (intent, expectedReader) =>
+    publishCurationOnly({ data: { intent, expectedReader }, headers: csrfHeaders() }),
+  activate: (intent, expectedReader) =>
+    activateCuration({ data: { ...intent, expectedReader }, headers: csrfHeaders() }),
+  readOpening: (expectedReader, signal) => readCuration({ data: { expectedReader }, signal, headers: csrfHeaders() }),
+};
 
-function Failure({ failure }: { failure: CurationFailure }) {
+/** The subject's private curation region shares the existing prepared BFF transport. */
+function SubjectCandidateCurationLive({ id, locale }: { id: string; locale: string }) {
+  const { state } = useSession();
+  const location = useLocation();
+  const params = new URLSearchParams(location.searchStr);
+  const field = params.get('candidateField') ?? undefined;
+  const statement = params.get('sourceStatement');
+  const sourceReturn = subjectVisitReturn(params.get('via'), locale);
+  const correction =
+    sourceReturn?.endsWith('/sources#subject-sources-heading') &&
+    statement &&
+    /^[0-9a-f-]{36}$/i.test(statement) &&
+    field
+      ? `${location.pathname.replace(/\/details$/, '/edit')}?${new URLSearchParams({ property: field, statement, returnTo: 'sources' })}`
+      : undefined;
+  const initialProperty = field && field.length <= 256 ? field : undefined;
+  if (state !== 'signed-in') return null;
   return (
-    <div role="alert" className="space-y-2 rounded-lg border border-destructive/40 bg-card p-4">
-      <p>
-        {failure.reason === 'invalid'
-          ? 'This profile cannot be published.'
-          : failure.reason === 'rate-limited'
-            ? `Too many requests. Try again${failure.retryAfter === undefined ? ' later' : ` in ${failure.retryAfter} seconds`}.`
-            : 'Presentation is unavailable. Please try again.'}
-      </p>
-      {failure.reason === 'invalid' ? (
-        <ul className="list-disc break-all ps-5">
-          {failure.errors.map(({ pointer, code }, index) => (
-            <li key={index}>
-              <code>
-                {pointer || '/'} — {code}
-              </code>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+    <div className="space-y-4">
+      {correction && (
+        <a className="inline-flex min-h-11 items-center underline" href={correction}>
+          {m.correction_title()}
+        </a>
+      )}
+      <CandidateReview
+        key={`${id}:${locale}:${initialProperty ?? ''}`}
+        initialProperty={initialProperty}
+        {...(sourceReturn ? { returnHref: sourceReturn, returnLabel: m.subject_sources() } : {})}
+        id={id}
+        locale={locale}
+        transport={{
+          read: (property, cursor, session, work) =>
+            !work?.live()
+              ? Promise.resolve({ ok: false, reason: 'denied' })
+              : readSubjectCandidates({
+                  data: { id, property, cursor, session, expectedReader: work.reader },
+                  headers: csrfHeaders(),
+                }),
+          confirm: (data, work) =>
+            !work?.live()
+              ? Promise.resolve({ ok: false, reason: 'denied' })
+              : confirmSubjectCandidate({ data, headers: csrfHeaders() }),
+        }}
+        lifecycle={{
+          change: (command, work) =>
+            changeOwnContribution({ data: editorRequest(command, work), headers: csrfHeaders() }),
+          read: (address, work) =>
+            rereadOwnContribution({ data: editorRequest(address, work), headers: csrfHeaders() }),
+        }}
+      />
     </div>
   );
 }
 
-export function CurationView({ initial }: { initial: CurationRead }) {
-  const [current, setCurrent] = useState(initial);
-  const [failure, setFailure] = useState<CurationFailure | null>(null);
-  const [message, setMessage] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [selected, setSelected] = useState<Template | null>(null);
-  const [scope, setScope] = useState<'type' | 'route'>('type');
-  const [key, setKey] = useState('');
-  const location = useLocation();
+export const SubjectCandidateCuration = candidateSession(SubjectCandidateCurationLive);
 
-  if ((!current.ok && current.reason === 'forbidden') || failure?.reason === 'forbidden') return <ErrorPage />;
-  if (!current.ok && current.reason === 'signed-out')
-    return <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />;
-
-  async function reload() {
-    setBusy(true);
-    setFailure(null);
-    try {
-      setCurrent(await readCuration({ headers: csrfHeaders() }));
-      setSelected(null);
-    } catch {
-      setFailure({ ok: false, reason: 'unavailable' });
-    } finally {
-      setBusy(false);
-    }
+/** Keep session/CSRF preparation at the existing BFF boundary; the editor owns only its local drafts. */
+export function CurationView({
+  initial,
+  transport = publicationTransport,
+}: {
+  initial: CurationRead;
+  transport?: CurationEditorTransport;
+}) {
+  const preview = useContext(PresentationPreviewContext);
+  const queryClient = useQueryClient();
+  const admissionRef = useRef<CurationReaderAdmission | null>(null);
+  if (!admissionRef.current || admissionRef.current.queryClient !== queryClient) {
+    const replaced = admissionRef.current !== null;
+    admissionRef.current?.retireForReplacement();
+    admissionRef.current = new CurationReaderAdmission(queryClient, initial.ok ? initial.reader : null, {
+      forceFresh: replaced,
+    });
+  } else {
+    admissionRef.current.updateInitial(initial.ok ? initial.reader : null);
   }
-
-  if (!current.ok)
-    return (
-      <div className="space-y-4">
-        <Failure failure={current} />
-        <button type="button" className={button} disabled={busy} onClick={reload}>
-          Reload presentation
-        </button>
-      </div>
-    );
-
-  const { profile, head } = current;
-  const templates = profileTemplates(profile);
-  const document = !selected
-    ? null
-    : selected.scope === 'generic'
-      ? profile.generic
-      : selected.scope === 'base'
-        ? profile.bases.find((item) => item.base === selected.key)!.document
-        : selected.scope === 'type'
-          ? profile.types.find((item) => item.type === selected.key)!.document
-          : profile.routes.find((item) => item.route === selected.key)!.document;
-
-  function addTemplate(event: FormEvent) {
-    event.preventDefault();
-    if (!current.ok || busy) return;
-    const template = { scope, key };
-    if (templates.some((item) => item.scope === scope && item.key === key)) {
-      setFailure({
-        ok: false,
-        reason: 'invalid',
-        errors: [{ pointer: `/${scope === 'type' ? 'types' : 'routes'}`, code: 'duplicate' }],
-      });
-      return;
-    }
-    const next = withTemplate(profile, template, structuredClone(profile.generic));
-    const errors = validateProfile(platformRegistry, next);
-    if (errors.length > 0) {
-      setFailure({ ok: false, reason: 'invalid', errors });
-      return;
-    }
-    setCurrent({ ...current, profile: next });
-    setSelected(template);
-    setKey('');
-    setFailure(null);
-    setMessage('Template added to the draft. Publish to activate it.');
-  }
-
-  async function publish(edited?: CompositionDocument) {
-    if (!current.ok || busy) return;
-    const next = edited && selected ? withTemplate(profile, selected, edited) : profile;
-    setCurrent({ ...current, profile: next });
-    setBusy(true);
-    setFailure(null);
-    setMessage('');
-    try {
-      const result = await publishCuration({
-        data: {
-          profile: next,
-          expectedHead: head,
-          keys: { publish: crypto.randomUUID(), activate: crypto.randomUUID() },
-        },
-        headers: csrfHeaders(),
-      });
-      if (result.ok) {
-        setCurrent({ ok: true, profile: next, digest: result.digest, head: result.head });
-        setMessage(`Presentation published. New head: ${result.head}.`);
-      } else if (result.reason === 'stale') {
-        setSelected(null);
-        setCurrent(await readCuration({ headers: csrfHeaders() }));
-        setMessage('The active presentation changed. Reloaded the active profile; your draft was discarded.');
-      } else setFailure(result);
-    } catch {
-      setFailure({ ok: false, reason: 'unavailable' });
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  const admission = admissionRef.current;
+  useLayoutEffect(() => admission.attach(), [admission]);
+  const locale = getLocale();
+  const readPublished = useCallback<PresentationPreviewRead>(
+    (input, signal) => readPresentationPreview({ data: input, signal, headers: csrfHeaders() }),
+    [],
+  );
   return (
-    <article className="min-w-0 space-y-6 text-foreground" aria-busy={busy}>
-      <header className="space-y-2">
-        <h1 className="font-serif text-3xl font-semibold tracking-tight">Curate presentation</h1>
-        <p className="text-muted-foreground">Active head: {head}. Edit a template, then publish the whole profile.</p>
-        <p className="text-sm text-muted-foreground">
-          The editor's Publish button activates all draft templates. Close the editor before switching templates;
-          unpublished editor changes are discarded.
-        </p>
-      </header>
-      {message ? (
-        <p role="status" className="rounded-lg border border-border bg-card p-4">
-          {message}
-        </p>
-      ) : null}
-      {failure ? <Failure failure={failure} /> : null}
-      <fieldset disabled={busy} className="min-w-0 space-y-6">
-        <section aria-label="Templates" className="rounded-xl border border-border bg-card p-4">
-          <h2 className="mb-3 font-semibold">Templates</h2>
-          <ul className="flex flex-wrap gap-2">
-            {templates.map((template) => (
-              <li key={`${template.scope}:${template.key}`} className="min-w-0 max-w-full">
-                <button
-                  type="button"
-                  className={`${button} max-w-full break-all py-2 text-start`}
-                  aria-pressed={selected?.scope === template.scope && selected.key === template.key}
-                  disabled={selected !== null}
-                  onClick={() => {
-                    setSelected(template);
-                    setMessage('');
-                  }}
-                >
-                  <span className="text-sm text-muted-foreground">{template.scope}: </span>
-                  {template.key ?? 'Generic page'}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-        {selected && document ? (
-          <section className="min-w-0 space-y-3" aria-label="Template editor">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="break-all font-semibold">
-                Editing {selected.scope}: {selected.key ?? 'Generic page'}
-              </h2>
-              <button type="button" className={button} onClick={() => setSelected(null)}>
-                Close editor
-              </button>
-            </div>
-            <div className="overflow-auto rounded-xl border border-border bg-card" style={editorTheme}>
-              <ClientOnly fallback={<p className="p-4">Loading editor…</p>}>
-                <Suspense fallback={<p className="p-4">Loading editor…</p>}>
-                  <PageEditor
-                    key={`${selected.scope}:${selected.key}`}
-                    document={document}
-                    locale={getLocale()}
-                    onPublish={(edited) => void publish(edited)}
-                  />
-                </Suspense>
-              </ClientOnly>
-            </div>
-          </section>
-        ) : (
-          <>
-            <form className="space-y-3 rounded-xl border border-border bg-card p-4" onSubmit={addTemplate}>
-              <h2 className="font-semibold">Add template</h2>
-              <p className="text-sm text-muted-foreground">
-                Start from the generic page. Type keys use a CURIE such as schema:Book; routes use paths such as /books.
-              </p>
-              <div className="flex flex-wrap items-end gap-3">
-                <label className="space-y-1">
-                  Scope
-                  <select
-                    className={`${control} block`}
-                    value={scope}
-                    onChange={(event) => setScope(event.target.value as 'type' | 'route')}
-                  >
-                    <option value="type">Type</option>
-                    <option value="route">Route</option>
-                  </select>
-                </label>
-                <label className="min-w-0 flex-1 space-y-1">
-                  Key
-                  <input
-                    className={`${control} block w-full`}
-                    value={key}
-                    onChange={(event) => setKey(event.target.value)}
-                    required
-                    autoComplete="off"
-                  />
-                </label>
-                <button type="submit" className={button}>
-                  Add template
-                </button>
-              </div>
-            </form>
-            <button type="button" className={button} onClick={() => void publish()}>
-              Publish profile
-            </button>
-          </>
-        )}
-      </fieldset>
-    </article>
+    <PresentationViewEditor
+      initial={initial}
+      locale={locale}
+      admission={admission}
+      transport={transport}
+      preview={<PresentationPreviewPanel key={locale} locale={locale} read={readPublished} {...preview} />}
+    />
   );
 }

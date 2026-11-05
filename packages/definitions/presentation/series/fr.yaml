@@ -1,6 +1,14 @@
 types:
-  wd:Q7725310: "série d'œuvres"
+  wd:Q7725310: 'série'
   schema:BookSeries: 'série de livres'
 properties:
   wdt:P2635: "nombre de parties de l'œuvre"
   wdt:P1433: 'publié dans'
+inverseProperties:
+  wdt:P1433: 'Œuvres publiées ici'
+typeDescriptions:
+  wd:Q7725310: 'Une série nommée d’œuvres, y compris documentaires ou de médias différents ; une liste personnelle sélectionnée relève d’une Collection.'
+  schema:BookSeries: 'Une série de livres ; chaque membre s’y rattache par son appartenance à la série et peut préciser sa position.'
+propertyDescriptions:
+  wdt:P2635: 'Nombre déclaré de parties en quantité entière non négative de volumes (wd:Q1238720) ou de chapitres (wd:Q1980247).'
+  wdt:P1433: 'L’œuvre plus vaste dans laquelle cette série a été publiée, comme une revue.'

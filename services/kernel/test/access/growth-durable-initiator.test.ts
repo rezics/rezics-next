@@ -1,3 +1,4 @@
+import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { resetGrowthTables } from './growth-reset.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { nativeModule } from './durable-initiator.test.ts';
@@ -45,30 +46,59 @@ for (const person of ['other people', 'same person history'] as const) {
         );
         const replayKey = Bun.randomUUIDv7();
         expect((await h.step(f, { key: replayKey })).effects).toBe(1);
+        // Keep immutable creation and command receipt lookups representative
+        // before the first scale, regardless of which neighbourhood grows.
         if (mode === 'revoked replay') {
           // Native Auth owns and publishes the pending restriction before its
           // unavailable Access acknowledgement. Access floor remains unchanged.
           expect((await h.request('/consent', { client_id: f.clientId, scope: [] }, f.cookie)).status).toBe(503);
         }
-        async function operation() {
+        async function operation(runFixture = f) {
           if (mode === 'revoked replay') {
-            await expect(h.step(f, { key: replayKey })).rejects.toThrow();
+            await expect(h.step(runFixture, { key: replayKey })).rejects.toThrow();
             return;
           }
           const key = Bun.randomUUIDv7();
-          const retried = await h.step(f, { key, retry: true });
+          const retried = await h.step(runFixture, { key, retry: true });
           expect(retried.attempts).toBe(2);
           expect(retried.effects).toBe(1);
-          const replay = await h.step(f, { key });
+          const replay = await h.step(runFixture, { key });
           expect(replay.outcome.replayed).toBe(true);
           expect(replay.effects).toBe(0);
         }
         const report = await checkGrowth(h.db, {
           name: `${mode}: ${person} ${relation}`,
           bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+          ...(mode === 'retry and replay' && relation !== 'operations' ? { rule: 'series' as const } : {}),
           repetitions: 3,
           warmups: 1,
           async grow(db, scale, previous) {
+            if (scale === 1) {
+              const ids = Array.from({ length: 512 }, () => newId(f.operation.route));
+              // Keep the immutable-operation and receipt relations large enough
+              // for the point lookups to use their representative plans on
+              // every growing axis, including consent and delegation history.
+              await db.admin.query(
+                `INSERT INTO durable_test.operation SELECT $1,id,jsonb_build_object('initiatorAccountId',CASE WHEN $4 THEN $3::uuid ELSE id END) FROM unnest($2::uuid[]) id`,
+                [f.operation.route, ids, f.id, person === 'same person history'],
+              );
+              await db.admin.query(
+                `INSERT INTO durable_test.source SELECT $1,id,id,repeat('0',64),id FROM unnest($2::uuid[]) id`,
+                [f.operation.route, ids],
+              );
+              await db.admin.query(
+                `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+                 SELECT $1,'account',CASE WHEN $4 THEN $2 ELSE id END,'durable-test.create',id::text,decode(repeat('0',64),'hex'),1,1,id,'{}'
+                 FROM unnest($3::uuid[]) id`,
+                [partitionOf(f.operation.route), f.id, ids, person === 'same person history'],
+              );
+              await db.admin.query(
+                `INSERT INTO core.receipt(partition_no,principal_kind,principal_id,command_kind,idempotency_key,request_digest,epoch,position,transaction_id,response)
+                 SELECT $1,'account',CASE WHEN $4 THEN $2 ELSE id END,'durable-test.step',id::text,decode(repeat('0',64),'hex'),1,1,id,'{}'
+                 FROM unnest($3::uuid[]) id`,
+                [partitionOf(f.target.route), f.id, ids, person === 'same person history'],
+              );
+            }
             const count = (scale - previous) * 500;
             const ids = Array.from({ length: count }, () =>
               newId(relation === 'operations' ? f.operation.route : 0x2345),
@@ -130,10 +160,25 @@ for (const person of ['other people', 'same person history'] as const) {
             ])
               await db.admin.query(`VACUUM (ANALYZE) ${table}`);
           },
-          operation,
+          ...(mode === 'retry and replay'
+            ? {
+                async prepare(db) {
+                  await db.admin.query('DELETE FROM durable_test.effect WHERE route=$1 AND id=$2', [
+                    f.target.route,
+                    f.target.id,
+                  ]);
+                },
+              }
+            : {}),
+          operation: async () => operation(),
         });
         expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
-        const observed = await capture(h.db, operation);
+        if (mode === 'retry and replay')
+          await h.db.admin.query('DELETE FROM durable_test.effect WHERE route=$1 AND id=$2', [
+            f.target.route,
+            f.target.id,
+          ]);
+        const observed = await capture(h.db, () => operation());
         const statements = observed.capture.statements;
         for (const pattern of [
           /FROM durable_test.operation/,
@@ -163,3 +208,33 @@ for (const person of ['other people', 'same person history'] as const) {
     }
   }
 }
+
+test('restoration keeps constant statements and rows at 8, 64 and 512 consented scopes', async () => {
+  const fixtures = new Map<number, Awaited<ReturnType<typeof h.fixture>>>();
+  const complete = new Error('Restoration measured before target writes');
+  const report = await checkGrowth(h.db, {
+    name: 'durable initiator restoration by consented scope count',
+    scales: [8, 64, MAX_CONSENTED_SCOPES],
+    bounds: { statements: 'constant', rows: 'constant', blocks: 'linear' },
+    async grow(_db, scale) {
+      const scopes = [
+        'subject:write',
+        'account:delegate',
+        ...Array.from({ length: scale - 2 }, (_, i) => `scope:${i}`),
+      ];
+      fixtures.set(scale, await h.fixture(false, scopes));
+    },
+    async operation(_db, scale) {
+      const fixture = fixtures.get(scale)!;
+      await expect(
+        h.step(fixture, {
+          onActor: async (actor) => {
+            expect(actor.scopes).toHaveLength(scale);
+            throw complete;
+          },
+        }),
+      ).rejects.toBe(complete);
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([8, 64, MAX_CONSENTED_SCOPES]);
+});

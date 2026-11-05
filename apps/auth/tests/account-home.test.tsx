@@ -1,0 +1,261 @@
+import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act } from 'react';
+import type { AccountIdentityResult, AccountIdentitySource } from '../src/account-identity';
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', `${import.meta.dir}/../../web`)))
+);
+const dom = new Window({ url: 'https://auth.test/' });
+const globals = {
+  window: dom,
+  document: dom.document,
+  navigator: dom.navigator,
+  IS_REACT_ACT_ENVIRONMENT: true,
+  HTMLElement: dom.HTMLElement,
+  Element: dom.Element,
+  Node: dom.Node,
+  getComputedStyle: dom.getComputedStyle.bind(dom),
+};
+const previous = new Map(
+  [...Object.keys(globals), 'fetch'].map((name) => [name, Object.getOwnPropertyDescriptor(globalThis, name)] as const),
+);
+for (const [name, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, name, { value, configurable: true, writable: true });
+const { createRoot } = await import('react-dom/client');
+const { AccountHome } = await import('../src/account-home-view');
+const { overwriteGetLocale } = await import('../src/paraglide/runtime.js');
+const { applyDocumentLocale, initializeDocumentLocale } = await import('../src/locale-observation');
+overwriteGetLocale(() => 'en');
+
+type Mounted = {
+  host: HTMLDivElement;
+  render: (source?: AccountIdentitySource) => Promise<void>;
+};
+const mounted: Array<{ root: ReturnType<typeof createRoot>; host: HTMLDivElement }> = [];
+const originalFetch = globalThis.fetch;
+
+async function flush(action: () => void = () => {}) {
+  await act(async () => {
+    action();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+async function mount(source?: AccountIdentitySource): Promise<Mounted> {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  mounted.push({ root, host });
+  await flush(() => root.render(<AccountHome source={source} />));
+  return {
+    host,
+    render: async (nextSource) => flush(() => root.render(<AccountHome source={nextSource} />)),
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((accept) => {
+    resolve = accept;
+  });
+  return { promise, resolve };
+}
+
+function identity(accountId: string, email: string | null): AccountIdentityResult {
+  return { kind: 'ready', accountId, email };
+}
+
+afterEach(async () => {
+  for (const { root, host } of mounted.splice(0)) {
+    await flush(() => root.unmount());
+    host.remove();
+  }
+  Object.defineProperty(globalThis, 'fetch', { value: originalFetch, configurable: true, writable: true });
+  window.history.replaceState(null, '', '/');
+});
+
+afterAll(async () => {
+  for (const [name, descriptor] of previous) {
+    if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+    else Reflect.deleteProperty(globalThis, name);
+  }
+  await dom.happyDOM.close();
+});
+
+test('signed-out, denied, unavailable and missing-email states stay distinct', async () => {
+  const signedOut = await mount(async () => ({ kind: 'signed-out' }));
+  expect(signedOut.host.querySelector('[role="status"]')?.textContent).toContain('You are signed out');
+  for (const href of ['/login', '/signup', '/recovery'])
+    expect(signedOut.host.querySelector(`a[href="${href}"]`)).not.toBeNull();
+  for (const href of ['/security', '/account/rename', '/account/delete', '/organizations/new', '/automated/new'])
+    expect(signedOut.host.querySelector(`a[href="${href}"]`)).not.toBeNull();
+  expect(signedOut.host.textContent).toContain('does not promise an action is available');
+
+  const denied = await mount(async () => ({ kind: 'denied' }));
+  expect(denied.host.querySelector('[role="status"]')?.textContent).toContain('was refused');
+  expect(denied.host.querySelector('button')).toBeNull();
+
+  const unavailable = await mount(async () => ({ kind: 'unavailable' }));
+  expect(unavailable.host.querySelector('[role="status"]')?.textContent).toContain('status is unknown');
+  expect(unavailable.host.querySelector('button')?.textContent).toContain('Retry account check');
+  expect(unavailable.host.querySelector('a[href="/recovery"]')).not.toBeNull();
+
+  const missingEmail = await mount(async () => identity('sample-account', null));
+  expect(missingEmail.host.textContent).toContain('No email address is available');
+  expect(missingEmail.host.textContent).not.toContain('verified');
+});
+
+test('independent home instances own separate reads and displayed identities', async () => {
+  const firstRead = deferred<AccountIdentityResult>();
+  const first = await mount(() => firstRead.promise);
+  const second = await mount(async () => identity('second-account', 'second@example.test'));
+  expect(first.host.querySelector('[role="status"]')?.textContent).toContain('Checking');
+  expect(second.host.textContent).toContain('second@example.test');
+  firstRead.resolve(identity('first-account', 'first@example.test'));
+  await flush();
+  expect(first.host.textContent).toContain('first@example.test');
+  expect(first.host.textContent).not.toContain('second@example.test');
+  expect(second.host.textContent).toContain('second@example.test');
+  expect(second.host.textContent).not.toContain('first@example.test');
+});
+
+test('replacing a source aborts its read and ignores a late result', async () => {
+  const previousRead = deferred<AccountIdentityResult>();
+  let previousSignal: AbortSignal | undefined;
+  const page = await mount((signal) => {
+    previousSignal = signal;
+    return previousRead.promise;
+  });
+  await page.render(async () => identity('replacement-account', 'replacement@example.test'));
+  expect(previousSignal?.aborted).toBe(true);
+  expect(page.host.textContent).toContain('replacement@example.test');
+  previousRead.resolve(identity('retired-account', 'retired@example.test'));
+  await flush();
+  expect(page.host.textContent).toContain('replacement@example.test');
+  expect(page.host.textContent).not.toContain('retired@example.test');
+});
+
+test('Retry focuses status, and pagehide/return clears and renews the observation', async () => {
+  let retries = 0;
+  const retryPage = await mount(async () =>
+    retries++ === 0 ? { kind: 'unavailable' } : identity('retried-account', 'retry@example.test'),
+  );
+  await flush();
+  await flush(() => retryPage.host.querySelector<HTMLButtonElement>('button')!.click());
+  expect(retries).toBe(2);
+  expect(document.activeElement).toBe(retryPage.host.querySelector('[role="status"]'));
+  expect(retryPage.host.textContent).toContain('retry@example.test');
+
+  let reads = 0;
+  const renewed = deferred<AccountIdentityResult>();
+  const returning = await mount(async () =>
+    reads++ === 0 ? identity('before-return', 'before@example.test') : renewed.promise,
+  );
+  await flush();
+  expect(returning.host.textContent).toContain('before@example.test');
+  await act(async () => {
+    window.dispatchEvent(new dom.Event('pagehide'));
+    expect(returning.host.textContent).not.toContain('before@example.test');
+    expect(returning.host.textContent).not.toContain('before-return');
+  });
+  expect(returning.host.textContent).not.toContain('before@example.test');
+  const pageshow = new dom.Event('pageshow');
+  Object.defineProperty(pageshow, 'persisted', { value: true });
+  await flush(() => window.dispatchEvent(pageshow));
+  expect(reads).toBe(2);
+  expect(returning.host.textContent).not.toContain('before@example.test');
+  renewed.resolve(identity('after-return', 'after@example.test'));
+  await flush();
+  expect(returning.host.textContent).toContain('after@example.test');
+});
+
+test('one installed identity observation, public tasks and read Retry never prepare work', async () => {
+  const calls: string[] = [];
+  const pendingKey = 'rezics.account-operation.pending';
+  window.sessionStorage.setItem(pendingKey, 'owned-by-destination');
+  const late = deferred<Response>();
+  const timeout = spyOn(globalThis, 'setTimeout');
+  globalThis.fetch = (async (input, init) => {
+    calls.push(String(input));
+    expect(init?.body).toBe('{}');
+    expect(init?.method).toBe('POST');
+    return calls.length === 1 ? late.promise : Response.json({ account_id: 'current', email: 'current@example.test' });
+  }) as typeof fetch;
+  const page = await mount();
+  const deadline = timeout.mock.calls.findIndex(([, delay]) => delay === 5000);
+  const expire = timeout.mock.calls[deadline]![0] as () => void;
+  clearTimeout(timeout.mock.results[deadline]!.value as ReturnType<typeof setTimeout>);
+  timeout.mockRestore();
+  expect(page.host.textContent).toContain('Checking');
+  await flush(expire);
+  expect(page.host.textContent).toContain('status is unknown');
+  expect(calls).toEqual(['/account-identity']);
+  const task = page.host.querySelector<HTMLAnchorElement>('a[href="/automated/new"]')!;
+  await flush(() => {
+    window.dispatchEvent(new dom.Event('focus'));
+    task.focus();
+    task.addEventListener('click', (event) => event.preventDefault());
+    task.click();
+  });
+  expect(document.activeElement).toBe(task);
+  expect(calls).toHaveLength(1);
+  expect(window.sessionStorage.getItem(pendingKey)).toBe('owned-by-destination');
+  await flush(() => page.host.querySelector<HTMLButtonElement>('button')!.click());
+  expect(calls).toEqual(['/account-identity', '/account-identity']);
+  expect(document.activeElement).toBe(page.host.querySelector('[role="status"]'));
+  expect(window.location.pathname).toBe('/');
+  expect(page.host.textContent).toContain('current@example.test');
+  task.focus();
+  await flush(() => late.resolve(Response.json({ account_id: 'old', email: 'old@example.test' })));
+  expect(page.host.textContent).not.toContain('old@example.test');
+  expect(page.host.textContent).toContain('current@example.test');
+  expect(document.activeElement).toBe(task);
+  await page.render();
+  expect(document.activeElement).toBe(task);
+  expect(calls).toHaveLength(2);
+  window.sessionStorage.removeItem(pendingKey);
+});
+
+test('replacement hides a ready identity while pending, and unrelated renders keep task focus', async () => {
+  const page = await mount(async () => identity('former-id', 'former@example.test'));
+  const replacement = deferred<AccountIdentityResult>();
+  const source: AccountIdentitySource = () => replacement.promise;
+  await page.render(source);
+  expect(page.host.textContent).not.toContain('former@example.test');
+  expect(page.host.textContent).not.toContain('former-id');
+  const link = page.host.querySelector<HTMLAnchorElement>('a[href="/organizations/new"]')!;
+  link.focus();
+  await page.render(source);
+  expect(document.activeElement).toBe(link);
+  replacement.resolve({ kind: 'denied' });
+  await flush();
+  expect(document.activeElement).toBe(link);
+  expect(page.host.querySelector('details')).toBeNull();
+  expect(page.host.querySelector('.auth-home-guide')?.textContent).not.toContain('former');
+});
+
+test('a mounted language change updates the public guide without another identity read', async () => {
+  initializeDocumentLocale('en');
+  let calls = 0;
+  const page = await mount(async () => {
+    calls++;
+    return identity('own-id', 'own@example.test');
+  });
+  const task = page.host.querySelector<HTMLAnchorElement>('a[href="/automated/new"]')!;
+  task.focus();
+  try {
+    await flush(() => {
+      applyDocumentLocale('ja');
+    });
+    expect(task.textContent).toContain('自動化アカウントの作成を確認');
+    expect(document.activeElement).toBe(task);
+    expect(page.host.textContent).toContain('own@example.test');
+    expect(calls).toBe(1);
+  } finally {
+    await flush(() => {
+      applyDocumentLocale('en');
+    });
+  }
+});

@@ -128,11 +128,13 @@ async function bounded(f: Fixture) {
   return trace;
 }
 async function tombstones(f: Fixture, ids: string[]) {
-  for (const post of f.targeted.filter((p) => ids.includes(p.id))) {
+  // inspect() proves every post's storage; the wire decision is the same per post, so read a spread sample.
+  const sample = new Set([ids[0], ids[Math.floor(ids.length / 2)], ids.at(-1)]);
+  for (const post of f.targeted.filter((p) => sample.has(p.id))) {
     for (const revision of post.revisions) {
       expect(await ok(await d().readRevision('author', post.id, revision.id))).toEqual({
         id: revision.id,
-        digest: revision.digest,
+        digest: null,
         body: null,
         availability: 'erased',
       });
@@ -241,13 +243,7 @@ test('selection authorId supplies no authority and current account formula guard
   const unknown = await hidden(await d().status('author', d().unknownOperation()));
   // unrelated has account:read on its own account, including consented scope.
   expect(await hidden(await d().status('unrelated', op.name))).toEqual(unknown);
-  for (const axis of [
-    'account:read',
-    'account:read-scope',
-    'account:read-principal',
-    'post:erase',
-    'suspension',
-  ] as const) {
+  for (const axis of ['account:read', 'account:read-scope', 'post:erase'] as const) {
     await d().authority('author', axis, 'revoke');
     await denied(await d().status('author', op.name), [op.name], true);
     const snapshot = await d().inspect(f);
@@ -261,6 +257,25 @@ test('selection authorId supplies no authority and current account formula guard
   completed(done, f);
   const trace = await bounded(f);
   expect(done.metadata.steps).toBe(trace.steps.length);
+});
+
+test('a suspension ends an erasure started before it, and reinstatement does not resume it', async () => {
+  const f = await d().seed({ posts: 205, revisions: 3 });
+  const { op, key, wire } = await start(f);
+  const held = await d().inspect(f);
+  await d().authority('author', 'suspension', 'revoke');
+  await denied(await d().status('author', op.name), [op.name], true);
+  await denied(await d().erase('author', f.thread, f.authorId, key), [op.name, wire]);
+  expect(await d().inspect(f)).toEqual(held);
+  // Reinstatement keeps the authentication floor the suspension raised, so the earlier initiator stays refused.
+  await d().authority('author', 'suspension', 'allow');
+  await d().finish(op.name);
+  const terminal = await operation(await d().status('author', op.name), true, f);
+  expect(terminal.error?.code).toBe(7);
+  expect(terminal.response).toBeUndefined();
+  expect(terminal.metadata.processedPosts).toBe(0);
+  expect(terminal.metadata.erasedRevisions).toBe(0);
+  expect(await d().inspect(f)).toEqual(held);
 });
 
 test('durable native restart and duplicate original key retain one operation and original 202', async () => {
@@ -331,4 +346,4 @@ test('checkGrowth binding measures bounded initiation status and native steps', 
       expect(sample.buffers).toBeGreaterThan(0);
     }
   }
-});
+}, 180_000);

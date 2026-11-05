@@ -15,33 +15,36 @@ export async function readFreshness(pool: Pool, consumer: string): Promise<Fresh
   return { asOf, behind, catchingUp: behind > 0 && now.getTime() - asOf.getTime() > 60_000 };
 }
 
-export function createFreshness(
-  pool: Pool,
-  consumer: string,
-  { ttlMs = 1000 }: { ttlMs?: number } = {},
-): { current(): Promise<Freshness> } {
-  if (!Number.isFinite(ttlMs) || ttlMs < 0) throw new RangeError('ttlMs must be a non-negative finite number');
+/**
+ * Answers each `current()` call from a read that began after the call. At most one read runs; calls made while it runs
+ * share the next read, which begins when the running one settles.
+ */
+export function createFreshness(pool: Pool, consumer: string): { current(): Promise<Freshness> } {
+  let running = false;
+  let queued: { promise: Promise<Freshness>; start(): void } | undefined;
 
-  let cached: Freshness | undefined;
-  let expiresAt = 0;
-  let refreshing: Promise<Freshness> | undefined;
+  function start(): Promise<Freshness> {
+    running = true;
+    const read = readFreshness(pool, consumer);
+    const settled = () => {
+      const next = queued;
+      queued = undefined;
+      if (next) next.start();
+      else running = false;
+    };
+    read.then(settled, settled);
+    return read;
+  }
 
   return {
     current(): Promise<Freshness> {
-      if (refreshing) return refreshing;
-      if (cached && Date.now() < expiresAt) return Promise.resolve(cached);
-
-      const refresh = readFreshness(pool, consumer)
-        .then((freshness) => {
-          cached = freshness;
-          expiresAt = Date.now() + ttlMs;
-          return freshness;
-        })
-        .finally(() => {
-          if (refreshing === refresh) refreshing = undefined;
-        });
-      refreshing = refresh;
-      return refresh;
+      if (!running) return start();
+      if (!queued) {
+        let begin!: () => void;
+        const promise = new Promise<Freshness>((resolve) => (begin = () => resolve(start())));
+        queued = { promise, start: begin };
+      }
+      return queued.promise;
     },
   };
 }

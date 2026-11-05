@@ -1,0 +1,104 @@
+import { slug } from '@rezics/definitions/slug';
+import { admittedBoardReturn } from './board-navigation';
+import { parseHistoryReturnToken } from './revision-return/history-return';
+
+const memoryKey = '__rezicsThreadSlugs';
+
+/** The slug of a thread title. A thread whose title is null is `thread`. */
+export function threadSlug(title: string | null | undefined): string {
+  return title ? slug(title) : 'thread';
+}
+
+/** A title carried on a thread read, or null when the opening post was erased. */
+export function threadTitle(thread: { title?: string | null }): string | null {
+  return typeof thread.title === 'string' && thread.title ? thread.title : null;
+}
+
+/** The canonical path of a thread, without a locale prefix. The id alone decides the page. */
+export function threadHref(thread: { id: string; title: string | null }): string {
+  return `/threads/${encodeURIComponent(thread.id)}/${encodeURIComponent(threadSlug(thread.title))}`;
+}
+
+/** The locale path of a thread, keeping an opaque cursor when the reader is past the first page. */
+export function threadLocation(
+  locale: string,
+  thread: { id: string; title?: string | null },
+  cursor?: string,
+  post?: string,
+  historyReturn?: { token?: string; revisionId?: string },
+  boardReturn?: string,
+): string {
+  // With no title projection, use the ID route so its normal reader can canonicalize after reading.
+  const route =
+    thread.title === undefined
+      ? `/threads/${encodeURIComponent(thread.id)}`
+      : threadHref({ id: thread.id, title: thread.title });
+  const path = `/${locale}${route}`;
+  const search: string[] = [];
+  if (cursor !== undefined) search.push(`cursor=${encodeURIComponent(cursor)}`);
+  if (post !== undefined) search.push(`post=${encodeURIComponent(post)}`);
+  const origin = admittedBoardReturn(boardReturn);
+  if (origin) search.push(`boardReturn=${encodeURIComponent(origin)}`);
+  const token = parseHistoryReturnToken(historyReturn?.token);
+  const revisionId = historyReturn?.revisionId;
+  if (token && revisionId && revisionId.length <= 128) {
+    search.push(`historyReturn=${encodeURIComponent(token)}`);
+    search.push(`historyRevision=${encodeURIComponent(revisionId)}`);
+  }
+  return `${path}${search.length ? `?${search.join('&')}` : ''}${post === undefined ? '' : `#post-${encodeURIComponent(post)}`}`;
+}
+
+export function threadSearch(search: Record<string, unknown>): {
+  cursor?: string;
+  post?: string;
+  historyReturn?: string;
+  historyRevision?: string;
+  boardReturn?: string;
+} {
+  const boardReturn = admittedBoardReturn(search.boardReturn);
+  return {
+    ...(boardReturn ? { boardReturn } : {}),
+    ...(typeof search.cursor === 'string' && search.cursor.length <= 4096 ? { cursor: search.cursor } : {}),
+    ...(typeof search.post === 'string' && search.post.length <= 128 ? { post: search.post } : {}),
+    ...(parseHistoryReturnToken(search.historyReturn)
+      ? { historyReturn: parseHistoryReturnToken(search.historyReturn)! }
+      : {}),
+    ...(typeof search.historyRevision === 'string' && search.historyRevision.length <= 128
+      ? { historyRevision: search.historyRevision }
+      : {}),
+  };
+}
+
+/**
+ * The latest slug seen in thread or board data. This lets a canonical page start its established
+ * thread and post reads together while URLs known to be outdated can redirect after the thread read.
+ */
+function slugs(): Map<string, string> {
+  const host = globalThis as typeof globalThis & { [memoryKey]?: Map<string, string> };
+  return (host[memoryKey] ??= new Map());
+}
+
+export function rememberedThreadSlug(id: string): string | undefined {
+  return slugs().get(id);
+}
+
+export function rememberThreadSlug(id: string, title: string | null): void {
+  slugs().set(id, threadSlug(title));
+}
+
+export function forgetThreadSlug(id: string): void {
+  slugs().delete(id);
+}
+
+export function slugMatches(requested: string, canonical: string): boolean {
+  if (requested === canonical) return true;
+  try {
+    return decodeURIComponent(requested) === canonical;
+  } catch {
+    return false;
+  }
+}
+
+export function sameThreadSlug(requested: string, title: string | null): boolean {
+  return slugMatches(requested, threadSlug(title));
+}

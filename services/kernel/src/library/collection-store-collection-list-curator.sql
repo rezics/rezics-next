@@ -1,6 +1,7 @@
 WITH input AS (SELECT :visibility::nullable(text) AS visibility, :after::nullable(uuid) AS after_id)
 SELECT collection.collection_id AS id, collection.curator_account_id AS "curatorAccountId", collection.title,
-       collection.description, collection.visibility, collection.state, collection.revision,
+       collection.description, collection.visibility, collection.presentation_kind AS "presentationKind",
+       collection.cover_media_id AS "coverMediaId", collection.state, collection.revision,
        collection.member_count AS "memberCount", collection.order_epoch AS "orderEpoch",
        collection.created_at::text AS "createdAt", collection.updated_at::text AS "updatedAt"
 FROM library.collection AS collection

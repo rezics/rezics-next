@@ -16,6 +16,8 @@ export const IMPORTER_SCOPES = [
   'media:read_reservation',
 ] as const;
 
+export const VNDB_IMPORTER_SCOPES = [...IMPORTER_SCOPES, 'source_statistic:write'] as const;
+
 export type CredentialsObserver = {
   onAccountKey?(
     path: string,
@@ -57,7 +59,8 @@ function base64url(value: Uint8Array | string): string {
 async function readAccountKey(path: string, observer?: CredentialsObserver): Promise<AccountKey> {
   let handle;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    // Do not wait for a FIFO writer before checking the opened descriptor's file type.
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   } catch {
     inputFailure();
   }
@@ -134,14 +137,41 @@ function assertion(account: string, authOrigin: string, accountKey: AccountKey, 
     .then((signature) => `${signingInput}.${base64url(new Uint8Array(signature))}`);
 }
 
-async function responseBytes(response: Response): Promise<Uint8Array> {
+// Register before starting work, including fetch implementations that ignore abort.
+function abortable<T>(signal: AbortSignal, work: () => Promise<T>, dispose?: (value: T) => void): Promise<T> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const aborted = () => reject(signal.reason);
+    signal.addEventListener('abort', aborted, { once: true });
+    Promise.resolve()
+      .then(() => {
+        signal.throwIfAborted();
+        return work();
+      })
+      .then(
+        (value) => {
+          signal.removeEventListener('abort', aborted);
+          if (signal.aborted) {
+            dispose?.(value);
+            reject(signal.reason);
+          } else resolve(value);
+        },
+        (error) => {
+          signal.removeEventListener('abort', aborted);
+          reject(error);
+        },
+      );
+  });
+}
+
+async function responseBytes(response: Response, signal: AbortSignal): Promise<Uint8Array> {
   if (!response.body) return new Uint8Array();
   const reader = response.body.getReader();
   let result = new Uint8Array(0);
   let size = 0;
   try {
     for (;;) {
-      const item = await reader.read();
+      const item = await abortable(signal, () => reader.read());
       if (item.done) break;
       const value = item.value;
       if (!(value instanceof Uint8Array) || value.buffer.byteLength > MAX_IMPORT_RESPONSE_BYTES)
@@ -158,6 +188,10 @@ async function responseBytes(response: Response): Promise<Uint8Array> {
       size += value.byteLength;
     }
     return result.subarray(0, size);
+  } catch (error) {
+    // Initiate disposal without waiting for an untrusted underlying cancel hook.
+    void reader.cancel().catch(() => {});
+    throw error;
   } finally {
     reader.releaseLock();
   }
@@ -174,34 +208,49 @@ function cookie(response: Response): string {
 type AuthRequest = {
   fetch: typeof fetch;
   url: string;
+  origin: string;
   body: string;
   cookie?: string;
+  signal: AbortSignal | undefined;
 };
 
 async function authRequest(options: AuthRequest): Promise<{ response: Response; bytes: Uint8Array }> {
   if (Buffer.byteLength(options.body) > MAX_IMPORT_BODY_BYTES) throw new CredentialServiceError();
   const controller = new AbortController();
+  const aborted = () => controller.abort(options.signal?.reason);
+  options.signal?.addEventListener('abort', aborted, { once: true });
+  if (options.signal?.aborted) aborted();
   const timer = setTimeout(
     () => controller.abort(new DOMException('Credential request deadline exceeded', 'TimeoutError')),
     MAX_IMPORT_DEADLINE_MS,
   );
   try {
-    const headers = new Headers({ 'content-type': 'application/json' });
+    const headers = new Headers({ 'content-type': 'application/json', origin: options.origin });
     if (options.cookie) headers.set('cookie', options.cookie);
-    const response = await options.fetch(
-      new Request(options.url, {
-        method: 'POST',
-        headers,
-        body: options.body,
-        redirect: 'manual',
-        signal: controller.signal,
-      }),
+    const response = await abortable(
+      controller.signal,
+      () =>
+        options.fetch(
+          new Request(options.url, {
+            method: 'POST',
+            headers,
+            body: options.body,
+            redirect: 'manual',
+            signal: controller.signal,
+          }),
+        ),
+      // A late result from an abort-ignoring fetch still belongs to this request.
+      (response) => {
+        void response.body?.cancel().catch(() => {});
+      },
     );
-    const bytes = await responseBytes(response);
+    const bytes = await responseBytes(response, controller.signal);
+    controller.signal.throwIfAborted();
     if (response.status === 401 || response.status === 403) throw new CredentialDeniedError();
     if (!response.ok) throw new CredentialServiceError();
     return { response, bytes };
   } catch (error) {
+    controller.abort();
     if (
       error instanceof CredentialDeniedError ||
       error instanceof CredentialServiceError ||
@@ -211,6 +260,7 @@ async function authRequest(options: AuthRequest): Promise<{ response: Response; 
     throw new CredentialServiceError();
   } finally {
     clearTimeout(timer);
+    options.signal?.removeEventListener('abort', aborted);
   }
 }
 
@@ -219,9 +269,11 @@ export type AccountCredentialsOptions = {
   account: string;
   client: string;
   authOrigin: string;
+  scopes?: readonly string[];
   fetch?: typeof fetch;
   now?: () => number;
   observer?: CredentialsObserver;
+  signal?: AbortSignal;
 };
 
 export type AccountTokenProvider = (fresh?: boolean) => Promise<string>;
@@ -234,15 +286,26 @@ export async function createAccountTokenProvider(options: AccountCredentialsOpti
   let expiresAt = 0;
   let renewing: Promise<string> | undefined;
 
+  const ensureActive = () => {
+    if (options.signal?.aborted) {
+      accessToken = undefined;
+      expiresAt = 0;
+      throw new CredentialServiceError();
+    }
+  };
+
   const renew = async (): Promise<string> => {
+    ensureActive();
     const signed = await assertion(options.account, options.authOrigin, accountKey, now());
     const signin = await authRequest({
       fetch: upstream,
       url: `${options.authOrigin}/signin/key`,
+      origin: options.authOrigin,
+      signal: options.signal,
       body: JSON.stringify({
         account_id: options.account,
         client_id: options.client,
-        scope: [...IMPORTER_SCOPES],
+        scope: [...(options.scopes ?? IMPORTER_SCOPES)],
         assertion: signed,
       }),
     });
@@ -250,6 +313,8 @@ export async function createAccountTokenProvider(options: AccountCredentialsOpti
     const token = await authRequest({
       fetch: upstream,
       url: `${options.authOrigin}/token`,
+      origin: options.authOrigin,
+      signal: options.signal,
       body: '{}',
       cookie: session,
     });
@@ -270,14 +335,21 @@ export async function createAccountTokenProvider(options: AccountCredentialsOpti
       (Reflect.get(value, 'expires_in') as number) <= 0
     )
       throw new CredentialServiceError();
-    accessToken = Reflect.get(value, 'access_token') as string;
     expiresAt = now() + (Reflect.get(value, 'expires_in') as number) * 1000;
+    ensureActive();
+    accessToken = Reflect.get(value, 'access_token') as string;
     return accessToken;
   };
 
   return async (fresh?: boolean) => {
-    if (!fresh && accessToken !== undefined && now() < expiresAt - REFRESH_EARLY_MS) return accessToken;
+    ensureActive();
+    if (!fresh && accessToken !== undefined && now() < expiresAt - REFRESH_EARLY_MS) {
+      ensureActive();
+      return accessToken;
+    }
     if (!renewing) renewing = renew().finally(() => (renewing = undefined));
-    return renewing;
+    const token = await renewing;
+    ensureActive();
+    return token;
   };
 }

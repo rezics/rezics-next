@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -29,14 +30,17 @@ beforeAll(async () => {
     secret: 'retention-only-secret-with-at-least-32-bytes',
     audience: 'https://retention.api.test',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount() {
         return null;
       },
       async authorizeProvisioning() {
         throw new Error('unused');
       },
-    },
+    }),
   });
   await db.admin.query(`INSERT INTO "user" (id,name,"emailVerified") VALUES ($1,'',false)`, [owner]);
   await db.admin.query(`INSERT INTO auth_client (client_id,first_party,scopes) VALUES ($1,true,ARRAY['openid'])`, [

@@ -29,7 +29,10 @@ notes:
     keys cover the published templates, not arbitrary user-created wiki keys.
   - A mapping is one decision. Existing means bundled on the named type; proposed includes missing profile bindings and
     qualifiers even where the property is already bundled on another type.
-  - Music and live-action subjects are omitted; real people remain available as credited creators and voice actors.
+  - Subject import covers type 1 (book), type 2 (anime), type 3 (music), type 4 (game) and type 6 (live-action). Music
+    uses the admitted MusicAlbum work fallback; live-action dispatches film versus series from pinned platform/template
+    codes. Real people remain available as credited creators and voice actors. Music relation codes and live-action
+    relation codes other than Adaptation remain row-6 vocabulary work.
   - Source strings used as field keys, template names and role labels retain their original spelling. All descriptive
     prose is English.
   - The concept Wikidata mapping describes skos:Concept. No equivalence is asserted between a Bangumi staff role concept
@@ -40,10 +43,13 @@ notes:
     qualifiers come only from a supporting wiki credit, never a fabricated value.
   - Subject-character order is zero-based, not necessarily contiguous, and sorted within role. Convert only the base,
     retaining gaps. Episode sort is a source ordinal and may be fractional.
-  - Raw infobox strings are parsed by template; unsupported custom keys must be reported with an omission reason. Image/cover
-    keys always feed the cover group. No image bytes or cover URL are exported by these eight files.
-  - Summaries and episode descriptions are attributed CC BY-SA 3.0 documents. Source work copyright notices do not override
-    the archive licence. Covers depicting copyrighted works retain the rights described by the primary copyright notice.
+  - Raw infobox strings are parsed by template; unsupported custom keys must be reported with an omission reason.
+    Covers come only from Bangumi's published cover-image field, never raw infobox image/cover keys. The import provider
+    owns obtaining that published field; the eight pinned archive files export neither cover URLs nor image bytes.
+  - Summaries and episode descriptions are attributed CC BY-SA 3.0 documents. CC BY-SA attribution is carried by the
+    subject's source record in its Sources section, never inferred from raw infobox copyright text. Source work copyright
+    notices do not override the archive licence. Covers depicting copyrighted works retain the rights described by the
+    primary copyright notice.
   - Schema to Wikidata mappings marked close preserve source distinctions and do not assert RDF equivalence.
   - Unknown observed association codes are explicitly omitted. The API CharacterType definition takes precedence over
     the abbreviated Archive README example for ships and organizations.
@@ -59,6 +65,24 @@ notes:
     use the same dispatch. The association mappings name TVSeries as a concrete example, not CreativeWork's shared slots.
   - Character kind codes are keyword concepts; appearance role codes qualify schema:character with wdt:P3831.
     No character-kind or appearance-role code creates a catalogue type.
+  - Direct character-to-character relations use spouse, sibling, father, mother, partner or rival when a source
+    code has that meaning and a Character target. Unknown Bangumi relation codes remain omitted provenance; no
+    catch-all property absorbs arbitrary codes. The additional person-relations file stays outside this inventory.
+  - Subject relation decisions cite subject-relations.jsonlines pairs from the verified pinned asset, not live pages.
+    A citation fragment names subject_id then related_subject_id; recordCheck records both rows, with null for a
+    missing reciprocal row. Subjects and their titles were checked in subject.jsonlines of the same asset.
+  - Resolve canonicalByReverse from the reciprocal row before applying a subject relation mapping. Its term replaces
+    the fallback term, and the source subject holds it. Parent Story reciprocals of Side Story or Spin-off therefore
+    resolve to the same canonical statement as their other side; a parent without such a reciprocal uses part-of.
+    Coalesce identical canonical statements; symmetric pairs use stable endpoint ordering and are stored once.
+  - Adaptation is reciprocal code 1 for both original and adaptation. It states a cross-media franchise connection,
+    not the direction of based-on. Album, book Version, DLC and retired Main Version likewise lack a consistent
+    holder direction in the archive and retain their exact unordered meanings rather than guessing derivation.
+  - Collaboration records character crossovers. Its reciprocal rows can use Character instead of Collaboration;
+    they do not consistently select a host. Character links works with shared characters and unrelated stories,
+    not character-focused works. Other preserves only Bangumi's outgoing catch-all assertion.
+  - Live-action Adaptation (relation.6/1) maps to crossMediaCounterpart on the actual Movie or TVSeries work profile;
+    it preserves the shared cross-media meaning without inferring which work was adapted.
 vocabulary:
   - &id010
     status: proposed
@@ -90,7 +114,8 @@ vocabulary:
     term: schema:image
     'on': schema:Book
     wikidata: wd:P18
-    meaning: Every source image or cover key feeds the cover group; the pinned archive has no top-level image field.
+    meaning: Bangumi's published cover-image field feeds the cover group, never raw infobox image/cover keys; the import
+      provider obtains it outside the eight pinned archive files, which export neither cover URLs nor image bytes.
     licence:
       id: LicenseRef-Source-Image-Rights
       url: https://bgm.tv/about/copyright
@@ -334,7 +359,7 @@ files:
       - id: favorite
         mapping: &id007
           status: omitted
-          reason: User tags, vote or collection/list statistics, rankings and comment counts are outside the catalogue.
+          reason: User tags and collection/list statistics, rankings and comment counts are outside the catalogue.
       - id: favorite.doing
         mapping: *id007
       - id: favorite.done
@@ -413,31 +438,33 @@ files:
           sources: &id022
             - https://www.wikidata.org/wiki/Property:P7937
       - id: rank
-        mapping: *id007
+        mapping: &id108
+          status: omitted
+          reason: Bangumi's licence covers entry information and not ratings.
       - id: score
-        mapping: *id007
+        mapping: *id108
       - id: score_details
-        mapping: *id007
+        mapping: *id108
       - id: score_details.1
-        mapping: *id007
+        mapping: *id108
       - id: score_details.10
-        mapping: *id007
+        mapping: *id108
       - id: score_details.2
-        mapping: *id007
+        mapping: *id108
       - id: score_details.3
-        mapping: *id007
+        mapping: *id108
       - id: score_details.4
-        mapping: *id007
+        mapping: *id108
       - id: score_details.5
-        mapping: *id007
+        mapping: *id108
       - id: score_details.6
-        mapping: *id007
+        mapping: *id108
       - id: score_details.7
-        mapping: *id007
+        mapping: *id108
       - id: score_details.8
-        mapping: *id007
+        mapping: *id108
       - id: score_details.9
-        mapping: *id007
+        mapping: *id108
       - id: series
         mapping: &id074
           status: existing
@@ -506,7 +533,7 @@ files:
           meaning: The original source name or a language-tagged Chinese name.
       - id: summary
         mapping:
-          status: proposed
+          status: existing
           term: schema:abstract
           'on': schema:Person
           wikidata: wd:Q333291
@@ -658,8 +685,15 @@ files:
             - https://www.wikidata.org/wiki/Property:P361
       - id: type
         mapping:
-          status: omitted
-          reason: The source episode-kind enumeration has no shared episode property with the same meaning.
+          status: existing
+          term: schema:keywords
+          'on': schema:Episode
+          wikidata: wd:P921
+          meaning: The source episode kind is an exact Bangumi concept resolved from the released episode-type scheme.
+          sources:
+            - https://schema.org/keywords
+            - https://www.wikidata.org/wiki/Property:P921
+            - https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType
   - id: subject-relations
     type:
       status: proposed
@@ -1710,11 +1744,15 @@ enumerations:
         mapping:
           status: omitted
           reason: The anime family is dispatched by its format concept, and has no separate generic profile.
-      - &id084
-        id: 3
-        mapping: &id073
-          status: omitted
-          reason: Music and live-action subject types are outside the launch scope.
+      - id: 3
+        mapping:
+          status: existing
+          term: schema:MusicAlbum
+          'on': schema:MusicAlbum
+          wikidata: wd:Q482994
+          meaning: >-
+            A music subject is the admitted album-work fallback. Bangumi type 3 does not distinguish work, release and
+            track; those grains stay unmapped until Semantic admits them.
       - id: 4
         mapping:
           status: omitted
@@ -1722,7 +1760,10 @@ enumerations:
             The game family dispatches by platform to a video game or independently referable add-on;
             software and tabletop records are outside this video-game profile. No generic family subject is created.
       - id: 6
-        mapping: *id073
+        mapping:
+          status: omitted
+          reason: >-
+            Live-action is dispatched by platform.real to a film or series profile; no generic live-action type is created.
   - id: subject.series
     values:
       - id: 'false'
@@ -2074,26 +2115,118 @@ enumerations:
     values:
       - &id085
         id: 0
-        mapping: *id073
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-0
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: other
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: &liveActionSeries
+            status: existing
+            term: schema:TVSeries
+            'on': schema:TVSeries
+            wikidata: wd:Q5398426
+            meaning: A live-action series or programme using the pinned TV wiki template.
       - id: 1
-        mapping: *id073
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-1
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: jp
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: *liveActionSeries
       - id: 2
-        mapping: *id073
-      - *id084
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-2
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: en
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: *liveActionSeries
+      - &id084
+        id: 3
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-3
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: cn
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: *liveActionSeries
       - id: 6001
-        mapping: *id073
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-6001
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: tv
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: *liveActionSeries
       - id: 6002
-        mapping: *id073
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-6002
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: movie
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile:
+            status: existing
+            term: schema:Movie
+            'on': schema:Movie
+            wikidata: wd:Q11424
+            meaning: A live-action film using the pinned realMovie wiki template.
       - id: 6003
-        mapping: *id073
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-6003
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: live
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: *liveActionSeries
       - id: 6004
-        mapping: *id073
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/6-6004
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: show
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: *liveActionSeries
   - id: platform.music
     values:
-      - *id085
+      - id: 0
+        mapping:
+          <<: *id010
+          status: existing
+          concept:
+            id: https://rezics.com/schemes/bangumi/formats/3-0
+            scheme: https://rezics.com/schemes/bangumi/formats
+            label: other
+          source: https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_platforms.yml
+          profile: &musicAlbum
+            status: existing
+            term: schema:MusicAlbum
+            'on': schema:MusicAlbum
+            wikidata: wd:Q482994
+            meaning: A music subject using the admitted album-work fallback.
       - &id101
         id: 3001
-        mapping: *id073
+        mapping: &id073
+          status: omitted
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - &id102
         id: 3002
         mapping: *id073
@@ -5750,108 +5883,288 @@ enumerations:
         mapping: *id073
   - id: relation.2
     values:
-      - &id105
-        id: 1
+      - id: 1
         label: Adaptation
         mapping:
-          status: omitted
-          reason:
-            The adaptation source relation does not identify a safe directed catalogue property; retain an explicit
-            omission rather than guess shared worlds, derivation or containment.
+          status: existing
+          term: rezics:crossMediaCounterpart
+          'on': schema:TVSeries
+          meaning:
+            The works are cross-media counterparts in the same franchise; code 1 does not identify the adapted-from
+            holder.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/12/497
+          recordCheck:
+            subject: 12
+            related: 497
+            forward: 1
+            reverse: 1
+            observation: Chobits anime (12) and Chobits manga (497) both show Adaptation (1). The same code appears
+              on the adaptation and on the original, so it is not a directed based-on code.
       - id: 2
         label: Prequel
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P155
-          'on': schema:CreativeWork
+          'on': schema:TVSeries
           wikidata: wd:P155
-          meaning: The related work is the prequel of this work.
-          sources: &id107
-            - https://www.wikidata.org/wiki/Property:P155
+          meaning: The related work precedes this work; this work holds the follows statement.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/8/793
+          recordCheck:
+            subject: 8
+            related: 793
+            forward: 2
+            reverse: 3
+            observation: Code Geass R2 (8) shows Prequel (2) to Code Geass (793); Code Geass shows Sequel (3) back.
       - id: 3
         label: Sequel
         mapping:
-          status: proposed
-          term: wdt:P156
-          'on': schema:CreativeWork
+          status: existing
+          term: wdt:P155
+          inverse: true
+          'on': schema:TVSeries
           wikidata: wd:P156
-          meaning: The related work is the sequel of this work.
-          sources: &id108
-            - https://www.wikidata.org/wiki/Property:P156
+          meaning: The related work follows this work and holds the follows statement.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/51/876
+          recordCheck:
+            subject: 51
+            related: 876
+            forward: 3
+            reverse: 2
+            observation: CLANNAD anime (51) shows Sequel (3) to After Story (876); After Story shows Prequel (2) back.
       - id: 4
         label: Summary
         mapping:
-          status: omitted
-          reason: The summary source relation does not identify a safe directed catalogue property; retain an explicit
-            omission rather than guess shared worlds, derivation or containment.
+          status: existing
+          term: rezics:summaryOf
+          inverse: true
+          'on': schema:TVSeries
+          meaning: The related work condenses this full story and holds the summary-of statement.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/8/99952
+          recordCheck:
+            subject: 8
+            related: 99952
+            forward: 4
+            reverse: 5
+            observation: Code Geass R2 (8) shows Summary (4) to the R2 Special Edition recap (99952); the recap shows
+              Full Story (5) back.
       - id: 5
         label: Full Story
         mapping:
-          status: omitted
-          reason:
-            The full story source relation does not identify a safe directed catalogue property; retain an explicit
-            omission rather than guess shared worlds, derivation or containment.
+          status: existing
+          term: rezics:summaryOf
+          'on': schema:TVSeries
+          meaning: This summary condenses the related full story and holds the summary-of statement.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/1999/975
+          recordCheck:
+            subject: 1999
+            related: 975
+            forward: 5
+            reverse: 4
+            observation: The One Piece Alabasta recap film (1999) shows Full Story (5) to the One Piece television work
+              (975); the television work shows Summary (4) back.
       - id: 6
         label: Side Story
-        mapping: &id109
-          status: omitted
-          reason:
-            The side story source relation does not identify a safe directed catalogue property; retain an explicit
-            omission rather than guess shared worlds, derivation or containment.
+        mapping:
+          status: existing
+          term: rezics:sideStoryOf
+          inverse: true
+          'on': schema:TVSeries
+          meaning: The related work is a supplementary side story and holds the side-story-of statement.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/8/35866
+          recordCheck:
+            subject: 8
+            related: 35866
+            forward: 6
+            reverse: 12
+            observation: Code Geass R2 (8) shows Side Story (6) to the Nunnally in Wonderland work (35866); Nunnally
+              shows Parent Story (12) back.
       - id: 7
         label: Character
-        mapping: &id111
-          status: omitted
-          reason: The character source relation does not identify a safe directed catalogue property; retain an explicit
-            omission rather than guess shared worlds, derivation or containment.
+        mapping:
+          status: existing
+          term: rezics:sameCharacters
+          'on': schema:TVSeries
+          meaning: The works share characters but have unrelated stories; neither endpoint is a fictional character
+            or necessarily a character-focused work.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/12/2478
+          recordCheck:
+            subject: 12
+            related: 2478
+            forward: 7
+            reverse: 7
+            observation: Chobits (12) and Kobato (2478) both show Character (7). The endpoints are works sharing a cast,
+              not an appearance pointing to a fictional-character subject.
       - id: 8
         label: Same Setting
-        mapping: &id112
-          status: omitted
-          reason:
-            The same setting source relation does not identify a safe directed catalogue property; retain an explicit
-            omission rather than guess shared worlds, derivation or containment.
+        mapping:
+          status: existing
+          term: rezics:sameSetting
+          'on': schema:TVSeries
+          meaning: The works share a world or timeline with different principal casts; the relation is symmetric.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/50/985
+          recordCheck:
+            subject: 50
+            related: 985
+            forward: 8
+            reverse: 8
+            observation: Mobile Suit Gundam (50) and Victory Gundam (985) both show Same Setting (8), linking works
+              in the same continuity.
       - id: 9
         label: Alternative Setting
-        mapping: &id113
-          status: omitted
-          reason: The alternative setting source relation does not identify a safe directed catalogue property; retain
-            an explicit omission rather than guess shared worlds, derivation or containment.
+        mapping:
+          status: existing
+          term: rezics:alternativeSetting
+          'on': schema:TVSeries
+          meaning: The works use the same principal characters in different worlds or timelines; the relation is symmetric.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/8/199228
+          recordCheck:
+            subject: 8
+            related: 199228
+            forward: 9
+            reverse: 9
+            observation: Code Geass R2 (8) and Lelouch of the Re;surrection (199228) both show Alternative Setting (9),
+              a cast reused across differing continuities.
       - id: 10
         label: Alternative Version
-        mapping: &id115
-          status: omitted
-          reason: The alternative version source relation does not identify a safe directed catalogue property; retain
-            an explicit omission rather than guess shared worlds, derivation or containment.
+        mapping:
+          status: existing
+          term: rezics:alternativeVersion
+          'on': schema:TVSeries
+          meaning: The works tell the same setting and characters differently; the relation is symmetric.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/8/199229
+          recordCheck:
+            subject: 8
+            related: 199229
+            forward: 10
+            reverse: 10
+            observation: Code Geass R2 (8) and the first recap film (199229) both show Alternative Version (10), with
+              neither row naming a derivation holder.
       - id: 11
         label: Spin-off
         mapping:
-          status: omitted
-          reason: The spin-off source relation does not identify a safe directed catalogue property; retain an explicit
-            omission rather than guess shared worlds, derivation or containment.
+          status: existing
+          term: rezics:spinOffOf
+          inverse: true
+          'on': schema:TVSeries
+          wikidata: wd:P2512
+          meaning: The related work is a spin-off derived from this original and holds the spin-off-of statement.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/50/106834
+          recordCheck:
+            subject: 50
+            related: 106834
+            forward: 11
+            reverse: 12
+            observation: Mobile Suit Gundam (50) shows Spin-off (11) to Gundam-san (106834); Gundam-san shows Parent
+              Story (12) back. The spin-off holds rezics:spinOffOf.
       - id: 12
         label: Parent Story
-        mapping: &id110
-          status: omitted
-          reason:
-            The parent story source relation does not identify a safe directed catalogue property; retain an explicit
-            omission rather than guess shared worlds, derivation or containment.
+        mapping:
+          status: existing
+          term: wdt:P361
+          'on': schema:TVSeries
+          canonicalByReverse:
+            6:
+              term: rezics:sideStoryOf
+            1007:
+              term: rezics:sideStoryOf
+            4006:
+              term: rezics:sideStoryOf
+            11:
+              term: rezics:spinOffOf
+          wikidata: wd:P361
+          meaning: This work belongs to the related parent story. A reciprocal side-story or spin-off code selects that
+            more specific canonical statement; otherwise use part-of.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/314/24274
+          recordCheck:
+            subject: 314
+            related: 24274
+            forward: 12
+            reverse: 6
+            observation: 'Lupin III: The Castle of Cagliostro (314) shows Parent Story (12) to Lupin III (24274); the
+              parent shows Side Story (6) back. Both rows resolve to sideStoryOf on 314.'
       - id: 14
         label: Collaboration
-        mapping: &id114
-          status: omitted
-          reason:
-            The collaboration source relation does not identify a safe directed catalogue property; retain an explicit
-            omission rather than guess shared worlds, derivation or containment.
+        mapping:
+          status: existing
+          term: rezics:collaborationWith
+          'on': schema:VideoGame
+          meaning:
+            The works are linked by a character crossover collaboration; reciprocal archive codes do not establish
+            a consistent host direction.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/47/515
+          recordCheck:
+            subject: 47
+            related: 515
+            forward: 14
+            reverse: 7
+            observation: Super Robot Wars A Portable (47) shows Collaboration (14) to Martian Successor Nadesico (515);
+              Nadesico shows Character (7) back. The host game and guest anime are linked by a crossover, but reciprocal
+              codes do not provide a uniform host-direction rule.
       - id: 99
         label: Other
-        mapping: &id116
-          status: omitted
-          reason: The other source relation does not identify a safe directed catalogue property; retain an explicit
-            omission rather than guess shared worlds, derivation or containment.
+        mapping:
+          status: existing
+          term: rezics:bangumiRelatedTo
+          'on': schema:TVSeries
+          meaning: Bangumi links this work to the related work with no stated kind. This is a source-specific outgoing
+            assertion, not generic relatedness.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/150/458009
+          recordCheck:
+            subject: 150
+            related: 458009
+            forward: 99
+            reverse: 99
+            observation: Summon Night 2 (150) shows Other (99) to Summon Night 2 Magical Disc (458009); Magical Disc
+              shows Other (99) back. Neither row states a more specific relation kind.
   - id: relation.1
     values:
-      - *id105
+      - id: 1
+        label: Adaptation
+        mapping:
+          status: existing
+          term: rezics:crossMediaCounterpart
+          'on': schema:Book
+          meaning:
+            The works are cross-media counterparts in the same franchise; code 1 does not identify the adapted-from
+            holder.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/1/296317
+          recordCheck:
+            subject: 1
+            related: 296317
+            forward: 1
+            reverse: 1
+            observation: The novel First Intimate Contact (1) and its game (296317) both show Adaptation (1), although
+              only the game adapts the novel.
       - id: 1002
         label: Series
         mapping:
@@ -5861,199 +6174,639 @@ enumerations:
           wikidata: wd:P179
           meaning: The related book series contains this source work, recorded as part of the series on the member.
           sources:
-            - https://www.wikidata.org/wiki/Property:P179
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/26/499
+          recordCheck:
+            subject: 26
+            related: 499
+            forward: 1002
+            reverse: 1003
+            observation:
+              The first Book Girl novel (26) shows Series (1002) to Book Girl (499); the series shows Offprint
+              (1003) back to the member.
       - id: 1003
         label: Offprint
         mapping:
           status: omitted
-          reason: >-
-            The offprint belongs to the book series through the member's part-of-the-series statement; a hasPart list
-            on the series would duplicate that statement.
+          reason: The offprint belongs to the book series through the member's part-of-the-series statement; a hasPart
+            list on the series would duplicate that statement.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/495/90
+          recordCheck:
+            subject: 495
+            related: 90
+            forward: 1003
+            reverse: 1002
+            observation:
+              The xxxHOLiC series (495) shows Offprint (1003) to volume 1 (90); the volume shows Series (1002)
+              back to 495, whose fact is stored on 90 as wdt:P179.
       - id: 1004
         label: Album
         mapping:
-          status: omitted
-          reason: The album source relation does not identify a safe directed catalogue property; retain an explicit
-            omission rather than guess shared worlds, derivation or containment.
+          status: existing
+          term: rezics:artbookCounterpart
+          'on': schema:Book
+          meaning: A work and a companion artbook are linked. Album occurs on both endpoints, so it does not identify
+            an artwork holder direction.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/10/497
+          recordCheck:
+            subject: 10
+            related: 497
+            forward: 1004
+            reverse: 1004
+            observation: The Chobits artbook Your Eyes Only (10) and the Chobits work (497) both show Album (1004);
+              the same code does not distinguish artbook from illustrated work.
       - id: 1005
         label: Prequel
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P155
-          'on': schema:CreativeWork
+          'on': schema:Book
           wikidata: wd:P155
-          meaning: The related work is the prequel of this book.
-          sources: *id107
+          meaning: The related work precedes this work; this work holds the follows statement.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/31/30
+          recordCheck:
+            subject: 31
+            related: 30
+            forward: 1005
+            reverse: 1006
+            observation: Legend of the Galactic Heroes volume 2 (31) shows Prequel (1005) to volume 1 (30); volume 1
+              shows Sequel (1006) back.
       - id: 1006
         label: Sequel
         mapping:
-          status: proposed
-          term: wdt:P156
-          'on': schema:CreativeWork
+          status: existing
+          term: wdt:P155
+          inverse: true
+          'on': schema:Book
           wikidata: wd:P156
-          meaning: The related work is the sequel of this book.
-          sources: *id108
+          meaning: The related work follows this work and holds the follows statement.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/30/31
+          recordCheck:
+            subject: 30
+            related: 31
+            forward: 1006
+            reverse: 1005
+            observation: Legend of the Galactic Heroes volume 1 (30) shows Sequel (1006) to volume 2 (31); volume 2
+              shows Prequel (1005) back.
       - id: 1007
         label: Side Story
-        mapping: *id109
+        mapping:
+          status: existing
+          term: rezics:sideStoryOf
+          inverse: true
+          'on': schema:Book
+          meaning: The related work is a supplementary side story and holds the side-story-of statement.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/49/51234
+          recordCheck:
+            subject: 49
+            related: 51234
+            forward: 1007
+            reverse: 1008
+            observation: The 5 Centimeters per Second novel (49) shows Side Story (1007) to one more side (51234); one
+              more side shows Parent Story (1008) back.
       - id: 1008
         label: Parent Story
-        mapping: *id110
+        mapping:
+          status: existing
+          term: wdt:P361
+          'on': schema:Book
+          canonicalByReverse:
+            6:
+              term: rezics:sideStoryOf
+            1007:
+              term: rezics:sideStoryOf
+            4006:
+              term: rezics:sideStoryOf
+            11:
+              term: rezics:spinOffOf
+          wikidata: wd:P361
+          meaning: This work belongs to the related parent story. A reciprocal side-story or spin-off code selects that
+            more specific canonical statement; otherwise use part-of.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/1236/7791
+          recordCheck:
+            subject: 1236
+            related: 7791
+            forward: 1008
+            reverse: 1007
+            observation: The Lucky Star murder-mystery novel (1236) shows Parent Story (1008) to Lucky Star (7791);
+              Lucky Star shows Side Story (1007) back. Both rows resolve to sideStoryOf on 1236.
       - id: 1010
         label: Version
         mapping:
-          status: omitted
-          reason: The version source relation does not identify a safe directed catalogue property; retain an explicit
-            omission rather than guess shared worlds, derivation or containment.
+          status: existing
+          term: rezics:editionCounterpart
+          'on': schema:Book
+          meaning: The books are different versions or editions; the reciprocal code states no original-to-edition direction.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/29/326025
+          recordCheck:
+            subject: 29
+            related: 326025
+            forward: 1010
+            reverse: 1010
+            observation: The Place Promised in Our Early Days book (29) and the other book version (326025) both show
+              Version (1010), with no original-versus-edition code.
       - id: 1011
         label: Character
-        mapping: *id111
+        mapping:
+          status: existing
+          term: rezics:sameCharacters
+          'on': schema:Book
+          meaning: The works share characters but have unrelated stories; neither endpoint is a fictional character
+            or necessarily a character-focused work.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/335/41336
+          recordCheck:
+            subject: 335
+            related: 41336
+            forward: 1011
+            reverse: 1011
+            observation: 'The Black Museum: Springald (335) and Embalming (41336) both show Character (1011). These
+              are narrative works linked by characters, not character records or a work and its character profile.'
       - id: 1012
         label: Same setting
-        mapping: *id112
+        mapping:
+          status: existing
+          term: rezics:sameSetting
+          'on': schema:Book
+          meaning: The works share a world or timeline with different principal casts; the relation is symmetric.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/76/77
+          recordCheck:
+            subject: 76
+            related: 77
+            forward: 1012
+            reverse: 1012
+            observation: School Days Sekai volume (76) and Kotonoha volume (77) both show Same setting (1012), with
+              different focal casts within the same setting.
       - id: 1013
         label: Alternative setting
-        mapping: *id113
+        mapping:
+          status: existing
+          term: rezics:alternativeSetting
+          'on': schema:Book
+          meaning: The works use the same principal characters in different worlds or timelines; the relation is symmetric.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/505/17326
+          recordCheck:
+            subject: 505
+            related: 17326
+            forward: 1013
+            reverse: 1013
+            observation:
+              The Haruhi novel series (505) and Haruhi-chan manga (17326) both show Alternative setting (1013),
+              reusing the cast in a different setting.
       - id: 1014
         label: Collaboration
-        mapping: *id114
+        mapping:
+          status: existing
+          term: rezics:collaborationWith
+          'on': schema:Book
+          meaning:
+            The works are linked by a character crossover collaboration; reciprocal archive codes do not establish
+            a consistent host direction.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/1674/147362
+          recordCheck:
+            subject: 1674
+            related: 147362
+            forward: 1014
+            reverse: 1014
+            observation:
+              Death Note (1674) and Platinum End (147362) both show Collaboration (1014); these rows establish
+              a crossover association, not a consistent direction for hosting guest characters.
       - id: 1015
         label: Alternative Version
-        mapping: *id115
+        mapping:
+          status: existing
+          term: rezics:alternativeVersion
+          'on': schema:Book
+          meaning: The works tell the same setting and characters differently; the relation is symmetric.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/5110/132876
+          recordCheck:
+            subject: 5110
+            related: 132876
+            forward: 1015
+            reverse: 1015
+            observation: The two Fate/strange fake works (5110 and 132876) both show Alternative Version (1015), rather
+              than identifying an original-edition holder.
       - id: 1099
         label: Other
-        mapping: *id116
+        mapping:
+          status: existing
+          term: rezics:bangumiRelatedTo
+          'on': schema:Book
+          meaning: Bangumi links this work to the related work with no stated kind. This is a source-specific outgoing
+            assertion, not generic relatedness.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/11/497
+          recordCheck:
+            subject: 11
+            related: 497
+            forward: 1099
+            reverse: 1099
+            observation: The Chobits fan book (11) shows Other (1099) to Chobits (497); Chobits also shows Other (1099)
+              back. Each outgoing assertion retains Bangumi as its stated kind.
   - id: relation.3
     values:
       - id: 3001
         label: OST
-        mapping: *id073
+        mapping:
+          status: omitted
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - id: 3002
         label: Character Song
-        mapping: *id073
+        mapping:
+          status: omitted
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - id: 3003
         label: Opening Song
-        mapping: *id073
+        mapping:
+          status: omitted
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - id: 3004
         label: Ending Song
-        mapping: *id073
+        mapping:
+          status: omitted
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - id: 3005
         label: Insert Song
-        mapping: *id073
+        mapping:
+          status: omitted
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - id: 3006
         label: Image Song
-        mapping: *id073
+        mapping:
+          status: omitted
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - id: 3007
         label: Drama
-        mapping: *id073
+        mapping:
+          status: omitted
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
       - id: 3099
         label: Other
-        mapping: *id073
+        mapping:
+          status: omitted
+          reason: Music and live-action staff, relation and unprofiled format codes await row-6 vocabulary binding.
   - id: relation.4
     values:
-      - *id105
+      - id: 1
+        label: Adaptation
+        mapping:
+          status: existing
+          term: rezics:crossMediaCounterpart
+          'on': schema:VideoGame
+          meaning:
+            The works are cross-media counterparts in the same franchise; code 1 does not identify the adapted-from
+            holder.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/13/51
+          recordCheck:
+            subject: 13
+            related: 51
+            forward: 1
+            reverse: 1
+            observation: CLANNAD game (13) and CLANNAD anime (51) both show Adaptation (1); the game is the original,
+              so the reciprocal code cannot select a based-on holder.
       - id: 4002
         label: Prequel
         mapping:
-          status: proposed
+          status: existing
           term: wdt:P155
-          'on': schema:CreativeWork
+          'on': schema:VideoGame
           wikidata: wd:P155
-          meaning: The related game precedes this game in the series.
-          sources: *id107
+          meaning: The related work precedes this work; this work holds the follows statement.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/4/9944
+          recordCheck:
+            subject: 4
+            related: 9944
+            forward: 4002
+            reverse: 4003
+            observation: Metal Slug 7 (4) shows Prequel (4002) to Metal Slug 6 (9944); Metal Slug 6 shows Sequel (4003)
+              back.
       - id: 4003
         label: Sequel
         mapping:
-          status: proposed
-          term: wdt:P156
-          'on': schema:CreativeWork
+          status: existing
+          term: wdt:P155
+          inverse: true
+          'on': schema:VideoGame
           wikidata: wd:P156
-          meaning: The related game follows this game in the series.
-          sources: *id108
+          meaning: The related work follows this work and holds the follows statement.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/9/20482
+          recordCheck:
+            subject: 9
+            related: 20482
+            forward: 4003
+            reverse: 4002
+            observation:
+              Rhythm Heaven (9) shows Sequel (4003) to Rhythm Heaven Fever (20482); Fever shows Prequel (4002)
+              back.
       - id: 4006
         label: Side Story
-        mapping: *id109
+        mapping:
+          status: existing
+          term: rezics:sideStoryOf
+          inverse: true
+          'on': schema:VideoGame
+          meaning: The related work is a supplementary side story and holds the side-story-of statement.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/13/3660
+          recordCheck:
+            subject: 13
+            related: 3660
+            forward: 4006
+            reverse: 4012
+            observation: CLANNAD (13) shows Side Story (4006) to Tomoyo After (3660); Tomoyo After shows Parent Story
+              (4012) back.
       - id: 4007
         label: Character
-        mapping: *id111
+        mapping:
+          status: existing
+          term: rezics:sameCharacters
+          'on': schema:VideoGame
+          meaning: The works share characters but have unrelated stories; neither endpoint is a fictional character
+            or necessarily a character-focused work.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/13/1172
+          recordCheck:
+            subject: 13
+            related: 1172
+            forward: 4007
+            reverse: 4007
+            observation: CLANNAD (13) and ai sp@ce (1172) both show Character (4007). They are games sharing characters
+              in otherwise separate stories, not character subjects.
       - id: 4008
         label: Same Setting
-        mapping: *id112
+        mapping:
+          status: existing
+          term: rezics:sameSetting
+          'on': schema:VideoGame
+          meaning: The works share a world or timeline with different principal casts; the relation is symmetric.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/40/43
+          recordCheck:
+            subject: 40
+            related: 43
+            forward: 4008
+            reverse: 4008
+            observation: Chinese Paladin (40) and Chinese Paladin 3 (43) both show Same Setting (4008), linking games
+              in one world.
       - id: 4009
         label: Alternative Setting
-        mapping: *id113
+        mapping:
+          status: existing
+          term: rezics:alternativeSetting
+          'on': schema:VideoGame
+          meaning: The works use the same principal characters in different worlds or timelines; the relation is symmetric.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/143/329302
+          recordCheck:
+            subject: 143
+            related: 329302
+            forward: 4009
+            reverse: 4009
+            observation: 'Pokemon Platinum (143) and Pokemon Legends: Arceus (329302) both show Alternative Setting
+              (4009). The source asserts an alternate setting symmetrically; it does not assert derivation.'
       - id: 4010
         label: Alternative Version
-        mapping: *id115
+        mapping:
+          status: existing
+          term: rezics:alternativeVersion
+          'on': schema:VideoGame
+          meaning: The works tell the same setting and characters differently; the relation is symmetric.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/40/41
+          recordCheck:
+            subject: 40
+            related: 41
+            forward: 4010
+            reverse: 4010
+            observation:
+              Chinese Paladin (40) and New Chinese Paladin (41) both show Alternative Version (4010), a different
+              telling with the same setting and characters.
       - id: 4012
         label: Parent Story
-        mapping: *id110
+        mapping:
+          status: existing
+          term: wdt:P361
+          'on': schema:VideoGame
+          canonicalByReverse:
+            6:
+              term: rezics:sideStoryOf
+            1007:
+              term: rezics:sideStoryOf
+            4006:
+              term: rezics:sideStoryOf
+            11:
+              term: rezics:spinOffOf
+          wikidata: wd:P361
+          meaning: This work belongs to the related parent story. A reciprocal side-story or spin-off code selects that
+            more specific canonical statement; otherwise use part-of.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/123/300296
+          recordCheck:
+            subject: 123
+            related: 300296
+            forward: 4012
+            reverse: 4006
+            observation: Puyo Puyo 15th Anniversary (123) shows Parent Story (4012) to Puyo Puyo (300296); Puyo Puyo
+              shows Side Story (4006) back. Both rows resolve to sideStoryOf on 123.
       - id: 4013
         label: Retired main version
         mapping:
-          status: omitted
-          reason: Retired game relation 4013 is present in the archive but commented out in the pinned definitions; its
-            former semantics are not assumed.
+          status: existing
+          term: rezics:bangumiLegacyVersion
+          'on': schema:VideoGame
+          meaning: The retired Main Version code links an original and a revised game reciprocally. Preserve this legacy
+            version association without inferring which endpoint holds an edition-of statement.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/122686/563561
+          recordCheck:
+            subject: 122686
+            related: 563561
+            forward: 4013
+            reverse: 4013
+            observation: Taisho Mebiusline Teito Bibouroku (122686) and Teito Bibouroku Hare (563561) both show retired
+              Main Version (4013). The code is commented out in the pinned document and occurs on both original and
+              revised records, so it cannot establish an original holder.
       - id: 4014
         label: Collaboration
-        mapping: *id114
+        mapping:
+          status: existing
+          term: rezics:collaborationWith
+          'on': schema:VideoGame
+          meaning:
+            The works are linked by a character crossover collaboration; reciprocal archive codes do not establish
+            a consistent host direction.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/6/20810
+          recordCheck:
+            subject: 6
+            related: 20810
+            forward: 4014
+            reverse: 4014
+            observation: Team Fortress 2 (6) and Dota 2 (20810) both show Collaboration (4014). The reciprocal code
+              records the crossover without consistently distinguishing a host game from a guest work.
       - id: 4015
         label: DLC
         mapping:
-          status: omitted
-          reason:
-            The dlc source relation does not identify a safe directed catalogue property; retain an explicit omission
-            rather than guess shared worlds, derivation or containment.
+          status: existing
+          term: rezics:expansionCounterpart
+          'on': schema:VideoGame
+          meaning:
+            A base game and an expansion are linked by the same DLC code in both directions, which does not identify
+            an expansion-of holder.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/171/30448
+          recordCheck:
+            subject: 171
+            related: 30448
+            forward: 4015
+            reverse: 4015
+            observation: Grand Theft Auto IV (171) and Episodes from Liberty City (30448) both show DLC (4015). The
+              same code links the base to the expansion and the expansion to the base, so it is an unordered expansion
+              counterpart assertion.
       - id: 4016
         label: Version
         mapping:
-          status: proposed
-          term: schema:workExample
-          'on': schema:CreativeWork
+          status: existing
+          term: schema:exampleOfWork
+          inverse: true
+          'on': schema:VideoGame
           wikidata: wd:P747
-          meaning: The related game is a different version of this original game.
+          meaning: The related game version represents this original work; the related release holds example-of-work.
           sources:
-            - https://schema.org/workExample
-            - https://www.wikidata.org/wiki/Property:P747
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/40/492287
+          recordCheck:
+            subject: 40
+            related: 492287
+            forward: 4016
+            reverse: 4017
+            observation: Chinese Paladin (40) shows Version (4016) to its separate version (492287); that version shows
+              Main Version (4017) back. The version holds schema:exampleOfWork pointing to 40.
       - id: 4017
         label: Main Version
         mapping:
-          status: proposed
+          status: existing
           term: schema:exampleOfWork
-          'on': schema:CreativeWork
+          'on': wd:Q20631656
           wikidata: wd:P629
-          meaning: The related game is the original version of this game.
+          meaning: This game version represents the related original work; this release holds example-of-work.
           sources:
-            - https://schema.org/exampleOfWork
-            - https://www.wikidata.org/wiki/Property:P629
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/124/84156
+          recordCheck:
+            subject: 124
+            related: 84156
+            forward: 4017
+            reverse: 4016
+            observation: 'Final Fantasy Tactics: The War of the Lions (124) shows Main Version (4017) to Final Fantasy
+              Tactics (84156); the original shows Version (4016) back. The version holds schema:exampleOfWork.'
       - id: 4018
         label: Collection
         mapping:
-          status: proposed
-          term: schema:isPartOf
-          'on': schema:CreativeWork
+          status: existing
+          term: wdt:P361
+          'on': schema:VideoGame
           wikidata: wd:P361
-          meaning: The related collection contains this game.
-          sources: *id106
+          meaning: The related collection contains this game; this member holds part-of.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/6/108488
+          recordCheck:
+            subject: 6
+            related: 108488
+            forward: 4018
+            reverse: 4019
+            observation: Team Fortress 2 (6) shows Collection (4018) to The Orange Box (108488); the collection shows
+              In Collection (4019) back. The member holds wdt:P361.
       - id: 4019
         label: In Collection
         mapping:
-          status: proposed
-          term: schema:hasPart
-          'on': schema:CreativeWork
+          status: existing
+          term: wdt:P361
+          inverse: true
+          'on': schema:VideoGame
           wikidata: wd:P527
-          meaning: The related game is contained in this collection.
+          meaning: This collection contains the related game; the related member holds part-of.
           sources:
-            - https://schema.org/hasPart
-            - https://www.wikidata.org/wiki/Property:P527
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/3681/608727
+          recordCheck:
+            subject: 3681
+            related: 608727
+            forward: 4019
+            reverse: 4018
+            observation: D.C.II Fall in Love (3681) shows In Collection (4019) to its Harukaze bonus work (608727);
+              that work shows Collection (4018) back. The contained work holds wdt:P361.
       - id: 4099
         label: Other
-        mapping: *id116
+        mapping:
+          status: existing
+          term: rezics:bangumiRelatedTo
+          'on': schema:VideoGame
+          meaning: Bangumi links this work to the related work with no stated kind. This is a source-specific outgoing
+            assertion, not generic relatedness.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
+            - https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip#subject-relations.jsonlines/52/472985
+          recordCheck:
+            subject: 52
+            related: 472985
+            forward: 4099
+            reverse: 4099
+            observation: Warcraft III (52) shows Other (4099) to Warcraft III World Editor (472985); the editor shows
+              Other (4099) back. No more specific relation kind is stated by these rows.
   - id: relation.6
     values:
       - id: 1
         label: Adaptation
-        mapping: *id073
+        mapping:
+          status: existing
+          term: rezics:crossMediaCounterpart
+          'on': schema:TVSeries
+          meaning:
+            The works are cross-media counterparts in the same franchise; code 1 does not identify the adapted-from
+            holder.
+          sources:
+            - https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/subject_relations.yml
       - id: 2
         label: Prequel
         mapping: *id073

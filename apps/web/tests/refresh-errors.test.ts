@@ -1,9 +1,12 @@
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { chromium, type Browser } from 'playwright';
+import offer from '../src/kernel/recorded/offer.json';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -25,6 +28,8 @@ const kernelCalls: { path: string; authorization: string | null }[] = [];
 let counter = 0;
 // How Auth answers the next refresh grants; null issues new tokens.
 let refusal: (() => Response) | null = null;
+let offerOutcome: 'missing' | 'closed' | 'unavailable' | 'error' | 'ready' = 'missing';
+let offerReads = 0;
 
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
 
@@ -86,6 +91,19 @@ const fake = Bun.serve({
       if (form.get('grant_type') === 'refresh_token') return refusal ? refusal() : issue('alice');
       return json({ error: 'unsupported_grant_type' }, 400);
     }
+    if (url.pathname === `/v1/offers/${offer.offer.id}`) {
+      offerReads++;
+      if (offerOutcome === 'ready') return json({ offer: { ...offer.offer, revision: 1 } });
+      const status = { missing: 404, closed: 403, unavailable: 503, error: 500 }[offerOutcome];
+      const code = offerOutcome === 'closed' ? 'platform_closed' : 'dependency_unavailable';
+      return Response.json(
+        { code, detail: 'private upstream cause' },
+        {
+          status,
+          headers: { 'cache-control': 'private, no-store', 'retry-after': '7' },
+        },
+      );
+    }
     if (url.pathname.startsWith('/v1/media/')) {
       kernelCalls.push({ path: url.pathname + url.search, authorization: request.headers.get('authorization') });
       return Response.json(
@@ -116,54 +134,92 @@ function freePort(): Promise<number> {
   });
 }
 
-let child: ChildProcess | undefined;
+let custody: ProcessCustody | undefined;
 let started: Promise<string> | undefined;
+let browser: Browser | undefined;
+let browserStarting: Promise<Browser> | undefined;
+let browserClosing: Promise<void> | undefined;
+let teardownStarted = false;
+
+function closeBrowser(): Promise<void> {
+  return (browserClosing ??= (async () => {
+    if (browser) {
+      await browser.close();
+      return;
+    }
+    if (browserStarting) {
+      try {
+        await (await browserStarting).close();
+      } catch {
+        if (browser) throw new Error('Refresh browser launch failed after producing a browser');
+      }
+    }
+  })());
+}
+
+function openBrowser(): Promise<Browser> {
+  if (teardownStarted) throw new Error('Refresh browser acquisition began after suite teardown');
+  browserStarting ??= chromium.launch().then((launched) => {
+    browser = launched;
+    if (teardownStarted) void closeBrowser().catch(() => {});
+    return launched;
+  });
+  void browserStarting.catch(() => {});
+  return browserStarting;
+}
 
 // The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
   started ??= (async () => {
     const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: fake.url.origin,
-        AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId,
-        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-        API_RESOURCE: resource,
-        WEBSITE_SCOPES: scopes.join(' '),
-      },
-    });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
     const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
+    try {
+      if (teardownStarted) throw new Error('Refresh-errors Vite acquisition began after suite teardown');
+      const child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+        cwd: app,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          KERNEL_ORIGIN: fake.url.origin,
+          AUTH_ISSUER: `${fake.url.origin}/auth`,
+          WEBSITE_CLIENT_ID: clientId,
+          WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+          API_RESOURCE: resource,
+          WEBSITE_SCOPES: scopes.join(' '),
+        },
+      });
+      custody = ownNodeProcess(child, { label: 'Refresh-errors Vite server', outputLimit: 8000 });
+      const deadline = Date.now() + 150_000;
+      for (;;) {
+        if (teardownStarted) throw new Error('Refresh-errors Vite readiness ended when suite teardown began');
+        if (child.exitCode !== null)
+          throw new Error(`dev server exited with ${child.exitCode}:\n${custody.diagnostics()}`);
+        try {
+          const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
+          if (response.status < 500) return origin;
+        } catch {}
+        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
+        await Bun.sleep(500);
+      }
+    } catch (error) {
+      if (!custody) throw error;
+      await withCleanup(async () => {
+        throw error;
+      }, [{ label: 'Refresh-errors Vite startup', run: () => custody!.close(), timeoutMs: 7000 }]);
+      throw error;
     }
   })();
   return started;
 }
 
-afterAll(() => {
-  fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
+afterAll(async () => {
+  teardownStarted = true;
+  await cleanupAll([
+    { label: 'Refresh-errors browser', run: closeBrowser, timeoutMs: 6000 },
+    { label: 'Refresh-errors Vite server', run: () => custody?.close(), timeoutMs: 7000 },
+    { label: 'Refresh-errors Auth and kernel fake', run: () => fake.stop(true), timeoutMs: 5000 },
+  ]);
 });
 
 const cookieValue = (response: Response, name: string) =>
@@ -248,6 +304,73 @@ test(
       expect(refreshes(), name).toBe(before + 2);
       expect(recovered.call?.authorization, name).toBe(`Bearer ${accessTokens.at(-1)}`);
     }
+  },
+  timeout,
+);
+
+test(
+  'generic route errors retain native failure status and noindex while exposing bounded real retry recovery in the sole shell main',
+  async () => {
+    const path = `/en/offers/${offer.offer.id}`;
+    const origin = await site();
+    for (const [outcome, status] of [
+      ['missing', 404],
+      ['closed', 403],
+      ['unavailable', 503],
+      ['error', 500],
+    ] as const) {
+      offerOutcome = outcome;
+      const response = await fetch(`${origin}${path}`, { redirect: 'manual' });
+      const html = await response.text();
+      expect(response.status, outcome).toBe(status);
+      expect(response.headers.get('cache-control')).toContain('no-store');
+      expect(response.headers.get('cache-control')).toContain('private');
+      expect(html).toMatch(/name="robots"[^>]*content="noindex/);
+      expect((html.match(/<main\b/g) ?? []).length).toBe(1);
+      expect(html).not.toContain('private upstream cause');
+      expect(html).not.toContain(offer.offer.title);
+      if (status >= 500) expect(response.headers.get('retry-after')).toBe('7');
+    }
+
+    offerOutcome = 'unavailable';
+    const ownedBrowser = await openBrowser();
+    await withCleanup(async () => {
+      const page = await ownedBrowser.newPage();
+      const response = await page.goto(`${origin}${path}`);
+      expect(response?.status()).toBe(503);
+      await page.locator('html[data-hydrated]').waitFor();
+      const main = page.getByRole('main');
+      expect(await main.count()).toBe(1);
+      const retry = main.getByRole('button', { name: 'Try again', exact: true });
+      await retry.waitFor();
+      expect(await main.getByRole('link', { name: 'Home', exact: true }).getAttribute('href')).toBe('/en');
+      expect(await main.getByRole('link', { name: 'Search', exact: true }).getAttribute('href')).toBe('/en/search');
+      const before = offerReads;
+      const failedRead = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname.startsWith('/_serverFn/') && response.url().includes(offer.offer.id),
+      );
+      await retry.click();
+      expect((await failedRead).status()).toBe(503);
+      await page.waitForFunction(() => {
+        const retry = Array.from(document.querySelectorAll<HTMLButtonElement>('main button')).find(
+          (button) => button.textContent === 'Try again',
+        );
+        return retry && !retry.disabled;
+      });
+      // A failed explicit attempt keeps noindex and never discloses the target or signs the reader in.
+      expect(offerReads).toBe(before + 1);
+      expect(await page.locator('meta[name="robots"]').getAttribute('content')).toContain('noindex');
+      expect(await main.innerText()).not.toContain(offer.offer.title);
+      expect(page.url()).toBe(`${origin}${path}`);
+      offerOutcome = 'ready';
+      await retry.click();
+      await main.getByRole('heading', { name: offer.offer.title, exact: true }).waitFor();
+      expect(offerReads).toBe(before + 2);
+      expect(await main.count()).toBe(1);
+      expect(await retry.count()).toBe(0);
+      expect(page.url()).toBe(`${origin}${path}`);
+    }, [{ label: 'Refresh-errors browser page', run: closeBrowser, timeoutMs: 6000 }]);
   },
   timeout,
 );

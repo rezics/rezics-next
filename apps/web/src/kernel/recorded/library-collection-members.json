@@ -1,0 +1,62 @@
+{
+  "members": [
+    {
+      "id": "01a17a3b-6ea0-7370-82d5-f4ccb3199f5c",
+      "subjectId": "01a17a3b-6c01-77c8-94fd-810a3ae73369",
+      "note": null,
+      "addedAt": "2026-10-26T18:22:28.256Z",
+      "subject": {
+        "creativeWork": true,
+        "id": "01a17a3b-6c01-77c8-94fd-810a3ae73369",
+        "type": "schema:Book",
+        "label": { "value": "Snow Country", "language": "en" },
+        "types": ["schema:Book"],
+        "cover": null
+      }
+    },
+    {
+      "id": "01a17a3b-6dca-720a-90e7-f4ccfb6ad87d",
+      "subjectId": "01a17a3b-6bc3-764f-8727-7872d197bd93",
+      "note": null,
+      "addedAt": "2026-10-26T18:22:28.195Z",
+      "subject": {
+        "creativeWork": true,
+        "id": "01a17a3b-6bc3-764f-8727-7872d197bd93",
+        "type": "schema:Book",
+        "label": { "value": "The Tale of Genji", "language": "en" },
+        "types": ["schema:Book"],
+        "cover": null
+      }
+    },
+    {
+      "id": "01a17a3b-6dfb-77d8-b821-f4cc37338a87",
+      "subjectId": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
+      "note": "Read it first as a child, and again whenever I need to be reminded what matters.",
+      "addedAt": "2026-10-26T18:22:28.215Z",
+      "subject": {
+        "creativeWork": true,
+        "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
+        "type": "schema:Book",
+        "label": { "value": "The Little Prince", "language": "en" },
+        "types": ["schema:Book"],
+        "cover": null
+      }
+    },
+    {
+      "id": "01a17a3b-6e78-73b5-9efd-f4cc070cc9e0",
+      "subjectId": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
+      "note": "The letter in the third part is the reason this one stays on the shelf.",
+      "addedAt": "2026-10-26T18:22:28.239Z",
+      "subject": {
+        "creativeWork": true,
+        "id": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
+        "type": "schema:Book",
+        "label": { "value": "Kokoro", "language": "en" },
+        "types": ["schema:Book"],
+        "cover": null
+      }
+    }
+  ],
+  "next": null,
+  "status": 200
+}

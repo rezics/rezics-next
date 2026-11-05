@@ -1,9 +1,24 @@
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
+import { deadlineClient } from '../access/authenticate.ts';
 import type { MembershipWorkInput } from '@rezics/auth-contract';
+import {
+  first,
+  isRealmTransitionOpen,
+  transitionParameters,
+  type RealmMembershipTransition,
+  type RealmMembershipProof,
+} from '../access/realm-membership-transition.ts';
+import proofRead from './membership-proof-read.sql';
+import proofWrite from './membership-proof-write.sql';
+import legacySource from './membership-legacy-source.sql';
+import proofExists from './membership-proof-exists.sql';
 import { readAccount } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { assertRealmOwnerMayLeave, lockRealmOwnership, REALM_OWNER_ROLE } from '../access/realm-ownership.ts';
+import { resourceRoleHeld } from '../access/resource-role-held.ts';
 import { durableInitiatorCommitment } from '../access/durable-initiator-capture.ts';
 import {
   DurableInitiatorUnavailableError,
@@ -16,8 +31,19 @@ import type { LifecycleRequest } from '../access/lifecycle.ts';
 import type { MembershipBootstrapStep, MembershipReservation } from '../access/membership-inverse.ts';
 import type { RealmMembershipCommands } from '../access/membership-work.ts';
 import type { MembershipRoleProof, RealmRoleReader } from '../access/permission.ts';
+import type { AccessWork } from '../access/work.ts';
+import {
+  roleWorkBound,
+  roleBatchWorkBound,
+  roleWorkReceipt,
+  roleBatchWorkReceipt,
+  type RoleProjection,
+  type BatchRoleProjection,
+} from './membership-access-work.ts';
 import {
   authoritativeTimeValue,
+  mintReadTime,
+  noEffect,
   principalCommandIdentity,
   runCommand,
   type CommandAuthorization,
@@ -44,7 +70,10 @@ import readTerminalRow from './membership-read-terminal.sql';
 import readChangeRow from './membership-read-change.sql';
 import readCurrent from './membership-current.sql';
 import readRoles from './membership-role.sql';
+import readRoleBatch from './membership-role-batch.sql';
 import readRealmHead from './realm-read.sql';
+import currentBan from './ban-current.sql';
+import { assertRealmBanTarget } from './ban-protection.ts';
 import readOperationRow from './membership-operation-read.sql';
 import readOperationReceipt from './membership-operation-receipt.sql';
 
@@ -109,6 +138,12 @@ export type RealmMembershipDependencies = {
   /** Restores the initiator of a sealed workflow at every step. Without it, sealed steps fail closed. */
   restorer?: InitiatorRestorer;
 };
+
+export class LegacyMembershipPendingError extends Error {
+  constructor(readonly state: 'pending' | 'uncertain') {
+    super(`Legacy membership ${state}`);
+  }
+}
 
 export type RealmMembership = RealmMembershipCommands & { roleReader: RealmRoleReader };
 
@@ -184,6 +219,12 @@ async function loadOperation(client: AccessClient, operation: DurableOperationAn
   const row = await readOperationRow.run(client, { route: operation.route, operation_id: operation.id });
   if (
     !row ||
+    row.member_account_id === null ||
+    row.initiator_account_id === null ||
+    row.actor_client_id === null ||
+    row.actor_scopes === null ||
+    row.actor_authn_epoch === null ||
+    row.original_minimum_authn_epoch === null ||
     row.kind !== kind ||
     row.creation_command_kind !== operation.kind ||
     routeOf(row.realm_id) !== operation.route
@@ -193,7 +234,12 @@ async function loadOperation(client: AccessClient, operation: DurableOperationAn
     partition_no: partitionOf(operation.route),
     initiator_account_id: row.initiator_account_id,
     creation_command_kind: row.creation_command_kind,
-    creation_idempotency_key: row.creation_idempotency_key,
+    creation_idempotency_keys: nativeReceiptKeyCandidates(
+      client,
+      row.creation_command_kind,
+      row.initiator_account_id,
+      row.creation_idempotency_key,
+    ),
   });
   if (
     !receipt ||
@@ -289,7 +335,22 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     denyUnless(input.role !== null || actor.accountId === input.memberAccountId);
     const action = actor.accountId === input.memberAccountId ? 'realm:join' : 'realm:manage';
     const check = await accessCheck(access, actor, action, { route, id: input.principal.id }, { ...request, pool });
-    denyUnless(await withConnection(pool, (client) => check(client)));
+    denyUnless(
+      await withConnection(pool, async (client) => {
+        const time = await mintReadTime(client, config.clock);
+        if (
+          input.role === 'member' &&
+          (await currentBan.run(client, {
+            route,
+            realm_id: input.principal.id,
+            account_id: input.memberAccountId,
+            at: authoritativeTimeValue(time),
+          }))
+        )
+          throw new GrantDeniedError();
+        return check(client, time);
+      }),
+    );
     return request;
   }
 
@@ -312,6 +373,24 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
       principal: { kind: 'realm' as const, id: input.principal.id },
       reservationId: input.reservationId,
       transactionId,
+    };
+  }
+
+  async function readTransition(
+    client: AccessClient,
+    input: RealmMembershipTransition,
+  ): Promise<RealmMembershipProof | null> {
+    const parameters = transitionParameters(input);
+    const row = first(await proofRead.run(client, { ...parameters, route: realmRoute(input.principal.id) }));
+    if (!row || (row.outcome !== 'published' && row.outcome !== 'cancelled')) return null;
+    return {
+      accountId: input.accountId,
+      principal: input.principal,
+      reservationId: input.reservationId,
+      transition: input.transition,
+      transactionId: row.transactionId,
+      outcome: row.outcome,
+      publicationTransactionId: row.publicationTransactionId,
     };
   }
 
@@ -344,33 +423,112 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     };
   }
 
+  type RoleInput = Parameters<RealmRoleReader>[1];
+  type RoleResult = Awaited<ReturnType<RealmRoleReader>>;
+  type BatchInput = Parameters<NonNullable<RealmRoleReader['batch']>>[1];
+  type BatchResult = Awaited<ReturnType<NonNullable<RealmRoleReader['batch']>>>;
+  type Receipt<R> = { result?: R; work?: AccessWork | undefined };
+  // Invocation-local observations only: no permission, account state or client
+  // is retained. actual consumes the exact context/result identity once.
+  const roleReceipts = new WeakMap<RoleInput, Receipt<RoleResult>>();
+  const batchReceipts = new WeakMap<BatchInput, Receipt<BatchResult>>();
+  const roleContexts = new WeakSet<RoleInput>();
+  const batchContexts = new WeakSet<BatchInput>();
   const roleReader: RealmRoleReader = async (client, input) => {
+    const receipt: Receipt<RoleResult> | undefined = roleContexts.has(input) ? undefined : {};
+    roleReceipts.delete(input);
+    roleContexts.add(input);
+    if (receipt) roleReceipts.set(input, receipt);
+    const complete = (result: RoleResult) => {
+      if (receipt) receipt.result = result;
+      return result;
+    };
     const route = routeOf(input.realmId);
-    if (route === null || routeOf(input.accountId) === null) return null;
+    if (route === null || routeOf(input.accountId) === null) return complete(null);
+    const parameters = { route, realm_id: input.realmId, account_id: input.accountId, at: input.at };
+    const bound = receipt ? roleWorkBound(input) : undefined;
     let value: unknown;
     try {
-      value = await readRoles.run(client, {
-        route,
-        realm_id: input.realmId,
-        account_id: input.accountId,
-        at: input.at,
-      });
+      value = await readRoles.run(client, parameters);
     } catch (error) {
-      if (error instanceof Error && error.message.includes('Expected exactly one row, got 0')) return null;
+      if (error instanceof Error && error.message.includes('Expected exactly one row, got 0')) {
+        if (receipt) receipt.work = roleWorkReceipt(bound, parameters, []);
+        return complete(null);
+      }
       throw error;
     }
+    if (receipt) receipt.work = roleWorkReceipt(bound, parameters, asRows(value) as RoleProjection[]);
     const proofs: MembershipRoleProof[] = [];
     for (const row of asRows(value)) {
       const role = row.role === 'owner' || row.role === 'member' ? row.role : null;
       const member = flag(row, 'member');
       const valid = text(row, 'valid');
-      if (!role || member === null || !valid) return null;
+      if (!role || member === null || !valid) return complete(null);
       proofs.push({ role, member, valid });
     }
     proofs.sort((left, right) => (left.role === right.role ? 0 : left.role === 'owner' ? -1 : 1));
-    if (proofs.length !== 2 || proofs[0]?.role !== 'owner' || proofs[1]?.role !== 'member') return null;
-    return proofs;
+    if (proofs.length !== 2 || proofs[0]?.role !== 'owner' || proofs[1]?.role !== 'member') return complete(null);
+    return complete(proofs);
   };
+
+  roleReader.work = Object.freeze({
+    bound(input: RoleInput) {
+      return roleContexts.has(input) ? undefined : roleWorkBound(input);
+    },
+    actual(input: RoleInput, result: RoleResult) {
+      const receipt = roleReceipts.get(input);
+      roleReceipts.delete(input);
+      return receipt?.result === result ? receipt.work : undefined;
+    },
+  });
+
+  roleReader.batch = async (client, input) => {
+    const receipt: Receipt<BatchResult> | undefined = batchContexts.has(input) ? undefined : {};
+    batchReceipts.delete(input);
+    batchContexts.add(input);
+    if (receipt) batchReceipts.set(input, receipt);
+    const complete = (result: BatchResult) => {
+      if (receipt) receipt.result = result;
+      return result;
+    };
+    const pairs = input.pairs.map(({ realmId, accountId }) => ({
+      route: routeOf(realmId),
+      realm_id: realmId,
+      account_id: accountId,
+    }));
+    if (pairs.some((pair) => pair.route === null || routeOf(pair.account_id) === null)) return complete(null);
+    const bound = receipt ? roleBatchWorkBound(input) : undefined;
+    if (!pairs.length) {
+      if (receipt) receipt.work = bound;
+      return complete([]);
+    }
+    const parameters = { at: input.at, pairs };
+    const rows = await readRoleBatch.run(client, parameters);
+    if (receipt)
+      receipt.work = roleBatchWorkReceipt(bound, parameters, asRows(rows) as BatchRoleProjection[], pairs.length);
+    const proofs: (MembershipRoleProof & { realmId: string; accountId: string })[] = [];
+    for (const row of asRows(rows)) {
+      const role = row.role === 'owner' || row.role === 'member' ? row.role : null;
+      const member = flag(row, 'member');
+      const valid = text(row, 'valid');
+      const realmId = text(row, 'realmId');
+      const accountId = text(row, 'accountId');
+      if (!role || member === null || !valid || !realmId || !accountId) return complete(null);
+      proofs.push({ realmId, accountId, role, member, valid });
+    }
+    if (proofs.length !== pairs.length * 2) return complete(null);
+    return complete(proofs);
+  };
+  roleReader.batchWork = Object.freeze({
+    bound(input: BatchInput) {
+      return batchContexts.has(input) ? undefined : roleBatchWorkBound(input);
+    },
+    actual(input: BatchInput, result: BatchResult) {
+      const receipt = batchReceipts.get(input);
+      batchReceipts.delete(input);
+      return receipt?.result === result ? receipt.work : undefined;
+    },
+  });
 
   /** A sealed reference names a committed operation. Nothing in it is an actor: the
    * returned request is only a carrier, and publish restores the initiator itself.
@@ -510,6 +668,12 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
     denyUnless(routeOf(input.memberAccountId) !== null);
     denyUnless(routeOf(reservation.reservationId) === routeOf(input.memberAccountId));
     denyUnless(Number.isFinite(request.deadline) && Date.now() < request.deadline);
+    // This checkout ends before Realm admission. The source's immutable proof
+    // slot makes a stale preflight incapable of doing another foreign effect.
+    const openTransition =
+      role === 'member' && reservation.transition
+        ? await isRealmTransitionOpen(pool, reservation as RealmMembershipTransition, request.deadline)
+        : false;
     const target = { route, id: realmId };
     const operation = operations.get(request);
     let identity: PrincipalCommandIdentity;
@@ -564,6 +728,41 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
         const at = authoritativeTimeValue(command.time);
         const active = await readOne(realmActive.run(tx, { route, id: realmId, at }));
         denyUnless(text(active, 'realmId') === realmId);
+        if (role === null && operation?.kind === 'removal')
+          await assertRealmBanTarget(tx, {
+            resource: target,
+            accountId: input.memberAccountId,
+            at: command.time,
+          });
+        if (
+          role === null &&
+          (operation ? operation.kind === 'leave' : request.actor.accountId === input.memberAccountId)
+        ) {
+          const ownership = { resource: target, accountId: input.memberAccountId, at: command.time };
+          // Recheck current owners at actual publication, under restored admission.
+          // Ban removal has the stricter role guard above; erasure is independent.
+          await lockRealmOwnership(tx, ownership);
+          if (await resourceRoleHeld(tx, { ...ownership, role: REALM_OWNER_ROLE }))
+            await assertRealmOwnerMayLeave(tx, ownership);
+        }
+        if (role === 'member') {
+          denyUnless(openTransition && reservation.transition);
+          denyUnless(
+            !first(
+              await proofExists.run(tx, {
+                route,
+                realm_id: realmId,
+                account_id: input.memberAccountId,
+                generation_id: reservation.transition.generationId,
+              }),
+            ),
+          );
+        }
+        if (
+          role === 'member' &&
+          (await currentBan.run(tx, { route, realm_id: realmId, account_id: input.memberAccountId, at }))
+        )
+          throw new GrantDeniedError();
         const written = await writeMembership(tx, {
           route,
           realmId,
@@ -573,7 +772,14 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
           at,
           transactionId: command.transactionId,
         });
-        denyUnless(written);
+        if (!written && role === 'member') {
+          // A positive role confirmation still spends a fresh generation. It
+          // proves this exact no-change publication, never reuses an old proof.
+          const current = first(
+            await readCurrent.run(tx, { route, realm_id: realmId, account_id: input.memberAccountId, at }),
+          );
+          denyUnless(current?.reservationId === reservation.reservationId);
+        } else denyUnless(written);
         if (role === 'member') await ensureRealmMemberGrant(tx, { realmId });
         denyUnless(await authorization.check(tx));
         const value = {
@@ -583,13 +789,200 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
           role,
           at,
           transactionId: command.transactionId,
+          ...(role === 'member'
+            ? {
+                publicationTransactionId: command.transactionId,
+                transition: { ...reservation.transition!, outcome: 'published' as const },
+              }
+            : {}),
         };
+        if (role === 'member')
+          await proofWrite.run(tx, {
+            ...transitionParameters(reservation as RealmMembershipTransition),
+            route,
+            outcome: 'published',
+            transaction_id: command.transactionId,
+            publication_transaction_id: command.transactionId,
+            principal_id: identity.principal.id,
+            command_kind: MEMBERSHIP_KIND,
+            command_key: key,
+            at,
+          });
+        // Every positive Realm operation records its fresh generation proof.
+        // An already-open exact membership needs no duplicate membership event.
+        return written
+          ? {
+              value,
+              events: [
+                {
+                  type: 'com.rezics.community.realm.membership.v1',
+                  subject: realmId,
+                  data: {
+                    realmId,
+                    accountId: input.memberAccountId,
+                    reservationId: reservation.reservationId,
+                    role,
+                    at,
+                    transactionId: command.transactionId,
+                  },
+                },
+              ],
+            }
+          : noEffect(value);
+      },
+    );
+  }
+
+  /** Exact mechanical obligation, not a user-result command. The source lock
+   * serializes cancellation with publication; no missing row is called success. */
+  async function cancel(reservation: RealmMembershipTransition, key: string) {
+    const deadline = deadlineFor(AUTHORIZE_DEADLINE_MS);
+    const parameters = transitionParameters(reservation);
+    const prior = await readTransition(deadlineClient(pool, deadline), reservation);
+    if (prior) return prior;
+    denyUnless(await isRealmTransitionOpen(pool, reservation, deadline));
+    const route = realmRoute(reservation.principal.id);
+    const identity = {
+      principal: { kind: 'account' as const, id: reservation.accountId },
+      basis: { clientId: CLIENT_ID, requestedBy: null },
+    };
+    const kind = 'community.realm.membership.cancel';
+    return runCommand<unknown>(
+      pool,
+      {
+        ...identity,
+        partition: partitionOf(route),
+        clock: config.clock,
+        deadline,
+        receipt: { kind, key, digest: digest(identity, kind, parameters) },
+      },
+      async (tx, command) => {
+        const at = authoritativeTimeValue(command.time);
+        // Positive publication takes the same active Realm lock. A closed
+        // Realm cannot publish, and cancellation grants no Realm access.
+        await realmActive.run(tx, { route, id: reservation.principal.id, at });
+        const existing = await readTransition(tx, reservation);
+        if (existing) return noEffect(existing);
+        denyUnless(
+          !first(
+            await proofExists.run(tx, {
+              route,
+              realm_id: reservation.principal.id,
+              account_id: reservation.accountId,
+              generation_id: reservation.transition.generationId,
+            }),
+          ),
+        );
+        const value = {
+          realmId: reservation.principal.id,
+          accountId: reservation.accountId,
+          reservationId: reservation.reservationId,
+          transactionId: command.transactionId,
+          at,
+          publicationTransactionId: null,
+          transition: { ...reservation.transition, outcome: 'cancelled' as const },
+        };
+        await proofWrite.run(tx, {
+          ...parameters,
+          route,
+          outcome: 'cancelled',
+          transaction_id: command.transactionId,
+          publication_transaction_id: '',
+          principal_id: identity.principal.id,
+          command_kind: kind,
+          command_key: key,
+          at,
+        });
         return {
           value,
-          events: [{ type: 'com.rezics.community.realm.membership.v1', subject: realmId, data: value }],
+          events: [
+            {
+              type: 'com.rezics.community.realm.membership.cancelled.v1',
+              subject: reservation.principal.id,
+              data: value,
+            },
+          ],
         };
       },
     );
+  }
+
+  /** Deployment-only certification. The coordinator has stopped old writers
+   * and adopted the exact historical hold under the account lock. Absence is
+   * pending; only an actual live interval or terminal source point can certify. */
+  async function certifyLegacy(reservation: RealmMembershipTransition, key: string) {
+    const deadline = deadlineFor(AUTHORIZE_DEADLINE_MS);
+    denyUnless(
+      reservation.transition.generationId === reservation.reservationId &&
+        reservation.transition.operationId.startsWith('legacy:'),
+    );
+    const prior = await readTransition(deadlineClient(pool, deadline), reservation);
+    if (prior) return prior.outcome;
+    denyUnless(await isRealmTransitionOpen(pool, reservation, deadline));
+    const route = realmRoute(reservation.principal.id);
+    const parameters = transitionParameters(reservation);
+    const identity = {
+      principal: { kind: 'account' as const, id: reservation.accountId },
+      basis: { clientId: CLIENT_ID, requestedBy: null },
+    };
+    const kind = 'community.realm.membership.legacy';
+    const result = await runCommand(
+      pool,
+      {
+        ...identity,
+        partition: partitionOf(route),
+        clock: config.clock,
+        deadline,
+        receipt: { kind, key, digest: digest(identity, kind, parameters) },
+      },
+      async (tx, command) => {
+        const at = authoritativeTimeValue(command.time);
+        await realmActive.run(tx, { route, id: reservation.principal.id, at });
+        const existing = await readTransition(tx, reservation);
+        if (existing) return noEffect({ state: existing.outcome });
+        const source = first(await legacySource.run(tx, { ...parameters, route }));
+        denyUnless(source);
+        const live = source.publicationTransactionId;
+        const terminal = source.terminalTransactionId;
+        if ((!live && !terminal) || (live && terminal) || !source.committed) {
+          // Do not commit a receipt for a provisional observation: a retry must
+          // examine the source again after an operator resolves uncertainty.
+          throw new LegacyMembershipPendingError(source.history ? 'uncertain' : 'pending');
+        }
+        const outcome = live ? ('published' as const) : ('cancelled' as const);
+        const value = {
+          realmId: reservation.principal.id,
+          accountId: reservation.accountId,
+          reservationId: reservation.reservationId,
+          transactionId: command.transactionId,
+          publicationTransactionId: live ?? terminal!,
+          transition: { ...reservation.transition, outcome },
+          state: outcome,
+        };
+        await proofWrite.run(tx, {
+          ...parameters,
+          route,
+          outcome,
+          transaction_id: command.transactionId,
+          publication_transaction_id: live ?? terminal!,
+          principal_id: identity.principal.id,
+          command_kind: kind,
+          command_key: key,
+          at,
+        });
+        return {
+          value,
+          events: [
+            {
+              type: 'com.rezics.community.realm.membership.certified.v1',
+              subject: reservation.principal.id,
+              data: value,
+            },
+          ],
+        };
+      },
+    );
+    return result.value.state;
   }
 
   async function terminalize(reservation: MembershipReservation, key: string) {
@@ -619,6 +1012,7 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
       },
       async (tx, command) => {
         const at = authoritativeTimeValue(command.time);
+        await realmActive.run(tx, { route, id: realmId, at });
         const written = await readOne(
           writeTerminal.run(tx, {
             route,
@@ -637,8 +1031,41 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
           transactionId: command.transactionId,
           at,
         };
+        // Ordinary terminalization remains absence-only. When its caller holds
+        // a generation, this actual terminal transaction also proves that exact
+        // cancellation. A pre-existing publication can never enter this branch.
+        let transition: { generationId: string; operationId: string; outcome: 'cancelled' } | undefined;
+        if (reservation.transition) {
+          const exact = reservation as RealmMembershipTransition;
+          const existing = await readTransition(tx, exact);
+          if (existing) denyUnless(existing.outcome === 'cancelled');
+          else {
+            denyUnless(
+              !first(
+                await proofExists.run(tx, {
+                  route,
+                  realm_id: realmId,
+                  account_id: reservation.accountId,
+                  generation_id: exact.transition.generationId,
+                }),
+              ),
+            );
+            transition = { ...exact.transition, outcome: 'cancelled' };
+            await proofWrite.run(tx, {
+              ...transitionParameters(exact),
+              route,
+              outcome: 'cancelled',
+              transaction_id: command.transactionId,
+              publication_transaction_id: '',
+              principal_id: identity.principal.id,
+              command_kind: TERMINAL_KIND,
+              command_key: key,
+              at,
+            });
+          }
+        }
         return {
-          value,
+          value: transition ? { ...value, publicationTransactionId: null, transition } : value,
           events: [{ type: 'com.rezics.community.realm.membership.terminalized.v1', subject: realmId, data: value }],
         };
       },
@@ -646,7 +1073,9 @@ export function createRealmMembership(config: RealmMembershipDependencies) {
   }
 
   return {
-    authority: { readTerminal, readChange },
+    authority: { readTerminal, readChange, readTransition },
+    cancel,
+    certifyLegacy,
     authorize,
     publish,
     terminalize,

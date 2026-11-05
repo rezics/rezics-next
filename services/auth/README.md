@@ -1,5 +1,10 @@
 # Auth account effects
 
+[Accounts](../../docs/accounts.md#8-platform-gates) owns local persona, seed and exposure composition.
+[Local development stack](../../docs/development/local-stack.md) owns startup and reset commands. The loopback
+transport preserves native origin checks and supplies the same complete catalogue to Auth and Access; it grants
+no production opening or resource authority.
+
 `@rezics/auth` is a separate workspace and PostgreSQL store. It owns password
 credentials, Better Auth sessions, registered clients, consent and signing keys.
 Access owns the only public identity, `account_id`, and all account state,
@@ -17,6 +22,106 @@ this service. Token issuance accepts `requested_by` only after current Access
 proof of a principal-created assignment for the authenticated actor. Unverified
 `requested_by` and all caller-supplied `act` values are rejected.
 
+## Native Collection Kind consent closure
+
+`@rezics/auth-contract` exports `KindConsentParticipant` and
+`KindConsentInvalidationReceiver`; `@rezics/auth/kind-consent` exports
+`createKindConsentParticipant`. These are trusted native composition ports.
+`participant.enroll` binds the account, client, original requested scopes and
+the exact Collection Kind route/owner/collection/preparation/origin locators.
+It returns only an opaque Auth lookup reference and the intersection of stored
+consent, current client coverage and any pending consent ceiling. First-party
+client status does not imply consent. The reference is not a grant or an allow
+verdict. The Source consumer must establish request provenance before calling
+the participant and must keep its own adoption guard.
+
+Auth consent and client writers close the durable enrollment frontier before
+making their exact authority change visible. Auth releases its database checkout
+before calling the native same-home receiver. Each transition advances at most
+100 enrolled consumers per call; the receiver must commit an immutable fence and
+then verify that exact current fence before Auth records the receipt. Lost or
+ambiguous replies retry the same transition identity. A missing receiver or an
+unverified result keeps the transition pending and prevents the Auth mutation.
+The default maintenance workflow advances pending invalidation pages. Restored
+Auth service and isolated restore-host admission fence the restored generation
+before opening normal admission. Database guards also reject direct consent,
+client, coverage and client-reduction authority writes that bypass an active or
+unresolved Kind closure.
+
+This is the Auth producer boundary only. A Source implementation must still
+adopt the exported types and methods, provide its native invalidate/verify
+receiver, and serialize adoption against its local fence before the automatic
+Collection Kind journey is complete.
+
+## Restored database admission
+
+[Deletion](../../docs/deletion.md#access-and-auth-participants) owns operational restore admission, coordinated
+WAL/PITR recovery, deletion replay, fresh database incarnation and Access proof-key rotation. Auth reuses its
+native erasure engine and original obligation, floor, applicability and consent cutoff; restored completion does
+not certify reintroduced data. Old writers must be retired before issuer, workflow, maintenance or mail writers
+open. This is an adopted requirement, not exercised hosting/runbook proof.
+
+Retained `restore-admission.ts` machinery can stage original obligations and advance bounded native replay.
+Replay advances at most one existing native unit per call: 48 raw keys, 1 KiB per locator and 64 KiB total.
+Obligation staging admits at most 48 obligations on one native partition/page per five-second absolute deadline;
+traversal/verification retains the fixed 4096-partition universe. Original receipt, continuation, source floor and
+310-second consent due time survive replay without renewing source authorization or evidence deadlines.
+Its existing `restoredGeneration`/database-owner declarations and receiving controls are implementation seams,
+not a required runtime physical-owner ABI or restore-generation witness protocol. Missing trusted source,
+consumer or custody facts remain unverified; declaration, local emptiness and elapsed TTL never supply them.
+A fresh UUID alone does not prove replay or physical isolation. Ordinary dev landing proves no restore pass.
+
+### Current receiving closure provenance
+
+The private `auth.receiving-closure/v1` factory accepts an exact obligation key and rereads its original accepted
+source continuation/receipt. Native consumption and copies-erased remain separate facts. Source acceptance alone
+does not discharge the source; original consumers must finish or transfer their need under the permanent fence.
+Copies-erased requires native/consent closure, complete creation coverage, actual result retirement, supported SDK
+writer cancellation/deletion and raw-key absence. No final participant ACK dependency is introduced.
+
+Released preparation and same-transaction current verification retain exact source/account/barrier bindings and
+native locks. No Auth checkout spans a Kernel call. Historical publications, registration, successful child status
+and page EOF do not establish complete custody. Retained receiving guards currently refuse unavailable original
+custody inputs; they cannot manufacture authority. That gap is not resolved by documenting an additional host ABI.
+Operational restore remains owned by Deletion, with deployment/runbook evidence honestly unverified.
+
+### Receiving producer and restore costs
+
+The native local control bounds are in [Access](../kernel/src/access/README.md#bounded-receiving-sql).
+The following additions use exact local keys and the existing original engines;
+they do not scan retained obligations, restart a cursor or renew consent. Key
+visits count repeated keyed reads/writes and FK checks. `restoreDatabaseWithin`
+executes BEGIN + initial settings, settings before each body statement, and
+settings + COMMIT: a body of n statements costs 2n+4 client statements. A
+standalone query through it costs six. Failure adds at most one ROLLBACK per
+opened transaction. Advisory locks/settings access no product table keys.
+
+| Local entry                         |                       Key visits |              Client SQL bound | Derivation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------------------- | -------------------------------: | ----------------------------: | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Begin receiving work                |                                5 |                            18 | Root point 1 (six statements); advisory lock, exact restored generation 1, marked-image LIMIT1 1, work INSERT + erasure FK 2 (four body statements, twelve with wrapper); PLUS native registration at released Access home                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Actual native terminal callback     |                                3 | 1, or 2 under restore wrapper | Exact erasure 1, latest work reverse PK 1, one work UPDATE 1; no reset or new native erasure algorithm                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Record one SDK copy                 |                                8 |                            19 | Latest work point 1/six statements, then root 1, advisory lock, work/copy INSERT SELECT 2 + receipt INSERT/two-column work FK 2, exact reread 1 (four body statements/twelve with wrapper); PLUS one actual SDK fence PK read/one statement/one key. The FK is one composite-key lookup; total local visits seven plus the SDK key                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Private receipt factory after begin |                               12 |                            20 | Exact work/erasure preflight 2/six statements, checking account/version/T before any native page; then five body statements: explicit settings, advisory lock, coverage 1, exact work/erasure 2 + marked-image LIMIT1 1 + exact replay/generation 2 + copy/consent absence prefixes 2 + coverage 1, then work UPDATE 1. Fourteen includes all transaction wrapper settings and controls. Every factory call first repeats begin receiving work (5 local keys/18 statements plus native registration 17 keys/9 statements), including historical obligations with no local work yet. Thus the complete Auth factory has 17 keys/38 client statements plus that native registration. If the preflight lacks a current native xid, one original native page and its existing producer fence run first, with their original separate bounds and no cursor reset; its receiving begin and terminal callback are additional, not included twice for free |
+| Restored import addition            |     native invalidate + register |             no added Auth SQL | Owner recovery and existing source floor/lineage validation precede control operations; exact database identity/generation must match verified inventory before the original import transaction                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Restored replay addition            | 1 + native invalidate + register |       6 added Auth statements | Exact original source tuple read through deadline wrapper before existing native replay; original replay/copy costs remain charged on every reached invocation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Live home addition                  | native invalidate + read-control |             no added Auth SQL | One existing rotating home; quarantine commits before any original live enrollment                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+
+The copy row bound above includes a successful immutable receipt insertion and
+its composite FK. `getWorkflowWriterFence` is the installed SDK patch's single
+`workflow_writer_fences(workflow_uuid)` query; it neither retires nor scans SDK
+history. All calls occur with Auth and Access homes released. The existing
+`eraseCopy` operation still performs genuine writer retirement and physical
+absence checks before this extra read/receipt. Its original 139-row/10-MiB,
+eight-locator page and one-execution limits remain unchanged and are additional
+to this table. SDK status, callback or an earlier receipt alone never proves current physical custody. Local factory output is
+bounded below 64 KiB; Access additionally rejects a current locator above 1 KiB.
+The original 310-second cutoff, page sizes, source high water/floor and lineage
+are unchanged. Factory registration and its native-page receiving hook retain
+the same absolute deadline; they cannot renew its five-second budget. The retained factory invokes at most one original native page when needed; historical completion cannot
+populate its fresh `native_xid`. These local implementation bounds do not establish restore admission.
+Focused native fixture cases are authored but UNRUN. Original acceptance/native
+and browser checks remain deferred to integration.
+
 ## Database and checks
 
 From the repository root:
@@ -24,18 +129,25 @@ From the repository root:
 ```sh
 bun install --frozen-lockfile
 bun run --cwd services/auth check
+bun run --cwd services/auth typecheck
 ```
+
+The standalone typecheck follows the [compiler placement contract](../../docs/development/compiler-check-placement.md)
+and creates one throwaway compiler database on an approved check host. This database receives both kernel and Auth
+migrations because the compiler also follows imports of kernel SQL. An explicit `DATABASE_URL` requires an already
+admitted physical run. Unavailable placement fails closed; tsc's status and diagnostics are unchanged.
 
 The check always creates a throwaway **separate** database using the same pinned
 PostgreSQL 19 image as kernel. It never uses `DATABASE_URL`, `AUTH_DATABASE_URL`
 or the development database. It applies committed dbmate migrations twice,
 compares the normalized schema dump, checks the schema against the installed
 Better Auth migration API, runs strict root TypeScript, root lint/format tools
-and the frozen Bun tests. Containers use `rezics.auth.check.pid` labels and tmpfs;
+and the frozen Bun tests. Containers use `rezics.auth.check.pid` labels and disk-backed volumes;
 normal exit and SIGINT/SIGTERM remove them, and later checks remove stale fixtures.
-Docker is required; a missing database URL never skips tests. Direct `bun test`
-also creates a fixture when `AUTH_TEST_DATABASE_URL` is absent. That variable is
-reserved for the check's fixture, never a development database.
+Auth test databases run through `scripts/stack-run.ts` on a check host when one answers (otherwise locally with a stderr notice), reuse the check lane's container, and remove leftover containers on failure.
+Docker is required; a missing database URL never skips tests. Direct database tests must use
+`bun run --cwd services/auth check <file>` so the whole test can be placed.
+`AUTH_TEST_DATABASE_URL` is reserved for the check's fixture, never a development database.
 
 Create an Auth-only database and apply migrations before starting an application:
 
@@ -154,19 +266,189 @@ Only trusted application code may call the internal effects:
 - `internal.revokeSessions(accountId)` uses Better Auth's
   `internalAdapter.deleteUserSessions`. Operator authorization and any epoch fence
   must already have succeeded as Access commands before this effect is called.
-- `internal.registerClient({ clientId, firstParty, scopes, displayName? })` persists trusted
+- `internal.registerClient({ clientId, firstParty, scopes, displayName?, mode? })` persists trusted
   client configuration. When supplied, `displayName` must contain 1–100 characters
   after trimming; invalid names are refused with 400. Re-registration replaces the
   display name, and omitting it stores null. Only trusted deployment/application code decides which
   clients are first party. Scope growth does not change existing sessions.
   Removing scopes or changing a first-party client to third party uses the workflow
   host's `reduceClientScopes`; direct `registerClient` calls continue to refuse reductions.
+  With `mode: 'create-or-match'`, the same native client lock and reduction guards
+  protect insertion or an exact first-party flag and normalized scope-set match.
+  A match preserves all existing metadata; a mismatch rolls back without writes.
+  Invalid modes are refused. Omitting the mode retains the ordinary upsert behavior.
 
 These are in-process methods, with no internal HTTP authorization endpoint.
+
+### Security and deletion preflight inventory
+
+`GET /security-page` composes the current human viewer, bounded session/passkey inventories and observational
+per-target action advice. Its closed DTO is in [security-page.ts](src/security-page.ts); page behavior, static
+composition limits and reconciliation are documented in the [Security page contract](../../apps/auth/README.md#security).
+Native mutation routes below remain authoritative.
+
+The configured issuer's same Auth handler serves `GET /clients` and `GET /consents`.
+Both require the current native human session cookie, exact issuer `Origin` and
+no cross-site fetch. Account, session, epoch, consent and issuance fences are
+revalidated; an unavailable dependency returns 503, denied authentication 401 and
+an invalid origin 403. Neither route accepts a selected account, client, bearer
+body, organization/operator authority or administrative fallback.
+
+Only these two exact GET paths accept `cursor?` and `limit?` query parameters.
+Limit defaults to 20 and must be an integer from 1 through 100; unknown, duplicate,
+empty or malformed parameters return 400. Other routes retain their query guards.
+Responses, including inventory errors, use `Cache-Control: private, no-store`.
+The closed response shapes are:
+
+```ts
+type ClientsPage = {
+  clients: Array<{
+    client_id: string;
+    display_name: string | null;
+    disabled: boolean;
+    scopes: string[];
+  }>;
+  next: string | null;
+};
+type ConsentsPage = {
+  consents: Array<{
+    client_id: string;
+    display_name: string | null;
+    granted: string[];
+    status: 'current' | 'inactive' | 'unavailable';
+    reducible: boolean;
+    pending_reduction: boolean;
+  }>;
+  next: string | null;
+};
+```
+
+`AuthService.security.listClients({headers,cursor?,limit?})` and
+`listConsents({headers,cursor?,limit?})` expose these same native reads for the
+existing `/security` and `/account/delete` consumers. Their inputs have no
+account selector and apply the same origin/session guards. DTOs and port types
+are exported from `@rezics/auth`.
+
+Clients come only from native `auth_client."userId"` ownership. The existing
+`erasure_auth_client_0(userId,client_id)` index supplies the ordered page; a
+configured first-party client, reference pointer, managed account or organization
+membership supplies no personal ownership. Returned labels are only the native
+configured `display_name`; scopes are the registered allowed ceiling, never a
+grant. A disabled or fenced owned record remains visible for responsibility
+remedies; fenced records suppress their label/scopes and report disabled. Listing
+does not waive the existing transfer/deletion responsibility guards. No arbitrary
+resource JSON or related-party metadata is exposed.
+
+Consents page actual `auth_consent(account_id,client_id)` primary-key rows, then
+read at most 100 exact native client keys in the same read-only REPEATABLE READ
+snapshot. `granted` intersects stored scopes, the current registered ceiling and
+`pending_scopes` when present, including an empty pending set. Disabled, fenced,
+uncovered, reducing, missing or invalid client authority yields `unavailable`
+with no effective grant; its consent row remains visible. A valid empty grant is
+`inactive`. `pending_reduction` preserves both consent and client reduction state.
+`reducible` is true only for a usable third-party binding; first-party standing
+consent gets no invented revocation control. The existing consent/mutation policy
+and permanent erasure rules are unchanged.
+
+Each list uses one native keyset page with one-row lookahead and exact bounded
+authority reads, without totals/history scans. `next` is an authenticated opaque
+AES-GCM cursor, using purpose-separated HKDF keys from the persistent Auth secret,
+bound to issuer, account, native session, client, epoch, session scopes, view and
+limit. It expires after 15 minutes. Modified, foreign, expired or changed-binding
+cursors fail with 400 before the page read and return no partial list. Consumers
+pass the same limit on subsequent pages. Concurrent changes are read at the next
+page's current snapshot; keys already passed are not repeated. No inventory cache,
+new key store, index or retained private record is introduced.
 Registration command durability, retries and Access activation remain the
 registration workflow's responsibility.
 
-Better Auth 1.8.0-beta.2's installed public `$context.adapter` types support
+Scope-list validation uses a bound computed once at service creation: the size
+of the union of `openid`, `offline_access`, `media:complete` and every mounted
+`siteActions` key, including anonymous actions. Without `siteActions`, the bound
+is 1,000 entries. Generic registration, session proofs, consent and token requests
+apply it before deduplication; website registration applies it after deduplication.
+Each scope still has a 128-character limit and the existing OAuth scope character rules.
+Validation touches only the request's scopes, costs O(scopes in the request),
+at most O(mounted actions), and adds no reads. Token scope claims and stored
+consent remain O(mounted actions), which is platform configuration, not user data.
+
+### Native private response bounds and composition
+
+Opening's Auth-page readback shares the admitted server-only configuration and issuer transport with account-session
+and selected inventory receiving. It uses the session O/S/A formula below with trusted C before parsing, preserving
+one native GET, original-cookie forwarding and whole-call cancellation. Its strict operated parser keeps current
+state separate from unresolved issuance; overflow or unavailable configuration never produces an empty proof.
+
+Decision: user-agent display metadata is limited to 512 UTF-16 code units at session creation;
+older oversized values project as null. Client labels use 100 units and passkey names 128;
+oversized historical labels project as null and names as the existing unnamed empty string.
+Display limits never alter identity, authority, credential counts, freshness or command advice.
+Historical records enter closed projections; no raw passkey row is serialized. IDs remain exact,
+nonempty and at most 1,024 units; invalid authoritative fields refuse the read or retain the
+section's unavailable state. Dates project to ISO timestamps (at most 27 units).
+Security retains windows 64/32 plus sentinels, independent unavailable sections and current-session
+recognition. `/passkeys` projects at most 32 entries. Selected clients/consents retain page 20
+(default; native limit 1–100), exact cursors (at most 8,260 units), existing bindings and retry rules.
+Invalid owned scope arrays refuse the page; invalid consent authority remains unavailable.
+
+`@rezics/auth-contract` exports `securityResponseLimits`, `securityScopeLimit`,
+`securityJsonStringBytes`, `securityFixedResponseByteBudgets` and `securityResponseByteBudgets`.
+The fixed object publishes `securityPage`, `passkeys` and `registrationPage` without a scope-count
+operand. For configuration count C, `securityResponseByteBudgets(C, L=20)` retains its existing
+allowances for `securityPage`, `clients`, `consents`, `session`, `passkeys` and `registrationPage`;
+its three fixed endpoint values are the same formulas exposed by the fixed object.
+Auth's readers use those fixed allowances for `GET /security-page`, `GET /passkeys` and
+`GET /registration-page`, including the registration advice and password-change limits reads.
+C is `securityScopeLimit(siteActions.keys())`: union of mounted keys with openid, offline_access
+and media:complete; only an absent catalogue uses 1,000. Native selected inventory uses this same
+ceiling rather than the separate kind-consent 512 contract. No configured scope is clipped.
+Scope text remains 128 units with OAuth characters; proof AMR is one of the four installed methods,
+epoch/time are safe integers. Registration password requirements are positive safe integers;
+its viewer comes from the bounded native session projection.
+
+The executable formulas count every emitted key, colon, comma and bracket: string S(n)=2+6n,
+array A(k,b)=2+kb+max(0,k−1), object O=sum(quoted-key bytes+1+value bytes)+2+commas.
+Cursor allowance is 4ceil((28+S(1024)+1+17+2)/3)=8,260 for AES-GCM/base64url.
+Nullable fields use max(4,S); booleans use 5; numbers use their maximum decimal widths.
+Six bytes per UTF-16 unit covers escaping, lone surrogates and UTF-8. All arithmetic must remain
+nonnegative safe finite integers; invalid composition fails before serving. Totals derive from
+closed fields and count limits, including worst-case escaped text, rather than row counts alone.
+
+Decision: the Auth-page Worker receives `AUTH_SECURITY_SCOPE_CONFIGURATION` from the same trusted composition that
+mounts the actual Access `siteActions` map for native Auth. `catalogue:<C>` carries
+`C=securityScopeLimit(siteActions.keys())`; only an explicitly absent catalogue uses `native-no-catalogue` and the
+native 1,000-scope fallback. Local `pages` launch derives this value from its mounted Kernel and Access catalogue.
+Production deployment supplies it from its own native composition. Requested website scopes and issued session
+scopes do not establish C. Missing or malformed configuration refuses dependent reads. The page imports only public
+`@rezics/auth-contract` helpers, never service/database code, and no browser value chooses C.
+
+The Auth-page `/clients` and `/consents` receivers use `securityResponseByteBudgets(C, 20).clients` and `.consents`
+with `readJsonBounded` before parsing. Each admitted page still makes one selected native read of 20 rows; byte
+admission adds no native reads or per-row probes. The account-session BFF receives exactly one native `GET /session`
+per user observation and applies `securityResponseByteBudgets(C).session` to actual response bytes before UTF-8
+decoding and JSON parsing. Its complete DTO budget is
+`O({account_id:S(1024),client_id:S(1024),scope:A(C,S(128)),authn_epoch:17,auth_time:17,amr:A(1,S(15))})`, where
+`S(n)=2+6n`, `A(k,b)=2+kb+max(0,k−1)`, and
+`O(F)=2+Σ(JSON.stringify(key).length+1+F[key])+max(0,|F|−1)`. This includes emitted keys, colons, commas and the
+maximum safe-integer widths. Actual bytes are checked with absent or dishonest Content-Length.
+
+The existing five-second private read signal covers issuer headers, body consumption and BFF delivery. Both
+account-session advice and the full human management proof reader use this same trusted configuration and issuer
+transport; each makes one native `GET /session`, forwards the original cookie only to the configured issuer and adds
+no metadata request, kernel/SQL read, retry, poll or command. Account-session validates only its consumed
+account/client identifiers and scope entries. The management reader retains the closed proof fields, bounds opaque
+account/client IDs, scope count and entries, safe epoch/time and a single human `pwd` or `pop` method, while native
+approval remains authoritative. Both apply `securityResponseByteBudgets(C).session` before parsing actual bytes,
+including absent or dishonest Content-Length. Overflow, malformed input, missing configuration, stalled or retired
+reads remain failure; native 401 remains signed-out. Neither response Content-Length nor another response header
+raises a cap. These
+receivers add no per-row read, polling or storage migration. Fixed `GET /security-page`, both `GET /passkeys` reads
+and both `GET /registration-page` reads use their C-independent `securityFixedResponseByteBudgets` through
+`readJsonBounded`; inventory and session use C-derived budgets. The page/BFF imports only public pure helpers, never
+service/database code. Browser parsing/migration and native journey qualification remain separate work; sign-in's
+installed 16,384-byte cap is unchanged.
+
+Better Auth 1.8.0-beta.3's installed public `$context.adapter` types support
 `create({ forceAllowId: true })` and `transaction()`. Provisioning uses that
 facility with `user.id = account_id`, and credential `accountId = userId`.
 No internal identity mapping is necessary. The tests inspect actual PostgreSQL
@@ -193,6 +475,13 @@ never to request booleans or a second permission engine in Auth.
   and the exact credential purposes (`set-password`, `remove-password`,
   `add-key`, `remove-key`) cannot be interchanged. Auth also journals receipt IDs
   durably to prevent duplicate local issuance across instances.
+- `consumePasskeyAuthorization({ authorization, subjectAccountId, purpose, operationKey, effectReference, human })`
+  consumes an exact `add-passkey` or `remove-passkey` approval for the human's own
+  account. The host opts into these floor purposes with `passkeys: true`.
+  Passkey approvals bind the same immutable stage locators and current session
+  evidence; they cannot authorize an operator or automated-account credential
+  operation. `consumeAuthorization` retains the four password and key purposes
+  above, plus `session`.
 - `invalidateAccount({ accountId, previousEpoch, reason, proofReference, operationKey })` atomically checks the
   old floor and commits an increased account floor before returning an
   `InvalidationReceipt`. Its receipt ID, account and higher minimum epoch are
@@ -229,6 +518,39 @@ read. Destructive effects revoke the subject's native sessions. Failed effects
 may spend the approval or leave the Access barrier raised; retry with a new
 approved command rather than replaying its receipt.
 
+The browser password path uses the existing `/credential-effects/stage`,
+`/approve` and `/apply` host commands. Each host request keeps its single native
+three-second deadline and the existing authorization, current credential,
+approval, floor, receipt, lock, replay and session-revocation behavior. The host
+admits a bounded 16,384-byte JSON request; its ordinary string fields retain the
+actual 1,024 UTF-16-unit limit. The apply approval reference has its own
+producer-derived allowance: the password Access seal is at most 2,768 ASCII
+characters; the shared host accepts up to 2,772 for the longest supported
+credential purpose (`remove-password`). These are Access's base64url payload,
+dot and 43-character SHA-256 HMAC, derived from its 255-unit operation-key
+locator, UUID account/effect/receipt fields, 64-character digest and embedded
+workflow-approval `{ route, id, binding }` seal or operator receipt locator. The
+embedded workflow seal uses the native route maximum 65,535, UUID approval ID
+and 64-character binding digest. Native approval expiries use
+`Date.prototype.toISOString()` (24 UTF-8 bytes), and Auth effect references and
+receipts use `randomUUID()` (36 lowercase UUID characters).
+
+The closed password success projections are stage `{ effectRef, key, subjectId,
+purpose: "set-password", digest }`, approval `{ reference, expiresAt }`, and
+apply `{ receiptId, replayed }`; the only error bodies are exact
+`credential_effect_denied` or `step_up_required` with
+`effect_status: "not_applied"`. Their largest UTF-8 bodies are respectively
+12,465, 2,823 and 69 bytes, with a 66-byte error ceiling. The Auth page spends
+one absolute five-second browser allowance per POST through headers and streamed
+body admission; it sends stage, approval and apply once each on ordinary
+completion. A lost response remains possible completion and only an explicit
+retry may repeat the exact uncertain phase. These browser allowances add no
+native reads or commands and do not change any native deadline or effect.
+Auth checks the trusted Access approval against the stage-purpose reference
+bound and canonical UTC millisecond expiry before projecting it. Apply forwards
+the exact sealed reference through its typed internal call; the host's ordinary
+1,024-unit string limit does not truncate or reject this longer reference.
+
 A first operator opening or key installation creates a native credential owner
 with `user.id = account_id` and a `credential` account row. A passwordless owner
 has null password. The schema plugin makes the native email column optional;
@@ -251,10 +573,170 @@ credential; it does not create another session store or a long-term bearer
 credential. Key signin still passes all native session hooks, consent and epoch
 checks. Credential keys never join Auth's public signing JWKS.
 
+## Passkeys and credential freshness
+
+Decision: admit discoverable authentication options at the plugin HTTP boundary using the pinned producer's
+closed output, and use the shared fixed-profile acknowledgement receiver in every installed browser sign-in caller.
+Authentication options are exactly `{rpId:"rezics.com", challenge, timeout:60000, userVerification:"required"}`.
+The plugin generates 32 challenge bytes (43 base64url characters), `preferred` UV and no allowCredentials or
+extensions when called without session cookies; the service projects UV to required and preserves Set-Cookie.
+The byte ceiling is the compact JSON size of those fixed fields and the 43-character challenge, using preferred
+for plugin ingress and required for browser ingress. Count actual bytes before fatal UTF-8 and JSON decoding;
+malformed/excess plugin output publishes no challenge cookie. Registration retains its separate receiving owner.
+
+Installed ordinary login, account-operation step-up, management and rename review, automated-account creation,
+operator transfer and organization membership reauthentication submit their selected fixed profile through the
+shared receiver. Its acknowledgement contract uses native SessionProof's exact six fields: account_id, client_id, scope,
+authn_epoch, auth_time and amr. Opaque IDs retain the Security 1024-code-unit bound and worst-case six-byte
+escaping; numbers are nonnegative safe integers (17-byte allowance). Scope strings retain Security's 128-unit
+bound. The proof formula is `securityResponseByteBudgets(N).session`, where N is the submitted fixed profile's
+deduplicated scope count, not a catalogue or current-session count. Native normalization sorts/deduplicates the
+submitted scopes; acknowledgement requires that exact ordered scope, fixed client and one pwd or pop method
+matching the submitted path. Each call has one five-second lifetime through bounded body completion, preserving
+same-origin cookies, no-store, redirect rejection and the installed one-POST password / options-plus-assertion cost.
+The four-minute browser options cache retains only admitted options and is shared by conditional mediation and an
+explicit prompt. This receiving contract adds no native authorization or currentness policy and does not restrict
+other native clients. Error receiving admits the native authentication_denied envelope,
+403 account_suspended/ACCOUNT_SUSPENDED, and supported 429 rate_limited forms; the fixed largest envelope
+provides the byte ceiling. Native 429 authentication_denied retains Retry-After independently of that ceiling.
+Native credential acceptance and real-browser integration remain independently qualified by their existing tests.
+
+Better Auth's `@better-auth/passkey` plugin is pinned to `1.8.0-beta.3`, matching
+`better-auth`. It uses RP ID `rezics.com`, RP name `REZICS`, the configured issuer
+as its expected origin, and requires a resident credential and user verification.
+The native `/api/auth/passkey/*` routes remain private. Auth aliases require the
+issuer `Origin`, reject queries and unknown JSON fields, return `no-store`, and
+share the native `/signin` attempt budget. Errors use fixed codes.
+
+| Route                             | Contract                                                                                                                                                                                                                                                                |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /signin/passkey/options`    | `{}`; returns discoverable `PublicKeyCredentialRequestOptionsJSON`, including `userVerification: "required"` and no credential allow list, plus a ceremony cookie.                                                                                                      |
+| `POST /signin/passkey`            | `{ response, client_id, scope }` and ceremony cookie; verifies an assertion and returns the same session proof and cookie as `/signin`, with `amr: ["pop"]`. Access, epochs, consent, session binding and replacement of the presented session follow password sign-in. |
+| `POST /passkeys/register/options` | Session cookie and `{}`; returns `PublicKeyCredentialCreationOptionsJSON` plus a ceremony cookie.                                                                                                                                                                       |
+| `POST /passkeys/register`         | Session and ceremony cookies and `{ response, name? }`; verifies, stages, approves and applies `add-passkey`, returning 201 `{ id, name, created_at }`. Names contain 1–128 characters after trimming; absent names are null.                                           |
+| `GET /passkeys`                   | Session cookie; returns `{ passkeys: [{ id, name, created_at, last_used_at }] }` for this person only, limited to 32. `last_used_at` is null before the first sign-in.                                                                                                  |
+| `POST /passkeys/remove`           | Session cookie and `{ id }`; stages, approves and applies `remove-passkey`, with a committed credential floor receipt and bounded session revocation, returning `{ success: true }`.                                                                                    |
+
+Decision: passkey label rename is an own-human, fresh-session `POST /passkeys/rename` with
+`{id,name,reviewed_account_id}` and exact `{id,name}` acknowledgement. Names are trimmed, nonempty and at most
+128 UTF-16 units. It changes only the label, without advancing the credential floor or revoking sessions.
+A changed account or unowned credential refuses the write. A lost response requires deliberate current-label
+review; that observation does not establish the earlier command's outcome. Human credential retirement requires
+a password or passkey to remain; account keys cannot substitute for an interactive credential. Consent Allow and
+reduction refuse a changed reviewed grant set at the final native writer, including changes after initial preparation.
+An absent consent row is an empty grant with a null pending reference. Requested-scope queries reach the consent
+read boundary parser; unrelated query parameters remain refused.
+Session/client/consent inventory retains catalogue-derived bounds; Security, passkey and registration projections
+retain their fixed budgets. Enrollment requires the pinned `rezics.com` / `REZICS` RP. Current-session review after
+a lost password replacement acknowledgement does not renew the original opening epoch or confirm that command;
+its exact retry remains unknown when native revalidation refuses it. Successful human password-retirement fixtures
+enroll an actual native passkey; independent account keys alone do not qualify that fixture.
+
+Enrollment responses use `packages/auth-contract/src/passkey-enrollment-response-bounds.ts`.
+Decision: bound the pinned complete creation DTO and exact credential-effect acknowledgement; stop malformed
+preparation before the browser prompt and retain unknown custody after ambiguous dispatch, without retries or new calls.
+Sources are the installed Better Auth passkey 1.8.0-beta.3 registration producer, SimpleWebAuthn server 13.3.3
+`generateRegistrationOptions`/`generateChallenge`/`parseAuthenticatorData`, native `registrationInput`, credential effects,
+and the passkey/user SQL schema. RP ID/name are the literals `rezics.com`/`REZICS`; issuer origin is verification
+configuration, not an emitted creation label. The plugin generates 32 random ASCII characters for the user handle
+(base64url ≤43), independently of the account ID, and a 32-byte challenge (base64url ≤43). Native owners have an empty
+name, so both user labels fall back to their existing Security-bounded account ID (≤1024 UTF-16 units).
+Historical nonempty user names/display names are PostgreSQL text without a database length constraint: only values
+within that same label allowance are qualified, with no clipping or fallback to a different identity.
+
+The supported configured DTO preserves algorithms `[-8,-7,-257]`, timeout 60000, attestation `none`, required resident
+key/UV with `requireResidentKey: true`, `extensions: { credProps: true }`, and empty hints. No custom extensions,
+authenticator attachment or alternate algorithm policy is configured. Exclusion retains ≤32 credentials and the
+seven pinned transport spellings; absent transports and the native empty-string storage default mean no hint.
+Credential IDs are base64url. The authenticator length field is uint16; the tighter existing 16384-byte native
+registration request ceiling also bounds each admitted ID's encoded length by 16384. SQL text alone gives no such
+bound: larger imported IDs, unknown/repeated transport lists beyond seven, excess historical owner rows and
+unconfigured options remain unqualified and make preparation unavailable, never a partial ceremony.
+
+Budgets use `S(n)=2+6n` for a JSON string (including escaping), `A(k,b)=2+kb+max(0,k−1)` for arrays, and the sum
+of quoted field names, colons, commas and values for closed objects. Base64url uses `2+n` rather than `S(n)`.
+The exported options formula includes every supported field and 32 maximum exclusion descriptors. Actual plugin
+success bytes are counted before fatal UTF-8/JSON decoding, then completely projected before JSON publication;
+invalid output publishes no challenge cookie. Valid output forwards the existing Set-Cookie unchanged. No query,
+challenge count, service deadline, freshness proof, effect digest/replay, approval, cap or epoch fence changes.
+The closed 201 has the exact effect ID, name and created_at: new IDs are UUIDs; retained receipt IDs use the existing
+1024-unit Security ID allowance, names are trimmed 1–128 units or null when absent, and dates use the 27-unit ISO
+allowance. Its formula is the closed three-field object; fixed native errors have a separate closed envelope.
+Native authenticator tests remain the verification authority; finite projection tests and mocked browser transport
+alone do not qualify real authenticator behavior or establish the outstanding native growth bound.
+
+The closed `CredentialPurpose` and `CredentialEffect` contracts retain the four
+operator-manageable purposes: `set-password`, `remove-password`, `add-key` and
+`remove-key`. The separate own-human `PasskeyPurpose` is `add-passkey` or
+`remove-passkey`; `PasskeyEffect` describes their public credential material.
+`CredentialFloorPurpose` records both sets in shared stages, approvals and floor
+receipts. Passkeys belong only to their human owner; operator openings and
+automated-account credential management exclude passkeys. The public passkey aliases operate only on the current person's
+credentials. Installation can only stage a public credential produced by successful WebAuthn verification;
+public credential-effect commands cannot install arbitrary passkey material.
+The host dispatches passkey removal to the own-human `stagePasskeyEffect` port;
+`stageCredentialEffect` keeps its password/public-key input and four-purpose result.
+Passkey consumption uses the separate `consumePasskeyAuthorization` port.
+The kernel binding opts into all floor purposes with `passkeys: true`; existing
+password/public-key-only trusted hosts keep their original approval types and
+refuse passkey effects when that capability is absent.
+The plugin's verification hooks enforce the authenticator's verified UV flag and
+hand registration to credential effects before native persistence.
+
+The registration operation key derives from the ceremony challenge. Its encrypted
+stage binds the verified public credential, exact ceremony response and name,
+person, client and scopes. A retry after a lost response resolves that stage and
+revalidates the committing approval before returning the same saved public result;
+it never installs a second passkey. Removal advances the Access floor by exactly one before the
+Auth transaction deletes the selected credential, revokes all of the owner's at most
+64 sessions and commits its immutable effect receipt. The consumed approval and
+floor receipt bind the exact route, account, opening, operation, effect reference
+and digest. Current-time validity is rechecked through commit; a revoked source
+session cannot replay the removal or advance the floor again. Removing
+the last interactive credential (password or passkey) is refused with 409 and
+`effect_status: "not_applied"`. A person can have at most 32 passkeys; another installation is 409.
+
+Decision: Security consumers require the exact command envelope with its status; the generic passkey 409 response
+does not disclose whether the refusal was last-credential protection or a stale selected effect.
+
+`POST /sessions/revoke` returns exactly `{}` on 200, clears the current session's cookies when that exact current
+session is selected, and returns `{ error: "authentication_denied" }` for unknown/foreign targets (404). A 409
+stale review adds `code: "stale_review"`. `POST /passkeys/remove` returns exactly `{ success: true }` on 200;
+step-up returns 401 `{ error: "step_up_required", effect_status: "not_applied" }`, and other passkey refusals return
+`{ error: "credential_effect_denied", effect_status: "not_applied" }` with the native status. The attempt wrapper
+returns 429 `{ error: "authentication_denied" }` before the removal handler. The closed response DTOs and exact
+UTF-8 maxima are `securityActionResponseByteBudgets.session = max(utf8('{}'), utf8('{"error":"authentication_denied"}'),
+utf8('{"error":"authentication_denied","code":"stale_review"}'))` and
+`.passkey = max(utf8('{"success":true}'), utf8('{"error":"step_up_required","effect_status":"not_applied"}'),
+utf8('{"error":"credential_effect_denied","effect_status":"not_applied"}'),
+utf8('{"error":"authentication_denied"}'))`. These command envelopes do not depend on catalogue size.
+
+Every own-human credential stage, approval and application requires `auth_time`
+within the last 600 seconds, read from the native session row with cookie caching
+and refresh disabled. This includes `/credential-effects/approve`, password
+changes and the passkey aliases. An older session receives 401
+`{ error: "step_up_required", effect_status: "not_applied" }` before any credential
+or approval change. Client input cannot supply authentication time. Operator and
+automated paths retain their existing rules; passkey listing and sign-in do not
+require fresh authentication.
+
+The Cost table separates the measured sign-in/list paths from registration and
+removal. `passkeys.test.ts` and `credential-freshness.test.ts` exercise software
+P-256 authenticators through real handlers, PostgreSQL and kernel capabilities.
+The six ordinary growth cases retain their original 1/8/64 scales and bounds.
+Consumable registration/removal fixtures prepare a fresh native ceremony and
+selected credential for the scale's warmup and every physical measured invocation,
+including runs discarded by the shared harness. Setup restores the capped native
+session neighborhood outside capture and retains committed effects, consumed
+approvals and expired challenge history. A failed growth check retains its original
+samples without running a replacement diagnostic operation. The retained failure
+below is historical evidence; the full acceptance command remains post-integration
+proof of the current source's bound.
+
 ## Guarded human recovery
 
 Hosts configure
-`recoveryDelivery.deliver({ accountId, email, token, expiresAt, url })` as a
+`recoveryDelivery.deliver({ deliveryId, accountId, email, token, expiresAt, url })` as a
 private delivery port. `url` is
 `${issuer}/recovery#account_id=<encoded account id>&token=<encoded token>`.
 Auth builds that URL and the mail adapter sends it verbatim. Only the native
@@ -267,6 +749,76 @@ mails at most one link per account per 60 seconds, and only for a current active
 human. Unknown, automated and inactive addresses get the same HTTP answer and no
 message. Completion still denies automation and organizations, missing evidence,
 inactive accounts and Access outages.
+
+Both commands project the exact acknowledgement `{"success":true}` (16 UTF-8
+bytes). Their native error projection is exactly `{"error":"authentication_denied"}`
+(33 UTF-8 bytes): status 400 covers request or password validation, completion
+status 401 covers token, credential or currentness denial, status 429 is native
+attempt admission and carries `Retry-After` as a header, and dependency failures
+project as status 503. The producer validates the closed body and byte bound at
+the HTTP projection boundary. The error body allowance is unchanged by the
+retry header; start does not synchronously look up an account or delivery result.
+
+`deliveryId` is the actual newly inserted Better Auth verification row ID. The
+supported native Kysely adapter commits that INSERT, its typed ownership
+projection and `auth_recovery_copy_source` together, before the after-create hook
+or delivery. A deferred producer guard refuses typed reset writers that omit the
+Source record. The original hook still binds token, owner and five-minute expiry;
+it does not acquire credential authority or stand in for atomic recording.
+`auth_recovery.proof_hash` remains authentication evidence only. Source metadata
+contains the original nonsecret identity, pinned producer/version, native creation
+and expiry and the actual known account roles. It contains no email, token, URL,
+credential, identifying hash or guessed provider identity.
+
+Before the callback, Auth commits one in-flight attempt under the current
+all-role erasure fence, then releases its connection and locks. The callback wait
+has a five-second deadline. Legacy callbacks cannot be cancelled; late sends
+remain unresolved under their original identity. There is no automatic resend.
+The existing `Promise<void>` ABI is preserved apart from the additive identity.
+Void resolution records `legacy-void`; arbitrary returned values are discarded
+without decoding or serialization (`unsupported-result`, zero retained response
+bytes). Failure and timeout retain only fixed codes. No such result verifies a
+receiver, sink generation, copy disposition or erasure. A failed technical
+checkpoint cannot invalidate an otherwise successful recovery proof. Delivery
+failure keeps the existing exact proof/verification cleanup; custody survives it.
+
+Native-only `readRecoveryCopySource(database, deliveryId)` exposes the first
+Source/status types. `readRecoveryCopySourcePage(database, { accountId, role,
+after? })` reads one indexed typed role and at most 48 nonsecret locators, each
+at most 1 KiB, below 64 KiB including status. Neither is an HTTP account lookup.
+The existing native obligation records `recovery_copy_pending` separately from
+shared history: `recovery-copy-custody` for a known unresolved Source,
+`recovery-copy-coverage` for unconverted historical sends. This field also
+defaults to unknown coverage on older obligations; pending native pages expose
+it as `externalPending`. Local native cleanup and the
+original 310-second consent lifecycle continue; unresolved Source metadata is
+retained and indexed in the native role inventory. Empty pages, local expiry,
+absence of a user and disabled callbacks never prove historical zero data.
+Scoped native/shared-history proofs remain their existing proofs; neither closes
+this independent external branch or supplies a terminal Auth acknowledgement.
+
+No receiving owner with durable result verification is installed, so
+`sinkGeneration` is explicitly null and custody remains unknown. There is no
+optional receipt callback or configured namespace to mistake for owner evidence.
+An actual receiving adapter must adopt the independent generation/fence, exact
+result lookup/idempotence and bounded physical disposition boundary in the
+[external custody contract](src/external-custody-contract.md) before any Source
+can be minimized or certified. Restores and diagnostic Sources remain separate.
+
+### Recovery Source recording cost
+
+- Touches: the actual verification INSERT/typed projection, one exact Source
+  key, five fixed typed-role erasure locks/probes and the existing proof INSERT.
+  A native erasure acceptance or tail checks at most one indexed key per role.
+- Bound: one native transaction for creation, one dispatch checkpoint, at most
+  one callback outside all DB leases, and one fixed status update; no payload or
+  history discovery. Status pages seek one role/key index with LIMIT 48; a full
+  page of 1 KiB IDs and fixed codes stays below 64 KiB. No new erasure engine,
+  scheduling loop, per-provider scan or cascade is introduced.
+- Growth check: deferred to integration under this slice's minimal verification
+  instruction. Focused existing-fixture producer cases cover pre-hook custody,
+  rollback, released connections, void/ambiguous/late results and retained identity;
+  existing exact recovery and external receiving acceptance remain unchanged.
 
 Completion resolves the token with Better Auth's installed native verifier, checks
 its account, expiry and issuance epoch, then atomically deletes that exact native
@@ -306,44 +858,79 @@ secure, HttpOnly, SameSite cookies remain on the issuer origin. The reverse prox
 must preserve that origin and sanitize forwarded client-IP headers used by
 Better Auth. Host consent UI must show the selected client and scopes explicitly.
 
-| Method and path              | Input / result                                                                                                                                                                                                                                                                                      |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /signin`               | `{ email, password, client_id, scope: string[] }` or `{ account_id, password, client_id, scope: string[] }`; returns `SessionProof` and the Better Auth session cookie after password, Access and consent checks. A valid session cookie on this request is deleted in the same successful response |
-| `POST /signin/key`           | `{ account_id, assertion, client_id, scope: string[] }`; verifies an owned `private_key_jwt` and returns a native session                                                                                                                                                                           |
-| `POST /recovery/start`       | `{ email }`; `200` `{ success: true }` for every well-formed address, without waiting for lookup, Access or delivery. Detached delivery sends at most one link per account per 60 seconds, and only to a current active human                                                                       |
-| `POST /recovery/complete`    | `{ account_id, token, new_password }`; consumes the epoch-bound proof and invalidates through Access before native reset                                                                                                                                                                            |
-| `GET /session`               | Cookie; returns only `SessionProof`, with a database session read and current Access/consent validation                                                                                                                                                                                             |
-| `POST /token`                | Cookie and `{ requested_by?: string }`; returns `{ access_token, token_type: "Bearer", expires_in: 300 }`                                                                                                                                                                                           |
-| `GET /consent/<client_id>`   | Cookie; returns `{ client_id, display_name, scopes, granted }` for a covered third-party client; 401 for an invalid human session, 404 for unknown, first-party, uncovered or reducing clients                                                                                                      |
-| `GET /sessions`              | Cookie; returns `{ sessions: [{ id, client_id, client_display_name, created_at, expires_at, user_agent, current }] }`, only this person's unexpired sessions, newest first, at most 64; IDs are opaque native row IDs, never cookie tokens                                                          |
-| `POST /sessions/revoke`      | Cookie and `{ session_id }`; deletes an own session and returns `{}` without step-up; clears cookies when revoking the current session; unknown or foreign IDs return 404 without mutation                                                                                                          |
-| `POST /consent`              | Cookie and `{ client_id, scope: string[] }`; explicitly replaces this actor's third-party consent and returns those fields                                                                                                                                                                          |
-| `POST /signout`              | Cookie and `{}`; Better Auth deletes the session and clears its cookie                                                                                                                                                                                                                              |
-| `GET /.well-known/jwks.json` | Public `PublicJwks`, containing only ES256 verification material                                                                                                                                                                                                                                    |
+| Method and path                    | Input / result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /signin`                     | `{ email, password, client_id, scope: string[] }` or `{ account_id, password, client_id, scope: string[] }`; returns `SessionProof` and the Better Auth session cookie after password, Access and consent checks. A valid session cookie on this request is deleted in the same successful response                                                                                                                                                                                                                    |
+| `POST /signin/key`                 | `{ account_id, assertion, client_id, scope: string[] }`; verifies an owned `private_key_jwt` and returns a native session                                                                                                                                                                                                                                                                                                                                                                                              |
+| `POST /recovery/start`             | `{ email }`; `200` `{ success: true }` for every well-formed address, without waiting for lookup, Access or delivery. Detached delivery sends at most one link per account per 60 seconds, and only to a current active human                                                                                                                                                                                                                                                                                          |
+| `POST /recovery/complete`          | `{ account_id, token, new_password }`; consumes the epoch-bound proof and invalidates through Access before native reset                                                                                                                                                                                                                                                                                                                                                                                               |
+| `GET /session`                     | Cookie; returns only `SessionProof`, with a database session read and current Access/consent validation                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `GET /registration-page`           | Auth workflow host only; one current-session read plus native registration requirements and available actions, `no-store`; reports registration unavailable when Siteverify is not configured and returns 503 when the read dependency is unavailable. This is page advice, not permission to submit                                                                                                                                                                                                                   |
+| `POST /token`                      | Cookie and `{ requested_by?: string }`; returns `{ access_token, token_type: "Bearer", expires_in: 300 }`                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `GET /consent/<client_id>`         | Cookie and optional single `scope` query; returns a private no-store projection `{ client_id, display_name, scopes, requested, granted, pending_reduction, acting_account, decisions }` for a covered third-party client. Revalidates the admitted human and registered client while reading exact consent; 400 for malformed/extra query parameters, 401 for an invalid human session, 404 for unknown, first-party, uncovered or reducing clients                                                                    |
+| `GET /sessions`                    | Cookie; returns `{ sessions: [{ id, client_id, client_display_name, created_at, expires_at, user_agent, current }] }`, only this person's unexpired sessions, newest first, at most 64; IDs are opaque native row IDs, never cookie tokens                                                                                                                                                                                                                                                                             |
+| `POST /sessions/revoke`            | Cookie and `{ session_id }`; deletes an own session and returns `{}` without step-up; clears cookies when revoking the current session; unknown or foreign IDs return 404 without mutation                                                                                                                                                                                                                                                                                                                             |
+| `POST /consent`                    | Cookie and `{ client_id, scope: string[] }`; explicitly replaces this actor's third-party consent. Review-bound approval may also send `{ reviewed_account_id, reviewed_scopes, reviewed_requested }`; it returns the closed `{ account_id, client_id, requested, scope }` acknowledgement. A stale account/grant/request returns 409 `stale_review` before mutation or a reduction barrier. Existing callers without `reviewed_account_id` retain the exact `{ client_id, scope }` response and replacement behavior  |
+| `POST /signout`                    | Cookie and `{}`; Better Auth deletes the session and clears its cookie                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `POST /account-operations/approve` | Auth-host composition only; session cookie and `{ operationKey, operation }`, where `operation` is an organization creation, rename, deletion, transfer, transfer acceptance, membership or operator-fencing request without `authorization`. Requires `auth_time` within the last 600 seconds (otherwise 401 `step_up_required`); organization creation is also checked against the `organizations` platform gate group (403 `platform_closed`). Answers `{ reference, expiresAt }` from the kernel workflow approval |
+| `POST /account-operations/execute` | Auth-host composition only; session cookie and `{ operationKey, operation, reference }`, plus `acceptance` for a co-approved transfer. Resolves the approval for the same person, runs the workflow and answers its native result, such as `{ accountId }`; replaying an operation key returns the same result without repeating effects. Transfer acceptance is approve-only                                                                                                                                          |
+| `GET /.well-known/jwks.json`       | Public `PublicJwks`, containing only ES256 verification material                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 The website client's OAuth/OIDC routes are listed under "Website client".
-Unrecognized routes, including `/api/auth/*`, signup and raw password recovery,
-are unavailable. `POST /recovery/start` accepts an email and does not disclose
+Unrecognized routes, including `/api/auth/*` and raw password recovery, are
+unavailable. Public signup is exposed only by the account-workflow host.
+`POST /recovery/start` accepts an email and does not disclose
 whether delivery occurred; automated accounts receive no mail. Failure responses
 expose only `authentication_denied`, never credential or Access details.
+After a human's sign-in credential verifies, suspension instead returns 403 with legacy `error: 'account_suspended'` and native `code: 'ACCOUNT_SUSPENDED'` without its reason, a session, cookie or token; unverified credentials retain the generic refusal.
 
 `internal.registerClient` accepts an optional `displayName`, trimmed to 1–100
 characters (invalid values fail with status 400). It is stored as nullable
 `auth_client.display_name`; re-registration replaces it, and omission stores null.
-Consent reads return registered scopes and the person's effective granted scopes,
-intersected with any pending reduction ceiling. Reads never create consent.
-Every pages route uses current native session, human and Access checks, rejects
-query parameters, and returns `no-store` with the fixed `authentication_denied`
-error code on failure. POSTs retain the issuer Origin and closed JSON body rules.
-Consent reads use one client point read with coverage/reduction checks and one
-consent point read, O(log C + log K). Session lists use the existing
-`session_owner_oldest ("userId", "createdAt", id)` index in reverse order with
-`LIMIT 64`, O(log S + 64) for the bounded native session neighborhood. The left join
-adds at most 64 primary-key probes on `auth_client`, so the list stays O(log S + 64 log C). Revocation
-adds one session ID point read and one owner-checked delete.
-`pages-consent-sessions.test.ts` exercises the real handler and database;
-`growth-pages-reads.test.ts` captures full handler SQL with `checkGrowth` at
-1x/8x/64x, growing unrelated sessions, clients and consents separately.
+Consent reads return registered scopes, exact requested names, the admitted
+acting account and effective grants intersected with any pending reduction
+ceiling. Query scopes are untrusted request intent; unknown names remain visible
+but never expand registered scopes. The private exact-self email appears only in
+this Auth page projection. Reads never create consent. The consent route accepts
+only its optional single `scope` query; other page routes reject query
+parameters. Page reads use the current native session, human and Access checks,
+and `private, no-store` responses. POSTs retain issuer Origin and closed JSON
+body rules. Allow compares the reviewed account, request and exact reviewed union under the native consent lock before
+mutation; it rereads and refuses `stale_review` if same-account grants were added after review. For reviewed browser
+submissions, the native seam also refuses a current union above the fixed 1,000-scope acknowledgement ceiling before
+any grant or reduction-barrier effect. The same pre-effect count admission applies to reviewed_scopes reduction requests. Unreviewed native replacement
+retains its existing scope behavior; remove-all submits an empty scope array. Nonempty Security reductions likewise bind their
+reviewed grant set before any reduction barrier; explicit remove-all remains unchanged.
+Decision: Reviewed Allow success requires a finite exact account/client/request/submitted-union acknowledgement;
+every ambiguous post-dispatch reply keeps its account/client/request marker unresolved. The fixed consent review
+projection and browser intake share the pure public `@rezics/auth-contract` consent response bounds. Native
+`consent-page` retains its existing exports.
+The response allowance includes every key/punctuation, both 1024-unit IDs, nullable 100-unit display name,
+254-unit email, all three 1000-entry arrays of 128 OAuth ASCII characters, pending state and decisions.
+Six bytes per UTF-16 text unit covers JSON escapes/UTF-8 conservatively; the 8192-byte requested query
+further reduces GET output. Native errors are closed `authentication_denied` with optional `stale_review`;
+only that shape determines the error allowance. This is separate from Security catalogue C and kind-consent.
+Browser admission adds no native query: the existing single current read, locks, decisions and issuance
+remain authoritative, and unreadable/over-limit preflight cannot authorize a reduction.
+The reviewed acknowledgement is `{ account_id, client_id, requested, scope }`, with `scope` the actual submitted
+union. Its maximum UTF-8 body is `JSON.stringify({account_id:'',client_id:'',requested:[],scope:[]}).length +
+12*1024 + 2*(1000*(128+3)-1)`: two maximally escaped 1,024-unit IDs and two independently bounded scope arrays,
+including JSON punctuation. The POST error allowance is
+`Math.max(JSON.stringify({error:'authentication_denied'}).length, JSON.stringify({error:'authentication_denied',code:'stale_review'}).length, JSON.stringify({error:'step_up_required',effect_status:'not_applied'}).length, JSON.stringify({error:'account_suspended',code:'ACCOUNT_SUSPENDED'}).length)`;
+`Retry-After` adds no body bytes. Unreviewed native callers still
+receive only `{ client_id, scope }`. `pages-consent-sessions.test.ts` exercises the producer and legacy compatibility;
+native/browser qualification remains outstanding at the manager's integration gate.
+Decision: connected-application reduction admits the native `{client_id,scope}` acknowledgement within
+`JSON.stringify({client_id:'',scope:[]}).length + 6*1024 + (1000*(128+3)-1)` UTF-8 bytes.
+The ID is already admitted by native request text; scope syntax/length is native OAuth admission and reviewed
+replacement counts are admitted before effects. No response validation after commit invents noncompletion.
+Errors reuse the Allow envelope allowance above. Generic 401/404/5xx can follow barrier progress and stay unknown;
+closed stale-review 409, step-up 401, suspension 403 and generic pre-effect 400/403/413/415/429 are known refusals.
+The attempt wrapper does not wrap `/consent`; its normalized 429/503 envelopes confer no additional certainty.
+Locks, operated/human checks, pending reduction, invalidation, floors, epochs and session deletion remain native.
+The Cost table derives consent/session reads and single-session revocation,
+including their complete handler growth citations. `pages-consent-sessions.test.ts`
+exercises the real handlers and database.
 
 First-party clients are preconsented for their registered scopes. Third-party
 clients require persisted explicit consent. A person can consent from an existing
@@ -426,7 +1013,7 @@ sockets for all three approved hosts.
 
 `SessionProof` contains only `account_id`, `client_id`, `scope: string[]`,
 `authn_epoch`, `auth_time` and `amr`. Successful password verification installs
-the epoch, authentication time (Unix seconds) and `amr: ["pwd"]`. Own-key
+the epoch, authentication time (Unix seconds) and `amr: ["pwd"]`. Passkey verification installs `amr: ["pop"]`; website authorization, ID tokens and refresh accept it. Own-key
 verification installs `amr: ["private_key_jwt"]`. Operator establishment uses
 `amr: ["operator"]` and the opening human's original authentication time, with
 private attribution to that human and operator. Reading a newer Access floor
@@ -463,16 +1050,48 @@ The returned host exports:
 - `start()` and `close()` for the official pinned DBOS SDK executor;
 - `beginRegistration`, `installRegistrationCredential`, `activateRegistration`
   and `register` for staged human registration;
-- `expireDueRegistrations` for bounded expiry work using the authoritative clock;
+- `expireDueRegistrations` for expiry work using the authoritative clock;
 - `renameHandle`, `createOrganization`, `setMembership`, `createAutomated`,
   `transferOperator`, `deleteAccount`, `fenceOperator`, `reduceConsent`,
   `revokeSessions` and `resumeOperation`;
 - `reduceClientScopes` and `resumeClientReduction` for bounded client reductions;
-- `openOperatorSession` for immediate native Access approval and Auth issuance;
-- `handler(Request): Promise<Response>`, which adds strict `POST /signup` with
-  `{ key, handle, email, password, turnstile_token }`. It verifies each token with
-  Cloudflare Siteverify before registration work and delegates other routes to the
-  guarded Auth handler.
+- `authorizeOperatorOpening` for a replayable native Access opening receipt;
+- `openOperatorSession` for immediate composition of that workflow and Auth issuance;
+- `handler(Request): Promise<Response>`, which adds `GET /registration-page` for
+  current viewer state, native registration requirements and available actions,
+  plus strict `POST /signup` with `{ key, handle, email, password, turnstile_token }`.
+  The read is an observation only; the write remains authoritative. It verifies each
+  token with Cloudflare Siteverify before registration work and delegates other routes
+  to the guarded Auth handler. The handler also serves `POST /account-operations/approve`
+  and `/account-operations/execute` when `AuthHostOptions.accountOperations`
+  supplies the kernel `approve`, `resolveForCaller` and `admitGroup` ports (see
+  "Public HTTP contract"); without them both routes answer 503
+  `account_operation_denied`.
+
+Sign-up validates the case-folded handle against
+`^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$` before staging or calling Access: 3–64 ASCII
+characters, letters or digits at both ends, and letters, digits, `_` or `-` inside.
+Whitespace is refused without trimming. Both the workflow entry point and `/signup`
+use the same Auth constant; a source-parity test keeps it equal to Access without a
+runtime kernel import. Access owns reserved-name refusals and its audited governance
+exception. Protected handle reservations pass the freshly resolved workflow context
+to Access; public sign-up supplies none. Expected old handles retain lookup validation.
+The page read returns password bounds from Better Auth's native password configuration;
+the signup endpoint and credential writer use that same configuration.
+
+Registration returns native 201 with exactly `{ accountId }` after begin/install/activate, without a session.
+Its public projection accepts nonempty opaque IDs of at most 128 UTF-16 units: native Access's
+`registrationTarget(key)` uses `derivedId` in Kernel's route producer (a routed UUID), while historical callback
+hosts are supported only within this explicit allowance, not assumed to generate UUIDs. Unsupported targets fail
+before staging/reservation; an invalid historical completed echo returns uncertain 503, never not-applied.
+Compact success costs `16 + 6 * 128 = 784` UTF-8 bytes including punctuation and worst-case escaping.
+Exact compact errors cost at most 31 bytes: 400 `registration_denied` for request/verification refusal,
+409 `handle_unavailable` or `registration_denied` from RegistrationFailure, and 503 `registration_denied`
+for dependency/ambiguous execution. There is no mounted workflow 429 variant. No diagnostic fields are public.
+The browser spends one five-second lifetime on fetch plus bounded streamed body admission before decoding/parsing.
+Only an exact admitted 201 starts its original attempt's one separate existing sign-in; malformed or lost output
+retains immutable exact-key recovery with fresh verification. No receiving probe or automatic resend is added.
+Native and browser acceptance of this projection remain integration qualifications; local fixtures alone do not prove them.
 
 Production uses `await createAuthHost(options)`, exported from `src/index.ts` with
 `AuthHostOptions` and `AuthHostConfigurationError`. Supply the migrated Auth
@@ -489,6 +1108,215 @@ leaves an existing `login` client unchanged. Repeated or concurrent starts
 register it once. `createAuthService` does not register it. SIGINT/SIGTERM stop
 DBOS before closing the product pool and any injected `systemDatabasePool`.
 
+Before resolving, `host.start()` also registers the first-party client
+`rezics-auth-account-operations` through trusted `registerClient` in
+`create-or-match` mode. `@rezics/auth-contract` exports its nonsecret
+`AUTH_PAGE_OPERATION_CLIENT_ID` and readonly `AUTH_PAGE_OPERATION_SCOPES`:
+`organization: ['organization:create']` and `delete: ['account:delete']`.
+Its ceiling is exactly their deduplicated union. An incompatible existing party
+or scope set fails startup with `AuthHostConfigurationError`, code
+`operation-client`, preserving the registry and native reduction fences.
+
+The existing `POST /signin` (`email`, `password`, `client_id`, `scope`) and
+`POST /signin/passkey` (`response`, `client_id`, `scope`, after its options ceremony)
+accept one selected fixed profile after real authentication. Their sessions and
+live proof tokens retain that exact client and scope. This registration supplies
+no grant, managed-account deletion or security-setting authority, and never enables
+cookie sign-in as the confidential `rezics-website` client.
+Web owns the step-up consumer: retain the initiating account, exact pending operation
+key and body, verify the returned account, and require normal confirmation plus
+fresh caller-bound native approval. `return_to` is navigation only; it selects
+neither client nor scopes. The native organizations platform gate remains mandatory.
+
+Account management uses the separate native first-party client
+`rezics-auth-account-management`, registered by the same trusted create-or-match
+path. Its exact registration ceiling is `account:update`, `organization:membership`
+and `account:manage`. `AUTH_MANAGEMENT_SCOPES` and `managementOperationProfile`
+publish the selected live profiles: rename requests only `account:update`, membership
+only `organization:membership`, and transfer/transfer acceptance only `account:manage`.
+Native authentication materializes current consent; registration and navigation grant
+no permissions. The fixed organization/delete client and ordinary login are unchanged.
+
+`POST /account-management/profile` accepts only `{accountId}` selecting the current human. Trusted
+`readRenameAccountProfile` binds Kernel `access/account-profile-source.ts` to `readEditableAccountProfile`, with the
+same permission formula as `GET /v1/accounts/{accountId}/profile`. Auth signs live proof; account/profile equality
+alone never authorizes disclosure. The closed response is `{profile:{id,kind:'actor',handle:string|null}}`, including
+handleless accounts. Failed bindings, authority or reads disclose no profile. Authentication, scope and native
+account:update admission remain unchanged; request/proof/cache rules below cover both routes.
+
+Decision: rename-page uses public `RENAME_PAGE_MAX_RESPONSE_BYTES`, apart from scope catalogues.
+SessionProof permits opaque securityId1024; excess is unavailable. The bound counts syntax, two escaped IDs, nullable
+ASCII handle64, exact client/scope, safe epoch/time,
+one pwd/pop and eight rename/account:update entries with UUID36 resource IDs and signed safe routes. Retained
+actions force both ID copies to UUID36; the bound takes the larger case. Bytes precede fatal UTF-8/JSON parsing
+within five seconds including body; common `/session` uses `AUTH_SECURITY_SCOPE_CONFIGURATION` separately.
+Native proof revalidation and its three-second deadline remain.
+
+Rename-page accepts only `{}`. Without the exact management profile it returns only management-auth-required plus
+continuation. `readRenameAccountPage` composes private profile and `readManagedAuthActions`: matching rename
+advice enables review, empty advice refuses, dependency loss is unavailable. Failed profile/proof/floor discloses no
+identity or reason; action loss may retain an admitted profile. Both require same-issuer Origin, JSON, no query/bearer, revalidated human cookie proof and private/no-store. Stale review is allowed; approval
+requires freshness. Cost: exact profile read, full-key current-account seek, bounded self action advice (one candidate,
+before/final snapshots, one Access formula), eight closed source entries/matches; no inventory or availability lookup.
+
+Decision: rename and organization share `account-operation-response-bounds.ts`. Approval is
+`{ reference, expiresAt }`: opaque ASCII base64url body + dot + MAC43, capped at 4,096 units by native unseal/execute.
+Usable canonical ISO expiry is at most 27 ASCII units; JSON costs
+`31 + 4096 + 27 = 4154` bytes. Success/replay is exactly `{ accountId }`, nonempty and at most 4,096 UTF-16
+units: `16 + 6 × 4096 = 24592` bytes with worst-case escaping. Invalid output or mismatched rename
+ID returns `{ error: "unavailable" }`/503, never invented not-applied. Browser custody binds organization
+acknowledgement without new result fields.
+
+Closed `{ error, effect_status: "not_applied" }` pairs: `account_operation_denied`/400,401,403,409,413,415,503;
+`step_up_required`/401; organization `platform_closed`/403. Plus `{ error: "unavailable" }`/503.
+Errors fit 69 bytes. Bytes are admitted before fatal UTF-8/JSON despite Content-Length.
+Malformed output cannot acknowledge; refusal/session equality cannot settle prior unknown.
+
+Each POST keeps five seconds through body, even for abort-ignoring I/O. Retirement sends no later command;
+abort cannot undo effects. Native freshness, scope, gate, approval, preparation, uniqueness and CAS/replay stay
+authoritative. Organization retries supported unavailable approval once; execution never automatically retries or
+renews approval. Entry/session/approval/execution/final-session costs five calls, six with approval retry; deliberate
+same-command retry costs four or five. Read Retry/restoration: one session read, zero commands. Acknowledgement
+survives final-read failure; private results need current original caller/descriptor. Cleanup
+preserves replacements. Rename keeps live reference/expiry, expectedHandle and recovery below. Fixtures grant no
+native/browser/growth pass.
+Review costs session GET + rename-page POST: entry/return/read Retry cost two and send zero commands.
+Fresh acknowledged submit costs six; unknown four. Exact live-reference retry costs three while unknown or five
+with acknowledgement; expiry renewal adds one. Supported 409 uses the second pair as advice instead of readback.
+Step-up return needs same-account review and confirmation, with zero commands. Native/browser acceptance and integration remain pending.
+
+`apps/auth/src/management-operations.ts` exports the closed `ManagementOperation`,
+`loadManagementSession()`, `managementOperationProfile(kind)` and
+`executeManagementOperation({ operationKey, operation, accountId })`. Here `accountId`
+is the initiating human, not necessarily the managed subject. Both existing operation
+routes accept this optional comparison field. When supplied, the host compares the
+native fresh human's account, client and exact operation profile before obtaining an
+Access token through `accessTokenForProof`; no browser proof or bearer is accepted.
+Existing native approval resolution and workflow authorization still decide authority.
+Transfer acceptance is approve-only: its complete result contains the real `reference`
+and `expiresAt`, to be used as the source transfer's `acceptance`. It never executes.
+Other complete results contain the native subject `accountId`. Refusal, step-up,
+unavailable dependencies and uncertain execution are distinct typed outcomes.
+
+Page owners supply the forms for `/account/rename`, `/organizations/members` and
+`/operators/transfer`; the Auth page server and production triggers dispatch these
+paths. On explicit submit, retain one immutable key and descriptor. If step-up is
+needed, `storePendingManagementOperationStepUp(input)` and
+`managementOperationStepUpUrl(operation.kind)` save and select the exact continuation.
+Password/passkey login checks the returned native human and profile, rechecks the
+saved body/key, and returns only to that kind's fixed route. Return does not approve
+or execute. The page reads `pendingManagementOperationStepUpState()`, restores the
+descriptor and key, resets its confirmation, and calls `executeManagementOperation`
+only on a second explicit submit. It must reject a mismatched continuation using
+`pendingManagementOperationMatches`, and clear it only on completion or explicit
+cancellation. Awaiting, substituted or malformed continuations cannot execute.
+Stale sessions require another step-up; approval expiry and current native checks
+still apply. An unknown execution result is not final workflow/readback evidence.
+
+`POST /account-management/operators/transfer-review` accepts exactly `{ kind: "readiness" }`,
+`{ kind: "source", subjectAccountId }` or `{ kind: "destination", request }`. Ordinary sessions get only transfer-profile advice. Source uses `readOperatorTransferState` for exact tuple/version and action advice.
+Decision: destination checks transfer-acceptance's `account:manage` action/resource, treating the source tuple as file
+data without reading its private relation. Zero approvals, execution, receipt lookups or command locks.
+
+Readiness checks one session/profile proof. Selected review obtains a server-only Access token, authenticates once
+and rechecks that human/profile after I/O within ten seconds. Source uses two bounded snapshots
+(subject/operator homes/accounts, slot/version, actor floor/assignment), one released preparation and final action
+check. Destination uses two actor/destination snapshots (homes/accounts, actor floor, at most one principal/assignment),
+one released preparation and final check. No lists, fanout, writes, pool preflight or publication.
+
+Decision: `private, no-store` replies publish `@rezics/auth-contract` operator-page bounds: routed lowercase UUID36
+and canonical bigint decimal `0..9223372036854775807`, kept as strings.
+Provenance: Kernel `operator-transfer-page-source.ts`, `management-source.ts`, `management-source-operator.sql`
+(`operator_relation_version::text`), and `access.account.operator_relation_version bigint`. Source's empty-field JSON adds `3 × 36 + 19`; destination adds 36. Fixed viewers/continuation, stages, action flags and syntax are counted;
+variable alphabets need no escaping. Errors: max(refused/refused, ready/unavailable).
+Port validates before serialization; invalid IDs/versions, extra fields or wrong selections become unavailable. Opening shares fields. Browser limits bytes before decoding/parsing in five seconds; zero added native calls. Native/browser/integration checks are pending.
+
+`POST /account-management/operators/relation` is the private native source for the
+existing transfer page. Its exact JSON body is `{ subjectAccountId: string }`;
+success contains only `{ previous: { operatorAccountId, subjectAccountId,
+reservationId }, expectedVersion: string }`. The reservation, operator and decimal
+version come from the current native Account and nonterminal operator slot. Public
+profiles and caller tuples never supply this evidence. No accounts are enumerated.
+The source releases its first snapshot before Access prepares foreign authority,
+then rechecks the exact source tuple/version and ordinary `account:manage` on the
+actual operator in a final snapshot at the same native T. It also checks current
+actor/floor, principal assignment, lifecycle and partition availability. Scope alone
+does not authorize disclosure.
+
+The default host mounts this read through the optional
+`AccountOperationAccess.readOperatorTransferState` binding, or the independent
+`AuthHostOptions.accountManagementReads` port. Supply the production
+`createAccountManagementReadAccess({ pool, access })` from Kernel
+`access/management-source.ts` as `accountManagementReads`, or copy its exact
+`readOperatorTransferState` method into existing approval/gate ports. This leaves
+the frozen native account-workflow composition shape and required callers intact.
+Existing callers may omit the additive binding; the endpoint then answers 503
+`account_management_read_unavailable`, never an empty successful result. The host
+retains its management-client registration. It uses the real fresh-human proof and
+exact transfer profile, obtains the Access bearer through `accessTokenForProof`,
+and revalidates that same Auth session/account/floor/consent after the source read.
+Tokens remain inside the trusted proof scope. The route requires POST, current
+Origin, JSON, no query or bearer header, and the existing CSRF boundary. Responses
+are `private, no-store`. Closed failures use 400 (shape/transport), 401 (session or
+`step_up_required`), 403 (refusal or missing relation), 409 (changed source),
+413 (bounded body), or 503 (unavailable source/binding). Refusals disclose no tuple.
+The result supplies current readback only: destination acceptance and source
+approval/execute keep their original immutable descriptor, operation key and
+explicit confirmation requirements.
+
+Native workflow requests resolve the complete original creation request before checking
+out the copy writer's SDK transaction. `workflow-request-parties.ts` uses the shared
+`creation-party-context.ts` `readApprovedCreationContext` helper and the exact
+`@rezics/auth-contract` `NativeCreationContextRequest` and `NativeCreationContextResult`
+through the native `readNativeCreationContext({ approvalReference, operationKey, operation })`
+function. The original resolver checks the full operation, digest and key with its unchanged
+current-T formula. Auth compares the available result's original reference, key, digest,
+command prefix, operation kind and target client against that request and its resolved
+approval binding. Historical, opening or absent provenance remains unavailable; neither
+caller JSON nor an actor-only callback supplies it.
+
+Only the frozen literal attribution is staged for the transaction: `actorAccountId`,
+`actingHumanId`, `operatorAccountId`, `principalAccountId`, authenticated `sourceClientId`,
+the original approval/key/digest/command binding and the native operation projection.
+Actor and human are independent; the source client is separate from the operation's
+target client. Explicit nulls mean the source proved that role inapplicable. Current native
+`copyActors` supplies the existing human/initiator/delegate roles and actor version unchanged;
+these must agree with the genuine source. No source read or foreign pool checkout runs while
+the SDK client is held. The preselected organization target and existing digest command
+prefix are resolved before checkout too. The snapshot conveys attribution, never cached
+allow: approval, execution, protected steps and disclosure retain their current authority.
+This is a consumer boundary, not producer, custody, native or participant completion.
+
+The closed business-variant projection records subject, both transfer operators,
+membership target, original target client and stage separately. Organization IDs use
+the operation's existing preselected native key; automated subjects come from the
+locked original stage. It captures target/source client owners under the existing
+client locks. All original accounts and both clients pass the actual current erasure
+guards before serialization, on the transaction that creates the request and SDK
+handoff together. Any source, fence or SDK failure rolls both back. Workflow IDs,
+business digests, operation keys and enqueue input shapes keep their original ABI.
+
+`request_party_version` and `request_context_version` pin this projection. Indexed
+actor, principal and source-client columns add the missing provenance. The versioned
+native inventory below binds their erasure seeks to the original producer. Every original role and version is immutable on replay,
+even in the creation transaction; current relations never refill a request. Existing
+rows retain version zero and unknown pending provenance. Request scope reads only
+original typed columns. A request locator does not establish SDK copy coverage.
+The copy retirement transaction minimizes a private request through the exact native
+registration closure or consumed non-stage result in `nativeRequestTerminal`, while
+its existing copy work and roles still anchor SDK history cleanup. The SDK deletion
+trigger uses the same native closure. Terminal SDK status or `terminal_at` alone
+cannot retire the request. Missing original result consumption remains pending.
+
+The two request producers are `workflows.ts`'s `runOperation` and
+`reduceClientScopes`; the atomic source callback is in `erasure-copy.ts`. The Access
+producer belongs to `services/kernel/src/access/native-account-bindings.ts`; this
+slice leaves that producer and stage/provisioning composition to their owners.
+`test/workflow-request-parties.test.ts` includes the deferred real-native producer
+scenario and focused closed-projection cases. It supplies no fabricated context to
+the native positive path and makes no final participant or native-suite completion
+claim.
+
 The native DBOS system schema is `auth_dbos` in the **same Auth database**.
 `systemDatabaseUrl` defaults to the product pool URL; an override or injected
 system pool must name that same database. The SDK creates and migrates its schema;
@@ -503,6 +1331,12 @@ Auth DBOS launch. The service-local `auth-maintenance` queue has concurrency one
 across replicas; native scheduling, durable steps, recovery and history remain in
 Auth. Every tick invokes one session-expiry batch (≤1000), one retention/CAS-guarded
 signing retirement (≤1 hot key), and one verification-expiry batch (≤1000).
+When due consent erasures exist, it also admits at most 100 erased accounts;
+each admitted account's complete consent range is processed without a client cap.
+Consent remains until five minutes and ten seconds after Auth deletes the account, covering the 300-second access-token lifetime plus margin.
+The cleanup only removes consent for accounts whose Auth user row is gone and
+takes each affected client's `auth-client:<client_id>` lock before deleting its
+row. Due work remains for later ticks; live-account consent is retained.
 Only counts enter step history. Backlog waits for another scheduled attempt;
 automatic schedule backfill is disabled, and ticks perform no bootstrap upgrade
 or all-account traversal. Kernel receives no Auth maintenance RPC, queue entries,
@@ -594,6 +1428,237 @@ Final deployment approval resolution and the original lifecycle outcome driver
 remain application integration work, including binding state suspension to Access
 policy. `fenceOperator` provides the durable fencing fanout itself.
 
+## Operated actor session opening transport
+
+Decision: The approval response is the closed `{ reference, expiresAt }` native shape, with UTF-8 allowance
+`ACCOUNT_OPERATION_APPROVAL_MAX_RESPONSE_BYTES = JSON.stringify({ reference: '', expiresAt: '' }).length + 4096 + 27`.
+The reference is the admitted ASCII base64url payload and SHA-256 MAC; expiry is canonical ISO time. Opening,
+rename and deletion approvals with an incompatible projection return unavailable before command execution.
+
+The single issuance response remains Auth's native `SessionProof` body and its original response headers. Its JSON
+allowance is `securityResponseByteBudgets(min(C, openingProfile.scope.length)).session`, where C is the native
+`securityScopeLimit(siteActions.keys())` used to admit the deployed Auth catalogue and `openingProfile` is the exact
+`managementOperationProfile('opening')`. The formula includes JSON punctuation and the native identifier, scope,
+number and closed `amr` maxima. IDs are opaque SessionProof IDs (up to 1,024 UTF-16 units), separate from the
+selected UUIDs; the scope count is capped by both C and the requested profile. Auth consumes the approval receipt
+once and returns only its receipt-bound scopes. Genuine `Set-Cookie` values, including cleanup values, pass through
+unchanged; cookies and proof never enter workflow results or DBOS. Native issuance errors use `step_up_required`
+with `401/not_applied` or `account_operation_denied` with a closed not-applied status; `503/unknown` remains
+ambiguous after dispatch.
+
+Decision: opening metadata has its own public C-independent byte allowance in
+`operator-page-response-bounds.ts` (exported from `@rezics/auth-contract`), derived from this closed
+projection and Kernel's `operator-opening-page-source.ts`. It includes every stage variant and the largest current
+body: fixed JSON syntax/literals plus S(1024) for the opaque native SessionProof viewer ID, three ASCII UUID36 IDs
+and canonical nonnegative PostgreSQL bigint19. `OPERATOR_OPENING_PAGE_MAX_RESPONSE_BYTES` includes JSON escaping and
+UTF-8; it is independent of transfer's envelope. Selected IDs reuse `isOperatorPageId`/`OPERATOR_PAGE_ID_BYTES` and
+relation versions reuse `isOperatorPageVersion`; viewer IDs retain the separate native `securityId` policy.
+The producer emits request-selected IDs and closed profile/action fields, and refuses invalid native viewer/relation
+projection before serialization. This prevents oversized imported identifiers or versions entering advice.
+The installed metadata receiver uses `readJsonBounded` through its existing five-second BFF/read lifetime, including
+stalled headers/body and retirement; the native service retains its ten-second deadline. A refused metadata retry
+keeps selection/key and sends no approval or issuance. Each explicit session readback costs one GET and no metadata,
+approval, cookie restoration or automatic retry. Installed stream/maxima/return tests cover this seam; broader native
+and browser qualification remains with the controller.
+
+`/automated/open` is an additive Auth page and production fetch trigger. It uses
+the existing `rezics-auth-account-management` registration with the exact
+`opening: ['account:manage']` operation profile. The registration ceiling remains
+the same three scopes. Ordinary sign-in, organization/deletion profiles, deployment
+availability contracts and the shared Web AccountMenu are unchanged.
+
+The closed protocol is:
+
+```ts
+// POST /account-operations/approve
+{
+  accountId: initiatingHumanId,
+  operationKey: originalKey,
+  operation: { kind: 'opening', operatorAccountId, subjectAccountId },
+}
+// -> { reference, expiresAt }
+// POST /operator-sessions/open: the exact same body plus reference
+// -> actual native SessionProof with genuine Set-Cookie headers
+// { account_id, client_id, scope, authn_epoch, auth_time, amr: ['operator'] }
+```
+
+Both transports require current fresh human proof and the exact selected profile.
+The browser reuses the shared management approval stage, including its immutable
+snapshot and exact pending/session checks; only issuance and its result parser are separate.
+Approval uses native Access approval; opening resolves the reference for that
+current caller before invoking only `createAccountWorkflows.openOperatorSession`.
+That existing workflow rechecks current operator authority, floors, consent and the
+exact session-purpose opening, then Auth consumes it once. It returns Auth's HTTP
+response verbatim, including native session cleanup on failed establishment. No
+session, cookie or proof is a workflow result or DBOS payload. Missing host Access
+composition answers 503. Generic execution explicitly rejects `opening` in both
+the host and the browser helper.
+
+The browser bounds approval receiving with the closed approval allowance above, then bounds issuance from the same
+trusted native catalogue C and exact opening profile. Each POST has one five-second receiver lifetime through
+headers and body. The native response body is parsed only after bounded UTF-8 receiving; native `Set-Cookie` values
+are forwarded before projection and remain verbatim even when output is malformed. The browser acknowledges only
+the actual closed operator proof for the original subject, exact opening client/scope profile and operator
+authentication. Unsupported, malformed or over-budget output remains possibly completed and is never replayed.
+Current `/session` readback is a separate observation and cannot settle this issuance.
+
+Selection is private and explicit. An Origin-protected server function reads the
+delivered `/account-management/operators/relation` native point source using the
+current fresh human and exact opening profile. Missing native source disables
+confirmation. Confirmation can name the actual subject and operator IDs from that
+authorized tuple without inventing labels or operator kind. If the existing native
+`/v1/accounts/{id}/management` projection also permits label disclosure, its exact
+subject, operator, reservation and version must match before displaying its names.
+The opening profile does not gain `account:read` for labels. URL roles or assumed
+equality to the human supply no authority. Contradictory tuples disable confirmation. The
+page explains the browser identity switch and names only the actual authorized
+subject and operator. Step-up returns only to `/automated/open`; navigation and
+reauthentication never issue a session. Confirmation is required again on return.
+
+Immediately before the single issuance attempt the shared private pending record
+is marked submitted. It contains only the original descriptor, human, key and
+continuation phase, never the approval or private metadata. The approval reference
+exists only in the ephemeral request stack. A lost or ambiguous response is UNKNOWN
+and is never automatically replayed. Readback uses native `/session` alone and
+displays a matching subject with operator authentication as the actual current
+session, without claiming which request established it. It neither refreshes
+cached metadata nor restores a cached human session. Another opening requires a
+deliberate new key, fresh same-human sign-in, current metadata, new confirmation
+and native authorization. Automated proof is kept separate from the human-only
+management proof; displayed scopes are only the actual native receipt-bound scopes.
+
+Focused fixtures are `test/operator-session-transport.test.ts` and Auth page
+`tests/operator-session-opening-route.test.tsx`. This transport adds no native authority,
+credential writer, relation, permission evaluator or deployment proof.
+
+## Operated actor creation transport
+
+`/automated/new` is an additive Auth page and production fetch trigger. It does not
+change route-admission contracts, add a menu link or claim deployment availability.
+It uses the existing credentialless `createAccountWorkflows.createAutomated` path;
+there is no new registration writer, handle allocator, account kind or actor session.
+
+The actual Auth-host protocol is:
+
+```ts
+// POST /account-operations/approve
+{
+  accountId: initiatingHumanId,
+  operationKey: originalKey,
+  operation: {
+    kind: 'automated',
+    registrationId: '',
+    operationKey: originalKey,
+    operatorAccountId: selectedOperatorId,
+    handle: normalizedHandle,
+  },
+}
+// -> { reference, expiresAt }
+// POST /account-operations/execute: same body plus reference
+// -> { accountId } only, from the completed native workflow
+```
+
+Both calls require the same real fresh human and the exact existing separate
+`rezics-auth-account-management` client with `['account:manage']`. They use
+`withFreshHuman`, `accessTokenForProof` and native Access approval/caller resolution.
+Access checks current operator authority, including organization membership, floors,
+client/principal scopes and denials. Execute calls only
+`createAutomated({ key: originalKey, authorization: reference, operatorAccountId,
+handle })`. The native workflow creates the stage and supplies its registration ID;
+the browser can supply only the initial empty registration ID. Access's existing
+`creationBinding` verifies that stage against the original approved business request.
+Owner impersonation, browser bearer input, credentials and extra fields are refused.
+The native result projection accepts exactly `{ accountId }` with a UUID. Exact
+workflow replay returns the same projection. A pending or incompatible result, or
+an exception after `createAutomated` may have completed, returns HTTP 503
+`{ error: 'account_operation_unresolved' }` without `effect_status`; it cannot
+assert `not_applied` after a possible commit.
+
+The browser-safe DTO ceiling is derived from these producers. Access `seal` caps an
+opaque approval reference at 4,096 characters, the existing execute input admits
+the same maximum, and the producer serializes expiry with `Date.toISOString()`
+(24 ASCII bytes). The compact approval-success ceiling is
+`UTF8(JSON({ reference: '', expiresAt: '' })) + 6 × 4,096 + 24`; the execution
+acknowledgement ceiling is `UTF8(JSON({ accountId: '' })) + 36` for the native
+UUID. The execute request reader also admits
+`UTF8(JSON({ operation: { kind: 'automated', registrationId: '', operationKey: '', operatorAccountId: '', handle: '' }, operationKey: '', accountId: '', reference: '' })) + 6 × (4,096 + 2 × 128) + 2 × 36 + 64`; this includes the reference, both copies of the 128-character key, UUIDs and maximum normalized handle. The six-byte factor covers worst-case JSON escaping per UTF-16 unit without parsing or narrowing the opaque reference. Each response endpoint takes the maximum of its success form, exact `account_operation_denied/not_applied`, `platform_closed/not_applied` and `step_up_required/not_applied` bodies, and execution's unresolved body. Known refusal envelopes are closed status/body pairs. Once execution may have started, a transport exception or invalid native projection remains unresolved; it never becomes a new refusal guarantee.
+
+The shared management discriminator currently omits `automated`. The exact additive
+alias needed is `AUTH_MANAGEMENT_SCOPES.automated = ['account:manage']`, together with
+`ManagementOperation`/`ManagementOperationKind` support for the native descriptor
+above. The local typed adapters use the already installed `transfer` profile, which
+has exactly those scopes. Shared active constants and the shared step-up engine are
+unchanged. Explicit inline native sign-in selects only that profile and materializes
+existing current consent; it never approves or creates. Missing registration or
+native ports refuse availability rather than fabricating approval.
+
+The same-origin `POST /account-management/automated/operator` now projects one
+closed native page envelope. Its sole body field is `operatorAccountId`, an exact
+UUID selection or null for safe caller/readiness bootstrap. It returns independently
+admitted `viewer.accountId`, `readiness`, `operator`, `handleRules` and `action`.
+The supported readiness/action pairs are authentication-needed/authenticate,
+select-operator/select-operator, review/confirm and refused/none. Only review may
+contain operator identity. The creation handle contract is lowercase, 3–64 ASCII
+letters/digits/underscores/hyphens, with an alphanumeric first and last character.
+
+Ordinary or old sessions observe only their own active unoperated-human context
+and advice to use the installed transfer management profile. Their selected target
+is never read. Exact current management sessions still require both native current
+`account:manage` decisions before returning a selected identity. Missing, inactive,
+fenced, operated, unsupported and unmanageable selections share generic refusal;
+dependency errors and changing observations remain unavailable. Null optional
+labels stay null. No approval reference, creation context, reservation or command
+is acquired, and no proof is consumed. Submit retains its independent authorization.
+The browser loader consumes this envelope without a browser profile prerequisite,
+closes its viewer/selection/action binding and rechecks the initiating session.
+
+Whole-call static bound: Auth admits one current human session; the native adapter
+signs one proof and authenticates once through the existing bounded authentication
+producer. Two native-time passes each mint and release one read time. Safe advice
+performs four human point snapshots total, each one partition-key read and one
+account-key read (eight point queries). Selected review adds four operator snapshots
+(eight further point queries), at most two installed `account:manage` preparations
+and two formula checks. Each preparation/check inherits Access's finite subject,
+assignment and grant bounds; no inventory, directory, extra action or runtime price
+dispatch is added. Auth finally revalidates the same proof once, with all work inside
+the original three-second deadline. Sources hold no connection across preparation.
+The factory exposes both the existing exact operator reader and the page reader;
+Auth host binds the page reader in production and rejects a missing port.
+
+Decision: a null selection bootstraps only admitted caller/readiness advice; an
+ordinary session's non-null selection never causes an operator point read.
+
+Decision: the completed result returns to supported Security navigation; a missing
+operator label uses localized text with the exact ID displayed separately.
+
+The form initializes from the native page envelope, including ordinary-session
+advice before any privileged selected-operator read. It validates fields in place,
+freezes the initiating human, selected ID and normalized handle for inline sign-in,
+then observes that exact selected page again. Credentials are transient and return
+requires a new explicit confirmation. Session replacement retires stale controls;
+submitted work remains in storage. Refusal after an uncertain dispatch cannot prove
+non-commit and keeps unknown recovery on the original key. Pending feedback is
+announced, and only a closed committed result exposes the Security return link.
+
+The page explicitly confirms the exact operator ID, handle and initiating human.
+It retains one immutable key and business body in session storage across lost
+responses, reload and inline step-up. Reauthentication clears its transient password
+and resets confirmation; only a second explicit submit may create. Each explicit
+retry obtains current native approval for the unchanged binding. Navigation and
+restoration have no native effect. A lost response stays uncertain; a closed native
+`{ accountId }` is creation evidence, not a claim about a later public identity read.
+No optional credential input is exposed, so no actor password enters page storage,
+URLs, logs or a second staging path. All new actual workflow copies retain the
+existing native owners; rollout, identity publication and erasure debt stay with
+those owners.
+
+`test/automated-account-transport.test.ts` reuses the existing native account-binding
+fixture and names approved creation, exact replay, foreign denial, source/key/operator
+substitution, stale-profile and incompatible native-result cases.
+`apps/auth/test/automated-account-create.test.ts` and the focused
+`automated-account-create` stories cover confirmation, response loss, unavailable
+identity, step-up and pending-result refusal. Story fixtures are presentation evidence.
+
 ## Account operation ports and ordering
 
 The optional operation ports deny their feature when absent. They use the native
@@ -622,8 +1687,9 @@ can install the native management defaults as a separate command. Transfer
 reserves the new operator, changes the subject relation (invalidating old relation
 approvals), revokes Auth sessions, terminalizes and releases the old hold. It
 never copies resource grants. Deletion commits the authorized Access tombstone
-and fence before Auth erasure, then retires/releases responsibility and reserves
-the former handle under the existing redirect policy. Native Access commands
+and fence before Auth erasure, then retires/releases responsibility and calls the
+deletion handle step to permanently retire the account's current handle without
+forwarding or reassignment. Native Access commands
 continue to enforce holds, operator eligibility and last-owner rules.
 
 `fenceOperator` first commits the operator fence, then enumerates native pages of
@@ -632,13 +1698,16 @@ is a separate DBOS step. It returns only after all pages finish. Failures preser
 committed fences and successful step history. The host exposes no fence-clearing
 compensation. Fresh recovery remains bound to the resulting floor and receipt.
 
-`openOperatorSession` obtains `authorizeOpening` using the authenticated context
-and calls the existing `internal.openAutomatedSession`. Auth's trusted
+`authorizeOperatorOpening` obtains `authorizeOpening` using the authenticated
+context and returns its opening receipt without consuming it. A current caller
+replaying the same key, with the same or a fresh approval, gets the stored receipt
+without repeating effects. `openOperatorSession` composes that workflow with the
+existing `internal.openAutomatedSession`. Auth's trusted
 `consumeAuthorization` binding must call actual `consumeOpening`; an adapter
 cannot manufacture a consumed receipt. Cookies, headers and Auth's response are
 never workflow arguments or results. The one-use native opening deliberately
-fails closed if an issuance acknowledgement is lost; the caller requests a fresh
-opening rather than replaying a session cookie.
+fails closed at issuance if its acknowledgement is lost. Replaying the opening
+workflow still returns its original receipt; a second issuance is denied.
 
 Consent reduction commits the native account fence before Auth's
 `internal.reduceConsent` transaction records its barrier and shrinks consent.
@@ -728,73 +1797,181 @@ and signing rotation checks.
 
 ## Cost
 
-Derived from `src/`, `db/migrations/`, `db/schema.sql` and installed Better Auth
-1.7.12: `db/internal-adapter.mjs`, `db/with-hooks.mjs`, session/sign-in/sign-out/password
-routes, password utilities, core adapter factory and PostgreSQL Kysely adapter.
-The owner schema, indexed verification, bounded session and trusted-establishment
-plugins run on every route. The JWT and website OAuth provider plugins serve only
-the website protocol routes; their costs are listed under "Website client".
-The dependencies are now Better Auth 1.8.0-beta.2; the growth tests below run on it.
-A counts accounts (`user`, at most one credential `account` each), S retained sessions,
-s one account's sessions, K signing keys, C clients; D, P, J, E, O, H, V and T count
-consents, public credentials, assertion JTIs, effect receipts, openings, recovery
-bindings, verifications and provisioning receipts (D ≤ A × C).
-R counts rows examined, B shared-block accesses, Q client SQL statements including
-BEGIN/COMMIT and advisory locks; FK probes count in R/B, not extra client statements.
-L is the sum of log(2 + cardinality) over touched tables: a B-tree probe is constant
-in rows and logarithmic in blocks; fixed index/constraint writes cost O(L) blocks.
-Bounds assume ordinary vacuum maintenance, fixed row/crypto sizes and no unbounded
-lock wait; these describe access paths, not timings or forced planner choices.
-Scopes are capped at 100 entries of 128 characters and HTTP bodies at 16 KiB.
-Each owner/session/credential projection is fixed size; bulk projections are counted.
-Trusted Access authorization/read/invalidation calls are constant per anchored effect;
-their backing-store costs are outside this Auth derivation, as is workflow orchestration.
-`proof` means native session/user reads, current Access evidence, client/reduction
-checks and optional consent (3–4 SQL statements); native joins become separate SELECTs
-because `advanced.database.joins` is unset, with cookie/secondary caches disabled.
-PK names below are schema constraint/index names; credential inserts also use
-`account_pkey`, `account_userId_idx`, `credential_owner_unique` and the user FK;
-session inserts use `session_pkey`, `session_token_key`, `session_userId_idx` and
-user/client FK probes, each at most one row through `user_pkey`/`auth_client_pkey`.
-Q counts successful paths after initialization; rejection/cleanup remains constant
-in statements, with recovery identifier/expiry cleanup retaining its row bounds.
-Unqualified growth check titles refer to `test/growth-sessions.test.ts`; other rows
-name their test files. Touches specifies independent growth axes and fixed inputs.
+The cost evidence below was recorded with Better Auth 1.8.0-beta.2 and DBOS
+5.4.6-preview; current dependency pins are in `package.json`. Each row identifies
+its native entry point; helper checks do not stand in for extra handler or durable
+wrapper I/O. Startup/schema migration, bootstrap and one-time legacy session
+upgrade discovery/trimming are excluded. Unimplemented account-erasure participant
+and terminal workflow steps have no runtime row.
 
-| Operation                       | Touches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Bound                                                                                                                                                                                                                                                                                                                                                                                                | Growth check                                                                                                                                          |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Session verification            | Cookie signature yields token: `session_token_key` SELECT → ≤1 session, `user_pkey` SELECT → ≤1 owner; `proof` adds client/reduction/consent below. Expiry is local; presented expired token adds snapshot SELECT + DELETE by token (≤1 row each). Seven-day lifetime, one-day native update age; `disableRefresh:true` suppresses ordinary refresh, while establishment-failure native lookup can UPDATE one session by token. Grow S (including expired rows), A, C, D; fix token, owner, scopes and expiry/refresh branch.                                                                                                                                                                                                                                                                                                                                                                                                    | R=O(1), B=O(log S+log A+log C+log D); Q=2 native lookup, 3–4 proof, 4 expired lookup/deletion, 3 native refresh (all constant).                                                                                                                                                                                                                                                                      | `Session verification stays within its bound as S grows`                                                                                              |
-| Access token issuance           | `/token`: native session/user point reads identify the client, then a shared client barrier, exact coverage/reduction checks, `proof` and client lookup. First-party issuance materializes one consent pair. Signing rechecks the singleton generation and seeks at most three live keys; no archive or token-table scan. No refresh-token issuance/rotation endpoint or plugin; `account.refreshToken` is unused. Grow unrelated S and archived K; fix live session, owner, claims, client/scopes and request count.                                                                                                                                                                                                                                                                                                                                                                                                            | R=O(1), B=O(L), Q=O(1), including barrier locks and signer refresh. Imported-key/claims work and JWKS slots are bounded; refresh-token rotation Q=0.                                                                                                                                                                                                                                                 | `Access token issuance stays within its bound as S grows`                                                                                             |
-| Live-proof token                | `internal.accessTokenForProof` accepts this instance's immutable native human proof only inside its live `consumeAuthorization` callback (private O(1) identity/scope check; copies/foreign/stale fail before I/O). Shared native client barrier; one source-session PK read, one current Access human/state/fence/epoch point read, exact client/coverage/reduction/consent chain and materialization, ≤3 signer slots. Same `/token` API claims/ES256/JWKS, no delegation; expiry=min(300s, source lifetime). JWT stays in the trusted adapter call and enters installed Access via ordinary authentication; no HTTP route, DBOS/persisted token or effect grant. Grow unrelated accounts and other owners' native histories at 1x/8x/64x within cap64; fix selected neighborhood and one proof/sign operation.                                                                                                                | R=N+U*t+M; constant statements/rows, indexed blocks O(log R). No session, verification or key-history scan. Bounded claims/ES256 CPU; no wall-clock growth gate.                                                                                                                                                                                                                                     | `test/growth-session-proof-capability.test.ts`: "checkGrowth live proof signing uses constant native evidence at 1x/8x/64x; copies reject before I/O" |
-| Scheduled maintenance           | One native Auth DBOS schedule/queue in `auth_dbos`, inside the Auth process/database. Each purpose step invokes one indexed primitive: `session_expiry` admission ≤1000, exact singleton/live-slot signing retention CAS (≤3 live slots, ≤1 retired key), and `verification_expiry_idx` admission ≤2000 candidates/≤1000 deletes. No history-draining loop, archive scan, account enumeration or upgrade backfill. Unfinished steps recover natively; successful checkpoints replay their counts. Grow unrelated rows, expired sessions/verifications and archived signing history independently at 1x/8x/64x; measure one fixed admitted durable tick, including native wake/history overhead.                                                                                                                                                                                                                                  | R=N+U*t+M plus Auth operational rows. Per attempt ≤1000 changes per kind, O(B log R) indexed work and bounded statements/native records; registration is O(1). Total backlog cost follows removed changes across separate attempts.                                                                                                                                                                  | `auth-schedules.test.ts`, `growth-auth-schedules.test.ts`                                                                                             |
-| Signing keys and JWKS           | Singleton generation + exact current/next/retiring kid seeks; sign/JWKS recheck generation. Imported material is cached at most 30s, refreshing generation changes immediately. At most three native ES256 keys; five-minute access/ID maximum + 600s recent-session logout hint + 30s verifier cache + 60s clock allowance retain keys for 990s. Auth-only `internal.signing` status/stage/rotate/prune use generation CAS and typed `signing_rotation_pending`; occupied slots throttle rotation. Retiring GC deletes one exact hot key, keeping immutable kid/material in cold archive. Upgrade requires stopped old binaries, renames legacy history without iterating K, and refuses startup for 690s when history exists before exact-key adoption. Grow history and unrelated Auth rows at 1x/8x/64x; measure actual loading/signing/refreshed HTTP JWKS with native JOSE verification.                                   | Hot R=O(1), B=O(log R), Q=O(1), output/JOSE work ≤3 keys; no history iteration. Injection ≤3 exact identity seeks; rotation/GC change O(1) slot/generation rows (GC batch B=1).                                                                                                                                                                                                                      | `test/growth-signing-retention.test.ts`: "signing loading and refreshed JWKS stay bounded as retired history and unrelated Auth rows grow"            |
-| Native attempt rate limiter     | Installed Better Auth 1.8.0-beta.2 production native admission uses PostgreSQL customStorage.consume: one atomic upsert by auth_attempt_counter_pkey per charge, returning at most one row across service instances. Common 1x/8x/64x seed grows unrelated counter keys C, owners/credentials, clients with ready coverage, reductions, session/recovery history and expired verifications R; the subject's expired session neighborhood stays at its native cap of 64. Capture whole wrong-password (known/missing email), recovery-start and invalid-proof handlers through two fresh instances: three Origin rejections, twelve charges, shared 429 budgets, generic denials and unchanged epoch floor.                                                                                                                                                                                                                       | R=O(1), B=O(log C + log R); Q=59 and 28 examined rows: 15 atomic consumes (12 native request budgets and three per-account mail cooldown checks) plus 44 other handler statements. Six transaction controls separately. Each request budget charge uses one upsert and returns at most one row. Sign-in failure/success: Q=7/15.                                                                     | `growth-auth-rate.test.ts` (whole handler + native counter), `rate-limit-cost.test.ts`                                                                |
-| Password sign-in                | Email: `user_email_key` SELECT + `account_userId_idx`/`credential_owner_unique` SELECT, at most one owner/credential; ID: one credential-owner seek. Native password verification, shared client barrier and exact coverage/reduction/consent probes precede establishment and `proof`. Session INSERT locks the owner and reads/evicts at most cap=64 oldest stored sessions, including expired rows. Grow unrelated A and S; fix owner, credential, client/scopes and own session neighborhood.                                                                                                                                                                                                                                                                                                                                                                                                                                | R=O(1+cap), B=O((1+cap)L), Q=O(1), cap=64; password work has fixed input size. Legacy owners must finish bounded upgrade pages before establishment.                                                                                                                                                                                                                                                 | `Password sign-in stays within its bound as A grows`                                                                                                  |
-| Public-key sign-in              | One `auth_public_key_pkey(account_id,kid)` SELECT, local JOSE verification, one `auth_key_assertion_pkey(account_id,jti)` INSERT + user FK. Establishment reads one owner, checks client coverage/reduction/consent under the shared barrier, INSERTs one session with the cap=64 owner lock/oldest-row eviction, then runs `proof`. Grow A, S, P, J; fix owner/kid, assertion size, client/scopes, own sessions and one fresh JTI per attempt.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | R=O(1+cap), B=O((1+cap)L), Q=O(1), cap=64; replay denial uses one key read and one conflicting INSERT. No assertion-history scan.                                                                                                                                                                                                                                                                    | `Public-key sign-in stays within its bound as J grows`                                                                                                |
-| Auth barrier proofs             | Native session/consent point reads or native verification lookup and exact recovery consumption; one immutable purpose/account/operation receipt insert and point resolution, credential/consent CAS, and existing bounded session revocation. Digest binds the exact transition; no account/history scans. All new owner references lead with account_id in the unique index for erasure. Expiry index admits B+1 keys (one hasMore peek), locks/deletes at most B≤1000, with no drain loop. One seed grows same-owner proof/consent/recovery history and unrelated owners at 1x/8x/64x; valid/invalid requests and expired batch stay fixed.                                                                                                                                                                                                                                                                                   | R=N+U*t+M plus Auth receipts: request rows/statements O(1), blocks O(log R); sweep rows O(1+B), blocks O((1+B)log R), Q=1. Varying the admitted batch measures linear cleanup; locked prefixes remain bounded. Scheduling remains separate; expiry already denies.                                                                                                                                   | `barrier-proofs.test.ts`, `growth-barrier-proofs.test.ts`                                                                                             |
-| Clients and consent             | Issuance retains fixed client/coverage/gate/pair probes under the shared barrier; begin takes its exclusive counterpart. Durable gate, operation PK and `auth_consent_client_owner` keyset admit P≤100 affected owners plus one lookahead. Each owner changes one floor/receipt/cursor; fenced cleanup selects/deletes at most 100 sessions once per receipt (at most 64 for upgraded owners); retained legacy rows fail proof. Terminal completion uses exact seeks; DBOS pages hold ≤64 owners. Deployment backfill/drain stays separate. Default PostgreSQL plans and shared `checkGrowth` independently grow unrelated accounts/consents, client/operation/receipt/session history and affected owners at 1x/8x/64x, P=8 fixed. Personal consent issuance is measured separately below.                                                                                                                                      | a=affected owners, P=min(100,a_remaining). Begin/completion O(log R); page O(P log R), O(P) actual changes. Fixed P: constant rows/statements, logarithmic blocks. The unrelated-account P=8 owner page captures rows=11/11/11, Q=4/4/4 and B=9/9/9 at 1x/8x/64x. Full reduction visits the a matching owners, not unrelated A. Personal consent: see below.                                         | `growth-client-reduction-natural.test.ts`: shared `checkGrowth`                                                                                       |
-| Personal consent issuance       | Same consent PK read gains a durable pending ceiling/reference; proof(reference) and receipt(receipt_id) use exact anchors. The source session resolves by primary key, and its owner is checked in the returned row. Publish proof+ceiling under the pair xact lock, release every Auth slot/client lock for one native Access call, then reacquire for revision/reference CAS and atomic receipt application. Cleanup ≤64 sessions. Signin, session creation/proof, token and live-proof issuance all check the ceiling, including after restart/expiry/GC. Shared captures include both transactions, pending issuance, live proofs and native Access barriers. Independently grow other owners, clients, same-owner other clients, pending rows and applied/expired proof history at 1x/8x/64x500; fix the selected pair.                                                                                                    | R=N+U*t+M; fixed rows/statements, O(log R) blocks at cap64. Two short transactions plus one external call; no owner/history fanout, global lock or planner/timing override.                                                                                                                                                                                                                          | `growth-consent-issuance.test.ts`: native + shared `checkGrowth`                                                                                      |
-| Provisioning and owner creation | Exact receipt PK/account-unique seek and bounded native owner/credential reads; no stage/user-existence or hash scans. Trusted pending receipt metadata preserves registration/reservation, deadline and observed epoch; rechecked before commit/publication. One transaction writes owner, credential and immutable receipt; digest/locks preserve replay identity. Resolver/reference producer: one SELECT. Erasure seeks owner/credential referencing indexes; old unproven receipts remain. Shared seeds grow unrelated accounts, stale same-registration/reservation receipt/stage decoys and mismatched receipts referencing the same credential at 1x/8x/64x. Account-unique indexes forbid same-account receipt/stage history. Measure valid/absent/mismatched lookups, password/credentialless commits, replay and erasure; no timing or planner overrides.                                                             | R=N+U*t+M plus Auth rows. Reads/writes O(1) rows/statements, O(log R) buffers; FK probes bounded. New evidence Q=9, replay Q=6 including BEGIN/COMMIT and proof read. Indexed erasure O(actual proof changes * log R), one DELETE.                                                                                                                                                                   | `growth-provisioning-evidence.test.ts`: `checkGrowth` at 1x/8x/64x.                                                                                   |
-| Authorized account effects      | `consume`: human `proof` (twice for opening), constant subject/human Access checks and receipt validation, one `auth_effect_receipt_pkey` INSERT. `setCredential`: one indexed credential read, `owner`, one credential UPDATE or public-key INSERT/DELETE, optional bounded session revocation. `openAutomatedSession`: `owner`, client barrier/coverage/consent checks, capped native establishment and one `auth_session_opening_pkey`/receipt-unique INSERT + user FK. Grow A, P, E, O with human/subject, credential/client, receipt size and own sessions fixed. Destructive effects and establishment inherit cap=64; legacy owners fail closed until trimmed.                                                                                                                                                                                                                                                            | R=O(1+s), B=O((1+s)L), Q=O(1), s≤64 for destructive effects and establishment. Fixed cap gives constant rows/statements and logarithmic buffers; no global session-history scan.                                                                                                                                                                                                                     | `Authorized account effects stays within its bound as s grows`                                                                                        |
-| Credential stage/approve/apply  | Stage seeks `auth_credential_operation(account_id,operation_key)` or inserts one encrypted stage/receipt; `auth_credential_reference` resolves one effect. Approve verifies that stage and the selected credential version, then calls Access for exact approval. Apply locks the owner and stage, CAS-mutates one selected password/key row and commits one receipt result atomically with session revocation. Password replacement, remove-password and remove-key advance the Access floor and delete at most 64 sessions; add-key/first password do not. Replay revalidates current authority and returns the saved receipt result with replayed=true, without repeating mutation. Grow series=old-effects or unrelated-owners at 1x/8x/64x; fix the selected credential and destructive=false (add-key) or true (remove-key with 64 sessions).                                                                              | R=O(1+s), B=O((1+s)L), Q=O(1), s<=64. Unique stage/reference/receipt and credential keys bound each point read/write to <=1 row; the owner session cap bounds deletions. At fixed selected neighborhood: constant rows/statements, logarithmic blocks as E, A and P grow; trusted Access costs are separate.                                                                                         | `test/growth-credential-effects.test.ts`: `Auth credential effect ${series}, destructive=${destructive}`                                              |
-| Session erasure                 | Native INSERT locks one existing owner; `session_owner_oldest` reads ≤64 stored keys, including expired rows, then evicts oldest (`createdAt,id`) atomically. Native revoke-all checks the upgrade barrier, snapshots ≤64, locks the same owner and deletes ≤64 via `session_userId_idx`; credential/recovery/consent/erasure inherit this session bound with Access first. Installed provider has no refresh history/cascade; additions require family guards. Legacy owners block insert/revoke/erase until resumable pages trim ≤1000 old rows, keeping newest 64; partial-index keyset discovery. Internal expiry maintenance admits ≤1000 via `session_expiry`, then SKIP LOCKED point locks/deletes, without scanning beyond admission. Grow expired/unrelated history independently at fixed owner neighborhood; measure legacy pages separately.                                                                         | cap=64: insert/revoke rows=O(cap), blocks=O(cap log R), Q=O(1). Expiry batch b≤1000: rows=O(b), blocks=O(b log R), Q=1 even with locks. Legacy page rows=O(cap+b), Q=1. Actual nested plans include native snapshot/trigger/deletion work.                                                                                                                                                           | `growth-bounded-sessions.test.ts`: `checkGrowth` at 1x/8x/64x                                                                                         |
-| Account erasure                 | `eraseAccount`: authoritative Access deleted/fenced check and native session-upgrade barrier before DELETE by `user_pkey`; one client statement plus native FK cascades. Credential/session seeks use `account_userId_idx`/`session_userId_idx`; key/assertion and barrier-proof cascades use leading-account indexes. Consent is retained issuance authority and has no account foreign key, so erasure does not delete or scan it. Recovery/opening cascades seek `auth_recovery_account_id_idx`/`auth_session_opening_subject_account_id_idx`. Let k count all matching references, including at most 64 sessions. Grow unrelated owners and reference populations at 1x/8x/64x with the target neighborhood fixed; capture actual DELETE/cascade plans and buffers. Separately vary own fanout; index builds and legacy session trimming are deployment maintenance.                                                         | R=Θ(1+k), B=O((1+k)L), Q=1. Fixed k gives constant rows/statements and logarithmic buffers, without global H/O scans. Non-session fanouts remain uncapped and exceed the criterion when k grows; indexed cascades pay for every matching reference.                                                                                                                                                  | `growth-erasure-indexes.test.ts` (native cascades, 1x/8x/64x)                                                                                         |
-| Recovery start                  | One owner email unique read (`user_email_key`), one credential unique read, one native verification INSERT and one `auth_recovery_pkey(proof_hash)` INSERT + user FK; external delivery. The installed native `verification.create.after` hook captures the new verification PK, owner, token hash and original five-minute expiry in private live reset-call provenance. Failure deletes the newly inserted source proof by proof_hash, that verification by primary key (owner checked), and the per-account mail cooldown key so a failed send does not consume the mail budget; missing or mismatched provenance cannot mint/deliver a proof and never queries identifier history. `verification.disableCleanup:true` prevents request-time expiry sweeps. Grow unrelated and same-owner proofs plus duplicate identifier history at 500 rows per scale unit, 1x/8x/64x; fix selected owner, credential and failed delivery. | R=O(1), B=O(L), Q=O(1), independent of identifier/owner history m. Full failed-start native `checkGrowth`, including attempt admission and nested SQL: rows=7/7/7, statements=11/11/11, blocks=56/59/68. Cleanup is three exact-key statements (verification by primary key, auth_recovery by proof_hash, and the mail cooldown key), at most one row each; no history scan or Account floor change. | `Recovery start stays within its bound as V grows`; [delivery proof](test/growth-recovery-delivery.test.ts).                                          |
-| Recovery completion             | Under a proof-specific advisory lock, seek/lock one `auth_recovery_pkey` binding and read one credential. Native latest lookup seeks one row through `verification_latest_idx(identifier,createdAt DESC,id DESC)`; request-time expiry cleanup is disabled. DELETE the exact verification PK with account/expiry checks, mark the binding consumed, publish/resolve one immutable barrier proof, then call Access to raise the epoch floor. A second transaction CAS-updates one credential, revokes at most 64 sessions and applies the proof/receipt. Grow other accounts’ and expired V at 500 rows per scale unit (1x/8x/64x); restore the same production-created proof, credential and session neighborhood between runs.                                                                                                                                                                                                  | R=O(1+s), B=O((1+s)L), Q=O(1), s≤64. At fixed owner neighborhood: constant rows/statements and logarithmic blocks as V grows. Exact native proof consumption does not erase identifier history or scan expired rows.                                                                                                                                                                                 | `Recovery completion stays within its bound as V grows`                                                                                               |
-| Verification / expiry           | Native Better Auth 1.7.12 find/consume uses the supported plugin-init/DBAdapter seam with its installed public Kysely adapter. Only the native identifier/createdAt-desc/limit-one request adds id-desc: `verification_latest_idx(identifier,createdAt DESC,id DESC)` seeks one row without sorting history. `verification.disableCleanup:true` prevents native request-time expiry cleanup. `internal.pruneExpiredVerifications()` uses `verification_expiry_idx(expiresAt,id)` to select at most 2000 ordered candidates, lock/delete at most B=1000 via SKIP LOCKED and exact TID keys in one statement. The native Auth maintenance schedule invokes one batch per tick; no request-time drain loop. Native token ownership, secrecy, expiry and one-use gates remain. Grow unrelated V, measured identifier history and expired rows together at 1x/8x/64x; B fixed.                                                        | Latest: R=1, blocks O(log V), Q=1. One expiry invocation: ≤2B candidates, ≤B deletes, R=O(B), blocks O(B log V), Q=1, including locked probes. Generic native identifier-wide invalidation remains proportional to matching history; recovery completion deletes one exact proof. Session revocation is capped at 64.                                                                                | `growth-verification.test.ts`: native latest and expiry                                                                                               |
+Host startup adds one fixed operation-client registration under its existing
+one-client lock. It performs exact-key reduction and registry reads; absence adds
+the native registry and coverage inserts. A matching replay makes three selected-client
+registry touches (lock, reduction read, client read) at 1/8/64 unrelated clients in
+`test/auth-page-operation-client.test.ts`. Work is constant in total accounts,
+clients and history, with logarithmic indexed access. It runs only at startup;
+sign-in and operation paths retain the bounds below.
 
-Stored sessions, including expired ones, count toward the per-owner cap of 64; native expiry validation remains local to the presented token.
-The native Auth maintenance schedule invokes one bounded session-expiry batch, one exact retiring-key prune and one bounded verification-expiry batch per tick; backlog waits for later ticks.
-Signing uses at most three live slots; retired identities/material remain in the cold archive, which loading, signing and JWKS never enumerate.
-Consent reduction, credential replacement/removal and recovery inherit bounded per-account session revocation; legacy owners fail closed until bounded upgrade pages finish.
-Client-reduction pages visit only the affected client's indexed consent owners; completing the effect costs proportional to that affected population, not all A accounts.
-Account erasure seeks matching recovery bindings and openings through their referencing indexes; non-session account fanouts remain uncapped.
-Verification latest lookup seeks one row without sorting history, and expiry maintenance admits a fixed indexed batch; generic identifier-wide invalidation remains unbounded in matching rows.
-Assertion JTIs, receipts, openings, provisioning receipts and unconsumed recovery bindings have no scheduled retention; their individually anchored operations remain logarithmic in their totals.
-Account erasure leaves consent rows, which are issuance authority without an account foreign key, effect/provisioning receipts and workflow staging/request records, which have no user FK, and native verification values, which carry the account ID without a relational FK.
-Signing and JWKS read the durable generation/slots on every call, so replicas follow committed rotation; the bounded import cache refreshes immediately on a generation change.
-Native verification's consume lock is process-local; recovery completion uses a PostgreSQL proof lock, exact DELETE RETURNING and durable consumed binding/barrier proof for cross-instance replay control.
-The installed native production HTTP rate limiter uses atomic PostgreSQL counters shared across replicas; each charge is one indexed upsert without a request-time retention sweep.
+R counts examined relation rows, B shared-block accesses, and Q client SQL statements
+including BEGIN/COMMIT and advisory locks; native FK/trigger work counts in R/B
+without adding client statements. N is the relevant table/history population and
+L is the sum of log(2 + cardinality) over touched tables. An indexed point probe
+examines constant rows and logarithmic blocks; fixed index/constraint writes cost
+O(L) blocks. Bounds assume ordinary vacuum maintenance, fixed row/crypto sizes and
+no unbounded lock wait; they describe access paths, not timings or forced plans.
+A, S, K, C and D count accounts, retained sessions, signing keys, clients and consents;
+P, J, E, O, H, V and T count public credentials, assertion JTIs, effect receipts,
+openings, recovery bindings, verifications and provisioning receipts. Lower-case s
+is the selected owner's stored sessions, including expired ones, capped at 64.
+Scope inputs use the service-creation known-scope bound (1,000 without a mounted
+catalogue), ≤128 characters per scope and ≤16 KiB HTTP bodies; the standalone
+current-consent reader validates at most 100 scopes per list.
+
+`proof` includes native session/user reads, current Access evidence and exact
+client/reduction/consent checks (3–4 Auth statements). Native joins become separate
+SELECTs with `advanced.database.joins` unset and cookie/secondary caching disabled.
+Credential inserts also use `account_pkey`, `account_userId_idx`,
+`credential_owner_unique` and user FK probes; session inserts use `session_pkey`,
+`session_token_key`, `session_userId_idx` and user/client PK FK probes. Each indexed
+write maintains its fixed schema indexes. Trusted Access backing-store costs are
+additional unless the cited series explicitly captures native Kernel bindings;
+workflow rows include their stated native persistence. Rejections stay anchored;
+identifier-wide invalidation and actual cascade/consent fanout keep their explicit
+linear bounds.
+
+| Operation                                                      | Touches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Bound                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Growth check                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Session verification                                           | Cookie signature yields token: `session_token_key` SELECT → ≤1 session, `user_pkey` SELECT → ≤1 owner; `proof` adds client/reduction/consent below. Expiry is local; presented expired token adds snapshot SELECT + DELETE by token (≤1 row each). Seven-day lifetime, one-day native update age; `disableRefresh:true` suppresses ordinary refresh, while establishment-failure native lookup can UPDATE one session by token. Grow S (including expired rows), A, C, D; fix token, owner, scopes and expiry/refresh branch.                                                                                                                                                                                                                                                                                                                                                                                                    | R=O(1), B=O(log S+log A+log C+log D); Q=2 native lookup, 3–4 proof, 4 expired lookup/deletion, 3 native refresh (all constant).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | `test/growth-sessions.test.ts`: “Session verification stays within its bound as S grows”                                                                                                                                                                                                                                                                                     |
+| Access token issuance                                          | `/token`: native session/user point reads identify the client, then a shared client barrier, exact coverage/reduction checks, `proof` and client lookup. First-party issuance materializes one consent pair. Signing rechecks the singleton generation and seeks at most three live keys; no archive or token-table scan. This JSON `/token` path does not issue or rotate refresh tokens; the website form endpoint is separate, and `account.refreshToken` is unused. Grow unrelated S and archived K; fix live session, owner, claims, client/scopes and request count.                                                                                                                                                                                                                                                                                                                                                       | R=O(1), B=O(L), Q=O(1): constant rows/statements and logarithmic blocks, including barrier locks and signer refresh. Imported-key/claims work and JWKS slots are bounded.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `test/growth-sessions.test.ts`: “Access token issuance stays within its bound as S grows”                                                                                                                                                                                                                                                                                    |
+| Live-proof token                                               | `internal.accessTokenForProof` accepts this instance's immutable native human proof only inside its live `consumeAuthorization` callback (private O(1) identity/scope check; copies/foreign/stale fail before I/O). Shared native client barrier; one source-session PK read, one current Access human/state/fence/epoch point read, exact client/coverage/reduction/consent chain and current materialization check, ≤3 signer slots. Same `/token` API claims/ES256/JWKS, no delegation; expiry=min(300s, source lifetime). JWT stays in the trusted adapter call and enters installed Access via ordinary authentication; no HTTP route, DBOS/persisted token or effect grant. Grow unrelated accounts and other owners' native histories at 1x/8x/64x within cap64; fix selected neighborhood and one proof/sign operation.                                                                                                  | Constant rows/statements and logarithmic indexed blocks O(L) for one proof/sign operation. No session, verification or key-history scan. Bounded claims/ES256 CPU; no wall-clock growth gate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `test/growth-session-proof-capability.test.ts`: “checkGrowth live proof signing uses constant native evidence at 1x/8x/64x; copies reject before I/O”                                                                                                                                                                                                                        |
+| Scheduled maintenance                                          | One `auth_dbos` tick persists native wake/step outputs and invokes `session_expiry` admission b≤1000, signing singleton/live-slot retention CAS (≤3 slots, ≤1 retired key), and `verification_expiry_idx` admission ≤2000/deletion ≤1000. The indexed `auth_consent_erasure_due` gate conditionally adds one due-owner batch d≤100: user PK checks, each erased owner's entire consent PK range, one client advisory lock and exact pair DELETE per consent, then schedule deletion. Fix admitted b,d and c consents per due owner while unrelated/expired purpose and DBOS histories grow; separately vary c. No consent-client cap or drain of the due-owner backlog.                                                                                                                                                                                                                                                          | R=O(b+d(1+c)), B=O((b+d(1+c))L), Q=O(1+d(1+c)) plus a constant number of DBOS records. Consent work is linear in actual d×c, d≤100, rather than ≤1000 changes per kind. With b,d,c fixed: constant rows/statements, logarithmic blocks. Registration is constant work; backlog waits for later ticks.                                                                                                                                                                                                                                                                                                                                                                                | `test/growth-auth-schedules.test.ts`: “checkGrowth captures one fixed native durable tick as unrelated and expired purpose histories grow”. `test/growth-revoke-maintenance.test.ts`: “Maintenance tick with due consent erasure stays within its bound as consent and session history grows”                                                                                |
+| Signing keys and JWKS                                          | Singleton generation + exact current/next/retiring kid seeks; sign/JWKS recheck generation. Imported material is cached at most 30s, refreshing generation changes immediately. At most three native ES256 keys; five-minute access/ID maximum + 600s recent-session logout hint + 30s verifier cache + 60s clock allowance retain keys for 990s. Auth-only `internal.signing` status/stage/rotate/prune use generation CAS and typed `signing_rotation_pending`; occupied slots throttle rotation. Retiring GC deletes one exact hot key, keeping immutable kid/material in cold archive. Upgrade requires stopped old binaries, renames legacy history without iterating K, and refuses startup for 690s when history exists before exact-key adoption. Grow history and unrelated Auth rows at 500 rows per scale unit; measure actual loading/signing/refreshed HTTP JWKS with native JOSE verification.                     | Hot R=O(1), B=O(L), Q=O(1), output/JOSE work ≤3 keys; no history iteration. Injection ≤3 exact identity seeks; rotation/GC change O(1) slot/generation rows (GC batch b=1). Constant rows/statements and logarithmic blocks in retained history.                                                                                                                                                                                                                                                                                                                                                                                                                                     | `test/growth-signing-retention.test.ts`: “signing loading and refreshed JWKS stay bounded as retired history and unrelated Auth rows grow”                                                                                                                                                                                                                                   |
+| Native attempt rate limiter                                    | Installed Better Auth 1.8.0-beta.2 production native admission uses PostgreSQL customStorage.consume: one atomic upsert by auth_attempt_counter_pkey per charge, returning at most one row across service instances. Common 1x/8x/64x seed grows unrelated counter keys C, owners/credentials, clients with ready coverage, reductions, session/recovery history and expired verifications R; the subject's expired session neighborhood stays at its native cap of 64. Capture whole wrong-password (known/missing email), recovery-start and invalid-proof handlers through two fresh instances: three Origin rejections, twelve charges, shared 429 budgets, generic denials and unchanged epoch floor.                                                                                                                                                                                                                       | R=O(1), B=O(log C + log R) for the counter/client and expired-verification populations; Q=59 and 28 examined rows: 15 atomic consumes (12 native request budgets and three per-account mail cooldown checks) plus 44 other handler statements. Six transaction controls separately. Each request budget charge uses one upsert and returns at most one row. Sign-in failure/success: Q=7/15. Constant rows/statements and logarithmic blocks at fixed request count.                                                                                                                                                                                                                 | `test/growth-auth-rate.test.ts`: “checkGrowth measures whole own handler including empty bounded scans”                                                                                                                                                                                                                                                                      |
+| Password sign-in                                               | Email: `user_email_key` SELECT + `account_userId_idx`/`credential_owner_unique` SELECT, at most one owner/credential; ID: one credential-owner seek. Native password verification, shared client barrier and exact coverage/reduction/consent probes precede establishment and `proof`. Session INSERT locks the owner and reads/evicts at most cap=64 oldest stored sessions, including expired rows. Grow unrelated A and S; fix owner, credential, client/scopes and own session neighborhood.                                                                                                                                                                                                                                                                                                                                                                                                                                | R=O(1+cap), B=O((1+cap)L), Q=O(1), cap=64; password work has fixed input size. Legacy owners must finish bounded upgrade pages before establishment. Constant rows/statements and logarithmic blocks at the fixed owner cap.                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `test/growth-sessions.test.ts`: “Password sign-in stays within its bound as A grows”                                                                                                                                                                                                                                                                                         |
+| Public-key sign-in                                             | One `auth_public_key_pkey(account_id,kid)` SELECT, local JOSE verification, one `auth_key_assertion_pkey(account_id,jti)` INSERT + user FK. Establishment reads one owner, checks client coverage/reduction/consent under the shared barrier, INSERTs one session with the cap=64 owner lock/oldest-row eviction, then runs `proof`. Grow A, S, P, J; fix owner/kid, assertion size, client/scopes, own sessions and one fresh JTI per attempt.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | R=O(1+cap), B=O((1+cap)L), Q=O(1), cap=64; replay denial uses one key read and one conflicting INSERT. No assertion-history scan. Constant rows/statements and logarithmic blocks at the fixed owner cap.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `test/growth-sessions.test.ts`: “Public-key sign-in stays within its bound as J grows”                                                                                                                                                                                                                                                                                       |
+| Auth barrier proofs                                            | Native session/consent point reads or native verification lookup and exact recovery consumption; one immutable purpose/account/operation receipt insert and point resolution, credential/consent CAS, and existing bounded session revocation. Digest binds the exact transition; no account/history scans. All new owner references lead with account_id in the unique index for erasure. Expiry index admits b+1 keys (one hasMore peek), locks/deletes at most b≤1000, with no drain loop. One seed grows same-owner proof/consent/recovery history and unrelated owners at 1x/8x/64x; valid/invalid requests and expired batch stay fixed.                                                                                                                                                                                                                                                                                   | Request: constant rows/statements and logarithmic O(L) blocks. Sweep: rows linear in admitted b≤1000, O(1+b), blocks O((1+b)L), Q=1. At fixed b, constant rows/statements and logarithmic blocks; locked prefixes remain bounded. Scheduling remains separate; expiry already denies.                                                                                                                                                                                                                                                                                                                                                                                                | `test/growth-barrier-proofs.test.ts`: “checkGrowth bounds actual ${kind} at 1x/8x/64x same-owner and unrelated history”                                                                                                                                                                                                                                                      |
+| Clients and consent                                            | Issuance retains fixed client/coverage/gate/pair probes under the shared barrier; begin takes its exclusive counterpart. Durable gate, operation PK and `auth_consent_client_owner` keyset admit P≤100 affected owners plus one lookahead. Each owner changes one floor/receipt/cursor; fenced cleanup selects/deletes at most 100 sessions once per receipt (at most 64 for upgraded owners); retained legacy rows fail proof. Terminal completion uses exact seeks; DBOS pages hold ≤64 owners. Deployment backfill/drain stays separate. Default PostgreSQL plans and shared `checkGrowth` independently grow unrelated accounts/consents, client/operation/receipt/session history and affected owners at 1x/8x/64x, page P=8 fixed. Personal consent issuance is measured separately below.                                                                                                                                 | a=affected owners, P=min(100,a_remaining). Begin/completion O(L) blocks; page O(PL) blocks, O(P) actual changes and statements. Fixed P: constant rows/statements, logarithmic blocks. The unrelated-account P=8 owner page captures rows=11/11/11, Q=4/4/4 and B=9/9/9 at 1x/8x/64x. Full reduction visits the a matching owners, not unrelated A. Personal consent: see below.                                                                                                                                                                                                                                                                                                     | `test/growth-client-reduction-natural.test.ts`: “three scale native growth remains within derived affected-owner bound”                                                                                                                                                                                                                                                      |
+| Personal consent issuance                                      | Same consent PK read gains a durable pending ceiling/reference; proof(reference) and receipt(receipt_id) use exact anchors. The source session resolves by primary key, and its owner is checked in the returned row. Publish proof+ceiling under the pair xact lock, release every Auth slot/client lock for one native Access call, then reacquire for revision/reference CAS and atomic receipt application. Cleanup ≤64 sessions. Signin, session creation/proof, token and live-proof issuance all check the ceiling, including after restart/expiry/GC. Shared captures include both transactions, pending issuance, live proofs and native Access barriers. Independently grow other owners, clients, same-owner other clients, pending rows and applied/expired proof history at 1x/8x/64x500; fix the selected pair.                                                                                                    | Constant rows/statements and logarithmic O(L) blocks at cap64. Two short transactions plus one external call; no owner/history fanout, global lock or planner/timing override.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `test/growth-consent-issuance.test.ts`: “checkGrowth captures complete native consent transactions, pending issuance, live proof and Access barriers at 1x/8x/64x500”                                                                                                                                                                                                        |
+| Provisioning and owner creation                                | Exact receipt PK/account-unique seek and bounded native owner/credential reads; no stage/user-existence or hash scans. Trusted pending receipt metadata preserves registration/reservation, deadline and observed epoch; rechecked before commit/publication. One transaction writes owner, credential and immutable receipt; digest/locks preserve replay identity. Resolver/reference producer: one SELECT. Erasure seeks owner/credential referencing indexes; old unproven receipts remain. Shared seeds grow unrelated accounts, stale same-registration/reservation receipt/stage decoys and mismatched receipts referencing the same credential at 1x/8x/64x. Account-unique indexes forbid same-account receipt/stage history. Measure valid/absent/mismatched lookups, password/credentialless commits, replay and erasure; no timing or planner overrides.                                                             | Constant read/write rows/statements, logarithmic O(L) buffers; FK probes bounded. New evidence Q=9, replay Q=6 including BEGIN/COMMIT and proof read. Indexed proof erasure is linear in actual proof changes, O(kL) blocks, one DELETE.                                                                                                                                                                                                                                                                                                                                                                                                                                             | `test/growth-provisioning-evidence.test.ts`: “checkGrowth exact valid, absent and mismatched evidence ignores growing receipt/stage decoys”; “checkGrowth native idempotent password and credentialless commits have constant rows/statements”; “proof erasure uses referencing-key indexes as unrelated receipts grow”                                                      |
+| Authorized account effects                                     | `consume`: human `proof` (twice for opening), constant subject/human Access checks and receipt validation, one `auth_effect_receipt_pkey` INSERT. `setCredential`: one indexed credential read, `owner`, one credential UPDATE or public-key INSERT/DELETE, optional bounded session revocation. `openAutomatedSession`: `owner`, client barrier/coverage/consent checks, capped native establishment and one `auth_session_opening_pkey`/receipt-unique INSERT + user FK. Grow A, P, E, O with human/subject, credential/client, receipt size and own sessions fixed. Destructive effects and establishment inherit cap=64; legacy owners fail closed until trimmed.                                                                                                                                                                                                                                                            | R=O(1+s), B=O((1+s)L), Q=O(1), s≤64 for destructive effects and establishment. Fixed cap gives constant rows/statements and logarithmic buffers; no global session-history scan.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `test/growth-sessions.test.ts`: “Authorized account effects stays within its bound as s grows”                                                                                                                                                                                                                                                                               |
+| Credential stage/approve/apply                                 | Stage seeks `auth_credential_operation(account_id,operation_key)` or inserts one encrypted stage/receipt; `auth_credential_reference` resolves one effect. Approve verifies that stage and the selected credential version, then calls Access for exact approval. Apply locks the owner and stage, CAS-mutates one selected password/key row and commits one receipt result atomically with session revocation. Password replacement, remove-password and remove-key advance the Access floor and delete at most 64 sessions; add-key/first password do not. Replay revalidates current authority and returns the saved receipt result with replayed=true, without repeating mutation. Grow series=old-effects or unrelated-owners at 1x/8x/64x; fix the selected credential and destructive=false (add-key) or true (remove-key with 64 sessions).                                                                              | R=O(1+s), B=O((1+s)L), Q=O(1), s<=64. Unique stage/reference/receipt and credential keys bound each point read/write to <=1 row; the owner session cap bounds deletions. At fixed selected neighborhood: constant rows/statements, logarithmic blocks as E, A and P grow; trusted Access costs are separate.                                                                                                                                                                                                                                                                                                                                                                         | `test/growth-credential-effects.test.ts`: “credential effect growth stays fixed at 1x/8x/64x: ${series}, ${destructive ? 'remove-key with 64 sessions' : 'add-key'}”                                                                                                                                                                                                         |
+| Account operation transport                                    | `/account-operations/approve` and `/execute`: bounded 16 KiB JSON, `withFreshHuman` native session/user proof and `accessTokenForProof` session/client/coverage/reduction/consent/signing seeks before native gate/approval resolution and workflow dispatch. Approval requires fresh authentication; execution uses `fresh:false`. Grow unrelated accounts and same-owner approval/workflow histories with one selected human, client, operation and fixed native authority neighborhood. The transport adds these reads even when dispatch is denied.                                                                                                                                                                                                                                                                                                                                                                          | Constant additional Auth rows/statements, logarithmic O(L) blocks for live proof and signing, plus the selected Access approval/gate and workflow operation costs. The native handler series includes those authorization/dispatch costs for the measured organization operation.                                                                                                                                                                                                                                                                                                                                                                                                    | `test/growth-account-operations.test.ts`: “Account operation transport stays within its bound as account and approval history grows”                                                                                                                                                                                                                                         |
+| Session erasure                                                | Native INSERT checks the owner upgrade barrier and serializes the owner row, reads at most 64 stored keys (expired rows count) through `session_owner_oldest`, and evicts the oldest key atomically. Native revoke-all checks the same barrier, snapshots ≤64 and deletes via `session_userId_idx` under the owner lock. Credential/recovery/consent/erasure inherit this cap with Access first. Grow expired and unrelated histories independently; fix the selected owner neighborhood. Website token families use their own guards, not a session-history cascade. One-time legacy upgrade pages are deployment work, excluded here.                                                                                                                                                                                                                                                                                          | cap=64: rows O(cap), blocks O(cap L), Q=O(1). Constant rows/statements and logarithmic blocks at fixed cap, including native snapshots, triggers and deletion work. Legacy owners fail closed until upgrade pages complete.                                                                                                                                                                                                                                                                                                                                                                                                                                                          | `test/growth-bounded-sessions.test.ts`: “checkGrowth measures actual native insertion and revocation with independent expired and unrelated history”                                                                                                                                                                                                                         |
+| Account erasure                                                | `eraseAccount` checks authoritative Access deleted/fenced state, then BEGIN, DELETE by `user_pkey` (native session-upgrade erasure trigger), one `auth_consent_erasure_pkey` INSERT ON CONFLICT with due time 310 seconds later, and COMMIT. Cascades seek credential/session, public-key/assertion, barrier-proof/recovery/establishment, provisioning and opening owner/reference indexes, plus any native owned client/passkey/protocol references. Let k count all matching cascade references, with ≤64 sessions for an upgraded owner. Personal consent has no account FK and is retained for delayed erasure. Grow unrelated owners/references with target k fixed; separately vary actual own fanout.                                                                                                                                                                                                                    | R=Θ(1+k), B=O((1+k)L), Q=4 including transaction control (two application statements). Linear in actual k; fixed k gives constant rows/statements and logarithmic blocks. Non-session fanouts remain uncapped. The cited cascade series includes own-fanout row assertions; its older Q=1 assertion predates consent scheduling.                                                                                                                                                                                                                                                                                                                                                     | `test/growth-erasure-indexes.test.ts`: “checkGrowth measures native eraseAccount cascades at 1x/8x/64x with fixed owner references”. `test/growth-consent-erasure.test.ts`: “consent erasure scheduling stays bounded as unrelated erasure rows and consents grow”                                                                                                           |
+| Recovery start                                                 | One owner email unique read (`user_email_key`), one credential unique read, one native verification INSERT and one `auth_recovery_pkey(proof_hash)` INSERT + user FK; external delivery. The installed native `verification.create.after` hook captures the new verification PK, owner, token hash and original five-minute expiry in private live reset-call provenance. Failure deletes the newly inserted source proof by proof_hash, that verification by primary key (owner checked), and the per-account mail cooldown key so a failed send does not consume the mail budget; missing or mismatched provenance cannot mint/deliver a proof and never queries identifier history. `verification.disableCleanup:true` prevents request-time expiry sweeps. Grow unrelated and same-owner proofs plus duplicate identifier history at 500 rows per scale unit, 1x/8x/64x; fix selected owner, credential and failed delivery. | R=O(1), B=O(L), Q=O(1), independent of identifier/owner history m. Full failed-start native `checkGrowth`, including attempt admission and nested SQL: rows=7/7/7, statements=11/11/11, blocks=56/59/68. Cleanup is three exact-key statements (verification by primary key, auth_recovery by proof_hash, and the mail cooldown key), at most one row each; no history scan or Account floor change. Constant rows/statements and logarithmic indexed blocks in retained history.                                                                                                                                                                                                    | `test/growth-recovery-delivery.test.ts`: “checkGrowth captures full native failed recovery start at 1/8/64 with duplicate identifier and owner history”                                                                                                                                                                                                                      |
+| Recovery completion                                            | Under a proof-specific advisory lock, seek/lock one `auth_recovery_pkey` binding and read one credential. Native latest lookup seeks one row through `verification_latest_idx(identifier,createdAt DESC,id DESC)`; request-time expiry cleanup is disabled. DELETE the exact verification PK with account/expiry checks, mark the binding consumed, publish/resolve one immutable barrier proof, then call Access to raise the epoch floor. A second transaction CAS-updates one credential, revokes at most 64 sessions and applies the proof/receipt. Grow other accounts’ and expired V at 500 rows per scale unit (1x/8x/64x); restore the same production-created proof, credential and session neighborhood between runs.                                                                                                                                                                                                  | R=O(1+s), B=O((1+s)L), Q=O(1), s≤64. At fixed owner neighborhood: constant rows/statements and logarithmic blocks as V grows. Exact native proof consumption does not erase identifier history or scan expired rows.                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `test/growth-sessions.test.ts`: “Recovery completion stays within its bound as V grows”                                                                                                                                                                                                                                                                                      |
+| Verification / expiry                                          | Native Better Auth 1.8.0-beta.2 find/consume uses the supported plugin-init/DBAdapter seam with its installed public Kysely adapter. Only the native identifier/createdAt-desc/limit-one request adds id-desc: `verification_latest_idx(identifier,createdAt DESC,id DESC)` seeks one row without sorting history. `verification.disableCleanup:true` prevents native request-time expiry cleanup. `internal.pruneExpiredVerifications()` uses `verification_expiry_idx(expiresAt,id)` to select at most 2000 ordered candidates, lock/delete at most B=1000 via SKIP LOCKED and exact TID keys in one statement. The native Auth maintenance schedule invokes one batch per tick; no request-time drain loop. Native token ownership, secrecy, expiry and one-use gates remain. Grow unrelated V, measured identifier history and expired rows together at 1x/8x/64x; B fixed.                                                  | Latest: R=1, blocks O(log V), Q=1. One expiry invocation: ≤2B candidates, ≤B deletes, R=O(B), blocks O(B log V), Q=1, including locked probes. Generic native identifier-wide invalidation remains proportional to matching history; recovery completion deletes one exact proof. Session revocation is capped at 64. At fixed B: constant rows/statements and logarithmic blocks; expiry work is linear in admitted B.                                                                                                                                                                                                                                                              | `test/growth-verification.test.ts`: “checkGrowth measures actual native latest queries at three scales of unrelated rows AND identifier history”; “checkGrowth measures one actual indexed expiry batch with fixed B=1000 at the same three scales”                                                                                                                          |
+| Deleted-account consent erasure                                | Scheduling is the exact-key upsert in `eraseAccount` after user deletion. `hasDueConsentErasure` seeks the earliest due range. One `eraseDueConsents` transaction admits d≤100 due account keys through `auth_consent_erasure_due(due_at,account_id)` in the scheduled composition (the primitive accepts ≤1000). Each owner gets a `user_pkey` absence check, the complete account-leading `auth_consent_pkey` range ordered by client_id, a client advisory lock and pair DELETE per consent, and a schedule DELETE guarded by NOT EXISTS on the same range. A live owner only clears its stale schedule. Fix d,c while live/future schedules and unrelated consent history grow; separately vary c.                                                                                                                                                                                                                           | Scheduling adds constant rows/statements and logarithmic blocks. Erasure R=O(d(1+c)), B=O(d(1+c)L), Q=3+Σ(3+2c_i) for absent owners, including BEGIN/COMMIT/admission; linear in actual consent fanout, c_i≤c. No per-owner client cap. Fixed d,c gives constant rows/statements and logarithmic blocks, independent of live/future history.                                                                                                                                                                                                                                                                                                                                         | `test/growth-consent-erasure.test.ts`: “consent erasure scheduling stays bounded as unrelated erasure rows and consents grow”; “one fixed consent erasure batch stays bounded as live consent and future schedules grow”. `test/growth-revoke-maintenance.test.ts`: “Maintenance tick with due consent erasure stays within its bound as consent and session history grows”  |
+| Passkey sign-in and listing                                    | `/signin/passkey/options` creates one native verification challenge without an allow list; `/signin/passkey` consumes it, seeks `passkey_credentialid_idx`, updates one counter/last_used_at and uses capped session establishment/replacement. `GET /passkeys` adds human proof then the `passkey_userid_idx(userId,id)` range LIMIT 32. Fix selected credential, challenge, client/scopes, ≤32 own passkeys and ≤64 sessions; grow unrelated credentials and same-owner consumed effect receipts. Registration/removal use the separate row below.                                                                                                                                                                                                                                                                                                                                                                             | Constant rows/statements and logarithmic O(L) blocks at fixed caps and request size. Listing examines ≤32 credentials; sign-in does not enumerate credential/effect history.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `test/growth-passkeys.test.ts`: “passkey ${path} remains bounded as unrelated credentials and own consumed effects grow at 1x/8x/64x”                                                                                                                                                                                                                                        |
+| Passkey registration and removal                               | `/passkeys/register/options` performs fresh human proof and native registration challenge/credential-exclusion reads. `/passkeys/register` consumes the challenge, seeks exact `(account_id,operation_key)` stage/replay and effect-reference indexes, then approves/applies one credential effect. `/passkeys/remove` stages the selected PK, revalidates last interactive credential, consumes the exact `workflow_approval_pkey(route,approval_id)` approval, advances the Access floor through `credential_floor_receipt_pkey(route,account_id,opening_receipt_id)` and deletes one passkey with ≤64 session revocations. Both Access points retain exact operation/effect binding and current-time approval validity. Installation checks the owner range LIMIT 32. Fix request bytes, owner, ≤32 passkeys and ≤64 sessions while unrelated credentials and own receipt/challenge history grow.                             | Required constant rows/statements and logarithmic O(L) blocks at fixed caps. The retained native attempt reported removal at 869/965/1061 rows and verified registration at 1036/1108/1180. Its full-key shared `core.receipt` read contributed 83/153/223 and 53/109/165 rows respectively; approval and floor receipt reads also grew. These results do not establish a current physical cause or successful bound. All six cases remain strict; full native acceptance is pending integration. Each invocation prepares a fresh native ceremony outside capture. Native challenge identifier-wide deletion is linear in duplicate matches; ordinary ceremonies have one identity. | `test/growth-passkeys.test.ts`: “passkey ${path} remains bounded as unrelated credentials and own receipts and challenges grow at 1x/8x/64x” (registration options, verified registration, registration replay, removal)                                                                                                                                                     |
+| Exact current consent                                          | `createCurrentConsentReader.readCurrentConsent` uses one snapshot statement seeking `auth_consent_pkey(account_id,client_id)`, `auth_client_pkey`, `auth_client_coverage_pkey` and anti-seeking `auth_client_reduction_pkey`. Intersects stored consent, client ceiling and pending ceiling locally; each validated list has ≤100 scopes. Fix the exact pair and scopes; grow same-person other-client/history and unrelated rows. Invalid input does no I/O.                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | R=O(1), B=O(L), Q=1: constant rows/statements, logarithmic blocks. Local set/filter/sort work follows the bounded scope lists; no consent refresh or history scan.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `test/growth-current-consent.test.ts`: “native exact consent cost stays fixed as unrelated and same-person other-client/history rows grow”; “durable consent point reader honors native pending reduction ceiling before Access floor and after lost acknowledgement, no extra statements or history scan”                                                                   |
+| Consent and sessions GETs                                      | Both complete handlers include native human/session and Access proof. Consent GET adds exact client/coverage/reduction and consent-pair reads. Sessions GET reads the owner range using `session_owner_oldest` in reverse, filters expiry, orders newest first and returns ≤64, with ≤64 client-PK left-join probes. Fix owner neighborhood, selected consent/client and scopes; grow unrelated sessions, clients and consents separately. The native stored-session cap, including expired rows, bounds examined owner history.                                                                                                                                                                                                                                                                                                                                                                                                 | Consent: constant rows/statements, logarithmic O(L) blocks. Sessions: R=O(64), B=O(64L), Q=O(1) including proof; constant rows/statements and logarithmic blocks at the native cap. LIMIT alone would not bound expired owner history without that cap.                                                                                                                                                                                                                                                                                                                                                                                                                              | `test/growth-pages-reads.test.ts`: “consent read and sessions list stay bounded as unrelated ${axis} grow”                                                                                                                                                                                                                                                                   |
+| Recovery-establishment evidence                                | `createRecoveryEstablishmentVerifier.resolve` anchors `auth_recovery_establishment_pkey(reference)` and lateral LIMIT 1 seeks of barrier reference, receipt PK, credential PK and recovery proof hash before owner/epoch predicates. Completion writes one establishment record in its credential/evidence transaction; expired barrier cleanup admits a fixed batch and cascades establishment by its unique reference. Fix selected account/proof/credential and cleanup limit; grow same-account consumed history and unrelated owners.                                                                                                                                                                                                                                                                                                                                                                                       | Resolve: constant rows, Q=1, logarithmic O(L) blocks. Complete: constant statements and rows at cap64; cleanup linear in admitted batch plus its unique establishment references, constant statements and logarithmic blocks at fixed batch.                                                                                                                                                                                                                                                                                                                                                                                                                                         | `test/growth-recovery-establishment.test.ts`: “native ${kind} remains bounded across same-account consumed history and unrelated owners”                                                                                                                                                                                                                                     |
+| Session expiry pruning                                         | `pruneExpiredSessions` admits b≤1000 ordered `(expiresAt,id)` keys via `session_expiry`, then point-locks only those keys with SKIP LOCKED and deletes by session PK in one statement. No search beyond a locked admitted prefix. Fix b while expired/live session history grows; legacy trimming/discovery is one-time deployment work.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | R=O(b), B=O(bL), Q=1. Linear in admitted b; constant rows/statements and logarithmic blocks at fixed b, including nested locks/deletes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `test/growth-bounded-sessions.test.ts`: “checkGrowth measures changing legacy history in separate bounded pages and indexed expiry batches”                                                                                                                                                                                                                                  |
+| Website refresh rotation and replay                            | Form `/token` confidential admission reads the exact website client/reduction, verifies its bounded JWK set and consumes one assertion JTI. Refresh token hash seeks `oauthRefreshToken_token_key`; family PK guard, session PK, current owner/consent/Access proof and ≤3 signing slots precede native CAS rotation. Reuse revokes the exact family marker and advances the Access floor, with one recent-session upsert; no family token-history walk. Fix selected session, family, scopes and request bytes; grow same-family history and unrelated tokens.                                                                                                                                                                                                                                                                                                                                                                  | Constant rows/statements and logarithmic O(L) blocks for rotation and replay invalidation, independent of retained tokens per family. The native handler series records rotation Q=28/R=30 and replay Q=18/R=16 at 1x/8x/64x. JWT/claims work uses fixed sizes; no promise of constant timing.                                                                                                                                                                                                                                                                                                                                                                                       | `test/growth-website-refresh.test.ts`: “checkGrowth keeps website refresh rotation constant as family history and unrelated tokens grow”; “checkGrowth keeps website refresh replay revocation constant without walking family history”                                                                                                                                      |
+| Website protocol retention and durable sweep                   | `pruneExpiredProtocolState` runs five expiry-index statements: access tokens, refresh tokens, refresh families, client assertions and recent OIDC sessions. Each admits ≤2b candidates, locks/deletes ≤b≤1000 by TID, in dependency order. Optional `websiteMaintenanceModule` registers one maintenance-queue workflow with one replayable step; its native wake/dispatch/checkpoint persistence is included in the separate sweep capture. Fix b and durable step count; grow expired/live protocol and workflow history.                                                                                                                                                                                                                                                                                                                                                                                                      | Primitive Q=5, R=O(5b), B=O(5bL), linear in admitted b. Constant rows/statements and logarithmic blocks at fixed b, plus a constant number of durable workflow/step records for the registered sweep. No history-draining loop; module availability does not imply every host composes it.                                                                                                                                                                                                                                                                                                                                                                                           | `test/website-protocol-retention.test.ts`: “checkGrowth keeps one retention invocation constant in rows and statements as expired and live history grows”. `test/growth-revoke-maintenance.test.ts`: “Website maintenance sweep stays within its bound as protocol state history grows”                                                                                      |
+| Auth workflow and request retention                            | SDK listing admits w≤1000 terminal workflows at a strict application/completion/creation cutoff and a sweep admits at most 60 batches. The default host retires each personal copy through its native result commitment/consumer, bounded exact artifact ledger, permanent SDK writer closure/deletion and raw absence probes. Missing, failed or live consumers stay pending. Only the two fixed technical maintenance workflows use direct SDK deletion. The request-retention trigger removes bindings by workflow PK inside native deletion.                                                                                                                                                                                                                                                                                                                                                                                 | Per personal artifact: ≤139 native rows/10 MiB under the writer caps, one fixed native result read and fixed raw-key verification statements, logarithmic indexed blocks. Total retirement follows admitted copies; it never derives readiness from age or terminal status. SDK listing retains its existing possible linear cost in an examined long-lived prefix before LIMIT; that retention admission cost is separate from the account-local exact erasure page.                                                                                                                                                                                                                | `test/growth-retention.test.ts`: “a full Auth retention batch stays constant as workflow and request history grow”; “a short Auth retention batch stays constant as workflow and request history grow”. `test/growth-erasure-history.test.ts`: “actual Auth copy creation, exact deletion and missing-custody proof stay bounded as unrelated native workflow history grows” |
+| Website authorize, code exchange, revoke, logout and discovery | Authorize reads exact website client/reduction and native session/user/Access/consent proof, materializes one consent pair and writes one native verification code. Code exchange seeks latest code via `verification_latest_idx`, verifies confidential assertion/JTI and PKCE, rechecks exact session/client/consent and creates one refresh family/token plus signed claims. Revoke seeks refresh hash or verifies signed access, checks native client proof, upserts one recent session and advances the Access floor before native family revocation. Logout checks exact hinted/current/recent session and client redirect, then invalidates before session deletion. Cold discovery reads the exact client and ≤3 signing slots. Fix selected anchors, request scopes/bytes and admitted branch; grow client/session/grant/code/token-family history.                                                                     | Constant rows/statements and logarithmic O(L) blocks for the measured complete protocol branches, including cold metadata/signing. Family revocation marks one family rather than walking siblings; code identity is fresh and bounded. Generic duplicate-identifier verification deletion remains linear in matching rows.                                                                                                                                                                                                                                                                                                                                                          | `test/growth-protocol.test.ts`: “Authorize stays within its bound as client, session and grant history grows”; “Authorization code exchange stays within its bound as code and token family history grows”; “Token revocation and logout stay within their bound as token family and session history grows”                                                                  |
+| Expired-registration release                                   | `expireDueRegistrations` reads pages of at most 64 due stages through the `auth_registration_stage_due` index, ordered and resumed by `(expires_at, registration_id)`, then seeks the partial automated-request registrationId index once per admitted registration. Each row sends both expiry messages or resumes its stored automated request, then performs the fixed expiry and release steps.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Constant rows and statements per admitted due registration; logarithmic blocks as finished stages, requests and workflow history grow. Total work follows the number of due registrations.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | `test/growth-registration-operator-workflows.test.ts`: “Auth expired registration release stays within its bound as stage, request and workflow history grows”                                                                                                                                                                                                               |
+| Operator-session workflow composition                          | `openOperatorSession` resolves one native Access approval/opening receipt then immediately invokes Auth `openAutomatedSession`: human/session proof, exact receipt, subject/client/coverage/consent reads, ≤64-session establishment and one `auth_session_opening_pkey`/receipt-unique insert. Current production path does not enqueue a DBOS workflow. Fix one approval/operator/subject and capped session neighborhood; grow stage/request/workflow history.                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Constant rows/statements and logarithmic O(L) blocks at fixed owner cap and approval neighborhood; no scan of retained opening/stage/workflow history.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `test/growth-registration-operator-workflows.test.ts`: “Operator session workflows stay within their bound as stage, request and workflow history grows”                                                                                                                                                                                                                     |
+| Human and automated registration workflows                     | Complete native Auth workflows stage by registration/request/account unique keys, persist one exact `auth_workflow_request` binding for automated creation, reserve/publish/activate through native Kernel Access, provision owner/credential/receipt and clear staging ciphertext. DBOS workflow IDs and step/event checkpoints are exact anchors. Fix registration input, selected human/operator and native binding neighborhoods; grow actual old human/automated stages, receipts and approvals, then replay the exact operations. Only implemented steps are counted.                                                                                                                                                                                                                                                                                                                                                      | Constant rows/statements and logarithmic indexed blocks across both Auth and Kernel for one human and one automated registration plus exact replay. Fixed password/input sizes and durable step count; no receipt/stage history traversal.                                                                                                                                                                                                                                                                                                                                                                                                                                           | `services/kernel/test/access/growth-native-account-bindings.test.ts`: “fixed native human and automated registrations and exact replay stay bounded as old receipts and stages grow”                                                                                                                                                                                         |
+| Native workflow-proof ports                                    | `recordPending`, `pendingReference`, `recordAutomatedPending` and `automatedReference` seek/update the unique staging account with exact reservation predicates. `provisioningEvidence` joins the unique account stage/receipt and delegates exact receipt verification; `creationBinding` starts at registration PK with request-key/optional pair checks. Fix one selected pair and receipt; grow unrelated and old registration stages/receipts. These actual ports execute inside the cross-service registration series.                                                                                                                                                                                                                                                                                                                                                                                                     | Constant rows/statements per port (including delegated exact provisioning reads), logarithmic O(L) blocks. No JSON search, hash scan or stage/history traversal.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `services/kernel/test/access/growth-native-account-bindings.test.ts`: “fixed native human and automated registrations and exact replay stay bounded as old receipts and stages grow”                                                                                                                                                                                         |
+
+### Single-session revoke POST
+
+- Touches: `/sessions/revoke` retains native human/session/Access and client/consent
+  proof, then one exact `session_pkey` owner read for unknown/foreign concealment.
+  The DELETE selects only `id=$1`; its scalar owner subquery separately reads that
+  same primary key in the mutation's snapshot. Ownership is compared with the
+  verified human, never request input or a cached owner. Native `(id,userId)`
+  immutability preserves the guard through concurrent tuple rechecks; key reuse
+  between statements is checked again. Concurrent disappearance remains a
+  successful no-op after the initial owned lookup. Self-session cookie clearing
+  stays local and returns the native clearing `Set-Cookie` alongside the exact
+  empty success body. Unknown/foreign targets return the same fixed denial body
+  without cookies or deletion. Neither key operation admits an owner-history
+  index predicate.
+- Bound: fixed examined rows/statements/connections/output and O(L) indexed blocks,
+  including all native nested work. At most one target is deleted; the mutation
+  and its owner guard each examine at most one session row. No owner history or
+  token-family traversal, including for pre-upgrade expired history beyond cap64.
+- Growth check: `test/session-revoke-point.test.ts`, “native session revoke examines
+  a fixed exact session neighborhood as the same owner expired and unrelated
+  sessions grow at the original scales”, uses real native signin/proof, fresh
+  physical targets after harness preparation, explicit spare warmups and every
+  occurrence-linked native plan at 1/8/64. It preserves the 32-row handler ceiling,
+  charges bytes/control work and applies measured-layout access-path checks.
+  Native authority, concealment, current-cookie/proof and deterministic identity,
+  expiry, disappearance and foreign key-reuse outcomes are in that same suite;
+  `test/pages-consent-sessions.test.ts` retains the existing pages outcomes.
+
+The scheduled consent bound is O(d×c) (often written O(B×C), B≤100 owners), with
+no per-owner client cap. It bounds owner admission rather than consent changes;
+the native due-tick series measures both retained-history and client-fanout axes.
+Client reduction similarly follows affected consent owners rather than all accounts.
+Account erasure retains personal consent for 310 seconds; delayed cleanup locks each
+client and deletes all that erased owner's pairs, while live-account consent remains.
+
+Signing/JWKS recheck the durable generation and ≤3 live slots on every call. Cold
+archived keys are never enumerated; imported material refreshes immediately after
+a generation change. Native verification's consume lock is process-local; recovery
+uses a PostgreSQL proof lock, exact DELETE RETURNING and a durable consumed binding
+for cross-instance replay. Assertion JTIs, effect/provisioning receipts, openings and
+unconsumed recovery bindings have no scheduled retention; anchored operations remain
+logarithmic in their totals. Barrier-proof expiry/cleanup and Auth workflow/request
+retention are separate purposes.
+
+The default host routes personal workflow retention through the same native
+result consumer and exact copy retirement as account erasure. An expired or
+terminal workflow with unknown custody, a live native consumer or no committed
+result stays pending; retention time never supplies that missing proof. Only the
+fixed technical maintenance workflows use direct SDK retention.
+
+`Missing:` identifies implemented I/O with no matching native growth capture, and
+is restricted to the explicit operation list in `test/cost-table.test.ts`.
+Existing cascade-test statement assertions predate
+the consent schedule; the current transaction bound above follows `eraseAccount`.
+
+## Current private account identity
+
+`POST /account-identity` with the closed JSON body `{}` returns exactly
+`{ account_id, email }` for the current native human session. Every response,
+including a refusal, is `private, no-store`. The request must carry the configured
+issuer Origin, cannot be cross-site, and accepts neither a bearer Authorization
+header nor account selectors, queries or extra fields. The ordinary service
+handler supplies this read, so the default host composes it without another port
+or Kernel permission.
+
+The source is the installed Better Auth `user.email`, selected by the native
+session's `userId` through `user`'s primary key. Native password provisioning stores
+the login/recovery email there, while key-only owners can have null email. Native
+`user.name` is synthetic or empty and is never projected. `emailVerified` is
+independent: this display read makes no verification claim and does not expose
+that flag. An absent address stays null; malformed native values fail unavailable.
+There is no installed exact-current-account handle reader in this composition.
+
+Access account IDs are lowercase UUIDs of 36 ASCII bytes. The native projection
+rejects a session ID outside that existing contract as unavailable before the
+`user` lookup; historical Auth rows with invalid IDs are not normalized or
+disclosed. The existing email maximum is 254 JavaScript UTF-16 code units. Its
+worst compact JSON value has 252 escapable code units at six bytes each, plus the
+required one-byte `@` and `.`. Together with the 36-byte ID and 28 bytes of fixed
+JSON syntax, the exact response allowance is 1,578 bytes.
+
+The service retains human/session, account floor, client coverage and current
+consent admission, holds the existing native issuance guard, and rechecks the
+same account, source session, client, scope, epoch, authentication time and methods
+after the exact native read. Identity supplies display context only. `/session`
+and all original approval, freshness, target-binding and mutation checks keep
+their existing contracts.
+
+Cost: one indexed exact-self `user` lookup, plus the existing constant native
+session/client/consent checks before and after I/O. No enumeration, join across
+homes, scans of account history, per-row requests or polling. Existing native
+request body bounds and issuance guards apply. The response byte allowance adds
+no query or session probe. `test/account-identity.test.ts`
+covers invalid historical ID refusal, the closed projection, source semantics, privacy refusals and changes
+while the native read is in flight; its execution is separate from typechecking.
 
 ## Ordinary native host assembly
 
@@ -804,6 +1981,16 @@ DBOS. Migrate two separate databases first. Supply persistent reference, routing
 staging and signing keys from host configuration; keep Auth database credentials
 and private keys out of the kernel worker. The host owns its Auth pools and
 `auth_dbos` system schema; the caller retains the kernel pool.
+
+One trusted binding factory composes Auth and native Access, with deferred Auth construction where needed.
+Consumers use public inward imports; canonical identity extraction changes imports, never erasure, verification,
+reversal or durable fences. Lightweight public-read and narrow binding entries preserve store entry, canonical
+error identity and deferred loading; they add neither a resolver nor a widened grant. Source compatibility proves
+no native or cold-load pass. Pure policy placement follows the [adopted architecture](../../docs/architecture.md).
+
+Automated and organization creation must verify the actual Auth session before and after released I/O. A
+fresh-human precheck, unchanged Access proof or token floor alone is no post-callback live-session proof. Native
+acknowledgement and browser private-result disclosure are separately owned by the [page contract](../../apps/auth/README.md#mounted-operation-lifetime).
 
 This minimal assembly uses the production factories directly. Import paths are
 relative to an application at the repository root. `actions` is the application's
@@ -821,6 +2008,7 @@ import {
 import type { Pool } from 'pg';
 import { createAccess } from './services/kernel/src/access/index.ts';
 import { createNativeAccountBindings } from './services/kernel/src/access/native-account-bindings.ts';
+import { createAccountManagementReadAccess } from './services/kernel/src/access/management-source.ts';
 import { createWorkflowApprovals } from './services/kernel/src/access/workflow-approvals.ts';
 import type { LifecycleRequest } from './services/kernel/src/access/lifecycle.ts';
 import type { ActionCatalogue } from './services/kernel/src/request/access.ts';
@@ -871,6 +2059,7 @@ export async function ordinaryHost(options: Options) {
     database: authPool,
     trustedAccess: bindings.trustedAccess,
     access: bindings.workflowPorts,
+    accountManagementReads: createAccountManagementReadAccess({ pool: kernelPool, access }),
   });
   service = host.service;
   const COMMANDS = {
@@ -965,6 +2154,11 @@ reduction returns null. First-party standing consent requires the native issuer'
 actual materialized row; this reader performs no materialization or refresh.
 Access epochs and caller timestamps do not replace this current fact.
 
+First-party consent materialization reuses an identical current consent under the native issuance barrier. It reads
+one exact account/client consent and the indexed pending-transition range; only an absent or changed consent enters
+the existing writer after release. Pending transitions still require that writer. Repeated live-proof signing during
+a credential transaction therefore does not request an exclusive client lock against its own shared lock.
+
 `@rezics/auth/internal-consent` exports `createInternalConsentHandler` with the
 Auth pool, `issuer`, `jwksUrl`, `audience` and `allowedServiceTokenIds` supplied
 by trusted server configuration. Its only route is
@@ -988,15 +2182,90 @@ Missing trust configuration fails startup. Runtime denial and unavailability are
 sanitized, and every response is `private, no-store`. No credentials, emails,
 other owners or history are selected or returned.
 
-Each invocation executes one statement: the consent `(account_id, client_id)` PK,
-client PK, coverage PK and reduction PK, with fixed rows and O(log R) indexed
-blocks. No issuance, refresh, mutation, owner scan, delegation enumeration or
-consent cache is involved. One bounded HTTP request/response is added per durable
-step; unauthorized requests execute zero SQL. `growth-current-consent.test.ts`
-uses native `checkGrowth` at 1/8/64 × 500, grows unrelated owners/clients and the
-selected person's other-client/history rows, and retains full SQL/auto_explain
-provenance in `.temp/current-consent-growth.json`. No planner overrides or
-wall-clock growth gate are used.
+The same private listener can also serve the installed Auth Kind enrollment
+participant at `POST /internal/v1/kind-consents:enroll`. Set
+`AuthHostOptions.privateConsent` to the trusted Access `issuer`, `jwksUrl`,
+`audience` and `allowedServiceTokenIds`. After `host.start()`, serve
+`host.privateConsentHandler` on its own Tunnel-only listener; it is not mounted
+on `host.handler` and returns 503 before host start or after shutdown. Host
+start/stop gates the handler and owns the existing Auth pool and the one
+`service.internal.kindConsentParticipant` instance. The listener does not make
+a second participant or pool. Kernel keeps the exact JSON `{ input, deadline }`
+and adds only the enrollment-specific `X-Rezics-Kind-Deadline` header with the
+same original integer deadline. The header is resource/deadline input, never
+service identity or admission authority. Auth reads and strictly parses it
+before JWT verification or body I/O, requires canonical positive-integer text
+and exact equality with the JSON number, and then fixes one cutoff at
+`min(originalDeadline, arrival+3000ms)`. That cutoff bounds verification, body,
+native pool checkout, transaction, response and rollback; there are no renewed
+per-stage windows. Owned JWKS/body streams and the native connection are aborted
+or cancelled at the cutoff. A detached raced promise is not used.
+
+Enrollment request bodies stay bounded at 90,000 bytes for the 80,000-byte
+canonical input; response bodies are bounded at 80,000 bytes. The JWT is limited
+to 16,384 bytes, JWKS request to 4,096 bytes and streamed JWKS response to
+65,536 bytes. Auth control input (URL, method and headers other than the
+separately charged JWT), JWKS response headers and the fixed Auth response
+headers share an 8,192-byte ceiling. The separate `/consents:read` route keeps
+its existing fixed verification/body behavior and 16,384-byte body ceiling.
+
+The canonical native Source bound is candidateKeys=1, nativeRows=2,
+identityMetadataRows=0, emptySeeks=3, nativePoints=4, witnessKeys=3 and
+statements=11; Access is keys=1, rows=2, emptySeeks=3, points=4 and witnesses=3.
+Literal successful new enrollment uses BEGIN + timeout configuration + three
+locks + frontier + current client/consent + existing consumer + INSERT + COMMIT
+(10 statements). Duplicate enrollment stops before INSERT (9); closed-frontier
+refusal stops after the frontier query (7); current-client refusal is 8. The
+ceiling's 11 includes attempted COMMIT and ROLLBACK after a failure. A pool wait
+executes no SQL. A failure or uncertain commit has no reusable actual charge,
+so the caller retains its full reservation. The producer traces each literal
+statement, lock, returned row, empty seek and JSON-serialized metadata result;
+the native actual is tied to the exact input/result and can be consumed once.
+
+For admitted input, `I = 128 + UTF8(accountId, clientId, route, ownerAccountId,
+collectionId, preparationId, originId, requestedScopes)`. The native byte
+ceiling is `I + max(2*JSON([])+JSON([currentRow])+JSON([insertRow]),
+3*JSON([])+JSON([currentRow]),
+JSON([])+JSON([currentRow])+JSON([existingRow]),
+2*JSON([])+JSON([currentRefusalRow]), JSON([{ "?column?": 1 }]))`. Every
+nonempty query result is the JSON array actually measured by `JSON.stringify(rows)`;
+each empty query result is `JSON([])`. The current row maximum uses
+`first_party=false`, `ready=true`, `reducing=false`, three maximum stored scope
+arrays and the 19-digit signed-BIGINT revision ceiling. A current refusal uses
+`first_party=false`, `ready=false`, `reducing=false`. The existing row maximum
+uses `active=false`, two maximum stored scope arrays and a 36-byte UUID text
+reference. The left-joined consent arrays and revision may be null; those
+shorter forms are included by the array and 19-digit maxima. Each scope array
+is bounded at 512 scopes of 128 ASCII bytes
+(67,073 JSON bytes). A 1,024-byte visible identifier can be 1,024 backslashes,
+which serializes as 2,050 JSON string bytes. The complete metadata-result path
+maxima are 203,482 bytes for a new insert, 203,427 for a suppressed insert,
+352,144 for a duplicate/inactive/refused consumer, 203,426 for a current
+refusal and 16 for a closed frontier. Thus the maximum native result is
+352,144 bytes before adding `I`; at maximum admitted identifier and scope
+lengths, `I` is 72,832 bytes. This `max` accounts for mutually exclusive paths
+without summing their rows. A suppressed `INSERT RETURNING` row is the
+three-empty-result new path and commits an unavailable result.
+
+Auth's verified actual adds the measured JWT, JWKS request/response and Auth
+control bytes to the traced native work. Kernel's actual adds the measured
+90,000-byte-bounded request body, 80,000-byte-bounded response body and
+8,192-byte-bounded URL/method/explicit headers. Both Source and Access byte
+reservations therefore add at most 272,400 transport/verifier bytes to the
+native input-plus-metadata ceiling. Auth returns `{ result, work }` only when
+the one-use native actual and measured verification work fit that declaration;
+Kernel validates every axis and consumes its invocation-bound actual once.
+Absent, malformed, late, dispatched-failure and repeated receipts leave the
+full same-frame reservation spent; a retry uses the same consumer identity and
+a new caller reservation. No parent allowance, ledger or child refund is added;
+a consumer parent without this complete declaration remains unavailable.
+This private transport does not implement Source invalidation/verification,
+same-home adoption fences, restore recovery or consent-erasure receiving.
+
+The Cost table derives the standalone exact current-consent reader and cites its
+native growth series. The private listener adds one bounded HTTP request/response
+per durable step; unauthorized requests execute zero SQL. No issuance, refresh,
+mutation, delegation enumeration or consent cache participates.
 
 ## Website client
 
@@ -1016,28 +2285,19 @@ session system or grant engine exists.
 Registration is a trusted, in-process deployment operation. There is no dynamic
 or HTTP client registration:
 
-```ts
-await auth.internal.registerWebsiteClient({
-  publicJwks: { keys: [websitePublicJwk] }, // public P-256 ES256 keys only
-  redirectUris: ['https://rezics.com/auth/callback'],
-  postLogoutRedirectUris: ['https://rezics.com/'],
-  scopes: [
-    'openid',
-    'offline_access',
-    ...[...mountedWebsiteActions].filter(([, action]) => !action.anonymous).map(([name]) => name),
-  ],
-});
-```
+Decision: derive website scopes from every mounted action, including anonymous-capable private branches,
+plus Auth's `organization:create`, `account:manage`, `account:delete`. Never use a hand list or wildcard.
+`mountedWebsiteConfiguration(actionCatalogue(kernel))` deduplicates/sorts actions with OpenID
+scopes. Local setup, host and launch share this composition. Auth's Access-supplied `siteActions` refuses
+unmounted names.
 
-`mountedWebsiteActions` is the trusted catalogue of mounted site features supplied
-as `siteActions` when composing Auth. It includes `media:complete` and all mounted
-protected site actions, including `account:read` with its self-revoking replay
-formula and admitted `source_fence:read`, `source_fence:takedown` and
-`media:import_from_url` features. Future mounted entries use this same data path.
-Registration supplies no actor, principal or resource grant; a public-read floor
-requires no scope. Production's configured audience, kernel `AUTH_AUDIENCE` and
-the website's `resource` are exactly `https://api.rezics.com`, without a trailing
-slash. Isolated tests use `https://api.rezics.test`.
+Trusted `registerWebsiteDeployment(auth, actionCatalogue(kernel), registration, websiteConfigurationFile)`
+registers first, then emits Web's public `WEBSITE_CONFIGURATION_FILE` operand. Deployment supplies the actual
+composition, public JWK and callbacks; Web refuses a scope override mismatch. Importer grants stay separate.
+
+Update registration/configuration together, then deliberately sign out, sign in and complete renewed consent.
+Old sessions/access/refresh ceilings remain unchanged. Registration supplies no resource, exposure, ownership
+or lifecycle grant; populated journeys still require native receiving and prepared fixtures.
 
 - The website generates its private P-256 JWK and keeps it as a Worker secret.
   Deployment passes only `{ keys: [public JWK] }`. Each key needs a unique `kid`,
@@ -1051,7 +2311,9 @@ slash. Isolated tests use `https://api.rezics.test`.
   allowance.
 - Scopes must include `openid`, `offline_access` and `media:complete`. When the
   composition supplies the trusted mounted action catalogue (`siteActions`),
-  every other scope must be one of its actions. Scope changes are additive;
+  every other scope must be one of its actions. The deduplicated list is bounded
+  by the known scope set described under client registration (1,000 entries
+  without a mounted catalogue). Scope changes are additive;
   removing a scope is refused here and belongs to the client reduction workflow.
 - The call is idempotent. It replaces keys and redirect lists, so rotate a key
   by registering both keys, switching the website, then registering the new key
@@ -1070,14 +2332,14 @@ server-to-server OAuth calls send `application/x-www-form-urlencoded` bodies
 without a browser `Origin`, and logout also accepts `GET`. Form bodies are at
 most 16 KiB, every field may appear once, and unknown fields are refused.
 
-| Method and path                            | Input / result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET /.well-known/openid-configuration`    | Discovery: exact `issuer`; `/authorize`, `/token`, `/revoke`, `/logout` and `/.well-known/jwks.json`; `response_types_supported: ["code"]`; grants `authorization_code` and `refresh_token`; PKCE `S256`; `private_key_jwt` with ES256; `scopes_supported` from the registered client. Also served at `oauth-authorization-server`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `GET /authorize`                           | `client_id`, exact `redirect_uri`, `response_type=code`, `state`, `code_challenge` (S256), `code_challenge_method=S256`, `resource` (the API audience), `scope` with `openid offline_access`, optional `nonce`, `prompt`, `max_age`. A signed-out browser is redirected to `/login` with the authorization query. A signed-in browser is redirected to `/step-up` with that query when the session does not satisfy `prompt=login` or when its `auth_time` is older than `max_age`. Resuming `/authorize` after a fresh sign-in, with that query minus `sig`, `exp` and `prompt`, issues a one-use code and `state` only to the validated URI. The ID token carries that session's `auth_time` and `amr`. Unrecognized query parameters are ignored; a repeated protocol parameter or a value longer than 8192 characters is refused |
-| `POST /token`                              | `grant_type=authorization_code` with `code`, `redirect_uri`, `code_verifier`; or `grant_type=refresh_token` with `refresh_token` and an optional narrower `scope`. Both require `client_id`, `client_assertion_type`, `client_assertion` and `resource`. Failures return only an error code: 400 `invalid_request` for malformed requests, 401 `invalid_client` for failed client authentication, 400 `invalid_grant` for refused grants, and 400 `unsupported_grant_type`, `invalid_scope` or `invalid_target` for their respective checks. Internal or unavailable dependencies return 503 `temporarily_unavailable`. Every response is `no-store`. JSON bodies keep the existing cookie `/token` route                                                                                                                            |
-| `POST /revoke`                             | RFC 7009 `token` and optional `token_type_hint`, with the same client authentication and `resource`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `GET` or `POST /logout`, `/logout/confirm` | OpenID Connect RP-Initiated Logout 1.0: `id_token_hint`, `client_id`, `post_logout_redirect_uri`, `state`. No client key is needed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `GET /login`                               | Login entry for the browser: sign in through `POST /signin` with the registered `login` client, then resume `/authorize`. A signed-in session that must authenticate again is sent to `/step-up` instead of `/login`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Method and path                            | Input / result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /.well-known/openid-configuration`    | Discovery: exact `issuer`; `/authorize`, `/token`, `/revoke`, `/logout` and `/.well-known/jwks.json`; `response_types_supported: ["code"]`; grants `authorization_code` and `refresh_token`; PKCE `S256`; `private_key_jwt` with ES256; `scopes_supported` from the registered client. Also served at `oauth-authorization-server`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `GET /authorize`                           | `client_id`, exact `redirect_uri`, `response_type=code`, `state`, `code_challenge` (S256), `code_challenge_method=S256`, `resource` (the API audience), `scope` with `openid offline_access`, optional `nonce`, `prompt`, `max_age`. A signed-out browser is redirected to `/login` with the authorization query. A signed-in browser is redirected to `/step-up` with that query when the session does not satisfy `prompt=login` or when its `auth_time` is older than `max_age`. First-party standing consent is materialized under a released issuance phase; a newly acquired barrier then rechecks the current session, client and committed consent before code issuance. Resuming `/authorize` after a fresh sign-in, with that query minus `sig`, `exp` and `prompt`, issues a one-use code and `state` only to the validated URI. The ID token carries that session's `auth_time` and `amr`. Unrecognized query parameters are ignored; a repeated protocol parameter or a value longer than 8192 characters is refused |
+| `POST /token`                              | `grant_type=authorization_code` with `code`, `redirect_uri`, `code_verifier`; or `grant_type=refresh_token` with `refresh_token` and an optional narrower `scope`. Both require `client_id`, `client_assertion_type`, `client_assertion` and `resource`. Failures return only an error code: 400 `invalid_request` for malformed requests, 401 `invalid_client` for failed client authentication, 400 `invalid_grant` for refused grants, and 400 `unsupported_grant_type`, `invalid_scope` or `invalid_target` for their respective checks. Internal or unavailable dependencies return 503 `temporarily_unavailable`. Every response is `no-store`. JSON bodies keep the existing cookie `/token` route                                                                                                                                                                                                                                                                                                                         |
+| `POST /revoke`                             | RFC 7009 `token` and optional `token_type_hint`, with the same client authentication and `resource`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `GET` or `POST /logout`, `/logout/confirm` | OpenID Connect RP-Initiated Logout 1.0: `id_token_hint`, `client_id`, `post_logout_redirect_uri`, `state`. No client key is needed                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `GET /login`                               | Login entry for the browser: sign in through `POST /signin` with the registered `login` client, then resume `/authorize`. A signed-in session that must authenticate again is sent to `/step-up` instead of `/login`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 
 Client assertions are ES256 JWTs signed with a registered `kid`, with
 `iss = sub = rezics-website`, `aud` exactly the configured issuer identifier (not
@@ -1117,7 +2379,7 @@ relies on the Access floor rather than on token rows.
 
 ### Refresh families (provider patch)
 
-`patches/@better-auth%2Foauth-provider@1.8.0-beta.2.patch`, registered in the root
+`patches/@better-auth%2Foauth-provider@1.8.0-beta.3.patch`, registered in the root
 `patchedDependencies`, fixes a provider defect: reuse detection did not
 linearize with rotation. A rotation revoked its parent, then inserted the child
 in a separate write. A concurrent replay, even in another process, deleted the
@@ -1152,13 +2414,9 @@ child to fail: it passes with the patch and fails on the unpatched provider,
 where the child refresh returns HTTP 200. `--observe-native` instead asserts
 that race. The probe prints only statuses and counts.
 
-Through the real website handler, one refresh rotation costs 28 statements and
-30 rows and one replay revocation 18 statements and 16 rows at 1x/8x/64x, while
-the measured family's rotated history, the person's other families and other
-people's families grow (`growth-website-refresh.test.ts`). Code exchange,
-refresh, replay and revocation touch the family and token rows by exact key or
-hash and never scan refresh history. Session logout does not enumerate token history: the provider's optional
-front/back-channel notification hooks are omitted because this sole native client
+The Cost table records complete website refresh/replay work and its native growth
+series alongside the other protocol handlers. Session logout does not enumerate
+token history: the provider's optional front/back-channel notification hooks are omitted because this sole native client
 has no such delivery registered. Native RP logout still deletes the actual session
 and expires its cookie. Access-first deletion raises the floor, and native token
 admission requires the same live session; expired physical rows wait for retention.
@@ -1167,8 +2425,8 @@ admission requires the same live session; expired physical rows wait for retenti
 1000, default 1000) of expired access tokens, refresh tokens, refresh families,
 client assertions and recent logout evidence per invocation. Removing a family
 never revives a token, because the provider refuses tokens of a missing family.
-Each kind uses its expiry index; one invocation stays constant in rows and
-statements as expired and live history grow (`website-protocol-retention.test.ts`).
+The Cost table derives expiry-index admission and distinguishes the primitive
+from the registered durable sweep, with a native growth citation for each.
 Register `websiteMaintenanceModule` from `@rezics/auth/website-maintenance` with
 the existing kernel worker. It registers one durable step and one minute schedule
 on the existing `maintenance` queue, with no backfill and no second SDK launch:
@@ -1198,3 +2456,877 @@ revocation, code redemption with logout, native browser confirmation and expired
 recent-session hints, including `pool.max=1`. RFC 7009 revocation of an API JWT
 uses the same native confidential proof admission, then the existing Access floor;
 the adapter reports success only after that floor commits.
+
+## Workflow history retention
+
+The Auth host refuses startup unless `AUTH_WORKFLOW_RETENTION_DAYS` is a whole
+number from 7 through 365; absence defaults to 30 days. Auth maintenance registers
+`auth.workflowRetention.every-10-minutes` (`*/10 * * * *`, UTC, no backfill) on its
+existing single-concurrency maintenance queue. It operates only on application
+`rezics-auth-accounts` in `auth_dbos`, without launching another executor.
+
+Each run fixes one cutoff and deletes at most 60 batches of 1000 terminal
+workflows (`SUCCESS`, `ERROR`, `CANCELLED`, `MAX_RECOVERY_ATTEMPTS_EXCEEDED`).
+Both `completedBefore` and `endTime` receive cutoff minus one millisecond because
+the SDK comparisons are inclusive. Running work and work completed exactly at
+or after the cutoff remain. Input/output payloads and child enumeration are
+excluded. After DBOS creates its system schema, the host installs a delete
+trigger: each deleted status removes its `auth_workflow_request` binding by
+primary key inside the same SDK transaction. A failure rolls both back; retries
+cannot strand bindings. Product migrations define the trigger function without
+requiring the DBOS schema to exist during migration.
+
+The Cost table records the full/short native batch series and its fixed-batch,
+retained-child and long-lived-workflow qualifications.
+
+### Erasure cursor deployment
+
+Quiesce Auth issuers and account workers before applying the ordinal migration.
+Run `AUTH_DATABASE_URL=… bun services/auth/src/erasure-cursor-cutover.ts` from the repository root until
+it returns `done: true`. Each committed page writes at most 99 native keys plus
+one checkpoint, or translates one cursor through indexed predecessor lookups.
+The singleton `auth_erasure_cursor_cutover.completed_at` is the durable completion
+marker required by subsequent erasure drains. An empty installation records it
+in the migration. Restarting the deployment step resumes its last checkpoint.
+
+Start the ordinal writer and worker version together after completion. Native
+writes refuse an incomplete deployment; legacy cursor columns are renamed and
+cleared as their rows translate, and legacy worker completion is refused.
+Legacy DBOS reduction pages are refused before owner effects; a versioned,
+deduplicated replacement resumes from the acknowledged ordinal saved at cutover,
+including after executor restarts. User and consent-owner ordinals are sequence values on their native rows, indexed
+with their actual owner keys. Deleting a native row removes that binding; no
+separate identity mapping survives it. Retained consent has its own ordinal
+because consent can outlive the user until its delayed drain completes.
+
+### Workflow ID reuse audit
+
+Retention removes execution history, not native command receipts or approval
+expiry checks. Reusing an old ID does not restore an expired authorization:
+
+- `accounts.registration`: the original native handle reservation and pending
+  commands replay their receipts with their original deadline. Provisioning and
+  activation enforce that deadline. Expiry requires the matching pending account;
+  a completed active account fails that check before Auth erasure. An already
+  expired registration replays expiry/release receipts and idempotent erasure.
+- `accounts.client-reduction`, including `:page:` continuation IDs: the original
+  approval expires within 300 seconds. Native progress is keyed by operation ID,
+  records its cursor and completion, and refuses changed inputs. Owner barriers
+  and cleanup receipts also retain their original keys.
+- `accounts.operation`: automated registration, organization creation, rename,
+  membership changes, operator transfer, deletion, operator fencing, consent and
+  authorized session revocation revalidate native approvals (at most 300 seconds)
+  before effects. Native commands use the approval's stable command prefix and
+  retained receipts. Delete/revoke continuations require the exact native
+  allowlisted operation and independently expire within 300 seconds; they cannot
+  be recreated by workflow ID alone. Historical
+  callback-only unapproved revoke paths use `wf:<ID>:<phase>` native keys;
+  production bindings refuse unapproved operations.
+  Operator session opening and transfer acceptance do not start a DBOS workflow.
+- `accounts.membership`: the shared registrar reauthorizes reserve and new publication;
+  native authorization expires independently of DBOS history. Every positive Realm operation reserves a fresh
+  generation, including role confirmation and rejoin. Its registered publication step first recovers an exact
+  committed source proof mechanically, without needing a lost bearer or publishing again. Registered `finalize`
+  consumes proof after publication; compensation commits `cancel` before finalization, then uses the original
+  `terminalize` and `release` steps and receipt keys for authoritative inverse removal. Realm work refuses missing
+  protocol wiring. These steps use `wf:<ID>:<phase>` native keys and bind the original input. Stable inverse
+  reservation and generation have separate lifetimes; replay cannot spend a later generation. Ordinary leave,
+  organization and operator authorization/order remain unchanged. Terminal release carries the exact reservation
+  and terminal proof. This registrar runs in the composing caller's executor; Auth retention never visits kernel's
+  system schema/application. Access documents the migration and stopped-old-writer reconciliation barrier.
+  Cost: constant durable steps and point commands per operation; native rows/blocks/connections/output, including
+  nested DBOS and proof work, are measured at 64/512/4096 in the kernel's Realm transition growth acceptance.
+- `auth.maintenance.tick`, `auth.workflowRetention`, and the separately composed
+  `accounts.website-protocol-expiry` schedule intentionally repeat bounded,
+  idempotent pruning primitives. Signing pruning uses its generation compare and
+  swap. Reusing a scheduled ID only performs another bounded maintenance pass.
+
+Fresh approvals for the same actor and logical operation retain the same native
+command prefix. The permanent native approval-binding receipt refuses changed
+business input or principal assignment. DBOS history retention therefore does
+not discard the effect authority or allow a second effect for that logical key.
+
+## Source diagnostic emission
+
+`src/diagnostics.ts` owns the nonpersonal source allowlist adopted by
+[external custody](src/external-custody-contract.md#source-admission-and-actual-receiving-lifecycle).
+Each output is exactly `{ code, operation, severity }`, with closed primitive enums.
+Membership step failures use `membership_<step>_failed` and `membership.<step>`
+for the static steps `reserve`, `publish`, `terminalize`, `release`, `finalize`
+and `cancel`. Recovery start failure uses `recovery_start_failed` / `recovery.start`.
+Invalid untyped emitter inputs use `diagnostic_input_rejected` / `diagnostics`.
+No error message, stack, cause, SQL parameters, identifiers, request context or
+credentials enter these outputs. The membership wrapper retains its existing
+thrown step error, disabled retries and compensation/denial ordering; HTTP and
+recovery error responses retain their existing behavior.
+
+The actual Better Auth instance inherits `BetterAuthOptions.logger.log` from
+`betterAuthOptions`: native logger calls project to `better_auth_diagnostic` /
+`better_auth`, retaining the existing warn threshold. The Auth workflow host
+sets `DBOSConfig.logger` and its copy writer's `DBOSClient.create({ logger })`
+to the same source policy: `dbos_diagnostic` / `workflow_runtime`. Each delegated
+SDK call emits once at its native `debug`, `info`, `warn` or `error` severity.
+DBOS custom loggers receive all levels regardless of `logLevel`; this adapter
+retains those calls, including error counts, and ignores every message/metadata
+argument. No console interception or external receiver is installed.
+
+These hooks close only their actual delegated emission paths. The pinned Better
+Auth core's `createAdapterFactory` export (`@better-auth/core/db/adapter`,
+`dist/db/adapter/factory.mjs`) still directly calls `console.error(error)` on a
+fallback-join failure and `console.log(stack)` on an unapproved supplied create
+ID. Neither uses `options.logger`; debug-adapter logging also constructs its own
+logger. The shared-runtime/Better Auth integration owner must route those actual
+calls through the existing instance logger. The core's `@better-auth/core/env`
+module logger also falls back to its default logger outside endpoint context;
+Auth's instance configuration cannot certify that foreign fallback. Browser
+client diagnostics are outside this server source closure.
+
+DBOS's installed `DBOSConfig.logger` and `DBOSClient.create` cover their delegated
+runtime and database diagnostics (including migration warnings). Optional
+`TelemetryCollector` / `TelemetryExporter` direct console emissions and the
+`ConfiguredInstance` decorator warning bypass that hook; the shared-runtime/DBOS
+owner must supply equivalent source routing there if used. Foreign hosts that
+register Auth membership steps own their DBOS configuration and must compose
+the logger policy on their existing instance. Auth does not replace their runtime.
+
+Old or external diagnostic copies, collectors, rotations, archives, exports,
+replicas and backup erasure remain unknown/pending with their receiving owners.
+This source change adopts no retention exception, copy-erasure certificate or
+Auth participant acknowledgement. Durable native workflow error/result custody
+remains governed separately by the existing erasure contracts.
+
+## Native metadata privacy contract
+
+[Native metadata privacy and creation custody](src/metadata-privacy-contract.md) owns the adopted field
+classification, whole-field legacy disposition, exact proposed personal-party columns, producer/consumer
+retirement, indexed native bounds and source-interface handoff for client contacts, client/resource metadata
+and private creation records. It is a specification with native boundary evidence, not a delivered personal
+metadata API. Generic registration and website registration remain mechanical trusted configuration writers.
+New personal metadata stays closed until its source-approved subject/context and shared-copy custody are adopted.
+A recorded owner never proves absence of other people; JSON, address, handle and ciphertext searches cannot
+supply attribution. Unknown creation/release witnesses remain pending until their actual source consumers retire.
+
+### Historical configuration disposition
+
+`internal.scrubMetadataConfiguration(store)` implements the adopted whole-field disposition for
+`auth_client`, `oauthResource` and `oauthClientResource`. Each native maintenance tick runs one separately
+committed page per store, through separate count-only DBOS steps. A page admits two raw primary keys, reserving
+the rest of the 48-key ceiling for existing old/new erasure and native role guards, exact-row inspection and
+the deployment checkpoint. SQL returns keys and presence booleans only; it never returns or parses historical
+JSON, addresses, handles, labels or claims. Locators are bounded to 1 KiB and returned control data to 64 KiB.
+An oversized key returns `locator-too-large` without its bytes and holds that store's boundary. Other stores
+continue independently. Native fence and writer-version refusals stay pending through their existing owners.
+
+`auth_metadata_scrub` stores only store, writer version and the last committed raw key. Empty tails wrap to
+revisit pending rows after source replacement. Payload changes and the boundary commit or roll back together;
+there is no ready bit, completion flag, coverage certificate or participant acknowledgement. Clean rows avoid
+rewrites. This deployment pass neither discovers people nor infers ownership from a linked client.
+
+The client pass removes contacts, arbitrary metadata outside the sole native website consumer, provider
+name/URI/icon/terms/policy, software identifiers/versions/statements and unproven `display_name`. Resource and
+link metadata are removed independently, including resources shared by living clients. Unproven resource names
+become the inert empty string; resources are never deleted by this operation. IDs, ownership, first-party and
+scope ceilings, redirect/logout URLs, JWKS and other protocol-authority fields remain under their existing commands.
+Legacy provider `referenceId` stays precisely pending because this slice has no source command retiring that
+authority. Native website metadata and resource `customClaims` also stay pending rather than changing token
+authorization through a maintenance write.
+
+The website admission read blocks historical metadata, provider references and custom resource claims before
+the provider consumes them. The existing `registerWebsiteClient` transaction replaces metadata/claims for its
+actual configured audience and reasserts the real `REZICS API` constant alongside its existing validated keys,
+scopes and exact callback configuration. A failed replacement rolls back all of those fields. Unknown resources
+remain independently pending; registering one audience never certifies any other resource or historical copy.
+
+Native configuration triggers suppress new unsupported free-field writes, including raw provider/import SQL.
+They preserve existing consumer-used inputs until the actual source replaces them. Unsupported replacement
+claims, references and metadata are never adopted; clearing a consumer-used value requires its actual source
+command. Presence checks and assignment preserve opaque originals without JSON comparison or traversal. No
+personal metadata producer is enabled. The trusted deployment `registerClient` command supplies the actual
+application label, never a `safe` assertion; callers must supply application constants without person-derived
+interpolation. Its transaction binds the exact configured client and label to field-specific writer provenance.
+Website resource provenance similarly binds the exact resource and service constant. Copying a label or setting
+the provenance column directly supplies no provenance. Exact `create-or-match` replay still preserves the existing
+row. Client/session/inventory reads withhold historical unproven labels before the scrub reaches them.
+
+`test/metadata-config-scrub.test.ts` covers previous-schema historical rows, whole-field disposal, independent
+shared resources, resumable rollback, bounded raw locators, native writer guards and actual website replacement.
+Shared/provider archives and histories still require their own supported disposition and custody. None of these
+native pages proves final erasure, closes the personal-contact/source gap or supplies Auth participant completion.
+
+## Native erasure and custody
+
+The existing deletion operation accepts a durable `auth_erasure` obligation after
+its trusted deleted/fenced account read. The original account and epoch floor,
+applicability, phase and independent raw-key cursor live in the Auth database,
+outside DBOS. The recovered `erase-auth-owner` step joins the same obligation.
+Default maintenance redrives one unfinished native page without a session or a
+fresh approval. No production Auth module imports the kernel.
+
+Every native page requires the deployed ordinal v2 completion marker. A page
+selects at most 48 keys, returns at most 1 KiB per key, and checkpoints with its
+mutations. An owned client is selected and fenced under its existing lock;
+subsequent pages hold only that client lock. Access tokens, attributed protocol
+rows, refresh tokens/families, sessions, operating openings, recovery proofs and
+establishments, effect receipts, provisioning receipts, credentials, assertions,
+registration stages, coverage, reduction progress and client resources drain
+before their parents. Native DELETE guards independently refuse user/client
+cascades through remaining children. Authorized surviving password credentials
+and unrelated clients are retained.
+
+Producer-side typed columns associate reset/WebAuthn/OAuth verification, refresh
+families, website client assertions, operating sessions/tokens and native stages.
+These are written in the artifact's native transaction.
+Provisioning receipts inherit creator/operator roles from their uniquely bound
+native registration stage in the credential transaction, and retain that stage's
+release witness until activation or release is terminal. Native workflow producers
+pass the actual stage key; a locked point read refuses provisioning if erasure has
+already removed that stage. Native account and client
+fences reject late issuance, recovery and reduction writes; minimal client replay
+fences survive metadata deletion. Verified-account recovery counters keep exact
+native HMAC-key associations, including retired secret generations. Anonymous
+transport counters are never assigned by IP address.
+
+User deletion writes the original `clock_timestamp() + 310 seconds` consent
+cutoff once. Website access/ID token lifetime is 300 seconds; the native signing
+and verifier limits accept no additional leeway. The extra ten seconds therefore
+covers the composed maximum. Retries retain the original cutoff. Each due page
+selects one account and one client, takes that client's lock, removes its consent,
+and checkpoints on the same transaction. Only actual residue absence removes the
+marker and persists completion, including the final page. Live-user stale markers
+are discarded without changing live consent. Sleep holds no connection.
+
+Native request rows have typed subject/human/operator/client/stage locators. The
+default deletion caller and maintenance scheduler compose the same native consumer
+continuation. Its held key and pending reason checkpoint before the Auth connection
+is released; foreign source commands finish before another connection is acquired.
+Neither a session nor a renewed approval supplies mechanical release authority.
+Confirmed deletion first commits its permanent Auth obligation, then finishes the
+original source responsibility releases and deleted-handle redirect under that
+same committed continuation before waiting on native Auth pages. A registration's
+source deadline can outlive the continuation; waiting does not renew its authority
+or postpone those already authorized source consumers.
+The pinned SDK's workflow patch preserves the old step order for existing
+histories. An old continuation that already expired before its source release
+remains refused; this path never restores its former authority.
+
+- Registration records its original workflow/activation keys before source work,
+  and its actual operator reservation when that command returns. Erasure removes
+  ciphertext and credential digest while retaining this release witness. A lost
+  activation reply consumes the private `OriginalLifecycleResultPort` reader's
+  actual committed result without invoking activation or transient provisioning
+  evidence. The exact original stage, provisioning receipt, reservation and
+  activation key form its `OriginalLifecycleRequest`. Auth releases its checkout
+  before the reader, then independently reacquires its erasure/obligation and
+  stage/receipt locks and compares the original bindings before recording the
+  existing terminal activation proof from the returned outcome. The producer's
+  native transaction, epoch and position describe the original source command;
+  Auth's consumption commits in a separate transaction. Otherwise the
+  existing source expiry command decides whether its original thirty-minute
+  deadline is due. Only actual expiry, handle release, operator retirement/release
+  and child Auth obligation acceptance establish release completion. Full native
+  proof retains those exact reservation bindings and returned results until the
+  LAST original stage, provisioning receipt and workflow request is deleted.
+  Stage deletion alone does not retire the request's exact binding reader.
+  Indexed final-reader checks run in each deletion transaction, including the
+  ordinary SDK request-retention trigger. Expired proof then retains only its
+  existing `(store,key)`, JSON `binding: null` and `result: {outcome: 'expired'}`.
+  Permanent original native expiry/release commands and operator slots still
+  refuse old writes; no new stage, receipt or request can reuse that proof key.
+  Existing exact-key request/receipt replay may finish while its original row
+  remains. The minimal skeleton supplies no authorization or source outcome.
+  Unknown source/release/responsibility returns retain the original witness and
+  the existing `native-stage`/`native-release` pending branch, never a success.
+  Completed/expired timestamps alone cannot close a registration consumer.
+  Activation drops its handle, reservation and operator links after the same
+  final-reader boundary, retaining only `[registrationId, workflowId,
+  activationKey, accountId]` and the exact actual activation result. The original
+  result reader remains usable after transient provisioning evidence expires,
+  without renewing its deadline or supplying caller disclosure/session authority.
+  Missing, imported, minimized or mismatched originals remain
+  `native-stage`/`native-release`; the actual current account state never
+  reconstructs an activation result. The retained
+  actual result must not be nulled to pretend that missing reader is delivered.
+- Credential consumers lock the actual receipt under the existing permanent
+  account/client fence. A real committed CAS result is retained with its original
+  operation, effect reference, digest, subject, floor and opening receipt. An
+  uncommitted effect receives a terminal refusal only while that permanent fence
+  excludes every later credential writer. Proof, physical witness removal and
+  checkpoint share the same transaction. A source identity fence prevents receipt
+  reuse after cleanup. Credential application takes the client/role admissions
+  before its source-row lock, matching erasure's producer order. Surviving
+  credentials are never reapplied or removed on behalf of an erased client owner.
+- Recovery consumes a lost committed result through the producer's
+  `readRecoveryResult(reference)` composition and actual private original-result
+  port. The producer derives the original operation key from Auth's establishment;
+  Auth independently compares the account, receipt, establishment and floor with
+  that returned outcome. Both lifecycle consumers validate the original native
+  partition, epoch, position and transaction ID before recording a proof. No
+  checkout spans the foreign read. Recovery reacquires the same erasure obligation
+  lock as activation, then locks and compares its exact six-field establishment
+  binding, original Auth floor and receipt. Its existing terminal proof records
+  `{outcome: 'released', sourceResult: original.outcome.value}` in the consumer's
+  separate transaction, without invoking `completeRecovery` or reading current
+  account state as proof. A missing, imported, minimized or mismatched original
+  retains the establishment and `native-release` pending state even after account
+  deletion. Only a still-active fenced source may use the ordinary live completion
+  port, which keeps its existing authenticated establishment and expiry checks.
+  No source lifetime or user/session disclosure authority is renewed. This supplies
+  no retention exception for creation descriptors, request JSON, handles or
+  approval business payload.
+- Reduction retains the original operation, delivered ordinal page and count of
+  acknowledged owners. The permanent erased-client obligation admits only that
+  existing gate. Continuation uses each original page/owner source key, its actual
+  barrier and the existing bounded session cleanup/completion primitives. The
+  source floor invalidates remaining sessions; the native page eagerly removes at
+  most one. Native finish and request terminality commit together. A disappeared
+  delivered owner without acknowledgement leaves a precise count gap pending.
+
+Credential proof is one point operation per raw receipt, with the original page
+transaction and checkpoint. Other consumer pages admit one outer locator within
+the 48-key budget, reserving space for its proof, indexed final-reader checks and
+nested continuation work, including reduction's existing eight-row ordinal batch.
+Ordinary pages also reserve child and client seeks. Only one held consumer is
+continued per page. Locators stay within 1 KiB each and 64 KiB total;
+there is no workflow-history search or account-map fanout. The native consumer
+growth acceptance measures proof, trigger work, cleanup, transaction and checkpoint
+at 256, 1024 and 4096 unrelated stages, effects and native request histories with
+constant rows/statements/output and logarithmic blocks using the shared harness.
+The real source-expiry acceptance waits for Access's actual deadline; it never
+backdates source state or removes a responsibility hold to make deletion eligible.
+
+### Remaining producer and composition gaps
+
+This composition has **no terminal Auth erasure acknowledgement**. Its final state
+remains pending, including after native work and the original consent cutoff:
+
+- Kernel shared-history still needs its own producer/minimizer closure after
+  consuming the separate Auth-local completion fact described below. No shared
+  global ACK is awaited by either Auth phase.
+- Historical opaque protocol rows and historical role fields lack a deployment
+  proof when their original typed source custody is unavailable. The native role
+  deployment below classifies supported sources; opaque/null or ambiguous old
+  attribution stays unknown. Ordinal v2 completion alone is never role coverage.
+- Client contacts, arbitrary resource/client metadata and legacy request or encrypted creation bindings still
+  lack runtime complete person attribution. The [metadata privacy contract](src/metadata-privacy-contract.md)
+  adopts their exact field disposition and minimal native proposal: bounded typed contacts, source-projected
+  actor/human/operator/principal/client roles, whole-field legacy scrub and real consumer retirement. Source
+  context projection, contact-subject approval and shared-copy recorder interfaces are explicitly missing;
+  no shared type/export or personal writer is claimed delivered. Ownership is never inferred from JSON,
+  addresses, handles or ciphertext.
+- Client contacts, arbitrary resource/client metadata and legacy request or
+  encrypted creation bindings do not have complete typed person attribution.
+  Ownership is never inferred by searching JSON, handles, email or network address.
+  Shared workflow delegated-principal roles now come from the resolved native
+  assignment through `copyActors`, before enqueue.
+- A stalled registration on a surviving subject can still require its native
+  release consumer's stage witness. That lifecycle must supply a terminal proof
+  before the witness can be removed; history deletion is not such a proof.
+- An unfinished credential-effect witness for a surviving subject remains pending
+  when an associated account or client is erased. Its native consumer must supply
+  a terminal-refusal proof; a missing user or shared-history deletion cannot
+  substitute for that proof.
+- Unknown historical registration bindings, lost operator-reservation identities,
+  unresolved delivered reduction owners and unknown native requests remain pending.
+  Their surviving release witnesses are not discarded or called complete.
+- Ordinary live activation/recovery still resolve their current Auth evidence
+  before command replay. Mechanical erasure consumers separately use the private
+  original-result reader described above for genuine lost committed results.
+  An absent original result or source capability retains the exact stage,
+  provisioning or establishment witness; elapsed time, current account state and
+  workflow terminal status cannot reconstruct that result or authorize a new effect.
+- External delivery-provider diagnostics/logs and backup restore deletion replay
+  are specified by the [external custody and restore contract](src/external-custody-contract.md).
+  Its source inventory, owner allocation, admission, proof and rollout are adopted;
+  native Access point/feed discovery and durable live consumption now bind
+  restored Auth import and isolated reconciliation as described above. Actual
+  receiving adapters and independent physical isolated-restore readiness remain
+  open. Native acceptance is deferred until integration; fixture callbacks do
+  not establish provider deletion or restore safety.
+
+The native marker deliberately has no `erased`, `none` or acknowledged outcome.
+A missing native user cannot change persisted applicability to `none`. These gaps
+are implementation/integration findings, not a new specification or a claim that
+elapsed credential lifetime completes erasure.
+
+### Native role producer deployment
+
+The existing `auth_copy_coverage.native_covered` field is the native role coverage
+authority. `erasure-coverage.ts` inventories 27 native stores: user and client;
+opening, session, verification, refresh family/token, access token and assertion;
+recent OIDC session, barrier and recovery establishment; registration stage and
+provisioning receipt; credential account, passkey, recovery and effect receipt;
+workflow request, public key, key assertion, account-attempt association, consent,
+client reduction/progress/coverage and client resource. Signing keys, public
+resource definitions and anonymous transport buckets are system data; a verified
+account's counter uses its exact `auth_attempt_account` association. Permanent
+erasure/copy/consumer progress retains its existing technical replay contracts.
+
+The Auth-owned pool installs producer version 1 on each checked-out connection,
+before composing the signer, issuer or workflows. Release resets the version
+before making the socket reusable. Deployment locks the fixed native store set
+in one order, drains in-flight writers and commits a permanent armed fence. An
+old writer, including a transaction/lease queued before that cut, cannot insert,
+update or delete native records afterward. Migration and startup retain unknown
+custody for old rows removed before classification. Restart uses the committed
+deployment checkpoint; it does not infer coverage from a newly empty table.
+Old producers lock the admission row without waiting, so a pre-cut repeatable-read
+snapshot fails serialization instead of admitting a writer through stale state.
+A fresh installation closes under that same drained and armed cut. SDK nested
+request cleanup is admitted only for its exact ready, retired native copy.
+
+Default native redrive reconciles one store per transaction, four tuple locators
+per page, reserving space for exact source/fence reads within the 48-key and
+64-KiB budget. Partial indexes select only unclassified rows. Classification and
+the store checkpoint commit together; retry does not retain a personal traversal
+cursor. Known direct typed account records and reset/WebAuthn verification
+attribution are resolvable without decoding old payloads. Session/opening,
+verification/family, proof/establishment and stage/receipt associations use only
+their existing exact native source keys. Missing sources and historical client
+ownership without a captured owner remain unknown: today's client owner cannot
+prove yesterday's owner and is never installed as its historical role. Missing
+sources preserve every existing positive typed role. Historical stage/request bindings without the complete
+source actor projection also remain unknown. Store/reason markers persist after
+expiry or physical removal; there is no historical JSON or identity search.
+
+Producing transactions snapshot client-owner and source-client-owner separately
+from subject, acting human and operator. Copied source roles retain the source's
+snapshot when its client moves. Approved stage/request producers additionally
+commit initiator and delegated-principal roles from the actual `copyActors`
+projection; provisioning receipts inherit them from their exact stage. A foreign
+host without that projection, or provisioning without an original native stage,
+remains usable with unknown coverage. These paths do not gain a new authority
+capability. New native reset, WebAuthn and authorization-code formats are labelled
+at creation; only the pinned anonymous discoverable WebAuthn challenge's explicit
+empty account field has a known account-free shape. Historical null is unknown.
+
+The existing native erasure phases consume these role-first indexed columns;
+surviving subjects keep unrelated credentials and clients. Request roles drain
+after user deletion so the original deletion consumer can finish. Native phase
+completion means known native work drained; complete inventory/local-copy proof
+still requires the coverage authority. Known copy retirement proceeds even while
+unknown coverage or proof publication is pending. Default recovery needs neither
+the original caller nor final participant acknowledgement. Consent retains its
+original 310-second cutoff. Version-zero role coverage keeps its existing historical
+recovery. Later phase inventories preserve completed old phases instead of
+restarting them; older completion markers cannot publish all-role proof.
+Raw client/contact metadata, foreign committed-result
+recovery, external sinks and universal shared history retain the separate gaps
+and owner contracts above; this deployment does not claim a terminal Auth ACK.
+
+### Native phase inventory upgrade
+
+`erasure-role-upgrade.ts` freezes the deployed inventory: phase 0 owns client
+traversal, subject phases 1–75 have literal store/role identities, 76–78 drain
+key assertions, public keys and counters, and 79–87 drain original request roles.
+Its 22 client subphases retain their original raw keys and ordering. Phase 88
+was the old native EOF. The closed adapter maps every old cursor identically,
+including an in-flight client and raw boundary; old EOF now starts appended
+coverage. Unknown versions, out-of-inventory phases and oversized boundaries
+refuse. `native_phase_version` versions interpretation, not custody evidence.
+
+One ordinary native page upgrades its obligation and checkpoints its source
+probes or actual work in the same transaction. No account list or bulk cursor rewrite is needed. The
+permanent obligation retains applicability, barrier/T, source handoff, committed
+user deletion and the original consent deadline. A completed old obligation is
+scheduled only for missing inventory; neither its completed phases nor its
+original tail timestamps are reset. Restore replay uses the same literal phase
+interpretation and independently checks that its current tail finished.
+
+The migration drains native writers and installs database-enforced page/producer
+version guards. The Auth-owned pool tags each new lease with both the original
+role-producer version and the phase-producer version and resets both on release.
+An old lease in another pool/process remains refused after activation. Deployment
+EOF, an empty native table and an older `native_completed_at` cannot supply a
+current native or shared-copy completion proof.
+
+Native phase inventory 3 preserves all 89 saved v1 identities and the 22 client
+store subphases. Inventory 2 remains separately defined: positions 88/89 were
+unavailable creation/request placeholders and 90 was done. They are never
+interpreted as inventory 3 role seeks. A v2 placeholder or done marker resumes at
+the first missing creation boundary with an empty new raw boundary; its original
+cursor is retained in immutable `auth_erasure.native_phase_upgrade`. A v1 EOF
+also starts its new role at an empty seek boundary while retaining that saved
+EOF evidence; the identity adapter itself preserves the old cursor. Earlier
+positions, raw keys, client boundaries, applicability, barrier, T, user deletion
+and the original consent deadline remain unchanged. Old completion markers cannot
+certify these additional roles.
+
+`NATIVE_CREATION_PARTY_PRODUCERS` in the original `creation-party-context.ts`
+module binds the actual `createStage` projection and its exact provisioning copy.
+Positions 88–93 drain stage actor, human, native opening operator, principal,
+target-client owner and source-client owner; 94–99 drain the corresponding
+receipt roles. These remain distinct from creator, target operator, initiator,
+delegate and subject in the saved inventory. The original version-1 creation
+guard validates source bindings, snapshots owners under client locks and refuses
+historical refill. The generic no-stage provisioning ABI stays version zero and
+records permanent missing-source custody. That original path supplies the
+missing-coverage restart case without manufacturing a source witness.
+
+`NATIVE_REQUEST_PARTY_PRODUCER` in the original `workflow-request-parties.ts`
+writer binds actor/principal at 100/101; done is 102. Consent keeps client
+position 22, request source-client is 23, and stage/receipt target/source-client
+seeks occupy 24–27. All use the existing leading-role indexes and native consumer
+retirement. The empty-client guard checks every added child. Current requests
+carry party/context/actor version 1; the original historical version-zero ABI
+remains pending and invalidates coverage instead of acquiring inferred roles.
+The existing native request terminal reader also recognizes a fully versioned
+non-stage operation only after `finishCopyResult` commits its exact native return
+digest and `completeCopy` consumes that return. A terminal timestamp or SDK status
+alone remains insufficient. Registration still requires its exact activation or
+expiry proof. Producer registration supplies no completion, receiving claim or ACK.
+
+No v2 cursor independently proves the new creation roles drained. Its request or
+done position can reach the first request phase only after the native deployment
+is drained, actual creation guards report no unknown source custody, and twelve
+bounded leading-role seeks prove the account's new creation ranges empty under
+its fence. That upgrade uses a separate ordinary page within the same budget.
+Otherwise it starts the first actual creation phase. Original placeholder raw
+boundaries are never used to seek a new role. Unknown creation custody stays at
+the first missing boundary when no known creation row can advance; known rows
+still use the ordinary native drains. A current fully classified deployment can
+advance normally. Neither old done nor deployment EOF alone certifies it.
+
+Native role seeks project bounded raw locators only, take the same client locks,
+and reserve guard/child/checkpoint work within the 48-key/64-KiB page. Nested
+consumer stores admit one locator; ordinary pages shrink with their declared
+child/client guard seeks. Oversized counter locators also stay pending. No
+payload search, owner-population walk or enlarged nested page is introduced.
+
+### Native shared-copy custody and proof publication
+
+`erasure-copy.ts` installs an Auth-owned recorder on the pinned SDK's real
+`auth_dbos` tables after native schema compatibility probes. Transactional
+`DBOSClient.enqueueInTransaction`/`sendInTransaction` commit exact work, complete
+typed account roles and actual copies together. Registration and account workflows
+include operating-human, initiator, operator, member, previous operator, delegate
+and client-owner roles supplied by native inputs/approval context. Client-reduction
+pages keep transient owner IDs inside their native step and carry independent
+ordinal boundaries; child creation records its exact parent and native progress
+locator. The last actual native consumer records an exact, bounded result
+commitment in `auth_copy_work` outside DBOS, atomically with the native operation
+terminal marker. Registration and reduction verify their original native source
+keys, bound atomically with the actual SDK copy at creation, before recording it.
+Native source cleanup cannot remove that exact handoff identity.
+`completeCopy(database, workflowId, result?)` consumes the actual SDK return and
+compares it with that commitment. Caller consumption precedes private disclosure,
+so a lawful disclosure denial cannot strand native retirement. Default history
+recovery invokes the same consumer for a lost caller, without a caller retry or
+reopening an approval/session. SDK SUCCESS only guards a nonblocking result read;
+a missing commitment, failed/live return, mismatch or unmapped copy stays pending.
+No private result or exception is retained in the native commitment.
+
+An execution has at most 139 native rows and 10 MiB: three status/input/output
+rows, 60 operation rows, eight event keys, 64 event-history rows and four messages.
+A status is at most 4 KiB; another artifact is at most 64 KiB including SDK
+bookkeeping. The recorder refuses undeclared streams, incomplete roles and budget
+overflow before the native write. Erasure uses eight exact locator keys per page
+and one execution per minimization unit. `sdk-retirement-fence.ts` binds the SDK
+owner's actual `DBOS.retireWorkflow(workflowID)` and
+`DBOS.getWorkflowWriterFence(workflowID)` in this same Auth runtime and database.
+Its receipt type comes directly from the installed SDK's original
+`WorkflowWriterFence` export. Missing methods, native migration/coverage, malformed
+receipts or any generation other than the producer's closed generation `2` stay pending before
+request retirement or physical deletion. Method presence alone proves no closure.
+
+`eraseCopy` first locks the original copy generation, exact roles and native source
+mapping. Its producer commitment and actual caller/recovery result consumption must
+already exist; live or historically unclassified request consumers remain pending.
+The Auth parent continuation link stays unchanged across retirement; transactional
+`DBOSClient` enqueue does not stamp that link into the SDK's native parent column.
+An original erasure-source workflow additionally requires its exact applicable
+obligation's accepted, discharged and published source facts. Deadlines, SDK status
+and current account state cannot supply these facts. The native obligation retains
+its original floor, kernel version/time and continuation/receipt identities.
+
+The SDK retirement body joins all native writers, including old executors, and
+revokes their execution token without cancellation. Auth releases its recorder lock
+before that supported call, whose transaction also touches the recorder, then
+reacquires it and revalidates the same original custody and bounded artifacts.
+The returned `{workflowID,generation,closureID,closedAt}` must exactly match a genuine
+native reread. Auth persists only generation, closure UUID and closure timestamp
+beside the existing workflow ID in `auth_copy_work`, atomically with local retirement
+and before request minimization. These fields and the original source key, result
+commitment and result-finished timestamp are immutable. No payload, error, stack or
+data hash is stored as fence evidence.
+
+Only then does supported `deleteWorkflows([workflowID], false)` remove history.
+Every existing exact physical family probe must be empty, and a post-delete native
+reread must still match, before `absent` is recorded. Cancellation after closure
+would itself be a forbidden writer and is never attempted. Lost replies resume
+from the same permanent native receipt, including after physical deduplication
+deletion. The SDK owns its guards, permanent control identity and backup custody;
+Auth adds no SDK SQL or second maintenance runtime. Default history and retention
+use this same primitive and retain precise pending codes in receiving progress.
+Unknown old copies or native rows preceding the creation cut remain pending;
+no scan attempts to infer their account roles. Native/source proof, final Auth or
+shared-history participation, root completion and external backups remain independent.
+
+The focused native binding cases are in `test/sdk-retirement-binding.test.ts`.
+They require producer-first package integration and deferred native execution;
+source registration and local typing establish neither native coverage nor Goal
+completion. `test/sdk-retirement-fence.test.ts` requires eligible, genuinely consumed
+registration retirement and exact receipt persistence across physical deletion and
+idempotent retry. Unknown mapping and living histories remain pending and present;
+genuinely missing capability still refuses retirement.
+
+`AuthService.internal.consumeAccountErasure(accountId, receiptId, workflowId)` is
+called by the actual `erase-auth-owner` step, in its SDK context, after the real
+committed continuation authorization. The native obligation writer commits source acceptance atomically with its
+obligation/progress under the producer fence, separately from the final validated
+native transfer. Acceptance alone emits no witness and
+blocks native cleanup. The native transfer preserves the original kernel
+version/T and continuation/receipt identity in the existing `auth_erasure` root;
+exact replays do not reopen the discharged source dependency.
+
+The default maintenance host independently redrives the early native-consumed
+witness and later local-copy completion through `TrustedAccessPorts`:
+`readAuthErasureBarrier`, `readAuthErasureSource`,
+`recordAuthNativeConsumption`, `recordAuthHistoryCompletion`. A missing capability
+is unavailable/pending. Publication failure leaves the permanent phase pending
+for default redrive and does not abort the other already-authorized source
+releases. Final completion additionally requires the kernel's matching earlier
+native-consumed fact. Pending-registration expiry retains separate native
+cleanup semantics and emits no active-account barrier proof. Explicit older
+separate-store workflow hosts retain their SDK behavior but have no Auth-local
+coverage cut or completion proof.
+
+The kernel sees only the immutable technical tuples through the fixed Auth-only
+binding. Auth imports shared types from `@rezics/auth-contract`, never kernel
+runtime modules or a kernel pool. Local completion and submission progress live
+outside DBOS, so final purge, executor loss and lost replies cannot erase them.
+Neither proof phase is an Auth/shared-history participant ACK. Kernel's own
+producer/minimizer closure remains necessary; Search cleanup remains undelivered.
+
+## Membership response receiving
+
+The closed native roster projection and selected-member projection publish separate fixed
+UTF-8 maxima through `membershipResponseBytes`: 97,089 and 200 bytes. Roster is
+`4,929 + 6 × (1,024 + 20 × (256 + 256) + 4,096)`: JSON punctuation, keys, longest
+closed role/action/readiness and identity kind spellings, UUID organization/row/disclosed
+identity fields (36 ASCII bytes each), opaque native viewer proof (1,024 UTF-16 units),
+nullable labels and cursor. Selected is the longest present membership with three ASCII
+UUIDs and role `member`; null is shorter. Native viewer identity is not newly UUID-qualified;
+the browser retains its existing UUID selection restriction. Invalid or excess dependency
+output returns unavailable, without truncation, fabricated absence or new action advice.
+Membership command approval is a separate closed `{ reference, expiresAt }` response:
+`JSON.stringify({ reference: '', expiresAt: '' }).length + 6 × (4,096 + 27)` bytes.
+Native locator references retain their supported ASCII spelling (including sealed references),
+and canonical ISO dates permit extended years. Execution is closed `{ accountId }`:
+`JSON.stringify({ accountId: '' }).length + 6 × 4,096` bytes, preserving opaque native IDs.
+Six bytes per UTF-16 unit cover JSON escaping, including temporal strings; browser selected
+IDs retain their UUID restriction. Errors use the shared maximum of the two closed
+`{ error: account_operation_denied | step_up_required, effect_status: not_applied }` variants.
+Only the native transport's matching status/error/effect envelope proves a refusal. A generic
+409 says nothing about last-holder protection. After membership workflow dispatch, an exception
+returns unavailable without a not-applied claim because publication or inverse cleanup may have run.
+
+Decision: membership uses the shared account-operation POST lifetime and its own native projection,
+with one five-second allowance through headers/body and bounded bytes before parsing. Timeout,
+malformed output and wrong-member acknowledgement leave execution unknown; they never cancel native
+work or retry it. This adds zero requests: fresh submit is session, selected preparation, approval,
+execute (four), then selected observation, page session and page (three); exact retry omits approval
+(three plus three). Read-only recovery remains at most four; sign-in/session then explicit review
+keeps its existing cost. Native internal typed calls and authorization remain authoritative.
+
+Native roster and selected deadlines remain eight and three seconds; exact fresh human
+profile and current proof revalidation remain in their native owners. Browser receiving uses
+one five-second allowance through preflight and body, with no timer reset or automatic retry.
+This adds zero native calls or scans. Native engine cost and real browser qualification remain
+unchanged and require integrated acceptance.
+
+## Selected organization member command state
+
+`POST /account-management/organizations/member` accepts only
+`{ organizationId, memberAccountId }` and returns only
+`{ organizationId, memberAccountId, membership: null | { role: 'owner' | 'member', reservationId: string } }`.
+The selection is not authority. This private no-store read uses a current human
+session with the exact management `organization:membership` profile, strict Origin
+and JSON/CSRF checks, and the native membership mutation formula on that exact
+organization. It neither requests `account:read` nor changes the generic management
+list's separate `account:read`/`account:manage` privacy policy.
+
+The closed native declaration lives in
+`services/kernel/src/access/management-membership-source.ts`:
+`readOrganizationMembershipCommandState({ pool, access, clock? }, actor, selection, { deadline })`.
+`createManagementMembershipAccess` supplies the trusted Auth port
+`readOrganizationMembershipCommandState({ human, organizationId, memberAccountId, deadline })`;
+the default native bindings append it to `trustedAccess`, and the default Auth host
+consumes it there. Auth's signer and native Access bind the live proof; an absent
+port returns 503. The point returns the reservation actually installed by the current
+native role transaction and verifies its exact member-side coordination provenance.
+An incomplete or failed source is unavailable, never null membership. No holder
+enumeration, private profile, operator reservation or synthetic version is returned.
+
+Selected-member actions capture this current reservation before constructing their
+immutable descriptor and operation key. Reauthentication requires another submit;
+retries retain the descriptor/key, and native acknowledgement remains separate
+from fresh selected-member readback. Existing native ownership, last-holder,
+reservation and command CAS checks remain final authority.
+
+## Selected automated creation operator
+
+`POST /account-management/automated/operator` accepts exactly `{ operatorAccountId }`
+and returns the closed `{ viewer, readiness, operator, handleRules, action }`
+page. `operator` is null except for `review`, where it is exactly
+`{ id, kind: 'actor' | 'organization', handle, displayName }`. This same-origin
+JSON, private no-store command-precondition read uses `withFreshHuman` and the
+exact management `account:manage` profile (the existing local transfer-profile
+alias). Its local `AutomatedOperatorAccess` port is
+`readAutomatedCreationPage({ human, operatorAccountId, deadline })`; the native
+binding authenticates the actual Auth-signed live proof. Missing native
+composition answers 503. Selection and returned labels are never approval or
+creation authority. The existing credentialless native creation writer, fresh
+approval/execute checks and shared opening profile remain unchanged.
+
+The page projection uses the actual Access account shape: UUID identity (36
+characters), nullable current handle (at most 64 UTF-16 code units under the
+stored `^[a-z0-9][a-z0-9_-]{0,63}$` source constraint), and nullable display name
+(at most 4,096 UTF-16 code units). `access.account.handle` has a finite pattern
+constraint; `display_name` is database `text` without a database length check,
+so the Auth projection establishes the 4,096-unit response contract and answers
+503 for invalid dependency output. It does not truncate a label or publish a
+partial review. Historical rows that exceed the current producer ceiling remain
+stored and produce unavailable advice until their source is corrected.
+
+`@rezics/auth-contract` exports these field ceilings and the fixed
+`AUTOMATED_CREATION_PAGE_MAX_RESPONSE_BYTES` ceiling of 24,969 UTF-8 bytes. Its
+budget is the maximum over all four readiness/action variants of the ASCII JSON
+skeleton plus 36 ASCII viewer-ID bytes, and for review 36 ASCII selected-ID
+bytes, 64 allowed ASCII handle bytes and six bytes for each of 4,096 display
+name UTF-16 units. Six bytes cover JSON escaping and UTF-8, including lone
+surrogates; UUID and handle rules restrict those fields to ASCII, and null
+labels are shorter than their allowed non-null maxima.
+
+The existing browser/Auth admission remains the case-insensitive generic
+8-4-4-4-12 hexadecimal UUID shape. Kernel `routeOf` is narrower: it requires a
+lowercase UUID-v7/v8 version nibble and RFC variant nibble. This page does not
+change either policy; a selection accepted by the browser can still be refused
+by the native route guard. The viewer is projected from `SessionProof.account_id`
+and must match the Auth proof exactly. Transport tests exercise this closed
+projector and byte ceiling; they do not establish real Kernel database
+authorization, which remains native acceptance qualification.
+
+### Native creation parties
+
+New registration stages bind the preselected account, normalized handle, original
+request and source context before encrypting credentials. Automated creation uses
+only the trusted optional `workflowPorts.readNativeCreationContext` runtime port;
+`creation-party-context.ts` consumes the original producer types exported by
+`@rezics/auth-contract`. Missing producer, historical provenance and
+unavailable opening provenance produce distinct unavailable reasons. Approval
+resolution remains the authorization boundary at its existing source timing.
+
+`creation_context` stores the exact native projection, including original approval,
+operation key/digest, command prefix and permission target. Independent indexed
+actor, human, principal, target-client and source-client columns preserve its roles.
+`erasure_native_operator_id` records the source operator relation independently of
+`erasure_operator_id`, which continues to identify the creation's target operator.
+Existing creator, initiator and delegate attribution still comes from `nativeActors`
+and `copyActors`; it is not reconstructed from the new projection. Client-owner
+snapshots come from locked native client rows. No contact writer, ordinary session,
+permission or client expansion is introduced.
+
+Public human self-registration has a native preselected subject and credential
+binding but no authenticated approval actor, opening human/operator, delegated
+principal or producer client. Those approval roles are inapplicable and null.
+A separate source version distinguishes this from historical missing provenance.
+The new request binding participates in AES-GCM AAD and the credential HMAC. Old
+AAD remains unchanged; old rows are never decrypted or backfilled to discover roles
+and cannot receive new encrypted credentials or native provisioning receipts.
+
+Provisioning locks the exact stage before writing either credential model. Its
+receipt copies all source roles and scope from that same row in the credential
+transaction, for both password and credentialless automation. Native triggers
+reject immutable-source drift and admit every known role/client through existing
+erasure fences. The historical generic provisioning adapter with no native stage
+remains explicitly unknown, without a fabricated native source or complete role
+claim. Unknown old custody stays pending. Attribution never certifies consumer
+retirement; original release, activation, reservation and provisioning identities
+and deadlines remain authoritative. Phase-inventory upgrades and terminal-proof
+minimization are separate owner integrations.
+
+## Personal account deletion review
+
+`POST /account-management/deletion-page`: exact `{}`, issuer Origin/cookie, JSON, no query/bearer, private/no-store.
+Human-targeted; ordinary sessions get authentication-required/session id without identity/preparation.
+Step-up requires fresh review/confirmation. Only dispatch marks submitted; missing older markers imply submission,
+never authority.
+
+`createNativeAccountBindings` installs `readAccountDeletionAdvice` under the deletion profile:
+`managedAuthWorkflowDescriptor('delete', human.account_id)` and `account:delete` preparation/formula,
+independent of the action directory. Live human, lifecycle/fence/floor, actor/client/scopes, session, home and deadline
+surround released preparation. Read transactions release connections during preparation, with no approval/command.
+Authority changes retire controls; dependency failure allows review. Admitted profiles alone read exact-self email
+with currentness.
+
+Full-call ceiling: one `withFreshHuman`, five `accessTokenForProof` (three transport/two native), one native
+`authenticate`, one read-time query, two two-account/home snapshots (four points), one Access preparation/formula
+and one Auth user primary-key read. Finite caps; no scan/runtime price. Failures short-circuit. Native I/O/disclosure
+share three seconds; browser reads five, without retry. Security inventories stay separate.
+
+Decision: deletion shares rename approval: exact `{reference,expiresAt}`, nonempty
+sealed ASCII reference ≤4096 units and canonical ISO expiry ≤27 bytes. Validate before emission; browser requires
+unexpired approval. Allowance: empty JSON skeleton plus `6×4096 + 27` bytes (legal reference escaping). Workflow
+success/replay: original `{accountId}`, nonempty opaque id ≤4096 units: empty skeleton plus `6×4096` bytes.
+Organization deletion retains this projection. Invalid results or post-dispatch exceptions emit `{error:unavailable}`/503, never false `not_applied`. Native resolution, freshness, preparations,
+responsibilities, CAS, fences and erasure remain authoritative.
+
+Error bound: larger closed JSON refusal: `{error:account_operation_denied,effect_status:not_applied}`
+at 400,401,403,409,413,415,503 or `{error:step_up_required,effect_status:not_applied}`/401 (JSON string values).
+Exact `{error:unavailable}`/503 fits too. Each POST has five seconds for headers/body; approval and explicit
+execution recovery each retry unavailable once. Two POSTs normally, four maximum; identical execution body/key/reference. Timeout, transport loss and malformed
+output never retry. Zero added native calls.
+
+Advice/absence/sign-out cannot acknowledge execution. Uncertainty survives later refusal and
+replacement; only original success resolves it, retaining generic completed history after private retirement.
+Owned cleanup preserves replacements. Commit means tombstone committed; cleanup, adopted retention,
+backups and external copies remain pending. Fixtures do not qualify native replay or browser acceptance.
+
+## Organization deletion review
+
+`POST /account-management/organizations/deletion-review` accepts exactly `{ organizationId }`, with the issuer
+Origin and existing JSON/CSRF bounds, no bearer or query. One private/no-store observation supplies the live
+initiating human, readiness and any admitted organization identity. It replaces the page's separate session read.
+The host consumes `readOrganizationDeletionPage` from the existing native deletion factory's trusted binding;
+`readOrganizationForDeletion` remains exact-profile on both trusted and workflow bindings. Ordinary page readiness
+is absent from workflow ports. Construction invokes no Auth callback or I/O.
+
+An ordinary live human receives authentication-required with before/after actual Auth-session proof and only
+their initiating ID, untrusted selected organization ID and explicit authentication continuation; target existence, labels, membership, permission and requirements stay unobserved.
+Missing bindings and failed preparations stay unavailable. Exact-profile native denial never becomes step-up advice.
+The continuation retains only human, target and operation key through the existing deletion step-up flow. Return
+compares the exact human/target/key before explicit review, clears typed confirmation and requires explicit submission; no approval or command runs on return.
+
+The exact-profile private producer reuses the native management account/role source and `readManagedAuthActions`
+deletion ENTRY formula without the generic endpoint's `account:read` scope, public attribution or member inventory.
+It compares identity, lifecycle, human floor, role and home epochs after released permission preparation. A changed
+snapshot retires review; missing/inactive accounts return missing, unrelated organizations hidden and current
+native refusals denied, without private identity. Only a ready result carries the allowlisted organization identity
+and confirm action. Read advice grants nothing and cannot establish approval freshness or clear command requirements.
+
+The whole page response, including Auth proof currentness before and after native I/O, has a three-second bound.
+The exact branch costs two bounded two-account snapshots, two role points, the existing finite native management
+ENTRY preparation/checks and constant Auth session checks. The ordinary branch performs only those Auth currentness
+checks and profile classification; no target lookup, permission preparation, inventory, workflow or polling.
+Approval and execution retain independent checks, exact original command/key and the pre-send uncertainty fence.
+Readback never resolves an unknown execution. Committed deletion means cleanup pending, with adopted retention
+exceptions and backups/external copies distinguished from complete erasure.
+
+The only serialized bodies are the closed ready, authentication-required, signed-out, hidden, denied, missing, changed
+and unavailable variants plus the fixed request-denied error. Their shared public UTF-8 ceiling is 30,946 bytes:
+`JSON.stringify(readySkeleton).length + 6 × (1,024 + 4,096)`, where the skeleton includes a UUID36, 64-character
+ASCII handle, every field name, quote and punctuation. The 1,024-unit human-ID ceiling is the existing
+`securityResponseLimits.id` for opaque SessionProof identifiers; organization handles use the database's lowercase
+ASCII 64-character check, and display names use the profile writer's 4,096 UTF-16-unit limit. `display_name` is
+PostgreSQL `text` without a column limit, so native output outside the writer contract is unavailable, never
+truncated or serialized. Nullable identity fields use `null` and do not add to the maximum. The HTTP reader enforces
+this bound on actual streamed success and error bytes before parsing within its one five-second browser read lifetime;
+the native producer keeps the existing three-second whole-call deadline.
+
+Decision: organization command acknowledgement is only the original native `{accountId}` result matching the selected
+organization. The shared command response bounds are `JSON.stringify({reference:'',expiresAt:''}).length + 6×4096 + 27`
+for approval, `JSON.stringify({accountId:''}).length + 6×4096` for execution, and the larger of the two closed refusal
+JSON lengths for errors. Approval references remain opaque strings; the native approval owns their validity. Each
+approval or execution POST has one five-second headers-and-body lifetime and retries only exact 503
+`{error:'unavailable'}` once with the same body. A matching result means tombstone committed and cleanup pending; it
+does not mean adopted retention, backups or external copies are erased. Current advice cannot acknowledge the command.

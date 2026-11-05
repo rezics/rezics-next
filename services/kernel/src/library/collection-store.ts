@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { newId } from '../route/route.ts';
 import type {
   Collection,
   CollectionChanges,
@@ -14,7 +15,10 @@ import type {
 import collectionInsert from './collection-store-collection-insert.sql';
 import collectionRead from './collection-store-collection-read.sql';
 import collectionUpdate from './collection-store-collection-update.sql';
+import { initializeCollectionMetadataHistory } from './collection-metadata-history.ts';
 import collectionTombstone from './collection-store-collection-tombstone.sql';
+import collectionDeletionRead from './collection-store-collection-deletion-read.sql';
+import collectionRestore from './collection-store-collection-restore.sql';
 import collectionListCurator from './collection-store-collection-list-curator.sql';
 import memberInsert from './collection-store-collection-member-insert.sql';
 import memberRead from './collection-store-collection-member-read.sql';
@@ -22,8 +26,11 @@ import memberNeighborsSql from './collection-store-collection-member-neighbors.s
 import memberNote from './collection-store-collection-member-note.sql';
 import memberMove from './collection-store-collection-member-move.sql';
 import memberDelete from './collection-store-collection-member-delete.sql';
+import memberRestore from './collection-store-collection-member-restore.sql';
+import memberRetentionRead from './collection-store-collection-member-retention-read.sql';
 import membersList from './collection-store-collection-members-list.sql';
 import membersRespace from './collection-store-collection-members-respace.sql';
+import { executeCollectionRetentionQuery } from './collection-retention-bounds.ts';
 
 type Client = Pick<PoolClient, 'query'>;
 type WriteContext = { transactionId: string; time: string };
@@ -38,23 +45,42 @@ function iso(value: string): string {
   return new Date(value).toISOString();
 }
 
-function asCollection(row: CollectionResult): Collection {
+function asCollection(
+  row: Omit<CollectionResult, 'membershipKind' | 'builtinKind' | 'hasSavedRule'> & {
+    membershipKind?: string;
+    builtinKind?: string | null;
+    hasSavedRule?: boolean;
+  },
+): Collection {
+  if (row.membershipKind !== undefined && row.membershipKind !== 'curated' && row.membershipKind !== 'dynamic')
+    throw new Error('Invalid Collection membership kind');
   return {
     id: row.id,
     curatorAccountId: row.curatorAccountId,
     title: row.title,
     description: row.description,
     visibility: row.visibility,
+    presentationKind: row.presentationKind,
+    coverMediaId: row.coverMediaId,
     state: row.state,
     revision: row.revision,
     memberCount: row.memberCount,
     orderEpoch: row.orderEpoch,
     createdAt: iso(row.createdAt),
     updatedAt: iso(row.updatedAt),
+    ...(row.membershipKind === 'dynamic'
+      ? {
+          membershipKind: row.membershipKind,
+          builtinKind: row.builtinKind ?? null,
+          hasSavedRule: row.hasSavedRule ?? false,
+        }
+      : {}),
   };
 }
 
 function asMember(row: MemberResult): CollectionMember {
+  if (row.ordinalKey === null || row.addedAt === null)
+    throw new Error('A live Collection member must retain its ordinal and added time');
   return {
     collectionId: row.collectionId,
     id: row.id,
@@ -88,15 +114,27 @@ export async function insertCollection(
     title: collection.title,
     description: collection.description,
     visibility: collection.visibility,
+    presentation_kind: collection.presentationKind ?? null,
+    cover_media_id: collection.coverMediaId ?? null,
     ...write(context),
   });
   const row = rows[0];
   if (!row) throw new Error('Collection insert returned no row');
-  return asCollection(row as CollectionResult);
+  const result = asCollection(row as CollectionResult);
+  await initializeCollectionMetadataHistory(client, {
+    route,
+    collection,
+    transactionId: context.transactionId,
+    time: context.time,
+  });
+  return result;
 }
 
 export async function readCollection(client: Client, route: number, id: string): Promise<Collection | null> {
-  const row = await collectionRead.run(queryClient(client), { route, id });
+  const row = await executeCollectionRetentionQuery('collectionRead', collectionRead, queryClient(client), {
+    route,
+    id,
+  });
   return row ? asCollection(row) : null;
 }
 
@@ -115,6 +153,10 @@ export async function updateCollection(
     title: changes.title,
     description: changes.description,
     visibility: changes.visibility,
+    set_presentation_kind: changes.presentationKind !== undefined,
+    presentation_kind: changes.presentationKind ?? null,
+    set_cover_media_id: changes.coverMediaId !== undefined,
+    cover_media_id: changes.coverMediaId ?? null,
     ...write(context),
   });
   return row ? asCollection(row as CollectionResult) : null;
@@ -126,8 +168,52 @@ export async function tombstoneCollection(
   id: string,
   context: WriteContext,
 ): Promise<Collection | null> {
-  const row = await collectionTombstone.run(queryClient(client), { route, id, ...write(context) });
-  return row ? asCollection(row as CollectionResult) : null;
+  const [row] = await executeCollectionRetentionQuery('tombstone', collectionTombstone, queryClient(client), {
+    route,
+    id,
+    ...write(context),
+  });
+  return row ? asCollection(row) : null;
+}
+
+// Private source metadata; purge must serialize and recheck state, revision and stamp before destructive work.
+export async function readCollectionDeletion(
+  client: Client,
+  route: number,
+  id: string,
+): Promise<{
+  revision: number;
+  deletionId: string | null;
+  deletedAt: string | null;
+  purgeAfter: string | null;
+} | null> {
+  const row = await collectionDeletionRead.run(queryClient(client), { route, id });
+  return row
+    ? {
+        revision: row.revision,
+        deletionId: row.deletionId,
+        deletedAt: row.deletedAt,
+        purgeAfter: row.purgeAfter,
+      }
+    : null;
+}
+
+export async function restoreCollection(
+  client: Client,
+  route: number,
+  id: string,
+  expectedRevision: number,
+  deletionId: string,
+  context: WriteContext,
+): Promise<Collection | null> {
+  const [row] = await executeCollectionRetentionQuery('restore', collectionRestore, queryClient(client), {
+    route,
+    id,
+    revision: expectedRevision,
+    deletion_id: deletionId,
+    ...write(context),
+  });
+  return row ? asCollection(row) : null;
 }
 
 export async function listCuratorCollections(
@@ -182,11 +268,13 @@ export async function memberNeighbors(
   route: number,
   collectionId: string,
   position: MemberPosition,
+  excludedIds: readonly string[] = [],
 ): Promise<MemberNeighbors | null> {
   const row = await memberNeighborsSql.run(queryClient(client), {
     route,
     collection_id: collectionId,
     kind: position.kind,
+    excluded_ids: [...excludedIds],
     member_id: position.kind === 'after' ? position.memberId : null,
   });
   if (!row || !row.found) return null;
@@ -219,6 +307,9 @@ export async function moveMember(
   ordinalKey: string,
   context: WriteContext,
 ): Promise<CollectionMember | null> {
+  // Only the addressed occurrence is a logical move. Later physical respacing updates in the same
+  // transaction remain silent in the structure journal.
+  await client.query("SELECT set_config('library.collection_structure_move_member', $1, true)", [memberId]);
   const row = await memberMove.run(queryClient(client), {
     route,
     collection_id: collectionId,
@@ -226,6 +317,7 @@ export async function moveMember(
     ordinal_key: ordinalKey,
     transaction_id: context.transactionId,
   });
+  await client.query("SELECT set_config('library.collection_structure_move_member', '', true)");
   return row ? asMember(row as MemberResult) : null;
 }
 
@@ -234,15 +326,82 @@ export async function deleteMember(
   route: number,
   collectionId: string,
   memberId: string,
+  expectedRevisionOrContext: number | WriteContext,
+  deletionIdOrContext?: string | WriteContext,
+  suppliedContext?: WriteContext,
+): Promise<(CollectionMember & { deletionId: string; revision: number }) | null> {
+  const legacy = typeof expectedRevisionOrContext !== 'number';
+  const expectedRevision = legacy
+    ? (await readCollection(client, route, collectionId))?.revision
+    : expectedRevisionOrContext;
+  const context = legacy ? expectedRevisionOrContext : suppliedContext;
+  const deletionId = legacy ? newId(route) : deletionIdOrContext;
+  if (!expectedRevision || !context || typeof deletionId !== 'string') return null;
+  const rows = await deleteMembers(client, route, collectionId, [{ memberId, deletionId }], expectedRevision, context);
+  return rows[0] ?? null;
+}
+
+/** The one native retained-deletion producer, shared by single and selected removal. */
+export async function deleteMembers(
+  client: Client,
+  route: number,
+  collectionId: string,
+  items: readonly { memberId: string; deletionId: string }[],
+  expectedRevision: number,
+  context: WriteContext,
+): Promise<(CollectionMember & { deletionId: string; revision: number })[]> {
+  if (items.length < 1 || items.length > 100 || new Set(items.map((item) => item.memberId)).size !== items.length)
+    throw new RangeError('Removal requires 1–100 distinct occurrences');
+  const input: (typeof memberDelete)['~reylo']['input'] = {
+    route,
+    collection_id: collectionId,
+    items: items.map((item) => ({ member_id: item.memberId, deletion_id: item.deletionId })),
+    expected_revision: expectedRevision,
+    ...write(context),
+  };
+  // Bind the JSON document once, as in native ordinal respacing; never JSON-encode an already encoded string.
+  const values = memberDelete.params.map((name) => {
+    const value = input[name as keyof typeof input];
+    return name === 'items' ? JSON.stringify(value) : value;
+  });
+  const { rows } = await client.query<(typeof memberDelete)['~reylo']['element']>(memberDelete.sql, values);
+  return rows.map((row) => {
+    if (row.deletionId === null || row.revision === null || row.ordinalKey === null || row.addedAt === null)
+      throw new Error('A removed Collection member must return its deletion episode revision');
+    return {
+      collectionId: row.collectionId,
+      id: row.id,
+      subjectId: row.subjectId,
+      note: row.note,
+      ordinalKey: row.ordinalKey,
+      addedAt: iso(row.addedAt),
+      deletionId: row.deletionId,
+      revision: Number(row.revision),
+    };
+  });
+}
+
+export async function readMemberDeletion(client: Client, route: number, collectionId: string, memberId: string) {
+  return memberRetentionRead.run(queryClient(client), { route, collection_id: collectionId, member_id: memberId });
+}
+
+export async function restoreMember(
+  client: Client,
+  route: number,
+  collectionId: string,
+  memberId: string,
+  deletionId: string,
+  expectedRevision: number,
   context: WriteContext,
 ): Promise<CollectionMember | null> {
-  const rows = await memberDelete.run(queryClient(client), {
+  const [row] = await memberRestore.run(queryClient(client), {
     route,
     collection_id: collectionId,
     member_id: memberId,
+    deletion_id: deletionId,
+    expected_revision: expectedRevision,
     ...write(context),
   });
-  const row = rows[0];
   return row ? asMember(row) : null;
 }
 
@@ -270,7 +429,6 @@ export async function respaceMembers(
   members: readonly MemberReordering[],
   context: WriteContext,
 ): Promise<number | null> {
-  if (members.length > 5000) throw new RangeError('A Collection cannot have more than 5000 members');
   const memberIds = new Set<string>();
   const ordinalKeys = new Set<string>();
   for (const member of members) {

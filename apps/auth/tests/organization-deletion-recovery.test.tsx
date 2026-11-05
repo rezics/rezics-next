@@ -1,0 +1,184 @@
+import { expect, spyOn, test } from 'bun:test';
+import {
+  creationFixture,
+  approval,
+  button,
+  dom,
+  fill,
+  flush,
+  leave,
+  open,
+  send,
+  session,
+} from './creation-page-fixture';
+import { OrganizationDeleteContent } from '../src/routes/organizations.delete';
+import {
+  clearOrganizationDeleteStepUp,
+  clearOrganizationDeleteUnknown,
+  ORGANIZATION_DELETE_DESCRIPTOR_MAX_RAW_UTF16,
+  readOrganizationDeleteStepUp,
+  readOrganizationDeleteUnknown,
+  storeOrganizationDeleteStepUp,
+  storeOrganizationDeleteUnknown,
+} from '../src/organization-delete-step-up';
+import type { OrganizationDeletionRead, OrganizationDeletionReader } from '../src/organization-deletion';
+
+creationFixture();
+const human = '10000000-0000-0000-0000-000000000000';
+const first = '20000000-0000-0000-0000-000000000000';
+const second = '30000000-0000-0000-0000-000000000000';
+const body = { account_id: human, client_id: session('delete').clientId, scope: session('delete').scopes };
+const ready = (id: string): OrganizationDeletionRead => ({
+  kind: 'ready',
+  humanAccountId: human,
+  action: 'confirm',
+  account: { id, kind: 'organization', handle: 'private-name', displayName: 'Private organization' },
+});
+const content = (id: string, read: OrganizationDeletionReader) => (
+  <OrganizationDeleteContent organizationId={id} privacyContact="mailto:privacy@example.test" read={read} />
+);
+const hint = {
+  version: 1 as const,
+  operation: 'delete' as const,
+  humanAccountId: human,
+  organizationId: first,
+  operationKey: 'a'.repeat(32),
+  returnTo: '/organizations/delete' as const,
+};
+const unload = () => {
+  const e = new dom.Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(e as unknown as Event);
+  return e.defaultPrevented;
+};
+
+test('single readback survives storage loss; late advice cannot affect replacement or its continuation', async () => {
+  const delayed = Promise.withResolvers<OrganizationDeletionRead>();
+  let reads = 0;
+  const read: OrganizationDeletionReader = async ({ organizationId }) =>
+    ++reads === 3 ? delayed.promise : ready(organizationId);
+  const page = await open(content(first, read), body);
+  await flush(() => {
+    fill(page.host.querySelector('input')!, '@private-name');
+    send(page.host);
+  });
+  await flush(() => page.calls[0]!.resolve(approval()));
+  await flush(() => page.calls[1]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
+  await flush(() => page.calls[2]!.resolve(Response.json({ error: 'unavailable' }, { status: 503 })));
+  const original = readOrganizationDeleteUnknown(first);
+  window.sessionStorage.clear();
+  const check = button(page.host, 'Check current organization')!;
+  await flush(() => {
+    check.click();
+    check.click();
+  });
+  expect(reads).toBe(3);
+  expect(check.disabled).toBe(true);
+  expect(page.host.querySelector('[role="status"]')!.textContent).toContain('Reading current');
+  expect(unload()).toBe(true);
+  // Reinstall the same conservative fence before replacing the selected target.
+  expect(original.kind).toBe('pending');
+  if (original.kind === 'pending') storeOrganizationDeleteUnknown(original.value);
+  const replacement = { humanAccountId: human, organizationId: second, operationKey: 'b'.repeat(32) };
+  storeOrganizationDeleteStepUp(replacement);
+  await page.render(content(second, read));
+  expect(page.host.querySelector('form')).toBeNull();
+  expect(page.host.textContent).toContain('The deletion result is unknown');
+  expect(page.host.textContent).not.toContain('Private organization');
+  await flush(() =>
+    delayed.resolve({ kind: 'authentication-required', humanAccountId: human, action: 'authenticate' }),
+  );
+  expect(page.host.querySelector('form')).toBeNull();
+  expect(page.host.textContent).toContain('The deletion result is unknown');
+  expect(page.host.textContent).not.toContain('Private organization');
+  expect(readOrganizationDeleteStepUp()).toMatchObject({ kind: 'pending', value: replacement });
+  expect(readOrganizationDeleteUnknown(first)).toEqual(original);
+  // The replacement's own continuation still warns; the old attempt must not.
+  expect(unload()).toBe(true);
+  window.sessionStorage.removeItem('rezics.organization-delete.step-up');
+  expect(unload()).toBe(false);
+  expect(page.calls).toHaveLength(3);
+  storeOrganizationDeleteStepUp({ ...replacement, organizationId: first });
+  await page.render(content(second, async () => ready(second)));
+  expect(unload()).toBe(false);
+  expect(readOrganizationDeleteStepUp()).toMatchObject({ kind: 'pending', value: { organizationId: first } });
+  await page.render(content(first, read));
+  expect(page.host.querySelector('form')).toBeNull();
+  expect(unload()).toBe(true);
+  expect(page.calls).toHaveLength(3);
+});
+
+for (const restored of ['exact', 'malformed', 'wrong-target'] as const)
+  test(`restored ${restored} hint stays conservative through page retirement and account replacement`, async () => {
+    if (restored === 'malformed')
+      window.sessionStorage.setItem(`rezics.organization-delete.step-up.unknown.${first}`, '{"oldLabel":"secret"}');
+    else if (restored === 'wrong-target')
+      window.sessionStorage.setItem(
+        `rezics.organization-delete.step-up.unknown.${first}`,
+        JSON.stringify({ ...hint, organizationId: second }),
+      );
+    else storeOrganizationDeleteUnknown(hint);
+    const saved = readOrganizationDeleteUnknown(first);
+    let result = ready(first);
+    const read: OrganizationDeletionReader = async () => result;
+    const page = await open(content(first, read), body);
+    expect(page.host.querySelector('form')).toBeNull();
+    expect(page.host.textContent).not.toContain('Private organization');
+    expect(page.host.textContent).not.toContain('secret');
+    expect(unload()).toBe(true);
+    await flush(leave);
+    await flush(() =>
+      window.dispatchEvent(new dom.PageTransitionEvent('pageshow', { persisted: true }) as unknown as Event),
+    );
+    expect(page.host.querySelector('form')).toBeNull();
+    expect(page.host.textContent).toContain('The deletion result is unknown');
+    result = { ...ready(first), humanAccountId: second } as OrganizationDeletionRead;
+    await flush(() => button(page.host, 'Check current organization')!.click());
+    expect(page.host.querySelector('form')).toBeNull();
+    expect(page.host.textContent).not.toContain(second);
+    expect(unload()).toBe(true);
+    expect(readOrganizationDeleteUnknown(first)).toEqual(saved);
+    expect(page.calls).toHaveLength(0);
+  });
+
+test('closed delete descriptors use the exact raw boundary and cleanup preserves replacements and invalid bytes', () => {
+  const stepUpKey = 'rezics.organization-delete.step-up';
+  const unknownKey = `${stepUpKey}.unknown.${first}`;
+  expect(ORGANIZATION_DELETE_DESCRIPTOR_MAX_RAW_UTF16).toBe(231);
+  expect(JSON.stringify(hint).length).toBe(ORGANIZATION_DELETE_DESCRIPTOR_MAX_RAW_UTF16);
+  window.sessionStorage.removeItem(stepUpKey);
+  window.sessionStorage.removeItem(unknownKey);
+
+  expect(storeOrganizationDeleteStepUp(hint)).toBe(true);
+  expect(window.sessionStorage.getItem(stepUpKey)?.length).toBe(ORGANIZATION_DELETE_DESCRIPTOR_MAX_RAW_UTF16);
+  expect(storeOrganizationDeleteUnknown(hint)).toBe(true);
+  const replacement = { ...hint, operationKey: 'b'.repeat(32) };
+  window.sessionStorage.setItem(unknownKey, JSON.stringify(replacement));
+  expect(clearOrganizationDeleteUnknown(first, hint)).toBe(false);
+  expect(readOrganizationDeleteUnknown(first)).toMatchObject({ kind: 'pending', value: replacement });
+  expect(clearOrganizationDeleteUnknown(first, replacement)).toBe(true);
+  expect(readOrganizationDeleteUnknown(first)).toEqual({ kind: 'absent' });
+  expect(clearOrganizationDeleteStepUp(replacement)).toBe(false);
+  expect(readOrganizationDeleteStepUp()).toMatchObject({ kind: 'pending', value: hint });
+  expect(clearOrganizationDeleteStepUp(hint)).toBe(true);
+
+  const oversized = `${JSON.stringify(hint)} `;
+  window.sessionStorage.setItem(stepUpKey, oversized);
+  window.sessionStorage.setItem(unknownKey, oversized);
+  const parse = spyOn(JSON, 'parse');
+  const stepUp = readOrganizationDeleteStepUp();
+  const unknown = readOrganizationDeleteUnknown(first);
+  const parseCalls = parse.mock.calls.length;
+  parse.mockRestore();
+  expect(stepUp).toEqual({ kind: 'invalid' });
+  expect(unknown).toEqual({ kind: 'invalid' });
+  expect(parseCalls).toBe(0);
+  expect(window.sessionStorage.getItem(stepUpKey)).toBe(oversized);
+  expect(window.sessionStorage.getItem(unknownKey)).toBe(oversized);
+
+  const getItem = spyOn(window.sessionStorage, 'getItem').mockImplementation(() => {
+    throw new Error('storage unavailable');
+  });
+  const unreadable = readOrganizationDeleteUnknown(first);
+  getItem.mockRestore();
+  expect(unreadable).toEqual({ kind: 'invalid' });
+});

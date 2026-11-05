@@ -289,11 +289,21 @@ test('after the purchases and selling groups are opened by data the offer and ch
   const created = await request('POST', '/v1/offers', 'seller', input);
   expect(created.status).toBe(201);
   const offer = (await created.json()).offer;
-  expect(Object.keys(offer).sort()).toEqual(['currency', 'id', 'state', 'targetSubjectId', 'title', 'unitAmountMinor']);
+  expect(Object.keys(offer).sort()).toEqual([
+    'currency',
+    'id',
+    'state',
+    'summary',
+    'targetSubjectId',
+    'title',
+    'unitAmountMinor',
+  ]);
+  const { summary, ...offerFields } = offer;
+  expect(summary).toBeNull();
   const listed = await request('GET', `/v1/offers/${offer.id}`, 'anonymous');
   expect(listed.status).toBe(200);
-  expect(await listed.json()).toEqual({ offer });
-  const checkout = await request('POST', '/v1/orders', 'buyer', { offerId: offer.id });
+  expect(await listed.json()).toEqual({ offer: { ...offerFields, revision: 1, subject: summary } });
+  const checkout = await request('POST', '/v1/orders', 'buyer', { offerId: offer.id, expectedOfferRevision: 1 });
   expect(checkout.status).toBe(201);
   const order = (await checkout.json()).order;
   expect(checkout.headers.get('location')).toBe(`/v1/orders/${order.id}`);
@@ -305,7 +315,7 @@ test('after the purchases and selling groups are opened by data the offer and ch
   const entitlements = await request('GET', '/v1/entitlements', 'buyer');
   expect(entitlements.status).toBe(200);
   expect(await entitlements.json()).toEqual({ entitlements: [], next: null });
-  const delisted = await request('POST', `/v1/offers/${offer.id}:delist`, 'seller', {});
+  const delisted = await request('POST', `/v1/offers/${offer.id}:delist`, 'seller', { expectedRevision: 1 });
   expect(delisted.status).toBe(200);
   expect((await delisted.json()).offer).toMatchObject({ id: offer.id, state: 'delisted' });
 });

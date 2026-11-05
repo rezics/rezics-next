@@ -1,3 +1,9 @@
+import { canActivateBenefit, lockBenefitAcquisition } from './acquisition.ts';
+import type { StripeMoneyUnit } from './money.ts';
+import { orderReceiptMoney } from './order-read.ts';
+import offerLock from './store-offer-lock.sql';
+import { routeOf } from '../route/route.ts';
+import { decodeCapturedContentEdition, encodeCapturedContentEdition } from './benefit.ts';
 import type { PoolClient } from 'pg';
 import type {
   CheckoutDecision,
@@ -14,10 +20,12 @@ import offerState from './store-offer-state.sql';
 import offerPrice from './store-offer-price.sql';
 import orderInsert from './store-order-insert.sql';
 import orderRead from './store-order-read.sql';
+import orderAccountPage from './order-account-page.sql';
 import orderSessionRead from './store-order-session-read.sql';
 import orderSession from './store-order-session.sql';
 import orderSettlement from './store-order-settlement.sql';
 import orderLock from './store-order-lock.sql';
+import orderRefresh from './store-order-refresh.sql';
 import orderDecision from './store-order-decision.sql';
 import entitlementRead from './store-entitlement-read.sql';
 import entitlementOrder from './store-entitlement-order.sql';
@@ -30,7 +38,8 @@ import transactionsInsert from './store-transactions-insert.sql';
 import transactionsCount from './store-transactions-count.sql';
 import transactionsProbe from './store-transactions-probe.sql';
 import transactionsNamed from './store-transactions-named.sql';
-import { assertTransactionBound, CheckoutMismatchError } from './settlement.ts';
+import { assertTransactionBound, CheckoutMismatchError, MovementIntegrityError } from './settlement.ts';
+import { interpretedTransactions } from './money-observation.ts';
 import { MAX_ORDER_TRANSACTIONS } from './model.ts';
 
 type Client = Pick<PoolClient, 'query'>;
@@ -41,7 +50,7 @@ function queryClient(client: Client): Client {
 }
 type WriteContext = { transactionId: string; time: string };
 type OfferRow = NonNullable<Awaited<ReturnType<typeof offerRead.run>>>;
-type OrderRow = NonNullable<Awaited<ReturnType<typeof orderRead.run>>>;
+type OrderRow = Omit<NonNullable<Awaited<ReturnType<typeof orderRead.run>>>, 'chargeEvidence' | 'presentmentEvidence'>;
 type EntitlementRow = NonNullable<Awaited<ReturnType<typeof entitlementRead.run>>>;
 
 function required<T>(value: T | null): T {
@@ -52,11 +61,20 @@ function iso(value: string): string {
   return new Date(value).toISOString();
 }
 function asOffer(row: OfferRow): Offer {
-  return { ...row, unitAmountMinor: Number(row.unitAmountMinor) };
+  return {
+    ...row,
+    contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    moneyUnit: row.moneyUnit === null ? null : (JSON.parse(row.moneyUnit) as StripeMoneyUnit),
+    taxBehavior: row.taxBehavior as 'exclusive' | null,
+    unitAmountMinor: Number(row.unitAmountMinor),
+  };
 }
 function asOrder(row: OrderRow): Order {
   return {
     ...row,
+    contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    moneyUnit: row.moneyUnit === null ? null : (JSON.parse(row.moneyUnit) as StripeMoneyUnit),
+    taxBehavior: row.taxBehavior as 'exclusive' | null,
     unitAmountMinor: Number(row.unitAmountMinor),
     amountTaxMinor: row.amountTaxMinor === null ? null : Number(row.amountTaxMinor),
     createdAt: iso(row.createdAt),
@@ -65,7 +83,12 @@ function asOrder(row: OrderRow): Order {
   };
 }
 function asEntitlement(row: EntitlementRow): Entitlement {
-  return { ...row, grantedAt: iso(row.grantedAt), revokedAt: row.revokedAt === null ? null : iso(row.revokedAt) };
+  return {
+    ...row,
+    contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    grantedAt: iso(row.grantedAt),
+    revokedAt: row.revokedAt === null ? null : iso(row.revokedAt),
+  };
 }
 function write(context: WriteContext) {
   return { transaction_id: context.transactionId, time: context.time };
@@ -84,10 +107,13 @@ export async function insertOffer(
         id: offer.id,
         creator_account_id: offer.creatorAccountId,
         target_subject_id: offer.targetSubjectId,
+        content_edition: encodeCapturedContentEdition(offer.contentEdition) ?? '',
         title: offer.title,
         currency: offer.currency,
         unit_amount_minor: offer.unitAmountMinor,
         tax_code: offer.taxCode,
+        money_unit: offer.moneyUnit ? JSON.stringify(offer.moneyUnit) : '',
+        tax_behavior: offer.taxBehavior ?? '',
         royalty_basis_points: offer.royaltyBasisPoints,
         updated_at: context.time,
         ...write(context),
@@ -97,6 +123,11 @@ export async function insertOffer(
 }
 export async function readOffer(client: Client, route: number, id: string): Promise<Offer | null> {
   const row = await offerRead.run(queryClient(client), { route, id });
+  return row ? asOffer(row) : null;
+}
+/** Serialize repricing with delisting and other revisions on the creator home. */
+export async function lockOffer(client: Client, route: number, id: string): Promise<Offer | null> {
+  const row = await offerLock.run(queryClient(client), { route, id });
   return row ? asOffer(row) : null;
 }
 export async function setOfferState(
@@ -113,12 +144,15 @@ export async function reviseOfferPrice(
   route: number,
   id: string,
   unitAmountMinor: number,
+  money: Readonly<{ moneyUnit: StripeMoneyUnit; taxBehavior: 'exclusive' }>,
   context: WriteContext,
 ): Promise<Offer | null> {
   const row = await offerPrice.run(queryClient(client), {
     route,
     id,
     unit_amount_minor: unitAmountMinor,
+    money_unit: JSON.stringify(money.moneyUnit),
+    tax_behavior: money.taxBehavior,
     ...write(context),
   });
   return row ? asOffer(row) : null;
@@ -139,11 +173,14 @@ export async function insertOrder(
         offer_id: offer.id,
         offer_revision: offer.revision,
         target_subject_id: offer.targetSubjectId,
+        content_edition: encodeCapturedContentEdition(offer.contentEdition) ?? '',
         creator_account_id: offer.creatorAccountId,
         title: offer.title,
         currency: offer.currency,
         unit_amount_minor: offer.unitAmountMinor,
         tax_code: offer.taxCode,
+        money_unit: offer.moneyUnit ? JSON.stringify(offer.moneyUnit) : '',
+        tax_behavior: offer.taxBehavior ?? '',
         royalty_basis_points: offer.royaltyBasisPoints,
         updated_at: context.time,
         ...write(context),
@@ -151,9 +188,70 @@ export async function insertOrder(
     ),
   );
 }
+/** One buyer-local keyset; the caller owns the repeatable-read snapshot and epoch check. */
+export async function listBuyerOrders(
+  client: Client,
+  route: number,
+  buyerAccountId: string,
+  page: { after: string | null; limit: number },
+) {
+  if (!Number.isInteger(page.limit) || page.limit < 1 || page.limit > 101)
+    throw new RangeError('Buyer order page must contain 1 to 101 rows');
+  const rows = await orderAccountPage.run(queryClient(client), {
+    route,
+    buyer_account_id: buyerAccountId,
+    after: page.after ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+    limit: page.limit,
+  });
+  return rows.map((row) => ({
+    ...row,
+    contentEdition: decodeCapturedContentEdition(row.contentEdition),
+    moneyUnit: row.moneyUnit === null ? null : (JSON.parse(row.moneyUnit) as StripeMoneyUnit),
+    taxBehavior: row.taxBehavior as 'exclusive' | null,
+    unitAmountMinor: Number(row.unitAmountMinor),
+    amountTaxMinor: row.amountTaxMinor === null ? null : Number(row.amountTaxMinor),
+    createdAt: iso(row.createdAt),
+    checkoutExpiresAt: row.checkoutExpiresAt === null ? null : iso(row.checkoutExpiresAt),
+  }));
+}
 export async function readOrder(client: Client, route: number, id: string): Promise<Order | null> {
-  const row = await orderRead.run(queryClient(client), { route, id });
-  return row ? asOrder(row) : null;
+  const row = await orderRead.run(queryClient(client), { route, id, receipt: false });
+  if (!row) return null;
+  const { chargeEvidence: _, presentmentEvidence: __, ...order } = row;
+  return asOrder(order);
+}
+
+/** One order anchor plus two exact Session/context seeks, each capped at one row. */
+export async function readBuyerOrder(client: Client, route: number, id: string) {
+  const row = await orderRead.run(queryClient(client), { route, id, receipt: true });
+  if (!row) return null;
+  const { chargeEvidence, presentmentEvidence, ...captured } = row;
+  const order = asOrder(captured);
+  return { order, ...orderReceiptMoney(order, chargeEvidence, presentmentEvidence) };
+}
+/** Caller retains this transaction and lock through completion lookup, claim or apply. */
+export async function lockOrder(client: Client, route: number, id: string): Promise<Order | null> {
+  const locked = await orderLock.run(queryClient(client), { route, id });
+  return locked ? readOrder(client, route, id) : null;
+}
+export async function claimOrderRefresh(
+  client: Client,
+  route: number,
+  order: Order,
+  context: WriteContext,
+): Promise<Order> {
+  if (order.revision >= 2147483647) throw new RangeError('Commerce order revision exhausted');
+  return asOrder(
+    required(
+      await orderRefresh.run(queryClient(client), {
+        route,
+        id: order.id,
+        revision: order.revision,
+        session_id: required(order.checkoutSessionId),
+        ...write(context),
+      }),
+    ),
+  );
 }
 export async function readOrderBySession(client: Client, route: number, sessionId: string): Promise<Order | null> {
   const row = await orderSessionRead.run(queryClient(client), { route, session_id: sessionId });
@@ -219,7 +317,10 @@ export async function listEntitlements(
 }
 function asTransaction(row: Awaited<ReturnType<typeof transactionsRead.run>>[number]): StripeTransaction {
   return {
-    ...row,
+    id: row.id,
+    kind: row.kind,
+    sourceId: row.sourceId,
+    currency: row.currency,
     amountMinor: Number(row.amountMinor),
     feeMinor: Number(row.feeMinor),
     netMinor: Number(row.netMinor),
@@ -237,8 +338,9 @@ export async function readNamedOrderTransactions(
   ids: readonly string[],
 ): Promise<StripeTransaction[]> {
   assertTransactionBound(ids);
-  const rows = await transactionsNamed.run(queryClient(client), { route, order_id: orderId, ids: [...ids] });
-  return rows.map(asTransaction);
+  const rows = await transactionsNamed.run(queryClient(client), { route, ids: [...ids] });
+  if (rows.some((row) => row.orderId !== orderId)) throw new MovementIntegrityError();
+  return interpretedTransactions(client, route, orderId, rows.map(asTransaction));
 }
 
 export async function readOrderTransactions(
@@ -247,7 +349,7 @@ export async function readOrderTransactions(
   orderId: string,
 ): Promise<StripeTransaction[]> {
   const rows = await transactionsRead.run(queryClient(client), { route, order_id: orderId });
-  return rows.map(asTransaction);
+  return interpretedTransactions(client, route, orderId, rows.map(asTransaction));
 }
 export async function readSettlementState(
   client: Client,
@@ -259,11 +361,12 @@ export async function readSettlementState(
   const order = await readOrder(client, route, orderId);
   if (!order) return null;
   const entitlement = await readOrderEntitlement(client, route, orderId);
-  const transactions = await transactionsProbe.run(queryClient(client), { route, order_id: orderId, ids: [...ids] });
+  const transactions = await transactionsProbe.run(queryClient(client), { route, ids: [...ids] });
   return {
     order,
     entitlement,
-    transactionIds: transactions.map((t) => t.id),
+    transactionIds: transactions.filter((t) => t.orderId === orderId).map((t) => t.id),
+    retainedTransactions: transactions.map((row) => ({ ...asTransaction(row), orderId: row.orderId })),
   };
 }
 
@@ -271,6 +374,7 @@ export type AppliedCheckoutDecision =
   | { changed: false }
   | {
       changed: true;
+      moneyMetadataChanged?: true;
       order: Order;
       entitlement: Entitlement | null;
       entitlementAction: Extract<CheckoutDecision, { changed: true }>['entitlement'];
@@ -291,12 +395,20 @@ export async function applyCheckoutDecision(
   if (!decision.changed) return { changed: false };
   if (context.amountTaxMinor != null && (!Number.isSafeInteger(context.amountTaxMinor) || context.amountTaxMinor < 0))
     throw new RangeError('Invalid Checkout tax amount');
+  if (decision.entitlement.kind === 'grant' || decision.entitlement.kind === 'restore')
+    await lockBenefitAcquisition(client, state.order);
   const lockedOrder = required(await orderLock.run(queryClient(client), { route, id: state.order.id }));
   if (lockedOrder.revision !== state.order.revision) throw new Error('Commerce order revision changed');
   const currentEntitlement = await entitlementLock.run(queryClient(client), { route, order_id: state.order.id });
   if (currentEntitlement?.id !== state.entitlement?.id || currentEntitlement?.revision !== state.entitlement?.revision)
     throw new Error('Commerce entitlement revision changed');
-  const action = decision.entitlement;
+  // Late money always applies, but another legitimate acquisition/active benefit owns the slot.
+  const action =
+    state.order.contentEdition &&
+    (decision.entitlement.kind === 'grant' || decision.entitlement.kind === 'restore') &&
+    !(await canActivateBenefit(client, state.order))
+      ? { kind: 'none' as const }
+      : decision.entitlement;
   if (
     (action.kind === 'grant' && currentEntitlement) ||
     (action.kind !== 'grant' && action.kind !== 'none' && !currentEntitlement)
@@ -322,7 +434,7 @@ export async function applyCheckoutDecision(
     ),
   );
   if (decision.newTransactions.length) {
-    await transactionsInsert.run(queryClient(client), {
+    const inserted = await transactionsInsert.run(queryClient(client), {
       route,
       order_id: order.id,
       transactions: decision.newTransactions.map((t) => ({
@@ -339,6 +451,7 @@ export async function applyCheckoutDecision(
       })),
       ...write(context),
     });
+    if (inserted.length !== decision.newTransactions.length) throw new MovementIntegrityError();
   }
   let entitlement = currentEntitlement ? asEntitlement(currentEntitlement) : null;
   if (action.kind === 'grant') {
@@ -351,6 +464,7 @@ export async function applyCheckoutDecision(
           order_id: order.id,
           offer_id: order.offerId,
           target_subject_id: order.targetSubjectId,
+          content_edition: encodeCapturedContentEdition(order.contentEdition) ?? '',
           ...write(context),
         }),
       ),
@@ -372,4 +486,24 @@ export async function applyCheckoutDecision(
     );
   }
   return { changed: true, order, entitlement, entitlementAction: action, newTransactions: decision.newTransactions };
+}
+
+/** Native owner-scoped eligibility data for Accounts. This is not an opaque Access fact
+ * and must never be accepted as one by a caller. No foreign home or provider is held.
+ * Accounts still prepares/checks permission; Content still performs its final native checks.
+ */
+export async function readContentEditionEntitlement(
+  client: Client,
+  buyerAccountId: string,
+  entitlementId: string,
+): Promise<Entitlement | null> {
+  const route = routeOf(buyerAccountId);
+  if (route === null || routeOf(entitlementId) !== route) return null;
+  const entitlement = await readEntitlement(client, route, entitlementId);
+  return entitlement?.accountId === buyerAccountId &&
+    entitlement.contentEdition !== null &&
+    entitlement.contentEdition !== undefined &&
+    entitlement.revokedAt === null
+    ? entitlement
+    : null;
 }

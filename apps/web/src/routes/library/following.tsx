@@ -1,13 +1,38 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { readMineFollowingPage } from '../../library/mine-following-actions';
-import { MineFollowingPageView } from '../../library/mine-following-page';
+import { followingKind } from '../../library/following-kind-navigation/address';
+import { requireSignedIn } from '../../session/guard';
+import { pageHead } from '../../shell/head';
+import { pageHeadContext } from '../../shell/head-context';
+import { createFileRoute, useLocation } from '@tanstack/react-router';
+import { readMineFollowingForViewer } from '../../library/mine-following-actions';
+import { CurrentViewerMineFollowingPage } from '../../library/mine-following-page';
+import { PERSONAL_DIRECTORY_CURSOR_LIMITS, personalDirectoryAddress } from '../../library/personal-directory-address';
 import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/library/following')({
-  validateSearch: (search: Record<string, unknown>) =>
-    typeof search.cursor === 'string' ? { cursor: search.cursor } : {},
-  loaderDeps: ({ search }) => ({ cursor: search.cursor }),
-  loader: ({ deps }) => readMineFollowingPage({ data: { cursor: deps.cursor } }),
-  head: () => ({ meta: [{ title: m.library_following_heading() }] }),
-  component: () => <MineFollowingPageView page={Route.useLoaderData()} />,
+  beforeLoad: requireSignedIn,
+  validateSearch: (search: Record<string, unknown>) => ({
+    ...(search.cursor === undefined ? {} : { cursor: search.cursor as string }),
+    ...(search.kind === undefined ? {} : { kind: typeof search.kind === 'string' ? search.kind : 'invalid' }),
+  }),
+  loaderDeps: ({ search }) => ({ cursor: search.cursor, kind: search.kind }),
+  loader: ({ deps }) => readMineFollowingForViewer({ data: { cursor: deps.cursor, kind: deps.kind } }),
+  head: ({ match }) =>
+    pageHead({ title: m.library_following_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
+  component: FollowingRoute,
 });
+
+function FollowingRoute() {
+  const initial = Route.useLoaderData();
+  // The active match can retain its old search while the next loader is pending.
+  const location = useLocation();
+  const address = personalDirectoryAddress(location.search.cursor, PERSONAL_DIRECTORY_CURSOR_LIMITS.following);
+  if (location.pathname.replace(/\/$/, '') !== '/library/following') return null;
+  return (
+    <CurrentViewerMineFollowingPage
+      initial={initial}
+      {...(address.cursor !== null ? { cursor: address.cursor } : {})}
+      kind={followingKind(location.search.kind) ?? 'all'}
+      invalidAddress={!address.valid || !followingKind(location.search.kind)}
+    />
+  );
+}

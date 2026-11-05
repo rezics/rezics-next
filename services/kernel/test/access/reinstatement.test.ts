@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
 import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
@@ -19,13 +19,32 @@ import { ACCESS_EVENTS } from '../../src/access/events.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
 import { Value } from 'typebox/value';
 
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `reinstatement_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
+
 const issuer = 'https://reinstatement.auth.test';
 const audience = 'https://reinstatement.api.test';
 const password = 'native grant routes registration password';
 const routeKey = new Uint8Array(32).fill(71);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(72)]]) };
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
-let authDatabase: ReturnType<typeof testDatabase>;
+let authDatabase: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let authPool: Pool;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
@@ -159,7 +178,7 @@ beforeAll(async () => {
   });
   const actions = actionCatalogue(kernel);
   scopes = [...actions.keys()].filter((action) => action !== 'media:complete');
-  authDatabase = testDatabase();
+  authDatabase = await cloneAuthDatabase();
   authPool = new Pool({ connectionString: authDatabase.url });
   const signingKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -215,7 +234,7 @@ beforeAll(async () => {
 }, 60000);
 afterAll(async () => {
   await host?.stop();
-  authDatabase?.close();
+  await authDatabase?.close();
   await db?.close();
 });
 
@@ -280,7 +299,7 @@ test('platform governance reinstates a suspended account and the person signs in
     suspension_reason: 'mistaken suspension',
     minimum_authn_epoch: String(Number(active.minimum_authn_epoch) + 1),
   });
-  expect((await establish('restored_person@reinstatement.test')).status).toBe(401);
+  expect((await establish('restored_person@reinstatement.test')).status).toBe(403);
   const suspendedCall = await call(session.bearer, '/v1/contexts', { labels: { en: 'While suspended' } });
   expect(suspendedCall.response.status, JSON.stringify(suspendedCall.value)).toBe(401);
   const reason = 'complaint justified';
@@ -318,8 +337,8 @@ test('platform governance reinstates a suspended account and the person signs in
   ).rows;
   expect(audit).toHaveLength(1);
   expect(audit[0].type).toBe('com.rezics.access.account.reinstated.v1');
-  const schema = ACCESS_EVENTS['com.rezics.access.account.reinstated.v1'];
-  expect(EVENT_TYPES['com.rezics.access.account.reinstated.v1']).toBe(schema);
+  const schema = ACCESS_EVENTS()['com.rezics.access.account.reinstated.v1'];
+  expect(EVENT_TYPES()['com.rezics.access.account.reinstated.v1']).toBe(schema);
   expect(Value.Check(schema, audit[0].data)).toBe(true);
   expect(JSON.stringify(audit)).not.toContain(reason);
   expect(await account(operated.accountId)).toEqual(operatedBefore);

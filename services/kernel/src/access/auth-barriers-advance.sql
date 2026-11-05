@@ -3,13 +3,16 @@ WITH input AS NOT MATERIALIZED (
     :transaction_id::uuid AS transaction_id, :expected_floor::bigint AS expected_floor, :purpose::text AS purpose
 ), changed AS (
   UPDATE access.account a
-  SET minimum_authn_epoch = minimum_authn_epoch + 1,
-      fence_receipt_id = i.receipt_id, transaction_id = i.transaction_id
+  SET minimum_authn_epoch = minimum_authn_epoch + 1, authn_fenced = true,
+      fence_receipt_id = CASE WHEN a.authn_fenced AND i.purpose = 'consent-reduction'
+        THEN a.fence_receipt_id ELSE i.receipt_id END,
+      transaction_id = i.transaction_id
   FROM input i
   WHERE a.route = i.route AND a.account_id = i.account_id
     AND a.minimum_authn_epoch = i.expected_floor
-    AND a.state = 'active' AND a.kind = 'actor' AND a.operator_account_id IS NULL
-    AND (i.purpose = 'consent-reduction' OR (i.purpose = 'recovery' AND a.authn_fenced))
+    AND a.state = 'active' AND a.kind = 'actor'
+    AND (i.purpose = 'consent-reduction'
+      OR (i.purpose = 'recovery' AND a.operator_account_id IS NULL AND a.authn_fenced))
   RETURNING a.route, a.account_id, a.minimum_authn_epoch
 )
 INSERT INTO access.lifecycle_fence_receipt

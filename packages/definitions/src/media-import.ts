@@ -26,6 +26,15 @@ function closed<T extends TSchema>(schema: T): T {
 const uuid = Type.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])' });
 const text = Type.String({ minLength: 1, maxLength: 1024 });
 const https = (maxLength: number) => Type.String({ minLength: 1, maxLength, pattern: '^https://[^\\s]+(?![\\s\\S])' });
+const crop = Type.String({
+  minLength: 1,
+  maxLength: 64,
+  pattern: '^xywh=\\d+,\\d+,(?:0*[1-9]\\d*),(?:0*[1-9]\\d*)$',
+});
+const focalPoint = Type.Object(
+  { x: Type.Number({ minimum: 0, maximum: 1 }), y: Type.Number({ minimum: 0, maximum: 1 }) },
+  { additionalProperties: false },
+);
 
 /** Image rights are independent of the licence on catalogue metadata. */
 export const CoverCreditSchema = Type.Object(
@@ -50,6 +59,8 @@ export const MediaImportRequestSchema = Type.Object(
   {
     containerId: uuid,
     sourceUrl: https(2048),
+    crop: Type.Optional(crop),
+    focalPoint: Type.Optional(focalPoint),
     credit: CoverCreditSchema,
     provenance: CoverProvenanceSchema,
   },
@@ -73,6 +84,8 @@ const measurements = {
 };
 const statusFields = {
   ...identity,
+  crop: Type.Optional(crop),
+  focalPoint: Type.Optional(focalPoint),
   credit: CoverCreditSchema,
   provenance: CoverProvenanceSchema,
   rejection: Type.Optional(Type.Object({ code: text }, { additionalProperties: false })),
@@ -161,10 +174,26 @@ function checkUrl(value: unknown, pointer: string, violations: Violation[]) {
     violations.push({ pointer, code: 'invalid_format' });
   }
 }
+function checkCrop(value: unknown, pointer: string, violations: Violation[]) {
+  if (typeof value !== 'string' || violations.some((violation) => violation.pointer === pointer)) return;
+  const match = /^xywh=(\d+),(\d+),(\d+),(\d+)$/.exec(value);
+  if (!match) {
+    violations.push({ pointer, code: 'invalid_format' });
+    return;
+  }
+  const values = match.slice(1).map(Number);
+  if (
+    values.some((number) => !Number.isSafeInteger(number) || number > 2_147_483_647) ||
+    values[2]! < 1 ||
+    values[3]! < 1
+  )
+    violations.push({ pointer, code: 'out_of_range' });
+}
 function checkBody(body: Record<string, unknown>, pointer: string, violations: Violation[]) {
   const result = checkCredit(body.credit, at(pointer, 'credit'), violations);
   if (record(body.credit) && record(body.credit.via))
     checkUrl(body.credit.via.url, `${pointer}/credit/via/url`, result);
+  if (Object.hasOwn(body, 'crop')) checkCrop(body.crop, at(pointer, 'crop'), result);
   return result;
 }
 

@@ -9,7 +9,7 @@ VALUES (
   :source_position::bigint
 )
 ON CONFLICT (route, target_id, kind) DO UPDATE
-SET count = GREATEST(stored.count + :update_delta::integer, 0),
+SET count = stored.count + :update_delta::integer,
     source_epoch = CASE
       WHEN ROW(EXCLUDED.source_epoch, EXCLUDED.source_position) >
            ROW(stored.source_epoch, stored.source_position)

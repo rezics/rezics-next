@@ -7,13 +7,16 @@ import { authRequest } from '../src/session/routes.ts';
 import { prepareSession } from '../src/session/request.ts';
 import { mediaRequest } from '../src/media/index.ts';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
+import { slug } from '@rezics/definitions/slug';
 import fixtures from '../src/kernel/fixtures.json';
+import { threadHref } from '../src/threads/thread-href';
 
 const app = join(import.meta.dir, '..');
 const cookieId = 'a'.repeat(43);
 const keyPair = await generateKeyPair('ES256', { extractable: true });
 const clientJwk = { ...(await exportJWK(keyPair.privateKey)), alg: 'ES256', kid: 'request-cost' };
 const subjectId = (fixtures.subjects[0] as { id: string }).id;
+const subjectSlug = slug((fixtures.subjects[0] as { labels: Record<string, string> }).labels.en!);
 const fakeKernel = createFakeKernelFetch(fixtures);
 const kernelCalls: string[] = [];
 const kernelAuthorizations: (string | null)[] = [];
@@ -297,26 +300,41 @@ test('home page stays within its bound as s grows', async () => {
     subjectSize = s;
     kernelCalls.length = 0;
     authCalls.length = 0;
-    const response = await fetch(`${origin}/en/`);
-    expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual(['POST /v1/pages:read']);
-    expect(authCalls).toEqual([]);
+    for (const cookie of ['', `__Host-rezics_session=${cookieId}`]) {
+      kernelCalls.length = 0;
+      const response = await fetch(`${origin}/en/`, { headers: { cookie } });
+      expect(response.status).toBe(200);
+      expect(kernelCalls).toEqual(['POST /v1/pages:read']);
+      expect(authCalls).toEqual([]);
+    }
   }
 }, 300_000);
 test('subject page stays within its bound as s grows', async () => {
   const origin = await site();
-  // The development Worker hides its workerd-bound SESSIONS binding, so its page D count is derived from the route.
+  // Personal state is browser-only; the signed-in cookie does not alter the server's public read set.
   for (const s of [1, 8, 64]) {
     subjectSize = s;
     kernelCalls.length = 0;
     kernelAuthorizations.length = 0;
-    const response = await fetch(`${origin}/en/subjects/${subjectId}`);
+    const response = await fetch(`${origin}/en/subjects/${subjectId}/${subjectSlug}`, {
+      headers: { cookie: `__Host-rezics_session=${cookieId}` },
+    });
     expect(response.status).toBe(200);
-    expect(kernelCalls).toHaveLength(2);
-    expect(kernelCalls).toEqual(
-      expect.arrayContaining(['POST /v1/pages:read', `GET /v1/subjects/${subjectId}/collections?view=FULL&limit=100`]),
+    // Agent subtype classification and the page's type label use a bounded definitions read, whatever s is.
+    const definitions = kernelCalls.filter((call) => call.includes('/v1/definitions/'));
+    expect(definitions.length).toBeLessThanOrEqual(3);
+    const page = kernelCalls.filter((call) => !call.includes('/v1/definitions/'));
+    expect(page).toHaveLength(5);
+    expect(page).toEqual(
+      expect.arrayContaining([
+        `GET /v1/subjects/${subjectId}`,
+        'POST /v1/pages:read',
+        `GET /v1/subjects/${subjectId}/reactions`,
+        `GET /v1/subjects/${subjectId}/ratings?question=00000000-0000-7000-8000-000000000001&population=00000000-0000-8000-8000-000000000000`,
+        `GET /v1/subjects/${subjectId}/source-statistics`,
+      ]),
     );
-    expect(kernelAuthorizations).toEqual([null, null]);
+    expect(kernelAuthorizations).toEqual(kernelCalls.map(() => null));
   }
 }, 300_000);
 test('board page stays within its bound as s grows', async () => {
@@ -327,7 +345,11 @@ test('board page stays within its bound as s grows', async () => {
     authCalls.length = 0;
     const response = await fetch(`${origin}/en/boards/${boardId}`);
     expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual([`GET /v1/boards/${boardId}`, `GET /v1/boards/${boardId}/threads`]);
+    expect(kernelCalls).toEqual([
+      `GET /v1/boards/${boardId}`,
+      `GET /v1/boards/${boardId}/threads?sort=active`,
+      `GET /v1/accounts?ids=${contentId(999)}`,
+    ]);
     expect(authCalls).toEqual([]);
   }
 }, 300_000);
@@ -337,9 +359,14 @@ test('thread page stays within its bound as s grows', async () => {
     postSize = s;
     kernelCalls.length = 0;
     authCalls.length = 0;
-    const response = await fetch(`${origin}/en/threads/${threadId}`);
+    const response = await fetch(`${origin}/en${threadHref({ id: threadId, title: 'Cost thread' })}`);
     expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual([`GET /v1/threads/${threadId}`, `GET /v1/threads/${threadId}/posts`]);
+    expect(kernelCalls).toEqual([
+      `GET /v1/threads/${threadId}`,
+      `GET /v1/threads/${threadId}/posts`,
+      `GET /v1/boards/${boardId}`,
+      `GET /v1/accounts?ids=${contentId(999)}`,
+    ]);
     expect(authCalls).toEqual([]);
   }
 }, 300_000);
@@ -351,7 +378,8 @@ test('search page stays within its bound as s grows', async () => {
     const response = await fetch(`${origin}/en/search?q=results`);
     expect(response.status).toBe(200);
     expect(kernelCalls).toEqual(['GET /v1/definitions/active', 'POST /v1/subjects:search']);
-    expect((await response.text()).length).toBeLessThan(100_000);
+    // At most 100 hits, each with its cover frame and placeholder: a constant few kilobytes per hit.
+    expect((await response.text()).length).toBeLessThan(300_000);
   }
 }, 300_000);
 test('suggestions stay within their bound as s grows', async () => {
@@ -361,7 +389,9 @@ test('suggestions stay within their bound as s grows', async () => {
     kernelCalls.length = 0;
     const response = await fetch(`${origin}/api/search/suggestions?q=results`);
     expect(response.status).toBe(200);
-    expect(kernelCalls).toEqual(['GET /v1/subjects:suggest']);
+    // One suggest read, plus at most the active digest and the release that name the types, whatever s is.
+    expect(kernelCalls.filter((call) => !call.includes('/v1/definitions/'))).toEqual(['GET /v1/subjects:suggest']);
+    expect(kernelCalls.filter((call) => call.includes('/v1/definitions/')).length).toBeLessThanOrEqual(2);
     expect(((await response.json()) as { subjects: unknown[] }).subjects.length).toBeLessThanOrEqual(8);
   }
 }, 300_000);

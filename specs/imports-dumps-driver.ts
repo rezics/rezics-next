@@ -33,9 +33,13 @@ export interface DumpRecord {
   payload: Record<string, unknown>;
 }
 export interface ImportDumpsDriver {
-  read(source: DumpSource, input: AsyncIterable<Uint8Array>, options: {
-    maxRecordBytes: number;
-  }): AsyncIterable<DumpRecord>;
+  read(
+    source: DumpSource,
+    input: AsyncIterable<Uint8Array>,
+    options: {
+      maxRecordBytes: number;
+    },
+  ): AsyncIterable<DumpRecord>;
   /**
    * Real instrumentation active from factory creation through inspection:
    * all attempted database statements, outbound requests and file writes from

@@ -20,8 +20,8 @@ const fixtures: ReturnType<typeof startFakeStripe>[] = [];
 afterEach(() => {
   for (const fake of fixtures.splice(0)) fake.stop();
 });
-function setup(managedPayments = false) {
-  const fake = startFakeStripe();
+function setup(managedPayments = false, rewriteRead?: Parameters<typeof startFakeStripe>[0]) {
+  const fake = startFakeStripe(rewriteRead);
   fixtures.push(fake);
   const config = {
     apiKey: 'sk_test_fixture_secret',
@@ -260,7 +260,7 @@ test('lost create then retry with the same key returns the same session and stor
   fake.pay(retry.id);
   expect(await port.createCheckoutSession(request, 'lost')).toEqual(retry);
   await expect(port.createCheckoutSession({ ...request, title: 'different' }, 'lost')).rejects.toBeInstanceOf(
-    StripeRejectedError,
+    StripeUnavailableError,
   );
   expect(fake.sessions.size).toBe(1);
 });
@@ -281,7 +281,9 @@ test('rejected and unknown Stripe outcomes are distinguished without exposing th
       await port.createCheckoutSession(request, type);
       throw new Error('Expected failure');
     } catch (error) {
-      expect(error).toBeInstanceOf(status <= 402 && status !== 401 ? StripeRejectedError : StripeUnavailableError);
+      expect(error).toBeInstanceOf(
+        type === 'invalid_request_error' || type === 'card_error' ? StripeRejectedError : StripeUnavailableError,
+      );
       expect(String(error)).not.toContain(config.apiKey);
     }
   }
@@ -331,4 +333,123 @@ test('fake events contain current Stripe objects and exact bytes signed by strip
   fake.updateDispute(dispute, 'won');
   const current = await fake.event('charge.dispute.closed', dispute);
   expect(JSON.parse(current.bytes).data.object.status).toBe('won');
+});
+
+test('captured provider tax mode overrides later factory configuration', async () => {
+  const { fake, port } = setup(true);
+  const captured = { ...request, managedPayments: false };
+  const first = await port.createCheckoutSession(captured, 'captured-mode');
+  expect(await port.createCheckoutSession(captured, 'captured-mode')).toEqual(first);
+  expect(fake.requests.map((r) => r.rawParams)[0]).toBe(fake.requests.map((r) => r.rawParams)[1]);
+  expect(fake.requests.every((r) => r.params.get('automatic_tax[enabled]') === 'true')).toBe(true);
+  expect(fake.requests.every((r) => !r.params.has('managed_payments[enabled]'))).toBe(true);
+  expect(fake.sessions.size).toBe(1);
+});
+
+test('incomplete, foreign and unsupported current payment evidence is unavailable before flattening', async () => {
+  let fault: { surface: string; field: string; value: unknown } | undefined;
+  const { fake, port } = setup(false, async (path, response) => {
+    const body = await response.json();
+    if (fault) {
+      const target = path.startsWith('/v1/checkout/sessions/')
+        ? fault.surface === 'session'
+          ? body
+          : fault.surface === 'intent'
+            ? body.payment_intent
+            : fault.surface === 'charge'
+              ? body.payment_intent.latest_charge
+              : undefined
+        : path === '/v1/refunds'
+          ? fault.surface === 'refund'
+            ? body.data[0]
+            : fault.surface === 'refunds'
+              ? body
+              : undefined
+          : path === '/v1/disputes' && fault.surface === 'dispute'
+            ? body.data[0]
+            : undefined;
+      if (target) target[fault.field] = fault.value;
+    }
+    return Response.json(body);
+  });
+  const session = await port.createCheckoutSession(request, 'evidence');
+  fake.pay(session.id);
+  fake.refund(session.id, { amount: 1200 });
+  fake.dispute(session.id);
+  const complete = await port.readCheckout(session.id);
+  expect(complete.refunds).toHaveLength(1);
+  for (const row of [
+    { surface: 'session', field: 'id', value: 'cs_foreign' },
+    { surface: 'session', field: 'mode', value: 'subscription' },
+    { surface: 'session', field: 'payment_intent', value: null },
+    { surface: 'session', field: 'payment_intent', value: complete.paymentIntentId },
+    { surface: 'intent', field: 'latest_charge', value: null },
+    { surface: 'intent', field: 'latest_charge', value: complete.chargeId },
+    { surface: 'intent', field: 'livemode', value: true },
+    { surface: 'intent', field: 'currency', value: 'eur' },
+    { surface: 'intent', field: 'amount', value: 1199 },
+    { surface: 'intent', field: 'amount_received', value: 0 },
+    { surface: 'intent', field: 'status', value: 'future_status' },
+    { surface: 'charge', field: 'payment_intent', value: 'pi_foreign' },
+    { surface: 'charge', field: 'currency', value: 'eur' },
+    { surface: 'charge', field: 'livemode', value: true },
+    { surface: 'charge', field: 'amount', value: null },
+    { surface: 'charge', field: 'amount_captured', value: 0 },
+    { surface: 'refund', field: 'payment_intent', value: 'pi_foreign' },
+    { surface: 'refund', field: 'charge', value: 'ch_foreign' },
+    { surface: 'refund', field: 'currency', value: 'eur' },
+    { surface: 'refund', field: 'amount', value: -1 },
+    { surface: 'refund', field: 'status', value: 'future_status' },
+    { surface: 'refund', field: 'status', value: null },
+    { surface: 'dispute', field: 'payment_intent', value: 'pi_foreign' },
+    { surface: 'dispute', field: 'charge', value: 'ch_foreign' },
+    { surface: 'dispute', field: 'currency', value: 'eur' },
+    { surface: 'dispute', field: 'livemode', value: true },
+    { surface: 'dispute', field: 'status', value: 'future_status' },
+    { surface: 'refunds', field: 'has_more', value: undefined },
+    { surface: 'refunds', field: 'has_more', value: true },
+    { surface: 'refunds', field: 'data', value: [] },
+  ]) {
+    fault = row;
+    await expect(port.readCheckout(session.id)).rejects.toBeInstanceOf(StripeUnavailableError);
+  }
+  fault = undefined;
+  expect((await port.readCheckout(session.id)).paymentIntentId).toBe(complete.paymentIntentId);
+});
+
+test('complete associated paid and adverse evidence does not require balance movement availability', async () => {
+  const { fake, port } = setup(false, async (path, response) => {
+    const body = await response.json();
+    if (path.startsWith('/v1/checkout/sessions/')) body.payment_intent.latest_charge.balance_transaction = null;
+    if (path === '/v1/refunds')
+      for (const refund of body.data) {
+        refund.balance_transaction = null;
+        refund.failure_balance_transaction = null;
+      }
+    if (path === '/v1/disputes') for (const dispute of body.data) dispute.balance_transactions = [];
+    return Response.json(body);
+  });
+  const session = await port.createCheckoutSession(request, 'no-cash');
+  fake.pay(session.id);
+  expect(await port.readCheckout(session.id)).toMatchObject({
+    paymentStatus: 'paid',
+    refunds: [],
+    disputes: [],
+    transactions: [],
+  });
+  const refund = fake.refund(session.id, { amount: 1200, status: 'pending' });
+  const dispute = fake.dispute(session.id, { status: 'lost', withdraw: false });
+  expect(await port.readCheckout(session.id)).toMatchObject({
+    refunds: [{ id: refund, status: 'pending' }],
+    disputes: [{ id: dispute, status: 'lost' }],
+    transactions: [],
+  });
+  fake.failRefund(refund);
+  fake.updateDispute(dispute, 'won');
+  expect(await port.readCheckout(session.id)).toMatchObject({
+    paymentStatus: 'paid',
+    refunds: [{ id: refund, status: 'failed' }],
+    disputes: [{ id: dispute, status: 'won' }],
+    transactions: [],
+  });
 });

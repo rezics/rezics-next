@@ -1,8 +1,9 @@
 import { checkDocument, fromPlainText, type DocumentProfile, type DocumentSnapshot } from '@rezics/document';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { waitForFocus } from '../test/focus.ts';
+import { dismissed } from '../test/waits.ts';
 import { RichTextEditor } from './rich-text-editor.tsx';
 
 function demo(profile: DocumentProfile = 'blocks', translated = false) {
@@ -41,7 +42,7 @@ function checked(snapshot: DocumentSnapshot) {
   return snapshot.doc.content?.[0];
 }
 const meta = {
-  title: 'Rezics UI/Editor Selection Menu',
+  title: 'Components/Editor Selection Menu',
   component: RichTextEditor,
   args: { value: fromPlainText('Selected words'), label: 'Post', onChange: () => undefined },
   parameters: { layout: 'padded' },
@@ -103,9 +104,12 @@ export const BlockCommands: Story = {
       ['Code block', 'codeBlock'],
     ]) {
       await userEvent.click(await canvas.findByRole('button', { name: 'Turn into' }));
-      const menu = within(await canvas.findByRole('menu', { name: 'Turn into' }));
+      // The menu is a shadcn dropdown, which renders in a portal on the page rather than inside the story canvas.
+      const menu = within(await screen.findByRole('menu', { name: 'Turn into' }));
       expect(menu.getAllByRole('menuitemradio', { checked: true })).toHaveLength(1);
       await userEvent.click(menu.getByRole('menuitemradio', { name }));
+      // The next round must not find this menu while it leaves.
+      await dismissed('menu');
       await waitFor(() => expect(checked(blocks.latest.current)?.type).toBe(type));
       if (type === 'heading' || type === 'paragraph' || type === 'codeBlock')
         expect(checked(blocks.latest.current)?.attrs?.id).toBe(id);
@@ -120,10 +124,12 @@ export const ProfileCommands: Story = {
     const canvas = await select(canvasElement);
     expect(await canvas.findByRole('toolbar', { name: 'Format text' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Turn into' }));
-    const menu = within(canvas.getByRole('menu', { name: 'Turn into' }));
+    const menu = within(await screen.findByRole('menu', { name: 'Turn into' }));
     expect(menu.queryByRole('menuitemradio', { name: /table|image/i })).toBeNull();
     expect(canvas.queryByRole('button', { name: /table|image/i })).toBeNull();
     await userEvent.click(menu.getByRole('menuitemradio', { name: 'Heading 1' }));
+    // The settled story must not hold a leaving menu, whose focus guards fail the accessibility check.
+    await dismissed('menu');
     await waitFor(() => expect(checked(profiles.latest.current)?.type).toBe('heading'));
     expect(profiles.latest.current.profile).toBe('text');
   },
@@ -148,7 +154,7 @@ export const KeyboardReach: Story = {
     // Applying a mark returns focus to the editor on a later frame; a shortcut sent before then is lost.
     await waitForFocus(textbox);
     await userEvent.keyboard('{Alt>}{F10}{/Alt}{End}{Enter}');
-    const menu = within(await canvas.findByRole('menu', { name: 'Turn into' }));
+    const menu = within(await screen.findByRole('menu', { name: 'Turn into' }));
     await waitFor(() => expect(menu.getByRole('menuitemradio', { name: 'Paragraph' })).toHaveFocus());
     await userEvent.keyboard('{ArrowDown}');
     expect(menu.getByRole('menuitemradio', { name: 'Heading 1' })).toHaveFocus();

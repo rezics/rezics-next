@@ -3,6 +3,7 @@ name: character
 version: 1.0.0
 description: Fictional character profiles and descriptive terms.
 prefixes:
+  rezics: https://rezics.com/vocab/
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
@@ -37,8 +38,16 @@ classes:
       - keywords
       - vndbId
       - bangumiCharacterId
+      - relatedCharacterIdentity
+      - spouse
+      - sibling
+      - father
+      - mother
+      - partner
+      - characterRival
     annotations:
       facets: keywords gender bloodType birthDate height weight
+      schema_org_type: https://schema.org/Thing
 slots:
   gender:
     slot_uri: schema:gender
@@ -52,6 +61,9 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: spoilerLevel
+      relation_group: classification
+      inverse: rezics:subjectWithGender
+      relation_order: name
   height:
     slot_uri: schema:height
     description: >-
@@ -86,6 +98,9 @@ slots:
       - wd:P1853
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:subjectWithBloodType
+      relation_order: name
   bangumiCharacterId:
     slot_uri: wdt:P6296
     description: >-
@@ -96,3 +111,106 @@ slots:
       - wd:P6296
     annotations:
       datatype: external-id
+  relatedCharacterIdentity:
+    slot_uri: rezics:relatedCharacterIdentity
+    description: >-
+      A directed identity association to another independently referable Character, with optional spoiler
+      qualification and statement references. VNDB chars.main names that Character endpoint. The appearance
+      role code main is a protagonist role on a work appearance, never this link. The association is not a
+      merge, redirect, instance-of class assertion or permission to combine biographies, and no target is
+      inferred from names or provider identifiers.
+    range: Character
+    annotations:
+      datatype: wikibase-item
+      qualifiers: spoilerLevel
+      relation_group: association
+      inverse: rezics:relatedCharacterIdentityOf
+      relation_order: name
+  spouse:
+    slot_uri: wdt:P26
+    description: >-
+      Another Character stated as this character's spouse.
+      Source and mapping: https://www.wikidata.org/wiki/Property:P26.
+    range: Character
+    multivalued: true
+    exact_mappings:
+      - wd:P26
+    annotations:
+      datatype: wikibase-item
+      qualifiers: spoilerLevel
+      symmetric: true
+      relation_group: association
+      relation_order: name
+  sibling:
+    slot_uri: wdt:P3373
+    description: >-
+      Another Character stated as this character's sibling.
+      Source and mapping: https://www.wikidata.org/wiki/Property:P3373.
+    range: Character
+    multivalued: true
+    exact_mappings:
+      - wd:P3373
+    annotations:
+      datatype: wikibase-item
+      qualifiers: spoilerLevel
+      symmetric: true
+      relation_group: association
+      relation_order: name
+  father:
+    slot_uri: wdt:P22
+    description: >-
+      The Character stated as this character's father.
+      Source and mapping: https://www.wikidata.org/wiki/Property:P22.
+    range: Character
+    exact_mappings:
+      - wd:P22
+    annotations:
+      datatype: wikibase-item
+      qualifiers: spoilerLevel
+      relation_group: association
+      inverse: rezics:fatherOf
+      relation_order: name
+  mother:
+    slot_uri: wdt:P25
+    description: >-
+      The Character stated as this character's mother.
+      Source and mapping: https://www.wikidata.org/wiki/Property:P25.
+    range: Character
+    exact_mappings:
+      - wd:P25
+    annotations:
+      datatype: wikibase-item
+      qualifiers: spoilerLevel
+      relation_group: association
+      inverse: rezics:motherOf
+      relation_order: name
+  partner:
+    slot_uri: wdt:P451
+    description: >-
+      Another Character stated as this character's unmarried partner or lover.
+      Source and mapping: https://www.wikidata.org/wiki/Property:P451.
+    range: Character
+    multivalued: true
+    exact_mappings:
+      - wd:P451
+    annotations:
+      datatype: wikibase-item
+      qualifiers: spoilerLevel
+      symmetric: true
+      relation_group: association
+      relation_order: name
+  characterRival:
+    slot_uri: rezics:characterRival
+    description: >-
+      Another Character stated as this character's rival or enemy in the source relationship, not a work
+      appearance role. Close mapping: https://www.wikidata.org/wiki/Property:P7047.
+    range: Character
+    multivalued: true
+    close_mappings:
+      - wd:P7047
+    annotations:
+      datatype: wikibase-item
+      qualifiers: spoilerLevel
+      symmetric: true
+      relation_group: association
+      relation_order: name

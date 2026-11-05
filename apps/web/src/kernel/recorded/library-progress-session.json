@@ -1,0 +1,20 @@
+{
+  "progressSession": {
+    "id": "01a17a3b-70a2-712a-bae6-f4cc72cd9182",
+    "subjectId": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
+    "versionSubjectId": null,
+    "mode": "cursor_position",
+    "unit": "chapter",
+    "total": null,
+    "amount": null,
+    "locator": "Part 2, chapter 14",
+    "position": "42",
+    "completedUnitCount": 0,
+    "state": "active",
+    "revision": 2,
+    "startedAt": "2026-10-26T18:22:28.378Z",
+    "completedAt": null,
+    "subject": { "id": "01a17a3b-6b89-748f-a486-33c354ef3c9a", "type": "schema:Book", "label": "Kokoro" }
+  },
+  "status": 200
+}

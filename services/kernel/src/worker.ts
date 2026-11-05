@@ -1,22 +1,33 @@
+import { initializeEventTypes } from './events/catalogue.ts';
 import pg from 'pg';
 import type { KernelClock } from './clock.ts';
 import { ConfigError } from './commerce/config.ts';
 import { createWorkClient } from './work/client.ts';
-import { KERNEL_WORK_MODULES } from './work/modules.ts';
+import { bindExecutionContract } from './command/execution-contract.ts';
+import { historyExecutionPort } from './history/operational-work.ts';
+import { workExecutionPort } from './work/selected-runtime.ts';
+import { createKernelWorkModules } from './work/modules.ts';
+import { createDiscoveryProducerEntry } from './composition/discovery.ts';
+import { createKernelRuntimeDefaults } from './composition/runtime-defaults.ts';
 import { composeWork, type WorkModule } from './work/registry.ts';
 import { effectsRelay } from './events/effects.ts';
 import { startRelays } from './events/relays.ts';
-import { linkProjection } from './semantic/links.ts';
+import { configureReceiptKeys, readReceiptKeyRing } from './command/receipt-key.ts';
+import type { KeyRing } from './tokens/seal.ts';
 
 export type WorkerConfig = {
   databaseUrl: string;
   executorId?: string;
   poolSize: number;
+  receiptKeys?: KeyRing;
   /** Trusted service composition only; never read from the environment. */
   clock?: KernelClock;
+  /** Trusted composition only. The worker owns and ends the returned runtime pool. */
+  kernelPool?: (url: string) => pg.Pool | Promise<pg.Pool>;
 };
 
 export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
+  const receiptKeys = readReceiptKeyRing(env);
   const databaseUrl = env.DATABASE_URL;
   try {
     const url = new URL(databaseUrl ?? '');
@@ -47,18 +58,31 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv): WorkerConfig {
   return {
     databaseUrl: databaseUrl!,
     poolSize: Number(size),
+    ...(receiptKeys === undefined ? {} : { receiptKeys }),
     ...(executorId === undefined ? {} : { executorId }),
   };
 }
 
 export async function startWorker(
   config: WorkerConfig,
-  modules: readonly WorkModule[] = KERNEL_WORK_MODULES,
+  modules: readonly WorkModule[] = createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults),
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
-  const pool = new pg.Pool({ connectionString: config.databaseUrl, max: config.poolSize });
+  const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
+  initializeEventTypes();
+  const pool = config.kernelPool
+    ? await config.kernelPool(config.databaseUrl)
+    : new pg.Pool({ connectionString: config.databaseUrl, max: config.poolSize });
+  if (receiptKeys) configureReceiptKeys(pool, receiptKeys);
   pool.on('error', () => {});
-  const client = await createWorkClient(config.databaseUrl, pool);
+  let client: Awaited<ReturnType<typeof createWorkClient>>;
+  try {
+    client = await createWorkClient(config.databaseUrl, pool);
+    bindExecutionContract(client, workExecutionPort(), historyExecutionPort);
+  } catch (error) {
+    await pool.end();
+    throw error;
+  }
   let work: Awaited<ReturnType<typeof composeWork>> | undefined;
   let relays: ReturnType<typeof startRelays> | undefined;
   let starting: Promise<void> | undefined;
@@ -96,7 +120,7 @@ export async function startWorker(
     starting = (async () => {
       work = await composeWork(modules, { ...config, pool, client, env });
       await work.launch();
-      relays = startRelays(pool, [effectsRelay(pool, work.effects), linkProjection(pool)]);
+      relays = startRelays(pool, [effectsRelay(pool, work.effects)]);
     })();
     await starting;
     return { stop };

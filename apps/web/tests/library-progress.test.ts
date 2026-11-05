@@ -1,12 +1,194 @@
-import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { afterAll, expect, test as bunTest } from 'bun:test';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
+import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
-import { chromium, type Browser, type Page } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from 'playwright';
 
 const app = join(import.meta.dir, '..');
+
+let serverCustody: ProcessCustody | undefined;
+let started: Promise<string> | undefined;
+let serverStartupAbort: AbortController | undefined;
+const pendingServerStartups = new Set<Promise<string>>();
+let browser: Browser | undefined;
+let browserLaunch: Promise<Browser> | undefined;
+let browserClosing: Promise<void> | undefined;
+let teardownStarted = false;
+let cleanupPromise: Promise<void> | undefined;
+const ownedContexts = new Set<BrowserContext>();
+const pendingContextSetups = new Set<Promise<unknown>>();
+const contextClosures = new WeakMap<BrowserContext, Promise<void>>();
+const failedContextSetups = new WeakSet<BrowserContext>();
+
+function ensureSiteStartupActive(output = '', cause?: unknown): void {
+  if (teardownStarted) {
+    const message = `dev server startup retired after suite teardown began${output ? `:\n${output}` : ''}`;
+    if (cause !== undefined) throw new Error(message, { cause });
+    throw new Error(message);
+  }
+}
+
+function siteStartupRequestSignal(): { signal: AbortSignal; dispose: () => void } {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  const parentSignal = serverStartupAbort?.signal;
+  const abort = () => controller.abort();
+  parentSignal?.addEventListener('abort', abort, { once: true });
+  if (parentSignal?.aborted) abort();
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timeout);
+      parentSignal?.removeEventListener('abort', abort);
+    },
+  };
+}
+
+type LifetimeTestOperation = () => unknown | PromiseLike<unknown>;
+
+function test(name: string, operation: LifetimeTestOperation, timeoutMs?: number) {
+  return bunTest(
+    name,
+    async () => {
+      const contextsBefore = new Set(ownedContexts);
+      let primary: unknown;
+      let failed = false;
+      try {
+        await operation();
+      } catch (error) {
+        primary = error;
+        failed = true;
+      }
+      const contexts = [...ownedContexts].filter(
+        (context) => !contextsBefore.has(context) && !failedContextSetups.has(context),
+      );
+      const results = await Promise.allSettled(contexts.map(closeContextAttempt));
+      const cleanupErrors = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+      if (failed && cleanupErrors.length > 0)
+        throw new AggregateError([primary, ...cleanupErrors], `${name} and browser context cleanup both failed`, {
+          cause: primary,
+        });
+      if (failed) throw primary;
+      if (cleanupErrors.length > 0) throw new AggregateError(cleanupErrors, `${name} browser context cleanup failed`);
+    },
+    timeoutMs,
+  );
+}
+
+function closeContextAttempt(context: BrowserContext): Promise<void> {
+  let closing = contextClosures.get(context);
+  if (!closing) {
+    closing = cleanupAll([{ label: 'browser context', run: () => context.close(), timeoutMs: 5000 }]);
+    contextClosures.set(context, closing);
+    void closing.catch(() => {});
+  }
+  return closing;
+}
+
+async function closeContext(context: BrowserContext): Promise<void> {
+  // The owning test wrapper reports this cached failure together with its primary assertion failure.
+  await closeContextAttempt(context).catch(() => {});
+}
+
+function closeBrowserHandle(instance: Browser): Promise<void> {
+  browserClosing ??= cleanupAll([{ label: 'Playwright browser', run: () => instance.close(), timeoutMs: 5000 }]);
+  void browserClosing.catch(() => {});
+  return browserClosing;
+}
+
+function launchBrowser(): Promise<Browser> {
+  if (teardownStarted) return Promise.reject(new Error('Browser launch requested after suite teardown began'));
+  browserLaunch ??= chromium.launch().then(async (instance) => {
+    browser = instance;
+    if (teardownStarted) {
+      await closeBrowserHandle(instance);
+      throw new Error('Browser launch completed after suite teardown began');
+    }
+    return instance;
+  });
+  void browserLaunch.catch(() => {});
+  return browserLaunch;
+}
+
+async function withBrowserContext<T>(
+  options: BrowserContextOptions,
+  prepare: (context: BrowserContext) => Promise<T>,
+): Promise<{ context: BrowserContext; value: T }> {
+  let context: BrowserContext | undefined;
+  let complete = false;
+  const operation = withCleanup(async () => {
+    const instance = await launchBrowser();
+    context = await instance.newContext(options);
+    ownedContexts.add(context);
+    if (teardownStarted) throw new Error('Browser context opened after suite teardown began');
+    const value = await prepare(context);
+    if (teardownStarted) throw new Error('Browser context setup completed after suite teardown began');
+    complete = true;
+    return { context, value };
+  }, [
+    {
+      label: 'partial browser context setup',
+      run: () => (complete || !context ? undefined : closeContextAttempt(context)),
+      timeoutMs: 6000,
+    },
+  ]);
+  pendingContextSetups.add(operation);
+  try {
+    return await operation;
+  } catch (error) {
+    if (context) failedContextSetups.add(context);
+    throw error;
+  } finally {
+    pendingContextSetups.delete(operation);
+  }
+}
+
+async function closeBrowser(): Promise<void> {
+  let instance = browser;
+  if (!instance && browserLaunch) {
+    try {
+      instance = await browserLaunch;
+    } catch {
+      instance = browser;
+    }
+  }
+  if (instance) await closeBrowserHandle(instance);
+}
+
+function cleanupSuite(): Promise<void> {
+  return (cleanupPromise ??= (async () => {
+    teardownStarted = true;
+    serverStartupAbort?.abort();
+    const viteCustody = serverCustody;
+    const contextActions = [...ownedContexts].map((context, index) => ({
+      label: `browser context ${index + 1}`,
+      run: () => closeContextAttempt(context),
+      timeoutMs: 6000,
+    }));
+    const setupActions = [...pendingContextSetups].map((setup, index) => ({
+      label: `pending browser context setup ${index + 1}`,
+      run: () => setup,
+      timeoutMs: 7000,
+    }));
+    const startupActions = [...pendingServerStartups].map((startup, index) => ({
+      label: `pending Vite startup ${index + 1}`,
+      run: () => startup,
+      timeoutMs: 15_000,
+    }));
+    await withCleanup(
+      () => cleanupAll([...contextActions, ...setupActions, ...startupActions]),
+      [
+        { label: 'Playwright browser', run: closeBrowser, timeoutMs: 7000 },
+        { label: 'fake API listener', run: () => fake.stop(true), timeoutMs: 7000 },
+        { label: 'Vite process group', run: () => viteCustody?.close(), timeoutMs: 8000 },
+      ],
+    );
+  })());
+}
+
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const session = '__Host-rezics_session';
@@ -308,6 +490,7 @@ const fake = Bun.serve({
   hostname: '127.0.0.1',
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === '/v1/platform/exposure') return json({ admitted: ['reading_progress'] });
     const issuer = `${url.origin}/auth`;
     const tokenEndpoint = `${issuer}/token`;
     const client = async (form: URLSearchParams) => {
@@ -513,72 +696,110 @@ function freePort(): Promise<number> {
     probe.once('error', reject);
     probe.listen(0, '127.0.0.1', () => {
       const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
+      probe.close((error) => (error ? reject(error) : resolve(port)));
     });
   });
 }
 
-let child: ChildProcess | undefined;
-let started: Promise<string> | undefined;
-
 // The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: fake.url.origin,
-        AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId,
-        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-        API_RESOURCE: resource,
-        WEBSITE_SCOPES: scopes.join(' '),
-      },
-    });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
+  if (teardownStarted) return Promise.reject(new Error('Site startup requested after suite teardown began'));
+  if (!started) {
+    serverStartupAbort = new AbortController();
+    const startup = Promise.resolve().then(async () => {
+      ensureSiteStartupActive();
+      const port = await freePort();
+      ensureSiteStartupActive();
+      let output = '';
+      const keep = (chunk: Uint8Array) => {
+        output = (output + Buffer.from(chunk).toString()).slice(-8000);
+      };
+      const startupChild = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+        cwd: app,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          KERNEL_ORIGIN: fake.url.origin,
+          AUTH_ISSUER: `${fake.url.origin}/auth`,
+          WEBSITE_CLIENT_ID: clientId,
+          WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+          API_RESOURCE: resource,
+          WEBSITE_SCOPES: scopes.join(' '),
+        },
+      });
+      const custody = ownNodeProcess(startupChild, {
+        label: 'Vite dev server',
+        outputLimit: 8000,
+        onOutput: keep,
+      });
+      serverCustody = custody;
+      let spawnError: Error | undefined;
+      startupChild.once('error', (error) => {
+        spawnError = error;
+      });
+      const origin = `http://127.0.0.1:${port}`;
+      const deadline = Date.now() + 150_000;
       try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) {
-          browser ??= await chromium.launch();
-          const context = await browser.newContext({ javaScriptEnabled: true });
+        for (;;) {
+          ensureSiteStartupActive(output);
+          if (spawnError)
+            throw new Error(`dev server spawn failed: ${spawnError.message}\n${output}`, { cause: spawnError });
+          if (startupChild.exitCode !== null)
+            throw new Error(`dev server exited with ${startupChild.exitCode}:\n${output}`);
+          let response: Response | undefined;
+          const request = siteStartupRequestSignal();
           try {
-            const page = await context.newPage();
-            for (const path of [`/en/library/progress?subjectId=${subjectId}`, `/en/library/progress/${id(20)}`]) {
-              for (let attempt = 0; ; attempt += 1) {
-                try {
-                  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-                  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 30_000 });
-                  break;
-                } catch (error) {
-                  if (attempt >= 1) throw error;
+            response = await fetch(`${origin}/en`, { redirect: 'manual', signal: request.signal });
+          } catch (error) {
+            ensureSiteStartupActive(output, error);
+            // The dev server is still starting.
+          } finally {
+            request.dispose();
+          }
+          ensureSiteStartupActive(output);
+          if (response && response.status < 500) {
+            const { context } = await withBrowserContext({ javaScriptEnabled: true }, async (context) => {
+              ensureSiteStartupActive(output);
+              const page = await context.newPage();
+              ensureSiteStartupActive(output);
+              for (const path of [`/en/library/progress?subjectId=${subjectId}`, `/en/library/progress/${id(20)}`]) {
+                ensureSiteStartupActive(output);
+                for (let attempt = 0; ; attempt += 1) {
+                  ensureSiteStartupActive(output);
+                  try {
+                    await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+                    ensureSiteStartupActive(output);
+                    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 30_000 });
+                    ensureSiteStartupActive(output);
+                    break;
+                  } catch (error) {
+                    ensureSiteStartupActive(output, error);
+                    if (attempt >= 1) throw error;
+                  }
                 }
               }
-            }
-          } finally {
-            await context.close();
+            });
+            await closeContext(context);
+            ensureSiteStartupActive(output);
+            return origin;
           }
-          return origin;
+          if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
+          await Bun.sleep(500);
         }
-      } catch {
-        // The dev server is still starting.
+      } catch (error) {
+        return await withCleanup(() => {
+          throw error;
+        }, [{ label: 'Vite startup process group', run: () => custody.close(), timeoutMs: 8000 }]);
       }
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
-    }
-  })();
+    });
+    started = startup;
+    pendingServerStartups.add(startup);
+    void startup.then(
+      () => pendingServerStartups.delete(startup),
+      () => pendingServerStartups.delete(startup),
+    );
+  }
   return started;
 }
 
@@ -615,46 +836,42 @@ async function signIn(returnTo = '/en') {
   return { cookie: sessionCookie!, access: accessTokens.at(-1)! };
 }
 
-let browser: Browser | undefined;
 let person: Promise<{ cookie: string; access: string }> | undefined;
 async function open(path: string): Promise<{ page: Page; access: string }> {
   person ??= signIn(path);
   const auth = await person;
   const origin = await site();
-  browser ??= await chromium.launch();
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 860 },
-    reducedMotion: 'reduce',
-    javaScriptEnabled: true,
-  });
-  await context.addCookies([
+  const { value } = await withBrowserContext(
     {
-      name: session,
-      value: auth.cookie,
-      domain: '127.0.0.1',
-      path: '/',
-      httpOnly: true,
-      secure: true,
-      sameSite: 'Lax',
+      viewport: { width: 1280, height: 860 },
+      reducedMotion: 'reduce',
+      javaScriptEnabled: true,
     },
-  ]);
-  const page = await context.newPage();
-  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  await hydrated(page);
-  return { page, access: auth.access };
+    async (context) => {
+      await context.addCookies([
+        {
+          name: session,
+          value: auth.cookie,
+          domain: '127.0.0.1',
+          path: '/',
+          httpOnly: true,
+          secure: true,
+          sameSite: 'Lax',
+        },
+      ]);
+      const page = await context.newPage();
+      await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+      await hydrated(page);
+      return { page, access: auth.access };
+    },
+  );
+  return value;
 }
 async function hydrated(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
 }
 afterAll(async () => {
-  await browser?.close();
-  fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
+  await cleanupSuite();
 });
 
 const creates = () => calls.filter((call) => call.method === 'POST' && call.path === '/v1/progressSessions');
@@ -691,7 +908,8 @@ test(
       expect(await page.getByRole('heading', { level: 1, name: 'Reading progress', exact: true }).innerText()).toBe(
         'Reading progress',
       );
-      expect(await page.getByRole('textbox', { name: 'Subject', exact: true }).inputValue()).toBe(subjectId);
+      expect(await page.getByRole('combobox', { name: 'Subject', exact: true }).inputValue()).toBe(subject.label);
+      expect(await page.locator('input[type=hidden][name=subjectId]').inputValue()).toBe(subjectId);
       const listed = calls.filter((call) => call.method === 'GET' && call.path === '/v1/progressSessions');
       expect(listed.length).toBeGreaterThan(0);
       expect(
@@ -756,7 +974,7 @@ test(
       expect(sessions.get(unitsId)?.state).toBe('active');
       expect(sessions.get(unitsId)?.total).toBeNull();
     } finally {
-      await page.context().close();
+      await closeContext(page.context());
     }
   },
   timeout,
@@ -769,9 +987,10 @@ test(
     const current = id(20);
     const { page, access } = await open(`/en/library/progress/${current}`);
     try {
+      await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       await page.getByRole('textbox', { name: 'Amount', exact: true }).fill('50');
       await page.getByRole('button', { name: 'Record', exact: true }).click();
-      await page.locator('[data-progress]').filter({ hasText: '50 of 200 (25%)' }).waitFor();
+      await page.locator('main').getByText('p. 50/200', { exact: true }).waitFor();
       expect(sessions.get(current)).toMatchObject({ amount: '50', state: 'active', revision: 2, completedAt: null });
       const saved = writesFor(`/${current}:record`);
       expect(saved).toHaveLength(1);
@@ -785,6 +1004,7 @@ test(
 
       const seen = sessions.get(current)!.revision;
       diverge(current);
+      await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       await page.getByRole('textbox', { name: 'Amount', exact: true }).fill('80');
       await page.getByRole('button', { name: 'Record', exact: true }).click();
       const alert = page.getByRole('alert');
@@ -792,8 +1012,8 @@ test(
       expect(await alert.innerText()).toContain('old revision');
       expect(await alert.innerText()).toContain('still here');
       expect(await page.getByRole('textbox', { name: 'Amount', exact: true }).inputValue()).toBe('80');
-      expect(await page.locator('[data-progress]').innerText()).toContain('50 of 200 (25%)');
-      expect(await page.locator('[data-progress]').innerText()).not.toContain('80 of 200');
+      expect(await page.locator('main').innerText()).toContain('p. 50/200');
+      expect(await page.locator('main').innerText()).not.toContain('p. 80/200');
       expect(sessions.get(current)).toMatchObject({ amount: '50', revision: seen + 1, state: 'active' });
       const stale = writesFor(`/${current}:record`);
       expect(stale).toHaveLength(2);
@@ -801,7 +1021,7 @@ test(
       expect(stale[1]?.key).toMatch(uuid);
       expect(calls.some((call) => call.path.endsWith(':complete') || call.path.endsWith(':abandon'))).toBe(false);
     } finally {
-      await page.context().close();
+      await closeContext(page.context());
     }
   },
   timeout,
@@ -815,6 +1035,7 @@ test(
     const batch = Array.from({ length: 100 }, (_, index) => `ep-${String(index + 1).padStart(3, '0')}`);
     const { page, access } = await open(`/en/library/progress/${current}`);
     try {
+      await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       const units = page.getByRole('region', { name: 'Completed units', exact: true });
       await page.getByRole('textbox', { name: 'Add units', exact: true }).fill(batch.join('\n'));
       await page.getByRole('button', { name: 'Add units', exact: true }).click();
@@ -828,6 +1049,7 @@ test(
       expect(sessions.get(current)?.completedUnitCount).toBe(100);
 
       const before = calls.length;
+      await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       await page.getByRole('textbox', { name: 'Add units', exact: true }).fill([...batch, 'ep-101'].join('\n'));
       await page.getByRole('button', { name: 'Add units', exact: true }).click();
       const alert = page.getByRole('alert');
@@ -849,7 +1071,7 @@ test(
       expect(sessions.get(current)?.completedUnitCount).toBe(0);
       expect(sessions.get(current)?.units).toEqual([]);
     } finally {
-      await page.context().close();
+      await closeContext(page.context());
     }
   },
   timeout,
@@ -866,7 +1088,8 @@ test(
       const history = page.getByRole('region', { name: 'Change history', exact: true });
       expect(await history.innerText()).toMatch(/\b4\b/);
       expect(writesFor(':complete')).toHaveLength(0);
-      await page.getByRole('button', { name: 'Complete', exact: true }).click();
+      await page.getByRole('button', { name: 'More actions', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Complete', exact: true }).click();
       expect(writesFor(':complete')).toHaveLength(0);
       await page.getByRole('button', { name: 'Confirm completion', exact: true }).click();
       await page.locator('main [data-progress-state="completed"]').waitFor();
@@ -881,8 +1104,10 @@ test(
 
       await page.getByRole('link', { name: 'Start again', exact: true }).click();
       await page.waitForURL(/\/en\/library\/progress\?/);
+      await hydrated(page);
       expect(await page.locator('main').innerText()).toContain('Completed');
-      expect(await page.getByRole('textbox', { name: 'Subject', exact: true }).inputValue()).toBe(subjectId);
+      expect(await page.getByRole('combobox', { name: 'Subject', exact: true }).inputValue()).toBe(subject.label);
+      expect(await page.locator('input[type=hidden][name=subjectId]').inputValue()).toBe(subjectId);
       await page.getByRole('button', { name: 'Start', exact: true }).click();
       await page.waitForURL(/\/en\/library\/progress\/0192f3a0-/);
       const restarted = new URL(page.url()).pathname.split('/').at(-1)!;
@@ -896,7 +1121,8 @@ test(
       const abandonedHistory = page.getByRole('region', { name: 'Change history', exact: true });
       expect(await abandonedHistory.innerText()).toMatch(/\b9\b/);
       expect(writesFor(':abandon')).toHaveLength(0);
-      await page.getByRole('button', { name: 'Abandon', exact: true }).click();
+      await page.getByRole('button', { name: 'More actions', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Abandon', exact: true }).click();
       expect(writesFor(':abandon')).toHaveLength(0);
       await page.getByRole('button', { name: 'Confirm abandon', exact: true }).click();
       await page.locator('main [data-progress-state="abandoned"]').waitFor();
@@ -907,7 +1133,7 @@ test(
       });
       expect(await abandonedHistory.innerText()).toMatch(/\b9\b/);
     } finally {
-      await page.context().close();
+      await closeContext(page.context());
     }
   },
   timeout,
@@ -920,9 +1146,10 @@ test(
     const current = id(21);
     const { page, access } = await open(`/en/library/progress/${current}`);
     try {
+      await page.getByRole('button', { name: 'Update progress', exact: true }).click();
       await page.getByRole('textbox', { name: 'Amount', exact: true }).fill('120');
       await page.getByRole('button', { name: 'Record', exact: true }).click();
-      await page.locator('[data-progress]').filter({ hasText: '120 of 120 (100%)' }).waitFor();
+      await page.locator('main').getByText('min 120/120', { exact: true }).waitFor();
       expect(await page.locator('main [data-progress-state]').getAttribute('data-progress-state')).toBe('active');
       expect(await page.locator('main [data-progress-state]').innerText()).toBe('Active');
       expect(sessions.get(current)).toMatchObject({ amount: '120', state: 'active', completedAt: null, revision: 2 });
@@ -934,8 +1161,17 @@ test(
       });
       expect(calls.some((call) => call.path.endsWith(':complete') || call.path.endsWith(':abandon'))).toBe(false);
     } finally {
-      await page.context().close();
+      await closeContext(page.context());
     }
+  },
+  timeout,
+);
+
+test(
+  'suite teardown refuses a new Vite startup',
+  async () => {
+    await cleanupSuite();
+    await expect(site()).rejects.toThrow('Site startup requested after suite teardown began');
   },
   timeout,
 );

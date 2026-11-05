@@ -1,7 +1,23 @@
 types:
+  wd:Q2095: food
+  wd:Q2620972: 'story arc'
   schema:Person: person
   schema:Organization: organization
+  schema:SoftwareApplication: software application
+  rezics:ReleaseGroup: 'release group'
+  schema:Place: 'place'
+  schema:AdministrativeArea: 'administrative area'
+  schema:Event: 'event'
 properties:
+  rezics:penNameOf: 'pen name of'
+  wdt:P186: made from material
+  wdt:P1114: quantity
+  rezics:note: note
+  rezics:listSection: list section
+  rezics:storyArc: 'Story arcs'
+  rezics:firstPart: 'First part'
+  rezics:lastPart: 'Last part'
+  wdt:P518: 'Applies to part'
   schema:url: URL
   schema:name: name
   schema:sameAs: exact match
@@ -14,6 +30,11 @@ properties:
   schema:dateModified: last update
   schema:inLanguage: language
   schema:abstract: abstract
+  wdt:P106: occupation
+  schema:knowsLanguage: known language
+  wdt:P749: parent organization
+  wdt:P1365: replaces
+  wdt:P1366: replaced by
   schema:image: image
   wdt:P648: Open Library ID
   wdt:P5732: Bangumi subject ID
@@ -34,4 +55,138 @@ properties:
   schema:character: 'characters'
   wdt:P179: 'part of the series'
   rezics:spoilerLevel: 'spoiler level'
+  wdt:P3629: 'age at appearance'
   schema:alternateName: alternate name
+  rezics:representativeEdition: 'Representative edition'
+  rezics:crossMediaCounterpart: 'Cross-media counterpart'
+  rezics:summaryOf: 'Summary of'
+  rezics:sideStoryOf: 'Side story of'
+  rezics:sameCharacters: 'Same characters, unrelated story'
+  rezics:sameSetting: 'Same setting'
+  rezics:alternativeSetting: 'Alternative setting'
+  rezics:alternativeVersion: 'Alternative telling'
+  rezics:collaborationWith: 'Character crossover collaboration'
+  rezics:bangumiRelatedTo: 'Related (Bangumi)'
+  rezics:artbookCounterpart: 'Artbook counterpart'
+  rezics:editionCounterpart: 'Other book version'
+  rezics:bangumiLegacyVersion: 'Version counterpart (retired Bangumi code)'
+  rezics:expansionCounterpart: 'Expansion or base game'
+  wdt:P4092: 'checksum'
+  wdt:P3575: 'file size'
+  rezics:hashAlgorithm: 'hash algorithm'
+  rezics:codec: 'codec'
+  rezics:fileQuality: 'file quality'
+  rezics:releaseGroup: 'release group'
+  schema:containedInPlace: 'contained in place'
+  schema:location: 'location'
+  schema:startDate: 'start date'
+  schema:endDate: 'end date'
+inverseProperties:
+  rezics:penNameOf: 'pen names'
+  wdt:P186: Used in
+  rezics:storyArc: 'Story arc of'
+  schema:author: 'Author of'
+  schema:illustrator: 'Illustrator of'
+  schema:director: 'Director of'
+  schema:musicBy: 'Composer of'
+  schema:producer: 'Producer of'
+  schema:productionCompany: 'Productions'
+  wdt:P58: 'Screenwriter of'
+  wdt:P178: 'Developer of'
+  wdt:P725: 'Voice roles in'
+  schema:contributor: 'Contributed to'
+  schema:character: 'Appears in'
+  wdt:P179: 'Members'
+  rezics:summaryOf: 'Summary versions'
+  rezics:sideStoryOf: 'Side stories'
+  rezics:bangumiRelatedTo: 'Related from (Bangumi)'
+  wdt:P749: subsidiaries
+  wdt:P1365: replaced by
+  wdt:P1366: replaces
+
+  rezics:releaseGroup: 'files from this release group'
+  schema:containedInPlace: 'Contains places'
+propertyDescriptions:
+  rezics:penNameOf: 'The person or organization behind this pen name or collective name.'
+  wdt:P186: 'A food or prepared recipe used as a material or component; qualify its quantity and list order where known.'
+  wdt:P1114: "The amount of the statement's object, with its unit and any stated lower and upper bounds."
+  rezics:note: 'A language-tagged note about this statement, such as an ingredient substitution.'
+  rezics:listSection: 'The language-tagged heading of the list section containing this item, such as sauce.'
+  rezics:storyArc: 'A story arc belonging to this work; qualifiers give its order and first and last episode or chapter numbers.'
+  rezics:firstPart: 'The first episode or chapter number in the arc, written as the work numbers it.'
+  rezics:lastPart: 'The last episode or chapter number in the arc, written as the work numbers it.'
+  wdt:P518: 'The story arc to which this particular appearance or credit applies.'
+  schema:url: 'A URL identifying this subject, rather than a description of an unrelated subject.'
+  schema:name: 'A source title or name as language-tagged text proposed in a statement; it does not automatically become the display label.'
+  schema:sameAs: 'The canonical URI for this same entity in another dataset; a related page is not an exact match.'
+  schema:birthDate: 'The stated birth date, preserving known precision; a birthday without a year is not a full birth date.'
+  schema:deathDate: "The stated date of death, preserving the source's date precision."
+  schema:author: 'A person or organization credited as an author of this work or publication.'
+  schema:position: 'One-based order within a list, stored as text, for example 1 or 2.'
+  schema:datePublished: 'The publication date of this work or release, at the precision stated by the source.'
+  schema:version: "The revision identifier of the source record; not a work's cut or an edition designation."
+  schema:dateModified: 'When the source record was last updated, rather than when the work was published.'
+  schema:inLanguage: "The resource's language code, such as en or ja; keep it separate from the interface language."
+  schema:abstract: 'An authored summary document, conventionally one per language; supply a document value rather than plain text.'
+  wdt:P106: "A Concept naming this person's occupation, such as director or writer; credits on works do not supply this fact."
+  schema:knowsLanguage: "A language this person knows, recorded as an admitted Concept; this is not spoken proficiency and not a credited work's language."
+  wdt:P749: 'The parent organization of this producer. The statement is stored on the child and may carry start and end dates with citations.'
+  wdt:P1365: 'The organization this producer replaces. The value is the predecessor; this is a directed replacement, not a generic chronological neighbor.'
+  wdt:P1366: 'The organization that replaces this producer. The value is the successor, kept as an independent direction from the predecessor statement.'
+  schema:image: 'An uploaded media object depicting the subject; use a media value rather than an external image URL.'
+  wdt:P648: 'An Open Library identifier, such as OL45804W, OL7353617M or OL23919A; use the identifier, not the page URL.'
+  wdt:P5732: 'The numeric Bangumi subject identifier, for example 123; not a person or character ID.'
+  wdt:P6298: 'The numeric Bangumi person identifier; separate from subject and character IDs.'
+  wdt:P3180: 'A VNDB identifier with its entity prefix, such as v17, r123, p1 or s1; not a URL.'
+  schema:illustrator: 'A person or organization credited with illustrations for this work or publication.'
+  schema:director: 'A person or organization credited with directing this work or publication.'
+  schema:musicBy: 'A person or organization credited with composing the music.'
+  schema:producer: 'A person or organization credited with production.'
+  schema:productionCompany: 'The person or organization credited as the production company.'
+  wdt:P58: 'A person or organization credited with writing the screenplay.'
+  wdt:P178: 'A person or organization credited with development.'
+  wdt:P725: 'A credited voice performer; the character-role qualifier identifies the character portrayed.'
+  schema:contributor: 'A person or organization credited in another job; specify that job with a detailed-role Concept.'
+  wdt:P1932: "The exact wording used in the source to name the statement's object, such as a credited name."
+  wdt:P3831: 'A Concept identifying the detailed staff job or appearance role; not a free-text credit name.'
+  wdt:P453: 'The fictional character portrayed in this voice credit.'
+  schema:character: 'A character appearing in this work; qualify the appearance with its role, credited name, spoiler, part, age and references where stated.'
+  wdt:P3629: 'The character’s age on this exact work appearance as a nonnegative quantity in years (wd:Q577); a source-wide age is not this qualifier.'
+  wdt:P179: "The series containing this member; its position qualifier records the member's ordinal."
+  rezics:spoilerLevel: 'Disclosure level as a unitless integer: 0 for no spoiler, 1 for minor and 2 for major spoilers.'
+  schema:alternateName: 'An alternate title or alias as language-tagged text, preserving its spelling and language.'
+  rezics:representativeEdition: 'The edition or release chosen to represent this work for a qualified language, one value per language.'
+  rezics:crossMediaCounterpart: 'A work in the same franchise in another medium; this link alone does not say which adapts the other.'
+  rezics:summaryOf: 'The full narrative work condensed by this recap or summary work.'
+  rezics:sideStoryOf: 'The main narrative work to which this supplementary side story belongs.'
+  rezics:sameCharacters: 'A work sharing characters but telling an unrelated story.'
+  rezics:sameSetting: 'A work sharing the world or timeline with a different principal cast.'
+  rezics:alternativeSetting: 'A work placing the same principal characters in a different world or timeline.'
+  rezics:alternativeVersion: 'A different telling with the same setting and characters.'
+  rezics:collaborationWith: 'A work connected by a character crossover; this link alone identifies neither the guest nor the host work.'
+  rezics:bangumiRelatedTo: "Bangumi's explicit Other relation to another work; it preserves that source assertion without inventing a relation kind."
+  rezics:artbookCounterpart: 'A work linked to its companion artbook, without identifying which endpoint is the artbook.'
+  rezics:editionCounterpart: 'Another book version or edition; this symmetric link identifies neither an original nor a work-to-edition direction.'
+  rezics:bangumiLegacyVersion: "The symmetric version link preserved from Bangumi's retired Main Version code 4013; it gives no original/version direction."
+  rezics:expansionCounterpart: 'A base game and add-on linked without identifying which expands the other; use the directed expansion relation when known.'
+  wdt:P4092: 'Exact checksum text. The hash algorithm is stored separately; equality does not identify or merge files.'
+  wdt:P3575: 'File size as a decimal quantity in bytes, preserving the source amount exactly.'
+  rezics:hashAlgorithm: 'The exact source code naming the checksum algorithm; unknown codes remain available for review.'
+  rezics:codec: 'The exact codec code reported by the source, including codes not yet recognized.'
+  rezics:fileQuality: 'The exact file quality code reported by the source, including codes not yet recognized.'
+  rezics:releaseGroup: 'The independently readable AniDB source group associated with this file, separate from a publication release and personal copy.'
+  schema:containedInPlace: 'The immediate place containing this place, such as its administrative area.'
+  schema:location: 'The place where this event occurs; it does not identify the event or a performance occurrence.'
+  schema:startDate: "The stated beginning of the subject's time span, preserving source precision and calendar."
+  schema:endDate: "The stated end of the subject's time span, preserving source precision and calendar."
+typeDescriptions:
+  wd:Q2095: 'A food or edible substance, such as flour; a recipe describes how to prepare it.'
+  wd:Q2620972: 'A named, ordered span of episodes or chapters within a work, with first and last part numbers.'
+  schema:Person: 'A real person identified in the catalogue, for example an author; distinct from a fictional character.'
+  schema:Organization: 'An organization or credited group, such as a publisher or studio.'
+  schema:SoftwareApplication: 'An identified software application, such as a reading tool; game works and their releases have separate Types.'
+
+  rezics:ReleaseGroup: 'An AniDB source group linked to the files it releases. Its identity remains separate from each file and publication release.'
+  schema:Place: 'A specific geographic or constructed place, distinct from events held there.'
+  schema:AdministrativeArea: 'A named administrative region represented as a place, distinct from a venue within it.'
+  schema:Event: 'A bounded occurrence with its own identity, distinct from its venue and participants.'

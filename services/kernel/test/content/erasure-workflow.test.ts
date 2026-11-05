@@ -16,6 +16,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
+import { observeSql } from './support/sql-observer.ts';
 
 let fixture: Awaited<ReturnType<typeof standingFixture>>;
 let client: Awaited<ReturnType<typeof createWorkClient>>;
@@ -455,6 +456,60 @@ async function launchSelection(
   return { handle, workflowId, operationId: source.value.operationId };
 }
 
+test('author erasure preserves the complete account inbox and its seen marker', async () => {
+  const selected = await scope(1);
+  const accountId = selected.actor.accountId;
+  const accountRoute = routeOf(accountId)!;
+  const ids = Array.from({ length: 2001 }, () => newId(accountRoute));
+  await fixture.reader.query(
+    `INSERT INTO content.notice (route, recipient_id, notice_id, kind, source_id, created_at)
+     SELECT $1, $2, notice_id, 'reply', notice_id, now()
+     FROM unnest($3::uuid[]) AS seeded(notice_id)`,
+    [accountRoute, accountId, ids],
+  );
+  const seenNoticeId = newId(accountRoute);
+  await fixture.reader.query(
+    `INSERT INTO content.notice_seen (route, account_id, seen_notice_id, seen_created_at, seen_at)
+     VALUES ($1, $2, $3, now(), now())`,
+    [accountRoute, accountId, seenNoticeId],
+  );
+
+  const readNotices = () =>
+    fixture.reader.query(
+      `SELECT to_jsonb(notice) AS notice FROM content.notice AS notice
+       WHERE route = $1 AND recipient_id = $2 ORDER BY created_at DESC, notice_id DESC`,
+      [accountRoute, accountId],
+    );
+  const readSeen = () =>
+    fixture.reader.query(
+      `SELECT to_jsonb(seen) AS seen FROM content.notice_seen AS seen
+       WHERE route = $1 AND account_id = $2`,
+      [accountRoute, accountId],
+    );
+  const noticesBefore = await readNotices();
+  const seenBefore = await readSeen();
+  expect(noticesBefore.rows).toHaveLength(2001);
+  expect(seenBefore.rows).toHaveLength(1);
+
+  const trace = observeSql(systemPool);
+  try {
+    const { handle } = await launchSelection(selected);
+    expect(await handle.getResult()).toEqual({ processedPosts: 1, erasedRevisions: 1 });
+  } finally {
+    await trace.close();
+  }
+  expect(trace.records.filter((record) => /\bDELETE\s+FROM\s+content\.notice\b/i.test(record.statement))).toHaveLength(
+    0,
+  );
+  expect(
+    trace.records.filter((record) => /\bDELETE\s+FROM\s+content\.notice_seen\b/i.test(record.statement)),
+  ).toHaveLength(0);
+
+  expect((await readNotices()).rows).toEqual(noticesBefore.rows);
+  expect((await readSeen()).rows).toEqual(seenBefore.rows);
+  await fixture.reader.query('TRUNCATE TABLE content.notice_ack, content.notice_seen, content.notice');
+});
+
 for (const revocation of ['grant', 'consent'] as const) {
   test(`native ${revocation} revocation at the logical step barrier preserves cleanup and stops later posts`, async () => {
     const selected = await scope(102, 3, revocation === 'consent' ? fixture.recipient : fixture.actor);
@@ -629,7 +684,6 @@ test('every measured revision erasure is a HOT update while another backend hold
   const db = await openGrowthDatabase();
   const rollback = new Error('Rollback measured cleanup');
   let snapshot: import('pg').PoolClient | undefined;
-  const openedScales = new Set<number>();
   const values = new Map<number, Awaited<ReturnType<typeof scope>>>();
   const hotUpdates: { scale: number; updated: number; hot: number }[] = [];
   const check = {
@@ -704,16 +758,19 @@ test('every measured revision erasure is a HOT update while another backend hold
         }
       },
       async warmup(target, scale, repetition) {
-        if (!openedScales.has(scale)) {
-          snapshot = await target.admin.connect();
-          await snapshot.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-          await snapshot.query('SELECT count(*) FROM content.revision');
-          openedScales.add(scale);
-        }
         await eraseRun(target, scale, repetition, false);
       },
+      async prepare(target) {
+        snapshot = await target.admin.connect();
+        await snapshot.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+        await snapshot.query('SELECT count(*) FROM content.revision');
+      },
       async operation(target, scale, repetition) {
-        await eraseRun(target, scale, repetition, true);
+        try {
+          await eraseRun(target, scale, repetition, true);
+        } finally {
+          await closeSnapshot();
+        }
       },
     });
     expect(report.samples.every((sample) => sample.cost.rows > 0 && sample.cost.blocks > 0)).toBe(true);
@@ -888,6 +945,13 @@ test('checkGrowth fixes a 205-post author while other authors grow in the same p
     measuredPool = db.pool;
     const report = await checkGrowth(db, {
       name: 'native logical author page',
+      rule: 'series',
+      // Native author erasure Cost: operation source/restoration, page seek and
+      // anchor validation; 100 post validations, revision-prefix counts and
+      // tombstones; Access P/Q adds account/inverse preparation and, per post,
+      // direct/active-account grants, active-account roles and identity denial,
+      // plus seven Global formula descents shared by the page.
+      indexProbes: 2 + 1 + 1 + 100 * (1 + 1 + 1 + 5) + 7 + 3,
       scales: [256, 1024, 4096],
       repetitions: 1,
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },

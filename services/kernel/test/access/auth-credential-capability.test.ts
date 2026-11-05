@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { createCredentialCapability } from '../../src/access/auth-credential-capability.ts';
 import { credentialWorkflowApprovals, createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import {
@@ -74,6 +75,7 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
     recoveryEvidence: async () => null,
   });
   const pair = await generateKeyPair('ES256', { extractable: true });
+  const vehicleJwk = { ...(await exportJWK(pair.publicKey)), alg: 'ES256' };
   service = await createAuthService({
     database: authPool,
     issuer,
@@ -85,9 +87,12 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
     },
     trustedAccess: {
       ...createAuthBindings({ pool, ...registration }),
+      async revalidateCredentialEffect() {
+        throw new Error('kernel-test-complete');
+      },
       async consumeAuthorization(input) {
         result = await capability.consumeAuthAuthorization({ ...pending, human: input.human });
-        // Stop before the legacy Auth mutation: these tests prove kernel checks only.
+        // Stop before Auth writes: these tests prove kernel checks only.
         throw new Error('kernel-test-complete');
       },
     },
@@ -235,12 +240,20 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
         operationKey: binding.operationKey,
         effectReference: binding.effectReference,
       };
+      const kid = key();
+      const staged = await service.internal.stageCredentialEffect({
+        key: key(),
+        subjectAccountId: binding.subjectAccountId,
+        headers,
+        credential: { kind: 'key', kid, publicJwk: { ...vehicleJwk, kid } },
+      });
       try {
-        await service.internal.setCredential({
+        await service.internal.applyCredentialEffect({
           authorization: reference,
+          effectRef: staged.effectRef,
+          key: staged.key,
           subjectAccountId: binding.subjectAccountId,
           headers,
-          credential: { kind: 'key', kid: 'staged-test-key', remove: true },
         });
       } catch (error) {
         if (!(error instanceof Error) || error.message !== 'kernel-test-complete') throw error;
@@ -376,7 +389,9 @@ test('every consume rechecks formula state fence floor and operator relation', a
     const binding = f.stage(s, h);
     const opening = await f.approve(cookie, binding);
     const id = target === 'human' ? h : s;
-    await db.admin.query(`UPDATE access.account SET ${change} WHERE route=$1 AND account_id=$2`, [routeOf(id)!, id]);
+    if (change === "state='suspended'") await suspendAccount(db.admin, id);
+    else
+      await db.admin.query(`UPDATE access.account SET ${change} WHERE route=$1 AND account_id=$2`, [routeOf(id)!, id]);
     await expect(f.consume(opening.reference, binding, cookie)).rejects.toThrow();
   }
   {
@@ -482,7 +497,7 @@ test('credential floor hook requires an exact committed floor receipt', async ()
 test('legacy unbound credential inputs fail unavailable before any I/O in both capabilities', async () => {
   const input = { purpose: 'add-key' as const, authorization: 'legacy', subjectAccountId: subject, human: {} as never };
   await expect(f.capability.consumeAuthAuthorization(input as never)).rejects.toThrow('unavailable');
-  await expect(f.session.consumeAuthAuthorization(input)).rejects.toThrow('unavailable');
+  await expect(f.session.consumeAuthAuthorization(input as never)).rejects.toThrow('unavailable');
 });
 
 test('lost committed credential consumption acknowledgement leaves the opening spent', async () => {
@@ -630,6 +645,6 @@ test('native bindings install the credential capability beside the unchanged ses
       authorization: 'legacy',
       subjectAccountId: subject,
       human: {} as never,
-    }),
+    } as never),
   ).rejects.toThrow('unavailable');
 });

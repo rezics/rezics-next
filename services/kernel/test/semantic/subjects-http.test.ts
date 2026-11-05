@@ -2,21 +2,26 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { createPool } from '../../src/database/pool.ts';
+import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { SESSION_HEADER } from '../../src/http/request.ts';
 import { createRealAccess } from './real-access.ts';
-import { newId } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+const projection = linkProjection(pool);
+const relays = startRelays(pool, [projection], { intervalMs: 50 });
 afterAll(async () => {
+  await relays.stop();
   await pool.end();
   await admin.end();
 });
@@ -60,6 +65,19 @@ async function call(
     }),
   );
   return { response, body: (await response.json()) as Record<string, any> };
+}
+
+async function catchUpLinks(id: string): Promise<void> {
+  const route = routeOf(id)!;
+  for (let step = 0; step < 200; step++) {
+    const result = await projection.run(partitionOf(route));
+    if (result.status === 'busy') {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      continue;
+    }
+    if (result.envelopes === 0) return;
+  }
+  throw new Error('Semantic link projection did not catch up');
 }
 
 const create = (body: Record<string, unknown>, key = `"${randomUUID()}"`, token = 'writer') =>
@@ -147,19 +165,32 @@ test('a read returns the subject, its session token and the labels of its proper
   });
   expect(hidden.response.status).toBe(200);
 
+  await catchUpLinks(id);
   const read = await call('GET', `/v1/subjects/${id}`, { session: created.response.headers.get(SESSION_HEADER)! });
   expect(read.response.status).toBe(200);
   expect(read.response.headers.get('etag')).toBe('"1"');
-  expect(read.body.subject).toEqual(created.body.subject);
+  expect(read.body.subject).toEqual({
+    ...created.body.subject,
+    statements: { 'schema:author': [created.body.subject.statements['schema:author'][0]] },
+  });
+  expect(read.body.account).toBeNull();
   expect(read.body.related).toEqual({
     'schema:author': { labels: bundledRelease.properties['schema:author']!.labels },
     'schema:url': { labels: bundledRelease.properties['schema:url']!.labels },
-    [soseki]: { labels: { en: 'Natsume Sōseki' } },
+    [soseki]: {
+      labels: { en: 'Natsume Sōseki' },
+      type: 'schema:Person',
+      types: ['schema:Person', ...bundledRelease.types['schema:Person']!.bases],
+      cover: null,
+    },
   });
   expect(decodeSession(tokens, 'anonymous', read.response.headers.get(SESSION_HEADER)!)).toHaveLength(1);
   expect(
     realAccess.readChecks.filter(({ action }) => action === 'subject:read').map(({ resource }) => resource.id),
-  ).toEqual(expect.arrayContaining([id, soseki, secret]));
+  ).toEqual(expect.arrayContaining([id, soseki]));
+  expect(
+    realAccess.readChecks.filter(({ action }) => action === 'subject:read').map(({ resource }) => resource.id),
+  ).not.toContain(secret);
 });
 
 test('a malformed, missing or unreadable subject is the same 404', async () => {

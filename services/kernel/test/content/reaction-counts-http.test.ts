@@ -1,6 +1,7 @@
 import { fromPlainText } from '@rezics/document';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -237,7 +238,7 @@ if (process.argv.includes('--reaction-count-worker')) {
   function spawnWorker() {
     const workerRouteKey = Buffer.alloc(32, 8).toString('base64url');
     const sessionKey = Buffer.alloc(32, 9).toString('base64url');
-    const env: Record<string, string | undefined> = {
+    const env = workerTestEnv({
       ...process.env,
       DATABASE_URL: databaseUrl,
       KERNEL_EXECUTOR_ID: `reaction-counts-${process.pid}`,
@@ -252,10 +253,10 @@ if (process.argv.includes('--reaction-count-worker')) {
       CONTENT_R2_ACCESS_KEY_ID: 'fixture-access',
       CONTENT_R2_SECRET_ACCESS_KEY: 'fixture-secret',
       CONTENT_SOURCE_HOSTS: 'images.example.org',
-      CONTENT_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
+      KERNEL_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
       CF_ACCESS_CLIENT_ID: 'fixture.access',
       CF_ACCESS_CLIENT_SECRET: 'fixture-secret-token',
-    };
+    });
     for (const name of [
       'OPENSEARCH_URL',
       'STRIPE_SECRET_KEY',
@@ -478,11 +479,6 @@ if (process.argv.includes('--reaction-count-worker')) {
       expect(JSON.stringify(openapi.paths['/v1/threads/{id}/posts']?.get?.responses?.['200'])).toContain(
         'reactionsAsOf',
       );
-      const client = readFileSync(
-        new URL('../../../../packages/client/src/kernel/http/kernel.d.ts', import.meta.url),
-        'utf8',
-      );
-      expect(client).toContain('reactionsAsOf');
     },
   );
 

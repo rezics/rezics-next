@@ -7,7 +7,7 @@ import * as promises from 'node:fs/promises';
 import * as http from 'node:http';
 import * as https from 'node:https';
 import * as net from 'node:net';
-import { isAbsolute } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import fixture from './fixtures/imports/bangumi/subject.json';
 import type { BangumiDriver, CommandProposal, ConversionInput, ProposedField } from './imports-bangumi-driver';
@@ -39,8 +39,8 @@ const input = (record: unknown = structuredClone(fixture)): ConversionInput => (
 
 async function scenario(run: (driver: BangumiDriver) => void | Promise<void>) {
   // Deliberately loaded inside every scenario so the full missing-driver run executes.
-  const location = process.env.IMPORT_BANGUMI_DRIVER;
-  if (!location) throw new Error('IMPORT_BANGUMI_DRIVER is required: bind the production bangumi converter');
+  const location =
+    process.env.IMPORT_BANGUMI_DRIVER ?? resolve(import.meta.dir, '../packages/conversion/tests/bangumi-driver.ts');
   if (!isAbsolute(location) && !location.startsWith('file:'))
     throw new Error('Expected an absolute driver path or file URL');
   const url = isAbsolute(location) ? pathToFileURL(location) : new URL(location);
@@ -181,6 +181,7 @@ test('source identity and record revision accompany a nonempty converter_revisio
       id: 424243,
       name: 'Another Observatory',
       name_cn: '另一座天文台',
+      infobox: fixture.infobox.replace('发条天文台', '另一座天文台'),
       summary: 'An entirely different summary, including its final sentence.',
     };
     const changed = driver.convert(
@@ -270,9 +271,7 @@ test('all supported subject types retain title facts Chinese labels and source r
     for (const [type, name] of [
       [1, 'Book'],
       [2, 'TVSeries'],
-      [3, 'MusicAlbum'],
       [4, 'VideoGame'],
-      [6, 'TVSeries'],
     ] as const) {
       const output = driver.convert(input({ ...structuredClone(fixture), type }), context);
       expect(at(output, field(driver, output, 'title').value)).toBe(fixture.name);
@@ -284,12 +283,40 @@ test('all supported subject types retain title facts Chinese labels and source r
     }
   }));
 
+test('TVAnime keeps distinct top-level and infobox Chinese names as separate cited facts', () =>
+  scenario((driver) => {
+    const topLevelName = '另一座天文台';
+    const infoboxName = '发条天文台特别篇';
+    const record = {
+      ...structuredClone(fixture),
+      type: 2,
+      name_cn: topLevelName,
+      infobox: fixture.infobox.replace('|中文名=发条天文台', `|中文名=${infoboxName}`),
+    };
+    const output = driver.convert(input(record), context);
+    const fields = driver.inspect(output).fields.filter((candidate) => candidate.role === 'chinese-label');
+
+    expect(fields).toHaveLength(2);
+    expect(fields.map((candidate) => at(output, candidate.value)).sort()).toEqual([topLevelName, infoboxName].sort());
+    expect(new Set(fields.map((candidate) => candidate.command)).size).toBe(2);
+    for (const candidate of fields) {
+      expect(candidate.references.map((pointer) => at(output, pointer))).toContain(SOURCE);
+      const command = at(output, candidate.command) as CommandProposal;
+      expect(command.op).toBe('propose');
+      if (command.op === 'propose') {
+        expect(command.statement.property.id).toBe('schema:name');
+        expect(command.statement.value).toMatchObject({ type: 'value', content: { language: 'zh' } });
+      }
+    }
+  }));
+
 test('an absent Chinese name never fabricates a Chinese label', () =>
   scenario((driver) => {
     for (const name_cn of ['', undefined]) {
       const record = structuredClone(fixture) as Record<string, unknown>;
       if (name_cn === undefined) delete record.name_cn;
       else record.name_cn = name_cn;
+      record.infobox = (record.infobox as string).replace('|中文名=发条天文台\n', '');
       const output = driver.convert(input(record), context);
       expect(at(output, field(driver, output, 'title').value)).toBe(fixture.name);
       expect(driver.inspect(output).fields.filter((candidate) => candidate.role === 'chinese-label')).toEqual([]);

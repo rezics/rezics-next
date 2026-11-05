@@ -1,8 +1,36 @@
 types:
-  wd:Q95074: '허구의 캐릭터'
+  wd:Q95074: '캐릭터'
 properties:
   schema:gender: 성별
   schema:height: 높이
   schema:weight: 질량
   wdt:P1853: 혈액형
   wdt:P6296: Bangumi 캐릭터 ID
+  rezics:relatedCharacterIdentity: 관련 캐릭터 정체성
+  wdt:P26: 배우자
+  wdt:P3373: 형제자매
+  wdt:P22: 아버지
+  wdt:P25: 어머니
+  wdt:P451: 연인
+  rezics:characterRival: 라이벌
+inverseProperties:
+  schema:gender: '이 젠더의 대상'
+  wdt:P1853: '이 혈액형의 대상'
+  rezics:relatedCharacterIdentity: 이 정체성을 갖는 캐릭터
+  wdt:P22: 아버지인 대상
+  wdt:P25: 어머니인 대상
+typeDescriptions:
+  wd:Q95074: '독립적으로 식별되는 허구의 캐릭터입니다. 가상의 기계, 함선, 조직도 포함합니다. 등장과 음성 크레딧은 작품에 기록합니다.'
+propertyDescriptions:
+  schema:gender: '허구의 캐릭터에 대해 명시적으로 설명된 젠더 개념입니다. 생물학적 성별을 추정하지 않습니다.'
+  schema:height: '명시된 키를 0 이상 수량으로 기록합니다. 센티미터(wd:Q174728) 또는 미터(wd:Q11573) 중 출처의 단위를 유지합니다.'
+  schema:weight: '명시된 체중을 0 이상 수량으로 기록합니다. 킬로그램(wd:Q11570) 또는 그램(wd:Q41803) 중 출처의 단위를 유지합니다.'
+  wdt:P1853: 'A형처럼 명시된 혈액형 개념입니다. 알 수 없는 값은 그대로 둡니다.'
+  wdt:P6296: '양의 숫자로 된 Bangumi 캐릭터 식별자입니다. 작품이나 인물 ID, 페이지 URL과 구별합니다.'
+  rezics:relatedCharacterIdentity: '이 정체성이 연결되는 다른 캐릭터입니다. 병합, 리다이렉트, 클래스 인스턴스, 전기 결합, 등장 역할 main이 아닙니다.'
+  wdt:P26: '배우자로 명시된 다른 캐릭터입니다. 스포일러 수준을 붙일 수 있습니다.'
+  wdt:P3373: '형제자매로 명시된 다른 캐릭터입니다. 스포일러 수준을 붙일 수 있습니다.'
+  wdt:P22: '아버지로 명시된 캐릭터입니다. 스포일러 수준을 붙일 수 있습니다.'
+  wdt:P25: '어머니로 명시된 캐릭터입니다. 스포일러 수준을 붙일 수 있습니다.'
+  wdt:P451: '연인이나 파트너로 명시된 다른 캐릭터입니다. 스포일러 수준을 붙일 수 있습니다.'
+  rezics:characterRival: '라이벌이나 적으로 명시된 다른 캐릭터입니다. 등장 역할이 아닙니다.'

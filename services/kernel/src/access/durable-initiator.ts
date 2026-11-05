@@ -1,3 +1,4 @@
+import { finishDurableRateIdentity } from './write-rate-identity.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
 import type { Pool } from 'pg';
@@ -41,7 +42,7 @@ export type DurableOperationAnchor = Readonly<{ route: number; id: string; kind:
  * must equal the ID's embedded route. kind, commandKind and idempotencyKey are
  * 1..255 non-space printable ASCII characters. actor is exactly an AccountActor
  * with kind='account', accountId=initiatorAccountId, clientId of 1..1024 non-space
- * printable ASCII characters, a positive safe-integer authnEpoch and at most 100
+ * printable ASCII characters, a positive safe-integer authnEpoch and at most 512
  * OAuth scope tokens (each 1..128 ASCII characters, excluding space, quote and
  * backslash). requestedBy is null or the exact native
  * urn:rezics:request:<principal UUID>:<request UUID> (at most 128 characters).
@@ -239,9 +240,13 @@ export function createInitiatorRestorer(config: InitiatorRestorerConfig): Initia
               throw new DurableInitiatorUnavailableError();
           }),
         );
+        finishDurableRateIdentity(actor, true);
         return actor;
       } catch (error) {
-        if (actor) discardDurableIdentity(config.access, actor);
+        if (actor) {
+          finishDurableRateIdentity(actor, false);
+          discardDurableIdentity(config.access, actor);
+        }
         throwAccessUnavailable(error);
         throwEvidenceFailure(error);
         throw new DurableInitiatorUnavailableError();

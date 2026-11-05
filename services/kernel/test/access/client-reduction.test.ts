@@ -1,3 +1,4 @@
+import { actionDeclarations } from './native-account-bindings-fixture.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import {
   createAuthHost,
@@ -7,8 +8,8 @@ import {
   type AuthService,
 } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { Client, Pool } from 'pg';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
@@ -16,15 +17,34 @@ import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createWorkflowApprovals, WORKFLOW_APPROVAL_ACTIONS } from '../../src/access/workflow-approvals.ts';
 
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `client_reduction_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
+
 const pool = createPool(process.env.DATABASE_URL!);
 const issuer = 'https://client-management.auth.test';
 const audience = 'https://client-management.api.test';
 const scopes = ['account:manage', 'account:read', 'access:grant', ...WORKFLOW_APPROVAL_ACTIONS.keys()].sort();
-const actions = new Map([...LIFECYCLE_ACTIONS, ...scopes.map((scope) => [scope, { anonymous: false }] as const)]);
+const actions = new Map([...LIFECYCLE_ACTIONS, ...actionDeclarations(scopes)]);
 const referenceKeys = { current: 1, keys: new Map([[1, crypto.getRandomValues(new Uint8Array(32))]]) };
 let service: AuthService;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
-let database: ReturnType<typeof testDatabase>;
+let database: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 const access = createAccess({
   actions,
   auth: {
@@ -99,7 +119,7 @@ async function client() {
   return clientId;
 }
 beforeAll(async () => {
-  database = testDatabase();
+  database = await cloneAuthDatabase();
   const authPool = new Pool({ connectionString: database.url });
   const proofs = createNativeWorkflowProofPorts({ database: authPool });
   const bindings = createNativeAccountBindings({
@@ -141,7 +161,7 @@ afterAll(async () => {
   try {
     await host?.stop();
   } finally {
-    database?.close();
+    await database?.close();
     await pool.end();
   }
 });

@@ -1,3 +1,5 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
+import { consumableGrowth } from './support/consumable-growth.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -52,14 +54,17 @@ beforeAll(async () => {
     audience: 'https://growth.api.test',
     secret: 'native-provisioning-growth-secret-at-least-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       readAccount: async (id) => accounts.get(id) ?? null,
       async authorizeProvisioning(id) {
         const result = approvals.get(id);
         if (!result) throw new Error('No trusted pending authorization');
         return structuredClone(result);
       },
-    },
+    }),
   });
   verifier = createProvisioningEvidenceVerifier({ database: db.pool });
   pending('hot');
@@ -158,6 +163,22 @@ test('checkGrowth exact valid, absent and mismatched evidence ignores growing re
 
 test('checkGrowth native idempotent password and credentialless commits have constant rows/statements', async () => {
   for (const automated of [false, true]) {
+    const targets = consumableGrowth({
+      name: automated ? 'robot' : 'person',
+      async setup(_database, _scale, id) {
+        pending(id, automated);
+      },
+      async run(_database, _scale, id) {
+        const commit = () =>
+          automated
+            ? service.internal.provisionCredentialless({ authorization: id })
+            : service.internal.provisionPassword(input(id));
+        const first = await commit();
+        expect(first.provisioningEvidence).toBeDefined();
+        expect(await commit()).toEqual(first);
+        expect((await db.admin.query('SELECT id FROM account WHERE "userId"=$1', [id])).rows).toHaveLength(1);
+      },
+    });
     const report = await checkGrowth(db, {
       name: `native ${automated ? 'credentialless' : 'password'} commit and exact replay`,
       bounds,
@@ -178,19 +199,17 @@ test('checkGrowth native idempotent password and credentialless commits have con
         if (count < scale * 1024) await grow(database, scale, count / 1024);
         else await database.admin.query('VACUUM (ANALYZE)');
       },
-      async operation(_database, _scale, repetition) {
-        const id = `${automated ? 'robot' : 'person'}-${repetition}`;
-        pending(id, automated);
-        const commit = () =>
-          automated
-            ? service.internal.provisionCredentialless({ authorization: id })
-            : service.internal.provisionPassword(input(id));
-        const first = await commit();
-        expect(first.provisioningEvidence).toBeDefined();
-        expect(await commit()).toEqual(first);
-        expect((await db.admin.query('SELECT id FROM account WHERE "userId"=$1', [id])).rows).toHaveLength(1);
-      },
+      ...targets.hooks,
     });
+    expect(targets.invocations.every(({ outcome }) => outcome === 'succeeded')).toBe(true);
+    for (const sample of report.samples) {
+      expect(targets.invocations.filter(({ scale, kind }) => scale === sample.scale && kind === 'warmup')).toHaveLength(
+        1,
+      );
+      expect(
+        targets.invocations.filter(({ scale, kind }) => scale === sample.scale && kind === 'measured'),
+      ).toHaveLength(sample.repetitions.length + (sample.coldBackendDiscards ?? 0));
+    }
     for (const { cost } of report.samples) {
       expect(cost.statements).toBe(11); // 15 including four BEGIN/COMMIT statements
       expect(cost.rows).toBeLessThanOrEqual(14);
@@ -201,6 +220,48 @@ test('checkGrowth native idempotent password and credentialless commits have con
 }, 120000);
 
 test('proof erasure uses referencing-key indexes as unrelated receipts grow', async () => {
+  const statements = [
+    'BEGIN',
+    'DELETE FROM "user" WHERE id=$1',
+    `INSERT INTO auth_consent_erasure (account_id,due_at)
+             VALUES ($1,clock_timestamp()+interval '5 minutes 10 seconds')
+             ON CONFLICT (account_id) DO NOTHING`,
+    'COMMIT',
+  ] as const;
+  const relations = [
+    'account',
+    'auth_barrier_proof',
+    'auth_client',
+    'auth_consent_erasure',
+    'auth_key_assertion',
+    'auth_provisioning_receipt',
+    'auth_provisioning_receipt',
+    'auth_public_key',
+    'auth_recovery',
+    'auth_session_opening',
+    'oauthAccessToken',
+    'oauthRefreshToken',
+    'passkey',
+    'session',
+    'user',
+  ];
+  type NativePlan = { Plan: { 'Relation Name': string }; 'Query Text': string };
+  const targets = consumableGrowth({
+    name: 'erase',
+    async setup(_database, _scale, id) {
+      pending(id, true);
+      const isolated = await createAuthService({ ...erasureOptions(), database: db.admin });
+      const proof = (await isolated.internal.provisionCredentialless({ authorization: id })).provisioningEvidence!;
+      Object.assign(accounts.get(id)!, { state: 'deleted', fenced: true });
+      return proof;
+    },
+    async run(_database, _scale, id, proof) {
+      await service.internal.eraseAccount(id);
+      expect(await createProvisioningEvidenceVerifier({ database: db.admin }).resolve(proof)).toBeNull();
+      expect((await db.admin.query('SELECT id FROM "user" WHERE id=$1', [id])).rowCount).toBe(0);
+      expect((await db.admin.query('SELECT id FROM account WHERE "userId"=$1', [id])).rowCount).toBe(0);
+    },
+  });
   const report = await checkGrowth(db, {
     name: 'native provisioning proof erasure',
     bounds,
@@ -220,20 +281,42 @@ test('proof erasure uses referencing-key indexes as unrelated receipts grow', as
       } else if (count < scale * 1024) await grow(database, scale, count / 1024);
       await database.admin.query('VACUUM (ANALYZE)');
     },
-    async operation(_database, _scale, repetition) {
-      const id = `erase-${repetition}`;
-      pending(id, true);
-      // Setup is outside the measured Auth pool, while actual native erasure is captured.
-      const isolated = await createAuthService({ ...erasureOptions(), database: db.admin });
-      const proof = (await isolated.internal.provisionCredentialless({ authorization: id })).provisioningEvidence!;
-      Object.assign(accounts.get(id)!, { state: 'deleted', fenced: true });
-      await service.internal.eraseAccount(id);
-      expect(await createProvisioningEvidenceVerifier({ database: db.admin }).resolve(proof)).toBeNull();
-    },
+    ...targets.hooks,
   });
-  for (const { cost } of report.samples) {
-    expect(cost.statements).toBe(1);
-    expect(cost.rows).toBeLessThanOrEqual(5);
+  expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
+  expect(targets.invocations.every(({ outcome }) => outcome === 'succeeded')).toBe(true);
+  for (const { scale, cost, repetitions, occurrenceRepetitions, coldBackendDiscards } of report.samples) {
+    expect(targets.invocations.filter((run) => run.scale === scale && run.kind === 'warmup')).toHaveLength(1);
+    expect(targets.invocations.filter((run) => run.scale === scale && run.kind === 'measured')).toHaveLength(
+      repetitions.length + (coldBackendDiscards ?? 0),
+    );
+    // Only accepted measured captures enter the report. Native producer ownership
+    // retains nested FK/cascade documents on their actual source occurrence.
+    const runs = occurrenceRepetitions.map(({ statements: occurrences }) => {
+      expect(occurrences.map(({ statement }) => statement)).toEqual([
+        'BEGIN',
+        'DELETE FROM "user" WHERE id=?',
+        'INSERT INTO auth_consent_erasure (account_id,due_at) VALUES (?,clock_timestamp()+interval ?) ON CONFLICT (account_id) DO NOTHING',
+        'COMMIT',
+      ]);
+      return occurrences.flatMap(({ planDocuments }) => planDocuments) as NativePlan[];
+    });
+    expect(runs).toHaveLength(repetitions.length);
+    for (const documents of runs) {
+      expect(documents.map(({ Plan }) => Plan['Relation Name']).sort()).toEqual(relations);
+      expect(documents.find(({ Plan }) => Plan['Relation Name'] === 'user')!['Query Text']).toBe(statements[1]);
+      expect(documents.find(({ Plan }) => Plan['Relation Name'] === 'auth_consent_erasure')!['Query Text']).toBe(
+        statements[2],
+      );
+    }
+    for (const measured of [cost, ...repetitions]) {
+      expect(measured.statements).toBe(2);
+      expect(measured.controlStatements).toBe(2);
+      expect(measured.plans).toBe(relations.length);
+      expect(measured.rows).toBeLessThanOrEqual(5);
+      expect(measured.relations['public.auth_consent']).toBeUndefined();
+      expect(measured.relations['public.auth_registration_stage']).toBeUndefined();
+    }
   }
   pending('index-erasure', true);
   await service.internal.provisionCredentialless({ authorization: 'index-erasure' });
@@ -245,7 +328,10 @@ test('proof erasure uses referencing-key indexes as unrelated receipts grow', as
   ).toBe(false);
   for (const index of ['auth_provisioning_receipt_owner_idx', 'auth_provisioning_receipt_credential_idx'])
     expect(plan.some((node) => node['Index Name'] === index)).toBe(true);
-  expect(costOf(actual.capture).statements).toBe(1);
+  expect(actual.capture.statements).toEqual(statements);
+  expect((actual.capture.plans as NativePlan[]).map(({ Plan }) => Plan['Relation Name']).sort()).toEqual(relations);
+  expect(costOf(actual.capture).statements).toBe(2);
+  expect(costOf(actual.capture).controlStatements).toBe(2);
 }, 120000);
 
 // A second native service uses the admin pool only for unmeasured erasure setup.
@@ -255,10 +341,11 @@ function erasureOptions() {
     audience: 'https://growth.api.test',
     secret: 'native-provisioning-growth-secret-at-least-32-bytes',
     signing: signingKeys,
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       readAccount: async (id: string) => accounts.get(id) ?? null,
+      readFencedAccount: async (id: string) => accounts.get(id) ?? null,
       authorizeProvisioning: async (id: string) => approvals.get(id)!,
-    },
+    }),
   };
 }
 let signingKeys: AuthServiceSigning;

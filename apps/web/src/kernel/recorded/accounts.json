@@ -1,0 +1,15 @@
+{
+  "accounts": [
+    {
+      "id": "01a17a3a-20f5-72aa-9f14-f4cc56678188",
+      "kind": "actor",
+      "handle": "mira",
+      "displayName": "Mira Okabe",
+      "state": "active",
+      "automated": false,
+      "operatorId": null
+    }
+  ],
+  "next": null,
+  "status": 200
+}

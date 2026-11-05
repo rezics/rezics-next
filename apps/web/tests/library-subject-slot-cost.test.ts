@@ -37,26 +37,30 @@ test('subject library slot stays within its bound as its collections grow', asyn
             },
           });
         if (url.pathname === `/v1/subjects/${subjectId}/collections`) {
-          expect(url.searchParams.get('limit')).toBe('100');
+          expect(url.searchParams.get('limit')).toBe('20');
           expect(url.searchParams.get('cursor')).toBeNull();
+          const limit = Number(url.searchParams.get('limit') ?? '20');
           return Response.json({
-            collections: Array.from({ length: size }, (_, index) => ({
+            collections: Array.from({ length: Math.min(size, limit) }, (_, index) => ({
               id: `public-${index}`,
               curatorAccountId: `curator-${index}`,
               title: `Public ${index}`,
               multiplicity: index + 1,
               curator: { id: `curator-${index}`, handle: `user-${index}`, displayName: `User ${index}` },
             })),
-            next: null,
+            count: { value: size, exact: true },
+            next: size > limit ? 'opaque-next' : null,
           });
         }
         if (url.pathname === '/v1/collections') {
-          expect(url.searchParams.get('limit')).toBe('100');
+          expect(url.searchParams.get('limit')).toBe('20');
           expect(url.searchParams.get('cursor')).toBeNull();
+          const limit = Number(url.searchParams.get('limit') ?? '20');
           return Response.json({
-            collections: Array.from({ length: size }, (_, index) => ({
+            collections: Array.from({ length: Math.min(size, limit) }, (_, index) => ({
               id: `mine-${index}`,
               curatorAccountId: 'owner',
+              membershipKind: 'curated',
               title: `Mine ${index}`,
               description: null,
               visibility: 'private',
@@ -66,7 +70,7 @@ test('subject library slot stays within its bound as its collections grow', asyn
               updatedAt: stamp,
               curator: { id: 'owner', handle: 'reader', displayName: 'Reader' },
             })),
-            next: null,
+            next: size > limit ? 'opaque-next' : null,
           });
         }
         throw new Error(`unexpected kernel request: ${request.method} ${url.pathname}`);
@@ -109,14 +113,16 @@ test('subject library slot stays within its bound as its collections grow', asyn
         headers: scenario.signedIn ? { cookie: `__Host-rezics_session=${sessionId}` } : {},
       });
       const data = await loadSubjectLibrarySlot(client, request, env, subjectId);
-      expect(data.publicCollections).toHaveLength(scale);
+      expect(data.publicCollections).toHaveLength(Math.min(scale, 20));
+      expect(data.publicCollectionsCount).toEqual({ kind: 'exact', value: scale });
       expect(data.collections).toBeNull();
       if (scenario.signedIn) {
         expect(counts).toEqual({ D: 1, K: 2, R: 0, A: 0 });
         if (scenario.pickerOpen) {
           const collectionPage = await loadSubjectLibraryCollections(client, new Request(request), env);
           expect(collectionPage.state).toBe('loaded');
-          expect(collectionPage.collections).toHaveLength(scale);
+          expect(collectionPage.collections).toHaveLength(Math.min(scale, 20));
+          expect(collectionPage.next).toBe(scale > 20 ? 'opaque-next' : null);
           expect(counts).toEqual({ D: 2, K: 3, R: 0, A: 0 });
         }
       } else {

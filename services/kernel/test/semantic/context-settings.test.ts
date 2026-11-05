@@ -87,6 +87,7 @@ beforeAll(async () => {
     'definitions:publish',
     'definitions:activate',
     'definitions:read',
+    'gate:definition_publication',
   ])
     await admin.query(
       `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)

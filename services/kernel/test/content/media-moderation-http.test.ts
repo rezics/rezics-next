@@ -1,3 +1,4 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createAuthService, createProvisioningEvidenceVerifier } from '@rezics/auth';
 import { createKernelClient } from '@rezics/client';
@@ -286,11 +287,6 @@ test('mounted once with current generated OpenAPI, action and shared rate declar
   expect(actionCatalogue(kernel).get(action)?.anonymous).toBe(false);
   const committed = await Bun.file(new URL('../../../../contracts/openapi.json', import.meta.url)).json();
   expect(committed.paths['/v1/media/{id}:takeDown']).toEqual(document.paths['/v1/media/{id}:takeDown']);
-  const generated = await Bun.file(
-    new URL('../../../../packages/client/src/kernel/content/media-moderation-routes.d.ts', import.meta.url),
-  ).text();
-  expect(generated).toContain('$takeDown');
-  expect(generated).toContain('securityRevision: string');
 });
 
 test('literal POST reaches native moderator command and actual shared write rate exactly once; retains appeal bytes', async () => {
@@ -356,7 +352,7 @@ test('current uploader, anonymous, suspended, scope and revoked replay denials r
   const id = await target();
   const key = Bun.randomUUIDv7();
   expect((await call(id, input, key)).response.status).toBe(200);
-  const stable = await effects();
+  let stable = await effects();
   async function reject(options: Parameters<typeof call>[3], status: number) {
     const start = observer.records.length;
     denied(await call(id, input, key, options), status);
@@ -368,17 +364,15 @@ test('current uploader, anonymous, suspended, scope and revoked replay denials r
   await reject({ bearer: uploaderBearer }, 403);
   await reject({ anonymous: true }, 401);
   await reject({ bearer: noScopeBearer }, 403);
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(moderatorId),
-    moderatorId,
-  ]);
+  await suspendAccount(db.admin, moderatorId);
+  stable = await effects();
   try {
     await reject({}, 401);
   } finally {
-    await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-      routeOf(moderatorId),
-      moderatorId,
-    ]);
+    await reinstateAccount(db.admin, moderatorId);
+    bearer = await issue(moderatorId, [action]);
+    noScopeBearer = await issue(moderatorId, ['media:read']);
+    stable = await effects();
   }
   await db.admin.query(
     'DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action=$4',

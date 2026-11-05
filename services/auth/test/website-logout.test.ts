@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createHash, randomBytes } from 'node:crypto';
@@ -50,7 +51,10 @@ beforeAll(async () => {
     audience,
     secret: 'isolated-website-issuer-secret-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount(accountId) {
         return accounts.get(accountId) ?? null;
       },
@@ -69,7 +73,7 @@ beforeAll(async () => {
           receiptId: `floor-${accountId}-${account.authnEpoch}`,
         };
       },
-    },
+    }),
   };
 }, 30000);
 

@@ -12,9 +12,11 @@ import type { Pool, PoolClient } from 'pg';
 import { publicCredential } from './key-credentials.ts';
 import type {
   CredentialEffect,
+  PasskeyEffect,
+  CredentialFloorPurpose,
+  CredentialFloorBinding,
   CredentialEffectBinding,
   CredentialEffectExpectation,
-  CredentialPurpose,
   SessionProof,
 } from './index.ts';
 
@@ -31,7 +33,7 @@ type Query = Pool | PoolClient;
 type Row = {
   receipt_id: string;
   account_id: string;
-  purpose: CredentialPurpose;
+  purpose: CredentialFloorPurpose;
   minimum_authn_epoch: number;
   operation_key: string;
   effect_reference: string;
@@ -44,17 +46,22 @@ type Row = {
   scopes: string[];
   stage_ciphertext: Buffer;
   opening_receipt_id: string | null;
+  opening_reference: string | null;
   committed_at: Date | null;
   committed_result: { receiptId: string; replayed: false } | null;
 };
-export type CredentialStage = { row: Row; binding: CredentialEffectBinding; credential: CredentialEffect };
+export type CredentialStage = {
+  row: Row;
+  binding: CredentialFloorBinding;
+  credential: CredentialEffect | PasskeyEffect;
+};
 function text(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !value || value.length > 1024) deny(400);
 }
 function same(a: unknown, b: unknown) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
-function bindingOf(row: Row): CredentialEffectBinding {
+function bindingOf(row: Row): CredentialFloorBinding {
   return {
     operationKey: row.operation_key,
     effectReference: row.effect_reference,
@@ -73,11 +80,11 @@ function bindingOf(row: Row): CredentialEffectBinding {
 export function credentialEffects(database: Pool, secret: string) {
   // Separate from registration, and separate encryption and commitment keys for
   // each purpose. The persistent Auth secret supports restart-safe verification.
-  const key = (purpose: CredentialPurpose, role: string) =>
+  const key = (purpose: CredentialFloorPurpose, role: string) =>
     Buffer.from(hkdfSync('sha256', secret, '', `rezics.auth.credential-${role}.${purpose}.v1`, 32));
-  const aad = (b: CredentialEffectBinding) =>
+  const aad = (b: CredentialFloorBinding) =>
     Buffer.from(JSON.stringify([1, b.effectReference, b.operationKey, b.subjectAccountId, b.purpose]));
-  const digest = (b: CredentialEffectBinding, credential: CredentialEffect) =>
+  const digest = (b: CredentialFloorBinding, credential: CredentialEffect | PasskeyEffect) =>
     createHmac('sha256', key(b.purpose, 'binding'))
       .update(
         JSON.stringify([
@@ -98,8 +105,9 @@ export function credentialEffects(database: Pool, secret: string) {
   async function normalize(
     value:
       | CredentialEffect
+      | PasskeyEffect
       | Parameters<import('./index.ts').AuthService['internal']['stageCredentialEffect']>[0]['credential'],
-  ): Promise<{ credential: CredentialEffect; purpose: CredentialPurpose }> {
+  ): Promise<{ credential: CredentialEffect | PasskeyEffect; purpose: CredentialFloorPurpose }> {
     if (!value || typeof value !== 'object' || Array.isArray(value)) deny(400);
     const fields = Object.keys(value);
     if (value.kind === 'password') {
@@ -112,6 +120,15 @@ export function credentialEffects(database: Pool, secret: string) {
         credential: { kind: 'password', password: value.password },
         purpose: value.password === null ? 'remove-password' : 'set-password',
       };
+    }
+    if (value.kind === 'passkey') {
+      text(value.id);
+      if (value.remove === true) {
+        if (fields.some((f) => !['kind', 'id', 'remove'].includes(f))) deny(400);
+        return { credential: { kind: 'passkey', id: value.id, remove: true }, purpose: 'remove-passkey' };
+      }
+      // Only the private verified ceremony path can stage an installation.
+      return { credential: value, purpose: 'add-passkey' };
     }
     if (value.kind !== 'key') return deny(400);
     text(value.kid);
@@ -134,29 +151,39 @@ export function credentialEffects(database: Pool, secret: string) {
       return deny(400);
     }
   }
-  async function selected(query: Query, subject: string, credential: CredentialEffect) {
+  async function selected(query: Query, subject: string, credential: CredentialEffect | PasskeyEffect) {
     const row =
-      credential.kind === 'password'
+      credential.kind === 'passkey'
         ? (
-            await query.query(
-              'SELECT id,password,xmin::text AS version FROM account WHERE "userId"=$1 AND "providerId"=\'credential\'',
-              [subject],
-            )
-          ).rows[0]
-        : (
-            await query.query('SELECT xmin::text AS version FROM auth_public_key WHERE account_id=$1 AND kid=$2', [
+            await query.query('SELECT id,xmin::text AS version FROM passkey WHERE "userId"=$1 AND id=$2', [
               subject,
-              credential.kid,
+              credential.id,
             ])
-          ).rows[0];
+          ).rows[0]
+        : credential.kind === 'password'
+          ? (
+              await query.query(
+                'SELECT id,password,xmin::text AS version FROM account WHERE "userId"=$1 AND "providerId"=\'credential\'',
+                [subject],
+              )
+            ).rows[0]
+          : (
+              await query.query('SELECT xmin::text AS version FROM auth_public_key WHERE account_id=$1 AND kid=$2', [
+                subject,
+                credential.kid,
+              ])
+            ).rows[0];
     return row && (credential.kind !== 'password' || row.password !== null)
       ? {
-          id: credential.kind === 'password' ? (row.id as string) : JSON.stringify([subject, credential.kid]),
+          id: credential.kind === 'key' ? JSON.stringify([subject, credential.kid]) : (row.id as string),
           version: row.version as string,
         }
       : { id: null, version: null };
   }
-  function resolve(row: Row | undefined, expected?: CredentialEffectExpectation): CredentialStage {
+  function resolve(
+    row: Row | undefined,
+    expected?: CredentialEffectExpectation<CredentialFloorPurpose>,
+  ): CredentialStage {
     if (!row || row.stage_version !== 1 || !row.stage_ciphertext) return deny();
     const binding = bindingOf(row);
     Object.freeze(binding.scopes);
@@ -172,7 +199,7 @@ export function credentialEffects(database: Pool, secret: string) {
         (expected.effectDigest !== undefined && binding.effectDigest !== expected.effectDigest))
     )
       deny();
-    let credential: CredentialEffect;
+    let credential: CredentialEffect | PasskeyEffect;
     try {
       const encrypted = row.stage_ciphertext;
       const decipher = createDecipheriv('aes-256-gcm', key(binding.purpose, 'staging'), encrypted.subarray(0, 12));
@@ -199,7 +226,7 @@ export function credentialEffects(database: Pool, secret: string) {
   }
   async function read(
     reference: string,
-    expected?: CredentialEffectExpectation,
+    expected?: CredentialEffectExpectation<CredentialFloorPurpose>,
     query: Query = database,
     lock = false,
   ) {
@@ -216,8 +243,9 @@ export function credentialEffects(database: Pool, secret: string) {
   async function stage(input: {
     key: string;
     subjectAccountId: string;
-    credential: CredentialEffect;
+    credential: CredentialEffect | PasskeyEffect;
     human: SessionProof;
+    sourceSessionId?: string | undefined;
   }) {
     text(input.key);
     text(input.subjectAccountId);
@@ -248,7 +276,7 @@ export function credentialEffects(database: Pool, secret: string) {
       const selectedRow = await selected(connection, input.subjectAccountId, credential);
       if ((purpose === 'remove-password' || purpose === 'remove-key') && selectedRow.id === null) deny(409);
       if (purpose === 'add-key' && selectedRow.id !== null) deny(409);
-      const binding: CredentialEffectBinding = {
+      const binding: CredentialFloorBinding = {
         operationKey: input.key,
         effectReference: randomUUID(),
         effectDigest: '',
@@ -266,8 +294,9 @@ export function credentialEffects(database: Pool, secret: string) {
       cipher.setAAD(aad(binding));
       const encrypted = Buffer.concat([cipher.update(JSON.stringify(credential)), cipher.final()]);
       await connection.query(
-        `INSERT INTO auth_effect_receipt(receipt_id,account_id,purpose,minimum_authn_epoch,operation_key,effect_reference,effect_digest,stage_version,credential_row_id,credential_row_version,acting_human_id,client_id,scopes,stage_ciphertext)
-        VALUES ($1,$2,$3,0,$4,$5,$6,1,$7,$8,$9,$10,$11,$12)`,
+        `INSERT INTO auth_effect_receipt(receipt_id,account_id,purpose,minimum_authn_epoch,operation_key,effect_reference,effect_digest,stage_version,credential_row_id,credential_row_version,acting_human_id,client_id,scopes,stage_ciphertext,erasure_operator_id)
+        VALUES ($1,$2,$3,0,$4,$5,$6,1,$7,$8,$9,$10,$11,$12,
+          (SELECT operator_account_id FROM auth_session_opening WHERE session_id=$13))`,
         [
           randomUUID(),
           input.subjectAccountId,
@@ -281,6 +310,7 @@ export function credentialEffects(database: Pool, secret: string) {
           binding.clientId,
           binding.scopes,
           Buffer.concat([nonce, cipher.getAuthTag(), encrypted]),
+          input.sourceSessionId ?? null,
         ],
       );
       await connection.query('COMMIT');
@@ -307,6 +337,38 @@ export function credentialEffects(database: Pool, secret: string) {
           [b.subjectAccountId, passwordHash, b.credentialRowId, b.credentialRowVersion],
         )
       ).rowCount;
+    } else if (value.kind === 'passkey') {
+      if (value.remove) {
+        count = (
+          await connection.query('DELETE FROM passkey WHERE "userId"=$1 AND id=$2 AND xmin::text=$3', [
+            b.subjectAccountId,
+            value.id,
+            b.credentialRowVersion,
+          ])
+        ).rowCount;
+      } else {
+        const size = await connection.query('SELECT id FROM passkey WHERE "userId"=$1 LIMIT 32', [b.subjectAccountId]);
+        if (size.rows.length >= 32) deny(409);
+        count = (
+          await connection.query(
+            `INSERT INTO passkey(id,"userId",name,"publicKey","credentialID",counter,"deviceType","backedUp",transports,"createdAt",aaguid)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING`,
+            [
+              value.id,
+              b.subjectAccountId,
+              value.name,
+              value.publicKey,
+              value.credentialID,
+              value.counter,
+              value.deviceType,
+              value.backedUp,
+              value.transports,
+              value.createdAt,
+              value.aaguid,
+            ],
+          )
+        ).rowCount;
+      }
     } else if (value.remove) {
       count = (
         await connection.query('DELETE FROM auth_public_key WHERE account_id=$1 AND kid=$2 AND xmin::text=$3', [
@@ -325,16 +387,25 @@ export function credentialEffects(database: Pool, secret: string) {
     }
     if (count !== 1) deny(409);
   }
+  async function verify<Purpose extends CredentialFloorPurpose>(
+    reference: string,
+    expected: CredentialEffectExpectation<Purpose>,
+  ): Promise<CredentialEffectBinding<Purpose>>;
+  async function verify(reference: string, expected: CredentialEffectExpectation): Promise<CredentialEffectBinding>;
+  async function verify(
+    reference: string,
+    expected: CredentialEffectExpectation<CredentialFloorPurpose>,
+  ): Promise<CredentialFloorBinding> {
+    const stage = await read(reference, expected);
+    if (!stage.row.committed_at) await current(database, stage);
+    return stage.binding;
+  }
   return {
     normalize,
     stage,
     read,
     current,
     mutate,
-    async verify(reference: string, expected: CredentialEffectExpectation) {
-      const stage = await read(reference, expected);
-      if (!stage.row.committed_at) await current(database, stage);
-      return stage.binding;
-    },
+    verify,
   };
 }

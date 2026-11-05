@@ -1,15 +1,26 @@
 import type {
   InvalidationReceipt,
   CredentialPurpose,
+  PasskeyPurpose,
   CredentialEffectVerifier,
   TrustedAccessPorts,
   SessionProof,
+  KindConsentParticipant,
+  KindConsentInvalidationReceiver,
 } from '@rezics/auth-contract';
+import type { MetadataConfigurationStore, MetadataScrubPage } from './metadata-scrub.ts';
 export type {
   AccessAccount,
   InvalidationReceipt,
   EffectPurpose,
   CredentialPurpose,
+  PasskeyPurpose,
+  CredentialFloorPurpose,
+  CredentialFloorBinding,
+  CredentialApprovalPorts,
+  PasskeyTrustedAccessPorts,
+  PasskeyAuthorizationInput,
+  CredentialFloorAuthorizationInput,
   CredentialEffectBinding,
   CredentialEffectExpectation,
   CredentialEffectVerifier,
@@ -18,13 +29,32 @@ export type {
   CredentialFloorPort,
   SessionAuthorizationInput,
   CredentialAuthorizationInput,
-  LegacyCredentialAuthorizationInput,
   AuthorizationConsumeInput,
   EffectAuthorization,
   AssignmentProof,
   TrustedAccessPorts,
   SessionProof,
+  KindConsentConsumer,
+  KindConsentReference,
+  KindConsentEnrollmentInput,
+  KindConsentEnrollmentResult,
+  KindConsentInvalidationInput,
+  KindConsentInvalidationResult,
+  KindConsentVerificationResult,
+  KindConsentParticipant,
+  KindConsentInvalidationReceiver,
+  KindConsentOperation,
+  KindConsentWorkDeclaration,
 } from '@rezics/auth-contract';
+export {
+  createKindConsentParticipant,
+  kindConsentOperationBound,
+  KIND_CONSENT_PAGE_SIZE,
+  kindConsentTransitionPageBound,
+  type KindConsentChange,
+  type KindConsentChangeResult,
+  type KindConsentWriter,
+} from './kind-consent.ts';
 export {
   createNativeWorkflowProofPorts,
   type NativeWorkflowProofPorts,
@@ -32,6 +62,16 @@ export {
 } from './native-workflow-proofs.ts';
 export { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
 export { createRecoveryEstablishmentVerifier, type RecoveryEstablishmentEvidence } from './recovery-establishment.ts';
+export {
+  readRecoveryCopySource,
+  readRecoveryCopySourcePage,
+  type RecoveryCopySource,
+  type RecoveryCopyLocator,
+  type RecoveryCopyRole,
+  type RecoveryCopyStatus,
+  type RecoveryCopyPending,
+  type RecoveryCopyCode,
+} from './recovery-copy-source.ts';
 export { createProvisioningEvidenceVerifier } from './provisioning-evidence.ts';
 export type {
   ProvisioningAuthorization,
@@ -54,8 +94,20 @@ import { buildAuthService } from './service.ts';
 export { WEBSITE_CLIENT_ID } from './website.ts';
 import type { JWK } from 'jose';
 import type { SessionTrim } from './session-limits.ts';
-export { createAuthHost, AuthHostConfigurationError } from './host.ts';
+import type { SecurityInventory } from './security-inventory.ts';
+export type {
+  SecurityInventory,
+  SecurityInventoryInput,
+  OwnedSecurityClient,
+  SecurityConsent,
+  OwnedSecurityClientsPage,
+  SecurityConsentsPage,
+} from './security-inventory.ts';
+export { createAuthHost, createAuthRestoreHost, AuthHostConfigurationError } from './host.ts';
 export type { AuthHostOptions } from './host.ts';
+export { createInternalConsentHandler } from './internal-consent.ts';
+export type { InternalConsentAccessConfiguration } from './internal-consent.ts';
+export type { AccountOperationAccess } from './account-operations-transport.ts';
 export { SigningRotationPending } from './signing.ts';
 export { createAccountWorkflows } from './workflows.ts';
 export type { TurnstileConfiguration } from './turnstile.ts';
@@ -76,17 +128,65 @@ export type CredentialEffect =
   | { kind: 'key'; kid: string; publicJwk: JWK; remove?: false }
   | { kind: 'key'; kid: string; remove: true };
 
+/** Verified public passkey material stays outside operator credential effects. */
+export type PasskeyEffect =
+  | { kind: 'passkey'; id: string; remove: true }
+  | {
+      kind: 'passkey';
+      id: string;
+      remove?: false;
+      name: string | null;
+      createdAt: string;
+      publicKey: string;
+      credentialID: string;
+      counter: number;
+      deviceType: string;
+      backedUp: boolean;
+      transports: string;
+      aaguid: string;
+      registrationDigest: string;
+    };
+
+export {
+  AuthRestoreAdmissionError,
+  importRestoredAuthProgress,
+  replayRestoredAuthPage,
+  stageRestoredAuthObligations,
+} from './restore-admission.ts';
+export { reconcileRestoredAuthPage } from './restore-live.ts';
+export type {
+  AuthRestoredGeneration,
+  AuthRestoreDatabaseOwner,
+  AuthRestoreInventory,
+  AuthRestoreNativeProgress,
+  AuthRestorePendingCode,
+} from './restore-admission.ts';
+
 export interface AuthServiceOptions {
+  /** Deployment declaration: reconciliation precedes even service construction. */
+  restoredGeneration?: import('./restore-admission.ts').AuthRestoredGeneration;
   database: Pool;
   issuer: string;
   audience: string;
   secret: string;
   signing: { activeKid: string; privateKeys: JWK[] };
   trustedAccess: TrustedAccessPorts;
+  /** Native Source receiving owner. Missing composition stays fail closed when
+   * any enrolled consumer would need invalidation. */
+  kindConsentReceiver?: KindConsentInvalidationReceiver;
+  /** Trusted clock supplied by native contract harnesses; production uses wall time. */
+  clock?: () => Date;
   /** Trusted mounted x-action catalogue, supplied by production composition. */
   siteActions?: ReadonlyMap<string, { anonymous: boolean; replay?: 'self-account-read' }>;
   recoveryDelivery?: {
-    deliver(input: { accountId: string; email: string; token: string; expiresAt: Date; url: string }): Promise<void>;
+    deliver(input: {
+      deliveryId: string;
+      accountId: string;
+      email: string;
+      token: string;
+      expiresAt: Date;
+      url: string;
+    }): Promise<void>;
   };
 }
 
@@ -150,17 +250,49 @@ export interface WebsiteClientRegistration {
 
 export interface AuthService {
   handler(request: Request): Promise<Response>;
+  /** Password bounds read from the native Better Auth configuration used by the credential writer. */
+  registrationPasswordLimits(): Promise<import('./registration-page.ts').RegistrationPasswordLimits>;
+  /** Current native human session only, with the same origin guard as HTTP. */
+  security: SecurityInventory;
   verifier: VerifierConfiguration;
   internal: {
+    receivingClosure?: import('@rezics/auth-contract').AuthReceivingClosureProducer;
+    /** Native Auth-owned participant used before Collection Kind evidence work. */
+    kindConsentParticipant: KindConsentParticipant;
+    /** One bounded page of durable Auth-to-Source invalidation recovery. */
+    continueKindConsentInvalidations(): Promise<import('./kind-consent.ts').KindConsentChangeResult | null>;
+    /** Auth-native erasure callers close Kind dependencies before their page. */
+    fenceKindConsentErasure(obligationId: string): Promise<void>;
     /** Auth-owned read closure; composition receives no database or credential material. */
     resolveRecoveryEstablishment(reference: unknown): Promise<RecoveryEstablishmentEvidence | null>;
     /** Trusted server composition only; the exact native human proof is live only
      * during this instance's trusted authorization callbacks. Never persist it or its JWT. */
     accessTokenForProof(proof: SessionProof): Promise<string>;
+    /** Auth-owned session existence read that does not reinterpret a native
+     * account floor as sign-out. */
+    hasCurrentAuthSession(headers: Headers): Promise<boolean>;
+    /** Auth-owned point read used only to distinguish a retired proof session
+     * from a still-present session refused by current native authority. */
+    isProofSessionCurrent(proof: SessionProof): Promise<boolean>;
+    /** Auth-host transport only. Proves the current human from the Auth session as
+     * approveCredentialEffect does and, unless `fresh` is false, requires the
+     * session's auth_time within the last 600 seconds (401 step_up_required).
+     * `work` runs inside the live proof scope, where accessTokenForProof gives the
+     * Access bearer for the proof; the bearer never leaves that scope. */
+    withFreshHuman<T>(
+      input: { headers: Headers; fresh?: boolean },
+      work: (proof: SessionProof) => Promise<T>,
+    ): Promise<T>;
     /** One native expiry batch, at most 1000 rows; scheduled by the Auth host. */
     pruneExpiredVerifications(): Promise<number>;
+    /** Bounded deployment disposition only; no coverage or participant acknowledgement. */
+    scrubMetadataConfiguration(store: MetadataConfigurationStore): Promise<MetadataScrubPage>;
     /** Bounded maintenance; the host registers and schedules these ports. */
     pruneExpiredSessions(batch?: number): Promise<number>;
+    /** One bounded batch of consent left by accounts erased in Auth. */
+    eraseDueConsents(batch?: number): Promise<number>;
+    /** Indexed scheduling gate; only the durable cleanup step crosses DBOS. */
+    hasDueConsentErasure(): Promise<boolean>;
     /** One bounded batch per expired native OAuth/OIDC kind (tokens, refresh
      * families, client assertions, recent OIDC sessions); at most 1000 each. */
     pruneExpiredProtocolState(batch?: number): Promise<number>;
@@ -172,10 +304,24 @@ export interface AuthService {
       email: string;
       password: string;
       idempotencyKey?: string;
+      sourceRegistrationId?: string;
     }): Promise<ProvisioningResult>;
-    provisionCredentialless(input: { authorization: string; idempotencyKey?: string }): Promise<ProvisioningResult>;
+    provisionCredentialless(input: {
+      authorization: string;
+      idempotencyKey?: string;
+      sourceRegistrationId?: string;
+    }): Promise<ProvisioningResult>;
     /** The coordinator must commit Access tombstone/fence before erasure. */
     eraseAccount(accountId: string): Promise<void>;
+    /** Accept the terminal obligation; each subsequent page is independently durable. */
+    startAccountErasure(accountId: string): Promise<string>;
+    /** Actual fixed erase-auth-owner consumer; original committed source only. */
+    consumeAccountErasure(accountId: string, receiptId: string, workflowId: string): Promise<string>;
+    redriveErasureHistory(): Promise<number>;
+    /** Retention shares the exact native result/readiness/absence protocol. */
+    retireWorkflowCopy(workflowId: string): Promise<boolean>;
+    nativeErasurePage(id: string): Promise<import('./erasure-native.ts').ErasurePage>;
+    redriveNativeErasure(): Promise<number>;
     openAutomatedSession(input: {
       authorization: string;
       subjectAccountId: string;
@@ -202,6 +348,13 @@ export interface AuthService {
         | { kind: 'key'; kid: string; publicJwk: JWK; remove?: undefined }
         | { kind: 'key'; kid: string; remove: true; publicJwk?: undefined };
     }): Promise<{ effectRef: string; key: string; subjectId: string; purpose: CredentialPurpose; digest: string }>;
+    /** Own-human removal staging. Installations are accepted only from a verified ceremony. */
+    stagePasskeyEffect(input: {
+      key: string;
+      subjectAccountId: string;
+      headers: Headers;
+      credential: Extract<PasskeyEffect, { remove: true }>;
+    }): Promise<{ effectRef: string; key: string; subjectId: string; purpose: PasskeyPurpose; digest: string }>;
     /** Resolve Auth's stage; enter the live proof callback and request an exact
      * native approval for this purpose/key/commitment. Authenticate anew; never
      * serialize proof/JWT/context. Own-human account:manage uses actor grant AND
@@ -217,6 +370,8 @@ export interface AuthService {
       key: string;
       subjectAccountId: string;
       headers: Headers;
+      /** Deadline created at the Auth request boundary. */
+      deadline?: number;
     }): Promise<{ reference: string; expiresAt: string }>;
     /** Resolve the same immutable stage; consume an exact credential authorization,
      * compare its binding with Auth's stage, then revalidate current authority at
@@ -243,15 +398,11 @@ export interface AuthService {
       key: string;
       subjectAccountId: string;
       headers: Headers;
+      /** Deadline created at the Auth request boundary. */
+      deadline?: number;
     }): Promise<{ receiptId: string; replayed: boolean }>;
     /** Auth-owned point-read verifier; no minting path. */
     verifyCredentialEffect: CredentialEffectVerifier;
-    setCredential(input: {
-      authorization: string;
-      subjectAccountId: string;
-      headers: Headers;
-      credential: CredentialEffect;
-    }): Promise<void>;
     reduceConsent(input: {
       accountId: string;
       clientId: string;
@@ -282,6 +433,10 @@ export interface AuthService {
       clientId: string;
       limit: number;
     }): Promise<{ next: string | null; ready: boolean }>;
+    continueNativeClientReduction(
+      input: { operationId: string; obligationId: string },
+      ports: Pick<import('@rezics/auth-contract').AccountWorkflowPorts<never>, 'readAccount' | 'raiseFence'>,
+    ): Promise<boolean>;
     finishClientReduction(input: {
       clientId: string;
       operationId: string;
@@ -297,10 +452,19 @@ export interface AuthService {
       firstParty: boolean;
       scopes: string[];
       displayName?: string;
+      /** Insert when absent; otherwise require exact party/scopes without replacing metadata. */
+      mode?: 'create-or-match';
     }): Promise<void>;
   };
 }
 
 export async function createAuthService(options: AuthServiceOptions): Promise<AuthService> {
-  return buildAuthService(options);
+  return buildAuthService(
+    options.restoredGeneration
+      ? {
+          ...options,
+          restoredGeneration: { ...options.restoredGeneration, receiving: options.trustedAccess },
+        }
+      : options,
+  );
 }

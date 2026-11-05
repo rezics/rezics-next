@@ -1,12 +1,17 @@
 import { fromPlainText, serializeDocument } from '@rezics/document';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
 if (process.argv.includes('--erased-post-worker')) {
   const { readWorkerConfig, startWorker } = await import('../../src/worker.ts');
-  await startWorker(readWorkerConfig(process.env));
+  await startWorker({
+    ...readWorkerConfig(process.env),
+    clock: () => new Date(Date.now() + 31 * 86400000),
+  });
   console.log('erased-post-worker-ready');
 } else {
   const { afterAll, beforeAll, expect, test } = await import('bun:test');
@@ -62,7 +67,7 @@ if (process.argv.includes('--erased-post-worker')) {
       audience,
       secret: 'erased-post-cleanup-test-only-secret-at-least-32',
       signing: { activeKid: signing.kid, privateKeys: [signing] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         async readAccount(id) {
           const account = await readAccount(pool, routeOf(id)!, id);
           return (
@@ -79,7 +84,7 @@ if (process.argv.includes('--erased-post-worker')) {
           if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
           return { accountId: reference };
         },
-      },
+      }),
     });
     await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
     for (const id of authors) {
@@ -163,7 +168,7 @@ if (process.argv.includes('--erased-post-worker')) {
   function spawnWorker(executorId: string) {
     const routeKey = Buffer.alloc(32, 8).toString('base64url');
     const sessionKey = Buffer.alloc(32, 9).toString('base64url');
-    const env: Record<string, string | undefined> = {
+    const env = workerTestEnv({
       ...process.env,
       DATABASE_URL: databaseUrl,
       KERNEL_EXECUTOR_ID: executorId,
@@ -177,10 +182,10 @@ if (process.argv.includes('--erased-post-worker')) {
       CONTENT_R2_ACCESS_KEY_ID: 'fixture-access',
       CONTENT_R2_SECRET_ACCESS_KEY: 'fixture-secret',
       CONTENT_SOURCE_HOSTS: 'images.example.org',
-      CONTENT_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
+      KERNEL_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
       CF_ACCESS_CLIENT_ID: 'fixture.access',
       CF_ACCESS_CLIENT_SECRET: 'fixture-secret-token',
-    };
+    });
     for (const name of [
       'OPENSEARCH_URL',
       'STRIPE_SECRET_KEY',

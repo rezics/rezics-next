@@ -1,0 +1,17 @@
+types:
+  schema:MusicVenue: 'lieu musical'
+  schema:MusicEvent: 'événement musical'
+  wd:Q34379: 'instrument de musique'
+
+properties:
+  schema:performer: 'interprète'
+  wdt:P1303: 'instrument utilisé'
+
+typeDescriptions:
+  schema:MusicVenue: 'Un lieu précis destiné aux représentations musicales, distinct de l’événement qui s’y déroule.'
+  schema:MusicEvent: 'Un événement musical identifié avec ses propres dates et lieu, distinct d’une représentation ou d’un lieu.'
+  wd:Q34379: 'L’identité d’un instrument de musique, distincte d’un exemplaire précis et de la personne qui l’utilise.'
+
+propertyDescriptions:
+  schema:performer: 'Personne ou organisation créditée comme interprète lors de cet événement musical ; le crédit et ses sources appartiennent à cette déclaration précise.'
+  wdt:P1303: 'Instrument utilisé par l’interprète crédité dans cette déclaration précise ; il ne fait pas partie de l’identité de l’interprète.'

@@ -1,4 +1,5 @@
 import { toOpenAPISchema } from '@elysia/openapi';
+import { unwrapSchema } from '@elysia/openapi/openapi';
 import type { AnyElysia } from 'elysia/base';
 import { customMethodPath } from './custom-method.ts';
 import { PROBLEMS, type ProblemCode } from './problem.ts';
@@ -34,6 +35,7 @@ type Route = {
   method: string;
   path: string;
   hooks?: {
+    body?: unknown;
     detail?: RouteDetail;
   };
 };
@@ -159,6 +161,31 @@ function validateRequestBody(operation: Operation, method: string, path: string)
   requestBody.content = { 'application/json': json };
 }
 
+function restoreJsonRequestBody(operation: Operation, route: Route): void {
+  // Command handlers can validate a closed body themselves while the transport accepts unknown input.
+  // The framework's generated body must not erase their explicitly authored public request schema.
+  const authored = route.hooks?.detail?.requestBody;
+  if (isRecord(authored) && isRecord(authored.content)) {
+    const content: Record<string, MediaType> = {};
+    for (const [type, media] of Object.entries(authored.content)) {
+      if (!isRecord(media)) continue;
+      content[type] = media.schema ? { ...media, schema: unwrapSchema(media.schema as never) } : media;
+    }
+    operation.requestBody = {
+      ...operation.requestBody,
+      ...authored,
+      content,
+    };
+  }
+  if (route.hooks?.detail?.['x-body-mode'] === 'raw' || operation.requestBody?.content?.['application/json']) return;
+  const schema = route.hooks?.body;
+  if (!schema) return;
+  const openApiSchema = unwrapSchema(schema as never);
+  if (!openApiSchema) return;
+  const requestBody = (operation.requestBody ??= { required: true });
+  requestBody.content = { ...(requestBody.content ?? {}), 'application/json': { schema: openApiSchema } };
+}
+
 function validateErrorResponses(operation: Operation, method: string, path: string, schemas: Record<string, unknown>) {
   for (const [status, response] of Object.entries(operation.responses ?? {})) {
     const statusCode = Number(status);
@@ -205,7 +232,8 @@ export function openApiDocument(app: AnyElysia): OpenApiDocument {
     for (const [method, operation] of operationsFor(document.paths, route)) {
       overlayAuthoredResponses(operation, route.hooks?.detail);
       validateSecurity(operation, method, route.path);
-      validateRequestBody(operation, method, route.path);
+      restoreJsonRequestBody(operation, route);
+      if (route.hooks?.detail?.['x-body-mode'] !== 'raw') validateRequestBody(operation, method, route.path);
       validateErrorResponses(operation, method, route.path, schemas);
     }
   }

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rezics.com/definitions/catalogue/2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "kindSpec", "reduction", "directoryDigest"],
+  "properties": {
+    "format": {
+      "const": "https://rezics.com/definitions/catalogue/2"
+    },
+    "kindSpec": {
+      "const": "https://rezics.com/definitions/kind/1"
+    },
+    "reduction": {
+      "const": "https://rezics.com/definitions/kind-reduction/1"
+    },
+    "directoryDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$(?![\\s\\S])"
+    }
+  }
+}

@@ -1,24 +1,26 @@
 import { DBOS } from '@dbos-inc/dbos-sdk';
-import { createAuthService } from '@rezics/auth';
-import { bundledRelease } from '@rezics/definitions/bundled';
-import { exportJWK, generateKeyPair } from 'jose';
+import type { AuthService } from '@rezics/auth';
+import { issuer } from '../../access/native-account-bindings-fixture.ts';
+import { createLibraryAccountHost, type LibraryAccountHost } from './native-account-host.ts';
+import { LIFECYCLE_ACTIONS } from '../../../src/access/lifecycle.ts';
+import { releaseDigest } from '@rezics/definitions';
+import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
 import { Pool, type PoolClient } from 'pg';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import type { Anchor, LibraryDriver, LibraryInspection, Persona } from '../../../../../specs/library-driver.ts';
+import type { Anchor, LibraryInspection, Persona } from '../../../../../specs/library-driver.ts';
 import { createAccess } from '../../../src/access/index.ts';
 import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../../src/access/bootstrap-governance.ts';
-import { readAccount } from '../../../src/access/account-data.ts';
 import { createWriteRateLimiter } from '../../../src/access/write-rate.ts';
 import { insertMember } from '../../../src/library/collection-store.ts';
 import { keyBetween, respacedKeys } from '../../../src/library/ordinal.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
+import { SHELF_TYPE_DIGEST_ENV } from '../../../src/library/shelf-type-keys.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../../src/route/route.ts';
-import { bootstrapRelease } from '../../../src/semantic/definitions.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
-import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
-import { startWorker } from '../../../src/worker.ts';
+import { KERNEL_WORK_MODULES } from '../../support/default-work-modules.ts';
+import { readWorkerConfig, startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import {
@@ -29,6 +31,15 @@ import {
   type GrowthDatabase,
 } from '../../support/growth.ts';
 import { placement, seed as seedRows, type Population } from '../../support/growth-seed.ts';
+import { workerTestEnv } from '../../support/worker-env.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../../support/receipt-keys.ts';
+import type { NativeConformanceOptions, NativeConformanceWorld } from './native-conformance.ts';
+import { compileLibraryOutcomeRelease } from './profile-entry-fixture.ts';
+import type { Access } from '../../../src/request/access.ts';
+import { deadlineFor } from '../../../src/request/deadline.ts';
+import { createNativeShelfTypePauses } from './native-shelf-type-pause.ts';
+import { NativeLabelCommandTrace } from './native-label-command-trace.ts';
+import { createStateReferenceRepair, installStateReferenceRepairLatch } from './native-state-reference-repair.ts';
 
 // Seeded receipts and write bases sit far above every partition's position: relays read only up to it, so the
 // missing outbox rows are never a gap, and real commands never reach these positions.
@@ -49,9 +60,13 @@ const autoExplainSetup = [
   'SET client_min_messages = notice',
 ];
 
-type AccountAnchor = Anchor & { email: string };
 type CapturedStatements = { statements: string[]; plans: unknown[] };
-type SavedMeasurement = { scale: number; index: number; statements: string[]; buffers: number };
+type SavedMeasurement = {
+  scale: number;
+  index: number;
+  statements: string[];
+  buffers: number;
+};
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 type ConnectCallback = (error: Error | undefined, client: PoolClient, release: (error?: Error) => void) => void;
 type ConnectPrototype = { connect: (...args: unknown[]) => unknown };
@@ -126,11 +141,27 @@ function bindDatabaseClock(pool: Pool, now: () => string): () => void {
 }
 
 /** Instrument library-owned pg.Pool instances as well as the shared growth pool. */
-function instrumentLibraryPools(databaseUrl: string, mainPool: Pool, active: () => CapturedStatements | undefined) {
+function instrumentLibraryPools(
+  databaseUrl: string,
+  mainPool: Pool,
+  active: () => CapturedStatements | undefined,
+  trace: NativeLabelCommandTrace,
+) {
   const prototype = Pool.prototype as unknown as ConnectPrototype;
   const original = prototype.connect;
   const clients = new WeakSet<PoolClient>();
   const pending = new WeakMap<PoolClient, Promise<void>>();
+  const mainClients = new Map<PoolClient, PoolClient['query']>();
+  const onAcquire = (client: PoolClient) => {
+    if (mainClients.has(client)) return;
+    const query = client.query;
+    mainClients.set(client, query);
+    client.query = ((...args: Parameters<PoolClient['query']>) => {
+      trace.query(args);
+      return query.apply(client, args as never);
+    }) as PoolClient['query'];
+  };
+  mainPool.on('acquire', onAcquire);
 
   async function prepare(client: PoolClient): Promise<void> {
     if (clients.has(client)) return pending.get(client);
@@ -142,6 +173,7 @@ function instrumentLibraryPools(databaseUrl: string, mainPool: Pool, active: () 
     client.query = ((...args: Parameters<PoolClient['query']>) => {
       const text = queryText(args[0]);
       if (text !== undefined) active()?.statements.push(text);
+      trace.query(args);
       return query(...args);
     }) as PoolClient['query'];
     const setup = Promise.all(autoExplainSetup.map((statement) => query(statement))).then(() => undefined);
@@ -176,6 +208,9 @@ function instrumentLibraryPools(databaseUrl: string, mainPool: Pool, active: () 
   };
 
   return () => {
+    mainPool.off('acquire', onAcquire);
+    for (const [client, query] of mainClients) client.query = query;
+    mainClients.clear();
     prototype.connect = original;
   };
 }
@@ -213,7 +248,8 @@ function sourceFile(statement: string): string {
   return statement.match(/\/\*\s*file=['"]([^'"]+)['"][^*]*\*\//i)?.[1] ?? 'source not embedded in statement';
 }
 
-export async function createLibraryDriver(): Promise<LibraryDriver> {
+export async function createLibraryDriver(options: NativeConformanceOptions = {}): Promise<NativeConformanceWorld> {
+  const typePauses = createNativeShelfTypePauses();
   const base = process.env.DATABASE_URL;
   if (!base) throw new Error('DATABASE_URL must name the migrated test database');
 
@@ -227,14 +263,20 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
   let owner: Pool | undefined;
   let db: GrowthDatabase | undefined;
   let authPool: Pool | undefined;
+  let accountHost: LibraryAccountHost | undefined;
   let authServer: ReturnType<typeof Bun.serve> | undefined;
   let workClient: Awaited<ReturnType<typeof createWorkClient>> | undefined;
   let child: ReturnType<typeof Bun.spawn> | undefined;
+  let stateReferenceRepair: ReturnType<typeof createStateReferenceRepair> | undefined;
   let restorePoolInstrumentation: (() => void) | undefined;
   let restoreDatabaseClock: (() => void) | undefined;
   let dropped = false;
+  const commandTrace = new NativeLabelCommandTrace();
 
   const cleanup = async () => {
+    commandTrace.close();
+    stateReferenceRepair?.close();
+    await typePauses.close();
     if (child) {
       child.kill('SIGCONT');
       child.kill('SIGTERM');
@@ -249,6 +291,8 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
     authServer = undefined;
     await workClient?.close().catch(() => undefined);
     workClient = undefined;
+    await accountHost?.close().catch(() => undefined);
+    accountHost = undefined;
     await authPool?.end().catch(() => undefined);
     authPool = undefined;
     await db?.close().catch(() => undefined);
@@ -275,13 +319,14 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
     let fixedInstant: string | undefined;
     const scenarioNow = () => fixedInstant ?? new Date().toISOString();
     db = await openGrowthDatabase(databaseUrl);
+    configureTestReceiptKeys(db.admin);
     restoreDatabaseClock = bindDatabaseClock(db.pool, scenarioNow);
 
     authPool = new Pool({ connectionString: await createAuthDatabase(base, authName), max: 2 });
     authPool.on('error', () => {});
     authPool.on('connect', (client) => client.on('error', () => {}));
 
-    const approvals = new Set<string>();
+    const routeKey = new Uint8Array(32).fill(17);
     const tokens = new Map<string, string>();
     const ownerAccount = { id: newId(0x3300), route: 0x3300, partition: partitionOf(0x3300) };
     const otherAccount = { id: newId(0x3301), route: 0x3301, partition: partitionOf(0x3301) };
@@ -303,50 +348,27 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       seedOtherPartition,
       ...seedParallelPeople,
     ];
-    for (const person of knownPeople) approvals.add(person.id);
 
     const signingKey = {
       ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
       kid: 'library-outcomes',
       alg: 'ES256',
     };
-    let auth!: Awaited<ReturnType<typeof createAuthService>>;
+    const tokenSigningKey = await importJWK(signingKey, 'ES256');
+    let auth!: AuthService;
     authServer = Bun.serve({
       hostname: '127.0.0.1',
       port: 0,
       fetch: (request) => auth.handler(request),
     });
-    const issuer = `http://127.0.0.1:${authServer.port}`;
-    const audience = 'https://api.rezics.test';
-    const password = 'library fixture password with enough entropy';
-    auth = await createAuthService({
-      database: authPool!,
-      issuer,
-      audience,
-      secret: 'library-fixture-secret-with-at-least-32-bytes',
-      signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-      trustedAccess: {
-        async readAccount(id) {
-          if (!db) throw new Error('The isolated kernel database is closed');
-          const row = await readAccount(db.admin, routeOf(id)!, id);
-          return (
-            row && {
-              accountId: row.accountId,
-              kind: row.kind,
-              state: row.state,
-              authnEpoch: Number(row.minimumAuthnEpoch),
-              automated: row.operatorAccountId !== null,
-            }
-          );
-        },
-        async authorizeProvisioning(reference) {
-          if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
-          return { accountId: reference };
-        },
-      },
-    });
+    const audience = 'https://ordinary.api.test';
 
+    const cursorKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) };
+    let managementObserver: Parameters<NativeConformanceWorld['native']['observeManagement']>[0];
+    let nativeAccess: Access;
     const app = createKernel({
+      receiptKeys: testReceiptKeys(),
+      typeSourceObserved: typePauses.observe,
       requestDeadlineMs: 30_000,
       pool: db!.pool,
       clock: () => new Date(scenarioNow()),
@@ -360,10 +382,11 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
           service: { write: { maximum: 1_000_000, seconds: 60 } },
         }),
       }),
-      routeKey: new Uint8Array(32).fill(17),
-      tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(19)]]) },
-      access: (config) =>
-        createAccess({
+      routeKey,
+      ...(options.shelfTypeDigest === undefined ? {} : { shelfTypeDigest: options.shelfTypeDigest }),
+      tokens: cursorKeys,
+      access: (config) => {
+        const access = createAccess({
           ...config,
           auth: {
             issuer,
@@ -371,48 +394,51 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
             jwksUrl: `${issuer}/.well-known/jwks.json`,
             fetch: async (location, init) => auth.handler(new Request(location, init)),
           },
-        }),
+        });
+        const authorize = access.authorize.bind(access);
+        access.authorize = (...args) => {
+          const [, , action, resource] = args;
+          if (['collection:update', 'space:manage', 'account:manage'].includes(action))
+            managementObserver?.({ action, resource: { route: resource.route, id: resource.id } });
+          return commandTrace.authorize(action, () => authorize(...args));
+        };
+        nativeAccess = access;
+        return access;
+      },
     });
     const scopes = [...actionCatalogue(app).keys()].filter((scope) => scope !== 'media:complete');
+    scopes.push(...[...LIFECYCLE_ACTIONS.keys()].filter((scope) => !scopes.includes(scope)));
     scopes.push('access:grant');
-    await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes });
+    accountHost = await createLibraryAccountHost({
+      pool: db.admin,
+      authPool,
+      databaseUrl: authPool.options.connectionString!,
+      privateKey: signingKey,
+      actions: actionCatalogue(app),
+      scopes,
+    });
+    auth = accountHost.service;
 
-    async function provisionAccount(person: Anchor): Promise<AccountAnchor> {
-      const email = `${person.id}@example.test`;
-      await db!.admin.query(
-        "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','pending',$2)",
-        [person.route, person.id],
-      );
-      await auth.internal.provisionPassword({ authorization: person.id, email, password });
-      await db!.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-        person.route,
-        person.id,
-      ]);
-      const signedIn = await auth.handler(
-        new Request(`${issuer}/signin`, {
-          method: 'POST',
-          headers: { origin: issuer, 'content-type': 'application/json' },
-          body: JSON.stringify({ email, password, client_id: 'web', scope: scopes }),
-        }),
-      );
-      if (signedIn.status !== 200) throw new Error(`Fixture sign-in failed: ${signedIn.status}`);
-      const cookie = signedIn.headers
-        .getSetCookie()
-        .map((value) => value.split(';')[0])
-        .join('; ');
-      const issued = await auth.handler(
-        new Request(`${issuer}/token`, {
-          method: 'POST',
-          headers: { origin: issuer, 'content-type': 'application/json', cookie },
-          body: '{}',
-        }),
-      );
-      if (issued.status !== 200) throw new Error(`Fixture token issuance failed: ${issued.status}`);
-      tokens.set(person.id, ((await issued.json()) as { access_token: string }).access_token);
-      return { ...person, email };
+    async function provisionAccount(person: Anchor): Promise<Anchor> {
+      const registered = await accountHost!.person(person.partition);
+      Object.assign(person, { id: registered.id, route: registered.route });
+      tokens.set(person.id, registered.credential);
+      return person;
+    }
+    for (const person of knownPeople) await provisionAccount(person);
+
+    async function consent(account: Anchor, requestedScopes: readonly string[]): Promise<string> {
+      return (await accountHost!.signIn(account.id, requestedScopes)).credential;
     }
 
-    for (const person of knownPeople) await provisionAccount(person);
+    for (const [name, selected] of Object.entries({
+      ownerReadOnly: ['collection:read', 'subject:read', 'library_entry:read', 'library_entry:list'],
+      libraryOnly: scopes.filter((scope) => !scope.startsWith('progress_session:')),
+      progressOnly: scopes.filter((scope) => !scope.startsWith('library_entry:')),
+      ungranted: [],
+      unscoped: [],
+    }))
+      tokens.set(name, await consent(ownerAccount, selected));
 
     const byRoute = async (
       token: string | null,
@@ -429,7 +455,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
         requestHeaders.set('content-type', 'application/json');
         init.body = JSON.stringify(body);
       }
-      const response = await app.handle(new Request(`http://kernel.test${path}`, init));
+      const response = await typePauses.run(() => app.handle(new Request(`http://kernel.test${path}`, init)));
       return response;
     };
     const key = () => `"${Bun.randomUUIDv7()}"`;
@@ -453,10 +479,56 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       );
       await expectJson(`Granting subject creation to seed account ${person.id}`, response, 201);
     };
-    // Account rows and Auth credentials are established through the fixture provisioning handshake.
-    await bootstrapRelease(db.pool, bundledRelease);
     // db.admin is outside statement capture; the measured pool stays out of fixture setup.
     await bootstrapGovernance(db.admin, governor.id);
+
+    const definitionGrant = await byRoute(
+      tokenFor(governor),
+      'POST',
+      '/v1/grants',
+      {
+        resource: PLATFORM_RESOURCE,
+        subject: { kind: 'account', id: governor.id },
+        actions: ['definitions:publish', 'definitions:activate'],
+        valid: '(,)',
+      },
+      { 'Idempotency-Key': key() },
+    );
+    await expectJson('Granting fixture definition publication', definitionGrant, 201);
+    const release = await compileLibraryOutcomeRelease();
+    const digest = releaseDigest(release);
+    const published = await byRoute(
+      tokenFor(governor),
+      'POST',
+      '/v1/definitions/releases',
+      { release },
+      { 'Idempotency-Key': key() },
+    );
+    const publishedBody = await expectJson<{ digest: string }>(
+      'Publishing Library outcome definitions',
+      published,
+      201,
+    );
+    if (publishedBody.digest !== digest) throw new Error('Definitions returned a different compiled release digest');
+    const currentHead = await byRoute(null, 'GET', '/v1/definitions/active');
+    const expectedHead =
+      currentHead.status === 404
+        ? null
+        : (await expectJson<{ head: number }>('Reading fixture definitions head', currentHead, 200)).head;
+    const activated = await byRoute(
+      tokenFor(governor),
+      'POST',
+      `/v1/definitions/releases/${digest}:activate`,
+      { expected_head: expectedHead },
+      { 'Idempotency-Key': key() },
+    );
+    await expectJson('Activating Library outcome definitions', activated, 200);
+    const active = await expectJson<{ digest: string }>(
+      'Reading activated Library outcome definitions',
+      await byRoute(null, 'GET', '/v1/definitions/active'),
+      200,
+    );
+    if (active.digest !== digest) throw new Error('Definitions did not activate the compiled fixture release');
 
     for (const group of ['collections', 'personal_library', 'reading_progress']) {
       const response = await byRoute(tokenFor(governor), 'POST', `/v1/platform/exposure/${group}:open`, undefined, {
@@ -478,12 +550,14 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
     );
     await expectJson('Suspending fixture persona', suspend, 200);
 
-    await authServer.stop(true);
-    authServer = undefined;
-
     workClient = await createWorkClient(databaseUrl);
     let activeInternalCapture: CapturedStatements | undefined;
-    restorePoolInstrumentation = instrumentLibraryPools(databaseUrl, db.pool, () => activeInternalCapture);
+    restorePoolInstrumentation = instrumentLibraryPools(
+      databaseUrl,
+      db.pool,
+      () => activeInternalCapture,
+      commandTrace,
+    );
 
     const accounts = {
       owner: { id: ownerAccount.id, route: ownerAccount.route, partition: ownerAccount.partition },
@@ -506,6 +580,15 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
     let childHeld = true;
     let workerFailure: string | undefined;
     let workerDiagnosticsTask: Promise<void> | undefined;
+    stateReferenceRepair = createStateReferenceRepair({
+      accountId: ownerAccount.id,
+      client: workClient,
+      resume: resumeExecutor,
+      send: (message) => {
+        if (!child) throw new Error('Production library executor is unavailable');
+        child.send(message);
+      },
+    });
 
     async function startExecutor(): Promise<void> {
       if (child) {
@@ -520,26 +603,22 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       child = Bun.spawn([process.execPath, import.meta.filename], {
         env: {
           ...process.env,
-          DATABASE_URL: databaseUrl,
-          KERNEL_ROUTE_KEY: Buffer.alloc(32, 17).toString('base64url'),
-          KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 19).toString('base64url')}`,
-          AUTH_ISSUER: issuer,
-          AUTH_AUDIENCE: audience,
-          AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
-          CONTENT_R2_ENDPOINT: `https://${'a'.repeat(32)}.r2.cloudflarestorage.com`,
-          CONTENT_R2_BUCKET: 'content-media',
-          CONTENT_R2_ACCESS_KEY_ID: 'private-access-id',
-          CONTENT_R2_SECRET_ACCESS_KEY: 'private-secret',
-          CONTENT_SOURCE_HOSTS: 'images.example.org',
-          CONTENT_AUTH_CONSENT_URL: 'https://realm-join.auth.test/internal/v1/consents:read',
-          CF_ACCESS_CLIENT_ID: 'realm-join.access',
-          CF_ACCESS_CLIENT_SECRET: 'realm-join-access-secret',
-          OPENSEARCH_URL: '',
+          ...workerTestEnv({
+            DATABASE_URL: databaseUrl,
+            KERNEL_WORKER_POOL_SIZE: '10',
+            KERNEL_EXECUTOR_ID: 'library-outcomes',
+            AUTH_ISSUER: issuer,
+            AUTH_AUDIENCE: audience,
+            AUTH_JWKS_URL: `http://127.0.0.1:${authServer!.port}/.well-known/jwks.json`,
+            OPENSEARCH_URL: '',
+            [SHELF_TYPE_DIGEST_ENV]: options.workerShelfTypeDigest,
+          }),
         },
         stdout: 'pipe',
         stderr: 'pipe',
         ipc(message) {
           if (message === 'ready') ready();
+          else stateReferenceRepair?.receive(message);
         },
       });
       const running = child;
@@ -564,6 +643,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
             : undefined;
       })();
       const exited = running.exited.then(async (code) => {
+        stateReferenceRepair?.close();
         await workerDiagnosticsTask;
         workerFailure ??= `executor exited ${code}: ${diagnostics || '(no output)'}`;
         return code;
@@ -655,7 +735,7 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       })) as LibraryInspection['members'];
       const entries = (
         await db!.admin.query(`
-        SELECT subject_id AS "subjectId", state, revision, created_at AS "createdAt", updated_at AS "updatedAt",
+        SELECT subject_id AS "subjectId", incarnation_id AS "incarnationId", state, revision, created_at AS "createdAt", updated_at AS "updatedAt",
                account_id AS "accountId", route
           FROM library.entry ORDER BY route, account_id, subject_id`)
       ).rows.map((row) => ({
@@ -820,15 +900,129 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
                 ],
               },
             };
-      const response = await byRoute(tokenFor(author), 'POST', '/v1/subjects', body, { 'Idempotency-Key': key() });
-      const result = await expectJson<{ subject: { id: string } }>('Creating semantic subject', response, 201);
+      const response = await byRoute(tokenFor(author), 'POST', '/v1/subjects', body, {
+        'Idempotency-Key': key(),
+      });
+      const result = await expectJson<{
+        subject: { id: string; type: string; release: string };
+      }>('Creating semantic subject', response, 201);
+      if (result.subject.type !== body.type || result.subject.release !== digest)
+        throw new Error('Semantic did not accept the subject against the activated Library outcome definitions');
       const subjectRoute = routeOf(result.subject.id);
       if (subjectRoute === null) throw new Error('Production semantic create returned an unroutable subject');
       initialSubjectIds.add(result.subject.id);
       return { id: result.subject.id, route: subjectRoute, partition: partitionOf(subjectRoute) };
     }
 
-    const driver: LibraryDriver = {
+    const nativeRequest: NativeConformanceWorld['native']['request'] = (as, input) => {
+      const person =
+        as === 'steward'
+          ? governor
+          : as === 'anonymous'
+            ? null
+            : as === 'owner' || as === 'other' || as === 'suspended'
+              ? accounts[as]
+              : ownerAccount;
+      const bearer = person === null ? null : (tokens.get(as) ?? tokenFor(person));
+      return byRoute(bearer, input.method, input.path, input.body, input.headers);
+    };
+    const driver: NativeConformanceWorld = {
+      native: {
+        typePauses,
+        accountHost,
+        pool: db.pool,
+        reader: db.admin,
+        databaseUrl,
+        workClient,
+        traceCommand: (operation) => commandTrace.trace(operation),
+        stateReferenceRepair,
+        steward: governor,
+        growth: db,
+        async principal(partition) {
+          if (!Number.isInteger(partition) || partition < 0 || partition >= 4096)
+            throw new RangeError('Native principal partition must be below 4096');
+          const person = await provisionAccount({ id: newId(partition * 16), route: partition * 16, partition });
+          return { accountId: person.id, credential: tokenFor(person) };
+        },
+        async reauthenticate(accountId, selected = scopes) {
+          const route = routeOf(accountId);
+          if (route === null) throw new TypeError('Unroutable native account');
+          return {
+            accountId,
+            credential: await consent({ id: accountId, route, partition: partitionOf(route) }, selected),
+          };
+        },
+        async bearerRequest(credential, path, init = {}) {
+          const headers = new Headers(init.headers);
+          if (credential === null) headers.delete('authorization');
+          else headers.set('authorization', `Bearer ${credential}`);
+          return app.handle(new Request(`http://kernel.test${path}`, { ...init, headers }));
+        },
+        observeManagement(observer) {
+          managementObserver = observer;
+        },
+        token(as) {
+          const person =
+            as === 'steward'
+              ? governor
+              : as === 'owner' || as === 'other' || as === 'suspended'
+                ? accounts[as]
+                : ownerAccount;
+          return tokens.get(as) ?? tokenFor(person);
+        },
+        accountActor(as) {
+          return nativeAccess.authenticate(tokenFor(accounts[as]), { pool: db!.pool, deadline: deadlineFor(30_000) });
+        },
+        request: nativeRequest,
+        async rawRequest(as, method, path, rawJson, headers = {}) {
+          return app.handle(
+            new Request(`http://kernel.test${path}`, {
+              method,
+              headers: {
+                ...headers,
+                'content-type': 'application/json',
+                ...(as === 'anonymous' ? {} : { authorization: `Bearer ${driver.native.token(as)}` }),
+              },
+              body: rawJson,
+            }),
+          );
+        },
+        async subject(type, author = 'steward') {
+          const response = await nativeRequest(author, {
+            method: 'POST',
+            path: '/v1/subjects',
+            body: { type, labels: { en: 'Native Library conformance subject' } },
+            headers: { 'Idempotency-Key': key() },
+          });
+          const result = await expectJson<{ subject: { id: string } }>('Creating native typed subject', response, 201);
+          const route = routeOf(result.subject.id);
+          if (route === null) throw new Error('Semantic returned an unroutable subject');
+          initialSubjectIds.add(result.subject.id);
+          return { id: result.subject.id, route, partition: partitionOf(route) };
+        },
+        async rotateCursorKeys() {
+          cursorKeys.current++;
+          cursorKeys.keys.clear();
+          cursorKeys.keys.set(cursorKeys.current, crypto.getRandomValues(new Uint8Array(32)));
+        },
+        hold: holdExecutor,
+        resume: resumeExecutor,
+        async capture(operation) {
+          await holdExecutor();
+          const internal: CapturedStatements = { statements: [], plans: [] };
+          activeInternalCapture = internal;
+          try {
+            const result = await capture(db!, operation, { includeBackends: true });
+            if (internal.statements.length)
+              throw new Error(
+                'Native cross-pool wire/backend attribution unavailable; refusing incomplete cost evidence',
+              );
+            return result;
+          } finally {
+            activeInternalCapture = undefined;
+          }
+        },
+      },
       accounts,
       unknown: {
         collectionId: unknown.collectionId,
@@ -840,6 +1034,20 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       },
       async setTime(value) {
         fixedInstant = new Date(value).toISOString();
+        // Keep the fixture's authenticated credentials on the same timeline as Access.
+        const issuedAt = Math.floor(Date.parse(fixedInstant) / 1000);
+        for (const [id, token] of tokens) {
+          const claims = decodeJwt(token);
+          const shift = issuedAt - claims.iat!;
+          tokens.set(
+            id,
+            await new SignJWT({ ...claims, auth_time: Number(claims.auth_time) + shift })
+              .setProtectedHeader({ alg: 'ES256', kid: signingKey.kid, typ: 'at+jwt' })
+              .setIssuedAt(issuedAt)
+              .setExpirationTime(claims.exp! + shift)
+              .sign(tokenSigningKey),
+          );
+        }
       },
       now: scenarioNow,
       provisionSubject,
@@ -935,7 +1143,12 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
             const transactions = Array.from({ length: 9 }, () => Bun.randomUUIDv7());
             const [subjectTx, collectionTx, entryTx, sessionTx, copyTx, followTx, memberTx, recordTx, logTx] =
               transactions as [string, string, string, string, string, string, string, string, string];
-            const commands: { partition: number; kind: string; transactionId: string; response: unknown }[] = [
+            const commands: {
+              partition: number;
+              kind: string;
+              transactionId: string;
+              response: unknown;
+            }[] = [
               {
                 partition: subjectRoute >>> 4,
                 kind: 'subject.create',
@@ -1213,7 +1426,6 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
       },
       async close() {
         tokens.clear();
-        approvals.clear();
         await cleanup();
         dropped = true;
       },
@@ -1230,7 +1442,27 @@ export async function createLibraryDriver(): Promise<LibraryDriver> {
 if (import.meta.main) {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('DATABASE_URL is required for the library executor');
-  await startWorker({ databaseUrl, poolSize: 10, executorId: 'library-outcomes' }, KERNEL_WORK_MODULES, process.env);
+  const workerEnv = workerTestEnv({
+    ...process.env,
+    DATABASE_URL: databaseUrl,
+    KERNEL_WORKER_POOL_SIZE: '10',
+    KERNEL_EXECUTOR_ID: 'library-outcomes',
+  });
+  let repairLatch: ReturnType<typeof installStateReferenceRepairLatch> | undefined;
+  process.on('message', (message) => repairLatch?.receive(message));
+  process.on('disconnect', () => repairLatch?.close());
+  const modules = KERNEL_WORK_MODULES.map((module) =>
+    module.name !== 'library'
+      ? module
+      : {
+          ...module,
+          async register(context: Parameters<typeof module.register>[0]) {
+            repairLatch = installStateReferenceRepairLatch(context.pool, (message) => process.send?.(message));
+            await module.register(context);
+          },
+        },
+  );
+  await startWorker(readWorkerConfig(workerEnv), modules, workerEnv);
   for (const queue of await DBOS.listQueues()) await queue.setMinPollingIntervalMs(5);
   process.send?.('ready');
 }

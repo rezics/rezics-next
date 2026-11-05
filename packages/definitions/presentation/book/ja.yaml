@@ -2,8 +2,150 @@ types:
   schema:Book: 書籍
   bf:Instance: 版
 properties:
+  schema:wordCount: '単語数'
   schema:exampleOfWork: 原作品
   schema:isbn: ISBN-13
   schema:publisher: 出版社
   schema:numberOfPages: ページ数
   schema:translator: 翻訳者
+inverseProperties:
+  schema:exampleOfWork: '版'
+  schema:publisher: '出版作品'
+  schema:translator: '翻訳作品'
+libraryProfiles:
+  book.reading:
+    states:
+      planned: '予定'
+      in_progress: '進行中'
+      completed: '完了'
+      paused: '中断'
+      dropped: '断念'
+    units:
+      scalar_amount:
+        page:
+          label: 'ページ'
+          countForms:
+            other: 'ページ'
+    copyKinds:
+      physical: '物理'
+      digital: 'デジタル'
+    copyStatuses:
+      physical:
+        owned: '所持'
+        disposed: '手放した'
+      digital:
+        owned: '所持'
+  book.edition:
+    states:
+      planned: '予定'
+      in_progress: '進行中'
+      completed: '完了'
+      paused: '中断'
+      dropped: '断念'
+    units:
+      scalar_amount:
+        page:
+          label: 'ページ'
+          countForms:
+            other: 'ページ'
+    copyKinds:
+      physical: '物理'
+      digital: 'デジタル'
+    copyStatuses:
+      physical:
+        owned: '所持'
+        disposed: '手放した'
+      digital:
+        owned: '所持'
+  legacy-fixed-v1:
+    states:
+      planned: '予定'
+      in_progress: '進行中'
+      completed: '完了'
+      paused: '中断'
+      dropped: '断念'
+    units:
+      scalar_amount:
+        page:
+          label: 'ページ'
+          countForms:
+            other: 'ページ'
+        chapter:
+          label: '章'
+          countForms:
+            other: '章'
+        episode:
+          label: 'エピソード'
+          countForms:
+            other: 'エピソード'
+        minute:
+          label: '分'
+          countForms:
+            other: '分'
+        volume:
+          label: '巻'
+          countForms:
+            other: '巻'
+        percent: 'パーセント'
+      cursor_position:
+        page:
+          label: 'ページ'
+          countForms:
+            other: 'ページ'
+        chapter:
+          label: '章'
+          countForms:
+            other: '章'
+        episode:
+          label: 'エピソード'
+          countForms:
+            other: 'エピソード'
+        minute:
+          label: '分'
+          countForms:
+            other: '分'
+        volume:
+          label: '巻'
+          countForms:
+            other: '巻'
+        percent: 'パーセント'
+      completed_units:
+        page:
+          label: 'ページ'
+          countForms:
+            other: 'ページ'
+        chapter:
+          label: '章'
+          countForms:
+            other: '章'
+        episode:
+          label: 'エピソード'
+          countForms:
+            other: 'エピソード'
+        minute:
+          label: '分'
+          countForms:
+            other: '分'
+        volume:
+          label: '巻'
+          countForms:
+            other: '巻'
+        percent: 'パーセント'
+    copyKinds:
+      legacy-unspecified: '未指定'
+    copyStatuses:
+      legacy-unspecified:
+        ordered: '注文済み'
+        owned: '所持'
+        lent: '貸出中'
+        disposed: '手放した'
+typeDescriptions:
+  schema:Book: '特定の版、翻訳、個人の所蔵本から独立した書籍の作品。'
+  bf:Instance: '特定の翻訳版など、独立して識別される書籍の刊行版。個人の所蔵本とは別です。'
+propertyDescriptions:
+  schema:wordCount: '書籍作品の正確な単語数を単位なしの整数で示します。文字数や版のページ数とは区別します。'
+  schema:exampleOfWork: 'この版やリリースが具体化した作品。個人の所蔵物ではなく作品自体を参照します。'
+  schema:isbn: '版のISBN-13。978または979で始まる13桁で、ハイフンは省略できます。例：9780140328721、978-0-14-032872-1。'
+  schema:publisher: 'この版やリリースの出版者としてクレジットされた人物または組織。'
+  schema:numberOfPages: 'この版のページ数。単位なしの1以上の整数の数量で記録します。'
+  schema:translator: 'この版や刊行物の翻訳担当としてクレジットされた人物または組織。'

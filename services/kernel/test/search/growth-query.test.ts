@@ -116,7 +116,7 @@ afterAll(async () => {
 
 test('Freshness stays within its bound as H grows', async () => {
   const database = db!;
-  await checkGrowth(database, {
+  const report = await checkGrowth(database, {
     name: 'Freshness',
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: async (growthDb, scale, previous) => {
@@ -132,4 +132,16 @@ test('Freshness stays within its bound as H grows', async () => {
       return row;
     },
   });
+  for (const sample of report.samples) {
+    console.info(
+      JSON.stringify({
+        evidence: 'search-growth-freshness',
+        scale: sample.scale,
+        population: sample.scale * rowsPerScale,
+        rows: sample.cost.rows,
+        blocks: sample.cost.blocks,
+        statements: sample.cost.statements,
+      }),
+    );
+  }
 }, 90_000);

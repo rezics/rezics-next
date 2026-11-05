@@ -1,7 +1,9 @@
 import * as oidc from 'openid-client';
 import { dependencyUnavailable, problem, problemResponse } from '../media/kernel.ts';
+import { assertPublicCacheReadAllowed } from '../security/page-cache.ts';
 import { authClient, configured, unreachable, type SessionEnv } from './client.ts';
 import { newCsrfToken } from './csrf.ts';
+import { websiteRequestedScopes } from './website-scopes.ts';
 import {
   clearCookie,
   cookie,
@@ -13,25 +15,30 @@ import {
   setCookie,
   validId,
 } from './cookies.ts';
+import { LOGIN_RETURN_COOKIE, safeRecoveryReturn } from './unavailable';
+import { returnTarget } from './return-target';
 
 const invalid = () => problem(400, 'invalid_request', 'Invalid Request');
 const redirect = (location: string, status = 303) => new Response(null, { status, headers: { location } });
 
-function returnTarget(value: string | null, origin: string): string {
-  if (!value?.startsWith('/') || value.startsWith('//') || value.startsWith('/\\')) return '/';
-  try {
-    const target = new URL(value, origin);
-    const path = target.pathname + target.search + target.hash;
-    return target.origin === origin && path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\')
-      ? path
-      : '/';
-  } catch {
-    return '/';
+function oidcFailureNames(error: unknown): string {
+  const names: string[] = [];
+  let current: unknown = error;
+  while (current instanceof Error && names.length < 4) {
+    const name = /^[A-Za-z][A-Za-z0-9_]{0,63}$/u.test(current.name) ? current.name : 'Error';
+    const details = current as Error & { error?: unknown; status?: unknown };
+    const code =
+      typeof details.error === 'string' && /^[a-z][a-z0-9_]{0,63}$/u.test(details.error) ? details.error : undefined;
+    const status = typeof details.status === 'number' && Number.isInteger(details.status) ? details.status : undefined;
+    names.push([name, code, status === undefined ? undefined : `HTTP_${status}`].filter(Boolean).join(':'));
+    current = current.cause;
   }
+  return names.join(' <- ') || typeof error;
 }
 
 async function signIn(request: Request, env: SessionEnv): Promise<Response> {
   const url = new URL(request.url);
+  const returnTo = returnTarget(url.searchParams.get('return_to'), url.origin);
   const config = await authClient(env);
   const verifier = oidc.randomPKCECodeVerifier();
   const state = oidc.randomState();
@@ -40,7 +47,7 @@ async function signIn(request: Request, env: SessionEnv): Promise<Response> {
     response_type: 'code',
     redirect_uri: `${url.origin}/auth/callback`,
     resource: env.API_RESOURCE,
-    scope: [...new Set(['openid', 'offline_access', ...env.WEBSITE_SCOPES.split(/\s+/).filter(Boolean)])].join(' '),
+    scope: websiteRequestedScopes(env.WEBSITE_SCOPES),
     state,
     nonce,
     code_challenge: await oidc.calculatePKCECodeChallenge(verifier),
@@ -52,11 +59,15 @@ async function signIn(request: Request, env: SessionEnv): Promise<Response> {
     state,
     nonce,
     verifier,
-    returnTo: returnTarget(url.searchParams.get('return_to'), url.origin),
+    returnTo,
     expiresAt: Date.now() + LOGIN_SECONDS * 1000,
   });
   const response = redirect(location.href, 302);
   response.headers.append('set-cookie', setCookie(LOGIN_COOKIE, id, LOGIN_SECONDS));
+  response.headers.append(
+    'set-cookie',
+    setCookie(LOGIN_RETURN_COOKIE, safeRecoveryReturn(returnTo, url.origin) ?? '/', LOGIN_SECONDS),
+  );
   return response;
 }
 
@@ -87,6 +98,7 @@ async function callback(request: Request, env: SessionEnv): Promise<Response> {
       { resource: env.API_RESOURCE },
     );
   } catch (error) {
+    console.error(`[web auth] OpenID authorization-code grant failed: ${oidcFailureNames(error)}`);
     throw unreachable(error) ? dependencyUnavailable() : invalid();
   }
   const claims = tokens.claims();
@@ -144,6 +156,7 @@ export async function authRequest(
   env: Partial<SessionEnv>,
   endedSession?: { idToken?: string | undefined },
 ): Promise<Response> {
+  assertPublicCacheReadAllowed(request, 'Auth');
   const path = new URL(request.url).pathname;
   let response: Response;
   try {
@@ -158,7 +171,10 @@ export async function authRequest(
   } catch (error) {
     response = problemResponse(error);
   }
-  if (path === '/auth/callback') response.headers.append('set-cookie', clearCookie(LOGIN_COOKIE));
+  if (path === '/auth/callback') {
+    response.headers.append('set-cookie', clearCookie(LOGIN_COOKIE));
+    response.headers.append('set-cookie', clearCookie(LOGIN_RETURN_COOKIE));
+  }
   response.headers.set('cache-control', 'private, no-store');
   return response;
 }

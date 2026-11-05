@@ -1,3 +1,9 @@
+import type { Kernel } from '@rezics/client';
+
+type SubjectSummary = NonNullable<
+  Kernel['~Routes']['v1']['offers'][':offerId']['get']['response'][200]['offer']['subject']
+>;
+
 /**
  * COMMERCE_DRIVER is an absolute path or file URL exporting
  * createCommerceDriver(): Promise<CommerceDriver>. Each factory call owns an isolated,
@@ -22,51 +28,103 @@
  */
 export type Persona = 'buyer' | 'other' | 'refunded' | 'anonymous' | 'suspended';
 export type Settlement = 'pending' | 'paid' | 'failed' | 'unknown';
-export interface OfferView {
-  id: string; targetSubjectId: string; title: string; currency: string;
-  unitAmountMinor: number; state: 'active' | 'delisted';
+export interface OfferView extends Pick<
+  OfferFixture,
+  'id' | 'revision' | 'targetSubjectId' | 'title' | 'currency' | 'unitAmountMinor' | 'state'
+> {
+  subject: SubjectSummary | null;
+}
+export interface OfferFixture {
+  id: string;
+  targetSubjectId: string;
+  title: string;
+  currency: string;
+  unitAmountMinor: number;
+  state: 'active' | 'delisted';
+  creatorAccountId: string;
+  taxCode: string;
+  royaltyBasisPoints: number;
+  revision: number;
 }
 export interface OrderView {
-  id: string; offerId: string; settlement: Settlement; checkoutUrl: string | null;
-  checkoutExpiresAt: string | null; entitlementId: string | null; createdAt: string;
+  id: string;
+  offerId: string;
+  settlement: Settlement;
+  checkoutUrl: string | null;
+  checkoutExpiresAt: string | null;
+  entitlementId: string | null;
+  createdAt: string;
+}
+export interface OrderReadView extends OrderView {
+  title: string;
+  targetSubjectId: string;
+  subject: SubjectSummary | null;
 }
 export interface EntitlementView {
-  id: string; offerId: string; orderId: string; targetSubjectId: string;
-  grantedAt: string; revokedAt: string | null; revokeReason: 'refund' | 'dispute' | null;
+  id: string;
+  offerId: string;
+  orderId: string;
+  targetSubjectId: string;
+  grantedAt: string;
+  revokedAt: string | null;
+  revokeReason: 'refund' | 'dispute' | null;
   active: boolean;
-}
-export interface OfferFixture extends OfferView {
-  creatorAccountId: string; taxCode: string; royaltyBasisPoints: number; revision: number;
+  summary: SubjectSummary | null;
 }
 export interface OrderRow {
-  id: string; buyerAccountId: string; route: number; partition: number; offerId: string;
-  offerRevision: number; creatorAccountId: string; title: string; currency: string;
-  unitAmountMinor: number; taxCode: string; royaltyBasisPoints: number;
-  settlement: Settlement; checkoutSessionId: string | null; checkoutUrl: string | null;
+  id: string;
+  buyerAccountId: string;
+  route: number;
+  partition: number;
+  offerId: string;
+  offerRevision: number;
+  creatorAccountId: string;
+  title: string;
+  currency: string;
+  unitAmountMinor: number;
+  taxCode: string;
+  royaltyBasisPoints: number;
+  settlement: Settlement;
+  checkoutSessionId: string | null;
+  checkoutUrl: string | null;
 }
 export interface Inspection {
   orders: OrderRow[];
-  entitlements: (EntitlementView & { accountId: string; route: number; partition: number })[];
+  entitlements: (Omit<EntitlementView, 'summary'> & { accountId: string; route: number; partition: number })[];
   events: { id: string; type: string; data: Record<string, string> }[];
   workflows: { id: string; name: string; status: string }[];
   transactions: { id: string; orderId: string; kind: string; amountMinor: number }[];
 }
 export type StripeEventType =
-  | 'checkout.session.completed' | 'checkout.session.async_payment_succeeded'
-  | 'checkout.session.async_payment_failed' | 'checkout.session.expired'
-  | 'charge.refunded' | 'charge.dispute.created' | 'charge.dispute.updated' | 'charge.dispute.closed';
+  | 'checkout.session.completed'
+  | 'checkout.session.async_payment_succeeded'
+  | 'checkout.session.async_payment_failed'
+  | 'checkout.session.expired'
+  | 'charge.refunded'
+  | 'charge.dispute.created'
+  | 'charge.dispute.updated'
+  | 'charge.dispute.closed';
 export interface StripeCreate {
   sessionId: string;
   idempotencyKey: string;
   parameters: {
-    mode: string; client_reference_id: string;
+    mode: string;
+    client_reference_id: string;
     metadata: { order_id: string; account_id: string };
     payment_intent_data: { metadata: { order_id: string } };
-    line_items: { quantity: number; price_data: {
-      currency: string; unit_amount: number; product_data: { name: string; tax_code: string };
-    } }[];
-    expires_at: number; success_url: string; cancel_url: string;
-    managed_payments?: { enabled: boolean }; automatic_tax?: { enabled: boolean };
+    line_items: {
+      quantity: number;
+      price_data: {
+        currency: string;
+        unit_amount: number;
+        product_data: { name: string; tax_code: string };
+      };
+    }[];
+    expires_at: number;
+    success_url: string;
+    cancel_url: string;
+    managed_payments?: { enabled: boolean };
+    automatic_tax?: { enabled: boolean };
   };
 }
 export interface CommerceDriver {
@@ -80,10 +138,16 @@ export interface CommerceDriver {
   provisionOffer(input?: { unitAmountMinor?: number }): Promise<OfferFixture>;
   reviseOffer(id: string, input: { unitAmountMinor?: number; state?: 'delisted' }): Promise<OfferFixture>;
   /** Raw Response, preserving HTTP status, body and headers without outcome normalization. */
-  request(as: Persona, input: {
-    method: 'GET' | 'POST'; path: string; headers?: Record<string, string>;
-    body?: unknown; rawBody?: Uint8Array;
-  }): Promise<Response>;
+  request(
+    as: Persona,
+    input: {
+      method: 'GET' | 'POST';
+      path: string;
+      headers?: Record<string, string>;
+      body?: unknown;
+      rawBody?: Uint8Array;
+    },
+  ): Promise<Response>;
   inspect(): Promise<Inspection>;
   /** Idempotently hold the actual executor before dequeuing work; HTTP enqueue remains live. */
   holdWork(): Promise<void>;
@@ -108,7 +172,10 @@ export interface CommerceDriver {
      * payloadPaymentStatus changes only the serialized payload, never current Stripe state.
      */
     event(input: {
-      id: string; type: StripeEventType; sessionId: string; payloadPaymentStatus?: 'paid';
+      id: string;
+      type: StripeEventType;
+      sessionId: string;
+      payloadPaymentStatus?: 'paid';
     }): Promise<Uint8Array>;
   };
   /**

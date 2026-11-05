@@ -6,7 +6,16 @@ import { chromium, type Browser } from 'playwright';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
-const paths = ['/login', '/signup', '/consent', '/recovery', '/security', '/step-up'];
+const paths = [
+  '/login',
+  '/signup',
+  '/consent',
+  '/recovery',
+  '/security',
+  '/step-up',
+  '/account/delete',
+  '/organizations/new',
+];
 const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'];
 const turnstileUrl = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 let child: ChildProcess | undefined;

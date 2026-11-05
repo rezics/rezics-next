@@ -24,7 +24,9 @@ export function createBarrierProofVerifier({ database }: { database: Pool }) {
         !['consent-reduction', 'recovery'].includes(expected.purpose) ||
         !Number.isSafeInteger(expected.previousEpoch) ||
         expected.previousEpoch < 0 ||
-        expected.previousEpoch > 2147483647
+        expected.previousEpoch > 2147483647 ||
+        (expected.openingReceiptId !== undefined &&
+          (expected.purpose !== 'consent-reduction' || !bounded(expected.openingReceiptId, 128)))
       )
         return null;
       const row = (
@@ -45,8 +47,11 @@ export function createBarrierProofVerifier({ database }: { database: Pool }) {
       const e = row.evidence;
       if (e[1] !== expected.accountId || e[2] !== expected.previousEpoch) return null;
       if (expected.purpose === 'consent-reduction') {
+        // An operator-opened reduction carries exactly one more field: the opening Auth committed for the session.
+        const operated = expected.openingReceiptId !== undefined;
         if (
-          e.length !== 13 ||
+          e.length !== (operated ? 14 : 13) ||
+          (operated && e[13] !== expected.openingReceiptId) ||
           e[0] !== 'consent-v1' ||
           hash(JSON.stringify(['auth-consent-v1', e])) !== expected.operationKey
         )
@@ -66,12 +71,24 @@ export function createBarrierProofVerifier({ database }: { database: Pool }) {
           !source ||
           source.account_id !== expected.accountId ||
           source.authnEpoch !== expected.previousEpoch ||
+          (source.authMethods === 'operator') !== operated ||
           !same([source.clientId, source.grantedScope, source.authTime, source.authMethods], e.slice(4, 8)) ||
           row.expires_at > source.expiresAt ||
           source.grantedScope
             .split(' ')
             .filter(Boolean)
             .some((s: string) => !source.scopes.includes(s) || (!source.first_party && !source.consent?.includes(s)))
+        )
+          return null;
+        // Only the opening Auth committed for this very session admits an operator-opened reduction.
+        if (
+          operated &&
+          !(
+            await database.query(
+              'SELECT 1 FROM auth_session_opening WHERE session_id=$1 AND subject_account_id=$2 AND receipt_id=$3',
+              [e[3], expected.accountId, expected.openingReceiptId],
+            )
+          ).rowCount
         )
           return null;
         const target = (
@@ -135,6 +152,7 @@ export function createBarrierProofVerifier({ database }: { database: Pool }) {
         operationKey: expected.operationKey,
         digest: row.digest,
         expiresAt: row.expires_at.toISOString(),
+        ...(expected.openingReceiptId === undefined ? {} : { openingReceiptId: expected.openingReceiptId }),
       });
     },
     async sweep({ limit }: { limit: number }): Promise<{ removed: number; hasMore: boolean }> {

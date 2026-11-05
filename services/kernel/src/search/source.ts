@@ -1,17 +1,49 @@
+import type { FilterQualifier, SpoilerThreshold } from '@rezics/filter';
 import { partitionOf, routeOf } from '../route/route.ts';
+import type { CalendarDate } from '@rezics/filter';
+import type { PublicRatingFigure } from './rating-source.ts';
+import type { CreditSearchProjection, CreditSearchSource } from './credit-search.ts';
+import type { DocumentTextProjection } from './document-text.ts';
 
 export type LanguageValue = { language: string; value: string };
 
+export const MAX_RELATION_FACET_VALUES = 128;
+export const MAX_RELATION_FACET_PROBES = 256;
+
+/** Adopted Global relation membership; all qualifiers constrain the same native statement. */
+export type RelationFacetProbe = {
+  subject: string;
+  property: string;
+  value: string;
+  qualifiers?: readonly FilterQualifier[];
+  /** Journey policy: voice credits also need permitted appearances of their own characters. */
+  spoilerThreshold?: SpoilerThreshold;
+};
+
+/** `true` and `false` are definitive; `not_proven` is bounded witness uncertainty and never `false`. */
+export type RelationFacetMatch = boolean | 'not_proven';
+
+/** Complete current work-link evidence. Concealed or malformed values carry no identity. */
+export type NativeWorkLinkValue = { kind: 'work'; id: string } | { kind: 'unknown' };
+export type NativeWorkLinkEvidence = Readonly<{
+  /** False means this bounded observation did not prove a complete current selection. */
+  complete: boolean;
+  /** An empty complete list proves no current work link. */
+  values: readonly NativeWorkLinkValue[];
+}>;
+/** Internal native work charged by the complete work-link reader before it performs each bounded stage. */
+export type CompleteWorkLinkReservation = Readonly<{ operations: number; keys: number }>;
+
 /**
  * Filterable form of a statement value.
- * `year` is the astronomical year of a time value.
+ * Time keeps its astronomical year and only the month/day represented by native precision.
  * `amount` is the decimal amount of a quantity.
  * A code value is the statement `value`.
  */
 export type FacetValue =
   | { kind: 'item' }
   | { kind: 'code' }
-  | { kind: 'time'; year: number }
+  | ({ kind: 'time' } & CalendarDate)
   | { kind: 'quantity'; amount: number; unit: string };
 
 /** One adopted statement value. The semantic source fills `facet` and `qualifiers`. */
@@ -19,14 +51,19 @@ export type IndexedStatement = {
   property: string;
   /** Stored statement value. An item value is the target subject id; a code value is the code. */
   value: string;
+  /** Original language of an admitted monolingual title or alternate name. */
+  language?: string;
   /** Present when the value's datatype can be a facet. */
   facet?: FacetValue;
-  /** Adopted qualifiers whose values are items (target subject ids). */
-  qualifiers?: { property: string; value: string }[];
+  /** Concrete adopted item, string, quantity or canonical spoiler-level qualifiers on this statement.
+   * Unknown snaks are omitted; absence here is not complete negative evidence. */
+  qualifiers?: { property: string; value: string; facet?: Extract<FacetValue, { kind: 'quantity' }> }[];
 };
 
 export type IndexedSubject = {
   id: string;
+  /** Current native standard-question Global figure, when one is published. */
+  publicRating?: PublicRatingFigure;
   type: string;
   /** Only visible subjects are indexed. */
   visibility: 'visible' | 'hidden' | 'taken_down';
@@ -37,18 +74,70 @@ export type IndexedSubject = {
   labels: LanguageValue[];
   aliases: LanguageValue[];
   descriptions: LanguageValue[];
-  /** Adopted Global statement values; an item value is the target subject id. */
+  /** Optional bounded, current public document text projection. Each document remains independent. */
+  documentText?: DocumentTextProjection;
+  /**
+   * Adopted Global statement values visible at snapshot build time; an item value is the target subject id.
+   * Descriptive statements are unchanged. Outgoing relations include at most MAX_RELATION_FACET_VALUES
+   * sampled entries per declared facet property, retaining facet and qualifier metadata.
+   * Undeclared relation properties and inbound edges are omitted.
+   */
   statements: IndexedStatement[];
+  /**
+   * Relation facet properties exceeding the sample bound. Production emits [] when none overflow;
+   * absence also means no overflow, for historical fixtures.
+   */
+  relationFacetOverflow?: string[];
 };
 
 /** The partition's `core.partition.position` and the listed subjects' state, read in one snapshot. */
-export type SubjectSnapshot = { partition: number; position: bigint; subjects: IndexedSubject[] };
+export type SubjectSnapshot = {
+  partition: number;
+  position: bigint;
+  subjects: IndexedSubject[];
+  /** Complete creator projections are attached only by the private index-input read. */
+  creditSearch?: ReadonlyMap<string, CreditSearchProjection>;
+};
+
+/** A page retains its source cuts and complete per-pool authorization until disclosure finishes. */
+export type RetainedRelationFacetPage = Readonly<{
+  bounds: readonly Readonly<{ partition: number; probeBatchBound: number }>[];
+  match(): Promise<RelationFacetMatch[]>;
+  revalidate(): Promise<boolean>;
+}>;
 
 export interface SubjectSource {
   /** Unknown ids are omitted. Every id must route to `partition`. */
   read(partition: number, ids: readonly string[]): Promise<SubjectSnapshot>;
+  /** Index-only complete input. Ordinary reader observations must not pay for creator projection. */
+  readForIndex?(partition: number, ids: readonly string[]): Promise<SubjectSnapshot>;
+  /** Exact current native support for one bounded credited-name projection. */
+  creditSearch?: CreditSearchSource;
   /** Visible, non-redirected subjects of the partition and its position, in one snapshot. */
   count(partition: number): Promise<{ position: bigint; count: number }>;
+  /**
+   * Match membership in full adopted Global relations, applying current source fences and moderation.
+   * Accept at most MAX_RELATION_FACET_PROBES probes, with every subject anchored to `partition`;
+   * Invalid structural input rejects. Qualifiers use the bounded shared filter grammar and must be
+   * admitted by the subject's current release; unsupported evidence remains not_proven. The aligned
+   * array preserves order and duplicates. Value and every qualifier must hold on one statement;
+   * evidence from repeated credits must never be combined. Qualified probes sharing a value share
+   * one bounded native seek, retaining separate truth results.
+   * Missing, hidden, taken-down and redirected subjects return false.
+   * `true` and `false` are definitive current truth and absence. `not_proven` is bounded witness
+   * uncertainty: the source could not prove membership within its bound, and it is never `false`.
+   * Optional for historical mocks. Search must fail closed
+   * when an overflow probe is needed and this method is absent.
+   */
+  /** Gather all indexed keys and current cuts before authorizing any page witness dispatch. */
+  prepareRelationFacets?(probes: readonly RelationFacetProbe[]): Promise<RetainedRelationFacetPage>;
+  matchRelationFacets?(partition: number, probes: readonly RelationFacetProbe[]): Promise<RelationFacetMatch[]>;
+  /** Read the complete adopted Global exampleOfWork selection for current visible releases. */
+  readCompleteWorkLinks?(
+    partition: number,
+    ids: readonly string[],
+    options?: Readonly<{ reserve?: (reservation: CompleteWorkLinkReservation) => void }>,
+  ): Promise<ReadonlyMap<string, NativeWorkLinkEvidence>>;
 }
 
 /** Active public Collection counts for subjects in one partition. Only the count is read. */

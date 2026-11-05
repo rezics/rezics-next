@@ -1,10 +1,11 @@
+import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
 import { createAuthService, type AuthService, type AuthServiceOptions } from '@rezics/auth';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
@@ -12,6 +13,26 @@ import { createDelegationCommands, readAssignment } from '../../src/access/deleg
 import { runCommand, IdempotencyConflictError } from '../../src/command/command.ts';
 import { accessCheck, accessCommandAuthorization, AuthenticationError } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
+
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `delegated_auth_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -28,7 +49,7 @@ const robotId = newId(0x4567);
 const resource = { route: 0x6789, id: newId(0x6789) };
 const action = 'subject:update';
 const actions = [action, 'account:delegate'];
-let fixture: ReturnType<typeof testDatabase> | undefined;
+let fixture: Awaited<ReturnType<typeof cloneAuthDatabase>> | undefined;
 let database: Pool;
 let service: AuthService;
 let options: AuthServiceOptions;
@@ -132,7 +153,7 @@ async function operation(bearer: string, receiptKey = Bun.randomUUIDv7()) {
 }
 
 beforeAll(async () => {
-  fixture = testDatabase();
+  fixture = await cloneAuthDatabase();
   database = new Pool({ connectionString: fixture.url });
   key = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -146,7 +167,7 @@ beforeAll(async () => {
     audience,
     secret: 'delegation-test-secret-at-least-thirty-two-characters',
     signing: { activeKid: key.kid!, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(reader, routeOf(id)!, id);
         return (
@@ -171,7 +192,7 @@ beforeAll(async () => {
           return readAssignment(reader, requestedBy, assignedActorId);
         },
       },
-    },
+    }),
   };
   service = await createAuthService(options);
   await service.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
@@ -209,7 +230,7 @@ beforeAll(async () => {
 }, 60000);
 afterAll(async () => {
   await database?.end();
-  fixture?.close();
+  await fixture?.close();
   await pool.end();
   await reader.end();
 });
@@ -434,21 +455,14 @@ test('principal changes and assignment revocation invalidate the next request wi
   const bearer = await token(actorCookie, current.reference);
   expect((await operation(bearer)).value).toBe('updated');
   for (const state of ['pending', 'suspended', 'deleted']) {
-    await reader.query('UPDATE access.account SET state=$3 WHERE route=$1 AND account_id=$2', [
-      routeOf(principalId),
-      principalId,
-      state,
-    ]);
+    await setFixtureAccountState(reader, principalId, state);
     try {
       await invalid(operation(bearer));
       expect((await request('/token', { requested_by: current.reference }, actorCookie)).status).toBeGreaterThanOrEqual(
         400,
       );
     } finally {
-      await reader.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-        routeOf(principalId),
-        principalId,
-      ]);
+      await setFixtureAccountState(reader, principalId, 'active');
     }
   }
   await reader.query('UPDATE access.account SET authn_fenced=true WHERE route=$1 AND account_id=$2', [

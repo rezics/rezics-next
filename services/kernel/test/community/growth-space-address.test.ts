@@ -12,6 +12,7 @@ import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://growth-space-address.auth.test';
@@ -277,7 +278,7 @@ beforeAll(async () => {
     audience,
     secret: 'growth-space-address-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(admin, routeOf(id)!, id);
         return (
@@ -294,7 +295,7 @@ beforeAll(async () => {
         if (reference !== accountId) throw new Error('Unknown fixture provisioning reference');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await admin.query(
     "INSERT INTO access.account (route, account_id, kind, state, transaction_id) VALUES ($1,$2,'actor','pending',$2)",

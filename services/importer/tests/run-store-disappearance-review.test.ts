@@ -1,0 +1,243 @@
+import { Database } from 'bun:sqlite';
+import { expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { runImportCli } from '../src/cli.ts';
+import { DISAPPEARANCE_EVIDENCE_TABLES, RunStore, type Run, type SourceProjection } from '../src/run-store.ts';
+
+const temporaryRoot = resolve(import.meta.dir, '../../../.temp');
+
+function digest(seed: string): string {
+  return createHash('sha256').update(seed).digest('hex');
+}
+
+function staged(source: string, key: string) {
+  return {
+    row: {
+      source,
+      recordKey: key,
+      recordRevision: 'revision-1',
+      digest: digest(`${source}:${key}`),
+      converter_revision: 'test@1',
+      state: 'present' as const,
+    },
+    projection: { sourceKind: 'wikidata' as const, normalizedRecord: { id: key } },
+  };
+}
+
+function complete(store: RunStore<SourceProjection>, run: Run, keys: string[]): void {
+  expect(store.seal(run, { complete: true }).status).toBe('ready');
+  for (const key of keys) {
+    store.classify(run, key, { commands: [] });
+    store.acknowledgeNoEffects(run, key, { reason: 'no-owned-candidates' });
+  }
+  while (true) {
+    const result = store.finalize(run, 100);
+    if (result === 'complete') return;
+    if (result === 'incomplete') throw new Error('Generation could not finalize');
+  }
+}
+
+test('seal captures immutable missing identities and later staging cannot rewrite them', () => {
+  mkdirSync(temporaryRoot, { recursive: true });
+  const directory = mkdtempSync(join(temporaryRoot, 'run-store-disappearance-'));
+  const path = join(directory, 'state.sqlite');
+  const store = new RunStore<SourceProjection>(path, { projectionMode: 'source-record' });
+  try {
+    const source = 'wikidata';
+    const baseline = store.begin(source);
+    if (baseline === 'busy') throw new Error('baseline');
+    for (const key of ['Q1', 'Q2', 'Q3', 'Q4', 'Q5']) store.stage(baseline, staged(source, key));
+    complete(store, baseline, ['Q1', 'Q2', 'Q3', 'Q4', 'Q5']);
+
+    const stopped = store.begin(source);
+    if (stopped === 'busy') throw new Error('stopped');
+    store.stage(stopped, staged(source, 'Q1'));
+    store.stage(stopped, staged(source, 'Q2'));
+    store.stage(stopped, staged(source, 'Q3'));
+    expect(store.seal(stopped, { complete: true })).toMatchObject({
+      status: 'mass-disappearance',
+      prior: 5,
+      seenSurvivors: 3,
+      supplied: 3,
+    });
+
+    const header = store.database
+      .query('SELECT * FROM run_disappearance_stops WHERE source=? AND run_id=?')
+      .get(source, stopped.id) as {
+      evidence_id: string;
+      baseline_generation: string;
+      prior: number;
+      missing: number;
+      threshold: number;
+      input_complete: number;
+    };
+    expect(header).toMatchObject({
+      baseline_generation: baseline.id,
+      prior: 5,
+      missing: 2,
+      threshold: 0.2,
+      input_complete: 1,
+    });
+    expect(header.evidence_id).toMatch(/^[a-f0-9]{48}$/);
+    const missing = store.database
+      .query('SELECT record_key FROM run_disappearance_missing WHERE source=? AND run_id=? ORDER BY record_key')
+      .all(source, stopped.id) as { record_key: string }[];
+    expect(missing.map((row) => row.record_key)).toEqual(['Q4', 'Q5']);
+
+    const later = store.begin(source);
+    if (later === 'busy') throw new Error('later');
+    store.stage(later, staged(source, 'Q4'));
+    expect(store.seal(later, { complete: false, reason: 'truncated' }).status).toBe('invalid-input');
+    const after = store.database
+      .query('SELECT record_key FROM run_disappearance_missing WHERE source=? AND run_id=? ORDER BY record_key')
+      .all(source, stopped.id) as { record_key: string }[];
+    expect(after.map((row) => row.record_key)).toEqual(['Q4', 'Q5']);
+
+    const empty = store.begin(source, { disappearanceThreshold: 1 });
+    if (empty === 'busy') throw new Error('empty');
+    expect(store.seal(empty, { complete: true }).status).toBe('mass-disappearance');
+  } finally {
+    store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('evidence capture failure rolls the seal back and all-missing stays blocked at threshold 1', () => {
+  const database = new Database(':memory:', { strict: true });
+  const original = database.prepare.bind(database);
+  database.prepare = ((sql: string) => {
+    if (sql.includes('INSERT INTO run_disappearance_missing')) throw new Error('injected evidence failure');
+    return original(sql);
+  }) as typeof database.prepare;
+  const store = new RunStore<SourceProjection>(database, { projectionMode: 'source-record' });
+  try {
+    const source = 'wikidata';
+    const baseline = store.begin(source);
+    if (baseline === 'busy') throw new Error('baseline');
+    store.stage(baseline, staged(source, 'Q1'));
+    complete(store, baseline, ['Q1']);
+    const stopped = store.begin(source, { disappearanceThreshold: 1 });
+    if (stopped === 'busy') throw new Error('stopped');
+    expect(() => store.seal(stopped, { complete: true })).toThrow('injected evidence failure');
+    expect(
+      store.database.query('SELECT status FROM run_generations WHERE id=?').get(stopped.id) as { status: string },
+    ).toMatchObject({ status: 'staging' });
+    expect(store.database.query('SELECT count(*) AS n FROM run_disappearance_stops').get() as { n: number }).toEqual({
+      n: 0,
+    });
+    expect(DISAPPEARANCE_EVIDENCE_TABLES).toEqual(['run_disappearance_stops', 'run_disappearance_missing']);
+  } finally {
+    store.close();
+  }
+});
+
+test('retention child deletion removes only one eligible generation and leaves other stop evidence', async () => {
+  mkdirSync(temporaryRoot, { recursive: true });
+  const directory = mkdtempSync(join(temporaryRoot, 'run-store-disappearance-retention-'));
+  const path = join(directory, 'state.sqlite');
+  const planPath = join(directory, 'plan.json');
+  const store = new RunStore<SourceProjection>(path, { projectionMode: 'source-record' });
+  try {
+    const source = 'wikidata';
+    const superseded = store.begin(source);
+    if (superseded === 'busy') throw new Error('superseded');
+    for (const key of ['Q1', 'Q2', 'Q3']) store.stage(superseded, staged(source, key));
+    complete(store, superseded, ['Q1', 'Q2', 'Q3']);
+    const baseline = store.begin(source);
+    if (baseline === 'busy') throw new Error('baseline');
+    for (const key of ['Q1', 'Q2', 'Q3', 'Q4']) store.stage(baseline, staged(source, key));
+    complete(store, baseline, ['Q1', 'Q2', 'Q3', 'Q4']);
+    const stopped = store.begin(source);
+    if (stopped === 'busy') throw new Error('stopped');
+    store.stage(stopped, staged(source, 'Q1'));
+    expect(store.seal(stopped, { complete: true }).status).toBe('mass-disappearance');
+    store.database
+      .query(
+        `INSERT INTO run_disappearance_stops(
+          source,run_id,evidence_id,baseline_generation,supplied,survivors,prior,missing,threshold,input_complete)
+        VALUES(?,?,?,?,?,?,?,?,?,1)`,
+      )
+      .run(source, superseded.id, 'a'.repeat(48), baseline.id, 3, 3, 3, 0, 0.2);
+    store.database
+      .query(
+        `INSERT INTO run_disappearance_missing(source,run_id,record_key,record_revision,digest,converter_revision)
+        VALUES(?,?,?,?,?,?)`,
+      )
+      .run(source, superseded.id, 'Q9', 'revision-1', digest('wikidata:Q9'), 'test@1');
+    store.close();
+
+    const listed = await runImportCli(['retention', '--state', path, '--source', source, '--json']);
+    expect(listed.code, listed.stderr).toBe(0);
+    const generations = (
+      JSON.parse(listed.stdout) as { generations: { id: string; eligible: boolean; reason: string }[] }
+    ).generations;
+    expect(generations.find((row) => row.id === superseded.id)).toMatchObject({
+      eligible: true,
+      reason: 'superseded-complete',
+    });
+    expect(generations.find((row) => row.id === stopped.id)).toMatchObject({
+      eligible: false,
+      reason: 'status-retained',
+    });
+
+    const planned = await runImportCli([
+      'retention',
+      '--state',
+      path,
+      '--source',
+      source,
+      '--generation',
+      superseded.id,
+      '--output',
+      planPath,
+      '--json',
+    ]);
+    expect(planned.code, planned.stderr).toBe(0);
+    const plan = JSON.parse(planned.stdout) as { planId: string };
+    const applied = await runImportCli([
+      'retention',
+      '--state',
+      path,
+      '--plan',
+      planPath,
+      '--confirm',
+      plan.planId,
+      '--apply',
+      '--json',
+    ]);
+    expect(applied.code, applied.stderr).toBe(0);
+    expect(JSON.parse(applied.stdout)).toMatchObject({ status: 'complete', retired: [superseded.id] });
+
+    const after = new RunStore<SourceProjection>(path, { projectionMode: 'source-record' });
+    try {
+      expect(
+        after.database.query('SELECT count(*) AS n FROM run_disappearance_stops WHERE run_id=?').get(superseded.id) as {
+          n: number;
+        },
+      ).toEqual({ n: 0 });
+      expect(
+        after.database
+          .query('SELECT count(*) AS n FROM run_disappearance_missing WHERE run_id=?')
+          .get(superseded.id) as {
+          n: number;
+        },
+      ).toEqual({ n: 0 });
+      expect(
+        after.database.query('SELECT missing FROM run_disappearance_stops WHERE run_id=?').get(stopped.id) as {
+          missing: number;
+        },
+      ).toEqual({ missing: 3 });
+    } finally {
+      after.close();
+    }
+  } finally {
+    try {
+      store.close();
+    } catch {
+      // Closed after planting evidence so retention can open the file.
+    }
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

@@ -41,6 +41,7 @@ type LogRow = {
   subject: string | null;
   data: unknown;
   time: string | null;
+  payload_state: string | null;
 };
 
 type EnvelopeGroup = { position: bigint; rows: LogRow[] };
@@ -100,7 +101,17 @@ function parseRows(
         reason = 'unknown_type';
         break;
       }
-      if (!validator.Check(row.data)) {
+      const minimized = row.payload_state === 'minimized';
+      if (
+        (row.payload_state !== 'present' && !minimized) ||
+        (minimized
+          ? row.subject !== null ||
+            typeof row.data !== 'object' ||
+            row.data === null ||
+            Array.isArray(row.data) ||
+            Object.keys(row.data).length !== 0
+          : !validator.Check(row.data))
+      ) {
         reason = 'invalid_data';
         break;
       }
@@ -108,7 +119,7 @@ function parseRows(
         specversion: '1.0',
         id: row.id!,
         source: `urn:rezics:log:${partition}.${envelopeEpoch}`,
-        type: row.type!,
+        type: minimized ? 'com.rezics.history.minimized.v1' : row.type!,
         ...(row.subject === null ? {} : { subject: row.subject }),
         time: row.time!,
         datacontenttype: 'application/json',

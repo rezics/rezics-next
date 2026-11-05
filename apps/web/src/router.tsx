@@ -1,9 +1,92 @@
 import { createIsomorphicFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
 import { requestNonce } from './security/nonce.ts';
+import { BuyerHistoryVisit } from './checkout/buyer-history-visit';
 import { createRouter } from '@tanstack/react-router';
+import { QueryClient } from '@tanstack/react-query';
+import { anonymousReadMode } from './kernel/credential';
+import { setupRouterSsrQueryIntegration } from '@tanstack/react-router-ssr-query';
+import { ClosedErrorPage } from './shell/closed';
+import { NotFoundPage } from './shell/shell';
+import { PendingPage } from './shell/pending';
 import { routeTree } from './routeTree.gen';
 import { deLocalizeUrl, localizeUrl } from './paraglide/runtime.js';
+import { applyDependencyErrorComponents, type DependencyRouteNode } from './shell/dependency-recovery/route-error';
+
+type RouteNode = {
+  options?: { id?: string; path?: string; staticData?: { publicCache?: boolean } };
+  children?: Record<string, RouteNode>;
+};
+
+type PublicCachePathMatch = { marked: boolean; specificity: number[]; depth: number };
+
+function routePattern(path: string): RegExp {
+  const segments = path.split('/').map((segment) => {
+    if (/^@\{\$[^}]+\}_?$/.test(segment)) return '@[^/]+';
+    if (segment.startsWith('$')) return '[^/]+';
+    if (segment === '*') return '.+';
+    return segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  });
+  return new RegExp(`^${segments.join('/')}/?$`);
+}
+
+function routeSpecificity(path: string): number[] {
+  return path
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => {
+      if (segment === '*') return 0;
+      if (segment.startsWith('$') || /^@\{\$[^}]+\}_?$/.test(segment)) return 1;
+      return 2;
+    });
+}
+
+function moreSpecific(left: PublicCachePathMatch, right: PublicCachePathMatch): boolean {
+  const length = Math.min(left.specificity.length, right.specificity.length);
+  for (let index = 0; index < length; index += 1) {
+    if (left.specificity[index] !== right.specificity[index])
+      return left.specificity[index]! > right.specificity[index]!;
+  }
+  return left.specificity.length > right.specificity.length || left.depth > right.depth;
+}
+
+function hasPublicCachePath(
+  route: RouteNode,
+  pathname: string,
+  parentPath = '/',
+  inherited = false,
+  depth = 0,
+): PublicCachePathMatch | undefined {
+  const routePath = route.options?.path ?? route.options?.id ?? '';
+  const fullPath = routePath.startsWith('/') ? routePath : `${parentPath.replace(/\/$/, '')}/${routePath}`;
+  const marked = inherited || route.options?.staticData?.publicCache === true;
+  const matches: PublicCachePathMatch[] = [];
+  if (routePath && routePattern(fullPath || '/').test(pathname))
+    matches.push({ marked, specificity: routeSpecificity(fullPath), depth });
+  for (const child of Object.values(route.children ?? {})) {
+    const match = hasPublicCachePath(child, pathname, fullPath, marked, depth + 1);
+    if (match) matches.push(match);
+  }
+  return matches.reduce<PublicCachePathMatch | undefined>(
+    (best, match) => (best === undefined || moreSpecific(match, best) ? match : best),
+    undefined,
+  );
+}
+
+export function isPublicCacheRequest(request: Request): boolean {
+  const publicUrl = deLocalizeUrl(new URL(request.url));
+  const root = routeTree as unknown as RouteNode;
+  if (root.options?.staticData?.publicCache === true) return true;
+  const matches = Object.values(root.children ?? {}).flatMap((route) => {
+    const match = hasPublicCachePath(route, publicUrl.pathname);
+    return match ? [match] : [];
+  });
+  const best = matches.reduce<PublicCachePathMatch | undefined>(
+    (current, match) => (current === undefined || moreSpecific(match, current) ? match : current),
+    undefined,
+  );
+  return best?.marked === true;
+}
 const nonce = createIsomorphicFn()
   .server(() => requestNonce(getRequest()))
   .client(() => document.querySelector<HTMLMetaElement>('meta[property="csp-nonce"]')?.content);
@@ -32,14 +115,24 @@ function stringifySearch(search: Record<string, unknown>): string {
 }
 
 export function getRouter() {
+  applyDependencyErrorComponents(routeTree as unknown as DependencyRouteNode);
   const cspNonce = nonce();
-  return createRouter({
+  const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 60_000 } } });
+  const router = createRouter({
+    context: { queryClient, credentialMode: anonymousReadMode, buyerHistory: new BuyerHistoryVisit(queryClient) },
+    defaultPreload: 'intent',
+    defaultPreloadStaleTime: 0,
+    defaultPendingComponent: PendingPage,
+    defaultErrorComponent: ClosedErrorPage,
+    defaultNotFoundComponent: NotFoundPage,
     routeTree,
     parseSearch,
     stringifySearch,
     ssr: cspNonce ? { nonce: cspNonce } : {},
     rewrite: { input: ({ url }) => deLocalizeUrl(url).href, output: ({ url }) => localizeUrl(url).href },
   });
+  setupRouterSsrQueryIntegration({ router, queryClient });
+  return router;
 }
 declare module '@tanstack/react-router' {
   interface Register {

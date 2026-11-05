@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { createResourcePublicEligibility } from '../../src/access/index.ts';
-import { createAccess } from '../../src/access/permission.ts';
 import { readAccount } from '../../src/access/account-data.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { authoritativeTimeValue, runCommand } from '../../src/command/command.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import {
   accessCheck,
   accessCommandAuthorization,
+  type Access,
   type AccessClient,
   type AccountActor,
   type Resource,
@@ -18,7 +19,7 @@ let db: GrowthDatabase;
 const action = 'content:read';
 const own = { route: 0x6789, id: newId(0x6789) };
 const parent = { route: 0x789a, id: newId(0x789a) };
-const actor: AccountActor = {
+let actor: AccountActor = {
   kind: 'account',
   accountId: newId(0x1234),
   clientId: 'fixture',
@@ -26,10 +27,7 @@ const actor: AccountActor = {
   requestedBy: null,
   authnEpoch: 1,
 };
-const permissions = createAccess({
-  actions: new Map([[action, { anonymous: true }]]),
-  accountEvidence: (_, ctx) => ctx.account,
-});
+let permissions: Access;
 const observedTimes: string[] = [];
 type Row = { revision: number; published: boolean; current: boolean };
 async function read(client: AccessClient, resource: Resource, at?: string) {
@@ -91,6 +89,8 @@ beforeAll(async () => {
     VALUES ($1,$2,'actor','active',$2)`,
     [routeOf(actor.accountId), actor.accountId],
   );
+  permissions = admittedAccess({ actions: new Map([[action, { anonymous: true }]]) });
+  actor = await authenticateAccount(permissions, { pool: db.pool, deadline: Date.now() + 10_000 }, actor);
 });
 beforeEach(async () => {
   observedTimes.length = 0;

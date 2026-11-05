@@ -7,6 +7,7 @@ prefixes:
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
   bf: http://id.loc.gov/ontologies/bibframe/
+  rezics: https://rezics.com/vocab/
 default_range: string
 imports:
   - linkml:types
@@ -24,12 +25,61 @@ classes:
       - abstract
       - datePublished
       - recipeIngredient
+      - madeFromMaterial
+      - recipeInstructions
       - cookTime
       - recipeYield
       - keywords
+      - suitableForDiet
     annotations:
-      facets: author keywords datePublished cookTime recipeYield
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:cookTime, schema:suitableForDiet]
+      library:
+        id: recipe.cooking
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: minute
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
+      facets: author keywords datePublished cookTime recipeYield suitableForDiet
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/Recipe
 slots:
+  suitableForDiet:
+    slot_uri: schema:suitableForDiet
+    description: A public dietary suitability classification asserted for the recipe.
+    range: Concept
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:recipeForDiet
+      relation_order: name
+  recipeInstructions:
+    slot_uri: schema:recipeInstructions
+    description: The document describing how to prepare the recipe.
+    annotations:
+      datatype: document
   recipeIngredient:
     slot_uri: schema:recipeIngredient
     description: An ingredient used to prepare the recipe.

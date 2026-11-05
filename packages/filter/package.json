@@ -4,13 +4,14 @@
   "type": "module",
   "license": "Apache-2.0",
   "scripts": {
-    "check": "oxfmt --check . && bun run tsc --noEmit --project tsconfig.json && bun test"
+    "check": "oxfmt --check . && bun check --no-script -p tsconfig.json && bun test",
+    "typecheck": "bun check --no-script -p tsconfig.json"
   },
   "exports": {
     ".": "./src/index.ts"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",
-    "@types/node": "26.6.5"
+    "@types/node": "26.6.6"
   }
 }

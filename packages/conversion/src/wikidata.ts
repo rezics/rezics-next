@@ -1,6 +1,8 @@
+import { types as utilTypes } from 'node:util';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { checkBatchWrite, type BatchCommand, type BatchReference, type BatchStatement } from '@rezics/definitions/bulk';
 import type { PropertyDefinition } from '@rezics/definitions';
+import { checkStatementInput } from '@rezics/definitions/validate';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index';
 import {
   canonicalLanguageTag,
@@ -12,7 +14,7 @@ import {
   type ConversionContext,
 } from './support';
 
-export const converter_revision = 'wikidata-3';
+export const converter_revision = 'wikidata-6';
 export const wikidataLimits = Object.freeze({
   bytes: 128 * 1024,
   statements: 64,
@@ -32,6 +34,7 @@ type Claim = {
   qualifiers?: Record<string, Snak[]>;
   references?: { snaks: Record<string, Snak[]> }[];
 };
+const qualificationLoss = new WeakSet<Claim>();
 type Term = { language: string; value: string };
 type NormalizedEntity = {
   id: string;
@@ -50,20 +53,62 @@ export type WikidataConversion = ConvertedRecord<BatchCommand> & {
   sourceMetadata: { license: 'CC0-1.0'; attribution: string; url: string };
 };
 
-// Mapping and value validation both come from the shipped catalogue, never from source extensions.
+// Property identities and value validation come from the shipped catalogue, never source extensions.
 const properties = Object.entries(bundledRelease.properties);
 const mappings = new Map(
   properties.flatMap(([id, definition]) =>
     definition.mappings
-      .filter((mapping) => /^wd:P[1-9][0-9]*$/.test(mapping))
+      .filter(
+        (mapping) =>
+          /^wd:P[1-9][0-9]*$/.test(mapping) &&
+          mapping !== 'wd:P18' &&
+          definition.datatype !== 'media' &&
+          definition.datatype !== 'document',
+      )
       .map((mapping) => [mapping.slice(3), { id, definition }] as const),
   ),
 );
-const types = new Map(
-  Object.entries(bundledRelease.types).flatMap(([id, definition]) =>
+// madeFromMaterial already has this canonical Wikidata property identity in the
+// bundle, but no redundant exact mapping. Keep this binding local and bounded.
+mappings.set('P186', { id: 'wdt:P186', definition: bundledRelease.properties['wdt:P186']! });
+function exactQuantity(definition: PropertyDefinition): boolean {
+  if (definition.datatype !== 'quantity') return false;
+  const value = definition.value as {
+    type?: unknown;
+    required?: unknown;
+    properties?: Record<string, unknown>;
+    additionalProperties?: unknown;
+  };
+  return (
+    value.type === 'object' &&
+    value.additionalProperties === false &&
+    Array.isArray(value.required) &&
+    value.required.length === 2 &&
+    value.required.includes('amount') &&
+    value.required.includes('unit') &&
+    !!value.properties &&
+    Object.keys(value.properties).length === 2 &&
+    Object.hasOwn(value.properties, 'amount') &&
+    Object.hasOwn(value.properties, 'unit') &&
+    !Object.hasOwn(value.properties, 'lowerBound') &&
+    !Object.hasOwn(value.properties, 'upperBound')
+  );
+}
+// Reviewed source classifications, not vocabulary equivalences. Citations and
+// the CC0-only projection are maintained in the Conversion README.
+const sourceTypeBindings = [
+  ['Q746549', 'schema:Recipe'], // dish
+  ['Q2095', 'wd:Q2095'], // food
+  ['Q25403900', 'wd:Q2095'], // food ingredient
+] as const;
+const types = new Map<string, string>([
+  ...Object.entries(bundledRelease.types).flatMap(([id, definition]) =>
     definition.mappings.map((mapping) => [mapping.replace(/^wd:/, ''), id] as const),
   ),
-);
+  ...sourceTypeBindings,
+]);
+const claimProperties = [...new Set(['P31', ...mappings.keys()])];
+const referenceProperties = [...new Set(['P854', ...mappings.keys()])];
 const qid = /^Q[1-9][0-9]{0,15}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const fail: (code: string, pointer?: string) => never = (code, pointer = '') => {
@@ -76,6 +121,7 @@ function object(value: unknown, pointer: string): ObjectValue {
   if (
     !value ||
     typeof value !== 'object' ||
+    utilTypes.isProxy(value) ||
     Array.isArray(value) ||
     ![Object.prototype, null].includes(Object.getPrototypeOf(value))
   )
@@ -89,7 +135,12 @@ function get(value: ObjectValue, key: string, pointer: string): unknown {
   return descriptor.value;
 }
 function list(value: unknown, limit: number, pointer: string): unknown[] {
-  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype || value.length > limit)
+  if (
+    utilTypes.isProxy(value) ||
+    !Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Array.prototype ||
+    value.length > limit
+  )
     fail('Source array exceeds its field limit or is malformed', pointer);
   for (let i = 0; i < value.length; i++) {
     const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
@@ -180,7 +231,12 @@ export function convertWikidata(
     return result;
   }
 
-  function snak(entry: unknown, property: string, pointer: string): Snak | undefined {
+  function snak(
+    entry: unknown,
+    property: string,
+    pointer: string,
+    preserveUnsupportedMonolingual = false,
+  ): Snak | undefined {
     const body = object(entry, pointer);
     if (read(body, 'property', pointer) !== property) fail('Mismatched mainsnak property', pointer);
     const snaktype = read(body, 'snaktype', pointer);
@@ -189,7 +245,10 @@ export function convertWikidata(
     const result: Snak = { snaktype: snaktype as string, property, datatype };
     const expected =
       property === 'P31' ? 'wikibase-item' : property === 'P854' ? 'url' : mappings.get(property)!.definition.datatype;
-    if (datatype !== expected) fail('Mapped snak datatype mismatch', pointer);
+    if (datatype !== expected) {
+      diagnose('Mapped snak datatype mismatch', pointer);
+      return;
+    }
     if (snaktype !== 'value') return result;
     const data = object(read(body, 'datavalue', pointer), pointer);
     const kind = text(read(data, 'type', pointer), pointer, 64);
@@ -210,38 +269,28 @@ export function convertWikidata(
       )
         fail('Invalid Wikidata relation identity', pointer);
       projection = { 'entity-type': 'item', 'numeric-id': numericId, id: target };
-    } else if (datatype === 'time') {
-      if (kind !== 'time') fail('Invalid date datavalue', pointer);
-      const date = object(value, pointer);
+    } else if (datatype === 'time' || datatype === 'quantity') {
+      if (kind !== datatype) {
+        diagnose('Unsupported source datavalue type', pointer);
+        return;
+      }
+      const body = object(value, pointer);
       const copy = dictionary<unknown>();
-      for (const key of ['time', 'timezone', 'before', 'after', 'precision', 'calendarmodel']) {
-        const item = read(date, key, pointer);
-        if (key === 'time' || key === 'calendarmodel') copy[key] = text(item, pointer);
+      const keys =
+        datatype === 'time'
+          ? ['time', 'timezone', 'before', 'after', 'precision', 'calendarmodel']
+          : ['amount', 'unit', 'lowerBound', 'upperBound'];
+      for (const key of keys) {
+        const item = read(body, key, pointer);
+        if (item === undefined) continue;
+        // Bound the source projection; the released validator owns semantic admission.
+        if (typeof item === 'string') copy[key] = text(item, pointer);
+        else if (typeof item === 'number') copy[key] = item;
         else {
-          if (typeof item !== 'number' || !Number.isSafeInteger(item)) fail('Malformed Wikidata date', pointer);
-          copy[key] = item;
+          diagnose('Unsupported source value component', pointer);
+          return;
         }
       }
-      if (
-        !/^[+-][0-9]{4,16}-[0-9]{2}-[0-9]{2}T00:00:00Z$/.test(copy.time as string) ||
-        !/^http:\/\/www.wikidata.org\/entity\/Q[1-9][0-9]*$/.test(copy.calendarmodel as string)
-      )
-        fail('Malformed Wikidata date or calendar URL', pointer);
-      projection = copy;
-    } else if (datatype === 'quantity') {
-      if (kind !== 'quantity') fail('Invalid quantity datavalue', pointer);
-      const quantity = object(value, pointer);
-      const copy = dictionary<unknown>();
-      for (const key of ['amount', 'unit', 'lowerBound', 'upperBound']) {
-        const part = read(quantity, key, pointer);
-        if (part !== undefined) copy[key] = text(part, pointer);
-      }
-      if (
-        typeof copy.amount !== 'string' ||
-        !/^[+-](?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(copy.amount) ||
-        typeof copy.unit !== 'string'
-      )
-        fail('Malformed Wikidata quantity', pointer);
       projection = copy;
     } else if (datatype === 'monolingualtext') {
       if (kind !== 'monolingualtext') fail('Invalid monolingual datavalue', pointer);
@@ -252,9 +301,11 @@ export function convertWikidata(
       // No canonical tag writes no value. Leave the text unread so it cannot fail the record.
       if (lang === null) {
         diagnose('Monolingual text has no canonical language tag', pointer);
-        return undefined;
+        if (!preserveUnsupportedMonolingual) return undefined;
+        projection = { language: rawLanguage };
+      } else {
+        projection = { language: lang, text: text(read(term, 'text', pointer), pointer) };
       }
-      projection = { language: lang, text: text(read(term, 'text', pointer), pointer) };
     } else {
       if (kind !== 'string') fail('Invalid string datavalue', pointer);
       projection = datatype === 'url' ? url(value, pointer) : text(value, pointer);
@@ -264,22 +315,40 @@ export function convertWikidata(
   }
 
   // Iterate the fixed supported vocabulary rather than traversing unknown property bodies.
-  function snaks(value: unknown, reference: boolean, pointer: string) {
+  function snaks(value: unknown, reference: boolean, pointer: string, exact = false) {
     const body = object(value, pointer);
     const result = dictionary<Snak[]>();
     let count = 0;
-    for (const property of reference ? ['P854', ...mappings.keys()] : mappings.keys()) {
+    let omitted = false;
+    const supported = reference ? referenceProperties : mappings.keys();
+    const supportedSet = new Set(supported);
+    if (exact && !reference) {
+      for (const property in body) {
+        if (!Object.hasOwn(body, property) || supportedSet.has(property)) continue;
+        omitted = true;
+        // Retain one actual unknown qualifier key, but never its body. This
+        // bounded marker survives normalization/serialization so a second
+        // conversion cannot publish the amount after losing its qualifier.
+        result[property] = [];
+        break;
+      }
+    }
+    for (const property of supportedSet) {
       const entries = read(body, property, pointer);
       if (entries === undefined) continue;
       const items = list(entries, wikidataLimits.snaks, pointer);
       count += items.length;
       if (count > wikidataLimits.snaks) fail('Source snak limit exceeded', pointer);
       result[property] = items.flatMap((item) => {
-        const parsed = snak(item, property, pointer);
-        return parsed === undefined ? [] : [parsed];
+        const parsed = snak(item, property, pointer, exact && !reference);
+        if (parsed === undefined) {
+          if (exact && !reference) omitted = true;
+          return [];
+        }
+        return [parsed];
       });
     }
-    return result;
+    return { result, omitted };
   }
 
   const normalizedRecord: NormalizedEntity = {
@@ -292,7 +361,7 @@ export function convertWikidata(
     claims: dictionary<Claim[]>(),
   };
   const claims = object(read(raw, 'claims', '/claims'), '/claims');
-  for (const property of ['P31', ...mappings.keys()]) {
+  for (const property of claimProperties) {
     const value = read(claims, property, '/claims');
     if (value === undefined) continue;
     const pointer = `/claims/${property}`;
@@ -317,12 +386,16 @@ export function convertWikidata(
         if (!new RegExp(`^${id}\\$[0-9a-fA-F-]{36}$`).test(result.id)) fail('Invalid Wikidata statement ID', pointer);
       }
       const qualifiers = read(body, 'qualifiers', pointer);
-      if (qualifiers !== undefined) result.qualifiers = snaks(qualifiers, false, pointer);
+      if (qualifiers !== undefined) {
+        const projected = snaks(qualifiers, false, pointer, exactQuantity(mappings.get(property)!.definition));
+        result.qualifiers = projected.result;
+        if (projected.omitted) qualificationLoss.add(result);
+      }
       const references = read(body, 'references', pointer);
       if (references !== undefined)
         result.references = list(references, wikidataLimits.references, pointer).map((referenceEntry) => {
           const reference = object(referenceEntry, pointer);
-          return { snaks: snaks(read(reference, 'snaks', pointer), true, pointer) };
+          return { snaks: snaks(read(reference, 'snaks', pointer), true, pointer).result };
         });
       kept.push(result);
     }
@@ -359,89 +432,32 @@ export function convertWikidata(
       if (resolved === undefined) return { type: 'somevalue' };
       if (typeof resolved !== 'string' || !uuid.test(resolved)) fail('Invalid resolved relation UUID', pointer);
       content = resolved;
-    } else if (definition.datatype === 'time') {
-      const date = content as {
-        time: string;
-        precision: number;
-        calendarmodel: string;
-        timezone: number;
-        before: number;
-        after: number;
-      };
-      if (
-        ![9, 10, 11].includes(date.precision) ||
-        date.calendarmodel !== 'http://www.wikidata.org/entity/Q1985727' ||
-        date.timezone !== 0 ||
-        date.before !== 0 ||
-        date.after !== 0
-      ) {
-        diagnose('Unsupported date precision, uncertainty, timezone or calendar', pointer);
+    } else if (definition.datatype === 'monolingualtext') {
+      const term = content as { language?: unknown; text?: unknown };
+      const language = typeof term.language === 'string' ? canonicalLanguageTag(term.language) : null;
+      if (language === null || typeof term.text !== 'string') {
+        diagnose('Unsupported monolingual qualifier value', pointer);
         return;
       }
-      const pieces = /^[+-]([0-9]+)-([0-9]{2})-([0-9]{2})/.exec(date.time)!;
-      const year = Number(pieces[1]),
-        month = Number(pieces[2]),
-        day = Number(pieces[3]);
-      const days = [
-        31,
-        year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28,
-        31,
-        30,
-        31,
-        30,
-        31,
-        31,
-        30,
-        31,
-        30,
-        31,
-      ];
-      if (
-        date.precision === 9
-          ? month !== 0 || day !== 0
-          : month < 1 || month > 12 || (date.precision === 10 ? day !== 0 : day < 1 || day > days[month - 1]!)
-      )
-        fail('Invalid source calendar date', pointer);
-      content = { time: date.time, precision: date.precision, calendarmodel: date.calendarmodel };
-    } else if (definition.datatype === 'quantity') {
-      const quantity = content as { amount: string; unit: string; lowerBound?: string; upperBound?: string };
-      if (quantity.lowerBound !== undefined || quantity.upperBound !== undefined) {
-        diagnose('Unsupported quantity uncertainty', pointer);
-        return;
-      }
-      content = { amount: quantity.amount, unit: quantity.unit };
-    }
-    // Enforce source scalar constraints from the actual bundled property definition.
-    const scalar = definition.value as { pattern?: string };
-    if (typeof content === 'string' && scalar.pattern && new RegExp(scalar.pattern, 'u').exec(content)?.[0] !== content)
-      fail('Source value violates the mapped catalogue datatype', pointer);
-    if (definition.datatype === 'quantity' && (definition.minimum !== undefined || definition.maximum !== undefined)) {
-      const quantity = content as { amount: string; unit: string };
-      const schema = definition.value as { properties: { amount: { pattern: string } } };
-      if (
-        !new RegExp(schema.properties.amount.pattern).test(quantity.amount) ||
-        !definition.units?.includes(quantity.unit)
-      )
-        fail('Source quantity violates its mapped datatype or units', pointer);
-      const amount = Number((content as { amount: string }).amount);
-      if (
-        !Number.isFinite(amount) ||
-        amount < (definition.minimum ?? -Infinity) ||
-        amount > (definition.maximum ?? Infinity)
-      )
-        fail('Source quantity violates catalogue bounds', pointer);
+      content = { language, text: term.text };
     }
     return { type: 'value', content };
   }
 
-  let subjectType: string | undefined;
+  const mappedTypes = new Set<string>();
+  let hasDish = false;
   for (const claim of normalizedRecord.claims.P31 ?? []) {
     if (claim.rank === 'deprecated' || claim.mainsnak.snaktype !== 'value') continue;
     const target = (claim.mainsnak.datavalue!.value as { id: string }).id;
     const mapped = types.get(target);
-    if (mapped && subjectType && subjectType !== mapped) fail('Ambiguous mapped Wikidata entity types', '/claims/P31');
-    if (mapped) subjectType = mapped;
+    if (mapped) mappedTypes.add(mapped);
+    if (target === 'Q746549') hasDish = true;
   }
+  // A dish can also be food. Resolve only that overlap, independently of claim
+  // order; every other mapped-type conflict retains the existing refusal.
+  if (hasDish) mappedTypes.delete('wd:Q2095');
+  if (mappedTypes.size > 1) fail('Ambiguous mapped Wikidata entity types', '/claims/P31');
+  const subjectType = mappedTypes.values().next().value;
   const statements: BatchStatement[] = Object.values(normalizedRecord.labels).map((term) => ({
     property: { id: 'schema:name' },
     value: { type: 'value', content: { language: term.language, text: term.value } },
@@ -457,6 +473,9 @@ export function convertWikidata(
         continue;
       }
       const relation = definition.datatype === 'wikibase-item';
+      const exact = exactQuantity(definition);
+      let lostQualifier = qualificationLoss.has(claim);
+      if (lostQualifier) diagnose('Exact quantity has an unmapped qualifier', pointer);
       if (relation && claim.mainsnak.snaktype !== 'value') {
         diagnose('Relation has no source identity', pointer);
         continue;
@@ -466,23 +485,40 @@ export function convertWikidata(
       if (!value) continue;
       const qualifiers: NonNullable<BatchStatement['qualifiers']> = [];
       for (const [key, snaks] of Object.entries(claim.qualifiers ?? {})) {
-        const qualifier = mappings.get(key)!;
+        const qualifier = mappings.get(key);
+        if (!qualifier) {
+          diagnose('Exact quantity has an unmapped qualifier', pointer);
+          if (exact) lostQualifier = true;
+          continue;
+        }
         if (!definition.qualifiers.includes(qualifier.id)) {
           diagnose('Qualifier is unsupported by the mapped property', pointer);
+          if (exact) lostQualifier = true;
           continue;
         }
         for (const snak of snaks) {
           if (qualifier.definition.datatype === 'wikibase-item') {
             diagnose('Item qualifier is unsupported', pointer);
+            if (exact) lostQualifier = true;
             continue;
           }
           const value = valueOf(snak, qualifier.definition, pointer);
+          if (!value) {
+            if (exact) lostQualifier = true;
+            continue;
+          }
+          if (exact && value.type === 'somevalue') {
+            diagnose('Exact quantity qualifier has no resolved value', pointer);
+            lostQualifier = true;
+            continue;
+          }
           if (value)
             qualifiers.push(
               value.type === 'value' ? part(qualifier.id, value.content) : { property: { id: qualifier.id }, value },
             );
         }
       }
+      if (exact && lostQualifier) continue;
       if (target && value.type === 'somevalue') {
         if (!definition.qualifiers.includes('schema:sameAs')) {
           diagnose('Unresolved relation lacks an approved identity qualifier', pointer);
@@ -520,13 +556,18 @@ export function convertWikidata(
         }
         if (parts.length) references.push({ parts });
       }
-      statements.push({
+      const candidate: BatchStatement = {
         property: { id: mapped },
         value,
         rank: claim.rank as 'normal' | 'preferred',
         ...(qualifiers.length ? { qualifiers } : {}),
         references,
-      });
+      };
+      if (checkStatementInput(candidate, bundledRelease).violations.length) {
+        diagnose('Complete source statement is unsupported by the released property', pointer);
+        continue;
+      }
+      statements.push(candidate);
     }
   }
   const proposals: BatchCommand[] = [];

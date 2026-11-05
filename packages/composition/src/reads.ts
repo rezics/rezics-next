@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import canonicalize from 'canonicalize';
+import type { PageDocumentRead } from './documents.ts';
 import {
   type CompositionDocument,
   type CompositionNode,
@@ -16,12 +17,22 @@ export const MAX_PAGE_COST = 128;
 
 /** Subjects one read can return: one subject, or a search read's limit. */
 export function readCost(read: PageRead): number {
-  return read.kind === 'subject' ? 1 : read.body.limit;
+  return read.kind === 'subject' || read.kind === 'reactions' || read.kind === 'account'
+    ? 1
+    : read.kind === 'search'
+      ? read.body.limit
+      : read.limit;
 }
 
 export interface PageReadPlan {
   reads: Record<string, PageRead>;
   nodes: Record<string, string>;
+}
+
+export class PageContinuationError extends Error {
+  constructor(readonly field: 'node' | 'cursor') {
+    super(`Invalid continuation ${field}`);
+  }
 }
 
 export class PageReadLimitError extends Error {
@@ -52,8 +63,26 @@ export function planReads(
   const keys = new Map<string, string>();
   const reads: Record<string, PageRead> = {};
   const nodes = new Map<string, string>();
+  let continued = false;
   for (const node of walkNodes(registry, document)) {
-    const read = components.get(node.type)!.read?.(node.props, page);
+    let read = components.get(node.type)!.read?.(node.props, page);
+    if (page.continuation?.node === node.props.id) {
+      if (
+        (node.type !== 'TypeList' && node.props.paged !== true) ||
+        !read ||
+        (read.kind !== 'links' &&
+          read.kind !== 'relations' &&
+          read.kind !== 'subjectThreads' &&
+          read.kind !== 'members' &&
+          read.kind !== 'search') ||
+        (read.kind === 'search' && node.type !== 'TypeList')
+      )
+        throw new PageContinuationError('node');
+      if (!page.continuation.cursor || (read.kind === 'subjectThreads' && page.continuation.cursor.length > 4096))
+        throw new PageContinuationError('cursor');
+      read = { ...read, cursor: page.continuation.cursor };
+      continued = true;
+    }
     if (read === undefined || read === null) continue;
     const canonical = canonicalize(read)!;
     let key = keys.get(canonical);
@@ -65,6 +94,7 @@ export function planReads(
     }
     nodes.set(node.props.id, key);
   }
+  if (page.continuation && !continued) throw new PageContinuationError('node');
   return { reads, nodes: Object.fromEntries(nodes) };
 }
 
@@ -77,4 +107,23 @@ export function shownProperties(document: CompositionDocument): string[] {
     }
   }
   return [...properties];
+}
+
+/** Code-owned dependent read for the statement surfaces this configuration actually renders. */
+export function documentRead(
+  document: CompositionDocument,
+  subject: string | null,
+  available: readonly string[],
+  context?: string,
+): PageDocumentRead | null {
+  if (subject === null) return null;
+  const selected = new Set(shownProperties(document));
+  if ([...walkNodes(platformRegistry, document)].some((node) => node.type === 'Summary'))
+    selected.add('schema:abstract');
+  if ([...walkNodes(platformRegistry, document)].some((node) => node.type === 'MoreStatements')) {
+    for (const property of available) selected.add(property);
+  }
+  return selected.size
+    ? { kind: 'documents', id: subject, ...(context ? { context } : {}), properties: [...selected].sort() }
+    : null;
 }

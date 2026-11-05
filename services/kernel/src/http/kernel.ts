@@ -1,11 +1,41 @@
+import { initializeEventTypes } from '../events/catalogue.ts';
+import { contentViewerActionResources } from '../content/viewer-actions.ts';
+import { createOperationCatalogue } from '@rezics/operations';
+import { FEED_OPERATION_DECLARATIONS } from '../content/feed-operation-declarations.ts';
+import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from '../commerce/money.ts';
+import { mountContentEditionConsent } from '../content/edition-sale.ts';
+import type { CurrentConsentReader } from '../access/auth-consent.ts';
+import { createContentEditionBuyerFactReader } from '../commerce/content-edition-buyer-fact.ts';
+import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
+import { NATIVE_CONTAINER_ACTIONS } from '../community/actions.ts';
+import { assertReceiptKeyRing, configureReceiptKeys, readReceiptKeyRing } from '../command/receipt-key.ts';
 import { randomBytes } from 'node:crypto';
+import { zoneRoutes } from '../zones/http.ts';
+import { zoneViewerActionResource } from '../zones/viewer-actions.ts';
+import type { Elysia } from 'elysia';
+import { ProblemError } from './problem.ts';
 import { parseExposure } from '../access/gates/declaration.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { createAccess } from '../access/index.ts';
+import { accessActionCatalogue, assertInternalActionDeclarations, createAccess } from '../access/index.ts';
 import { deriveAccess } from '../access/derived-access.ts';
 import { assertDeclaredResourceTypes } from '../access/resource-roles.ts';
 import { installResourceRoleCatalogue, resourceRoleCatalogue } from '../access/resource-roles.ts';
+import {
+  compileViewerActionBindings,
+  viewerActionBindingActions,
+  viewerActionsRoutes,
+  type ViewerActionResources,
+  type ViewerActionResource,
+  type ViewerActionBindings,
+} from '../access/viewer-actions.ts';
+import { contextViewerActionResource, subjectViewerActionResources } from '../semantic/viewer-actions.ts';
+import { accountViewerActionResource } from '../access/account-viewer-actions.ts';
+import { collectionViewerActionResource } from '../library/collection-reads.ts';
+import { realmViewerActionResource } from '../community/realm.ts';
+import { spaceViewerActionResource } from '../community/space.ts';
+import { followingSpaceTargets } from '../community/following-space-targets.ts';
 import { accessRoutes } from '../access/routes.ts';
+import { erasureStatusRoutes } from '../access/erasure-status-route.ts';
 import { exposureRoutes } from '../access/gates/routes.ts';
 import { createRealmMembership } from '../community/membership.ts';
 import { createRealmParticipationCheck, type RealmParticipationCheck } from '../community/participation.ts';
@@ -15,15 +45,40 @@ import { systemClock } from '../clock.ts';
 import { payoutRoutes } from '../commerce/payout-routes.ts';
 import { commerceRoutes, type CommerceDependencies } from '../commerce/routes.ts';
 import { collectionRoutes } from '../library/collection-routes.ts';
+import { continueRoutes } from '../library/continue-routes.ts';
+import { feedRoutes } from '../content/feed-routes.ts';
+import { personalLabelRoutes } from '../library/label-routes.ts';
+import { pinRoutes } from '../library/pin-routes.ts';
 import { progressRoutes } from '../library/progress-routes.ts';
+import { LIBRARY_OPERATION_DECLARATIONS } from '../library/operation-declarations.ts';
+import { readingInsightsRoutes } from '../library/reading-insights-routes.ts';
+import { yearlyCompletionGoalRoutes } from '../library/yearly-goal-routes.ts';
+import { diaryRoutes } from '../library/diary-routes.ts';
+import { createSessionCommands } from '../library/sessions.ts';
+import { ratingRoutes } from '../rating/routes.ts';
+import { sourceStatisticRoutes } from '../rating/source-statistics.ts';
 import type { ContentBoardDependencies } from '../content/boards.ts';
 import { currentRealmDisclosureScope } from '../content/reads.ts';
 import { mediaRoutes } from '../content/media-routes.ts';
-import { contentRoutes } from '../content/routes.ts';
+import { contentRoutes, subjectReactionRoutes } from '../content/routes.ts';
+import { noticeRoutes } from '../content/notice-routes.ts';
 import { realmOfItem } from '../content/realm-of-item.ts';
 import type { TurnstileVerifier } from '../content/turnstile.ts';
 import type { ContentRuntime } from '../content/runtime.ts';
+import { bangumiImportRoutes } from '../library/list-import-bangumi-routes.ts';
+import { malImportRoutes } from '../library/list-import-mal-routes.ts';
+import { libraryExportRoutes } from '../library/library-export-routes.ts';
+import { libraryArchiveMergeRoutes } from '../library/library-archive-merge-routes.ts';
+import { copyArchiveRoutes } from '../library/copy-archive-routes.ts';
+import { libraryArchiveCollectionRecoveryRoutes } from '../library/library-archive-collection-recovery-routes.ts';
 import { personalLibraryRoutes } from '../library/personal-routes.ts';
+import { aniListImportRoutes } from '../library/list-import-anilist-routes.ts';
+import { vndbImportRoutes } from '../library/list-import-vndb-routes.ts';
+import { createDefaultShelfReads, type ShelfNativeReadBindings } from '../library/shelf-reader-defaults.ts';
+import { createContentShelfTitleSource, type ContentShelfTitleInputs } from '../library/shelf-title-content-source.ts';
+import type { ShelfTypeDigest } from '../library/shelf-type-keys.ts';
+import { createShelfMaintenanceOps } from '../library/shelf-maintenance-runtime.ts';
+import { readViewerPersonalActionsPage, type ViewerPersonalActionsReader } from '../library/viewer-personal-actions.ts';
 import { profileRoutes } from '../presentation/http/profiles.ts';
 import type { Access, AccessConfig, AccessFactory, AccessRealmRoleReader, Actor, Resource } from '../request/access.ts';
 import { withConnection } from '../database/pool.ts';
@@ -31,26 +86,95 @@ import { routeOf } from '../route/route.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { Pool } from 'pg';
 import { createWorkClient, type WorkClient } from '../work/client.ts';
-import { searchRoutes, type SearchService } from '../search/http/routes.ts';
+import { bindExecutionContract } from '../command/execution-contract.ts';
+import { historyExecutionPort } from '../history/operational-work.ts';
+import { workExecutionPort } from '../work/selected-runtime.ts';
+import { recentSearchRoutes } from '../search/recent-searches.ts';
+import { searchRoutes } from '../search/http/routes.ts';
+import type { SearchService as SearchRuntime } from '../search/service-scope.ts';
+import { configureDefinitionCatalogue, createNativeDefinitionCatalogue } from '../semantic/definition-catalogue.ts';
 import { definitionRoutes } from '../semantic/http/definitions.ts';
 import { contextRoutes } from '../semantic/http/contexts.ts';
 import { bulkRoutes } from '../semantic/http/bulk.ts';
+import { sourceRecordRoutes } from '../semantic/http/source-records.ts';
 import { subjectRoutes } from '../semantic/http/subjects.ts';
+import { providerReviewQueueRoutes } from '../semantic/http/provider-review-queue.ts';
+import {
+  createSubjectPagePublication,
+  mountSubjectPagePublication,
+  type SubjectPagePublication,
+} from '../semantic/subject-page-publication.ts';
+import { createSubjectPageFeed, type SubjectPageFeed } from '../semantic/subject-page-feed.ts';
+import { subjectPageRoutes } from '../semantic/http/subject-pages.ts';
 import { createApp } from './app.ts';
-import { actionCatalogue } from './request.ts';
+import { actionCatalogue, type MountedRoute } from './request.ts';
 import { declareKernelWriteRates } from './write-rate-routes.ts';
+
+function compileGuestSecurity(routes: readonly MountedRoute[]) {
+  const result = new Map<string, 'anonymous' | 'authenticated' | 'unknown'>();
+  for (const route of routes) {
+    const detail = route.hooks?.detail as Record<string, unknown> | undefined;
+    if (!detail || typeof detail.operationId !== 'string') continue;
+    const security = detail.security;
+    const classification = !Array.isArray(security)
+      ? 'unknown'
+      : security.some(
+            (requirement) =>
+              typeof requirement === 'object' &&
+              requirement !== null &&
+              !Array.isArray(requirement) &&
+              Object.keys(requirement).length === 0,
+          )
+        ? 'anonymous'
+        : security.length > 0
+          ? 'authenticated'
+          : 'unknown';
+    const prior = result.get(detail.operationId);
+    result.set(detail.operationId, prior === undefined || prior === classification ? classification : 'unknown');
+  }
+  return result;
+}
 
 export type KernelDependencies = Parameters<typeof createApp>[0] & {
   routeKey: Uint8Array;
+  /** Trusted post-catalogue binding; runs before the host admits any request. */
+  onAccessReady?: (
+    access: Access,
+    viewerActions: { resources: ViewerActionResources; bindings: ViewerActionBindings },
+  ) => void;
+  /** Dedicated durable HMAC configuration, independent of ephemeral token defaults. */
+  receiptKeys?: KeyRing;
+  /** Trusted modules mount declarations before composition validation. */
+  modules?: readonly ((app: ReturnType<typeof createApp>) => void)[];
+  viewerActionResources?: ViewerActionResources;
+  resourceRoles?: import('../access/resource-roles.ts').ResourceRoleCatalogue;
   /** Trusted domain time only; authentication and request budgets retain real time. */
   clock?: () => Date;
   commerce?: CommerceDependencies;
-  content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
-  search?: SearchService;
+  moneyPolicy?: CommerceMoneyPolicy;
+  content?: ContentRuntime &
+    Pick<ContentBoardDependencies, 'cursorNow'> & {
+      readConsent?: CurrentConsentReader;
+      /** Complete-input title observations; absent until Content installs its native producer. */
+      shelfTitleInputs?: ContentShelfTitleInputs;
+    };
+  search?: SearchRuntime;
+  /** Native shelf maintenance bindings; absence is a typed preparing response, never ready empty data. */
+  shelves?: ShelfNativeReadBindings;
+  /** Per-kernel private Type dictionary digest; defaults to SHA-256. */
+  shelfTypeDigest?: ShelfTypeDigest;
+  /** Optional entry preparation observation, after release of the source snapshots. */
+  typeSourceObserved?: import('../library/type-preparation-contract.ts').TypePreparationSourceObserved;
+  /** Trusted owner for the original funded frame around each complete private loan HTTP operation. */
+  loanHttpWork?: import('../library/loan-operation-bounds.ts').LoanHttpWorkOwner;
+
+  discovery?: import('../search/discovery-service.ts').DiscoverySearch;
   /** Trusted verifier binding; runtime secret/env composition belongs to the service. */
   reports?: { anonymousVerifier?: TurnstileVerifier };
   /** Enqueue-only client. Tests close the instance they pass. */
   workClient?: WorkClient;
+  /** Test and deployment override for the kernel-registered current Realm role reader. */
+  realmRoleReader?: AccessRealmRoleReader;
 };
 
 type ContentReadAssociation = Readonly<{ realmId: string | null }>;
@@ -107,7 +231,10 @@ function realmAwareContentAccess(access: Access): Access {
             const preparedResource: Resource = {
               route: realmRoute,
               id: association.realmId,
-              eligibility: realmReadEligibility({ route: realmRoute, id: association.realmId }),
+              eligibility: realmReadEligibility({
+                route: realmRoute,
+                id: association.realmId,
+              }),
             };
             realmResource = preparedResource;
             realmEvidence = access.prepare
@@ -174,58 +301,123 @@ function realmAwareContentAccess(access: Access): Access {
   return wrapped;
 }
 
-/** Builds the Access resolver shared by production kernels and test compositions. */
+export class KernelAccessCompositionError extends Error {
+  constructor() {
+    super('Access was resolved before kernel composition finished');
+    this.name = 'KernelAccessCompositionError';
+  }
+}
+
+/** One Access per kernel, built on first use after composition from the complete
+ * mounted catalogue; composition code receives Access lazily. Standalone test
+ * compositions may supply their already-complete catalogue in resolveAccess.
+ */
 export function createKernelAccessResolver(options: {
   pool: Pool;
   tokens: KeyRing;
   clock: () => Date;
   access?: Access | AccessFactory;
   realmRoleReader?: AccessRealmRoleReader;
-}): { resolveAccess: (config: AccessConfig) => Access; realmRoleReader: AccessRealmRoleReader } {
+  /** Undefined until the kernel has mounted its last route. */
+  composedActions?: () => AccessConfig['actions'] | undefined;
+}): {
+  resolveAccess: (config: AccessConfig) => Access;
+  realmRoleReader: AccessRealmRoleReader;
+} {
   const factory = options.access ?? createAccess;
+  const contentEditionBuyerFactReader = createContentEditionBuyerFactReader({
+    pool: options.pool,
+    clock: options.clock,
+  });
   let access: Access | undefined;
   let realmMembership: ReturnType<typeof createRealmMembership> | undefined;
+  function membershipReader() {
+    if (!realmMembership) {
+      if (!access) throw new Error('Realm membership role reader is not installed');
+      realmMembership = createRealmMembership({
+        pool: options.pool,
+        access,
+        referenceKeys: options.tokens,
+        clock: options.clock,
+      });
+    }
+    return realmMembership.roleReader;
+  }
   const realmRoleReader: AccessRealmRoleReader =
     options.realmRoleReader ??
-    ((client, input) => {
-      if (!realmMembership) {
-        if (!access) throw new Error('Realm membership role reader is not installed');
-        realmMembership = createRealmMembership({
-          pool: options.pool,
-          access,
-          referenceKeys: options.tokens,
-          clock: options.clock,
-        });
-      }
-      return realmMembership.roleReader(client, input);
-    });
-  const resolveAccess = (config: AccessConfig) =>
-    (access ??=
-      typeof factory === 'function' ? factory({ ...config, realmRoleReader, clock: options.clock }) : factory);
+    Object.assign(
+      (client: Parameters<AccessRealmRoleReader>[0], input: Parameters<AccessRealmRoleReader>[1]) =>
+        membershipReader()(client, input),
+      {
+        batch: ((client, input) => membershipReader().batch!(client, input)) as NonNullable<
+          AccessRealmRoleReader['batch']
+        >,
+      },
+    );
+  const resolveAccess = (config: AccessConfig): Access => {
+    if (typeof factory !== 'function') return (access = factory);
+    if (access) return access;
+    const actions = options.composedActions ? options.composedActions() : config.actions;
+    if (!actions) throw new KernelAccessCompositionError();
+    return (access = factory({
+      ...config,
+      actions,
+      realmRoleReader,
+      clock: options.clock,
+      contentEditionBuyerFactReader,
+    }));
+  };
   return { resolveAccess, realmRoleReader };
 }
 
 /** The route key must stay the same across restarts, or retries lose their receipts. */
-export function createKernel(dependencies: KernelDependencies) {
+export function createKernel(dependencies: KernelDependencies): Kernel {
+  initializeEventTypes();
+  const operationCatalogue = createOperationCatalogue([
+    ...LIBRARY_OPERATION_DECLARATIONS,
+    ...FEED_OPERATION_DECLARATIONS,
+  ]);
+  if (dependencies.content?.readConsent)
+    mountContentEditionConsent(dependencies.pool, dependencies.content.readConsent);
   const sourceClock = dependencies.clock ?? systemClock;
   const clock = () => {
     const instant = sourceClock();
     if (!(instant instanceof Date) || !Number.isFinite(instant.getTime())) throw new TypeError('Invalid command clock');
     return instant;
   };
-  const tokens = dependencies.tokens ?? { current: 1, keys: new Map([[1, new Uint8Array(randomBytes(32))]]) };
+  const tokens = dependencies.tokens ?? {
+    current: 1,
+    keys: new Map([[1, new Uint8Array(randomBytes(32))]]),
+  };
+  configureDefinitionCatalogue(dependencies.pool, tokens);
+  const receiptKeys = readReceiptKeyRing(process.env, dependencies.receiptKeys);
+  assertReceiptKeyRing(receiptKeys, tokens);
+  configureReceiptKeys(dependencies.pool, receiptKeys);
+  let composedActions: AccessConfig['actions'] | undefined;
+  const accessFactory = typeof dependencies.access === 'function' ? dependencies.access : createAccess;
   const { resolveAccess, realmRoleReader } = createKernelAccessResolver({
     pool: dependencies.pool,
     tokens,
     clock,
-    ...(dependencies.access === undefined ? {} : { access: dependencies.access }),
+    composedActions: () => composedActions,
+    access:
+      typeof dependencies.access === 'object'
+        ? dependencies.access
+        : (config) =>
+            accessFactory({
+              ...config,
+              ...(dependencies.resourceRoles ? { resourceRoles: dependencies.resourceRoles } : {}),
+            }),
+    ...(dependencies.realmRoleReader === undefined ? {} : { realmRoleReader: dependencies.realmRoleReader }),
   });
+  const bindKernelExecution = (client: WorkClient) =>
+    bindExecutionContract(client, workExecutionPort(), historyExecutionPort);
   let opened: Promise<WorkClient> | undefined;
   const workClient = (): Promise<WorkClient> => {
-    if (dependencies.workClient) return Promise.resolve(dependencies.workClient);
+    if (dependencies.workClient) return Promise.resolve(bindKernelExecution(dependencies.workClient));
     const url = dependencies.pool.options.connectionString;
     if (!url) return Promise.reject(new Error('Work client requires the pool connection string'));
-    opened ??= createWorkClient(url);
+    opened ??= createWorkClient(url).then(bindKernelExecution);
     return opened;
   };
   const subjects = subjectRoutes(
@@ -240,8 +432,53 @@ export function createKernel(dependencies: KernelDependencies) {
       clock,
       tokens,
       access: () => resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
+      viewerActionBindings: () => {
+        if (!viewerBindings) throw new ProblemError('dependency_unavailable');
+        return viewerBindings;
+      },
     },
   );
+  let publication: SubjectPagePublication | undefined;
+  let subjectPageFeed: SubjectPageFeed;
+  function resolvePublication(): SubjectPagePublication {
+    if (publication) return publication;
+    const publicationConfig = {
+      pool: dependencies.pool,
+      access: resolveAccess({
+        actions: actionCatalogue(subjects),
+        realmRoleReader,
+      }),
+      clock: sourceClock,
+      routeKey: dependencies.routeKey,
+    };
+    publication = createSubjectPagePublication(publicationConfig);
+    subjectPageFeed = createSubjectPageFeed({
+      ...publicationConfig,
+      tokens,
+      publication,
+    });
+    return publication;
+  }
+  subjectPageRoutes(subjects, {
+    pool: dependencies.pool,
+    feed: () => {
+      resolvePublication();
+      return subjectPageFeed;
+    },
+  });
+  sourceRecordRoutes(subjects, {
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
+  });
+  providerReviewQueueRoutes(subjects, {
+    pool: dependencies.pool,
+    tokens,
+    routeKey: dependencies.routeKey,
+    workClient,
+    access: () => resolveAccess({ actions: actionCatalogue(subjects), realmRoleReader }),
+  });
   const batched = bulkRoutes(subjects, {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
@@ -249,16 +486,33 @@ export function createKernel(dependencies: KernelDependencies) {
     access: () => resolveAccess({ actions: actionCatalogue(batched), realmRoleReader }),
   });
   const app = definitionRoutes(batched as unknown as ReturnType<typeof subjectRoutes>, {
+    tokens,
+    catalogue: () =>
+      createNativeDefinitionCatalogue({
+        pool: dependencies.pool,
+        access: resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
+      }),
     pool: dependencies.pool,
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
   });
-  const presentation = profileRoutes(app, { ...dependencies, tokens });
-  const payouts = payoutRoutes(app, {
+  profileRoutes(app, {
+    ...dependencies,
+    tokens,
+    access: (config) => resolveAccess({ ...config, realmRoleReader }),
+  });
+  erasureStatusRoutes(app, {
+    pool: dependencies.pool,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
+  });
+  payoutRoutes(app, {
     ...dependencies,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
   });
   const commercial = commerceRoutes(app, {
+    moneyPolicy: dependencies.moneyPolicy ?? readCommerceMoneyPolicy(process.env),
+    routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     tokens,
     access: () => resolveAccess({ actions: actionCatalogue(app), realmRoleReader }),
@@ -266,18 +520,97 @@ export function createKernel(dependencies: KernelDependencies) {
   });
   let progress: ReturnType<typeof progressRoutes>;
   progress = progressRoutes(commercial as unknown as ReturnType<typeof definitionRoutes>, {
+    routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     tokens,
     clock,
+    operations: operationCatalogue,
     access: () => resolveAccess({ actions: actionCatalogue(progress), realmRoleReader }),
   });
-  const contextual = contextRoutes(progress as unknown as ReturnType<typeof definitionRoutes>, {
+  let yearlyGoals: ReturnType<typeof yearlyCompletionGoalRoutes>;
+  yearlyGoals = yearlyCompletionGoalRoutes(commercial as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(yearlyGoals), realmRoleReader }),
+  });
+  let journalCommands: ReturnType<typeof createSessionCommands> | undefined;
+  const deferredJournalCommands = new Proxy({} as ReturnType<typeof createSessionCommands>, {
+    get(_target, property) {
+      const commands = (journalCommands ??= createSessionCommands({
+        pool: dependencies.pool,
+        tokens,
+        clock,
+        access: resolveAccess({ actions: actionCatalogue(progress), realmRoleReader }),
+      }));
+      const value = Reflect.get(commands, property, commands);
+      return typeof value === 'function' ? value.bind(commands) : value;
+    },
+  });
+  const readingInsights = readingInsightsRoutes(progress as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+  });
+  const diary = diaryRoutes(readingInsights as unknown as ReturnType<typeof definitionRoutes>, {
+    tokens,
+    pool: dependencies.pool,
+    clock,
+    routeKey: dependencies.routeKey,
+    access: () => resolveAccess({ actions: actionCatalogue(diary), realmRoleReader }),
+  });
+  const continued = continueRoutes(diary as unknown as ReturnType<typeof definitionRoutes>, {
+    tokens,
+    pool: dependencies.pool,
+    clock,
+    routeKey: dependencies.routeKey,
+    operations: operationCatalogue,
+    ...(dependencies.search ? { search: dependencies.search } : {}),
+    access: () => resolveAccess({ actions: actionCatalogue(continued), realmRoleReader }),
+  });
+  let viewerResources: Map<string, ViewerActionResource> | undefined;
+  let viewerBindings: ViewerActionBindings | undefined;
+  let viewerGuestSecurity: ReadonlyMap<string, 'anonymous' | 'authenticated' | 'unknown'> | undefined;
+  const viewerActionRuntime = () => {
+    if (!viewerResources || !viewerBindings || !viewerGuestSecurity) throw new ProblemError('dependency_unavailable');
+    return {
+      access: resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+      resources: viewerResources,
+      bindings: viewerBindings,
+      guestSecurity: viewerGuestSecurity,
+      clock,
+    };
+  };
+  const viewerPersonalActions: ViewerPersonalActionsReader = (actor, rows, questionId, deadline) =>
+    readViewerPersonalActionsPage({ pool: dependencies.pool, viewerActionRuntime }, actor, rows, questionId, deadline);
+  const feed = feedRoutes(continued as unknown as ReturnType<typeof definitionRoutes>, {
+    tokens,
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
-    access: () => resolveAccess({ actions: actionCatalogue(contextual), realmRoleReader }),
+    operations: operationCatalogue,
+    workClient,
+    ...(dependencies.search ? { search: dependencies.search } : {}),
+    ...(dependencies.discovery ? { discovery: dependencies.discovery } : {}),
+    access: () => resolveAccess({ actions: actionCatalogue(feed), realmRoleReader }),
+    contentAccess: () => realmAwareContentAccess(resolveAccess({ actions: actionCatalogue(feed), realmRoleReader })),
+    viewerPersonalActions,
+    viewerActionRuntime,
   });
-  const searched = searchRoutes(contextual, dependencies);
+  const contextual = contextRoutes(feed as unknown as ReturnType<typeof definitionRoutes>, {
+    tokens,
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    clock,
+    access: () =>
+      resolveAccess({
+        actions: actionCatalogue(contextual),
+        realmRoleReader,
+      }),
+  });
+  let searched: ReturnType<typeof searchRoutes>;
+  searched = searchRoutes(contextual, {
+    ...dependencies,
+    clock,
+    gateAccess: () => resolveAccess({ actions: actionCatalogue(searched), realmRoleReader }),
+  });
   const anonymousVerifier = dependencies.reports?.anonymousVerifier ?? dependencies.content?.anonymousVerifier;
   const cursorNow = dependencies.content?.cursorNow ?? (() => clock().getTime());
   let contentAccess: Access | undefined;
@@ -286,11 +619,14 @@ export function createKernel(dependencies: KernelDependencies) {
   const checkRealmParticipation: RealmParticipationCheck = (client, input, time) => {
     realmParticipation ??= createRealmParticipationCheck({
       pool: dependencies.pool,
-      access: resolveAccess({ actions: actionCatalogue(content), realmRoleReader }),
+      access: resolveAccess({
+        actions: actionCatalogue(content),
+        realmRoleReader,
+      }),
     });
     return realmParticipation(client, input, time);
   };
-  content = contentRoutes(searched as unknown as ReturnType<typeof definitionRoutes>, {
+  const contentDependencies = {
     pool: dependencies.pool,
     routeKey: dependencies.routeKey,
     clock,
@@ -299,30 +635,54 @@ export function createKernel(dependencies: KernelDependencies) {
     ...(dependencies.content?.fetchConfig === undefined ? {} : { fetchConfig: dependencies.content.fetchConfig }),
     ...(dependencies.content?.workflows === undefined ? {} : { workflows: dependencies.content.workflows }),
     ...(anonymousVerifier === undefined ? {} : { anonymousVerifier }),
+    viewerActionRuntime,
     realmParticipation: checkRealmParticipation,
     get access() {
       if (!contentAccess)
         contentAccess = realmAwareContentAccess(resolveAccess({ actions: actionCatalogue(content), realmRoleReader }));
       return contentAccess;
     },
+  };
+  content = contentRoutes(searched as unknown as ReturnType<typeof definitionRoutes>, contentDependencies);
+  noticeRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    tokens,
+    routeKey: dependencies.routeKey,
+    get access() {
+      return contentDependencies.access;
+    },
+    clock,
   });
+  subjectReactionRoutes(app as unknown as ReturnType<typeof createApp>, contentDependencies);
   const media = mediaRoutes(content as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
+    tokens,
     clock,
     routeKey: dependencies.routeKey,
     realmParticipation: checkRealmParticipation,
     get access() {
-      return resolveAccess({ actions: actionCatalogue(granted), realmRoleReader });
+      return resolveAccess({
+        actions: actionCatalogue(granted),
+        realmRoleReader,
+      });
     },
   });
   const granted = accessRoutes(media as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     clock,
+    tokens,
     access: () => resolveAccess({ actions: actionCatalogue(granted), realmRoleReader }),
+    realmRoleReader,
+    grantResources: () => {
+      if (!viewerResources) throw new ProblemError('dependency_unavailable');
+      return viewerResources;
+    },
   });
   const exposed = exposureRoutes(granted as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     clock,
+    cursorKeys: tokens,
+    access: () => resolveAccess({ actions: actionCatalogue(exposed), realmRoleReader }),
   });
   const community = communityRoutes(exposed as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
@@ -332,36 +692,241 @@ export function createKernel(dependencies: KernelDependencies) {
     tokens,
     workClient,
   });
+  recentSearchRoutes(app as unknown as ReturnType<typeof createApp>, {
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+  });
+  const shelfTitleSource = dependencies.content?.shelfTitleInputs
+    ? createContentShelfTitleSource(dependencies.content.shelfTitleInputs)
+    : dependencies.shelves?.titleSource;
   const personal = personalLibraryRoutes(community as unknown as ReturnType<typeof definitionRoutes>, {
+    ...(dependencies.typeSourceObserved ? { typeSourceObserved: dependencies.typeSourceObserved } : {}),
+    ...(dependencies.loanHttpWork === undefined ? {} : { loanHttpWork: dependencies.loanHttpWork }),
+    routeKey: dependencies.routeKey,
     pool: dependencies.pool,
     tokens,
     clock,
     access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
+    followingSpaceTargets: (actor, ids, deadline) => {
+      if (!viewerResources || !viewerBindings) throw new ProblemError('dependency_unavailable');
+      return followingSpaceTargets(
+        {
+          pool: dependencies.pool,
+          access: resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+          resources: viewerResources,
+          bindings: viewerBindings,
+          clock,
+        },
+        actor,
+        ids,
+        deadline,
+      );
+    },
+    ...(dependencies.shelfTypeDigest === undefined ? {} : { shelfTypeDigest: dependencies.shelfTypeDigest }),
+    ...(shelfTitleSource === undefined ? {} : { titleSource: shelfTitleSource }),
+    shelves: () => {
+      const access = resolveAccess({ actions: actionCatalogue(personal), realmRoleReader });
+      return createDefaultShelfReads({
+        pool: dependencies.pool,
+        tokens,
+        clock,
+        access,
+        maintenance: createShelfMaintenanceOps({
+          pool: dependencies.pool,
+          access,
+          client: workClient,
+          clock,
+          ...(dependencies.shelfTypeDigest === undefined ? {} : { shelfTypeDigest: dependencies.shelfTypeDigest }),
+        }),
+        ...(dependencies.shelfTypeDigest === undefined ? {} : { shelfTypeDigest: dependencies.shelfTypeDigest }),
+        ...dependencies.shelves,
+        ...(shelfTitleSource === undefined ? {} : { titleSource: shelfTitleSource }),
+      });
+    },
   });
-  const collections = collectionRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
+  libraryExportRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
     pool: dependencies.pool,
     tokens,
     clock,
-    access: () => resolveAccess({ actions: actionCatalogue(collections), realmRoleReader }),
+    workClient,
+    access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
   });
-  declareKernelWriteRates(collections);
+  libraryArchiveMergeRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    workClient,
+    ...(journalCommands === undefined ? {} : { journalCommands }),
+    access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
+  });
+  copyArchiveRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    tokens,
+    routeKey: dependencies.routeKey,
+    clock,
+    workClient,
+    access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
+  });
+  libraryArchiveCollectionRecoveryRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    tokens,
+    routeKey: dependencies.routeKey,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(personal), realmRoleReader }),
+  });
+  const bangumi = bangumiImportRoutes(personal as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(bangumi), realmRoleReader }),
+  });
+  const mal = malImportRoutes(bangumi as unknown as ReturnType<typeof definitionRoutes>, {
+    routeKey: dependencies.routeKey,
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    journal: deferredJournalCommands,
+    access: () => resolveAccess({ actions: actionCatalogue(mal), realmRoleReader }),
+  });
+  const aniList = aniListImportRoutes(mal as unknown as ReturnType<typeof definitionRoutes>, {
+    routeKey: dependencies.routeKey,
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(aniList), realmRoleReader }),
+  });
+  const vndbImports = vndbImportRoutes(aniList as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(vndbImports), realmRoleReader }),
+    ...(dependencies.shelfTypeDigest === undefined ? {} : { shelfTypeDigest: dependencies.shelfTypeDigest }),
+    ...(dependencies.typeSourceObserved ? { typeSourceObserved: dependencies.typeSourceObserved } : {}),
+  });
+  const labels = personalLabelRoutes(vndbImports as unknown as ReturnType<typeof definitionRoutes>, {
+    routeKey: dependencies.routeKey,
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(labels), realmRoleReader }),
+  });
+  // Collection FULL facts use this server route key and the admitted route job deadline.
+  const collections = collectionRoutes(labels as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    viewerPersonalActions,
+    workClient,
+    routeKey: dependencies.routeKey,
+    tokens,
+    clock,
+    ...(dependencies.search ? { search: dependencies.search } : {}),
+    access: () =>
+      resolveAccess({
+        actions: actionCatalogue(collections),
+        realmRoleReader,
+      }),
+  });
+  const pins = pinRoutes(collections as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(pins), realmRoleReader }),
+  });
+  let ratings: ReturnType<typeof ratingRoutes>;
+  let sourceStatistics: ReturnType<typeof sourceStatisticRoutes>;
+  ratings = ratingRoutes(pins as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    tokens,
+    clock,
+    access: () =>
+      resolveAccess({
+        actions: actionCatalogue(sourceStatistics),
+        realmRoleReader,
+      }),
+  });
+  declareKernelWriteRates(ratings);
+  sourceStatistics = sourceStatisticRoutes(ratings as unknown as ReturnType<typeof definitionRoutes>, {
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    tokens,
+    clock,
+    access: () =>
+      resolveAccess({
+        actions: actionCatalogue(sourceStatistics),
+        realmRoleReader,
+      }),
+  });
+  const zones = zoneRoutes(sourceStatistics, {
+    pool: dependencies.pool,
+    routeKey: dependencies.routeKey,
+    ...(dependencies.search ? { search: dependencies.search } : {}),
+    tokens,
+    clock,
+    access: () => resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+  });
+  const mountedViewerResources = new Map<string, ViewerActionResource>([
+    ...subjectViewerActionResources(),
+    ...contentViewerActionResources,
+    ['semantic.context', contextViewerActionResource],
+    ['access.account', accountViewerActionResource],
+    ['library.collection', collectionViewerActionResource],
+    ['community.realm', realmViewerActionResource],
+    ['community.space', spaceViewerActionResource],
+    ['semantic.zone', zoneViewerActionResource],
+  ]);
+  for (const [type, resource] of dependencies.viewerActionResources ?? []) {
+    if (mountedViewerResources.has(type)) throw new Error(`${type}: duplicate viewer actions registration`);
+    mountedViewerResources.set(type, resource);
+  }
+  viewerResources = mountedViewerResources;
+  for (const module of dependencies.modules ?? []) module(zones as unknown as ReturnType<typeof createApp>);
+  viewerActionsRoutes(zones as unknown as ReturnType<typeof createApp>, {
+    pool: dependencies.pool,
+    clock,
+    resources: mountedViewerResources,
+    access: () => resolveAccess({ actions: actionCatalogue(zones), realmRoleReader }),
+    bindings: () => {
+      if (!viewerBindings) throw new ProblemError('dependency_unavailable');
+      return viewerBindings;
+    },
+  });
+  declareKernelWriteRates(zones);
+  viewerBindings = compileViewerActionBindings(zones.routes);
+  viewerGuestSecurity = compileGuestSecurity(zones.routes);
+  for (const [type, resource] of mountedViewerResources) {
+    const actions = new Set([
+      resource.readAction,
+      ...(viewerBindings.get(type) ?? []).flatMap(viewerActionBindingActions),
+    ]);
+    if (actions.size > 64)
+      throw new Error(`${type}: viewer actions exceed 64 candidate actions or 256 operation bindings`);
+  }
   const parameterNames = new Map<string, { name: string; method: string; path: string }>();
-  for (const route of collections.routes) {
-    const prefix: string[] = [];
-    for (const [position, segment] of route.path.split('/').entries()) {
+  for (const route of zones.routes) {
+    const segments = route.path.split('/');
+    for (const [position, segment] of segments.entries()) {
       if (segment.startsWith(':')) {
         const name = segment.slice(1);
-        const key = JSON.stringify([prefix, position]);
+        const key = JSON.stringify(
+          segments.slice(0, position).map((prefixSegment) => (prefixSegment.startsWith(':') ? ':' : prefixSegment)),
+        );
         const first = parameterNames.get(key);
         if (first && first.name !== name) {
           throw new Error(
             `${first.method.toUpperCase()} ${first.path} and ${route.method.toUpperCase()} ${route.path}: inconsistent path parameter name at position ${position}`,
           );
         }
-        if (!first) parameterNames.set(key, { name, method: route.method, path: route.path });
-        prefix.push(':');
-      } else {
-        prefix.push(segment);
+        if (!first)
+          parameterNames.set(key, {
+            name,
+            method: route.method,
+            path: route.path,
+          });
       }
     }
     if (route.hooks.detail?.hide === true) continue;
@@ -371,22 +936,91 @@ export function createKernel(dependencies: KernelDependencies) {
       throw new Error(`${route.method.toUpperCase()} ${route.path}: invalid x-exposure declaration`, { cause });
     }
   }
-  assertDeclaredResourceTypes(collections);
-  return collections as typeof collections &
-    typeof personal &
-    typeof community &
-    typeof exposed &
-    typeof batched &
-    typeof presentation &
-    typeof granted &
-    typeof media &
-    typeof content &
-    typeof searched &
-    typeof payouts &
-    typeof commercial &
-    typeof progress &
-    typeof contextual;
+  const actions = actionCatalogue(zones, NATIVE_CONTAINER_ACTIONS);
+  const consentedScopeCount = accessActionCatalogue(actions).size;
+  if (consentedScopeCount > MAX_CONSENTED_SCOPES)
+    throw new Error(
+      `Kernel action catalogue has ${consentedScopeCount} actions; consented scope bound is ${MAX_CONSENTED_SCOPES}`,
+    );
+  composedActions = actions;
+  assertInternalActionDeclarations(actions);
+  assertDeclaredResourceTypes(zones, dependencies.resourceRoles, actions);
+  dependencies.onAccessReady?.(resolveAccess({ actions, realmRoleReader }), {
+    resources: mountedViewerResources,
+    bindings: viewerBindings,
+  });
+  mountSubjectPagePublication(zones, resolvePublication);
+  return zones as Kernel;
 }
 
-/** The app's type is the Eden contract. */
-export type Kernel = ReturnType<typeof createKernel>;
+// The module inherits definition routes. Keep their existing schemas only once: intersecting
+// another copy expands their response unions beyond the compiler's representable type size.
+type ZoneComposition = Omit<ReturnType<typeof zoneRoutes>, '~Routes'> & {
+  '~Routes': {
+    v1: Pick<ReturnType<typeof zoneRoutes>['~Routes']['v1'], 'zones'>;
+  };
+};
+
+type KernelComposition = ZoneComposition &
+  ReturnType<typeof recentSearchRoutes> &
+  ReturnType<typeof viewerActionsRoutes> &
+  ReturnType<typeof sourceStatisticRoutes> &
+  ReturnType<typeof ratingRoutes> &
+  ReturnType<typeof collectionRoutes> &
+  ReturnType<typeof continueRoutes> &
+  ReturnType<typeof feedRoutes> &
+  ReturnType<typeof pinRoutes> &
+  ReturnType<typeof personalLabelRoutes> &
+  ReturnType<typeof personalLibraryRoutes> &
+  ReturnType<typeof bangumiImportRoutes> &
+  ReturnType<typeof malImportRoutes> &
+  ReturnType<typeof aniListImportRoutes> &
+  ReturnType<typeof vndbImportRoutes> &
+  ReturnType<typeof libraryExportRoutes> &
+  ReturnType<typeof libraryArchiveMergeRoutes> &
+  ReturnType<typeof copyArchiveRoutes> &
+  ReturnType<typeof libraryArchiveCollectionRecoveryRoutes> &
+  ReturnType<typeof communityRoutes> &
+  ReturnType<typeof exposureRoutes> &
+  ReturnType<typeof subjectPageRoutes> &
+  ReturnType<typeof bulkRoutes> &
+  ReturnType<typeof sourceRecordRoutes> &
+  ReturnType<typeof profileRoutes> &
+  ReturnType<typeof accessRoutes> &
+  ReturnType<typeof erasureStatusRoutes> &
+  ReturnType<typeof mediaRoutes> &
+  ReturnType<typeof contentRoutes> &
+  ReturnType<typeof noticeRoutes> &
+  ReturnType<typeof subjectReactionRoutes> &
+  ReturnType<typeof searchRoutes> &
+  ReturnType<typeof payoutRoutes> &
+  ReturnType<typeof commerceRoutes> &
+  ReturnType<typeof progressRoutes> &
+  ReturnType<typeof readingInsightsRoutes> &
+  ReturnType<typeof yearlyCompletionGoalRoutes> &
+  ReturnType<typeof diaryRoutes> &
+  ReturnType<typeof contextRoutes> &
+  ReturnType<typeof providerReviewQueueRoutes>;
+export type Kernel = KernelComposition;
+
+// Every route module inherits the same definition routes. Reuse their method types
+// once: intersecting all inherited response unions can exceed TypeScript's union limit.
+type ClientRoutes<Routes, Base> = {
+  [Key in keyof Routes]: Key extends keyof Base
+    ? Base[Key] extends { body: unknown; response: unknown }
+      ? Base[Key]
+      : ClientRoutes<Routes[Key], Base[Key]>
+    : Routes[Key];
+};
+
+/** createKernel guarantees one parameter name for each route position. */
+export type ClientKernel = Elysia<
+  KernelComposition['~Prefix'],
+  'local',
+  KernelComposition['~Singleton'],
+  KernelComposition['~Definitions'],
+  KernelComposition['~Metadata'],
+  ClientRoutes<KernelComposition['~Routes'], ReturnType<typeof definitionRoutes>['~Routes']>,
+  KernelComposition['~Ephemeral'],
+  KernelComposition['~Volatile']
+>;

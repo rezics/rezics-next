@@ -1,0 +1,151 @@
+import type { ReactNode } from 'react';
+import { Bell, LogIn, Plus } from 'lucide-react';
+import { Menu } from '@rezics/ui/menu';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Skeleton } from '@rezics/ui/shadcn/skeleton';
+import { cn } from '@rezics/ui/utils';
+import { getLocale } from '../paraglide/runtime.js';
+import { m } from '../paraglide/messages.js';
+import { UnreadBadge, UnreadBadgeView } from '../inbox/unread-badge';
+import type { UnreadCount } from '../inbox/inbox-read';
+import { LanguageControl, ThemeControl } from './appearance-controls';
+import { PhoneCreationLinks, useShellCreationActions } from './phone-navigation';
+import { navigationPathMatches, type NavigationSession } from './navigation';
+
+export function TopBar({
+  navigation,
+  logo,
+  search,
+  actions,
+}: Record<'navigation' | 'logo' | 'search' | 'actions', ReactNode>) {
+  return (
+    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur-md has-[[data-expanded=true]]:z-50">
+      <div className="flex min-h-16 items-center gap-2 px-3 lg:grid lg:grid-cols-[minmax(21rem,1fr)_minmax(0,40rem)_minmax(21rem,1fr)]">
+        <div className="flex shrink-0 items-center gap-1">
+          {navigation}
+          {logo}
+        </div>
+        <div className="min-w-0 flex-1">{search}</div>
+        <div className="ms-auto flex w-max shrink-0 items-center gap-1">{actions}</div>
+      </div>
+    </header>
+  );
+}
+
+export function NotificationsLink({ pathname, badge }: { pathname: string; badge: ReactNode }) {
+  const locale = getLocale();
+  return (
+    <a
+      href={`/${locale}/inbox`}
+      aria-current={navigationPathMatches({ locale, pathname }, '/inbox', 'prefix') ? 'page' : undefined}
+      className={cn(buttonVariants({ variant: 'ghost', size: 'icon-lg' }), 'relative rounded-full text-primary')}
+    >
+      <Bell aria-hidden="true" className="size-5" />
+      <span className="sr-only">{m.settings_notifications_heading()}</span>
+      <span className="absolute -end-1 -top-1">{badge}</span>
+    </a>
+  );
+}
+
+export function UnavailableAccountAction({ signIn }: { signIn: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <span
+        role="status"
+        className="sr-only md:not-sr-only md:max-w-36 md:break-words md:text-xs md:text-muted-foreground"
+      >
+        {m.shell_account_unavailable()}
+      </span>
+      <a
+        href={signIn}
+        aria-label={m.account_sign_in()}
+        title={m.account_sign_in()}
+        className={cn(
+          buttonVariants({ variant: 'ghost', size: 'icon-lg' }),
+          'size-11 min-h-11 min-w-11 shrink-0 rounded-full p-0 text-primary',
+        )}
+      >
+        <LogIn aria-hidden="true" className="size-4" />
+      </a>
+    </div>
+  );
+}
+
+export function ShellTopActions({
+  session,
+  pathname,
+  returnTo,
+  account,
+  unread,
+  notifications,
+}: {
+  session: NavigationSession;
+  pathname: string;
+  returnTo: string;
+  account: ReactNode;
+  unread?: UnreadCount;
+  notifications?: ReactNode;
+}) {
+  const actions = useShellCreationActions(session);
+  const signIn = `/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`;
+  return (
+    <>
+      <Menu
+        title={m.shell_create()}
+        closeOnNavigation
+        trigger={
+          <Button size="lg" className="min-w-11 rounded-full px-3" aria-label={m.shell_create()}>
+            <Plus aria-hidden="true" />
+            <span className="hidden lg:inline">{m.shell_create()}</span>
+          </Button>
+        }
+        content={
+          session === 'signed-out' ? (
+            <a className="flex min-h-11 items-center gap-2 px-3 text-primary" href={signIn}>
+              <LogIn aria-hidden="true" className="size-4" />
+              {m.account_sign_in()}
+            </a>
+          ) : (
+            <PhoneCreationLinks actions={actions} pathname={pathname} session={session} />
+          )
+        }
+      />
+      {session === 'signed-in' ? (
+        <>
+          {notifications ?? (
+            <NotificationsLink
+              pathname={pathname}
+              badge={unread ? <UnreadBadgeView data={unread} /> : <UnreadBadge />}
+            />
+          )}
+          <div className="hidden md:block" data-session-slot>
+            {account}
+          </div>
+        </>
+      ) : session === 'signed-out' ? (
+        <>
+          <div className="hidden items-center gap-1 md:flex">
+            <LanguageControl />
+            <ThemeControl />
+          </div>
+          <a
+            href={signIn}
+            className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'rounded-full px-3 text-primary')}
+          >
+            <LogIn aria-hidden="true" className="size-4" />
+            <span className="hidden sm:inline">{m.account_sign_in()}</span>
+            <span className="sr-only sm:hidden">{m.account_sign_in()}</span>
+          </a>
+        </>
+      ) : session === 'unknown' ? (
+        <div data-session-pending role="status" aria-busy="true" className="flex items-center gap-1">
+          <span className="sr-only">{m.candidate_loading()}</span>
+          <Skeleton aria-hidden className="size-11 rounded-full motion-reduce:animate-none" />
+          <Skeleton aria-hidden className="hidden size-11 rounded-full motion-reduce:animate-none md:block" />
+        </div>
+      ) : (
+        <UnavailableAccountAction signIn={signIn} />
+      )}
+    </>
+  );
+}

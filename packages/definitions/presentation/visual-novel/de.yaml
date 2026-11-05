@@ -2,8 +2,37 @@ types:
   wd:Q689445: Visual Novel
 properties:
   wdt:P144: basiert auf
-  wdt:P156: Nachfolger
   wdt:P1889: verschieden von
-  wdt:P2512: hat Ableger
   wdt:P361: ist Teil von
-  wdt:P4969: abgeleitetes Werk
+  rezics:spinOffOf: 'Ableger von'
+inverseProperties:
+  wdt:P144: 'Adaptionen'
+  wdt:P361: 'Bestandteile'
+  rezics:spinOffOf: 'Ableger'
+libraryProfiles:
+  visual-novel.reading:
+    states:
+      planned: 'Geplant'
+      in_progress: 'In Arbeit'
+      completed: 'Abgeschlossen'
+      paused: 'Pausiert'
+      dropped: 'Abgebrochen'
+    units:
+      scalar_amount:
+        percent: 'Prozent'
+    copyKinds:
+      physical: 'Physisch'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Im Besitz'
+        disposed: 'Abgegeben'
+      digital:
+        owned: 'Im Besitz'
+typeDescriptions:
+  wd:Q689445: 'Eine Visual Novel als Werk, unabhängig von Sprach- oder Plattformveröffentlichungen; Figuren und Mitwirkende sind über Aussagen am Werk verknüpft.'
+propertyDescriptions:
+  wdt:P144: 'Das Werk, auf dem diese Visual Novel beruht; bezeichnet die Vorlage statt einer ungerichteten Medienverbindung.'
+  wdt:P1889: 'Eine alternative Visual Novel in derselben Welt oder Kontinuität; beide bleiben eigenständige Werke.'
+  wdt:P361: 'Das größere Werk, zu dem dieses Werk gehört, etwa eine übergeordnete Geschichte oder Zusammenstellung.'
+  rezics:spinOffOf: 'Das Ursprungswerk, aus dem dieses Spin-off hervorgeht.'

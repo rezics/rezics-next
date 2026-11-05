@@ -1,18 +1,67 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { ProgressIndexPage } from '../../library/progress-page';
-import { readProgressIndex } from '../../library/progress-server';
+import { prepareExposure } from '../../kernel/exposure';
+import { pageHead } from '../../shell/head';
+import { pageHeadContext } from '../../shell/head-context';
+import { progressIndexAddress } from '../../library/progress-address';
+import { createFileRoute, useLocation } from '@tanstack/react-router';
+import { CurrentViewerProgressIndexPage } from '../../library/progress-page';
+import { readCurrentViewerProgressIndex } from '../../library/progress-server';
+import { progressIndexReturnSelectionFromLocationState } from '../../library/progress-start-draft-navigation';
+import { progressIndexWindowRouteState } from '../../library/progress-index-windows';
+import { subjectProgressEntryReturnFromState, subjectSlotReturnTo } from '../../library/subject-slot-return-context';
+import { displayLibraryTitle } from '../../library/title';
+import { getLocale } from '../../paraglide/runtime.js';
 import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/library/progress/')({
-  validateSearch: (search: Record<string, unknown>) => ({
-    ...(typeof search.subjectId === 'string' && search.subjectId ? { subjectId: search.subjectId } : {}),
-    ...(typeof search.cursor === 'string' && search.cursor ? { cursor: search.cursor } : {}),
+  beforeLoad: async (args) => {
+    await prepareExposure(args.context.queryClient);
+  },
+  validateSearch: progressIndexAddress,
+  loaderDeps: ({ search }) => ({
+    subjectId: search.subjectId,
+    state: search.state,
+    mode: search.mode,
+    profileId: search.profileId,
+    cursor: search.cursor,
   }),
-  loaderDeps: ({ search }) => ({ subjectId: search.subjectId, cursor: search.cursor }),
-  loader: ({ deps }) => readProgressIndex({ data: deps }),
-  staleTime: 60_000,
-  head: () => ({ meta: [{ title: m.library_progress_heading() }] }),
+  loader: ({ deps }) => readCurrentViewerProgressIndex({ data: deps }),
+  shouldReload: ({ deps, prevDeps, location }) => {
+    const movement = progressIndexWindowRouteState(location.state);
+    return !(
+      movement &&
+      prevDeps &&
+      movement.to === (location.search.cursor ?? null) &&
+      deps.subjectId === prevDeps.subjectId &&
+      deps.state === prevDeps.state &&
+      deps.mode === prevDeps.mode &&
+      deps.profileId === prevDeps.profileId
+    );
+  },
+  staleTime: 0,
+  head: ({ match }) =>
+    pageHead({ title: m.library_progress_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: function ProgressIndexRoute() {
-    return <ProgressIndexPage page={Route.useLoaderData()} />;
+    const loader = Route.useLoaderData();
+    const location = useLocation();
+    const locale = getLocale();
+    const requested = progressIndexAddress(location.search);
+    const returnSelection = progressIndexReturnSelectionFromLocationState(location.state, locale);
+    const subject = loader.page.selectedSubject;
+    const subjectHrefInput = subject
+      ? { id: subject.id, label: displayLibraryTitle(subject.label, locale).text }
+      : undefined;
+    const candidate =
+      returnSelection?.sourceReturnTo ??
+      (subjectHrefInput ? subjectProgressEntryReturnFromState(location.state, subjectHrefInput, locale) : undefined);
+    const sourceReturnTo =
+      candidate && subjectHrefInput ? subjectSlotReturnTo(candidate, subjectHrefInput, locale) : undefined;
+    return (
+      <CurrentViewerProgressIndexPage
+        loader={loader}
+        requested={requested}
+        returnSelection={returnSelection}
+        sourceReturnTo={sourceReturnTo}
+      />
+    );
   },
 });

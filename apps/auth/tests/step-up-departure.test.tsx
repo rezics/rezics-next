@@ -1,0 +1,270 @@
+import { recoveryPage } from '../../../services/auth/src/recovery-page';
+import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
+import { creationFixture, button, dom, fill, flush, open as mount, send } from './creation-page-fixture';
+import type { PasskeySignInResult } from '../src/passkeys';
+import { nativeSignInProof } from './sign-in-fixture';
+
+creationFixture();
+let cleanup = () => {};
+afterEach(() => cleanup());
+const previousScrollTo = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
+Object.defineProperty(globalThis, 'scrollTo', { value: dom.scrollTo.bind(dom), configurable: true, writable: true });
+afterAll(() => {
+  if (previousScrollTo) Object.defineProperty(globalThis, 'scrollTo', previousScrollTo);
+  else Reflect.deleteProperty(globalThis, 'scrollTo');
+});
+const { createRootRoute, createRoute, createRouter, createBrowserHistory, RouterProvider } =
+  await import('@tanstack/react-router');
+const { Route } = await import('../src/routes/step-up');
+const passkeys = await import('../src/passkeys');
+const { WebAuthnAbortService } = await import('@simplewebauthn/browser');
+const signInQuery =
+  '?response_type=code&client_id=rezics-website&redirect_uri=https%3A%2F%2Fweb.rezics.test%2Fauth%2Fcallback' +
+  '&scope=openid+offline_access&state=opaque%2Bstate%26next%3D%2Fevil&nonce=nonce%2Fone' +
+  '&code_challenge=challenge&code_challenge_method=S256&resource=https%3A%2F%2Fapi.rezics.test' +
+  '&resource=urn%3Asecond&empty=&prompt=login&prompt=select_account&max_age=600&exp=1893456000&sig=opaque-signature';
+
+async function setup(query = signInQuery) {
+  window.history.replaceState(null, '', `/step-up${query}`);
+  const parent = createRootRoute();
+  const stepUp = Route.update({ id: '/step-up', path: '/step-up', getParentRoute: () => parent } as never);
+  const away = createRoute({ getParentRoute: () => parent, path: '/away', component: () => 'Away' });
+  const history = createBrowserHistory({ window: dom });
+  const router = createRouter({ routeTree: parent.addChildren([stepUp, away]), history });
+  await router.load();
+  const supported = spyOn(passkeys, 'passkeysSupported').mockReturnValue(true);
+  const ceremony = Promise.withResolvers<PasskeySignInResult>();
+  const signInWithPasskey = spyOn(passkeys, 'signInWithPasskey').mockImplementation(() => ceremony.promise);
+  const cancel = spyOn(WebAuthnAbortService, 'cancelCeremony');
+  const assign = spyOn(window.location, 'assign').mockImplementation(() => {});
+  const page = await mount(<RouterProvider router={router} />, {});
+  const navigate = (href: string) => flush(() => void router.navigate({ href }));
+  const choose = (label: 'Stay' | 'Leave') =>
+    flush(() => document.querySelector<HTMLButtonElement>(`[role=alertdialog] [data-${label.toLowerCase()}]`)!.click());
+  const unload = () => {
+    const event = new dom.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event as unknown as Event);
+    return event.defaultPrevented;
+  };
+  const dispose = () => {
+    history.destroy();
+    for (const spy of [supported, signInWithPasskey, cancel, assign]) spy.mockRestore();
+  };
+  cleanup = dispose;
+  return {
+    ...page,
+    router,
+    ceremony,
+    cancel,
+    assign,
+    navigate,
+    choose,
+    unload,
+    dispose,
+  };
+}
+
+test('Stay keeps validation and masked input; replacement starts a clean request', async () => {
+  const page = await setup();
+  expect(page.unload()).toBe(false);
+  const email = page.host.querySelector<HTMLInputElement>('[name=email]')!;
+  const password = page.host.querySelector<HTMLInputElement>('[name=password]')!;
+  await flush(() => {
+    fill(email, 'invalid');
+    fill(password, 'private password');
+    send(page.host);
+  });
+  expect(email.getAttribute('aria-invalid')).toBe('true');
+  expect(page.unload()).toBe(true);
+  await page.navigate('/away');
+  expect(document.querySelector('[role=alertdialog]')).not.toBeNull();
+  await page.choose('Stay');
+  expect([email.value, password.value, password.type, email.getAttribute('aria-invalid')]).toEqual([
+    'invalid',
+    'private password',
+    'password',
+    'true',
+  ]);
+  expect(document.activeElement).toBe(email);
+  await page.navigate('/step-up?return_to=%2Fsecurity&nonce=replaced');
+  expect(page.router.history.location.pathname).toBe('/step-up');
+  expect(page.host.querySelector<HTMLInputElement>('[name=email]')!.value).toBe('');
+  expect(page.unload()).toBe(false);
+});
+
+test('Leave retires a dispatched password continuation without cancelling its sign-in', async () => {
+  const page = await setup();
+  await flush(() => {
+    fill(page.host.querySelector('[name=email]')!, 'reader@example.test');
+    fill(page.host.querySelector('[name=password]')!, 'private password');
+    send(page.host);
+  });
+  expect(page.calls[0]?.path).toBe('/signin');
+  expect(page.unload()).toBe(true);
+  await page.navigate('/away');
+  await page.choose('Leave');
+  expect(page.cancel).not.toHaveBeenCalled();
+  page.calls[0]!.resolve(Response.json(nativeSignInProof(page.calls[0]!.body)));
+  await flush(() => Promise.resolve());
+  expect(page.assign).not.toHaveBeenCalled();
+});
+
+test('Leave cancels an unfinished browser passkey ceremony', async () => {
+  const page = await setup();
+  await flush(() => button(page.host, 'Verify with a passkey')!.click());
+  expect(page.unload()).toBe(true);
+  await page.navigate('/away');
+  await page.choose('Leave');
+  expect(page.cancel).toHaveBeenCalledTimes(1);
+  expect(page.calls).toHaveLength(0);
+  page.ceremony.resolve({ ok: false, reason: 'cancelled' });
+});
+
+test('successful confirmation releases a blocked departure and continues to its target', async () => {
+  const page = await setup();
+  await flush(() => {
+    fill(page.host.querySelector('[name=email]')!, 'reader@example.test');
+    fill(page.host.querySelector('[name=password]')!, 'private password');
+    send(page.host);
+  });
+  await page.navigate('/away');
+  expect(document.querySelector('[role=alertdialog]')).not.toBeNull();
+  page.calls[0]!.resolve(Response.json(nativeSignInProof(page.calls[0]!.body)));
+  await flush(() => Promise.resolve());
+  expect(page.router.history.location.pathname).toBe('/step-up');
+  expect(page.assign).toHaveBeenCalledTimes(1);
+  expect(document.querySelector('[role=alertdialog]')).toBeNull();
+  expect(page.unload()).toBe(false);
+});
+
+const { confirmStepUp, confirmStepUpWithPasskey } = await import('../src/step-up');
+const { accountOperationProfile } = await import('../src/account-operation-step-up');
+const accountId = '11111111-1111-4111-8111-111111111111';
+const organizationId = '22222222-2222-4222-8222-222222222222';
+for (const method of ['password', 'passkey'] as const)
+  for (const phase of ['authentication', 'session'] as const)
+    for (const kind of ['delete', 'organization', 'organization-delete'] as const)
+      test(`${method} ${kind} refuses changed continuations during ${phase}`, async () => {
+        const organization = kind === 'organization-delete';
+        const storageKey = organization ? 'rezics.organization-delete.step-up' : 'rezics.account-operation.step-up';
+        const query = organization
+          ? '?organization_delete=1&return_to=%2Forganizations%2Fdelete'
+          : `?account_operation=${kind}&return_to=${kind === 'delete' ? '%2Faccount%2Fdelete' : '%2Forganizations%2Fnew'}`;
+        const original = organization
+          ? {
+              version: 1,
+              operation: 'delete',
+              humanAccountId: accountId,
+              organizationId,
+              operationKey: 'a'.repeat(32),
+              returnTo: '/organizations/delete',
+            }
+          : {
+              version: 1,
+              kind,
+              accountId,
+              operationKey: 'a'.repeat(32),
+              operation: kind === 'delete' ? { kind, accountId } : { kind, handle: 'original' },
+              returnTo: kind === 'delete' ? '/account/delete' : '/organizations/new',
+            };
+        for (const replacement of [
+          null,
+          '{',
+          JSON.stringify({ ...original, operationKey: 'b'.repeat(32) }),
+          JSON.stringify({ ...original, returnTo: '/security' }),
+          JSON.stringify(
+            organization
+              ? { ...original, organizationId: '33333333-3333-4333-8333-333333333333' }
+              : {
+                  ...original,
+                  operation:
+                    kind === 'organization'
+                      ? { kind, handle: 'replacement' }
+                      : { kind: 'organization', handle: 'replacement' },
+                  kind: 'organization',
+                  returnTo: '/organizations/new',
+                },
+          ),
+        ]) {
+          window.sessionStorage.setItem(storageKey, JSON.stringify(original));
+          const authentication = Promise.withResolvers<Response>();
+          const observed = Promise.withResolvers<Response>();
+          const observing = Promise.withResolvers<void>();
+          const paths: string[] = [];
+          let signInBody: { client_id: string; scope: string[] } | undefined;
+          const request = spyOn(globalThis, 'fetch').mockImplementation((path, init) => {
+            paths.push(String(path));
+            if (String(path) === '/signin') signInBody = JSON.parse(String(init?.body));
+            if (path === '/session') {
+              observing.resolve();
+              return observed.promise;
+            }
+            return authentication.promise;
+          });
+          const passkey = Promise.withResolvers<PasskeySignInResult>();
+          const ceremony = spyOn(passkeys, 'signInWithPasskey').mockImplementation(() => passkey.promise);
+          const authenticate = () => {
+            authentication.resolve(Response.json(nativeSignInProof(signInBody!)));
+            passkey.resolve({ ok: true });
+          };
+          try {
+            const outcome =
+              method === 'password'
+                ? confirmStepUp('person@example.test', 'private password', query, 'https://auth.test')
+                : confirmStepUpWithPasskey(query, 'https://auth.test');
+            if (phase === 'session') {
+              authenticate();
+              await observing.promise;
+            }
+            if (replacement === null) window.sessionStorage.removeItem(storageKey);
+            else window.sessionStorage.setItem(storageKey, replacement);
+            authenticate();
+            const profile = accountOperationProfile(kind === 'organization' ? kind : 'delete');
+            observed.resolve(
+              Response.json({ account_id: accountId, client_id: profile.client_id, scope: profile.scope }),
+            );
+            expect(await outcome).toEqual({ ok: false, message: expect.stringContaining('saved request changed') });
+            expect(window.sessionStorage.getItem(storageKey)).toBe(replacement);
+            expect(paths.every((path) => path === '/signin' || path === '/session')).toBe(true);
+            if (phase === 'authentication') expect(paths).not.toContain('/session');
+          } finally {
+            request.mockRestore();
+            ceremony.mockRestore();
+          }
+        }
+      });
+
+test('step-up removes old account advice during refresh and rejects late viewer results', async () => {
+  const page = await setup();
+  const old = Promise.withResolvers<Response>();
+  const nativePage = (account: string) =>
+    Response.json(
+      recoveryPage(
+        'step-up',
+        { minPasswordLength: 8, maxPasswordLength: 128 },
+        { kind: 'signed-in', account_id: account, email: `${account}@example.test` },
+      ),
+    );
+  const request = spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(nativePage('first'))
+    .mockImplementationOnce(() => old.promise)
+    .mockResolvedValueOnce(nativePage('replacement'));
+  try {
+    await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
+    expect(page.host.textContent).toContain('first@example.test');
+    await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
+    expect(page.host.textContent).not.toContain('first@example.test');
+    await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
+    expect(page.host.textContent).toContain('replacement@example.test');
+    old.resolve(nativePage('obsolete'));
+    await flush(() => {});
+    expect(page.host.textContent).not.toContain('obsolete@example.test');
+    request.mockResolvedValueOnce(new Response('', { status: 503 }));
+    await flush(() => window.dispatchEvent(new dom.Event('focus') as unknown as Event));
+    expect(page.host.textContent).not.toContain('replacement@example.test');
+    expect(page.host.textContent).toContain('unavailable');
+    expect(page.host.querySelector<HTMLButtonElement>('[type=submit]')!.disabled).toBe(true);
+  } finally {
+    request.mockRestore();
+  }
+});

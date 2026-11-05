@@ -1,3 +1,4 @@
+import type { DurableOperationAnchor } from './durable-initiator.ts';
 import type { Pool } from 'pg';
 import type { Actor } from '../request/access.ts';
 export type WriteRateFamily = 'write' | 'upload' | 'report' | 'correspondence' | 'search' | 'provider' | 'address';
@@ -21,6 +22,16 @@ export type WriteRateLimiter = {
     /** units defaults to 1 and must be a positive safe integer no greater than 100. */
     spend(context: WriteRateContext, family: WriteRateFamily, units?: number): Promise<WriteRateDecision>;
 };
+export type WriteRateChunk = Readonly<{
+    operation: DurableOperationAnchor;
+    index: number;
+}>;
+export type DurableWriteRateLimiter = WriteRateLimiter & {
+    /** Call in CommandAuthorization.prepare after restoring the initiator at the same T.
+     * Retries of the same identity/operation/index spend nothing within the window.
+     */
+    spendChunk(context: WriteRateContext, chunk: WriteRateChunk, family: WriteRateFamily, units: number): Promise<WriteRateDecision>;
+};
 export declare class WriteRateUnavailableError extends Error {
     constructor();
 }
@@ -30,5 +41,5 @@ export type WriteRateConfig = {
     /** Strict partial RATE_LIMIT_V1 overrides encoded as JSON. */
     overrides?: string;
 };
-/** One native routed point upsert; no classification query, sweep or receipt. */
-export declare function createWriteRateLimiter(config?: WriteRateConfig): WriteRateLimiter;
+/** One native routed statement per spend; no classification query or sweep. */
+export declare function createWriteRateLimiter(config?: WriteRateConfig): DurableWriteRateLimiter;

@@ -1,4 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import {
   runCommand,
@@ -12,10 +13,11 @@ import {
 import {
   accessCheck,
   accessCommandAuthorization,
-  type AccountActor,
+  type Access,
   type ActionCatalogue,
 } from '../../src/request/access.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
+import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 
@@ -31,6 +33,10 @@ const actions: ActionCatalogue = new Map([
   ['account:update', { anonymous: false }],
   ['account:create', { anonymous: false }],
 ]);
+const issuer = 'https://replay-context.example.test';
+const audience = 'https://api.replay-context.example.test';
+let signingKeys: CryptoKeyPair | undefined;
+let jwks: object | undefined;
 class Denied extends Error {}
 async function fixture(route: number, action = 'account:update') {
   const accountId = newId(route);
@@ -42,19 +48,45 @@ async function fixture(route: number, action = 'account:update') {
     `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id) VALUES ($1,$2,$2,$3,'(,)',$4)`,
     [route, accountId, action, Bun.randomUUIDv7()],
   );
-  const actor: AccountActor = {
-    kind: 'account',
-    accountId,
-    clientId: 'web',
-    scopes: [action],
-    requestedBy: null,
-    authnEpoch: 1,
-  };
-  const account = await readAccount(admin, route, accountId);
-  const access = createAccess({ actions, accountEvidence: () => account });
-  const basis = { actorAccountId: accountId, clientId: actor.clientId, requestedBy: null };
+  signingKeys ??= await generateKeyPair('ES256');
+  jwks ??= { keys: [{ ...(await exportJWK(signingKeys.publicKey)), kid: 'fixture', alg: 'ES256' }] };
+  const access = createAccess({
+    actions,
+    auth: {
+      issuer,
+      audience,
+      jwksUrl: `${issuer}/jwks`,
+      async fetch() {
+        return Response.json(jwks);
+      },
+    },
+  });
+  const now = Math.floor(Date.now() / 1000);
+  const token = await new SignJWT({
+    iss: issuer,
+    aud: audience,
+    sub: accountId,
+    client_id: 'web',
+    scope: action,
+    authn_epoch: 1,
+    iat: now,
+    exp: now + 300,
+    auth_time: now,
+    amr: ['pwd'],
+  })
+    .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt', kid: 'fixture' })
+    .sign(signingKeys.privateKey);
+  const actor = await access.authenticate(token, { pool, deadline: Date.now() + 10_000 });
+  const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
   const target = { route, id: accountId };
   return { actor, access, basis, target };
+}
+function observingAccess(
+  access: Access,
+  prepare: NonNullable<Access['prepare']>,
+  authorize: Access['authorize'],
+): Access {
+  return deriveAccess(access, { prepare, authorize });
 }
 const event = { type: 'com.rezics.test.authorized.v1', data: {} };
 
@@ -63,19 +95,19 @@ test('one database T is shared by the final formula, body SQL and immutable live
   let prepares = 0;
   let checkedAt = '';
   const binding = await accessCommandAuthorization(
-    {
-      ...f.access,
-      async prepare(...args) {
+    observingAccess(
+      f.access,
+      async (...args) => {
         prepares++;
         return f.access.prepare!(...args);
       },
-      async authorize(client, actor, action, resource, evidence, time) {
+      async (client, actor, action, resource, evidence, time) => {
         expect(time).toBeDefined();
         checkedAt = authoritativeTimeValue(time!);
         expect(() => currentCommand(client)).toThrow('No authorized live command');
         return f.access.authorize(client, actor, action, resource, evidence, time);
       },
-    },
+    ),
     f.actor,
     'account:update',
     f.target,
@@ -128,17 +160,17 @@ test('a real PostgreSQL retry chooses a fresh T and prepares and reauthorizes on
   let prepares = 0;
   const checked: string[] = [];
   const binding = await accessCommandAuthorization(
-    {
-      ...f.access,
-      async prepare(...args) {
+    observingAccess(
+      f.access,
+      async (...args) => {
         prepares++;
         return f.access.prepare!(...args);
       },
-      async authorize(client, actor, action, resource, evidence, time) {
+      async (client, actor, action, resource, evidence, time) => {
         checked.push(authoritativeTimeValue(time!));
         return f.access.authorize(client, actor, action, resource, evidence, time);
       },
-    },
+    ),
     f.actor,
     'account:update',
     f.target,

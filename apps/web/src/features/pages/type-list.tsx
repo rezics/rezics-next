@@ -1,0 +1,112 @@
+import { createContext, useContext } from 'react';
+import { m } from '../../paraglide/messages.js';
+import { PageHeading } from '../../shell/page-heading';
+import { SectionHeading } from '../../library/section-heading';
+import { CoverList } from './cover-list';
+import { OverviewContext, type Item } from './overview';
+import { pageText, linkClass, linkColor } from './shared';
+import { typeListHref, type TypeListTarget } from './type-list-model';
+import { nativeTypeListPage } from './type-list-page-admission';
+import { useSearchRetryWait } from '../../search/search-recovery-retry';
+import { subjectHref } from '../../subject/subject-href';
+import { admittedCatalogueWorkId } from '../feed/home-work-library/contract';
+import { HomeWorkLibraryAction, useHomeWorkLibraryEnabled } from '../feed/home-work-library/view';
+
+export const TypeListContext = createContext<{ target?: TypeListTarget; full?: string; cursor?: string }>({});
+
+const controlClass = `${linkClass} ${linkColor} inline-flex min-h-[44px] min-w-[44px] max-w-full items-center rounded-sm px-2 py-2 text-start whitespace-normal [overflow-wrap:anywhere] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`;
+
+/** Render the native window and its supplied public comparison context without hydrating its targets. */
+export function TypeList(props: Record<string, unknown>) {
+  const value = useContext(OverviewContext);
+  const { target, full, cursor } = useContext(TypeListContext);
+  const homeLibraryEnabled = useHomeWorkLibraryEnabled();
+  const id = String(props.id);
+  const section = value?.sections.get(id);
+  const retryWaiting = useSearchRetryWait(section && !section.ok ? section.retryAt : undefined);
+  if (!value) return null;
+  if (section && !section.ok && section.status === 204) return null;
+  const title = pageText(props.title, value.locale);
+  const options = { locale: value.locale as never };
+  const page = section?.ok ? nativeTypeListPage(section.read, section.body) : undefined;
+  const items: Item[] = (page?.subjects ?? []).map((hit) => {
+    const label = pageText(hit.labels, value.locale);
+    const workId = homeLibraryEnabled ? admittedCatalogueWorkId({ id: hit.id, summary: hit.summary }) : undefined;
+    const href = subjectHref({ id: hit.id, label: label.text }, value.locale).href;
+    return {
+      id: hit.id,
+      label,
+      notes: [],
+      gated: false,
+      type: hit.type,
+      ...(hit.summary !== null ? { summary: hit.summary } : {}),
+      ...(workId
+        ? {
+            supportSlot: (
+              <HomeWorkLibraryAction subjectId={workId} href={`${href}?slot=collections`} locale={value.locale} />
+            ),
+          }
+        : {}),
+    };
+  });
+  const href = target ? typeListHref(value.locale, target, id, full === id ? cursor : undefined) : undefined;
+  const next = page?.next && target ? typeListHref(value.locale, target, id, page.next) : undefined;
+  return (
+    <section data-slot="type-list" aria-labelledby={`${id}-title`} className="min-w-0 space-y-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1 basis-48 [overflow-wrap:anywhere]">
+          <ListHeading full={full === id} id={`${id}-title`} lang={title.lang}>
+            {title.text}
+          </ListHeading>
+        </div>
+        {full !== id && href && (
+          <a data-slot="see-all" href={href} className={controlClass}>
+            {m.home_see_all({}, options)}
+          </a>
+        )}
+      </div>
+      {!page ? (
+        <p role="alert" className="[overflow-wrap:anywhere]">
+          {m.subject_section_failed({}, options)}{' '}
+          {href &&
+            (retryWaiting ? (
+              <button
+                type="button"
+                disabled
+                className={`${controlClass} disabled:cursor-not-allowed disabled:opacity-60`}
+              >
+                {m.subject_section_retry({}, options)}
+              </button>
+            ) : (
+              <a href={href} className={controlClass}>
+                {m.subject_section_retry({}, options)}
+              </a>
+            ))}
+        </p>
+      ) : (
+        <>
+          {items.length ? (
+            <CoverList
+              items={items}
+              value={value}
+              label={title.text}
+              preview={full !== id}
+              memberCatalogue={Object.fromEntries((page?.subjects ?? []).map((hit) => [hit.id, hit.catalogue]))}
+            />
+          ) : (
+            <p role="status">{m.search_no_results({}, options)}</p>
+          )}
+          {next && (
+            <a data-slot="next-page" href={next} className={controlClass}>
+              {m.library_more({}, options)}
+            </a>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function ListHeading({ full, ...props }: import('react').ComponentProps<typeof SectionHeading> & { full: boolean }) {
+  return full ? <PageHeading {...props} /> : <SectionHeading {...props} />;
+}

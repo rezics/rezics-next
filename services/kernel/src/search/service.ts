@@ -1,43 +1,161 @@
-import { admitFilter, FilterError, parseFilter, positiveFilter, type FilterRelease } from '@rezics/filter';
+import {
+  admitFilter,
+  admitDiscoveryFilter,
+  FilterError,
+  parseDiscoveryFilter,
+  parseFilter,
+  positiveDiscoveryFilter,
+  positiveFilter,
+  relationFacetProperty,
+  type DiscoveryFilterDocument,
+  type FilterDocument,
+  type FilterRelease,
+  type SpoilerThreshold,
+} from '@rezics/filter';
+import { createHash, randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
+import { systemClock, type KernelClock } from '../clock.ts';
+import { GLOBAL_CONTEXT } from '../access/gates/catalogue.ts';
+import { STANDARD_QUESTION_ID } from '../rating/votes.ts';
 import { ProblemError, type FieldErrorCode } from '../http/problem.ts';
+import { compileKinds, kindDigest, retainCurrent, type KindSnapshot } from './query.ts';
 import { activeRelease } from '../semantic/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import { decodeSearchCursor, encodeSearchCursor } from './cursor.ts';
-import { checkHits, type FactClause } from './disclosure/check.ts';
+import type { FacetDiscoveryScope } from './facet-discovery-contract.ts';
 import {
-  admitFacets,
-  codeFacet,
-  discloseFacetValues,
-  validateFacets,
-  type FacetRequest,
-  type FacetValue,
-} from './facets.ts';
+  decodeSearchCursor,
+  encodeSearchCursor,
+  encodeRetainedSearchCursor,
+  retainedSearchContinuation,
+  type SearchCursorBinding,
+  type SearchSortValue,
+} from './cursor.ts';
+import { validateRequestSourceSnapshot } from './request-source-snapshot.ts';
+import { checkHits, type FactClause, type Hit as CheckedHit } from './disclosure/check.ts';
+import { createCurrentTextDisclosure } from './disclosure/current-text.ts';
+import { admitFacets, validateFacets, type FacetRequest } from './facets.ts';
 import { compileFilter } from './filter.ts';
 import { createFreshness } from './freshness.ts';
-import { subjectGenerations, subjectIndexName } from './indices.ts';
-import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
+import { searchObservation, type SearchFreshness } from './search-context.ts';
 import {
-  countFacets,
-  installTemplates,
-  searchSubjects,
-  suggestSubjects,
-  type SearchPlan,
-  type SubjectHit,
-} from './query.ts';
+  admitProperties,
+  projectFacts,
+  projectHit,
+  validateHitOptions,
+  validateSearchLimit,
+  type SearchHit,
+} from './hits.ts';
+export { validateSearchLimit } from './hits.ts';
+import {
+  discoveryIndexUuid,
+  readSubjectCalendarFormat,
+  readSubjectSortFormat,
+  SUBJECT_SORT_FORMAT,
+  subjectGenerations,
+  subjectIndexName,
+} from './indices.ts';
+import type { CalendarPhysicalIdentity } from './release-search-calendar.ts';
+import type { ReleaseSearchCandidateReservation } from './release-search-native-stream.ts';
+import {
+  RELEASE_GROUPING_LIMITS,
+  ReleaseGroupingRestartRequired,
+  ReleaseGroupingUnavailable,
+  type ReleaseGroupingBasis,
+  type ReleaseGroupingRequest,
+} from './release-search-grouping.ts';
+import {
+  readReleaseSearchChildren,
+  readReleaseSearchGroups,
+  type ReleaseSearchGroupsResult,
+} from './release-search-source.ts';
+import { ReleaseSearchCursorInvalid } from './release-search-cursor.ts';
+import { OpenSearchError, SearchUnavailableError, type OpenSearch } from './opensearch.ts';
+import { publicHitFigures } from './public-figures.ts';
+import { installTemplates, searchSubjectHits, suggestSubjects, type SearchPlan } from './query.ts';
+import { decodeRatingCursor, encodeRatingCursor, type RatingPhase } from './rating-cursor.ts';
+import { normalizePublicRatingFigure, type PublicRatingEpoch, type PublicRatingSource } from './rating-source.ts';
 import { subjectConsumer } from './runner.ts';
+import { registerSearchScopeRuntime, createSearchScopeForService } from './service-scope.ts';
+import { readScopedFacetDiscovery } from './scoped-facet-admission.ts';
+import { serviceRealmScopeFacetAdmission, serviceScopeFacetAdmission } from './scoped-facet-source.ts';
+import type { RealmSubjectSource } from '../content/realm-subject-source.ts';
+import type { RealmSubjectCapabilities } from './realm-scope.ts';
+import type { LeafOptions } from '../semantic/scope-leaf-evidence.ts';
+import { ScopeWork, scopeAllowance } from './scope-execution.ts';
+import type { ScopeBasis } from './scope-source.ts';
 import type { IndexedSubject, SubjectSource } from './source.ts';
-import { compileText, parseText, positiveText, TextSyntaxError } from './text.ts';
+import type { SubjectCanonicalNames } from '../semantic/subject-source-key-pages.ts';
+import { compileText, parseText, positiveText, textSyntaxProblem, TextSyntaxError } from './text.ts';
+import { collectUsefulPage } from './useful-page.ts';
+import { readPublicSearchPage, type DefaultPublicFilterRuntime } from './public-runtime.ts';
+import type {
+  PublicFilterConsumerJob,
+  PublicFilterConsumerOperations,
+  PublicFilterConsumerCapture,
+} from './public-filter-consumer-contract.ts';
+import type { SearchHit as NativeSearchHit } from './query.ts';
+import type { PublicSearchHit } from './public-figures.ts';
+import type { KindValue } from './query.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import {
+  admitFacetPage,
+  authenticateFacetCursors,
+  readFacetDiscovery,
+  validateFacetCursorRelease,
+} from './facet-discovery-runtime.ts';
+import type { FacetDiscoveryProvider } from './facet-discovery-native.ts';
+import type { FacetDiscovery200Response } from './facet-discovery-contract.ts';
+import { ownSubjectRequest } from './service-request.ts';
+import { readRealmRatingOrder, type RealmRatingSource, type RealmRatingQuery } from './realm-rating-order.ts';
+import { routeOf } from '../route/route.ts';
+import { executeScopedSuggestions } from './scoped-suggestion.ts';
+import { boundMatchEvidencePage, compileMatchEvidence, projectMatchEvidence } from './match-evidence.ts';
+import {
+  completeSuggestionWorkContext,
+  type SuggestionWorkContext,
+  type SuggestionWorkContextReader,
+} from './suggestion-context.ts';
 
 export type SearchRequest = {
   text?: string;
   filter?: unknown;
   sort?: SearchPlan['sort'];
+  spoilerThreshold?: number;
+  population?: { realm: string };
   limit?: number;
   cursor?: string;
+  kindCursor?: string;
+  descriptions?: boolean;
+  languages?: string[];
+  properties?: string[];
 };
 
-type Result = { id: string; type: string; labels: Record<string, string> };
+export type GroupedReleaseSearchRequest = SearchRequest & {
+  work?: string;
+  childCursor?: string;
+};
+
+type SearchFilterDocument = FilterDocument | DiscoveryFilterDocument;
+
+export type PublicSearchPage = {
+  subjects: PublicSearchHit[];
+  kinds?: { values: KindValue[]; next: string | null };
+  next: string | null;
+  as_of: string;
+  freshness?: SearchFreshness;
+};
+
+export type PublicSearchReadContext = Readonly<{
+  deadline: number;
+  /** The verified request context used only by the service-bound native Scope. */
+  scope?: LeafOptions;
+  realmAuthority?: RealmRatingQuery['authority'];
+  complete: (page: PublicSearchPage) => Promise<void>;
+}>;
+
+type Result = { id: string; type: string; labels: Record<string, string>; workContext?: SuggestionWorkContext };
 
 function invalid(pointer: string, code: FieldErrorCode): never {
   throw new ProblemError('invalid_request', { errors: [{ pointer, code }] });
@@ -47,15 +165,181 @@ function unsupported(pointer: string, code: FieldErrorCode = 'unsupported'): nev
   throw new ProblemError('unsupported_query', { errors: [{ pointer, code }] });
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function containsCalendarRange(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsCalendarRange);
+  if (!isRecord(value)) return false;
+  if (isRecord(value.statement) && isRecord(value.statement.range) && value.statement.range.type === 'time')
+    return true;
+  return Object.values(value).some(containsCalendarRange);
+}
+
+/** Remove the one top-level request scope leaf; the admitted native Scope carries its membership. */
+function scopedCatalogueCondition(value: unknown, scope: FacetDiscoveryScope): unknown {
+  if (value === undefined || value === '') return undefined;
+  let document = value;
+  if (typeof value === 'string') {
+    try {
+      document = JSON.parse(value);
+    } catch {
+      invalid('/conditions', 'invalid_format');
+    }
+  }
+  const leaves: { kind: string; leaf: Record<string, unknown>; operand: unknown }[] = [];
+  const visit = (node: unknown) => {
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    if (!isRecord(node)) return;
+    for (const kind of ['realm', 'collection'])
+      if (Object.hasOwn(node, kind)) leaves.push({ kind, leaf: node, operand: node[kind] });
+    for (const [key, child] of Object.entries(node)) if (key !== 'realm' && key !== 'collection') visit(child);
+  };
+  visit(document);
+  if (!leaves.length) return document;
+  const candidate = leaves[0]!;
+  const topLevel =
+    document === candidate.leaf ||
+    (isRecord(document) &&
+      Object.keys(document).length === 1 &&
+      Array.isArray(document.and) &&
+      document.and.includes(candidate.leaf));
+  if (
+    leaves.length !== 1 ||
+    !topLevel ||
+    candidate.kind !== scope.kind ||
+    Object.keys(candidate.leaf).length !== 1 ||
+    !isRecord(candidate.operand) ||
+    Object.keys(candidate.operand).length !== 1 ||
+    !Object.hasOwn(candidate.operand, 'id') ||
+    typeof candidate.operand.id !== 'string' ||
+    candidate.operand.id.toLowerCase() !== scope.id.toLowerCase()
+  )
+    invalid('/conditions', 'invalid_format');
+  if (document === candidate.leaf) return undefined;
+  const remaining = (document as { and: unknown[] }).and.filter((entry) => entry !== candidate.leaf);
+  if (!remaining.length) return undefined;
+  return remaining.length === 1 ? remaining[0] : { and: remaining };
+}
+
 function indexNotReady(): ProblemError {
   return new ProblemError('index_not_ready', { headers: { 'retry-after': '1' } });
 }
 
-function project(subject: IndexedSubject): Result {
+/** Unavailable current evidence must fail the response, including under negation. */
+async function sourceRequest<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof ProblemError) throw error;
+    if (error instanceof SearchUnavailableError) throw indexNotReady();
+    throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+  }
+}
+
+function containsOwnerPredicate(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const node = value as Record<string, unknown>;
+  if (Object.hasOwn(node, 'owner')) return true;
+  if ('not' in node && containsOwnerPredicate(node.not)) return true;
+  return ['and', 'or'].some((key) => Array.isArray(node[key]) && node[key].some(containsOwnerPredicate));
+}
+
+function containsRealmPredicate(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const node = value as Record<string, unknown>;
+  if (Object.hasOwn(node, 'realm')) return true;
+  if ('not' in node && containsRealmPredicate(node.not)) return true;
+  return ['and', 'or'].some((key) => Array.isArray(node[key]) && node[key].some(containsRealmPredicate));
+}
+
+function containsUnsupportedDiscoveryLeaf(value: unknown): boolean {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+  const node = value as Record<string, unknown>;
+  if (Object.hasOwn(node, 'kind') || Object.hasOwn(node, 'ratingQuestion')) return true;
+  if ('not' in node && containsUnsupportedDiscoveryLeaf(node.not)) return true;
+  return ['and', 'or'].some((key) => Array.isArray(node[key]) && node[key].some(containsUnsupportedDiscoveryLeaf));
+}
+
+/** Narrow the opt-in discovery grammar before passing it to catalogue-only readers. */
+function catalogueFilter(value: SearchFilterDocument): FilterDocument {
+  if (containsRealmPredicate(value) || containsUnsupportedDiscoveryLeaf(value)) unsupported('/filter');
+  return value as FilterDocument;
+}
+
+function scopeEvaluationReservation(work: ScopeWork, rawKeys: number) {
+  const allowance = work.remaining();
+  const remaining = allowance.remaining;
   return {
-    id: subject.id,
-    type: subject.type,
-    labels: Object.fromEntries(subject.labels.map(({ language, value }) => [language, value])),
+    rawKeys,
+    native: {
+      points: remaining.nativePoints,
+      witnesses: remaining.witnessKeys,
+      rows: remaining.nativeRows,
+      bytes: remaining.bytes,
+      emptySeeks: remaining.emptySeeks,
+    },
+    allowance,
+  };
+}
+
+export function bindSearchScopeCursorRequest(request: unknown, basis: ScopeBasis): unknown {
+  const record =
+    request !== null && typeof request === 'object' && !Array.isArray(request)
+      ? (request as Record<string, unknown>)
+      : { request };
+  return {
+    ...record,
+    scopeBasis: {
+      release: basis.release,
+      query: basis.query,
+      profile: basis.profile,
+      canonical: basis.canonical,
+      generation: 'generation' in basis ? basis.generation : null,
+      index: 'index' in basis ? basis.index : null,
+    },
+  };
+}
+
+function scopeCursorAfter(sort: 'id', after: readonly (string | number | null)[]): string;
+function scopeCursorAfter(sort: 'name', after: readonly (string | number | null)[]): readonly [string | null, string];
+function scopeCursorAfter(
+  sort: 'collections',
+  after: readonly (string | number | null)[],
+): readonly [number, string | null, string];
+function scopeCursorAfter(
+  sort: 'id' | 'name' | 'collections',
+  after: readonly (string | number | null)[],
+): string | readonly [string | null, string] | readonly [number, string | null, string] {
+  if (sort === 'id') {
+    if (after.length !== 1 || typeof after[0] !== 'string') throw new ProblemError('search_restart_required');
+    return after[0];
+  }
+  if (sort === 'name') {
+    if (after.length !== 2 || !(after[0] === null || typeof after[0] === 'string') || typeof after[1] !== 'string')
+      throw new ProblemError('search_restart_required');
+    return [after[0], after[1]] as const;
+  }
+  if (
+    after.length !== 3 ||
+    typeof after[0] !== 'number' ||
+    !(after[1] === null || typeof after[1] === 'string') ||
+    typeof after[2] !== 'string'
+  )
+    throw new ProblemError('search_restart_required');
+  return [after[0], after[1], after[2]] as const;
+}
+
+function project(subject: IndexedSubject, languages?: readonly string[]): Result {
+  const hit = projectHit(subject, { descriptions: false, ...(languages === undefined ? {} : { languages }) });
+  return {
+    id: hit.id,
+    type: hit.type,
+    labels: hit.labels,
   };
 }
 
@@ -83,13 +367,16 @@ function validate(request: SearchRequest) {
       text = parseText(request.text);
     }
   } catch (error) {
-    if (error instanceof TextSyntaxError) unsupported('/text', error.code);
+    if (error instanceof TextSyntaxError) throw new ProblemError('unsupported_query', textSyntaxProblem(error));
     throw error;
   }
 
-  let filter;
+  let filter: SearchFilterDocument | undefined;
   try {
-    if (request.filter !== undefined) filter = parseFilter(request.filter);
+    if (request.filter !== undefined) {
+      const discovery = parseDiscoveryFilter(request.filter);
+      filter = containsRealmPredicate(discovery) ? discovery : parseFilter(request.filter);
+    }
   } catch (error) {
     if (error instanceof FilterError)
       throw new ProblemError(error.problem, {
@@ -98,26 +385,73 @@ function validate(request: SearchRequest) {
     throw error;
   }
 
-  const sort = request.sort === undefined ? (text ? 'relevance' : 'name') : request.sort;
-  if (sort !== 'relevance' && sort !== 'name' && sort !== 'id' && sort !== 'collections')
+  const realmFilter = filter !== undefined && containsRealmPredicate(filter);
+  const sort = request.sort === undefined ? (realmFilter ? 'name' : text ? 'relevance' : 'name') : request.sort;
+  if (sort !== 'relevance' && sort !== 'name' && sort !== 'id' && sort !== 'collections' && sort !== 'rating')
     invalid('/sort', 'invalid_format');
   if (sort === 'relevance' && !text) unsupported('/sort');
-  const limit = request.limit === undefined ? 20 : request.limit;
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) invalid('/limit', 'out_of_range');
+  let spoilerThreshold: SpoilerThreshold | undefined;
+  if (request.spoilerThreshold !== undefined) {
+    const value = request.spoilerThreshold;
+    if (!Number.isSafeInteger(value) || value < 0 || value > 2) invalid('/spoilerThreshold', 'invalid_format');
+    spoilerThreshold = value as SpoilerThreshold;
+  }
+  if (spoilerThreshold !== undefined && !filter) unsupported('/spoilerThreshold');
+  if (realmFilter && sort !== 'name') unsupported('/sort');
+  if (request.population !== undefined) {
+    const population = request.population;
+    if (
+      !population ||
+      typeof population !== 'object' ||
+      Array.isArray(population) ||
+      Object.keys(population).length !== 1 ||
+      typeof population.realm !== 'string' ||
+      routeOf(population.realm) === null ||
+      population.realm === GLOBAL_CONTEXT.id
+    )
+      invalid('/population', 'invalid_format');
+    if (sort !== 'rating') unsupported('/population');
+  }
+  const limit = validateSearchLimit(request.limit);
+  const hitOptions = validateHitOptions(request);
 
   return {
     text,
     filter,
     sort,
+    spoilerThreshold,
     limit,
+    hitOptions,
     // Keep the validated JSON, rather than the compiler's internal representation, in the binding.
     bindingRequest: {
       ...(text ? { text: request.text } : {}),
       ...(filter ? { filter } : {}),
       sort,
+      ...(spoilerThreshold !== undefined ? { spoilerThreshold } : {}),
+      ...(request.population ? { population: request.population } : {}),
       limit,
+      ...(hitOptions.descriptions ? { descriptions: true } : {}),
+      ...(hitOptions.languages ? { languages: hitOptions.languages } : {}),
+      ...(hitOptions.properties ? { properties: hitOptions.properties } : {}),
     },
   };
+}
+
+/** Classify the same bounded parser trees used by execution; never infer syntax from raw text. */
+export function requiresAdvancedSearch(request: SearchRequest): boolean {
+  const { text, filter, sort } = validate(request);
+  const basicText = (node: NonNullable<typeof text>): boolean =>
+    node.kind === 'term' ||
+    node.kind === 'phrase' ||
+    ((node.kind === 'and' || node.kind === 'or') && node.children.every(basicText));
+  const basicFilter = (node: NonNullable<typeof filter>): boolean =>
+    'type' in node || ('and' in node && node.and.every(basicFilter)) || ('or' in node && node.or.every(basicFilter));
+  return (
+    sort === 'rating' ||
+    sort === 'collections' ||
+    (text !== undefined && !basicText(text)) ||
+    (filter !== undefined && !basicFilter(filter))
+  );
 }
 
 export function createSearchService({
@@ -125,23 +459,56 @@ export function createSearchService({
   client,
   prefix,
   source,
+  ratings,
+  realmSubjects,
+  realmSubjectsForReader,
+  realmRatings,
+  realmSubjectCapabilities,
   cursors,
+  clock = systemClock,
   facetSample = 10_000,
+  facetProvider,
+  publicFilters,
+  preparePublic,
+  suggestionWorkContext,
   // Definition releases store value.pattern on the property schema. Keep that object so pattern compilation stays cached.
-  release = async () => ((await activeRelease(pool))?.release as FilterRelease | undefined) ?? null,
+  release: releaseOverride,
 }: {
   pool: Pool;
   client: OpenSearch;
   prefix: string;
-  source: SubjectSource;
+  source: SubjectSource & Partial<{ canonicalNames: SubjectCanonicalNames }>;
+  ratings?: PublicRatingSource;
+  realmSubjects?: RealmSubjectSource;
+  realmSubjectsForReader?: (reader: LeafOptions) => RealmSubjectSource | undefined;
+  realmRatings?: RealmRatingSource;
+  realmSubjectCapabilities?: RealmSubjectCapabilities;
   cursors: KeyRing;
+  clock?: KernelClock;
   release?: () => Promise<FilterRelease | null>;
+  /** Legacy preview helper tuning; never used by the public continuation path. */
   facetSample?: number;
+  /** Trusted native provider; omitted only by historical isolated service fixtures. */
+  publicFilters?: () => DefaultPublicFilterRuntime;
+  preparePublic?: (job: PublicFilterConsumerJob) => Promise<void>;
+  /** Trusted native owner composition. Missing native ports fail closed. */
+  facetProvider?: () => Promise<FacetDiscoveryProvider | undefined>;
+  /** Optional batched handoff to the qualified work-context owner. */
+  suggestionWorkContext?: SuggestionWorkContextReader;
 }) {
+  const release =
+    releaseOverride ?? (async () => ((await activeRelease(pool))?.release as FilterRelease | undefined) ?? null);
+  const realmRelease = releaseOverride
+    ? async (expected?: string) => {
+        const current = await releaseOverride();
+        if (!current) return null;
+        const digest = kindDigest(current);
+        return expected !== undefined && expected !== digest ? null : { digest, release: current };
+      }
+    : undefined;
   if (!Number.isSafeInteger(facetSample) || facetSample < 1)
     throw new RangeError('facetSample must be a positive safe integer');
   let templates: Promise<void> | undefined;
-  let alias: { generation: number; expiresAt: number } | undefined;
   let aliasRead: Promise<number> | undefined;
   const freshness = new Map<number, ReturnType<typeof createFreshness>>();
 
@@ -161,57 +528,139 @@ export function createSearchService({
     }
   }
 
+  async function freshAliasGeneration(): Promise<number> {
+    const { active } = await subjectGenerations(client, prefix);
+    if (active === null) throw indexNotReady();
+    return active;
+  }
+
   function aliasGeneration(): Promise<number> {
     if (aliasRead) return aliasRead;
-    if (alias && Date.now() < alias.expiresAt) return Promise.resolve(alias.generation);
-    const read = subjectGenerations(client, prefix)
-      .then(({ active }) => {
-        if (active === null) throw indexNotReady();
-        alias = { generation: active, expiresAt: Date.now() + 1000 };
-        return active;
-      })
-      .finally(() => {
-        if (aliasRead === read) aliasRead = undefined;
-      });
+    const read = freshAliasGeneration().finally(() => {
+      if (aliasRead === read) aliasRead = undefined;
+    });
     aliasRead = read;
     return read;
   }
 
-  async function generationOf(hits: readonly SubjectHit[]): Promise<number> {
-    if (!hits.length) return indexRequest(aliasGeneration);
-    let generation: number | undefined;
-    const stem = `${prefix}subjects-g`;
-    for (const hit of hits) {
-      const suffix = hit.index.startsWith(stem) ? hit.index.slice(stem.length) : '';
-      const value = Number(suffix);
-      if (!Number.isSafeInteger(value) || value < 1 || subjectIndexName(prefix, value) !== hit.index)
+  async function ratingEpoch(): Promise<PublicRatingEpoch> {
+    try {
+      if (!ratings) throw indexNotReady();
+      const value = await ratings.epoch();
+      if (
+        !value ||
+        typeof value !== 'object' ||
+        value.questionId !== STANDARD_QUESTION_ID ||
+        value.populationId !== GLOBAL_CONTEXT.id ||
+        !(value.priorEpoch === null || (Number.isSafeInteger(value.priorEpoch) && value.priorEpoch > 0))
+      )
         throw indexNotReady();
-      if (generation !== undefined && value !== generation) throw new ProblemError('search_restart_required');
-      generation = value;
+      return { questionId: value.questionId, populationId: value.populationId, priorEpoch: value.priorEpoch };
+    } catch {
+      throw indexNotReady();
     }
-    return generation!;
+  }
+
+  async function ratingCandidates(
+    hits: Awaited<ReturnType<typeof searchSubjectHits>>['hits'],
+    rating: PublicRatingEpoch,
+    positions: ReadonlyMap<number, bigint>,
+  ) {
+    // Disclosure returns these same candidate objects through its smaller Hit interface.
+    const accepted = new Set<object>();
+    const partitions = new Map<number, string[]>();
+    for (const hit of hits) partitions.set(hit.partition, [...(partitions.get(hit.partition) ?? []), hit.id]);
+    for (const [partition, ids] of partitions) {
+      let snapshot;
+      try {
+        snapshot = await ratings!.read(partition, [...new Set(ids)]);
+        if (
+          snapshot.partition !== partition ||
+          typeof snapshot.position !== 'bigint' ||
+          snapshot.position < 0n ||
+          snapshot.position !== positions.get(partition) ||
+          !(snapshot.figures instanceof Map) ||
+          [...snapshot.figures.keys()].some((id) => !ids.includes(id))
+        )
+          throw indexNotReady();
+      } catch {
+        throw indexNotReady();
+      }
+      for (const hit of hits.filter((hit) => hit.partition === partition)) {
+        const raw = snapshot.figures.get(hit.id);
+        let figure;
+        if (snapshot.figures.has(hit.id)) {
+          try {
+            figure = normalizePublicRatingFigure(raw, {
+              questionId: rating.questionId,
+              populationId: rating.populationId,
+              subjectId: hit.id,
+            });
+          } catch {
+            // A stale or unproven candidate is consumed, never reranked into the other phase.
+            continue;
+          }
+        }
+        const eligible =
+          rating.priorEpoch !== null && figure?.priorEpoch === rating.priorEpoch && figure.score !== null;
+        if (
+          hit.ratingPhase === 'scored'
+            ? eligible && figure!.score === hit.sort[0]
+            : hit.ratingPhase === 'unscored' && !eligible
+        )
+          accepted.add(hit);
+      }
+    }
+    return accepted;
+  }
+
+  async function discoveryGeneration(): Promise<number> {
+    const generation = await indexRequest(aliasGeneration);
+    const format = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
+    if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
+    return generation;
+  }
+
+  async function observation(generation: number) {
+    const reader = retainCurrent(freshness, generation, () =>
+      createFreshness(pool, subjectConsumer(prefix, generation)),
+    );
+    const observed = await reader.current();
+    if (publicFilters && observed.behind > 0 && Date.now() - observed.asOf.getTime() > 300_000) throw indexNotReady();
+    return searchObservation(observed);
   }
 
   async function asOf(generation: number): Promise<string> {
-    let reader = freshness.get(generation);
-    if (!reader) {
-      reader = createFreshness(pool, subjectConsumer(prefix, generation));
-      freshness.set(generation, reader);
-    }
-    return (await reader.current()).asOf.toISOString();
+    return (await observation(generation)).as_of;
   }
 
   async function admitQuery(
     text: ReturnType<typeof parseText> | undefined,
-    filter: ReturnType<typeof parseFilter> | undefined,
+    filter: SearchFilterDocument | undefined,
     current?: FilterRelease,
+    nativeOrder = false,
+    spoilerThreshold?: SpoilerThreshold,
+    inverse = false,
   ) {
     let admitted;
     if (filter) {
       const active = current ?? (await release());
       if (!active) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
       try {
-        admitted = admitFilter(filter, active);
+        if (containsRealmPredicate(filter)) {
+          if (containsUnsupportedDiscoveryLeaf(filter)) unsupported('/filter');
+          admitted = admitDiscoveryFilter(parseDiscoveryFilter(filter), active, new Set(), {
+            owner: true,
+            ...(inverse ? { inverse: true as const } : {}),
+            ...(spoilerThreshold !== undefined ? { spoilerThreshold } : {}),
+          });
+        } else {
+          admitted = admitFilter(filter as FilterDocument, active, {
+            ...(containsOwnerPredicate(filter) ? { owner: true as const } : {}),
+            ...(inverse ? { inverse: true as const } : {}),
+            ...(spoilerThreshold !== undefined ? { spoilerThreshold } : {}),
+          });
+        }
       } catch (error) {
         if (error instanceof FilterError)
           throw new ProblemError(error.problem, {
@@ -220,28 +669,614 @@ export function createSearchService({
         throw error;
       }
     }
-    if ((text || admitted) && !(text && positiveText(text)) && !(admitted && positiveFilter(admitted)))
+    if (
+      !publicFilters &&
+      !nativeOrder &&
+      (text || admitted) &&
+      !(text && positiveText(text)) &&
+      !(
+        admitted &&
+        (containsRealmPredicate(admitted)
+          ? positiveDiscoveryFilter(admitted as DiscoveryFilterDocument)
+          : positiveFilter(admitted as FilterDocument))
+      )
+    )
       unsupported(text ? '/text' : '/filter');
     return admitted;
   }
 
-  return {
-    async search(principal: 'anonymous' | `account:${string}`, request: SearchRequest, now = Date.now()) {
-      const { text, filter, sort, limit, bindingRequest } = validate(request);
-      const admitted = await admitQuery(text, filter);
-      const binding = { operation: 'subjects.search', request: bindingRequest, principal };
-      const cursor =
-        request.cursor === undefined ? undefined : decodeSearchCursor(cursors, binding, request.cursor, now);
+  async function groupedReleaseSearch(
+    principal: 'anonymous' | `account:${string}`,
+    submitted: GroupedReleaseSearchRequest,
+    now = clock().getTime(),
+    active?: { digest: string; head?: number; release: FilterRelease } | null,
+    readContext?: PublicSearchReadContext,
+  ) {
+    const child = submitted.work !== undefined;
+    const childCursor = submitted.childCursor;
+    if ((childCursor !== undefined && !child) || (child && submitted.cursor !== undefined))
+      invalid(child ? '/cursor' : '/work', 'invalid_format');
+    if (childCursor !== undefined && (typeof childCursor !== 'string' || !childCursor))
+      invalid('/childCursor', 'invalid_format');
+    if (submitted.sort !== undefined && submitted.sort !== 'name' && submitted.sort !== 'relevance')
+      unsupported('/sort');
+    if (submitted.filter === undefined) unsupported('/filter');
+
+    const request = ownSubjectRequest({ ...submitted, sort: submitted.sort ?? 'name' });
+    const { text, filter, sort, hitOptions, spoilerThreshold } = validate(request);
+    if (sort !== 'name' && sort !== 'relevance') unsupported('/sort');
+    if (!filter || containsRealmPredicate(filter) || containsOwnerPredicate(filter)) unsupported('/filter');
+
+    const native = active === undefined && !releaseOverride ? await activeRelease(pool) : active;
+    const current = native?.release ?? (releaseOverride ? await release() : undefined);
+    if (!current || (publicFilters && !native)) throw indexNotReady();
+    const releaseDigest = native?.digest ?? kindDigest(current);
+    const releaseHead = native?.head;
+    const admitted = await admitQuery(text, filter, current, false, spoilerThreshold ?? 0);
+    if (!admitted || containsRealmPredicate(admitted) || containsOwnerPredicate(admitted)) unsupported('/filter');
+    if (hitOptions.properties) admitProperties(hitOptions.properties, current);
+    if (!source.canonicalNames) throw indexNotReady();
+
+    const generation = await indexRequest(aliasGeneration);
+    const sortFormat = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
+    if (sortFormat !== SUBJECT_SORT_FORMAT) throw indexNotReady();
+    const precise = containsCalendarRange(admitted);
+    const calendarFormat = precise
+      ? await indexRequest(() => readSubjectCalendarFormat(client, prefix, generation))
+      : null;
+    if (precise && calendarFormat !== 1) throw indexNotReady();
+    const index = subjectIndexName(prefix, generation);
+    const indexUuid = await indexRequest(() => discoveryIndexUuid(client, index));
+    const physical: CalendarPhysicalIdentity = { generation, indexUuid, incarnation: indexUuid };
+
+    const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
+    const compiledFilter = compileFilter(admitted as FilterDocument, {
+      prefix: 'f',
+      relationOverflow: true,
+      ...(calendarFormat === null ? {} : { calendarFormat }),
+    });
+    const overflowProperties = [
+      ...new Set(compiledFilter.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
+    ];
+    const relationProperties = overflowProperties.filter((property) => relationFacetProperty(current, property));
+    const nativePlan: SearchPlan = {
+      ...(compiledText
+        ? {
+            query: compiledText.query,
+            boost: compiledText.leaves
+              .filter((leaf) => !leaf.negated)
+              .map((leaf) => leaf.value)
+              .join(' '),
+          }
+        : {}),
+      filter: compiledFilter.query,
+      ...(overflowProperties.length ? { overflowProperties } : {}),
+      sort,
+      generation,
+      size: RELEASE_GROUPING_LIMITS.children,
+    };
+    const groupingRequest = {
+      releaseDigest,
+      filter: admitted as FilterDocument,
+      ...(submitted.text === undefined ? {} : { text: submitted.text }),
+      sort,
+      languages: hitOptions.languages ?? ['en'],
+      spoilerThreshold: (spoilerThreshold ?? 0) as SpoilerThreshold,
+      ...(hitOptions.properties ? { properties: hitOptions.properties } : {}),
+      groupLimit: RELEASE_GROUPING_LIMITS.groups,
+      childLimit: RELEASE_GROUPING_LIMITS.children,
+      previewLimit: RELEASE_GROUPING_LIMITS.preview,
+    } as const;
+    const deadline = readContext?.deadline ?? Date.now() + 10_000;
+    const reservations = new Map<string, ReleaseSearchCandidateReservation>();
+    const reserve = (value: ReleaseSearchCandidateReservation) => {
+      const fields = [
+        value.observations,
+        value.ownerReads,
+        value.nameSeeks,
+        value.keys,
+        value.sourceReads,
+        value.completeWorkLinkReads,
+        value.completeWorkLinkOperations,
+        value.authorityObservations,
+        value.searchReads,
+      ];
+      if (
+        !value.pool ||
+        fields.some((field) => !Number.isSafeInteger(field) || field < 0) ||
+        value.observations + value.authorityObservations > 4096 ||
+        value.nameSeeks > 4096
+      )
+        throw new ReleaseGroupingUnavailable();
+      const prior = reservations.get(value.pool);
+      const total = {
+        pool: value.pool,
+        observations: (prior?.observations ?? 0) + value.observations,
+        ownerReads: (prior?.ownerReads ?? 0) + value.ownerReads,
+        nameSeeks: (prior?.nameSeeks ?? 0) + value.nameSeeks,
+        keys: (prior?.keys ?? 0) + value.keys,
+        sourceReads: (prior?.sourceReads ?? 0) + value.sourceReads,
+        completeWorkLinkReads: (prior?.completeWorkLinkReads ?? 0) + value.completeWorkLinkReads,
+        completeWorkLinkOperations: (prior?.completeWorkLinkOperations ?? 0) + value.completeWorkLinkOperations,
+        authorityObservations: (prior?.authorityObservations ?? 0) + value.authorityObservations,
+        searchReads: (prior?.searchReads ?? 0) + value.searchReads,
+      };
+      if (
+        Object.values(total).some((field) => typeof field === 'number' && !Number.isSafeInteger(field)) ||
+        total.nameSeeks > RELEASE_GROUPING_LIMITS.seeks * 4096
+      )
+        throw new ReleaseGroupingUnavailable();
+      reservations.set(value.pool, total);
+    };
+    const assertPhysical = async () => {
+      const latestGeneration = await indexRequest(freshAliasGeneration);
+      const latestUuid = await indexRequest(() =>
+        discoveryIndexUuid(client, subjectIndexName(prefix, latestGeneration)),
+      );
+      if (latestGeneration !== generation || latestUuid !== indexUuid) throw new ReleaseGroupingRestartRequired();
+    };
+    const assertRelease = async () => {
+      if (releaseOverride) {
+        const latest = await sourceRequest(release);
+        if (!latest || kindDigest(latest) !== releaseDigest) throw new ReleaseGroupingRestartRequired();
+        return;
+      }
+      const latest = await sourceRequest(() => activeRelease(pool));
+      if (latest?.digest !== releaseDigest || (releaseHead !== undefined && latest.head !== releaseHead))
+        throw new ReleaseGroupingRestartRequired();
+    };
+    const observeBasis = async (): Promise<ReleaseGroupingBasis> => {
+      await assertRelease();
+      await assertPhysical();
+      const population = await sourceRequest(() => source.canonicalNames!.observe({ deadline }));
+      const ready = await indexRequest(() => readSubjectCalendarFormat(client, prefix, generation));
+      if (precise && ready !== 1) throw new ReleaseGroupingRestartRequired();
+      await assertRelease();
+      await assertPhysical();
+      const epochValue = canonicalize({
+        releaseDigest,
+        releaseHead: releaseHead ?? null,
+        physical,
+        population,
+        calendarReady: ready === 1,
+      });
+      if (epochValue === undefined) throw new ReleaseGroupingUnavailable();
+      return {
+        releaseDigest,
+        physical,
+        epoch: createHash('sha256').update(epochValue).digest('hex'),
+        calendarReadyFor: ready === 1 ? physical : null,
+      };
+    };
+    const relationRelease = async () => {
+      await assertRelease();
+      return { digest: releaseDigest, head: releaseHead ?? 0, release: current };
+    };
+    const currentMatches = async (
+      _request: ReleaseGroupingRequest,
+      keys: readonly { id: string; partition: number; securityRevision: number }[],
+    ) => {
+      if (!keys.length) return new Set<string>();
+      reserve({
+        pool: 'semantic',
+        observations: 0,
+        ownerReads: 0,
+        nameSeeks: 0,
+        keys: keys.length,
+        sourceReads: keys.length,
+        completeWorkLinkReads: 0,
+        completeWorkLinkOperations: 0,
+        authorityObservations: 0,
+        searchReads: 0,
+      });
+      const hits = keys.map((key) => ({ ...key, matched: [] as string[] }));
+      const checked = await sourceRequest(() =>
+        checkHits(source, hits, new Map(), {
+          ...(admitted === undefined ? {} : { filter: catalogueFilter(admitted) }),
+          relationProperties,
+          spoilerThreshold: spoilerThreshold ?? 0,
+          observeRelationRelease: relationRelease,
+        }),
+      );
+      if (checked.relationRejected) throw new ReleaseGroupingRestartRequired();
+      return new Set(checked.passed.map(({ hit }) => hit.id));
+    };
+    try {
+      const page = child
+        ? await readReleaseSearchChildren({
+            pool,
+            source,
+            cursors,
+            principal,
+            release: current,
+            request: groupingRequest,
+            nativePlan,
+            generation,
+            prefix,
+            client,
+            relationProperties,
+            observeBasis,
+            deadline,
+            observeRelationRelease: relationRelease,
+            now,
+            runSource: sourceRequest,
+            runSearch: indexRequest,
+            reserve,
+            currentMatches,
+            work: submitted.work!,
+            ...(childCursor === undefined ? {} : { cursor: childCursor }),
+          })
+        : await readReleaseSearchGroups({
+            pool,
+            source,
+            cursors,
+            principal,
+            release: current,
+            request: groupingRequest,
+            nativePlan,
+            generation,
+            prefix,
+            client,
+            relationProperties,
+            observeBasis,
+            deadline,
+            observeRelationRelease: relationRelease,
+            now,
+            runSource: sourceRequest,
+            runSearch: indexRequest,
+            reserve,
+            currentMatches,
+            ...(submitted.cursor === undefined ? {} : { cursor: submitted.cursor }),
+          });
+      await assertRelease();
+      await assertPhysical();
+      return { ...page, as_of: await asOf(generation) };
+    } catch (error) {
+      if (error instanceof ReleaseSearchCursorInvalid) invalid(child ? '/childCursor' : '/cursor', 'invalid_format');
+      if (error instanceof ReleaseGroupingRestartRequired) throw new ProblemError('search_restart_required');
+      if (error instanceof ReleaseGroupingUnavailable) throw indexNotReady();
+      throw error;
+    }
+  }
+
+  const service = {
+    releaseGroups: groupedReleaseSearch,
+    async search(
+      principal: 'anonymous' | `account:${string}`,
+      request: SearchRequest,
+      now = clock().getTime(),
+      active?: { digest: string; head?: number; release: FilterRelease } | null,
+      readContext?: PublicSearchReadContext,
+    ) {
+      request = ownSubjectRequest(request);
+      const { text, filter, sort, limit, hitOptions, spoilerThreshold, bindingRequest } = validate(request);
+      // One lookup serves filter admission and the requested properties.
+      const native = active === undefined && !releaseOverride ? await activeRelease(pool) : active;
+      const current = native?.release ?? (releaseOverride ? await release() : undefined);
+      if (publicFilters && !native) throw indexNotReady();
+      const kinds: KindSnapshot | undefined = current
+        ? compileKinds(current, native?.digest ?? kindDigest(current))
+        : undefined;
+      const releaseBinding = native ? { digest: native.digest, head: native.head } : null;
+      const assertCurrentRelease = async () => {
+        if (!current) return;
+        if (releaseBinding) {
+          const latest = await sourceRequest(() => activeRelease(pool));
+          if (
+            latest?.digest !== releaseBinding.digest ||
+            (releaseBinding.head !== undefined && latest.head !== releaseBinding.head)
+          )
+            throw new ProblemError('search_restart_required');
+        } else if (releaseOverride) {
+          const latest = await sourceRequest(release);
+          if (!latest || kindDigest(latest) !== kinds!.digest) throw new ProblemError('search_restart_required');
+        }
+      };
+      if ((filter || hitOptions.properties) && !current)
+        throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+      const admitted = await admitQuery(
+        text,
+        filter,
+        current ?? undefined,
+        request.population !== undefined,
+        spoilerThreshold,
+        !request.population,
+      );
+      if (hitOptions.properties) admitProperties(hitOptions.properties, current!);
+      if (request.kindCursor !== undefined && typeof request.kindCursor !== 'string')
+        invalid('/kindCursor', 'invalid_type');
+      if (request.population) {
+        // Selected populations never query public rating fields or acquire a public result cache.
+        if (request.kindCursor !== undefined) unsupported('/kindCursor');
+        const binding = {
+          operation: 'subjects.search.realm_rating',
+          principal,
+          request: { ...bindingRequest, meaningDigest: kinds?.digest ?? null },
+        };
+        // Authenticate before native authority/evidence reads, including malformed continuations.
+        if (request.cursor !== undefined) {
+          const decoded = await decodeSearchCursor(cursors, binding, request.cursor, now);
+          if (!decoded.ok) {
+            if (decoded.reason === 'expired') throw new ProblemError('search_restart_required');
+            invalid('/cursor', 'invalid_format');
+          }
+        }
+        const ordered = await readRealmRatingOrder({
+          ratings: realmRatings,
+          source,
+          cursors,
+          binding,
+          limit,
+          now,
+          ...(request.cursor === undefined ? {} : { cursor: request.cursor }),
+          query: {
+            principal,
+            populationId: request.population.realm,
+            release: current ?? undefined,
+            meaningDigest: kinds?.digest,
+            text,
+            filter: admitted === undefined ? undefined : catalogueFilter(admitted),
+            deadline: readContext?.deadline ?? Date.now() + 10_000,
+            ...(readContext?.realmAuthority ? { authority: readContext.realmAuthority } : {}),
+          },
+        });
+        const results = ordered.subjects.map((subject) =>
+          projectHit(subject, {
+            ...hitOptions,
+            matchEvidence: text ? { state: 'unavailable' } : { state: 'absent' },
+          }),
+        );
+        if (hitOptions.properties) {
+          const facts = await sourceRequest(() =>
+            projectFacts(source, ordered.subjects, hitOptions.properties!, hitOptions.languages),
+          );
+          results.forEach((hit, index) => (hit.facts = facts[index]!));
+        }
+        const response: PublicSearchPage = {
+          subjects: await sourceRequest(() => publicHitFigures(pool, results)),
+          next: ordered.next,
+          as_of: ordered.as_of,
+          freshness: { state: 'unavailable' },
+        };
+        await readContext?.complete(response);
+        await ordered.finalize();
+        await assertCurrentRelease();
+        return response;
+      }
+      const realmScopedRequest = admitted !== undefined && containsRealmPredicate(admitted);
+      const scopedRequest = admitted !== undefined && (containsOwnerPredicate(admitted) || realmScopedRequest);
+      let scope: ReturnType<typeof createSearchScopeForService> | undefined;
+      let preparedScope: Awaited<ReturnType<NonNullable<typeof scope>['prepare']>> | undefined;
+      let scopeWork: ScopeWork | undefined;
+      if (scopedRequest) {
+        const options = readContext?.scope;
+        if (!options) throw indexNotReady();
+        scope = createSearchScopeForService(service, options);
+        scopeWork = new ScopeWork(scopeAllowance(700, randomUUID()));
+        if (realmScopedRequest) {
+          if (containsUnsupportedDiscoveryLeaf(admitted)) unsupported('/filter');
+          const preparedRealm = await sourceRequest(() =>
+            scope!.realm.prepare(admitted as DiscoveryFilterDocument, scopeWork!.remaining(), kindDigest(current!)),
+          );
+          scopeWork.native(preparedRealm.work);
+          const generation = await indexRequest(aliasGeneration);
+          const format = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
+          if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
+          const index = subjectIndexName(prefix, generation);
+          const indexUuid = await indexRequest(() => discoveryIndexUuid(client, index));
+          const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
+          const textBoost = compiledText?.leaves
+            .filter((leaf) => !leaf.negated)
+            .map((leaf) => leaf.value)
+            .join(' ');
+          const searchBasis = scope!.realm.searchBasis(preparedRealm.scope, {
+            ...(request.text === undefined ? {} : { text: request.text }),
+            ...(compiledText ? { textQuery: compiledText.query, textBoost: textBoost! } : {}),
+            generation,
+            indexUuid,
+          });
+          const binding = {
+            operation: 'subjects.search',
+            request: bindSearchScopeCursorRequest(bindingRequest, searchBasis),
+            principal,
+          };
+          let cursor: Awaited<ReturnType<typeof decodeSearchCursor>> | undefined =
+            request.cursor === undefined ? undefined : await decodeSearchCursor(cursors, binding, request.cursor, now);
+          if (cursor && !cursor.ok) {
+            if (cursor.reason === 'expired') throw new ProblemError('search_restart_required');
+            invalid('/cursor', 'invalid_format');
+          }
+          if (cursor?.ok && cursor.generation !== generation) throw new ProblemError('search_restart_required');
+          const after = cursor?.ok ? scopeCursorAfter('name', cursor.after) : null;
+          const kindAfter =
+            request.kindCursor === undefined
+              ? undefined
+              : kinds
+                ? await decodeKindCursor(cursors, binding, request.kindCursor, generation, kinds.digest, now)
+                : (() => {
+                    throw new ProblemError('search_restart_required');
+                  })();
+          const page = await sourceRequest(() =>
+            scope!.realm.searchPage(preparedRealm.scope, {
+              basis: searchBasis,
+              ...(request.text === undefined ? {} : { text: request.text }),
+              ...(compiledText ? { textQuery: compiledText.query, textBoost: textBoost! } : {}),
+              generation,
+              indexUuid,
+              after,
+              quota: limit,
+              allowance: scopeWork!.remaining(),
+            }),
+          );
+          scopeWork.native(page.work);
+          if (page.status !== 'ready' || !isDeepStrictEqual(page.basis, searchBasis)) throw indexNotReady();
+          const shown = [...page.subjects];
+          if (shown.length !== page.hits.length) throw new ProblemError('search_restart_required');
+          const results = shown.map((subject) =>
+            projectHit(subject, {
+              ...hitOptions,
+              matchEvidence: text ? { state: 'unavailable' } : { state: 'absent' },
+            }),
+          );
+          if (hitOptions.properties) {
+            const facts = await sourceRequest(() =>
+              projectFacts(source, shown, hitOptions.properties!, hitOptions.languages),
+            );
+            results.forEach((hit, index) => (hit.facts = facts[index]!));
+          }
+          const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
+          const observed = await observation(generation);
+          const witnesses = new Map<string, number>();
+          if (request.cursor === undefined && request.kindCursor === undefined)
+            for (const subject of shown.slice(0, 2))
+              witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
+          const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], witnesses);
+          const nextAfter = page.after;
+          if (!page.exhausted && nextAfter === null) throw new ProblemError('search_restart_required');
+          const response: PublicSearchPage = {
+            subjects: publicResults,
+            ...(metadata
+              ? {
+                  kinds: {
+                    values: metadata.values,
+                    next:
+                      metadata.after === null
+                        ? null
+                        : await encodeKindCursor(cursors, binding, generation, kinds!.digest, metadata.after, now),
+                  },
+                }
+              : {}),
+            next: page.exhausted
+              ? null
+              : await encodeSearchCursor(cursors, binding, { generation, after: [...nextAfter!] }, now),
+            ...observed,
+          };
+          await readContext?.complete(response);
+          const currentHits = await sourceRequest(() => checkHits(source, page.hits, new Map()));
+          if (
+            currentHits.passed.length !== shown.length ||
+            currentHits.passed.some(({ subject }, position) => subject.id !== shown[position]!.id)
+          )
+            throw new ProblemError('search_restart_required');
+          const final = await sourceRequest(() =>
+            scope!.realm.evaluate(
+              preparedRealm.scope,
+              shown.map((subject) => subject.id),
+              scopeWork!.remaining(),
+            ),
+          );
+          scopeWork.native(final.work);
+          if (
+            final.basis !== preparedRealm.scope.basis ||
+            final.values.length !== shown.length ||
+            final.values.some((value) => value !== true)
+          )
+            throw new ProblemError('search_restart_required');
+          if ((await indexRequest(() => discoveryIndexUuid(client, index))) !== indexUuid)
+            throw new ProblemError('search_restart_required');
+          if ((await indexRequest(freshAliasGeneration)) !== generation)
+            throw new ProblemError('search_restart_required');
+          return response;
+        } else {
+          const nativeOrder = !text && (sort === 'name' || sort === 'collections') ? sort : undefined;
+          preparedScope = await sourceRequest(() =>
+            scope!.prepare(admitted as FilterDocument, {
+              releaseDigest: native?.digest ?? kindDigest(current!),
+              ...(nativeOrder ? { nativeOrder, pageSize: limit } : {}),
+              allowance: scopeWork!.remaining(),
+            }),
+          );
+          scopeWork.native(scope.work(preparedScope));
+        }
+      }
+      const cursorRequest = preparedScope
+        ? bindSearchScopeCursorRequest(bindingRequest, preparedScope.basis)
+        : bindingRequest;
+      const binding = { operation: 'subjects.search', request: cursorRequest, principal };
+      // Preserve a known unsafe candidate total across continuations in the signed
+      // scope; the request/principal binding and keyset payload stay unchanged.
+      const lowerBoundBinding = { ...binding, operation: 'subjects.search.lower_bound' };
+      let inexact = false;
+      let cursor =
+        request.cursor === undefined ? undefined : await decodeSearchCursor(cursors, binding, request.cursor, now);
+      if (cursor && !cursor.ok && cursor.reason === 'invalid') {
+        cursor = await decodeSearchCursor(cursors, lowerBoundBinding, request.cursor!, now);
+        inexact = cursor.ok;
+      }
       if (cursor && !cursor.ok) {
         if (cursor.reason === 'expired') throw new ProblemError('search_restart_required');
         invalid('/cursor', 'invalid_format');
       }
 
+      const retained = cursor?.ok ? retainedSearchContinuation(cursor.after) : null;
+      if (publicFilters && cursor && !retained) throw new ProblemError('search_restart_required');
+      if (!publicFilters && retained) throw new ProblemError('search_restart_required');
+      // Authenticate the original operation/request/viewer before reading dynamic rating metadata.
+      const rating = sort === 'rating' ? await ratingEpoch() : undefined;
+      if (
+        retained &&
+        (rating
+          ? !retained.rating ||
+            retained.rating.questionId !== rating.questionId ||
+            retained.rating.populationId !== rating.populationId ||
+            retained.rating.priorEpoch !== rating.priorEpoch
+          : retained.rating !== undefined)
+      )
+        throw new ProblemError('search_restart_required');
+      let ratingPhase: RatingPhase | undefined;
+      if (rating) {
+        if (request.cursor !== undefined && !retained) {
+          const decoded = await decodeRatingCursor(
+            cursors,
+            inexact ? lowerBoundBinding : binding,
+            rating,
+            request.cursor,
+            now,
+          );
+          if (!decoded.ok) {
+            if (decoded.reason === 'restart' || decoded.reason === 'expired')
+              throw new ProblemError('search_restart_required');
+            invalid('/cursor', 'invalid_format');
+          }
+          cursor = decoded;
+          ratingPhase = decoded.phase;
+        }
+      }
+      // Pin the active generation before querying, including empty queries. Every
+      // refill targets that physical index even if the alias switches during validation.
+      const generation = await indexRequest(aliasGeneration);
+      if (cursor && cursor.generation !== generation) throw new ProblemError('search_restart_required');
+      if (
+        retained &&
+        (retained.queried.consumer.physicalTarget !== subjectIndexName(prefix, generation) ||
+          retained.queried.consumer.meaningDigest !== native?.digest)
+      )
+        throw new ProblemError('search_restart_required');
+      const format = await indexRequest(() => readSubjectSortFormat(client, prefix, generation));
+      if (format !== SUBJECT_SORT_FORMAT) throw indexNotReady();
+      const calendarFormat =
+        admitted && containsCalendarRange(admitted)
+          ? await indexRequest(() => readSubjectCalendarFormat(client, prefix, generation))
+          : null;
+
       const compiledText = text ? compileText(text, { field: 'search_text', prefix: 't' }) : undefined;
-      const compiledFilter = admitted ? compileFilter(admitted, { prefix: 'f' }) : undefined;
-      const clauses = new Map<string, FactClause>(
-        compiledFilter?.leaves.filter((leaf) => !leaf.negated).map((leaf) => [leaf.name, leaf]),
-      );
+      const matchEvidencePlan = compiledText ? compileMatchEvidence(compiledText) : undefined;
+      const currentTextDisclosure = text
+        ? createCurrentTextDisclosure(client, subjectIndexName(prefix, generation!))
+        : undefined;
+      const compiledFilter =
+        admitted && !preparedScope
+          ? compileFilter(admitted as FilterDocument, {
+              prefix: 'f',
+              relationOverflow: true,
+              ...(calendarFormat === null ? {} : { calendarFormat }),
+            })
+          : undefined;
+      const overflowProperties = [
+        ...new Set(compiledFilter?.leaves.flatMap((leaf) => (leaf.facet === 'statement' ? [leaf.property] : []))),
+      ];
+      const relationProperties = overflowProperties.filter((property) => relationFacetProperty(current!, property));
+      const clauses = new Map<string, FactClause>(compiledFilter?.leaves.map((leaf) => [leaf.name, leaf]));
       const plan = {
         ...(compiledText
           ? {
@@ -253,98 +1288,834 @@ export function createSearchService({
             }
           : {}),
         ...(compiledFilter ? { filter: compiledFilter.query } : {}),
+        ...(overflowProperties.length ? { overflowProperties } : {}),
         sort,
       };
-      let after = cursor?.after;
-      let generation = cursor?.generation;
-      let total;
-      let exhausted = false;
-      const results: Result[] = [];
-      for (let round = 0; round < 3; round++) {
-        const size = Math.min(200, 2 * (limit - results.length) + 1);
-        const page = await indexRequest(() =>
-          searchSubjects(client, prefix, { ...plan, size, ...(after === undefined ? {} : { after }) }),
+      const kindAfter =
+        request.kindCursor === undefined
+          ? undefined
+          : kinds
+            ? await decodeKindCursor(cursors, binding, request.kindCursor, generation!, kinds.digest, now)
+            : (() => {
+                throw new ProblemError('search_restart_required');
+              })();
+      let overflow = false;
+      const witnesses = new Map<string, number>();
+      let witnessCount = 0;
+      // Observe every checked snapshot, including rejected candidates: current overflow can
+      // precede its indexed marker, so an exact candidate total would also be unsafe there.
+      const sourcePositions = new Map<number, bigint>();
+      const evidenceById = new Map<string, NativeSearchHit['engineEvidence']>();
+      const disclosureSource: SubjectSource =
+        overflowProperties.length || rating
+          ? {
+              async read(partition, ids) {
+                const snapshot = await source.read(partition, ids);
+                validateRequestSourceSnapshot(snapshot, partition, ids);
+                if (rating) {
+                  const previous = sourcePositions.get(partition);
+                  if (previous !== undefined && previous !== snapshot.position) throw indexNotReady();
+                  sourcePositions.set(partition, snapshot.position);
+                }
+                overflow ||= snapshot.subjects.some((subject) =>
+                  subject.relationFacetOverflow?.some((property) => overflowProperties.includes(property)),
+                );
+                return snapshot;
+              },
+              count: (partition) => source.count(partition),
+              ...(source.prepareRelationFacets
+                ? { prepareRelationFacets: source.prepareRelationFacets.bind(source) }
+                : {}),
+              ...(source.matchRelationFacets ? { matchRelationFacets: source.matchRelationFacets.bind(source) } : {}),
+            }
+          : source;
+      const evaluateScope = async (ids: readonly string[]) => {
+        if (!scope || !preparedScope || !scopeWork) throw indexNotReady();
+        if (ids.length === 0) return [] as const;
+        const evaluation = await sourceRequest(() =>
+          scope.evaluate(preparedScope!, [...ids], scopeEvaluationReservation(scopeWork!, ids.length)),
         );
-        total ??= page.total;
-        const currentGeneration = await generationOf(page.hits);
-        if (generation !== undefined && generation !== currentGeneration)
-          throw new ProblemError('search_restart_required');
-        generation = currentGeneration;
-        const { passed } = await checkHits(source, page.hits, clauses);
-        const subjects = new Map(passed.map(({ hit, subject }) => [hit, subject]));
-        let consumed = 0;
-        for (const hit of page.hits) {
-          after = hit.sort;
-          consumed++;
-          const subject = subjects.get(hit);
-          if (subject) results.push(project(subject));
-          if (results.length === limit) break;
-        }
-        exhausted = page.hits.length < size && consumed === page.hits.length;
-        if (exhausted || results.length === limit) break;
-      }
-      return {
-        subjects: results,
-        total: total!,
-        next: exhausted ? null : encodeSearchCursor(cursors, binding, { generation: generation!, after: after! }, now),
-        as_of: await asOf(generation!),
+        scopeWork.native(scope.work(evaluation));
+        if (
+          evaluation.basis.canonical !== preparedScope.basis.canonical ||
+          evaluation.values.length !== ids.length ||
+          evaluation.progress !== null ||
+          evaluation.values.includes('not_proven')
+        )
+          throw indexNotReady();
+        return evaluation.values;
       };
+      const checkCandidates = async (hits: readonly NativeSearchHit[]) => {
+        sourcePositions.clear();
+        const { passed, relationRejected } = await sourceRequest(() =>
+          checkHits(disclosureSource, hits, clauses, {
+            ...(admitted && !preparedScope
+              ? {
+                  filter: catalogueFilter(admitted),
+                  relationProperties,
+                  ...(spoilerThreshold === undefined ? {} : { spoilerThreshold }),
+                  observeRelationRelease: async () => {
+                    await assertCurrentRelease();
+                    return current
+                      ? { release: current, digest: kinds!.digest, head: releaseBinding?.head ?? 0 }
+                      : null;
+                  },
+                }
+              : {}),
+            ...(currentTextDisclosure && text
+              ? {
+                  currentText: (subject: IndexedSubject) => currentTextDisclosure.matchesText(subject, text),
+                }
+              : {}),
+          }),
+        );
+        inexact ||= relationRejected === true;
+        const ratingAccepted = rating ? await ratingCandidates([...hits], rating, sourcePositions) : undefined;
+        const subjects = new Map(passed.map(({ hit, subject }) => [hit, subject]));
+        let scopedMatches: Set<string> | undefined;
+        if (scope && preparedScope && scopeWork && passed.length) {
+          const ids = passed.map(({ subject }) => subject.id);
+          const values = await evaluateScope(ids);
+          scopedMatches = new Set(ids.filter((_, index) => values[index] === true));
+        }
+        const checked = new Map<(typeof hits)[number], IndexedSubject>();
+        for (const hit of hits) {
+          if (rating && hit.ratingPhase !== 'scored' && hit.ratingPhase !== 'unscored') throw indexNotReady();
+          const subject = subjects.get(hit);
+          if (
+            subject &&
+            (!scopedMatches || scopedMatches.has(subject.id)) &&
+            (!ratingAccepted || ratingAccepted.has(hit))
+          ) {
+            checked.set(hit, subject);
+            evidenceById.set(subject.id, hit.engineEvidence);
+          }
+        }
+        return checked;
+      };
+      if (
+        scope &&
+        preparedScope &&
+        scopeWork &&
+        !text &&
+        (sort === 'id' || sort === 'name' || sort === 'collections') &&
+        !hitOptions.descriptions &&
+        !hitOptions.properties
+      ) {
+        const nativeHits: NativeSearchHit[] = [];
+        let after: SearchSortValue[] | null = null;
+        let exhausted = false;
+        if (sort === 'id') {
+          const afterSubject = cursor?.ok ? scopeCursorAfter('id', cursor.after) : null;
+          const page = await sourceRequest(() =>
+            scope!.prefix(preparedScope!, {
+              afterSubject,
+              quota: limit,
+              budget: Math.min(256, limit + 1),
+              allowance: scopeWork!.remaining(),
+            }),
+          );
+          if (page.basis.canonical !== preparedScope.basis.canonical || !page.usage.work)
+            throw new ProblemError('search_restart_required');
+          scopeWork.native(page.usage.work);
+          nativeHits.push(...page.hits);
+          exhausted = page.exhausted;
+          after = page.coveredThrough === null ? null : [page.coveredThrough];
+          if (!exhausted && after === null) throw indexNotReady();
+          if (nativeHits.length < limit && !exhausted) throw indexNotReady();
+        } else if (sort === 'name') {
+          let orderedAfter: readonly [string | null, string] | null = cursor?.ok
+            ? scopeCursorAfter('name', cursor.after)
+            : null;
+          let covered: readonly [string | null, string] | null = null;
+          while (nativeHits.length < limit) {
+            const quota = Math.min(99, limit - nativeHits.length);
+            const page = await sourceRequest(() =>
+              scope!.orderedPrefix(preparedScope!, {
+                order: 'name',
+                after: orderedAfter,
+                quota,
+                budget: quota + 1,
+                allowance: scopeWork!.remaining(),
+              }),
+            );
+            if (page.basis.canonical !== preparedScope.basis.canonical)
+              throw new ProblemError('search_restart_required');
+            if (page.order !== 'name') throw new ProblemError('search_restart_required');
+            scopeWork.native(page.usage.work);
+            nativeHits.push(...page.hits.map((hit) => ({ ...hit, sort: [...hit.sort] })));
+            covered = page.coveredThrough;
+            exhausted = page.exhausted;
+            if (nativeHits.length >= limit || exhausted) break;
+            if (page.hits.length === 0 || covered === null) throw indexNotReady();
+            orderedAfter = covered;
+          }
+          after = covered === null ? null : [...covered];
+          if (!exhausted && after === null) throw indexNotReady();
+          if (nativeHits.length < limit && !exhausted) throw indexNotReady();
+        } else {
+          let orderedAfter: readonly [number, string | null, string] | null = cursor?.ok
+            ? scopeCursorAfter('collections', cursor.after)
+            : null;
+          let covered: readonly [number, string | null, string] | null = null;
+          while (nativeHits.length < limit) {
+            const quota = Math.min(99, limit - nativeHits.length);
+            const page = await sourceRequest(() =>
+              scope!.orderedPrefix(preparedScope!, {
+                order: 'collections',
+                after: orderedAfter,
+                quota,
+                budget: quota + 1,
+                allowance: scopeWork!.remaining(),
+              }),
+            );
+            if (page.basis.canonical !== preparedScope.basis.canonical)
+              throw new ProblemError('search_restart_required');
+            if (page.order !== 'collections') throw new ProblemError('search_restart_required');
+            scopeWork.native(page.usage.work);
+            nativeHits.push(...page.hits.map((hit) => ({ ...hit, sort: [...hit.sort] })));
+            covered = page.coveredThrough;
+            exhausted = page.exhausted;
+            if (nativeHits.length >= limit || exhausted) break;
+            if (page.hits.length === 0 || covered === null) throw indexNotReady();
+            orderedAfter = covered;
+          }
+          after = covered === null ? null : [...covered];
+          if (!exhausted && after === null) throw indexNotReady();
+          if (nativeHits.length < limit && !exhausted) throw indexNotReady();
+        }
+        if (new Set(nativeHits.map((hit) => hit.id)).size !== nativeHits.length) throw indexNotReady();
+        const checked = await checkCandidates(nativeHits);
+        if (checked.size !== nativeHits.length) throw new ProblemError('search_restart_required');
+        const shown = nativeHits.map((hit) => checked.get(hit)!);
+        const results = shown.map((subject) =>
+          projectHit(subject, {
+            ...hitOptions,
+            matchEvidence: text ? { state: 'unavailable' } : { state: 'absent' },
+          }),
+        );
+        const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
+        const observed = await observation(generation!);
+        const witnesses = new Map<string, number>();
+        for (const subject of shown.slice(0, 2)) witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
+        const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], witnesses);
+        const response: PublicSearchPage = {
+          subjects: publicResults,
+          ...(metadata
+            ? {
+                kinds: {
+                  values: metadata.values,
+                  next:
+                    metadata.after === null
+                      ? null
+                      : await encodeKindCursor(cursors, binding, generation!, kinds!.digest, metadata.after, now),
+                },
+              }
+            : {}),
+          next: exhausted
+            ? null
+            : await encodeSearchCursor(cursors, binding, { generation: generation!, after: after ?? [] }, now),
+          ...observed,
+        };
+        await readContext?.complete(response);
+        const finalValues = await evaluateScope(shown.map((subject) => subject.id));
+        if (finalValues.some((value) => value !== true)) throw new ProblemError('search_restart_required');
+        if ((await indexRequest(freshAliasGeneration)) !== generation)
+          throw new ProblemError('search_restart_required');
+        await assertCurrentRelease();
+        return response;
+      }
+      const runtime = publicFilters?.();
+      if (publicFilters && (!runtime || !readContext)) throw indexNotReady();
+      const context = { deadline: readContext?.deadline ?? Date.now() + 10_000 };
+      const capturePlan = {
+        ...plan,
+        generation,
+        filterDocument: preparedScope ? undefined : (admitted as FilterDocument | undefined),
+        text,
+        pageSize: limit,
+        size: Math.min(200, 2 * limit + 1),
+        ...(retained?.frontier.after ? { after: retained.frontier.after } : {}),
+        ...(rating
+          ? { rating, ...(retained?.frontier.ratingPhase ? { ratingPhase: retained.frontier.ratingPhase } : {}) }
+          : {}),
+      };
+      let operations: PublicFilterConsumerOperations | undefined;
+      let capture: PublicFilterConsumerCapture | undefined;
+      let disposeRetainedPage: (() => Promise<void>) | undefined;
+      try {
+        if (runtime) {
+          if (retained) {
+            operations = await indexRequest(() => runtime.resumeRequest(retained.queried, context));
+          } else {
+            // Poll the retained preparation instead of reserving a fresh direct
+            // allowance on every retry of the same sparse page.
+            const bound = await indexRequest(() =>
+              runtime.bindRequest({ plan: capturePlan, snapshot: 'prepared' }, context),
+            );
+            operations = bound.operations;
+            capture = bound.capture;
+          }
+        }
+        const installed = operations;
+        const retainedRead = installed
+          ? await indexRequest(() =>
+              readPublicSearchPage({
+                operations: installed,
+                context,
+                plan: capturePlan,
+                ...(capture ? { capture } : {}),
+                ...(preparePublic ? { prepare: preparePublic } : {}),
+                ...(retained ? { continuation: retained } : {}),
+                check: checkCandidates,
+                canonicalId: (subject) => subject.id,
+              }),
+            )
+          : undefined;
+        disposeRetainedPage = retainedRead?.dispose;
+        if (
+          retainedRead &&
+          (retainedRead.continuation.queried.consumer.physicalTarget !== subjectIndexName(prefix, generation) ||
+            retainedRead.continuation.queried.consumer.meaningDigest !== native?.digest)
+        )
+          throw request.cursor ? new ProblemError('search_restart_required') : indexNotReady();
+        const useful =
+          retainedRead?.page ??
+          (await collectUsefulPage({
+            limit,
+            frontier: {
+              ...(cursor?.after === undefined ? {} : { after: cursor.after }),
+              ...(ratingPhase === undefined ? {} : { ratingPhase }),
+            },
+            read: async ({ after, ratingPhase: phase, size }) => {
+              const page = await indexRequest(() =>
+                searchSubjectHits(client, prefix, {
+                  ...plan,
+                  ...(matchEvidencePlan ? { query: matchEvidencePlan.query, matchEvidence: matchEvidencePlan } : {}),
+                  generation,
+                  size,
+                  ...(after === undefined ? {} : { after }),
+                  ...(rating ? { rating, ...(phase ? { ratingPhase: phase } : {}) } : {}),
+                }),
+              );
+              overflow ||= page.overflow === true;
+              return page;
+            },
+            check: checkCandidates,
+            canonicalId: (subject) => subject.id,
+          }));
+        // Never publish a partial page or a raw-candidate continuation on work-bound exhaustion.
+        // Native preparation must own the retained input; a request cannot fabricate a job.
+        if (useful.status === 'preparing') throw indexNotReady();
+        const exhausted = useful.status === 'exhausted';
+        const after = useful.frontier.after;
+        ratingPhase = useful.frontier.ratingPhase;
+        const shown = [...useful.values];
+        const results: SearchHit[] = boundMatchEvidencePage(
+          shown.map((subject) => ({
+            ...projectHit(subject, hitOptions),
+            matchEvidence: projectMatchEvidence(subject, evidenceById.get(subject.id), matchEvidencePlan),
+          })),
+        );
+        for (const subject of shown) {
+          if (request.cursor === undefined && request.kindCursor === undefined && witnessCount < 2) {
+            witnesses.set(subject.type, (witnesses.get(subject.type) ?? 0) + 1);
+            witnessCount++;
+          }
+        }
+        if (hitOptions.properties) {
+          const facts = await sourceRequest(() =>
+            projectFacts(source, shown, hitOptions.properties!, hitOptions.languages),
+          );
+          results.forEach((hit, index) => (hit.facts = facts[index]!));
+        }
+        const publicResults = await sourceRequest(() => publicHitFigures(pool, results));
+        // Exactly one freshness observation; verify dynamic context after all response work, even for empty pages.
+        const observed = await observation(generation!);
+        if (rating) {
+          const currentRating = await ratingEpoch();
+          if (
+            currentRating.questionId !== rating.questionId ||
+            currentRating.populationId !== rating.populationId ||
+            currentRating.priorEpoch !== rating.priorEpoch
+          )
+            throw new ProblemError('search_restart_required');
+        }
+        const cursorBinding = overflow || inexact ? lowerBoundBinding : binding;
+        const metadata = kinds?.page(kindAfter, hitOptions.languages ?? [], retainedRead ? new Map() : witnesses);
+        const response: PublicSearchPage = {
+          subjects: publicResults,
+          ...(metadata
+            ? {
+                kinds: {
+                  values: metadata.values,
+                  next:
+                    metadata.after === null
+                      ? null
+                      : await encodeKindCursor(cursors, binding, generation!, kinds!.digest, metadata.after, now),
+                },
+              }
+            : {}),
+          next: exhausted
+            ? null
+            : retainedRead
+              ? await encodeRetainedSearchCursor(cursors, cursorBinding, generation!, retainedRead.continuation, now)
+              : rating
+                ? await encodeRatingCursor(
+                    cursors,
+                    cursorBinding,
+                    rating,
+                    { generation: generation!, phase: ratingPhase!, after: after! },
+                    now,
+                  )
+                : await encodeSearchCursor(cursors, cursorBinding, { generation: generation!, after: after! }, now),
+          ...observed,
+        };
+        // This operation's final observation must follow all query and source work;
+        // another request's in-flight alias read cannot bracket this response.
+        await readContext?.complete(response);
+        if (scope && preparedScope && shown.length) {
+          const finalValues = await evaluateScope(shown.map((subject) => subject.id));
+          if (finalValues.some((value) => value !== true)) throw new ProblemError('search_restart_required');
+        }
+        if ((await indexRequest(freshAliasGeneration)) !== generation)
+          throw new ProblemError('search_restart_required');
+        if (retainedRead) {
+          await indexRequest(retainedRead.finalize);
+          await indexRequest(retainedRead.release);
+        }
+        await assertCurrentRelease();
+        return response;
+      } finally {
+        try {
+          // Hydration/cursor failures still release the SAME page use. Disposing
+          // failed work never substitutes for the missing final disclosure.
+          await disposeRetainedPage?.();
+        } finally {
+          await operations?.close();
+        }
+      }
     },
 
-    async facets(principal: 'anonymous' | `account:${string}`, request: FacetRequest, now = Date.now()) {
-      const facets = validateFacets(request);
+    async facets(
+      principal: 'anonymous' | `account:${string}`,
+      request: FacetRequest,
+      now = clock().getTime(),
+      context: { deadline: number; scope?: LeafOptions } = { deadline: deadlineFor(30_000) },
+    ): Promise<FacetDiscovery200Response> {
+      request = ownSubjectRequest(request);
+      if (request.scope !== undefined) {
+        const provider =
+          (await facetProvider?.()) ??
+          (publicFilters === undefined ? undefined : await publicFilters().facetProvider());
+        if (!provider) throw indexNotReady();
+        return readScopedFacetDiscovery(cursors, provider, request, async (scopedRequest) => {
+          if (!context.scope) throw indexNotReady();
+          if (
+            scopedRequest.conditions !== undefined &&
+            scopedRequest.filter !== undefined &&
+            !isDeepStrictEqual(scopedRequest.conditions, scopedRequest.filter)
+          )
+            invalid('/conditions', 'invalid_format');
+          const submitted = scopedRequest.conditions ?? scopedRequest.filter;
+          const catalogueCondition = scopedCatalogueCondition(submitted, scopedRequest.scope);
+          const kindCondition = scopedRequest.kinds?.length ? { type: { in: [...scopedRequest.kinds] } } : undefined;
+          const effectiveFilter = kindCondition
+            ? catalogueCondition === undefined
+              ? kindCondition
+              : { and: [catalogueCondition, kindCondition] }
+            : catalogueCondition;
+          const normalized = validate({
+            ...(scopedRequest.text === undefined ? {} : { text: scopedRequest.text }),
+            filter: effectiveFilter,
+          });
+          const languages = validateHitOptions({ languages: scopedRequest.languages }).languages;
+          const current = await release();
+          if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
+          // The native facet population is pinned to schema:Thing by its registered provider meaning.
+          const predicate = normalized.filter ?? { type: { in: ['schema:Thing'] } };
+          const admitted = await admitQuery(normalized.text, predicate, current, false, undefined, true);
+          if (!admitted) throw indexNotReady();
+          const catalogue = catalogueFilter(admitted);
+
+          const scope = createSearchScopeForService(service, context.scope);
+          const scopeWork = new ScopeWork(scopeAllowance(700, randomUUID()));
+          const meaning = {
+            text: normalized.text ?? null,
+            filter: admitted,
+            kinds: scopedRequest.kinds ?? null,
+            release: kindDigest(current),
+            languages: languages ?? null,
+          };
+          if (scopedRequest.scope.kind === 'realm') {
+            const prepared = await sourceRequest(() =>
+              scope.realm.prepare(catalogue, scopeWork.remaining(), kindDigest(current)),
+            );
+            scopeWork.native(prepared.work);
+            return {
+              principal,
+              text: normalized.text,
+              filter: catalogue,
+              originalFilter: normalized.filter === undefined ? undefined : catalogueFilter(normalized.filter),
+              release: current,
+              languages,
+              now,
+              context: { deadline: context.deadline },
+              scope: serviceRealmScopeFacetAdmission({
+                resource: scopedRequest.scope,
+                scope,
+                prepared: prepared.scope,
+                realms: scope.realm.realms(prepared.scope),
+                work: scopeWork,
+                principal,
+                meaning,
+              }),
+            };
+          }
+          const prepared = await sourceRequest(() =>
+            scope.prepare(catalogue, {
+              releaseDigest: kindDigest(current),
+              allowance: scopeWork.remaining(),
+            }),
+          );
+          scopeWork.native(scope.work(prepared));
+          return {
+            principal,
+            text: normalized.text,
+            filter: catalogue,
+            originalFilter: normalized.filter === undefined ? undefined : catalogueFilter(normalized.filter),
+            release: current,
+            languages,
+            now,
+            context: { deadline: context.deadline },
+            scope: serviceScopeFacetAdmission({
+              resource: scopedRequest.scope,
+              scope,
+              prepared,
+              work: scopeWork,
+              principal,
+              meaning,
+            }),
+          };
+        });
+      }
+      const { languages: languageChain, ...facetRequest } = request;
+      const { languages } = validateHitOptions({ languages: languageChain });
+      const facets = validateFacets(facetRequest);
+      const kinds = request.kinds;
+      admitFacetPage(facets);
       const { text, filter } = validate({
         ...(request.text === undefined ? {} : { text: request.text }),
         filter: request.filter,
       });
+      const positions = await authenticateFacetCursors(cursors, {
+        principal,
+        text,
+        originalFilter: filter === undefined ? undefined : catalogueFilter(filter),
+        ...(kinds ? { kinds } : {}),
+        facets,
+        languages,
+        now,
+      });
       const current = await release();
       if (!current) throw new ProblemError('semantic_not_ready', { headers: { 'retry-after': '1' } });
-      const admitted = await admitQuery(text, filter, current);
-      admitFacets(facets, filter, current);
-      const counted = await indexRequest(() =>
-        countFacets(client, prefix, {
-          ...(text ? { query: compileText(text, { field: 'search_text', prefix: 't' }).query } : {}),
-          ...(admitted ? { filter: compileFilter(admitted, { prefix: 'f' }).query } : {}),
+      validateFacetCursorRelease(positions, current);
+      const admitted = await admitQuery(text, filter, current, false, undefined, true);
+      const catalogue = admitted === undefined ? undefined : catalogueFilter(admitted);
+      admitFacets(facets, catalogue, current);
+      // The native factory must resolve the actual registered catalogue/meaning/identity context.
+      // Neither preview buckets nor a guessed Global/type configuration can replace this boundary.
+      const provider =
+        (await facetProvider?.()) ?? (publicFilters === undefined ? undefined : await publicFilters().facetProvider());
+      if (!provider) throw indexNotReady();
+      return readFacetDiscovery(
+        cursors,
+        provider,
+        {
+          principal,
+          text,
+          filter: catalogue,
+          originalFilter: filter === undefined ? undefined : catalogueFilter(filter),
+          ...(kinds ? { kinds } : {}),
+          release: current,
           facets,
-          sample: facetSample,
-        }),
+          languages,
+          now,
+          context,
+        },
+        positions,
       );
-      const coded = new Set(
-        facets.filter((facet) => codeFacet(current, facet.property)).map((facet) => facet.property),
-      );
-      const subjects = await discloseFacetValues(
-        source,
-        counted.facets.flatMap((facet) => (coded.has(facet.property) ? [] : facet.values.map(({ value }) => value))),
-      );
-      return {
-        facets: counted.facets.map((facet, index) => ({
-          property: facet.property,
-          relation: facet.relation,
-          values: facet.values
-            .flatMap(({ value, count }): FacetValue[] => {
-              if (coded.has(facet.property)) return [{ value, count, labels: {} }];
-              const subject = subjects.get(value);
-              return subject ? [{ value, count, labels: project(subject).labels }] : [];
-            })
-            .slice(0, facets[index]!.size),
-        })),
-        total: counted.total,
-        as_of: await asOf(await indexRequest(aliasGeneration)),
-      };
     },
 
-    async suggest(q: string, limit = 8) {
+    async suggest(
+      q: string,
+      limit = 8,
+      languages?: string[],
+      read?: {
+        deadline: number;
+        filter?: unknown;
+        scope?: LeafOptions;
+        suggestionWorkContext?: SuggestionWorkContextReader;
+        complete(page: { subjects: Result[]; as_of: string }): Promise<void>;
+      },
+    ) {
+      languages = ownSubjectRequest(languages);
       if (typeof q !== 'string' || q.length > 128 || [...q].length < 1 || [...q].length > 64)
         invalid('/q', 'out_of_range');
       if (!Number.isInteger(limit) || limit < 1 || limit > 10) invalid('/limit', 'out_of_range');
-      const hits = await indexRequest(() => suggestSubjects(client, prefix, { text: q, size: 2 * limit }));
-      const generation = await generationOf(hits);
-      const { passed } = await checkHits(
-        source,
-        hits.map((hit) => ({ ...hit, matched: [] })),
-        new Map(),
+      const options = validateHitOptions({ languages });
+      const contextDeadline = read?.deadline ?? Date.now() + 10_000;
+      let currentTextDisclosure: ReturnType<typeof createCurrentTextDisclosure> | undefined;
+      const verifySuggestionHits = async (hits: readonly CheckedHit[], expected: readonly Result[]) => {
+        const { passed: current } = await sourceRequest(() =>
+          checkHits(
+            source,
+            hits.map((hit) => ({ ...hit, matched: [] })),
+            new Map(),
+            {
+              currentText: (subject) => currentTextDisclosure!.matchesPrefix(subject, q),
+            },
+          ),
+        );
+        const projected = new Map(
+          current.map(({ subject }) => [subject.id, project(subject, options.languages ?? [])]),
+        );
+        return (
+          projected.size === expected.length &&
+          expected.every((subject) => isDeepStrictEqual(projected.get(subject.id), subject))
+        );
+      };
+      const completePage = <T extends Result>(
+        page: { subjects: readonly T[]; as_of: string },
+        hits?: readonly CheckedHit[],
+      ) =>
+        completeSuggestionWorkContext(page, {
+          ...((read?.suggestionWorkContext ?? suggestionWorkContext)
+            ? { reader: read?.suggestionWorkContext ?? suggestionWorkContext }
+            : {}),
+          languages: options.languages ?? [],
+          deadline: contextDeadline,
+          ...(read?.complete ? { complete: read.complete } : {}),
+          ...(hits
+            ? {
+                verifyCurrent: () =>
+                  verifySuggestionHits(
+                    hits,
+                    page.subjects.map(({ id, type, labels }) => ({ id, type, labels })),
+                  ),
+              }
+            : {}),
+        });
+      const generation = await discoveryGeneration();
+      currentTextDisclosure = createCurrentTextDisclosure(client, subjectIndexName(prefix, generation));
+      const parsed = read?.filter === undefined ? undefined : validate({ filter: read.filter }).filter;
+      const current = parsed ? await activeRelease(pool) : undefined;
+      const admitted = parsed ? await admitQuery(undefined, parsed, current?.release, false) : undefined;
+      const catalogue = admitted === undefined ? undefined : catalogueFilter(admitted);
+      if (parsed && !admitted) throw indexNotReady();
+      if (admitted && !publicFilters) throw indexNotReady();
+
+      if (admitted && publicFilters) {
+        if (!current) throw indexNotReady();
+        const context = { deadline: read?.deadline ?? Date.now() + 10_000 };
+        const bound = await indexRequest(() =>
+          publicFilters().bindSuggestion(
+            {
+              purpose: 'suggest',
+              prefix: q,
+              size: 2 * limit + 1,
+              generation,
+              filterDocument: undefined,
+              text: undefined,
+            },
+            context,
+          ),
+        );
+        try {
+          const prepare = async () => {
+            if (bound.capture.status === 'captured' || bound.capture.status === 'preparing')
+              await preparePublic?.(bound.capture.repair);
+          };
+          if (bound.capture.status !== 'captured') {
+            await prepare();
+            throw indexNotReady();
+          }
+          let scope: ReturnType<typeof createSearchScopeForService> | undefined;
+          let preparedScope: Awaited<ReturnType<NonNullable<typeof scope>['prepare']>> | undefined;
+          let scopeWork: ScopeWork | undefined;
+          if (catalogue && containsOwnerPredicate(catalogue)) {
+            if (!read?.scope) throw indexNotReady();
+            scope = createSearchScopeForService(service, read.scope);
+            scopeWork = new ScopeWork(scopeAllowance(700, randomUUID()));
+            preparedScope = await sourceRequest(() =>
+              scope!.prepare(catalogue, {
+                releaseDigest: current.digest,
+                allowance: scopeWork!.remaining(),
+              }),
+            );
+            scopeWork.native(scope.work(preparedScope));
+          }
+          let completed: Awaited<ReturnType<typeof completeSuggestionWorkContext<Result>>> | undefined;
+          const response = await executeScopedSuggestions({
+            operations: bound.operations,
+            queried: bound.capture.queried,
+            context,
+            limit,
+            generation,
+            filter: catalogue!,
+            release: current.release,
+            source,
+            currentText: (subject) => currentTextDisclosure!.matchesPrefix(subject, q),
+            ...(scope ? { scope } : {}),
+            ...(preparedScope ? { preparedScope } : {}),
+            ...(scopeWork ? { scopeWork } : {}),
+            readSource: sourceRequest,
+            project: (subject) => project(subject, options.languages),
+            asOf: () => asOf(generation),
+            freshGeneration: () => indexRequest(freshAliasGeneration),
+            releaseIsCurrent: async () => (await activeRelease(pool))?.digest === current.digest,
+            complete: async (page) => {
+              completed = await completePage(page);
+            },
+            prepare,
+          });
+          return completed ?? response;
+        } finally {
+          try {
+            if (bound.capture.status === 'captured')
+              await bound.operations.closeObservation(bound.capture.queried, context);
+          } finally {
+            await bound.operations.close();
+          }
+        }
+      }
+      if (publicFilters) {
+        const context = { deadline: read?.deadline ?? Date.now() + 10_000 };
+        const bound = await indexRequest(() =>
+          publicFilters().bindSuggestion(
+            {
+              purpose: 'suggest',
+              prefix: q,
+              size: 2 * limit,
+              generation,
+              filterDocument: undefined,
+              text: undefined,
+            },
+            context,
+          ),
+        );
+        const preparing = async (): Promise<never> => {
+          if (bound.capture.status === 'captured' || bound.capture.status === 'preparing')
+            await preparePublic?.(bound.capture.repair);
+          throw indexNotReady();
+        };
+        try {
+          if (bound.capture.status !== 'captured') return await preparing();
+          const observation = bound.capture.queried;
+          const queried = await indexRequest(() => bound.operations.query(observation, context));
+          if (queried.status !== 'queried') return await preparing();
+          const { passed } = await sourceRequest(() =>
+            checkHits(
+              source,
+              queried.result.map((hit) => ({ ...hit, matched: [] })),
+              new Map(),
+              {
+                currentText: (subject) => currentTextDisclosure!.matchesPrefix(subject, q),
+              },
+            ),
+          );
+          const visible = passed.slice(0, limit);
+          const page = {
+            subjects: visible.map(({ subject }) => project(subject, options.languages)),
+            as_of: await asOf(generation),
+          };
+          const response = await completePage(
+            page,
+            visible.map(({ hit }) => hit),
+          );
+          if ((await indexRequest(freshAliasGeneration)) !== generation)
+            throw new ProblemError('search_restart_required');
+          const final = await bound.operations.readStatus(
+            { queried: queried.queried, execution: queried.execution },
+            context,
+          );
+          if (final.status !== 'observed' || final.blocking.length) return await preparing();
+          return response;
+        } finally {
+          try {
+            if (bound.capture.status === 'captured')
+              await bound.operations.closeObservation(bound.capture.queried, context);
+          } finally {
+            await bound.operations.close();
+          }
+        }
+      }
+      const hits = await indexRequest(() => suggestSubjects(client, prefix, { text: q, size: 2 * limit, generation }));
+      const { passed } = await sourceRequest(() =>
+        checkHits(
+          source,
+          hits.map((hit) => ({ ...hit, matched: [] })),
+          new Map(),
+          {
+            currentText: (subject) => currentTextDisclosure!.matchesPrefix(subject, q),
+          },
+        ),
       );
-      return { subjects: passed.slice(0, limit).map(({ subject }) => project(subject)), as_of: await asOf(generation) };
+      const visible = passed.slice(0, limit);
+      const page = {
+        subjects: visible.map(({ subject }) => project(subject, options.languages)),
+        as_of: await asOf(generation),
+      };
+      const response = await completePage(
+        page,
+        visible.map(({ hit }) => hit),
+      );
+      if ((await indexRequest(freshAliasGeneration)) !== generation) throw new ProblemError('search_restart_required');
+      return response;
     },
   };
+  registerSearchScopeRuntime(service, {
+    pool,
+    client,
+    prefix,
+    source,
+    release,
+    clock,
+    ...(realmRelease ? { realmRelease } : {}),
+    ...(realmSubjects ? { realmSubjects } : {}),
+    ...(realmSubjectsForReader ? { realmSubjectsForReader } : {}),
+    ...(realmSubjectCapabilities ? { realmSubjectCapabilities } : {}),
+  });
+  return service;
+}
+
+const bindingFor = (binding: SearchCursorBinding) => ({ ...binding, operation: 'subjects.search.kinds' });
+function encodeKindCursor(
+  ring: KeyRing,
+  binding: SearchCursorBinding,
+  generation: number,
+  digest: string,
+  after: string,
+  now: number,
+) {
+  return encodeSearchCursor(ring, bindingFor(binding), { generation, after: [digest, after] }, now);
+}
+async function decodeKindCursor(
+  ring: KeyRing,
+  binding: SearchCursorBinding,
+  token: string,
+  generation: number,
+  digest: string,
+  now: number,
+): Promise<string> {
+  const decoded = await decodeSearchCursor(ring, bindingFor(binding), token, now);
+  if (!decoded.ok) {
+    if (decoded.reason === 'expired') throw new ProblemError('search_restart_required');
+    throw new ProblemError('invalid_request', { errors: [{ pointer: '/kindCursor', code: 'invalid_format' }] });
+  }
+  if (decoded.generation !== generation || decoded.after[0] !== digest)
+    throw new ProblemError('search_restart_required');
+  if (decoded.after.length !== 2 || typeof decoded.after[1] !== 'string')
+    throw new ProblemError('invalid_request', { errors: [{ pointer: '/kindCursor', code: 'invalid_format' }] });
+  return decoded.after[1];
 }

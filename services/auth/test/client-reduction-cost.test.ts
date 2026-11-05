@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
@@ -81,7 +82,10 @@ beforeAll(async () => {
     audience: 'https://api.reduction.test',
     secret: 'reduction-only-secret-with-at-least-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+      },
       async readAccount(id) {
         if (id === pausedOwner) {
           pausedOwner = undefined;
@@ -100,7 +104,7 @@ beforeAll(async () => {
         return receipt;
       },
       authorizeProvisioning: async (accountId) => ({ accountId }),
-    },
+    }),
   });
   const ports: AccountWorkflowPorts = {
     registrationTarget: (key) => key,
@@ -392,7 +396,7 @@ test('native website, password, key and delegated issuance materialize implicit 
 test('legacy deployment coverage is an explicit bounded barrier and migrations produce the committed dump', async () => {
   await auth.internal.registerClient({ clientId: 'legacy', firstParty: true, scopes: ['read'] });
   await pool.query(
-    "UPDATE auth_client_coverage SET ready=false,after_account='',ready_after=now()+interval '5 minutes' WHERE client_id='legacy'",
+    "UPDATE auth_client_coverage SET ready=false,after_ordinal=0,ready_after=now()+interval '5 minutes' WHERE client_id='legacy'",
   );
   await expect(
     auth.internal.beginClientReduction({

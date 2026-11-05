@@ -1,4 +1,5 @@
-import { createWriteRateLimiter, type WriteRateLimiter } from './access/write-rate.ts';
+import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './commerce/money.ts';
+import type { WriteRateLimiter } from './access/write-rate.ts';
 import { createWriteRateStage, type WriteRateStageOptions } from './access/write-rate-stage.ts';
 import { createPool, KERNEL_POOL_MAX, readPoolAcquireTimeoutMillis } from './database/pool.ts';
 import type { Pool } from 'pg';
@@ -11,90 +12,32 @@ import { createWorkClient } from './work/client.ts';
 import { readContentConfig } from './content/config.ts';
 import type { ContentRuntime } from './content/runtime.ts';
 import type { NativeAuthorErasureWorkflows } from './content/operation-contract.ts';
-import { systemClock } from './clock.ts';
+import { configureReceiptKeys, readReceiptKeyRing } from './command/receipt-key.ts';
+import { createKernelRuntimeDefaults, decodeKey, required } from './composition/runtime-defaults.ts';
 
 export { ConfigError } from './commerce/config.ts';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { setupPresentation } from './presentation/setup.ts';
-import { subjectSource } from './semantic/search-source.ts';
+import { createRatedSubjectSource } from './search/rated-source.ts';
+import { createRealmRatingNativeSource } from './search/realm-rating-native.ts';
 import { setupSemantic } from './semantic/setup.ts';
+import { setupContent } from './content/setup.ts';
+import { createRealmSubjectSearchSource } from './content/index.ts';
 import { createOpenSearch } from './search/opensearch.ts';
 import { createSearchService } from './search/service.ts';
 import { readSearchConfig, type SearchConfig } from './search/work.ts';
-import { createAccess, type AccessConfig } from './access/index.ts';
 import type { AuthenticationConfig } from './access/authenticate.ts';
-import type { AccessFactory } from './request/access.ts';
+import { createDefaultPublicFilterRuntime, type DefaultPublicFilterRuntime } from './search/public-runtime.ts';
+import { createPublicPreparationStore } from './search/public-preparation-store.ts';
+import { createDefaultDiscoverySearch, type DefaultDiscoverySearch } from './search/default-discovery.ts';
+import { createDiscoveryProducerEntry } from './composition/discovery.ts';
+import { MAX_HTTP_BODY_LIMIT } from './http/body.ts';
 
-export type KernelRuntimeDefaults = {
-  tokens: KeyRing;
-  writeRate: WriteRateLimiter;
-  rateAttribution: WriteRateStageOptions;
-  clock: () => Date;
-  access: AccessFactory;
-  auth?: AuthenticationConfig;
-};
-
-export type KernelRuntimeOverrides = {
-  env?: NodeJS.ProcessEnv;
-  tokens?: KeyRing;
-  writeRate?: WriteRateLimiter;
-  rateAttribution?: WriteRateStageOptions;
-  clock?: () => Date;
-  auth?: AuthenticationConfig;
-};
-
-function readTokenKeys(env: NodeJS.ProcessEnv): KeyRing {
-  const entries = required(env, 'KERNEL_SESSION_KEYS').split(',');
-  const keys = new Map<number, Uint8Array>();
-  for (const entry of entries) {
-    const match = /^(\d+):([A-Za-z0-9_-]+)$/.exec(entry);
-    const id = match?.[1] === undefined ? NaN : Number(match[1]);
-    const encoded = match?.[2];
-    if (!Number.isInteger(id) || id < 0 || id > 255 || encoded === undefined || keys.has(id)) {
-      throw new ConfigError('KERNEL_SESSION_KEYS');
-    }
-    keys.set(id, decodeKey(encoded, 'KERNEL_SESSION_KEYS'));
-  }
-  const current = keys.keys().next().value as number | undefined;
-  if (current === undefined) throw new ConfigError('KERNEL_SESSION_KEYS');
-  return { current, keys };
-}
-
-function readAuthConfig(env: NodeJS.ProcessEnv): AuthenticationConfig | undefined {
-  const issuer = env.AUTH_ISSUER;
-  const audience = env.AUTH_AUDIENCE;
-  const jwksUrl = env.AUTH_JWKS_URL;
-  if (issuer === undefined && audience === undefined && jwksUrl === undefined) return undefined;
-  return { issuer: issuer ?? '', audience: audience ?? '', jwksUrl: jwksUrl ?? '' };
-}
-
-/** Shared production composition defaults for the server and test factories. */
-export function createKernelRuntimeDefaults(overrides: KernelRuntimeOverrides = {}): KernelRuntimeDefaults {
-  const env = overrides.env ?? process.env;
-  const tokens = overrides.tokens ?? readTokenKeys(env);
-  const writeRate =
-    overrides.writeRate ??
-    createWriteRateLimiter({
-      ...(env.KERNEL_WRITE_RATE_SECRET === undefined ? {} : { secret: env.KERNEL_WRITE_RATE_SECRET }),
-      ...(env.KERNEL_WRITE_RATE_OVERRIDES === undefined ? {} : { overrides: env.KERNEL_WRITE_RATE_OVERRIDES }),
-    });
-  const rateAttribution = overrides.rateAttribution ?? {
-    trustedProxyPeers: env.KERNEL_RATE_TRUSTED_PROXY_PEERS?.split(',') ?? [],
-    clientIpHeader: env.KERNEL_RATE_CLIENT_IP_HEADER ?? 'cf-connecting-ip',
-  };
-  const auth = overrides.auth ?? readAuthConfig(env);
-  const access: AccessFactory = auth ? (config: AccessConfig) => createAccess({ ...config, auth }) : createAccess;
-  return {
-    tokens,
-    writeRate,
-    rateAttribution,
-    clock: overrides.clock ?? systemClock,
-    access,
-    ...(auth === undefined ? {} : { auth }),
-  };
-}
+export { createKernelRuntimeDefaults };
+export type { KernelRuntimeDefaults, KernelRuntimeOverrides } from './composition/runtime-defaults.ts';
 
 export type ServerConfig = {
+  moneyPolicy?: CommerceMoneyPolicy;
   databaseUrl: string;
   poolAcquireTimeoutMillis: number;
   /** Test override for verifying that the server pool survives its idle eviction interval. */
@@ -103,6 +46,7 @@ export type ServerConfig = {
   port: number;
   routeKey: Uint8Array;
   tokens: KeyRing;
+  receiptKeys?: KeyRing;
   commerce: CommerceConfig | null;
   content: ContentRuntime;
   search?: SearchConfig;
@@ -110,22 +54,6 @@ export type ServerConfig = {
   rateAttribution?: WriteRateStageOptions;
   auth?: AuthenticationConfig;
 };
-
-function required(env: NodeJS.ProcessEnv, variable: string): string {
-  const value = env[variable];
-  if (!value) throw new ConfigError(variable);
-  return value;
-}
-
-function decodeKey(value: string, variable: string, exactLength?: number): Uint8Array {
-  if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new ConfigError(variable);
-  const decoded = Buffer.from(value, 'base64url');
-  if (decoded.toString('base64url') !== value || decoded.byteLength < (exactLength ?? 32)) {
-    throw new ConfigError(variable);
-  }
-  if (exactLength !== undefined && decoded.byteLength !== exactLength) throw new ConfigError(variable);
-  return new Uint8Array(decoded);
-}
 
 export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
   const databaseUrl = required(env, 'DATABASE_URL');
@@ -149,10 +77,12 @@ export function readConfig(env: NodeJS.ProcessEnv): ServerConfig {
     port,
     routeKey,
     tokens: defaults.tokens,
+    receiptKeys: defaults.receiptKeys,
     writeRate: defaults.writeRate,
     rateAttribution: defaults.rateAttribution,
     ...(defaults.auth === undefined ? {} : { auth: defaults.auth }),
     commerce,
+    moneyPolicy: readCommerceMoneyPolicy(env),
     content: readContentConfig(env),
     ...(search === undefined ? {} : { search }),
   };
@@ -181,6 +111,7 @@ async function fillPool(pool: Pool): Promise<void> {
 export function startServer(config: ServerConfig): Promise<RunningServer> & RunningServer {
   const defaults = createKernelRuntimeDefaults({
     tokens: config.tokens,
+    ...(config.receiptKeys === undefined ? {} : { receiptKeys: config.receiptKeys }),
     ...(config.writeRate === undefined ? {} : { writeRate: config.writeRate }),
     ...(config.rateAttribution === undefined ? {} : { rateAttribution: config.rateAttribution }),
     ...(config.auth === undefined ? {} : { auth: config.auth }),
@@ -190,12 +121,16 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
     min: KERNEL_POOL_MAX,
     ...(config.poolIdleTimeoutMillis === undefined ? {} : { idleTimeoutMillis: config.poolIdleTimeoutMillis }),
   });
+  if (defaults.receiptKeys) configureReceiptKeys(pool, defaults.receiptKeys);
   const peers = new WeakMap<Request, string>();
   const searchConfig = config.search;
   const commerce = config.commerce;
+  const moneyPolicy = config.moneyPolicy ?? readCommerceMoneyPolicy(process.env);
   // One client for the process. The server enqueues no index work and runs no relay.
   const openSearch = searchConfig === undefined ? undefined : createOpenSearch(searchConfig.url);
   let app: ReturnType<typeof createKernel> | undefined;
+  let publicFilters: DefaultPublicFilterRuntime | undefined;
+  let discovery: DefaultDiscoverySearch | undefined;
   let workClient: ReturnType<typeof createWorkClient> | undefined;
   let contentWorkflows: Promise<NativeAuthorErasureWorkflows> | undefined;
   const workflows = (): Promise<NativeAuthorErasureWorkflows> =>
@@ -217,31 +152,96 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   const boot = (async () => {
     await fillPool(pool);
     await setupSemantic(pool, bundledRelease);
+    await setupContent(pool);
     await setupPresentation(pool);
     workClient = createWorkClient(config.databaseUrl);
     // Observe startup rejection immediately; the webhook and stop still receive it.
     void workClient.catch(() => {});
     const client = workClient;
     await client;
+    const rated = searchConfig === undefined ? undefined : createRatedSubjectSource(pool, config.routeKey);
     app = createKernel({
+      moneyPolicy,
       pool,
       routeKey: config.routeKey,
       tokens: defaults.tokens,
+      receiptKeys: defaults.receiptKeys,
       writeRate: defaults.writeRate,
       rateAttribution: defaults.rateAttribution,
       clock: defaults.clock,
       access: defaults.access,
+      onAccessReady(access, viewerActions) {
+        if (openSearch && searchConfig) {
+          if (!rated) throw new Error('Discovery Subject source composition is incomplete');
+          publicFilters = createDefaultPublicFilterRuntime({
+            pool,
+            routeKey: config.routeKey,
+            access,
+            search: openSearch,
+            prefix: searchConfig.prefix,
+            clock: defaults.clock,
+          });
+          const producers = createDiscoveryProducerEntry({
+            pool,
+            routeKey: config.routeKey,
+            access,
+            tokens: config.tokens,
+            clock: defaults.clock,
+            subjects: rated.source,
+          });
+          discovery = createDefaultDiscoverySearch(
+            {
+              spaceEntryActions: viewerActions,
+              pool,
+              routeKey: config.routeKey,
+              access,
+              search: openSearch,
+              prefix: searchConfig.prefix,
+              keys: config.tokens,
+              clock: defaults.clock,
+            },
+            producers,
+          );
+        }
+      },
       content: { ...config.content, workflows: operationWorkflows },
       ratePeer: (request) => peers.get(request),
-      ...(openSearch === undefined || searchConfig === undefined
+      ...(openSearch === undefined || searchConfig === undefined || rated === undefined
         ? {}
         : {
+            discovery: (principal, request, context) => {
+              if (!discovery) throw new Error('Discovery Access composition is incomplete');
+              return discovery.search(principal, request, context);
+            },
             search: createSearchService({
               pool,
               client: openSearch,
               prefix: searchConfig.prefix,
-              source: subjectSource(pool),
+              source: rated.source,
+              ratings: rated.ratings,
+              realmRatings: createRealmRatingNativeSource({
+                pool,
+                search: openSearch,
+                prefix: searchConfig.prefix,
+                tokens: config.tokens,
+              }),
+              realmSubjectsForReader: (reader) => createRealmSubjectSearchSource({ pool, reader }),
               cursors: config.tokens,
+              clock: defaults.clock,
+              publicFilters: () => {
+                if (!publicFilters) throw new Error('Public Search Access composition is incomplete');
+                return publicFilters;
+              },
+              async preparePublic(job) {
+                await createPublicPreparationStore(pool, await client, searchConfig.prefix).retain(
+                  {
+                    kind: 'repair',
+                    key: JSON.stringify(job),
+                    job,
+                  },
+                  Date.now() + 24 * 60 * 60 * 1000,
+                );
+              },
             }),
           }),
       ...(commerce === null
@@ -265,6 +265,7 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
   const server = Bun.serve({
     hostname: config.hostname,
     port: config.port,
+    maxRequestBodySize: MAX_HTTP_BODY_LIMIT(),
     async fetch(request, transport) {
       let finish!: () => void;
       const active = new Promise<void>((resolve) => (finish = resolve));
@@ -308,7 +309,15 @@ export function startServer(config: ServerConfig): Promise<RunningServer> & Runn
         } finally {
           try {
             await boot.catch(() => {});
-            if (workClient) await (await workClient).close();
+            try {
+              await discovery?.close();
+            } finally {
+              try {
+                await publicFilters?.close();
+              } finally {
+                if (workClient) await (await workClient).close();
+              }
+            }
           } finally {
             await pool.end();
           }

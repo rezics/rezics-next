@@ -2,7 +2,10 @@ import { expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
 import { createKernelClient } from '@rezics/client';
+import { slug } from '@rezics/definitions/slug';
 import platform from '@rezics/composition/profiles/platform.json';
+import { readMemberList, type MemberListRequest } from '../src/features/pages/member-list-query';
+import { memberContinuationDocument } from '../src/kernel/fake/composed-member-list';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 import { loadSubjectPage, SubjectPage, subjectPageTitle } from '../src/features/pages/subject.tsx';
@@ -41,22 +44,36 @@ const loaded = async (id: string) => {
 test('a subject page is one page read rendered from its template', async () => {
   sent.length = 0;
   const page = await loaded(kokoro);
-  expect(sent).toEqual([`POST /v1/pages:read ${JSON.stringify({ target: { subject: kokoro } })}`]);
+  expect(sent).toEqual([`POST /v1/pages:read ${JSON.stringify({ target: { subject: kokoro }, languages: ['en'] })}`]);
   expect(page.subject).toBe(kokoro);
   expect(page.template).toEqual({ scope: 'base', key: 'schema:CreativeWork' });
-  expect(page.document).toEqual(platform.bases.find(({ base }) => base === 'schema:CreativeWork')!.document);
+  expect(page.document).toEqual(
+    (platform.bases.find(({ base }) => base === 'schema:CreativeWork') as { views: { overview: unknown } }).views
+      .overview,
+  );
+  expect(subjectPageTitle(page, 'en')).toBe('Kokoro');
   expect(subjectPageTitle(page, 'ja')).toBe('こころ');
   const html = renderToString(createElement(SubjectPage, { page, locale: 'en', messages }));
   expect(html).toMatch(/<h1[^>]*>Kokoro<\/h1>/);
-  expect(html).toMatch(new RegExp(`href="/en/subjects/${soseki}"[^>]*>Natsume Sōseki</a>`));
+  expect(html).toMatch(new RegExp(`href="/en/subjects/${soseki}/${slug('Natsume Sōseki')}"[^>]*>Natsume Sōseki</a>`));
   const script = /<script type="application\/ld\+json">([^<]*)<\/script>/.exec(html);
   expect(script).not.toBeNull();
   expect(JSON.parse(script![1]!)).toMatchObject({ '@context': 'https://schema.org', '@type': 'Book', name: 'Kokoro' });
   const tale = renderToString(createElement(SubjectPage, { page: await loaded(taketori), locale: 'en', messages }));
-  expect(tale).toContain(`href="/en/subjects/${shortStory}"`);
+  expect(tale).toContain(`href="/en/subjects/${shortStory}/${slug('short story')}"`);
   expect(tale).not.toContain(`/subjects/${mergedGenre}`);
   const person = await loaded(soseki);
   expect(person.template).toEqual({ scope: 'base', key: 'schema:CreativeWork' });
+});
+
+test('a subject page requests and renders the reader language before English', async () => {
+  sent.length = 0;
+  const page = await loadSubjectPage(client, kokoro, undefined, 'ja');
+  if (page.kind !== 'page') throw new Error(`expected a page, got ${page.kind}`);
+  expect(sent).toEqual([`POST /v1/pages:read ${JSON.stringify({ target: { subject: kokoro }, languages: ['ja'] })}`]);
+  expect(subjectPageTitle(page.page, 'ja')).toBe('こころ');
+  const html = renderToString(createElement(SubjectPage, { page: page.page, locale: 'ja', messages }));
+  expect(html).toMatch(/<h1[^>]*>こころ<\/h1>/);
 });
 
 test('merged and missing subjects are told apart', async () => {
@@ -65,4 +82,53 @@ test('merged and missing subjects are told apart', async () => {
   sent.length = 0;
   expect(await loadSubjectPage(client, 'not-a-uuid')).toEqual({ kind: 'missing' });
   expect(sent).toEqual([]);
+});
+
+test('member continuation refuses a replacement Context on its native page read', async () => {
+  const originalContext = {
+    id: '0192f3a0-6c1e-7b2a-9d4e-000000000111',
+    population: { kind: 'realm' as const, id: '0192f3a0-6c1e-7b2a-9d4e-000000000112', title: 'Original' },
+  };
+  const replacementContext = {
+    id: '0192f3a0-6c1e-7b2a-9d4e-000000000121',
+    population: { kind: 'realm' as const, id: '0192f3a0-6c1e-7b2a-9d4e-000000000122', title: 'Replacement' },
+  };
+  const request: MemberListRequest = {
+    target: { account: 'member-continuation' },
+    locale: 'en',
+    node: 'members',
+    cursor: 'opaque:member-next==',
+    expectedReader: 'reader-a',
+    representation: {
+      context: originalContext.id,
+      population: 'realm',
+      populationId: originalContext.population.id,
+    },
+  };
+  const calls: { body: unknown; authorization: string | null }[] = [];
+  const client = createKernelClient('https://kernel.invalid', {
+    fetch: (async (input, init) => {
+      const call = new Request(input, init);
+      calls.push({ body: await call.json(), authorization: call.headers.get('authorization') });
+      return Response.json({
+        subject: null,
+        account: { id: '0192f3a0-6c1e-7b2a-9d4e-000000000131', handle: 'member-continuation' },
+        context: replacementContext,
+        document: memberContinuationDocument,
+        reads: {},
+      });
+    }) as typeof fetch,
+  });
+
+  expect(await readMemberList(client, request, 'Bearer current-reader')).toEqual({ ok: false, status: 409 });
+  expect(calls).toEqual([
+    {
+      body: {
+        target: { account: 'member-continuation' },
+        languages: ['en'],
+        continuation: { node: 'members', cursor: 'opaque:member-next==' },
+      },
+      authorization: 'Bearer current-reader',
+    },
+  ]);
 });

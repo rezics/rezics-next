@@ -1,5 +1,9 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { shareAccount } from '../access/account-share.ts';
+import { LifecycleDeniedError } from '../access/lifecycle-20261025094010-command.ts';
+import { grantAccountRole } from '../access/account-role-grant.ts';
+import { readAccount } from '../access/account-data.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -14,11 +18,20 @@ import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { recordedMoneyUnit, sameMoneyUnit } from './money.ts';
+import { checkoutIntegrationMoney } from './money-observation.ts';
 import type { TransactionKind } from './model.ts';
-import { statementPeriod, royaltyLines, type RoyaltyLine, type StatementTotal } from './royalty.ts';
+import {
+  statementPeriod,
+  royaltyLines,
+  MoneyInterpretationUnavailable,
+  type RoyaltyLine,
+  type StatementTotal,
+} from './royalty.ts';
 import { readOrder, readNamedOrderTransactions } from './store.ts';
+import retainedUnits from './payout-retained-units.sql';
 import record from './payout-record.sql';
-import { assertTransactionBound } from './settlement.ts';
+import { assertTransactionBound, MovementIntegrityError } from './settlement.ts';
 import statementRead from './payout-statement-read.sql';
 import statementList from './payout-statement-list.sql';
 import linesRead from './payout-lines.sql';
@@ -58,6 +71,7 @@ function statement(row: StatementRow): PayoutStatement {
   const creatorShareMinor = money(BigInt(row.weightedNetMinor) / 10000n);
   return {
     ...row,
+    moneyUnit: row.moneyUnit === null ? null : recordedMoneyUnit(JSON.parse(row.moneyUnit)),
     grossMinor: money(row.grossMinor),
     taxMinor: money(row.taxMinor),
     feeMinor: money(row.feeMinor),
@@ -85,6 +99,8 @@ async function ownAccount(pool: Pool, actor: Actor, check: AccessCheck): Promise
   if (actor.kind !== 'account') throw notFound();
   const route = routeOf(actor.accountId);
   if (route === null || !(await withConnection(pool, check))) throw notFound();
+  const current = await readAccount(queryClient(pool), route, actor.accountId);
+  if (!current || current.state === 'deleted') throw notFound();
   return { route, id: actor.accountId };
 }
 export async function readPayoutStatement(pool: Pool, actor: Actor, id: string, check: AccessCheck) {
@@ -135,6 +151,8 @@ async function readPage<T>(
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
       if (!(await check(client))) throw notFound();
+      const current = await readAccount(queryClient(client), route, owner.id);
+      if (!current || current.state === 'deleted') throw notFound();
       const partition = await readPartition(client, partitionOf(route));
       if (epoch !== null && epoch !== partition?.epoch) throw new ProblemError('stale_cursor');
       if (statementId !== null) {
@@ -194,6 +212,7 @@ export async function listPayoutLines(
   });
   const lines: PayoutLine[] = result.rows.map((row) => ({
     ...row,
+    moneyUnit: row.moneyUnit === null ? null : recordedMoneyUnit(JSON.parse(row.moneyUnit)),
     kind: row.kind as TransactionKind,
     created: new Date(row.created).toISOString(),
     recordedAt: new Date(row.recordedAt).toISOString(),
@@ -218,7 +237,14 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
     const order = await readOrder(pool, buyerRoute, orderId);
     if (!order || order.settlement !== 'paid') return { changed: false };
     const transactions = await readNamedOrderTransactions(pool, buyerRoute, orderId, ids);
-    const lines = royaltyLines(order, order.amountTaxMinor ?? null, transactions);
+    if (transactions.length !== ids.length) throw new MoneyInterpretationUnavailable();
+    const integration = await checkoutIntegrationMoney(pool, buyerRoute, order);
+    const lines = royaltyLines(
+      order,
+      integration?.amountTaxMinor ?? order.amountTaxMinor ?? null,
+      transactions,
+      integration?.moneyUnit,
+    );
     if (!lines.length) return { changed: false };
     const route = routeOf(order.creatorAccountId)!;
     try {
@@ -235,8 +261,28 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
           },
         },
         async (tx, command) => {
+          // Creator-home account fence precedes every local royalty/role write.
+          // Inactive creators still receive financial reconciliation, never a private role.
+          let permitsBenefits = true;
+          try {
+            await shareAccount(tx, order.creatorAccountId);
+          } catch (error) {
+            if (!(error instanceof LifecycleDeniedError)) throw error;
+            permitsBenefits = false;
+          }
           const at = authoritativeTimeValue(command.time),
             period = statementPeriod(at);
+          const existing = await retainedUnits.run(tx, { route, ids });
+          for (const row of existing) {
+            const line = lines.find((line) => line.balanceTransactionId === row.id)!;
+            if (
+              !sameMoneyUnit(
+                row.moneyUnit === null ? null : recordedMoneyUnit(JSON.parse(row.moneyUnit)),
+                line.moneyUnit,
+              )
+            )
+              throw new MoneyInterpretationUnavailable();
+          }
           const rows = await record.run(tx, {
             route,
             creator: order.creatorAccountId,
@@ -245,11 +291,11 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
             basis_points: order.royaltyBasisPoints,
             period,
             at,
-            transaction_id: command.transactionId,
             lines: lines.map((line) => ({
               id: line.balanceTransactionId,
               kind: line.kind,
               currency: line.currency,
+              money_unit: line.moneyUnit,
               gross: line.grossMinor,
               tax: line.taxMinor,
               fee: line.feeMinor,
@@ -261,6 +307,11 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
           });
           // Roll back a no-op, including its receipt/outbox position. Old IDs cannot create an empty later statement.
           if (!rows.length) throw new Unchanged();
+          if (permitsBenefits)
+            await grantAccountRole(tx, {
+              account: { route, id: order.creatorAccountId },
+              role: 'commerce.payout.owner',
+            });
           return {
             value: rows.map(statement),
             events: rows.map((row) => ({
@@ -273,6 +324,22 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
       );
     } catch (error) {
       if (error instanceof Unchanged) return { changed: false };
+      // The exact-key conflict branch reaches the existing immutable-row guard, never an overwrite.
+      // Serialization errors remain native retry signals; unrelated constraint failures propagate.
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        error.code === '23514' &&
+        error.message === 'Statement money interpretation unavailable'
+      )
+        throw new MoneyInterpretationUnavailable();
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        error.code === '23514' &&
+        error.message === 'Recorded Stripe transactions are immutable'
+      )
+        throw new MovementIntegrityError();
       throw error;
     }
   }
@@ -311,6 +378,8 @@ export function createPayouts({ pool, clock }: { pool: Pool; clock?: (() => Date
         if (!current) throw notFound();
         const at = authoritativeTimeValue(command.time),
           period = statementPeriod(at);
+        if (current.moneyUnit === null || !recordedMoneyUnit(JSON.parse(current.moneyUnit)))
+          throw new MoneyInterpretationUnavailable();
         if (current.state !== 'open' || current.period >= period) throw new ProblemError('conflict');
         const row = await paid.run(tx, { route, id, at, period, reference: paidReference });
         if (!row) throw new ProblemError('conflict');

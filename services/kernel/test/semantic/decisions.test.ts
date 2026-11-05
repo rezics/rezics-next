@@ -6,8 +6,9 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { createRealAccess } from './real-access.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -52,6 +53,19 @@ const kernel = createKernel({
   routeKey: new Uint8Array(32).fill(4),
   writeRate: realAccess.writeRate,
 });
+const projection = linkProjection(pool);
+async function catchUpLinks(id: string): Promise<void> {
+  const partition = partitionOf(routeOf(id)!);
+  for (let step = 0; step < 200; step++) {
+    const result = await projection.run(partition);
+    if (result.status === 'busy') {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      continue;
+    }
+    if (result.envelopes === 0) return;
+  }
+  throw new Error('Semantic link projection did not catch up');
+}
 
 async function call(method: string, path: string, options: { token?: string; key?: string; body?: unknown } = {}) {
   const headers: Record<string, string> = {};
@@ -78,6 +92,16 @@ const as = (options: Options, fallback: string) => ({
   key: options.key ?? key(),
 });
 const key = () => `"${randomUUID()}"`;
+const relationTargets = new Map<string, Set<string>>();
+const candidateTargets = new Map<string, string>();
+const relationKey = (subject: string, property: string) => `${subject}\0${property}`;
+const relationGroups = new Set(['order', 'derivation', 'world', 'membership', 'association', 'credit', 'appearance']);
+function rememberTarget(subject: string, property: string, target: unknown): void {
+  if (typeof target !== 'string') return;
+  const targets = relationTargets.get(relationKey(subject, property)) ?? new Set<string>();
+  targets.add(target);
+  relationTargets.set(relationKey(subject, property), targets);
+}
 const GREGORIAN = 'http://www.wikidata.org/entity/Q1985727';
 const value = (content: unknown) => ({ type: 'value', content });
 const statement = (property: string, content: unknown, extra: Record<string, unknown> = {}) => ({
@@ -93,7 +117,11 @@ const pick = (candidate: string, rank = 'normal') => ({ candidate, rank });
 async function created(body: unknown): Promise<Record<string, any>> {
   const answer = await call('POST', '/v1/subjects', { token: 'editor', key: key(), body });
   expect(answer.response.status).toBe(201);
-  return answer.body.subject;
+  const subject = answer.body.subject as Record<string, any>;
+  for (const [property, statements] of Object.entries(subject.statements as Record<string, any[]>))
+    for (const entry of statements)
+      if (entry.value?.type === 'value') rememberTarget(subject.id, property, entry.value.content);
+  return subject;
 }
 const person = (name: string) => created({ type: 'schema:Person', labels: { en: name } });
 async function proposed(id: string, input: unknown): Promise<string> {
@@ -103,7 +131,13 @@ async function proposed(id: string, input: unknown): Promise<string> {
     body: { statement: input },
   });
   expect(answer.response.status).toBe(201);
-  return answer.body.candidate;
+  const candidate = answer.body.candidate as string;
+  const parsed = input as { property?: { id?: string }; value?: { type?: string; content?: unknown } };
+  if (parsed.property?.id && parsed.value?.type === 'value' && typeof parsed.value.content === 'string') {
+    candidateTargets.set(candidate, parsed.value.content);
+    rememberTarget(id, parsed.property.id, parsed.value.content);
+  }
+  return candidate;
 }
 const decide = (
   id: string,
@@ -117,16 +151,43 @@ const decide = (
     ...as(options, 'acceptor'),
     body: { context, expected_head: expected },
   });
-const adopt = (id: string, body: Record<string, unknown>, options: Options = {}) =>
-  call('POST', `/v1/subjects/${id}:adopt`, { ...as(options, 'acceptor'), body: { context: GLOBAL_CONTEXT, ...body } });
+const adopt = (id: string, body: Record<string, unknown>, options: Options = {}) => {
+  const selection = Array.isArray(body.selection) ? (body.selection as { candidate: string }[]) : [];
+  const selectedTargets = new Set(selection.map((entry) => candidateTargets.get(entry.candidate)).filter(Boolean));
+  const property = String(body.property);
+  const isRelation = relationGroups.has(bundledRelease.properties[property]?.relation?.group ?? '');
+  const knownTargets = isRelation ? relationTargets.get(relationKey(id, property)) : undefined;
+  const target = isRelation
+    ? selectedTargets.size === 1
+      ? [...selectedTargets][0]
+      : knownTargets?.size === 1
+        ? [...knownTargets][0]
+        : undefined
+    : undefined;
+  return call('POST', `/v1/subjects/${id}:adopt`, {
+    ...as(options, 'acceptor'),
+    body: { context: GLOBAL_CONTEXT, ...body, ...(body.target === undefined && target ? { target } : {}) },
+  });
+};
 async function view(id: string, context?: string) {
+  await catchUpLinks(id);
   const answer = await call('GET', `/v1/subjects/${id}${context ? `?context=${context}` : ''}`);
   expect(answer.response.status).toBe(200);
   expect(answer.response.headers.get('etag')).toBe(`"${answer.body.subject.revision}"`);
   return answer.body;
 }
 async function listed(id: string, property: string, query = '') {
-  const answer = await call('GET', `/v1/subjects/${id}/candidates?property=${encodeURIComponent(property)}${query}`);
+  const knownTargets = relationTargets.get(relationKey(id, property));
+  const target =
+    relationGroups.has(bundledRelease.properties[property]?.relation?.group ?? '') &&
+    !/[?&](?:target|sameAs)=/.test(query) &&
+    knownTargets?.size === 1
+      ? `&target=${[...knownTargets][0]}`
+      : '';
+  const answer = await call(
+    'GET',
+    `/v1/subjects/${id}/candidates?property=${encodeURIComponent(property)}${target}${query}`,
+  );
   expect(answer.response.status).toBe(200);
   return answer.body;
 }
@@ -189,13 +250,13 @@ test('Global acceptance and adoption turn a proposal into a ranked statement, on
   const stale = await decide(book.id, candidate, 'accept', GLOBAL_CONTEXT, null);
   expect([stale.response.status, stale.body.code]).toEqual([409, 'stale_editorial_head']);
   expect((await view(book.id)).subject.statements).toEqual(book.statements);
-  const pending = (await listed(book.id, 'schema:author')).candidates[1];
+  const pending = (await listed(book.id, 'schema:author', `&target=${collective.id}`)).candidates[0];
   expect([pending.id, pending.decision, pending.head, pending.rank]).toEqual([candidate, 'accepted', 1, null]);
-  const selection = [pick(original.id, 'preferred'), pick(candidate)];
-  const adopted = await adopt(book.id, { property: 'schema:author', mode: 'replace', selection, expected_head: 1 });
+  const selection = [pick(candidate)];
+  const adopted = await adopt(book.id, { property: 'schema:author', mode: 'replace', selection, expected_head: null });
   expect(adopted.response.status).toBe(200);
   expect(adopted.body).toEqual({
-    adoption: { context: GLOBAL_CONTEXT, property: 'schema:author', mode: 'replace', selection, head: 2 },
+    adoption: { context: GLOBAL_CONTEXT, property: 'schema:author', mode: 'replace', selection, head: 1 },
     revision: 4,
   });
   expect(realAccess.checks.at(-1)).toEqual({
@@ -205,15 +266,24 @@ test('Global acceptance and adoption turn a proposal into a ranked statement, on
   });
   const shown = await view(book.id);
   expect(shown.subject.revision).toBe(4);
-  expect(shown.subject.statements['schema:author'].map((s: any) => [s.id, s.rank, s.rezics.revision])).toEqual([
-    [original.id, 'preferred', 1],
-    [candidate, 'normal', 2],
-  ]);
-  expect(shown.related[collective.id]).toEqual({ labels: collective.labels });
-  const listing = await listed(book.id, 'schema:author');
-  expect(listing.adoption).toEqual({ mode: 'replace', head: 2 });
+  const authorStatements = shown.subject.statements['schema:author']
+    .map((s: any) => [s.id, s.rank, s.rezics.revision])
+    .sort(([left]: any[], [right]: any[]) => String(left).localeCompare(String(right)));
+  expect(authorStatements).toEqual(
+    [
+      [original.id, 'preferred', 1],
+      [candidate, 'normal', 2],
+    ].sort(([left]: any[], [right]: any[]) => String(left).localeCompare(String(right))),
+  );
+  expect(shown.related[collective.id]).toEqual({
+    labels: collective.labels,
+    type: 'schema:Organization',
+    types: ['schema:Organization', 'schema:Thing'],
+    cover: null,
+  });
+  const listing = await listed(book.id, 'schema:author', `&target=${collective.id}`);
+  expect(listing.adoption).toEqual({ mode: 'replace', head: 1 });
   expect(listing.candidates.map((x: any) => [x.id, x.decision, x.head, x.rank])).toEqual([
-    [original.id, 'accepted', 1, 'preferred'],
     [candidate, 'accepted', 1, 'normal'],
   ]);
   expect((await revisions(book.id)).map((row) => row.kind)).toEqual(['create', 'propose', 'accept', 'adopt']);
@@ -221,7 +291,6 @@ test('Global acceptance and adoption turn a proposal into a ranked statement, on
 
 test('a Global rejection keeps its candidate as deprecated with references and only accepted candidates are adopted', async () => {
   const work = await created({ type: 'schema:Book', labels: { en: 'Kokoro' } });
-  const otherWork = await created({ type: 'schema:Book', labels: { en: 'Botchan' } });
   const edition = await created({
     type: 'bf:Instance',
     labels: { en: 'Kokoro, Penguin Classics' },
@@ -250,7 +319,7 @@ test('a Global rejection keeps its candidate as deprecated with references and o
     head: 1,
     rank: 'deprecated',
   });
-  const alternative = await proposed(edition.id, cited('schema:exampleOfWork', otherWork.id));
+  const alternative = await proposed(edition.id, cited('schema:exampleOfWork', work.id, { rank: 'preferred' }));
   const before = await revisions(edition.id);
   for (const [property, candidate] of [
     ['schema:datePublished', wrongDate],

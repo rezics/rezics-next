@@ -7,6 +7,7 @@ import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import type { AccountActor, Resource } from '../../src/request/access.ts';
 import {
+  capture,
   checkGrowth,
   openGrowthDatabase,
   seed,
@@ -32,16 +33,37 @@ const receiptDigest = Buffer.alloc(32, 7);
 
 let db: GrowthDatabase | undefined;
 let actorId = '';
+let principalId = '';
+let assignmentRequestId = '';
 let organizationId = '';
 let transactionId = '';
 let target: Resource;
 let actor: AccountActor;
+let assignmentActor: AccountActor;
 let permissions: ReturnType<typeof createPermissionAccess>;
 
 const seededAccountIds: string[] = [];
 const seededOrganizationIds: string[] = [];
 const seededResourceIds: string[] = [];
 const seededTestResourceIds: string[] = [];
+const assignmentGrowthPrincipalIds: string[] = [];
+
+function expectIndex(plans: readonly unknown[], expected: string): void {
+  let found = false;
+  const visit = (node: unknown): void => {
+    if (typeof node !== 'object' || node === null) return;
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child);
+      return;
+    }
+    const plan = node as Record<string, unknown>;
+    if (typeof plan['Index Name'] === 'string' && plan['Index Name'].startsWith(expected)) found = true;
+    if (typeof plan.Plan === 'object' && plan.Plan !== null) visit(plan.Plan);
+    if (Array.isArray(plan.Plans)) for (const child of plan.Plans) visit(child);
+  };
+  for (const plan of plans) visit(plan);
+  expect(found, `plan should use ${expected}`).toBe(true);
+}
 
 // This population mirrors Access account, organization membership, grant, role-grant and denial rows, fence.sql records, and the resource creation port's route/id insert.
 const population: Population = {
@@ -181,9 +203,60 @@ const population: Population = {
   },
 };
 
+const assignmentGrowthPopulation: Population = {
+  name: 'access-permission-assignment-growth',
+  hotPartition: anchorPartition,
+  hotShare: 1,
+  rows: ({ route }) => {
+    const seededPrincipalId = newId(route);
+    const requestId = newId(route);
+    const rowTransactionId = newId(route);
+    assignmentGrowthPrincipalIds.push(seededPrincipalId);
+    return {
+      'access.account': [
+        {
+          route,
+          account_id: seededPrincipalId,
+          kind: 'actor',
+          handle: null,
+          state: 'active',
+          registration_id: null,
+          registration_expires_at: null,
+          transaction_id: rowTransactionId,
+        },
+      ],
+      'access.principal_assignment': [
+        {
+          route,
+          principal_id: seededPrincipalId,
+          request_id: requestId,
+          assigned_actor_id: actorId,
+          creator_principal_id: seededPrincipalId,
+          valid: '(,)',
+          transaction_id: rowTransactionId,
+        },
+      ],
+      'access.resource_grant': [
+        {
+          route: anchorRoute,
+          resource_id: target.id,
+          subject_kind: 'identity',
+          subject_id: seededPrincipalId,
+          subject_role: '',
+          action,
+          valid: '(,)',
+          transaction_id: rowTransactionId,
+        },
+      ],
+    };
+  },
+};
+
 beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
   actorId = newId(anchorRoute);
+  principalId = newId(anchorRoute);
+  assignmentRequestId = newId(anchorRoute);
   organizationId = newId(anchorRoute);
   transactionId = newId(anchorRoute);
   target = { route: anchorRoute, id: newId(anchorRoute) };
@@ -194,6 +267,10 @@ beforeAll(async () => {
     scopes: [action],
     requestedBy: null,
     authnEpoch: 1,
+  };
+  assignmentActor = {
+    ...actor,
+    requestedBy: `urn:rezics:request:${principalId}:${assignmentRequestId}`,
   };
 
   await db.admin.query(`CREATE SCHEMA ${schema}`);
@@ -207,8 +284,9 @@ beforeAll(async () => {
   // These fixture writes use the account, membership and grant shapes used by existing Access tests.
   await db.admin.query(
     `INSERT INTO access.account (route, account_id, kind, state, transaction_id)
-     VALUES ($1, $2, 'actor', 'active', $3), ($1, $4, 'organization', 'active', $3)`,
-    [anchorRoute, actorId, transactionId, organizationId],
+     VALUES ($1, $2, 'actor', 'active', $3), ($1, $4, 'organization', 'active', $3),
+            ($1, $5, 'actor', 'active', $3)`,
+    [anchorRoute, actorId, transactionId, organizationId, principalId],
   );
   await db.admin.query(
     `INSERT INTO access.organization_member
@@ -241,10 +319,17 @@ beforeAll(async () => {
     },
   );
   await db.admin.query(
+    `INSERT INTO access.principal_assignment
+     (route, principal_id, request_id, assigned_actor_id, creator_principal_id, valid, transaction_id)
+     VALUES ($1, $2, $3, $4, $2, '(,)'::tstzrange, $5)`,
+    [anchorRoute, principalId, assignmentRequestId, actorId, transactionId],
+  );
+  await db.admin.query(
     `INSERT INTO access.resource_grant
      (route, resource_id, subject_kind, subject_id, subject_role, action, valid, transaction_id)
-     VALUES ($1, $2, 'identity', $3, '', $4, '(,)'::tstzrange, $5)`,
-    [target.route, target.id, actorId, action, transactionId],
+     VALUES ($1, $2, 'identity', $3, '', $4, '(,)'::tstzrange, $5),
+            ($1, $2, 'identity', $6, '', $4, '(,)'::tstzrange, $5)`,
+    [target.route, target.id, actorId, action, transactionId, principalId],
   );
   await db.admin.query(`ANALYZE ${resources}`);
 }, 90_000);
@@ -258,12 +343,23 @@ afterAll(async () => {
         target.route,
         target.id,
       ]);
+    if (assignmentRequestId)
+      await db.admin.query(
+        'DELETE FROM access.principal_assignment WHERE route = $1 AND principal_id = $2 AND request_id = $3',
+        [anchorRoute, principalId, assignmentRequestId],
+      );
     if (organizationId && actorId)
       await db.admin.query(
         'DELETE FROM access.organization_member WHERE route = $1 AND organization_id = $2 AND member_account_id = $3',
         [anchorRoute, organizationId, actorId],
       );
-    const accounts = [...seededAccountIds, actorId, organizationId].filter(Boolean);
+    const accounts = [
+      ...seededAccountIds,
+      ...assignmentGrowthPrincipalIds,
+      actorId,
+      principalId,
+      organizationId,
+    ].filter(Boolean);
     if (accounts.length)
       await db.admin.query('DELETE FROM access.account WHERE account_id = ANY($1::uuid[])', [accounts]);
     await db.admin.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
@@ -301,6 +397,18 @@ async function resetSeededRows(): Promise<void> {
       seededResourceIds,
     ]);
   }
+  if (assignmentGrowthPrincipalIds.length) {
+    await database.admin.query('DELETE FROM access.principal_assignment WHERE principal_id = ANY($1::uuid[])', [
+      assignmentGrowthPrincipalIds,
+    ]);
+    await database.admin.query(
+      'DELETE FROM access.resource_grant WHERE route = $1 AND resource_id = $2 AND subject_id = ANY($3::uuid[])',
+      [anchorRoute, target.id, assignmentGrowthPrincipalIds],
+    );
+    await database.admin.query('DELETE FROM access.account WHERE account_id = ANY($1::uuid[])', [
+      assignmentGrowthPrincipalIds,
+    ]);
+  }
   if (seededOrganizationIds.length)
     await database.admin.query('DELETE FROM access.organization_member WHERE organization_id = ANY($1::uuid[])', [
       seededOrganizationIds,
@@ -322,10 +430,11 @@ async function resetSeededRows(): Promise<void> {
   seededAccountIds.length = 0;
   seededOrganizationIds.length = 0;
   seededTestResourceIds.length = 0;
+  assignmentGrowthPrincipalIds.length = 0;
 }
 
-async function prepare(pool: Pool, resource = target): Promise<unknown> {
-  const evidence = await permissions.prepare!(actor, action, resource, {
+async function prepare(pool: Pool, resource = target, principal = actor): Promise<unknown> {
+  const evidence = await permissions.prepare!(principal, action, resource, {
     pool,
     deadline: Date.now() + 5_000,
   });
@@ -361,7 +470,86 @@ test('Final permission check stays within its bound as G grows', async () => {
       }
     }),
   );
+  const finalPlan = await capture(db!, async () => {
+    const evidence = await prepare(db!.pool);
+    const client = await db!.pool.connect();
+    try {
+      if (!(await permissions.authorize(client, actor, action, target, evidence)))
+        throw new Error('The bounded resource grant did not authorize its actor');
+    } finally {
+      client.release();
+    }
+  });
+  expectIndex(finalPlan.capture.plans, 'resource_grant_pkey');
 }, 85_000);
+
+test('Assignment permission check stays within its bound as assignments and grants grow', async () => {
+  await resetSeededRows();
+  const report = await checkGrowth(db!, {
+    name: 'Assignment permission check stays within its bound as assignments and grants grow',
+    scales: [256, 1024, 4096],
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    grow: async (growthDb, scale, previous) => {
+      await seed({ pool: growthDb.pool, admin: growthDb.admin }, assignmentGrowthPopulation, {
+        from: previous * ordinalsPerScaleUnit,
+        to: scale * ordinalsPerScaleUnit,
+      });
+    },
+    operation: async (growthDb) => {
+      const evidence = await prepare(growthDb.admin, target, assignmentActor);
+      const client = await growthDb.pool.connect();
+      try {
+        if (!(await permissions.authorize(client, assignmentActor, action, target, evidence)))
+          throw new Error('The current assignment and resource grants did not authorize the actor');
+      } finally {
+        client.release();
+      }
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([256, 1024, 4096]);
+  const assignmentPlan = await capture(db!, async () => {
+    const evidence = await prepare(db!.admin, target, assignmentActor);
+    const client = await db!.pool.connect();
+    try {
+      if (!(await permissions.authorize(client, assignmentActor, action, target, evidence)))
+        throw new Error('The current assignment and resource grants did not authorize the actor');
+    } finally {
+      client.release();
+    }
+  });
+  expectIndex(assignmentPlan.capture.plans, 'principal_assignment_pkey');
+  expectIndex(assignmentPlan.capture.plans, 'resource_grant_pkey');
+}, 300_000);
+
+test('the final delegated formula retains a full-key assignment probe', async () => {
+  const measured = await capture(db!, async () => {
+    const evidence = await prepare(db!.admin, target, assignmentActor);
+    const client = await db!.pool.connect();
+    try {
+      expect(await permissions.authorize(client, assignmentActor, action, target, evidence)).toBe(true);
+    } finally {
+      client.release();
+    }
+  });
+  const assignments: Record<string, unknown>[] = [];
+  function visit(value: unknown): void {
+    if (Array.isArray(value)) {
+      for (const child of value) visit(child);
+    } else if (typeof value === 'object' && value !== null) {
+      const node = value as Record<string, unknown>;
+      if (node['Relation Name'] === 'principal_assignment') assignments.push(node);
+      if (node.Plan) visit(node.Plan);
+      if (node.Plans) visit(node.Plans);
+    }
+  }
+  for (const plan of measured.capture.plans) visit(plan);
+  expect(assignments).toContainEqual(
+    expect.objectContaining({ 'Index Name': 'principal_assignment_pkey', 'Actual Rows': 1, 'Actual Loops': 1 }),
+  );
+  expect(measured.capture.statements.filter((statement) => statement.includes('probes AS MATERIALIZED'))).toHaveLength(
+    1,
+  );
+});
 
 test('Parent creation authorization stays within its bound as G grows', async () => {
   await resetSeededRows();

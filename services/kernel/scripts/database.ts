@@ -3,13 +3,14 @@ import { randomBytes } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { workerLocalContainerError } from '../../../scripts/stack-run.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:7c70c2455c1f22cf4fbf90b16345aa4e5f4e3efd68d68f7cd6d014f529a69108';
+export const POSTGRES_IMAGE = 'postgres:19rc1@sha256:b3cb7405059fd06f9ebae4aad4780b3788dfdd2acef1ac248ad9d56ced8abb06';
 // src/events/effects.ts launches DBOS on this schema.
 const DBOS_SCHEMA = 'dbos';
-const container = 'rezics-kernel-dev';
-const volume = 'rezics-kernel-dev';
+const container = process.env.KERNEL_DATABASE_CONTAINER ?? 'rezics-kernel-dev';
+const volume = process.env.KERNEL_DATABASE_VOLUME ?? container;
 const port = Number(process.env.KERNEL_DATABASE_PORT ?? '54329');
 
 /** Refuse future or duplicate migration versions before they can be applied. */
@@ -66,24 +67,47 @@ function databaseUrl(databasePort: number): string {
 }
 
 /** Keep these secrets stable across restarts; a new route key would orphan receipts of retried creates. */
-export function developmentEnv(existing: string, url: string): string {
+export function developmentEnv(existing: string, url: string, freshDatabase = false): string {
   const lines = existing.split('\n');
   if (lines.at(-1) === '') lines.pop();
   let hasDatabaseUrl = false;
   let hasRouteKey = false;
   let hasSessionKeys = false;
+  let hasRatingCounterSecret = false;
+  const defaults: Record<string, string> = {
+    KERNEL_SEARCH_PREFIX: `local-${randomBytes(12).toString('hex')}-`,
+    KERNEL_RECEIPT_KEYS: `1:${randomBytes(32).toString('base64url')}`,
+    KERNEL_WRITE_RATE_SECRET: randomBytes(32).toString('base64url'),
+    KERNEL_POOL_ACQUIRE_TIMEOUT_MS: '10000',
+    KERNEL_WRITE_RATE_OVERRIDES: JSON.stringify({
+      'new-account': { write: { maximum: 100000, seconds: 60 } },
+      member: { write: { maximum: 100000, seconds: 60 } },
+    }),
+    AUTH_ISSUER: 'http://127.0.0.1:4200',
+    AUTH_AUDIENCE: 'https://api.rezics.test',
+    AUTH_JWKS_URL: 'http://127.0.0.1:4200/.well-known/jwks.json',
+  };
   const updated = lines.map((line) => {
+    if (freshDatabase && line.startsWith('KERNEL_SEARCH_PREFIX=')) {
+      const prefix = defaults.KERNEL_SEARCH_PREFIX!;
+      delete defaults.KERNEL_SEARCH_PREFIX;
+      return `KERNEL_SEARCH_PREFIX=${prefix}`;
+    }
+    delete defaults[line.split('=')[0]!];
     if (line.startsWith('DATABASE_URL=')) {
       hasDatabaseUrl = true;
       return `DATABASE_URL=${url}`;
     }
     if (line.startsWith('KERNEL_ROUTE_KEY=')) hasRouteKey = true;
     if (line.startsWith('KERNEL_SESSION_KEYS=')) hasSessionKeys = true;
+    if (line.startsWith('KERNEL_RATING_COUNTER_SECRET=')) hasRatingCounterSecret = true;
     return line;
   });
   if (!hasDatabaseUrl) updated.push(`DATABASE_URL=${url}`);
   if (!hasRouteKey) updated.push(`KERNEL_ROUTE_KEY=${randomBytes(32).toString('base64url')}`);
   if (!hasSessionKeys) updated.push(`KERNEL_SESSION_KEYS=1:${randomBytes(32).toString('base64url')}`);
+  if (!hasRatingCounterSecret) updated.push(`KERNEL_RATING_COUNTER_SECRET=${randomBytes(32).toString('base64url')}`);
+  for (const [name, value] of Object.entries(defaults)) updated.push(`${name}=${value}`);
   return `${updated.join('\n')}\n`;
 }
 
@@ -123,24 +147,43 @@ export function moduleExtensionFiles(root = directory): string[] {
   });
 }
 
-export function migrate(url: string, root = directory): void {
-  const migrationDirectories = ['db/migrations', ...modules(root).map((name) => `db/${name}/migrations`)];
-  command(
-    resolve(directory, 'node_modules/.bin/dbmate'),
-    [
-      '--url',
-      url,
-      ...migrationDirectories.flatMap((path) => ['--migrations-dir', path]),
-      '--no-dump-schema',
-      '--migration-lock',
-      '--wait',
-      'up',
-    ],
-    { cwd: root },
-  );
+function dbmateBin(): string {
+  return resolve(directory, 'node_modules/.bin/dbmate');
+}
+
+function migrationDirectories(root: string): string[] {
+  return ['db/migrations', ...modules(root).map((name) => `db/${name}/migrations`)];
+}
+
+function dbmate(url: string, args: string[], root: string): string {
+  return command(dbmateBin(), ['--url', url, '--no-dump-schema', ...args], { cwd: root });
+}
+
+/** Install or advance the SDK system schema. Extra repository indexes on those tables are left in place. */
+export function installDbosSchema(url: string, root = directory): void {
   command(process.execPath, [resolve(directory, 'node_modules/.bin/dbos'), 'schema', url, '--schema', DBOS_SCHEMA], {
     cwd: root,
   });
+}
+
+function ensureDatabase(url: string, root: string): void {
+  dbmate(url, ['wait'], root);
+  try {
+    dbmate(url, ['create'], root);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/already exists/i.test(message)) throw error;
+  }
+}
+
+export function migrate(url: string, root = directory): void {
+  ensureDatabase(url, root);
+  installDbosSchema(url, root);
+  dbmate(
+    url,
+    [...migrationDirectories(root).flatMap((path) => ['--migrations-dir', path]), '--migration-lock', 'up'],
+    root,
+  );
 }
 
 function schemaDumpWith(url: string, options: string[] = [], root = directory): string {
@@ -188,7 +231,9 @@ function docker(args: string[]): string {
   return command('docker', args);
 }
 
-async function up(): Promise<void> {
+async function up(freshDatabase = false): Promise<void> {
+  const refusal = await workerLocalContainerError(process.env, process.cwd());
+  if (refusal) throw new Error(refusal);
   const existing = docker(['ps', '-aq', '--filter', `name=^${container}$`]).trim();
   if (existing) {
     const running = docker(['inspect', '-f', '{{.State.Running}}', container]).trim();
@@ -214,10 +259,18 @@ async function up(): Promise<void> {
     ]);
   }
   const url = databaseUrl(port);
-  migrate(url);
+  try {
+    migrate(url);
+  } catch (cause) {
+    throw new Error(
+      'Development database migration failed. If this database predates the rebuilt migrations, reset the local stack with `task dev:reset` (deletes local development data).',
+      { cause },
+    );
+  }
   const envFile = resolve(directory, '.env');
   const existingEnv = (await Bun.file(envFile).exists()) ? await Bun.file(envFile).text() : '';
-  await Bun.write(envFile, developmentEnv(existingEnv, url));
+  const generated = developmentEnv(existingEnv, url, freshDatabase);
+  if (generated !== existingEnv) await Bun.write(envFile, generated, { mode: 0o600 });
 }
 
 async function main(): Promise<void> {
@@ -228,16 +281,16 @@ async function main(): Promise<void> {
     if (found) docker(['stop', container]);
   } else if (action === 'reset') {
     const found = docker(['ps', '-aq', '--filter', `name=^${container}$`]).trim();
-    if (found) docker(['rm', '-f', container]);
+    if (found) docker(['rm', '-f', '-v', container]);
     try {
       docker(['volume', 'rm', volume]);
     } catch {
       // A missing volume is already reset.
     }
-    await up();
+    await up(true);
   } else if (action === 'dump') {
     const url = databaseUrl(port);
-    process.env.KERNEL_DATABASE_CONTAINER = container;
+    process.env.KERNEL_DATABASE_CONTAINER ??= container;
     for (const [path, dump] of Object.entries(schemaDumps(url))) {
       await Bun.write(resolve(directory, path), dump);
     }

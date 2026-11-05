@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -54,7 +55,10 @@ test('checkGrowth measures actual path at three scales for unrelated A, affected
       audience: 'https://api.growth.test',
       secret: 'growth-reduction-secret-with-at-least-32-bytes',
       signing: { activeKid: key.kid, privateKeys: [key] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
+        async readFencedAccount(id) {
+          return this.readAccount(id);
+        },
         readAccount: async (accountId) => ({
           accountId,
           kind: 'actor',
@@ -66,7 +70,7 @@ test('checkGrowth measures actual path at three scales for unrelated A, affected
         authorizeProvisioning: async () => {
           throw new Error('Unused');
         },
-      },
+      }),
     });
     for (const clientId of [
       'unrelated',

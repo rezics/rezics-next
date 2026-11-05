@@ -1,15 +1,110 @@
 types:
   schema:VideoGame: Computerspiel
-  wd:Q20631656: Softwareveröffentlichung
-  wd:Q209163: Computerspiel-Erweiterung
+  wd:Q20631656: 'Release'
+  wd:Q209163: 'Add-on'
 properties:
   schema:gamePlatform: Spielplattform
   schema:gtin: GTIN
   wdt:P2899: Mindestalter
   wdt:P31: ist ein(e)
   wdt:P155: Vorgänger
+  rezics:releaseSupersedes: ersetzt
   wdt:P437: Auslieferungsmedium
   wdt:P408: Engine
   schema:numberOfPlayers: Spieleranzahl
   schema:minValue: Mindestwert
   wdt:P8646: Erweiterung von
+inverseProperties:
+  schema:gamePlatform: 'Spiele auf dieser Plattform'
+  wdt:P31: 'Veröffentlichungen dieses Typs'
+  wdt:P437: 'Veröffentlichungen in diesem Format'
+  wdt:P155: 'Nachfolger'
+  rezics:releaseSupersedes: 'Ersetzt durch'
+  wdt:P408: 'Spiele mit dieser Engine'
+  wdt:P8646: 'Erweiterungen'
+typeDescriptions:
+  schema:VideoGame: 'Ein Videospiel als Werk mit zusammengefassten Plattformangaben; getrennt von einer bestimmten Softwareveröffentlichung und einem persönlichen Exemplar.'
+  wd:Q20631656: 'Eine eigenständig identifizierte Softwareveröffentlichung für ein oder mehrere Werke; Plattform- und Sprachlisten allein erzeugen keine weiteren Veröffentlichungen.'
+  wd:Q209163: 'Ein eigenständig benennbares Zusatzwerk zu einem Spiel, einschließlich Erweiterungen und DLC; Patch, Download oder gebündelte Datei allein begründen kein Werk.'
+libraryProfiles:
+  game.playing:
+    states:
+      planned: 'Geplant'
+      in_progress: 'In Arbeit'
+      completed: 'Abgeschlossen'
+      paused: 'Pausiert'
+      dropped: 'Abgebrochen'
+    units:
+      scalar_amount:
+        minute:
+          label: 'Minute'
+          countForms:
+            one: 'Minute'
+            other: 'Minuten'
+    copyKinds:
+      physical: 'Physisch'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Im Besitz'
+        disposed: 'Abgegeben'
+      digital:
+        owned: 'Im Besitz'
+  game.release:
+    states:
+      planned: 'Geplant'
+      in_progress: 'In Arbeit'
+      completed: 'Abgeschlossen'
+      paused: 'Pausiert'
+      dropped: 'Abgebrochen'
+    units:
+      scalar_amount:
+        minute:
+          label: 'Minute'
+          countForms:
+            one: 'Minute'
+            other: 'Minuten'
+    copyKinds:
+      physical: 'Physisch'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Im Besitz'
+        disposed: 'Abgegeben'
+      digital:
+        owned: 'Im Besitz'
+  game.addon:
+    states:
+      planned: 'Geplant'
+      in_progress: 'In Arbeit'
+      completed: 'Abgeschlossen'
+      paused: 'Pausiert'
+      dropped: 'Abgebrochen'
+    units:
+      scalar_amount:
+        minute:
+          label: 'Minute'
+          countForms:
+            one: 'Minute'
+            other: 'Minuten'
+    copyKinds:
+      physical: 'Physisch'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Im Besitz'
+        disposed: 'Abgegeben'
+      digital:
+        owned: 'Im Besitz'
+propertyDescriptions:
+  schema:gamePlatform: 'Ein Plattformkonzept, auf dem Spiel oder Veröffentlichung läuft; ein Sprachqualifikator kann die Zuordnung von Plattform und Sprache bewahren.'
+  schema:gtin: 'Die Global Trade Item Number der Veröffentlichung als 8, 12, 13 oder 14 Ziffern ohne Trennzeichen.'
+  wdt:P2899: 'Mindestalter der Altersfreigabe als nichtnegative ganzzahlige Menge in Jahren (wd:Q577).'
+  wdt:P31: 'Ein Konzept für die Veröffentlichungsart, etwa vollständig, teilweise oder Testversion; nicht der Katalogtyp des Subjekts.'
+  wdt:P155: 'Das vorherige Werk oder die vorherige Veröffentlichung, auf die dieses Werk oder diese Veröffentlichung folgt.'
+  rezics:releaseSupersedes: 'Die genaue Softwareveröffentlichung, die diese Veröffentlichung ersetzt; unabhängig von der zeitlichen Reihenfolge.'
+  wdt:P437: 'Ein Konzept für Vertriebsform oder physischen Datenträger der Veröffentlichung, etwa eine optische Disc.'
+  wdt:P408: 'Ein Konzept, das die verwendete Spiel-Engine bezeichnet.'
+  schema:numberOfPlayers: 'Maximale Spielerzahl als einheitenlose ganze Zahl; bei einem angegebenen Bereich die Obergrenze verwenden und die Untergrenze separat qualifizieren.'
+  schema:minValue: 'Die Untergrenze eines angegebenen Spielerzahlbereichs als einheitenloser ganzzahliger Qualifikator der Spielerzahl; aus einer Einzelzahl nicht ableiten.'
+  wdt:P8646: 'Das Grundspiel, das dieses eigenständig identifizierte Zusatzwerk erweitert; keine Werkzuordnung einer Softwareveröffentlichung.'

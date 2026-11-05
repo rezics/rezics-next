@@ -1,0 +1,119 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { RealmDiscoverySection, type RealmDiscoveryState } from '../community/realm-discovery';
+import { readRealmDiscovery, type RealmDiscoveryWindow } from './realm-discovery-loader';
+import { useRealmPageFocus } from './realm-page-focus';
+import { createRealmPageProgress } from './realm-page-progress';
+
+export type {
+  RealmDiscoveryCard,
+  RealmDiscoverySectionProps,
+  RealmDiscoverySort,
+  RealmDiscoveryState,
+} from '../community/realm-discovery';
+type Page = Exclude<RealmDiscoveryState, { kind: 'loading' }>;
+
+export const REALM_DISCOVERY_LIMIT = 20;
+export type SearchRealmDiscoveryRequest = Readonly<{
+  locale: string;
+  sort: 'trending';
+  cursor?: string;
+  limit: typeof REALM_DISCOVERY_LIMIT;
+}>;
+export type SearchRealmDiscoveryLoader = (input: SearchRealmDiscoveryRequest, signal?: AbortSignal) => Promise<Page>;
+
+export const loadSearchRealmDiscovery: SearchRealmDiscoveryLoader = (request, signal) => {
+  const { sort: _sort, limit: _limit, ...readerInput } = request;
+  void _sort;
+  void _limit;
+  return readRealmDiscovery({
+    data: { ...readerInput, sort: 'trending' },
+    ...(signal === undefined ? {} : { signal }),
+  });
+};
+
+/** Accumulated public rows, one bounded page per action; disposal fences every late completion. */
+export function createSearchRealmDiscoveryPage(
+  load: SearchRealmDiscoveryLoader,
+  locale: string,
+  publish: (state: RealmDiscoveryState, progress: Pick<RealmDiscoveryWindow, 'pending' | 'retry' | 'restart'>) => void,
+) {
+  const page = createRealmPageProgress({
+    read: ({ cursor, signal }) =>
+      load(
+        {
+          locale,
+          sort: 'trending',
+          limit: REALM_DISCOVERY_LIMIT,
+          ...(cursor === undefined ? {} : { cursor }),
+        },
+        signal,
+      ),
+    publish: (window) =>
+      publish(window.state, {
+        pending: window.pending,
+        retry: window.retry,
+        restart: window.restart,
+      }),
+  });
+  return {
+    start: () => page.start(),
+    next: () => page.next(),
+    retry: () => page.retry(),
+    dispose: () => page.dispose(),
+  };
+}
+
+/** Mounted only by the existing visible, global, empty-query region. Content owns all successful presentation. */
+export function SearchRealmDiscoverySection({
+  locale,
+  load = loadSearchRealmDiscovery,
+}: {
+  locale: string;
+  load?: SearchRealmDiscoveryLoader | undefined;
+}) {
+  const [snapshot, setSnapshot] = useState<RealmDiscoveryWindow & { owner: object }>();
+  const owner = useMemo(() => ({ locale, load }), [locale, load]);
+  const current = useRef<ReturnType<typeof createSearchRealmDiscoveryPage> | null>(null);
+  useEffect(() => {
+    const page = createSearchRealmDiscoveryPage(owner.load, owner.locale, (state, progress) =>
+      setSnapshot({ owner, state, ...progress }),
+    );
+    current.current = page;
+    let active = true;
+    // React's development effect replay must not issue a second request for the same visible panel.
+    queueMicrotask(() => {
+      if (active) void page.start();
+    });
+    return () => {
+      active = false;
+      page.dispose();
+      if (current.current === page) current.current = null;
+    };
+  }, [owner]);
+  const { state, pending, retry, restart } =
+    snapshot?.owner === owner
+      ? snapshot
+      : { state: { kind: 'loading' as const }, pending: false, retry: false, restart: false };
+  const focus = useRealmPageFocus(owner, pending, state);
+  return (
+    <div
+      ref={focus.rootRef}
+      data-search-realm-discovery
+      data-state={state.kind}
+      onClickCapture={focus.captureActivation}
+    >
+      <RealmDiscoverySection
+        sort="trending"
+        state={state}
+        locale={locale}
+        pending={pending}
+        retry={retry}
+        restart={restart}
+        {...(state.kind === 'ready' && state.next !== null && !retry
+          ? { onNext: () => void current.current?.next() }
+          : {})}
+        {...(retry ? { onRetry: () => void current.current?.retry() } : {})}
+      />
+    </div>
+  );
+}

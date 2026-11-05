@@ -1,11 +1,14 @@
+import { accessClock } from './access-clock.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import type { CredentialEffectBinding } from '@rezics/auth-contract';
-import { approvalClock, verifiedBearerExpiry } from './approved-identity.ts';
+import { verifiedKernelExpiry } from './approved-identity.ts';
 import credentialBind from './operator-opening-credential-bind.sql';
 import credentialConsume from './operator-opening-credential-consume.sql';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
+import type { KernelClock } from '../clock.ts';
 import {
   runCommand,
   currentCommand,
@@ -14,22 +17,29 @@ import {
   type CommandAttempt,
   type CommandOutcome,
   type CommandTransaction,
+  type CommandEvent,
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
-import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
+import { decodeCursor, encodeCursor } from '../tokens/cursor.ts';
+import { decodeListCursor, encodeListCursor } from '../tokens/list-cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import {
   accessCheck,
   type Access,
   type AccessClient,
+  type AccessContext,
   type AccountActor,
+  type Actor,
   type ActionCatalogue,
 } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
-import type { Account } from './account-data.ts';
+import { readAccount, type Account } from './account-data.ts';
 import { actingCommandAccount, commandAccessContext } from './command-admission.ts';
-import type { LifecycleRequest } from './lifecycle.ts';
+import type { LifecycleRequest, OpeningManagement } from './lifecycle.ts';
+import { createAccess as createPermissionAccess } from './permission.ts';
+import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
+import { resourceRoleCatalogue } from './resource-roles.ts';
 import accountRead from './operator-account.sql';
 import reservationRead from './operator-reservation.sql';
 import reserve from './operator-reserve.sql';
@@ -48,7 +58,6 @@ import nativeFence from './lifecycle-fence.sql';
 import { lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
 
 export const OPERATOR_RECEIPT_TTL_MS = 60_000;
-const EVIDENCE_TTL_MS = 1000;
 const NAMESPACE = '134e9749-1120-8a0c-97d0-71287a629cef';
 const SERVICE_ID = '00000000-0000-8000-8000-000000000001';
 export class OperatorDeniedError extends Error {
@@ -70,6 +79,10 @@ function route(id: string): number {
 function version(value: string) {
   requireAllowed(typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value));
 }
+function roleDigest(catalogue: NonNullable<ReturnType<typeof resourceRoleCatalogue>>) {
+  const byKey = (left: [string, unknown], right: [string, unknown]) => (left[0] < right[0] ? -1 : 1);
+  return canonicalize([[...catalogue.roles].sort(byKey), [...catalogue.types].sort(byKey)]);
+}
 function eligible(account: AccountRow | null): account is AccountRow {
   return !!account && account.state === 'active' && !account.fenced && account.operatorAccountId === null;
 }
@@ -87,6 +100,16 @@ function human(account: Account | null | undefined, actor: AccountActor): accoun
   );
 }
 type AccountRow = NonNullable<Awaited<ReturnType<typeof accountRead.run>>>;
+/** Who decides that the human is still current and whether that human manages the operator. */
+type Evaluation = {
+  access: Access;
+  admit(actor: AccountActor, context: AccessContext): Promise<Account | null>;
+};
+const managements = new WeakMap<Access, OpeningManagement>();
+/** The management decision installed with the operator commands built on this Access, if any. */
+export function openingManagement(access: Access): OpeningManagement | undefined {
+  return managements.get(access);
+}
 export type OperatorPurpose = 'session' | 'credential-management';
 export type OperatorResponsibility = { operatorAccountId: string; subjectAccountId: string; reservationId: string };
 export type OperatorRelation = OperatorResponsibility & { version: string };
@@ -106,7 +129,9 @@ export type OperatorConfig = {
   actions: ActionCatalogue;
   /** Registered colon-form account/access permission protecting the operator resource. */
   managementAction: string;
-  /** Trusted shared cursor signing keys; required only for responsibilityPage. */
+  /** Trusted kernel clock; defaults to the clock installed on Access. */
+  clock?: KernelClock;
+  /** Trusted shared token keys; required only for responsibility pages. */
   cursorKeys?: KeyRing;
 };
 type Mutation = {
@@ -117,8 +142,9 @@ type Mutation = {
   actor?: AccountActor;
   deadline?: number;
   authorization?: CommandAuthorization;
+  counterChanged?: boolean;
 };
-function executor(pool: Pool, access: Access) {
+function executor(pool: Pool, clock: () => Date) {
   return async function execute<T>(
     options: Mutation,
     body: (tx: CommandTransaction, transactionId: string) => Promise<T>,
@@ -138,8 +164,8 @@ function executor(pool: Pool, access: Access) {
       pool,
       {
         partition: partitionOf(anchorRoute),
-        clock: approvalClock(access),
         basis,
+        clock,
         authorization: options.authorization,
         ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
         receipt: {
@@ -151,12 +177,25 @@ function executor(pool: Pool, access: Access) {
       },
       async (tx, { transactionId }) => {
         const value = await body(tx, transactionId);
+        const events: CommandEvent[] = [
+          { type: `com.rezics.access.operator.${options.kind}.v1`, subject: options.anchor, data: value },
+        ];
+        if (options.counterChanged)
+          events.push({
+            type: 'com.rezics.access.rating-counter.changed.v1',
+            subject: options.anchor,
+            data: { accountId: options.anchor, at: authoritativeTimeValue(currentCommand(tx).time) },
+          });
         return {
           value,
-          events: [{ type: `com.rezics.access.operator.${options.kind}.v1`, subject: options.anchor, data: value }],
+          events,
         };
       },
-    );
+    ).catch((error: unknown) => {
+      // Preserve Access unavailability across the command executor boundary.
+      throwAccessUnavailable(error);
+      throw error;
+    });
     return {
       ...outcome,
       get value() {
@@ -214,8 +253,13 @@ export function createOperatorCommands(config: OperatorConfig) {
     /^(account|access):[a-z][a-z0-9_-]*$/.test(managementAction) &&
       config.actions.get(managementAction)?.anonymous === false,
   );
-  const execute = executor(pool, access);
+  const clock = config.clock ?? accessClock(access);
+  const execute = executor(pool, clock);
   const read = (id: string) => withConnection(pool, (client) => account(client, id));
+  const authenticated: Evaluation = {
+    access,
+    admit: (actor, context) => actingCommandAccount(access, actor, context),
+  };
   async function reservation(input: OperatorResponsibility) {
     return withConnection(pool, (client) =>
       reservationRead.run(client, {
@@ -229,6 +273,7 @@ export function createOperatorCommands(config: OperatorConfig) {
     context: LifecycleRequest,
     input: { operatorAccountId: string; subjectAccountId: string; purpose: OperatorPurpose },
     attempt: CommandAttempt,
+    evaluation: Evaluation = authenticated,
   ) {
     requireAllowed(input.purpose === 'session' || input.purpose === 'credential-management');
     const deadline = context.deadline;
@@ -237,7 +282,7 @@ export function createOperatorCommands(config: OperatorConfig) {
       // supplied request evidence is required; consumption additionally refreshes
       // the human so a durable receipt never preserves a stale login observation.
       const preparation = commandAccessContext({ ...context, pool }, attempt);
-      const actualHuman = await actingCommandAccount(access, context.actor, preparation);
+      const actualHuman = await evaluation.admit(context.actor, preparation);
       requireAllowed(human(actualHuman, context.actor));
       const operator = await read(input.operatorAccountId);
       requireAllowed(eligible(operator));
@@ -257,6 +302,7 @@ export function createOperatorCommands(config: OperatorConfig) {
             route: route(input.operatorAccountId),
             organization_id: input.operatorAccountId,
             human_id: context.actor.accountId,
+            at: authoritativeTimeValue(attempt.time),
           }),
         );
         requireAllowed(members.length === 1 && members[0]);
@@ -266,7 +312,7 @@ export function createOperatorCommands(config: OperatorConfig) {
       }
       const permissionContext = Object.assign(preparation, { account: actualHuman });
       const allowed = await accessCheck(
-        access,
+        evaluation.access,
         context.actor,
         managementAction,
         { route: route(input.operatorAccountId), id: input.operatorAccountId },
@@ -308,13 +354,145 @@ export function createOperatorCommands(config: OperatorConfig) {
     requireAllowed(human(facts.actualHuman, context.actor) && (await facts.allowed(tx)));
     live(facts.deadline);
   }
+  // A bearer is not at hand when an opened session reduces its own consent. The opening recorded its principal,
+  // so the same evidence and the same final check run with the shared permission evaluator over the mounted
+  // action catalogue and that principal's account row. Realm group roles have no reader here and deny.
+  let restored: Evaluation | undefined;
+  function restoredEvaluation(): Evaluation {
+    if (restored) return restored;
+    const native = createPermissionAccess({
+      actions: new Map([...config.actions, ['gate:any', { anonymous: false }]]),
+      accountEvidence: (_actor, context) => context.account,
+      clock,
+    });
+    // A role catalogue that differs from the mounted one would decide differently, so it decides nothing.
+    const mounted = resourceRoleCatalogue(access);
+    const own = resourceRoleCatalogue(native);
+    requireAllowed(!mounted || (own && roleDigest(mounted) === roleDigest(own)));
+    return (restored = {
+      access: native,
+      admit: (actor) => readAccount(pool, route(actor.accountId), actor.accountId),
+    });
+  }
+  const proofs = new WeakMap<
+    object,
+    {
+      attempt: CommandAttempt;
+      context: LifecycleRequest;
+      input: { operatorAccountId: string; subjectAccountId: string };
+      facts: OpeningEvidence;
+    }
+  >();
+  const management: OpeningManagement = {
+    async prepare(attempt, opening) {
+      requireAllowed(opening.action === managementAction);
+      const context = {
+        actor: opening.principal,
+        deadline: accessEvidenceDeadline(deadlineFor(ACCESS_EVIDENCE_TTL_MS)),
+      };
+      const input = {
+        operatorAccountId: opening.operatorAccountId,
+        subjectAccountId: opening.subjectAccountId,
+        purpose: 'session' as const,
+      };
+      const facts = await openingEvidence(context, input, attempt, restoredEvaluation());
+      const proof = Object.freeze({});
+      proofs.set(proof, { attempt, context, input, facts });
+      return proof;
+    },
+    async authorize(tx, attempt, proof) {
+      const prepared = typeof proof === 'object' && proof !== null ? proofs.get(proof) : undefined;
+      if (typeof proof === 'object' && proof !== null) proofs.delete(proof);
+      requireAllowed(prepared && prepared.attempt === attempt);
+      await finalOpening(tx, prepared.context, prepared.input, prepared.facts);
+    },
+  };
+  managements.set(access, management);
+  async function responsibilityPage(
+    input: { operatorAccountId: string; limit?: number; cursor?: string },
+    viewer: Actor = { kind: 'anonymous' },
+    work = false,
+  ) {
+    input = { ...input };
+    const limit = input.limit === undefined ? 20 : input.limit;
+    requireAllowed(Number.isInteger(limit) && limit >= 1 && limit <= 100);
+    const operatorRoute = route(input.operatorAccountId);
+    const ring = config.cursorKeys;
+    requireAllowed(ring);
+    // Even an empty page fails closed if the active token key is unavailable.
+    const tokenKey = ring.keys.get(ring.current);
+    requireAllowed(
+      Number.isInteger(ring.current) &&
+        ring.current >= 0 &&
+        ring.current <= 255 &&
+        tokenKey &&
+        tokenKey.byteLength >= 32,
+    );
+    const workBinding = {
+      operation: 'access.operator.responsibility.list',
+      parameters: { operatorAccountId: input.operatorAccountId, purpose: 'operator', sort: 'reservationId:asc' },
+    };
+    const binding = {
+      // This internal list has no HTTP route; use its fixed feed identity.
+      route: workBinding.operation,
+      viewer: viewer.kind === 'account' ? viewer.accountId : null,
+      query: { ...workBinding.parameters, limit },
+    };
+    const now = clock();
+    let after = '';
+    let cursorEpoch: number | undefined;
+    if (input.cursor !== undefined) {
+      const decoded = work
+        ? decodeCursor(ring, workBinding, input.cursor)
+        : await decodeListCursor(ring, binding, input.cursor, now);
+      requireAllowed(decoded.ok);
+      requireAllowed(decoded.after.length === 1 && typeof decoded.after[0] === 'string');
+      after = decoded.after[0];
+      route(after);
+      cursorEpoch = decoded.epoch;
+    }
+    return withConnection(pool, async (client) => {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      try {
+        const partition = await readPartition(client, partitionOf(operatorRoute));
+        requireAllowed(partition && (cursorEpoch === undefined || cursorEpoch === partition.epoch));
+        const rows = await pageRead.run(client, {
+          route: operatorRoute,
+          operator_id: input.operatorAccountId,
+          after,
+          limit: limit + 1,
+        });
+        const operators = rows.slice(0, limit);
+        const next =
+          rows.length > limit
+            ? work
+              ? encodeCursor(ring, workBinding, { epoch: partition.epoch, after: [operators.at(-1)!.reservationId] })
+              : await encodeListCursor(
+                  ring,
+                  binding,
+                  { epoch: partition.epoch, after: [operators.at(-1)!.reservationId] },
+                  now,
+                )
+            : null;
+        await client.query('COMMIT');
+        return { operators, next };
+      } catch (error) {
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackError) {
+          discardConnection(client, rollbackError as Error);
+        }
+        throw error;
+      }
+    });
+  }
   return {
     /** Committed mechanical work only. Lock relation and slot with the account,
      * then use the native fence mutation in that same subject transaction. */
     async fenceOperatedSubject(input: OperatorResponsibility & { key: string }) {
       input = structuredClone(input);
       const subjectRoute = route(input.subjectAccountId);
-      return lifecycleExecutor(pool)(
+      return lifecycleExecutor(pool, clock)(
         {
           route: subjectRoute,
           id: input.subjectAccountId,
@@ -332,6 +510,7 @@ export function createOperatorCommands(config: OperatorConfig) {
           if (!related) return { accountId: input.subjectAccountId, fenced: false, receiptId: null };
           const receiptId = derivedId(NAMESPACE, `${transactionId}:fence`, subjectRoute);
           const receipt = await nativeFence.run(tx, {
+            at: authoritativeTimeValue(currentCommand(tx).time),
             route: subjectRoute,
             account_id: input.subjectAccountId,
             receipt_id: receiptId,
@@ -418,12 +597,12 @@ export function createOperatorCommands(config: OperatorConfig) {
           input.operatorAccountId !== input.expectedOperatorAccountId,
       );
       if (input.expectedOperatorAccountId !== null) route(input.expectedOperatorAccountId);
-      const deadline = Date.now() + EVIDENCE_TTL_MS;
+      const deadline = accessEvidenceDeadline(deadlineFor(ACCESS_EVIDENCE_TTL_MS));
       const held = await reservation(input);
       const operator = await read(input.operatorAccountId);
       const bound = operator ? databaseDeadline(operator, deadline) : '';
       return execute(
-        { anchor: input.subjectAccountId, kind: 'relation-recorded', key: input.key, input },
+        { anchor: input.subjectAccountId, kind: 'relation-recorded', key: input.key, input, counterChanged: true },
         async (tx, transactionId) => {
           live(deadline);
           // The responsibility row is on the operator. Lock that account with the
@@ -454,6 +633,7 @@ export function createOperatorCommands(config: OperatorConfig) {
           const safety = await safetyRead.run(tx, {
             route: route(input.subjectAccountId),
             account_id: input.subjectAccountId,
+            at: authoritativeTimeValue(currentCommand(tx).time),
           });
           requireAllowed(safety && !safety.held);
           const slot = await slotRead.run(tx, {
@@ -474,6 +654,7 @@ export function createOperatorCommands(config: OperatorConfig) {
             );
           }
           const changed = await link.run(tx, {
+            at: authoritativeTimeValue(currentCommand(tx).time),
             route: route(input.subjectAccountId),
             subject_id: input.subjectAccountId,
             operator_id: input.operatorAccountId,
@@ -563,74 +744,25 @@ export function createOperatorCommands(config: OperatorConfig) {
         },
       );
     },
-    /** Bounded operator-local page for the later durable suspension fanout. It
-     * includes pending reservations conservatively. It is not relation authority.
+    /** Bounded operator-local observation, including pending reservations; not relation authority.
+     * Trusted composition supplies the authenticated viewer, never a request body's viewer id.
      */
-    async responsibilityPage(input: { operatorAccountId: string; limit?: number; cursor?: string }) {
-      input = { ...input };
-      const limit = input.limit === undefined ? 20 : input.limit;
-      requireAllowed(Number.isInteger(limit) && limit >= 1 && limit <= 100);
-      const operatorRoute = route(input.operatorAccountId);
-      const ring = config.cursorKeys;
-      requireAllowed(ring);
-      // Even an empty page fails closed if the active signing key is unavailable.
-      const signingKey = ring.keys.get(ring.current);
-      requireAllowed(
-        Number.isInteger(ring.current) &&
-          ring.current >= 0 &&
-          ring.current <= 255 &&
-          signingKey &&
-          signingKey.byteLength >= 32,
-      );
-      const binding: CursorBinding = {
-        operation: 'access.operator.responsibility.list',
-        parameters: { operatorAccountId: input.operatorAccountId, purpose: 'operator', sort: 'reservationId:asc' },
-      };
-      let after = '';
-      let cursorEpoch: number | undefined;
-      if (input.cursor !== undefined) {
-        const decoded = decodeCursor(ring, binding, input.cursor);
-        requireAllowed(decoded.ok);
-        requireAllowed(decoded.after.length === 1 && typeof decoded.after[0] === 'string');
-        after = decoded.after[0];
-        route(after);
-        cursorEpoch = decoded.epoch;
-      }
-      return withConnection(pool, async (client) => {
-        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        try {
-          const partition = await readPartition(client, partitionOf(operatorRoute));
-          requireAllowed(partition && (cursorEpoch === undefined || cursorEpoch === partition.epoch));
-          const rows = await pageRead.run(client, {
-            route: operatorRoute,
-            operator_id: input.operatorAccountId,
-            after,
-            limit: limit + 1,
-          });
-          const operators = rows.slice(0, limit);
-          const next =
-            rows.length > limit
-              ? encodeCursor(ring, binding, { epoch: partition.epoch, after: [operators.at(-1)!.reservationId] })
-              : null;
-          await client.query('COMMIT');
-          return { operators, next };
-        } catch (error) {
-          try {
-            await client.query('ROLLBACK');
-          } catch (rollbackError) {
-            discardConnection(client, rollbackError as Error);
-          }
-          throw error;
-        }
-      });
-    },
+    responsibilityPage: (input: { operatorAccountId: string; limit?: number; cursor?: string }, viewer?: Actor) =>
+      responsibilityPage(input, viewer),
+    /** Internal fanout work cursors stay on the seal and never reach a list reader. */
+    responsibilityWorkPage: (input: { operatorAccountId: string; limit?: number; cursor?: string }) =>
+      responsibilityPage(input, undefined, true),
     /** Advisory local eligibility. The actual lifecycle tombstone rechecks holds
      * with the locked account and database guard, atomically with deletion.
      */
     async deletionEligibility(accountId: string) {
       return withConnection(pool, async (client) => {
         const current = await account(client, accountId);
-        const safety = await safetyRead.run(client, { route: route(accountId), account_id: accountId });
+        const safety = await safetyRead.run(client, {
+          route: route(accountId),
+          account_id: accountId,
+          at: clock().toISOString(),
+        });
         return {
           accountId,
           safe:
@@ -642,6 +774,9 @@ export function createOperatorCommands(config: OperatorConfig) {
         };
       });
     },
+    /** Authorization replay returns the original receipt after checking current
+     * authority. Only session issuance or the bound credential effect consumes it.
+     */
     async authorizeOpening(
       context: LifecycleRequest,
       input: {
@@ -691,9 +826,10 @@ export function createOperatorCommands(config: OperatorConfig) {
               operator_id: input.operatorAccountId,
               receipt_id: receiptId,
               ...credentialParameters(input.credential),
+              at: authoritativeTimeValue(currentCommand(tx).time),
               expires_at: new Date(
                 Math.min(
-                  verifiedBearerExpiry(access, context.actor, { pool, deadline: context.deadline }),
+                  verifiedKernelExpiry(access, context.actor, { pool, deadline: context.deadline }),
                   Date.parse(authoritativeTimeValue(currentCommand(tx).time)) + OPERATOR_RECEIPT_TTL_MS,
                 ),
               ).toISOString(),
@@ -744,9 +880,8 @@ export function createOperatorCommands(config: OperatorConfig) {
           return openingValue(context, input, facts, input.receiptId, consumed[0].expiresAt);
         },
       );
-      // A retry can observe the durable executor result but cannot mint a second
-      // Auth issuance authorization. Lost acknowledgements fail closed. A later
-      // Auth coordinator must bind its own issuance idempotency to this receipt.
+      // Consumption replay cannot authorize another Auth issuance. Lost issuance
+      // acknowledgements fail closed; opening authorization remains replayable.
       requireAllowed(!outcome.replayed);
       return outcome;
     },

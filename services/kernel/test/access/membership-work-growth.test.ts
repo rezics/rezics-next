@@ -3,8 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork } from '../../src/work/registry.ts';
 import { createMembershipWorkPorts, enqueueMembership, registerAccounts } from '../../src/access/membership-work.ts';
-import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
+import { createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { derivedId, newId, routeOf } from '../../src/route/route.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { authenticated } from './membership-work-fixture.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
 
@@ -60,11 +61,25 @@ test('real durable joins and leaves keep reserve join leave and release command 
         {
           name: 'accounts',
           register(context) {
+            const access = admittedAccess({ actions: new Map(LIFECYCLE_ACTIONS) });
             const ports = {} as Record<Phase, ReturnType<typeof createMembershipWorkPorts>>;
             for (const phase of PHASES)
               ports[phase] = createMembershipWorkPorts(
                 { ...context, pool: databases[phase].pool },
-                { authorize: async () => authenticated(database.admin, owner) },
+                {
+                  access,
+                  authorize: async () => {
+                    const request = await authenticated(database.admin, owner);
+                    return {
+                      ...request,
+                      actor: await authenticateAccount(
+                        access,
+                        { pool: databases[phase].pool, deadline: Date.now() + 10_000 },
+                        request.actor,
+                      ),
+                    };
+                  },
+                },
               );
             registerAccounts(context, {
               ...ports.reserve,
@@ -75,7 +90,13 @@ test('real durable joins and leaves keep reserve join leave and release command 
               async publish(request, input, ...rest) {
                 const phase = input.kind === 'membership' && input.role === null ? 'leave' : 'join';
                 calls[phase]++;
-                return ports[phase].publish(request, input, ...rest);
+                // Each phase command runs on its own pool, and admission binds the actor to that pool.
+                const actor = await authenticateAccount(
+                  access,
+                  { pool: databases[phase].pool, deadline: Date.now() + 10_000 },
+                  request.actor,
+                );
+                return ports[phase].publish({ ...request, actor }, input, ...rest);
               },
               async release(...args) {
                 calls.release++;

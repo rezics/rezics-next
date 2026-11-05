@@ -1,18 +1,52 @@
+import type { ConceptStatementReader } from '../search/concept-browse-statements.ts';
+import { indexedStatement, selectedRank } from './scope-leaf-selection.ts';
+export { indexedStatement } from './scope-leaf-selection.ts';
+import {
+  readSubjectKeyPage,
+  createSubjectCanonicalNames,
+  type SubjectCanonicalNames,
+  type SubjectSourceKeyTraversal as SubjectSourceKeyPages,
+} from './subject-source-key-pages.ts';
 import type { Release } from '@rezics/definitions';
+import { relationSource } from './search-relations.ts';
+import { readRelease } from './definitions.ts';
 import type { Pool, PoolClient } from 'pg';
+import { CommandUnavailableError } from '../access/unavailable.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { withoutFencedEntries } from './fences.ts';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import type { IndexedStatement, IndexedSubject, SubjectSnapshot, SubjectSource } from '../search/source.ts';
 import count from './search-source-count.sql';
-import readAdoptions from './search-source-adoptions.sql';
+import readCurrentStatements from './search-source-current-statements.sql';
 import readFacts from './search-source-facts.sql';
+import rebuildSelection from './search-selected-rebuild.sql';
 import readReleases from './search-source-releases.sql';
 import readPosition from './search-source-position.sql';
 import readStatements from './search-source-statements.sql';
 import readSubjects from './search-source-subjects.sql';
+import { accessCheck } from '../request/access.ts';
+import { mintReadTime } from '../command/command.ts';
+import { classifyUnavailability, requireAccessDeadline } from '../access/unavailable.ts';
+import { readPartition } from '../partition/partition.ts';
+import { subjectReadEligibility } from './eligibility.ts';
+import { withPublicStatementReader } from './statement-disclosure.ts';
+import { withIdentitySourceSupportJob } from './identity-source-support-scope.ts';
+import { identityEpochStore } from './identity-adapters/index.ts';
+import type { IdentityJobRef } from './identity-epoch-contract.ts';
+import type {
+  PublicFilterCost,
+  PublicFilterProjectionPage,
+  PublicFilterProjectionRequest,
+  PublicFilterSource,
+  PublicFilterSourceFactory,
+} from './public-filter-source-contract.ts';
+import readVisibility from './read-visibility.sql';
+import { withReadTransaction } from './read.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
 
 type SubjectRow = {
+  selection_ready: boolean;
+  current_revision: number | null;
   route: number;
   id: string;
   type: string;
@@ -34,13 +68,7 @@ type FactRow = {
   candidate_id: string | null;
   body: unknown;
   release: string | null;
-};
-type AdoptionRow = {
-  route: number;
-  subject_id: string;
-  slot_id: string;
-  mode: 'inherit' | 'replace' | 'suppress' | null;
-  selection: unknown;
+  rank?: 'normal' | 'preferred' | null;
 };
 type StatementEntry = {
   source: 'compact' | 'expanded';
@@ -63,6 +91,24 @@ type StatementRow = {
   ordinal: number;
 };
 
+/** Existing `read` id cap; a larger batch is refused before SQL. */
+export const SEARCH_SOURCE_SUBJECT_BATCH = 256;
+/** `current_facts` current-slot budget per Subject. */
+export const SEARCH_SOURCE_CURRENT_SLOT_BUDGET = 512;
+/** Global adoption selection cap per expanded slot. */
+export const SEARCH_SOURCE_CURRENT_CANDIDATE_BUDGET = 32;
+const CURRENT_STATEMENT_LIMIT = SEARCH_SOURCE_CURRENT_SLOT_BUDGET * SEARCH_SOURCE_CURRENT_CANDIDATE_BUDGET + 1;
+
+/** Current name/fact/visibility publication fence used by complete Search traversals. */
+export async function readSearchCanonicalGeneration(pool: Pool | PoolClient): Promise<string> {
+  const result = await pool.query<{ last_value: string; is_called: boolean }>(
+    `SELECT last_value::text,is_called FROM semantic.search_canonical_generation`,
+  );
+  const row = result.rows[0];
+  if (!row || !/^[0-9]+$/.test(row.last_value)) throw new Error('Search canonical generation is unavailable');
+  return `${row.last_value}:${row.is_called ? 1 : 0}`;
+}
+
 const ASCII = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -70,74 +116,6 @@ const object = (value: unknown): value is Record<string, unknown> =>
 function assertPartition(partition: number): void {
   if (!Number.isInteger(partition) || partition < 0 || partition >= PARTITIONS)
     throw new TypeError('Partition must be an integer from 0 through 4095');
-}
-
-function valueText(body: unknown, definition: Release['properties'][string] | undefined): string | null {
-  if (!object(body) || !object(body.value)) return null;
-  const value = body.value;
-  if (value.type !== 'value' || !object(value.content)) {
-    if (value.type !== 'value' || typeof value.content !== 'string') return null;
-    return value.content;
-  }
-  const content = value.content;
-  switch (definition?.datatype) {
-    case 'time':
-      return typeof content.time === 'string' ? content.time : null;
-    case 'quantity':
-      return typeof content.amount === 'string' ? content.amount : null;
-    case 'monolingualtext':
-      return typeof content.text === 'string' ? content.text : null;
-    default:
-      return null;
-  }
-}
-
-function timeYear(time: string): number | null {
-  const match = /^([+-])(\d+)-/.exec(time);
-  if (!match) return null;
-  const year = Number(`${match[1]}${match[2]}`);
-  return Number.isSafeInteger(year) ? year : null;
-}
-
-function indexedStatement(row: StatementRow, release: Release): IndexedStatement | null {
-  const body = row.body;
-  if (!object(body)) return null;
-  const definition = release.properties[row.property];
-  const value = valueText(body, definition);
-  if (value === null) return null;
-
-  const statement: IndexedStatement = { property: row.property, value };
-  if (definition?.datatype === 'wikibase-item') statement.facet = { kind: 'item' };
-  else if (definition?.datatype === 'time') {
-    const content = object(body.value) && object(body.value.content) ? body.value.content : undefined;
-    const year = content && typeof content.time === 'string' ? timeYear(content.time) : null;
-    if (year !== null) statement.facet = { kind: 'time', year };
-  } else if (definition?.datatype === 'quantity') {
-    const content = object(body.value) && object(body.value.content) ? body.value.content : undefined;
-    const amount = content && typeof content.amount === 'string' ? Number(content.amount) : NaN;
-    if (Number.isFinite(amount) && content && typeof content.unit === 'string')
-      statement.facet = { kind: 'quantity', amount, unit: content.unit };
-  } else if (
-    definition?.datatype === 'string' &&
-    object(definition.value) &&
-    typeof definition.value.pattern === 'string'
-  ) {
-    statement.facet = { kind: 'code' };
-  }
-
-  if (Array.isArray(body.qualifiers)) {
-    const qualifiers = body.qualifiers.flatMap((raw): { property: string; value: string }[] => {
-      if (!object(raw) || typeof raw.property !== 'string' || !object(raw.value) || raw.value.type !== 'value')
-        return [];
-      const qualifierDefinition = release.properties[raw.property];
-      const content = raw.value.content;
-      return qualifierDefinition?.datatype === 'wikibase-item' && typeof content === 'string'
-        ? [{ property: raw.property, value: content }]
-        : [];
-    });
-    if (qualifiers.length > 0) statement.qualifiers = qualifiers;
-  }
-  return statement;
 }
 
 function termValues(rows: FactRow[], kind: 'label' | 'description' | 'alias') {
@@ -160,7 +138,7 @@ function termValues(rows: FactRow[], kind: 'label' | 'description' | 'alias') {
   return [...current].map(([language, value]) => ({ language, value }));
 }
 
-async function inSnapshot<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
+export async function inSearchSnapshot<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
   return withConnection(pool, async (client) => {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     try {
@@ -178,11 +156,22 @@ async function inSnapshot<T>(pool: Pool, work: (client: PoolClient) => Promise<T
   });
 }
 
-export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource {
+export function subjectSource(
+  pool: Pool,
+  routeKey?: Uint8Array,
+): SubjectSource &
+  SubjectSourceKeyPages & {
+    canonicalNames: SubjectCanonicalNames;
+    readConceptStatements: ConceptStatementReader;
+    readCompleteWorkLinks: NonNullable<SubjectSource['readCompleteWorkLinks']>;
+  } {
+  const relations = relationSource(pool, routeKey);
   return {
+    readSubjectKeyPage,
+    canonicalNames: createSubjectCanonicalNames(pool),
     async read(partition, ids): Promise<SubjectSnapshot> {
       assertPartition(partition);
-      if (ids.length > 256) throw new TypeError('A subject snapshot accepts at most 256 ids');
+      if (ids.length > SEARCH_SOURCE_SUBJECT_BATCH) throw new TypeError('A subject snapshot accepts at most 256 ids');
       const requested = new Map<string, number>();
       for (const id of ids) {
         const route = routeOf(id);
@@ -192,9 +181,12 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
       }
       const pairs = [...requested].map(([id, route]) => ({ id, route }));
 
-      return inSnapshot(pool, async (client) => {
+      const snapshot = await inSearchSnapshot(pool, async (client) => {
         const positionRow = await readPosition.run(client, { partition_no: partition });
-        const position = BigInt(positionRow?.position ?? '0');
+        if (!positionRow) throw new CommandUnavailableError('fenced', partition);
+        if (positionRow.writeState === 'moved')
+          throw new CommandUnavailableError('moved', partition, positionRow.movedTo);
+        const position = BigInt(positionRow.position);
         if (pairs.length === 0) return { partition, position, subjects: [] };
 
         const rows = (await readSubjects.run(client, {
@@ -205,27 +197,32 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
         if (rows.length === 0) return { partition, position, subjects: [] };
 
         const found = new Map(rows.map((row) => [row.id, row]));
+        const unreadied = rows.find((row) => !row.selection_ready);
+        if (unreadied)
+          return { partition, position, subjects: [] as IndexedSubject[], pending: unreadied, rebuild: true };
         const present = rows.map(({ id, route }) => ({ id, route }));
         const factRows = (await readFacts.run(client, {
           partition_no: partition,
           routes: present.map(({ route }) => route),
           subject_ids: present.map(({ id }) => id),
         })) as FactRow[];
-        const expanded = factRows.filter((row) => row.entry_kind === 'expanded');
-        const adoptions = expanded.length
-          ? ((await readAdoptions.run(client, {
-              partition_no: partition,
-              routes: expanded.map(({ route }) => route),
-              subject_ids: expanded.map(({ id }) => id),
-              slot_ids: expanded.map(({ slot_id }) => slot_id),
-            })) as AdoptionRow[])
-          : [];
+        const currentRows = (await readCurrentStatements.run(client, {
+          partition_no: partition,
+          routes: present.map(({ route }) => route),
+          subject_ids: present.map(({ id }) => id),
+          subject_limit: CURRENT_STATEMENT_LIMIT,
+        })) as FactRow[];
+        const currentCounts = new Map<string, number>();
+        for (const row of currentRows) currentCounts.set(row.id, (currentCounts.get(row.id) ?? 0) + 1);
+        const overflow = present.find(({ id }) => (currentCounts.get(id) ?? 0) >= CURRENT_STATEMENT_LIMIT);
+        if (overflow)
+          return { partition, position, subjects: [] as IndexedSubject[], pending: overflow, rebuild: false };
 
-        const entries: StatementEntry[] = factRows.flatMap((row) => {
-          if (row.entry_kind !== 'compact' || !row.candidate_id || !row.property || !row.release) return [];
+        const entries: StatementEntry[] = currentRows.flatMap((row) => {
+          if (!row.candidate_id || !row.property || !row.release) return [];
           const body = object(row.body) ? row.body : {};
-          const rank = body.rank;
-          if (rank !== 'normal' && rank !== 'preferred') return [];
+          const rank = selectedRank(row.rank) ?? selectedRank(body.rank);
+          if (rank === null) return [];
           return [
             {
               source: 'compact' as const,
@@ -241,31 +238,6 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
             },
           ];
         });
-        for (const adoption of adoptions) {
-          if (adoption.mode !== 'replace' || !Array.isArray(adoption.selection)) continue;
-          const slot = expanded.find(
-            (row) => row.route === adoption.route && row.id === adoption.subject_id && row.slot_id === adoption.slot_id,
-          );
-          if (!slot || !slot.property) continue;
-          for (const [index, selected] of adoption.selection.entries()) {
-            if (
-              !object(selected) ||
-              typeof selected.candidate !== 'string' ||
-              (selected.rank !== 'normal' && selected.rank !== 'preferred')
-            )
-              continue;
-            entries.push({
-              source: 'expanded',
-              route: adoption.route,
-              subject_id: adoption.subject_id,
-              slot_id: adoption.slot_id,
-              property: slot.property,
-              candidate_id: selected.candidate,
-              rank: selected.rank,
-              ordinal: index + 1,
-            });
-          }
-        }
 
         const visible = routeKey && entries.length ? await withoutFencedEntries(client, routeKey, entries) : entries;
         const statements = visible.length
@@ -281,6 +253,12 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
             }[])
           : [];
         const releases = new Map(releaseRows.map((row) => [row.digest, row.body]));
+        // A statement of a Context's own relation type was written with a composed release.
+        for (const digest of digests) {
+          if (releases.has(digest)) continue;
+          const composed = await readRelease(client, digest);
+          if (composed) releases.set(digest, composed);
+        }
 
         const termRows = new Map<string, FactRow[]>();
         for (const row of factRows) {
@@ -304,6 +282,7 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
           indexed.set(row.subject_id, properties);
         }
 
+        const relation = await relations.prepare(client, rows, releases, partition);
         const subjects: IndexedSubject[] = [];
         for (const { id } of pairs) {
           const row = found.get(id);
@@ -334,20 +313,149 @@ export function subjectSource(pool: Pool, routeKey?: Uint8Array): SubjectSource 
             statements: indexedStatements,
           });
         }
-        return { partition, position, subjects };
+        return { partition, position, subjects, relation };
       });
+      if ('pending' in snapshot && snapshot.pending) {
+        if (snapshot.rebuild)
+          await rebuildSelection.run(pool, {
+            route: snapshot.pending.route,
+            subject_id: snapshot.pending.id,
+          });
+        throw new CommandUnavailableError('contention', partition);
+      }
+      // Release the source owner before independently anchoring foreign identities or tuples.
+      const relation = 'relation' in snapshot ? await relations.finish(snapshot.relation) : new Map();
+      for (const subject of snapshot.subjects) {
+        const selected = relation.get(subject.id);
+        if (!selected) continue;
+        subject.statements.push(...selected.statements);
+        if (selected.overflow.length) subject.relationFacetOverflow = selected.overflow;
+      }
+      return { partition: snapshot.partition, position: snapshot.position, subjects: snapshot.subjects };
     },
+
+    matchRelationFacets: relations.match,
+    prepareRelationFacets: relations.preparePage,
+    readConceptStatements: relations.readConceptStatements,
+    readCompleteWorkLinks: relations.readCompleteWorkLinks,
 
     async count(partition) {
       assertPartition(partition);
-      return inSnapshot(pool, async (client) => {
+      return inSearchSnapshot(pool, async (client) => {
         const positionRow = await readPosition.run(client, { partition_no: partition });
+        if (!positionRow) throw new CommandUnavailableError('fenced', partition);
+        if (positionRow.writeState === 'moved')
+          throw new CommandUnavailableError('moved', partition, positionRow.movedTo);
         const countRow = await count.run(client, { partition_no: partition });
         return {
-          position: BigInt(positionRow?.position ?? '0'),
+          position: BigInt(positionRow.position),
           count: Number(countRow?.visible ?? '0'),
         };
       });
     },
   };
+}
+
+/** Internal same-job operation. The ordinary Source retains ALL native projection guards.
+ * Only exact installed identity mappings become readable inside the scoped invocation.
+ * This operation does not use subjectSource's history fold or its sampled scalar arrays.
+ */
+export async function readIdentitySourceProjection(
+  config: Parameters<PublicFilterSourceFactory>[0],
+  source: PublicFilterSource,
+  request: Omit<PublicFilterProjectionRequest, 'subject'> & {
+    job: IdentityJobRef;
+    original: string;
+    terminal: string;
+  },
+): Promise<
+  | {
+      status: 'projected';
+      projection: Extract<PublicFilterProjectionPage, { status: 'progress' | 'complete' }> | null;
+      cost: PublicFilterCost;
+    }
+  | { status: 'changed' | 'unready' | 'unavailable'; cost: PublicFilterCost }
+> {
+  let cost: PublicFilterCost = {
+    inputKeys: 0,
+    candidates: 0,
+    accessPoints: 0,
+    dependencyPoints: 0,
+    engineSearches: 0,
+    engineIteratorSteps: 0,
+    outputSlots: 0,
+    resultWrites: 0,
+    frontierWrites: 0,
+  };
+  const charge = (field: 'dependencyPoints' | 'accessPoints', points = 1) => {
+    cost = { ...cost, [field]: cost[field] + points };
+  };
+  try {
+    const route = routeOf(request.original);
+    if (route === null) throw new TypeError('Projection original must be a native routed ID');
+    requireAccessDeadline(request.context.deadline);
+    // Prepare current anonymous evidence before acquiring the original home. No caller
+    // actor or editor AsyncLocal audience can replace the public resource/disclosure view.
+    const resource = { route, id: request.original };
+    charge('accessPoints');
+    const authorize = await accessCheck(
+      config.access,
+      { kind: 'anonymous' },
+      'subject:read',
+      { ...resource, eligibility: subjectReadEligibility(resource) },
+      { pool: config.pool, deadline: request.context.deadline },
+    );
+    const visible = await withRequestDeadline(request.context.deadline, () =>
+      withReadTransaction(config.pool, async (tx) => {
+        charge('dependencyPoints');
+        const owner = await readPartition(tx, partitionOf(route));
+        if (!owner || owner.writeState !== 'active') return 'unavailable' as const;
+        charge('dependencyPoints');
+        const state = await readVisibility.run(tx, {
+          route,
+          subject_id: request.original,
+        });
+        // Missing original is unknown native support, not a withheld/absent projection.
+        if (!state) return 'unavailable' as const;
+        if (state.visibility !== 'visible') return 'withheld' as const;
+        requireAccessDeadline(request.context.deadline);
+        const at = await mintReadTime(tx, config.clock);
+        return (await authorize(tx, at)) ? ('visible' as const) : ('withheld' as const);
+      }),
+    );
+    if (visible === 'unavailable') return { status: 'unavailable', cost };
+    if (visible === 'withheld') return { status: 'projected', projection: null, cost };
+    return await withPublicStatementReader(() =>
+      withIdentitySourceSupportJob(request.job, async () => {
+        charge('dependencyPoints');
+        const mapping = await identityEpochStore().readMapping(config.pool, request.original);
+        if (mapping.state === 'pending') return { status: 'unready', cost };
+        if (mapping.state !== 'mapped') return { status: 'unavailable', cost };
+        if (mapping.epoch !== request.job.epoch || mapping.terminal !== request.terminal)
+          return { status: 'changed', cost };
+        const page = await source.readPublicFilterProjectionPage({
+          subject: request.original,
+          meaning: request.meaning,
+          frontier: request.frontier,
+          inputLimit: request.inputLimit,
+          context: request.context,
+        });
+        cost = Object.fromEntries(
+          Object.entries(cost).map(([key, value]) => [key, value + page.cost[key as keyof PublicFilterCost]]),
+        ) as PublicFilterCost;
+        if (page.status !== 'progress' && page.status !== 'complete') return { status: page.status, cost };
+        if (page.source.subject !== request.original || page.source.terminal !== request.terminal)
+          return { status: 'changed', cost };
+        charge('dependencyPoints');
+        const current = await identityEpochStore().readMapping(config.pool, request.original);
+        if (current.state !== 'mapped' || current.epoch !== request.job.epoch || current.terminal !== request.terminal)
+          return { status: 'changed', cost };
+        requireAccessDeadline(request.context.deadline);
+        return { status: 'projected', projection: page, cost };
+      }),
+    );
+  } catch (error) {
+    if (classifyUnavailability(error)) return { status: 'unavailable', cost };
+    throw error;
+  }
 }

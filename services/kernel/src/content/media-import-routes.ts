@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -10,35 +11,42 @@ import type { mediaModerationRoutes } from './media-moderation-routes.ts';
 import type { ContentCommandDependencies } from './commands.ts';
 import {
   importMediaFromUrl,
+  MediaImportConflictError,
   readMediaImportStatus,
   type MediaImportDependencies,
   type MediaImportFetchConfig,
 } from './media-import.ts';
 import { MediaImportInputSchema, MediaImportReceiptSchema, MediaImportPollSchema } from './schemas.ts';
+import { recordOwnMediaReservation } from './own-media.ts';
 
 /** Supplied by trusted runtime composition. Missing configuration fails closed. */
 export type MediaImportRouteDependencies = ContentCommandDependencies & { fetchConfig?: MediaImportFetchConfig };
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  500: problemSchema('internal_error'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-  ),
-};
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    500: problemSchema('internal_error'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+    ),
+  }));
+}
 const security = [{ bearerAuth: [] }];
-const uploadRate = defineRateLimit({ family: 'upload', units: 1 });
+function uploadRate() {
+  return memoizedValue(uploadRate, () => defineRateLimit({ family: 'upload', units: 1 }));
+}
 
 async function importOperation<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
   } catch (error) {
     if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+    if (error instanceof MediaImportConflictError) throw new ProblemError('conflict');
     if (
       error instanceof TypeError &&
       [
@@ -72,11 +80,12 @@ export function mediaImportRoutes(
       customMethod('/v1/media', 'importFromUrl'),
       {
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
-        body: MediaImportInputSchema,
+        body: MediaImportInputSchema(),
         response: {
-          202: withHeaders(MediaImportReceiptSchema, { [SESSION_HEADER]: t.String() }),
-          ...failures,
+          202: withHeaders(MediaImportReceiptSchema(), { [SESSION_HEADER]: t.String() }),
+          ...failures(),
           403: problemSchema('forbidden'),
+          409: problemSchema('conflict'),
           422: problemSchema('idempotency_conflict', 'too_many_events'),
           429: problemSchema('rate_limited'),
           503: problemSchema(
@@ -93,7 +102,7 @@ export function mediaImportRoutes(
           'x-exposure': 'public',
           'x-action': 'media:import_from_url',
           'x-resource-types': ['content.media'],
-          'x-rate-limit': uploadRate,
+          'x-rate-limit': uploadRate(),
           security,
         },
       },
@@ -108,6 +117,7 @@ export function mediaImportRoutes(
           admission.run('normal', job, async () => {
             const deps = configured();
             const outcome = await importMediaFromUrl(deps, actor, body, context);
+            await recordOwnMediaReservation(deps.pool, actor, outcome.value.mediaId);
             // Receipts contain IDs only. Resolve current disclosure on every return,
             // including replay, before publishing either the identity or session token.
             const current = await readMediaImportStatus(deps, actor, outcome.value.mediaId, { deadline: job.deadline });
@@ -130,7 +140,7 @@ export function mediaImportRoutes(
       customMethod('/v1/media/:id', 'importStatus'),
       {
         params: t.Object({ id: t.String() }, { additionalProperties: false }),
-        response: { 200: MediaImportPollSchema, ...failures },
+        response: { 200: MediaImportPollSchema(), ...failures() },
         detail: {
           operationId: 'media.import_status',
           'x-exposure': 'public',

@@ -32,8 +32,8 @@ const actions = [
   'subject:merge',
   'moderation:hide',
 ];
-const realAccess = await createRealAccess(admin, accounts, actions);
 const commandAt = new Date('2031-02-03T04:05:06.000Z');
+const realAccess = await createRealAccess(admin, accounts, actions, { clock: () => new Date(commandAt) });
 const hour = 60 * 60 * 1000;
 const windowAround = (instant: Date) => [
   new Date(instant.getTime() - hour / 2),

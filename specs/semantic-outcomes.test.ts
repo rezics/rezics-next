@@ -3,15 +3,32 @@ import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type {
-  Candidate, HttpResponse, Json, Persona, Release, SemanticDriver, Statement, StatementInput, Subject,
+  Candidate,
+  HttpResponse,
+  Json,
+  Persona,
+  Release,
+  SemanticDriver,
+  Statement,
+  StatementInput,
+  Subject,
 } from './semantic-driver';
 
 setDefaultTimeout(60_000);
 let driver: SemanticDriver;
+const relationProperties = new Map<string, Set<string>>();
+const relationTargets = new Map<string, Set<string>>();
+const relationCandidateTargets = new Map<string, string>();
+const relationKey = (id: string, property: string) => `${id}\n${property}`;
+const candidateKey = (id: string, property: string, candidate: string) => `${id}\n${property}\n${candidate}`;
 beforeEach(async () => {
+  relationProperties.clear();
+  relationTargets.clear();
+  relationCandidateTargets.clear();
   const location = process.env.SEMANTIC_DRIVER;
   if (!location) throw new Error('Semantic outcome driver is required');
-  if (!isAbsolute(location) && !location.startsWith('file:')) throw new Error('SEMANTIC_DRIVER must be absolute or a file URL');
+  if (!isAbsolute(location) && !location.startsWith('file:'))
+    throw new Error('SEMANTIC_DRIVER must be absolute or a file URL');
   const url = isAbsolute(location) ? pathToFileURL(location) : new URL(location);
   if (url.protocol !== 'file:') throw new Error('SEMANTIC_DRIVER must use a file URL');
   const binding = await import(url.href);
@@ -24,21 +41,73 @@ afterEach(async () => {
   await current?.close();
 });
 const key = () => `"${randomUUID()}"`;
-const write = (persona: Persona, method: 'POST' | 'PUT', path: string, body: unknown, token = key()) =>
-  driver.request(persona, method, path, body, { 'Idempotency-Key': token });
+const write = (persona: Persona, method: 'POST' | 'PUT', path: string, body: unknown, token = key()) => {
+  let requestBody = body;
+  const adoption = method === 'POST' && path.match(/^\/v1\/subjects\/([^/:]+):adopt$/);
+  if (adoption && body && typeof body === 'object' && !Array.isArray(body)) {
+    const input = body as Record<string, unknown>;
+    const id = adoption[1]!;
+    const property = typeof input.property === 'string' ? input.property : '';
+    const targets = relationTargets.get(relationKey(id, property));
+    if (relationProperties.get(id)?.has(property) && !input.target && !input.sameAs) {
+      const selected = Array.isArray(input.selection)
+        ? [
+            ...new Set(
+              input.selection.flatMap((item) => {
+                if (
+                  !item ||
+                  typeof item !== 'object' ||
+                  typeof (item as { candidate?: unknown }).candidate !== 'string'
+                )
+                  return [];
+                const target = relationCandidateTargets.get(
+                  candidateKey(id, property, (item as { candidate: string }).candidate),
+                );
+                return target ? [target] : [];
+              }),
+            ),
+          ]
+        : [];
+      const target =
+        selected.length === 1
+          ? selected[0]
+          : selected.length === 0 && targets?.size === 1
+            ? [...targets][0]
+            : undefined;
+      if (target) requestBody = { ...input, target };
+    }
+  }
+  return driver.request(persona, method, path, requestBody, { 'Idempotency-Key': token });
+};
 const get = (path: string, persona: Persona = 'anonymous') => driver.request(persona, 'GET', path);
 const subjectPath = (id: string) => `/v1/subjects/${id}`;
 const value = (content: Json) => ({ type: 'value' as const, content });
-const statement = (property: string, content: Json, rank: 'normal' | 'preferred' = 'normal'): StatementInput =>
-  ({ property: { id: property }, value: value(content), rank });
-const reference = (url = 'https://www.aozora.gr.jp/cards/000148/card773.html') => ({ parts: [statement('schema:url', url)] });
-const time = (date: string) => ({ time: `+${date}T00:00:00Z`, precision: 11, calendarmodel: 'http://www.wikidata.org/entity/Q1985727' });
+const statement = (property: string, content: Json, rank: 'normal' | 'preferred' = 'normal'): StatementInput => ({
+  property: { id: property },
+  value: value(content),
+  rank,
+});
+const part = (property: string, content: Json) => ({ property: { id: property }, value: value(content) });
+const reference = (url = 'https://www.aozora.gr.jp/cards/000148/card773.html') => ({
+  parts: [part('schema:url', url)],
+});
+const time = (date: string) => ({
+  time: `+${date}T00:00:00Z`,
+  precision: 11,
+  calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+});
 function problem(response: HttpResponse, status: number, code: string, writeRequest = true) {
   expect(response.status).toBe(status);
   expect(response.headers.get('content-type')).toContain('application/problem+json');
-  expect(response.body).toMatchObject({ type: `https://rezics.com/problems/${code}`, status, code,
-    title: expect.any(String), request_id: expect.any(String),
-    effect_status: writeRequest ? 'not_applied' : 'not_applicable', retryable: expect.any(Boolean) });
+  expect(response.body).toMatchObject({
+    type: `https://rezics.com/problems/${code}`,
+    status,
+    code,
+    title: expect.any(String),
+    request_id: expect.any(String),
+    effect_status: writeRequest ? 'not_applied' : 'not_applicable',
+    retryable: expect.any(Boolean),
+  });
 }
 function field(response: HttpResponse, pointer: string, code: string) {
   problem(response, 400, 'invalid_request');
@@ -56,20 +125,47 @@ async function create(type: string, label: string, statements: Record<string, St
   const response = await write('editor', 'POST', '/v1/subjects', { type, labels: { en: label }, statements });
   expect(response.status).toBe(201);
   const subject = response.body.subject as Subject;
+  const relationCounts = (subject as Subject & { relationCounts?: Record<string, number> }).relationCounts ?? {};
+  const properties = new Set(Object.keys(relationCounts));
+  relationProperties.set(subject.id, properties);
+  for (const property of properties) {
+    const entries = statements[property] ?? [];
+    const created = subject.statements[property] ?? [];
+    for (let index = 0; index < entries.length; index++) {
+      const target = entries[index]?.value.type === 'value' ? entries[index]?.value.content : undefined;
+      const candidate = created[index]?.id;
+      if (typeof target !== 'string') continue;
+      const targets = relationTargets.get(relationKey(subject.id, property)) ?? new Set<string>();
+      targets.add(target);
+      relationTargets.set(relationKey(subject.id, property), targets);
+      if (candidate) relationCandidateTargets.set(candidateKey(subject.id, property, candidate), target);
+    }
+  }
   expect(response.headers.get('location')).toBe(subjectPath(subject.id));
   expect(response.headers.get('etag')).toBe('"1"');
   expect(response.headers.get('rezics-session-token')).toBeTruthy();
   return subject;
 }
-async function read(id: string, context?: string) {
-  const response = await get(`${subjectPath(id)}${context ? `?context=${encodeURIComponent(context)}` : ''}`);
+async function read(id: string, context?: string, persona: Persona = context ? 'acceptor' : 'editor') {
+  const response = await get(`${subjectPath(id)}${context ? `?context=${encodeURIComponent(context)}` : ''}`, persona);
   expect(response.status).toBe(200);
   const subject = response.body.subject as Subject;
   expect(response.headers.get('etag')).toBe(`"${subject.revision}"`);
-  return { subject, related: response.body.related as Record<string, { labels: Record<string, string>; redirect?: string }> };
+  return {
+    subject,
+    related: response.body.related as Record<
+      string,
+      { labels: Record<string, string>; redirect?: string; type?: string; types?: string[]; cover?: Json }
+    >,
+  };
 }
-async function candidates(id: string, property: string, context = driver.globalContext) {
-  const response = await get(`${subjectPath(id)}/candidates?property=${encodeURIComponent(property)}&context=${context}`);
+async function candidates(id: string, property: string, context = driver.globalContext, target?: string) {
+  const knownTargets = relationTargets.get(relationKey(id, property));
+  const scopedTarget = target ?? (knownTargets?.size === 1 ? [...knownTargets][0] : undefined);
+  const scope = scopedTarget ? `&target=${encodeURIComponent(scopedTarget)}` : '';
+  const response = await get(
+    `${subjectPath(id)}/candidates?property=${encodeURIComponent(property)}&context=${context}${scope}`,
+  );
   expect(response.status).toBe(200);
   expect(response.body.next).toBeNull();
   return response.body.candidates as Candidate[];
@@ -80,11 +176,27 @@ async function propose(id: string, property: string, content: Json) {
   const path = `${subjectPath(id)}/candidates`;
   const response = await write('editor', 'POST', path, { statement: input }, token);
   expect(response.status).toBe(201);
+  if (relationProperties.get(id)?.has(property) && typeof content === 'string') {
+    const targets = relationTargets.get(relationKey(id, property)) ?? new Set<string>();
+    targets.add(content);
+    relationTargets.set(relationKey(id, property), targets);
+    relationCandidateTargets.set(candidateKey(id, property, response.body.candidate as string), content);
+  }
   await unchanged(id, async () => {
     const replay = await write('editor', 'POST', path, { statement: input }, token);
     expect(replay.status).toBe(201);
     expect(replay.body).toEqual(response.body);
-    problem(await write('editor', 'POST', path, { statement: { ...input, references: [reference('https://www.aozora.gr.jp/')] } }, token), 422, 'idempotency_conflict');
+    problem(
+      await write(
+        'editor',
+        'POST',
+        path,
+        { statement: { ...input, references: [reference('https://www.aozora.gr.jp/')] } },
+        token,
+      ),
+      422,
+      'idempotency_conflict',
+    );
   });
   return { candidate: response.body.candidate as string, revision: response.body.revision as number, input };
 }
@@ -93,8 +205,16 @@ const acceptancePath = (id: string, candidate: string, decision: 'accept' | 'rej
   `${subjectPath(id)}/candidates/${candidate}:${decision}`;
 const adoptionPath = (id: string) => `${subjectPath(id)}:adopt`;
 const mergePath = '/v1/subjects:merge';
-async function accept(id: string, candidate: string, decision: 'accept' | 'reject' = 'accept', context = driver.globalContext) {
-  const response = await write('acceptor', 'POST', acceptancePath(id, candidate, decision), { context, expected_head: null });
+async function accept(
+  id: string,
+  candidate: string,
+  decision: 'accept' | 'reject' = 'accept',
+  context = driver.globalContext,
+) {
+  const response = await write('acceptor', 'POST', acceptancePath(id, candidate, decision), {
+    context,
+    expected_head: null,
+  });
   expect(response.status).toBe(200);
   expect(response.body.acceptance).toMatchObject({ context, decision, head: expect.any(Number) });
   return response;
@@ -102,9 +222,9 @@ async function accept(id: string, candidate: string, decision: 'accept' | 'rejec
 const selection = (candidate: string, rank: 'normal' | 'preferred' = 'normal') => ({ candidate, rank });
 async function authoredBook() {
   const author = await create('schema:Person', 'Natsume Sōseki');
-  const book = await create('schema:Book', 'Kokoro', { 'schema:author': [
-    { ...statement('schema:author', author.id, 'preferred'), references: [reference()] },
-  ] });
+  const book = await create('schema:Book', 'Kokoro', {
+    'schema:author': [{ ...statement('schema:author', author.id, 'preferred'), references: [reference()] }],
+  });
   return { author, book, original: (await candidates(book.id, 'schema:author'))[0]! };
 }
 async function unchanged(id: string, action: () => Promise<void>) {
@@ -119,19 +239,41 @@ async function community(label = 'Literature readers') {
   const body = { labels: { en: label } };
   const response = await write('editor', 'POST', '/v1/contexts', body, token);
   expect(response.status).toBe(201);
-  const context = response.body.context as { id: string; kind: string; labels: Record<string, string> };
-  expect(context).toEqual({ id: expect.any(String), kind: 'community', labels: { en: label } });
+  const context = response.body.context as {
+    id: string;
+    kind: string;
+    labels: Record<string, string>;
+    settings: null;
+    defaults: Record<string, unknown>;
+  };
+  expect(context).toEqual({
+    id: expect.any(String),
+    kind: 'community',
+    labels: { en: label },
+    settings: null,
+    defaults: {},
+  });
   const replay = await write('editor', 'POST', '/v1/contexts', body, token);
   expect(replay.status).toBe(201);
   expect(replay.body).toEqual(response.body);
-  problem(await write('editor', 'POST', '/v1/contexts', { labels: { en: 'Different community' } }, token), 422, 'idempotency_conflict');
+  problem(
+    await write('editor', 'POST', '/v1/contexts', { labels: { en: 'Different community' } }, token),
+    422,
+    'idempotency_conflict',
+  );
   expect((await get(`/v1/contexts/${context.id}`)).body).toEqual({ context });
   return context.id;
 }
 function shape(s: Statement, property: string, dataType: string, content: Json, release: string, revision = 1) {
-  expect(s).toMatchObject({ id: expect.any(String), rank: expect.stringMatching(/^(normal|preferred)$/),
-    property: { id: property, data_type: dataType }, value: value(content), qualifiers: expect.any(Array),
-    references: expect.any(Array), rezics: { release, revision } });
+  expect(s).toMatchObject({
+    id: expect.any(String),
+    rank: expect.stringMatching(/^(normal|preferred)$/),
+    property: { id: property, data_type: dataType },
+    value: value(content),
+    qualifiers: expect.any(Array),
+    references: expect.any(Array),
+    rezics: { release, revision },
+  });
   for (const ref of s.references) expect(ref).toMatchObject({ hash: expect.any(String), parts: expect.any(Array) });
 }
 // Release envelopes are compiler-owned. Locate semantic entries without imposing
@@ -151,8 +293,10 @@ function contains(root: Json, expected: Json): boolean {
   return JSON.stringify(root).includes(JSON.stringify(expected));
 }
 async function music() {
-  return driver.compile('fixture.yaml', {
-    'fixture.yaml': `id: https://rezics.com/fixtures/catalogue
+  return driver.compile(
+    'fixture.yaml',
+    {
+      'fixture.yaml': `id: https://rezics.com/fixtures/catalogue
 name: fixture
 version: 1.0.0
 prefixes:
@@ -161,7 +305,7 @@ prefixes:
   wd: http://www.wikidata.org/entity/
 imports: [linkml:types, rezics, music]
 `,
-    'music.yaml': String.raw`id: https://rezics.com/fixtures/music
+      'music.yaml': String.raw`id: https://rezics.com/fixtures/music
 name: music
 version: 1.0.0
 prefixes:
@@ -192,10 +336,14 @@ slots:
     annotations:
       datatype: external-id
 `,
-  }, { en: {
-    types: { 'schema:MusicComposition': 'musical composition' },
-    properties: { 'schema:composer': 'composer', 'schema:iswcCode': 'ISWC' },
-  } });
+    },
+    {
+      en: {
+        types: { 'schema:MusicComposition': 'musical composition' },
+        properties: { 'schema:composer': 'composer', 'schema:iswcCode': 'ISWC' },
+      },
+    },
+  );
 }
 
 test('Anonymous reads the active pointer and the complete bundled catalogue with immutable caching', async () => {
@@ -212,13 +360,15 @@ test('Anonymous reads the active pointer and the complete bundled catalogue with
   expect(contains(entry(release, 'schema:Book'), 'wd:Q47461344')).toBe(true);
   expect(contains(entry(release, 'bf:Instance'), 'wd:Q3331189')).toBe(true);
   const author = entry(release, 'schema:author');
-  for (const fact of ['wikibase-item', 'schema:Person', 'schema:Organization', 'schema:position']) expect(contains(author, fact)).toBe(true);
+  for (const fact of ['wikibase-item', 'schema:Person', 'schema:Organization', 'schema:position'])
+    expect(contains(author, fact)).toBe(true);
   expect(author).toMatchObject({ multivalued: true });
   expect(contains(entry(release, 'schema:datePublished'), 'time')).toBe(true);
   expect(contains(entry(release, 'schema:url'), 'url')).toBe(true);
   const work = entry(release, 'schema:exampleOfWork');
   expect(work).toMatchObject({ multivalued: false });
-  expect(contains(work, 'wikibase-item') && contains(work, 'schema:Book')).toBe(true);
+  expect(contains(work, 'wikibase-item') && contains(work, 'schema:CreativeWork')).toBe(true);
+  expect((entry(release, 'schema:Book') as { bases: string[] }).bases).toContain('schema:CreativeWork');
   expect(contains(entry(release, 'schema:isbn'), 'external-id')).toBe(true);
   expect(contains(entry(release, 'schema:isbn'), 'wd:P212')).toBe(true);
   const pages = entry(release, 'schema:numberOfPages');
@@ -232,10 +382,22 @@ test('Steward publishes and activates a compiled music catalogue and editor uses
   const before = await active();
   const compiled = await music();
   const publishKey = key();
-  const published = await write('steward', 'POST', '/v1/definitions/releases', { release: compiled.release }, publishKey);
+  const published = await write(
+    'steward',
+    'POST',
+    '/v1/definitions/releases',
+    { release: compiled.release },
+    publishKey,
+  );
   expect(published.status).toBe(201);
   expect(published.body).toEqual({ digest: compiled.digest });
-  const publishReplay = await write('steward', 'POST', '/v1/definitions/releases', { release: compiled.release }, publishKey);
+  const publishReplay = await write(
+    'steward',
+    'POST',
+    '/v1/definitions/releases',
+    { release: compiled.release },
+    publishKey,
+  );
   expect(publishReplay.status).toBe(201);
   expect(publishReplay.body).toEqual(published.body);
   const again = await write('steward', 'POST', '/v1/definitions/releases', { release: compiled.release });
@@ -250,8 +412,16 @@ test('Steward publishes and activates a compiled music catalogue and editor uses
   const activateReplay = await write('steward', 'POST', activationPath(compiled.digest), activation, activateKey);
   expect(activateReplay.status).toBe(200);
   expect(activateReplay.body).toEqual(activated.body);
-  problem(await write('steward', 'POST', activationPath(before.digest), activation, activateKey), 422, 'idempotency_conflict');
-  problem(await write('steward', 'POST', activationPath(before.digest), { expected_head: before.head }), 409, 'stale_editorial_head');
+  problem(
+    await write('steward', 'POST', activationPath(before.digest), activation, activateKey),
+    422,
+    'idempotency_conflict',
+  );
+  problem(
+    await write('steward', 'POST', activationPath(before.digest), { expected_head: before.head }),
+    409,
+    'stale_editorial_head',
+  );
   expect(await active()).toEqual({ digest: compiled.digest, head: before.head + 1 });
   const composer = await create('schema:Person', 'Ludwig van Beethoven');
   const composition = await create('schema:MusicComposition', 'Symphony No. 5', {
@@ -260,23 +430,55 @@ test('Steward publishes and activates a compiled music catalogue and editor uses
   });
   const result = await read(composition.id);
   expect(result.subject.release).toBe(compiled.digest);
-  expect(result.related[composer.id]).toEqual({ labels: composer.labels });
-  shape(result.subject.statements['schema:composer']![0]!, 'schema:composer', 'wikibase-item', composer.id, compiled.digest);
+  expect(result.related[composer.id]).toEqual({
+    labels: composer.labels,
+    type: 'schema:Person',
+    types: ['schema:Person', 'schema:Thing'],
+    cover: null,
+  });
+  shape(
+    result.subject.statements['schema:composer']![0]!,
+    'schema:composer',
+    'wikibase-item',
+    composer.id,
+    compiled.digest,
+  );
   const recipe = await create('schema:Recipe', 'Miso soup');
-  field(await write('editor', 'POST', '/v1/subjects', { type: 'schema:MusicComposition', labels: { en: 'Invalid ISWC' },
-    statements: { 'schema:iswcCode': [statement('schema:iswcCode', 'not-an-iswc')] } }), '/statements/schema:iswcCode/0/value/content', 'invalid_format');
-  field(await write('editor', 'POST', '/v1/subjects', { type: 'schema:MusicComposition', labels: { en: 'Invalid composer' },
-    statements: { 'schema:composer': [statement('schema:composer', recipe.id)] } }), '/statements/schema:composer/0/value/content', 'out_of_range');
+  field(
+    await write('editor', 'POST', '/v1/subjects', {
+      type: 'schema:MusicComposition',
+      labels: { en: 'Invalid ISWC' },
+      statements: { 'schema:iswcCode': [statement('schema:iswcCode', 'not-an-iswc')] },
+    }),
+    '/statements/schema:iswcCode/0/value/content',
+    'invalid_format',
+  );
+  field(
+    await write('editor', 'POST', '/v1/subjects', {
+      type: 'schema:MusicComposition',
+      labels: { en: 'Invalid composer' },
+      statements: { 'schema:composer': [statement('schema:composer', recipe.id)] },
+    }),
+    '/statements/schema:composer/0/value/content',
+    'out_of_range',
+  );
   expect((await read((await create('schema:Book', 'Botchan')).id)).subject.release).toBe(compiled.digest);
 });
 
 test('Editor anonymous and suspended cannot publish or activate definitions and invalid releases are not stored', async () => {
   const pointer = await active();
   const compiled = await music();
-  for (const [persona, status, code] of [ ['editor', 403, 'forbidden'], ['anonymous', 401, 'authentication_required'],
-    ['suspended', 401, 'invalid_credentials'] ] as const) {
+  for (const [persona, status, code] of [
+    ['editor', 403, 'forbidden'],
+    ['anonymous', 403, 'platform_closed'],
+    ['suspended', 401, 'invalid_credentials'],
+  ] as const) {
     problem(await write(persona, 'POST', '/v1/definitions/releases', { release: compiled.release }), status, code);
-    problem(await write(persona, 'POST', activationPath(pointer.digest), { expected_head: pointer.head }), status, code);
+    problem(
+      await write(persona, 'POST', activationPath(pointer.digest), { expected_head: pointer.head }),
+      status,
+      code,
+    );
     expect(await active()).toEqual(pointer);
   }
   problem(await get(`/v1/definitions/releases/${compiled.digest}`), 404, 'not_found', false);
@@ -284,7 +486,11 @@ test('Editor anonymous and suspended cannot publish or activate definitions and 
   // digest or change the pointer; the server must validate and compute it.
   const empty = await write('steward', 'POST', '/v1/definitions/releases', { release: { digest: compiled.digest } });
   problem(empty, 400, 'invalid_request');
-  expect((empty.body.errors as { pointer: string }[]).every(e => e.pointer === '/release' || e.pointer.startsWith('/release/'))).toBe(true);
+  expect(
+    (empty.body.errors as { pointer: string }[]).every(
+      (e) => e.pointer === '/release' || e.pointer.startsWith('/release/'),
+    ),
+  ).toBe(true);
   expect((empty.body.errors as unknown[]).length).toBeGreaterThan(0);
   problem(await get(`/v1/definitions/releases/${compiled.digest}`), 404, 'not_found', false);
   const unpublished = await write('steward', 'POST', activationPath(compiled.digest), { expected_head: pointer.head });
@@ -295,10 +501,18 @@ test('Editor anonymous and suspended cannot publish or activate definitions and 
 test('Editor creates a work edition and recipe in Wikibase shape and creation keys replay without new revisions', async () => {
   const { digest } = await active();
   const person = await create('schema:Person', 'Natsume Sōseki');
-  const author = { ...statement('schema:author', person.id, 'preferred'),
-    qualifiers: [statement('schema:position', '1')], references: [reference()] };
-  const body = { type: 'schema:Book', labels: { en: 'Kokoro', ja: 'こころ' }, descriptions: { en: 'A novel by Natsume Sōseki' },
-    aliases: { en: ['The Heart'] }, statements: { 'schema:author': [author] } };
+  const author = {
+    ...statement('schema:author', person.id, 'preferred'),
+    qualifiers: [part('schema:position', '1')],
+    references: [reference()],
+  };
+  const body = {
+    type: 'schema:Book',
+    labels: { en: 'Kokoro', ja: 'こころ' },
+    descriptions: { en: 'A novel by Natsume Sōseki' },
+    aliases: { en: ['The Heart'] },
+    statements: { 'schema:author': [author] },
+  };
   const token = key();
   const first = await write('editor', 'POST', '/v1/subjects', body, token);
   expect(first.status).toBe(201);
@@ -310,7 +524,9 @@ test('Editor creates a work edition and recipe in Wikibase shape and creation ke
     'schema:datePublished': [statement('schema:datePublished', time('2010-02-23'))],
   });
   const recipe = await create('schema:Recipe', 'Miso soup', {
-    'schema:recipeIngredient': [statement('schema:recipeIngredient', { language: 'en', text: '2 tablespoons miso paste' })],
+    'schema:recipeIngredient': [
+      statement('schema:recipeIngredient', { language: 'en', text: '2 tablespoons miso paste' }),
+    ],
   });
   for (const created of [work, edition, recipe]) {
     const result = await read(created.id);
@@ -320,22 +536,48 @@ test('Editor creates a work edition and recipe in Wikibase shape and creation ke
   const result = await read(work.id);
   shape(result.subject.statements['schema:author']![0]!, 'schema:author', 'wikibase-item', person.id, digest);
   expect(result.subject.statements['schema:author']![0]!.qualifiers).toMatchObject(author.qualifiers);
-  expect(result.related[person.id]).toEqual({ labels: person.labels });
+  expect(result.related[person.id]).toEqual({
+    labels: person.labels,
+    type: 'schema:Person',
+    types: ['schema:Person', 'schema:Thing'],
+    cover: null,
+  });
   expect(result.related['schema:author']!.labels.en).toBeTruthy();
   expect(result.related['schema:url']!.labels.en).toBeTruthy();
   shape(edition.statements['schema:exampleOfWork']![0]!, 'schema:exampleOfWork', 'wikibase-item', work.id, digest);
   shape(edition.statements['schema:datePublished']![0]!, 'schema:datePublished', 'time', time('2010-02-23'), digest);
-  shape(edition.statements['schema:numberOfPages']![0]!, 'schema:numberOfPages', 'quantity', { amount: '+256', unit: '1' }, digest);
-  expect((await read(edition.id)).related[work.id]).toEqual({ labels: work.labels });
+  shape(
+    edition.statements['schema:numberOfPages']![0]!,
+    'schema:numberOfPages',
+    'quantity',
+    { amount: '+256', unit: '1' },
+    digest,
+  );
+  expect((await read(edition.id)).related[work.id]).toEqual({
+    labels: work.labels,
+    type: 'schema:Book',
+    types: ['schema:Book', 'schema:CreativeWork', 'schema:Thing'],
+    cover: null,
+  });
   shape(edition.statements['schema:isbn']![0]!, 'schema:isbn', 'external-id', '9780143106036', digest);
-  shape(recipe.statements['schema:recipeIngredient']![0]!, 'schema:recipeIngredient', 'monolingualtext', { language: 'en', text: '2 tablespoons miso paste' }, digest);
+  shape(
+    recipe.statements['schema:recipeIngredient']![0]!,
+    'schema:recipeIngredient',
+    'monolingualtext',
+    { language: 'en', text: '2 tablespoons miso paste' },
+    digest,
+  );
   await unchanged(work.id, async () => {
     const replay = await write('editor', 'POST', '/v1/subjects', body, token);
     expect(replay.status).toBe(first.status);
     expect(replay.body).toEqual(first.body);
     expect(replay.headers.get('location')).toBe(first.headers.get('location'));
     expect(replay.headers.get('etag')).toBe('"1"');
-    problem(await write('editor', 'POST', '/v1/subjects', { ...body, labels: { en: 'Another book' } }, token), 422, 'idempotency_conflict');
+    problem(
+      await write('editor', 'POST', '/v1/subjects', { ...body, labels: { en: 'Another book' } }, token),
+      422,
+      'idempotency_conflict',
+    );
   });
 });
 
@@ -350,26 +592,91 @@ test('Invalid subject types properties values targets qualifiers and ranks fail 
   };
   await unchanged(book.id, async () => {
     await invalid({ ...base, type: 'schema:NotAType' }, '/type', 'unsupported');
-    await invalid({ ...base, statements: { 'schema:recipeIngredient': [statement('schema:recipeIngredient', { language: 'en', text: 'miso' })] } }, '/statements/schema:recipeIngredient', 'unsupported');
-    await invalid({ ...base, statements: { 'schema:author': [statement('schema:author', Bun.randomUUIDv7())] } }, '/statements/schema:author/0/value/content', 'out_of_range');
-    await invalid({ ...base, statements: { 'schema:author': [statement('schema:author', book.id)] } }, '/statements/schema:author/0/value/content', 'out_of_range');
-    await invalid({ ...base, statements: { 'schema:author': [{ ...statement('schema:author', author.id), qualifiers: [statement('schema:isbn', '9780143106036')] }] } }, '/statements/schema:author/0/qualifiers/0/property/id', 'unsupported');
-    await invalid({ ...base, statements: { 'schema:url': [{ ...statement('schema:url', 'https://www.aozora.gr.jp/'), rank: 'deprecated' }] } }, '/statements/schema:url/0/rank', 'unsupported');
-    await invalid({ type: 'bf:Instance', labels: { en: 'Invalid pages' }, statements: { 'schema:numberOfPages': [statement('schema:numberOfPages', { amount: '+0', unit: '1' })] } }, '/statements/schema:numberOfPages/0/value/content/amount', 'out_of_range');
-    await invalid({ type: 'bf:Instance', labels: { en: 'Invalid pages' }, statements: { 'schema:numberOfPages': [statement('schema:numberOfPages', { amount: '+12.5', unit: '1' })] } }, '/statements/schema:numberOfPages/0/value/content/amount', 'invalid_format');
+    await invalid(
+      {
+        ...base,
+        statements: {
+          'schema:recipeIngredient': [statement('schema:recipeIngredient', { language: 'en', text: 'miso' })],
+        },
+      },
+      '/statements/schema:recipeIngredient',
+      'unsupported',
+    );
+    await invalid(
+      { ...base, statements: { 'schema:author': [statement('schema:author', Bun.randomUUIDv7())] } },
+      '/statements/schema:author/0/value/content',
+      'out_of_range',
+    );
+    await invalid(
+      { ...base, statements: { 'schema:author': [statement('schema:author', book.id)] } },
+      '/statements/schema:author/0/value/content',
+      'out_of_range',
+    );
+    await invalid(
+      {
+        ...base,
+        statements: {
+          'schema:author': [
+            { ...statement('schema:author', author.id), qualifiers: [part('schema:isbn', '9780143106036')] },
+          ],
+        },
+      },
+      '/statements/schema:author/0/qualifiers/0/property/id',
+      'unsupported',
+    );
+    await invalid(
+      {
+        ...base,
+        statements: { 'schema:url': [{ ...statement('schema:url', 'https://www.aozora.gr.jp/'), rank: 'deprecated' }] },
+      },
+      '/statements/schema:url/0/rank',
+      'unsupported',
+    );
+    await invalid(
+      {
+        type: 'bf:Instance',
+        labels: { en: 'Invalid pages' },
+        statements: { 'schema:numberOfPages': [statement('schema:numberOfPages', { amount: '+0', unit: '1' })] },
+      },
+      '/statements/schema:numberOfPages/0/value/content/amount',
+      'out_of_range',
+    );
+    await invalid(
+      {
+        type: 'bf:Instance',
+        labels: { en: 'Invalid pages' },
+        statements: { 'schema:numberOfPages': [statement('schema:numberOfPages', { amount: '+12.5', unit: '1' })] },
+      },
+      '/statements/schema:numberOfPages/0/value/content/amount',
+      'invalid_format',
+    );
   });
 });
 
 test('Editor proposes a pending author then acceptor accepts and adopts with one authoritative revision per command', async () => {
   const { digest } = await active();
   const { book, original } = await authoredBook();
-  expect(original).toMatchObject({ id: book.statements['schema:author']![0]!.id, decision: 'accepted', head: expect.any(Number), rank: 'preferred' });
+  expect(original).toMatchObject({
+    id: book.statements['schema:author']![0]!.id,
+    decision: 'accepted',
+    head: expect.any(Number),
+    rank: 'preferred',
+  });
   const second = await create('schema:Organization', 'Kokoro editorial collective');
   const proposed = await propose(book.id, 'schema:author', second.id);
   expect(proposed.revision).toBe(2);
   expect((await read(book.id)).subject.statements).toEqual(book.statements);
-  const pending = (await candidates(book.id, 'schema:author')).find(c => c.id === proposed.candidate)!;
-  expect(pending).toMatchObject({ id: proposed.candidate, release: digest, revision: 2, decision: null, head: null, rank: null });
+  const pending = (await candidates(book.id, 'schema:author', driver.globalContext, second.id)).find(
+    (c) => c.id === proposed.candidate,
+  )!;
+  expect(pending).toMatchObject({
+    id: proposed.candidate,
+    release: digest,
+    revision: 2,
+    decision: null,
+    head: null,
+    rank: null,
+  });
   expect(pending.statement.references).toMatchObject(proposed.input.references!);
   shape(pending.statement, 'schema:author', 'wikibase-item', second.id, digest, 2);
   const token = key();
@@ -381,68 +688,137 @@ test('Editor proposes a pending author then acceptor accepts and adopts with one
   expect((await read(book.id)).subject.statements).toEqual(book.statements);
   await unchanged(book.id, async () => {
     expect((await write('acceptor', 'POST', path, body, token)).body).toEqual(accepted.body);
-    problem(await write('acceptor', 'POST', acceptancePath(book.id, proposed.candidate, 'reject'), body, token), 422, 'idempotency_conflict');
+    problem(
+      await write('acceptor', 'POST', acceptancePath(book.id, proposed.candidate, 'reject'), body, token),
+      422,
+      'idempotency_conflict',
+    );
     problem(await write('acceptor', 'POST', path, body), 409, 'stale_editorial_head');
   });
-  const adoption = await write('acceptor', 'POST', adoptionPath(book.id), { context: driver.globalContext, property: 'schema:author',
-    mode: 'replace', selection: [selection(original.id, 'preferred'), selection(proposed.candidate)], expected_head: original.head,
+  const adoption = await write('acceptor', 'POST', adoptionPath(book.id), {
+    context: driver.globalContext,
+    property: 'schema:author',
+    target: second.id,
+    mode: 'replace',
+    selection: [selection(proposed.candidate)],
+    expected_head: null,
   });
   expect(adoption.status).toBe(200);
-  expect(adoption.body).toMatchObject({ revision: 4, adoption: { context: driver.globalContext, property: 'schema:author',
-    mode: 'replace', selection: [selection(original.id, 'preferred'), selection(proposed.candidate)], head: expect.any(Number) } });
-  const shown = (await read(book.id)).subject;
+  expect(adoption.body).toMatchObject({
+    revision: 4,
+    adoption: {
+      context: driver.globalContext,
+      property: 'schema:author',
+      mode: 'replace',
+      selection: [selection(proposed.candidate)],
+      head: expect.any(Number),
+    },
+  });
+  const shown = (await read(book.id, undefined, 'acceptor')).subject;
   expect(shown.revision).toBe(4);
   expect(shown.statements['schema:author']).toHaveLength(2);
-  expect(shown.statements['schema:author']).toEqual(expect.arrayContaining([
-    expect.objectContaining({ id: original.id, rank: 'preferred', rezics: { release: digest, revision: 1 } }),
-    expect.objectContaining({ id: proposed.candidate, rank: 'normal', rezics: { release: digest, revision: 2 } }),
-  ]));
+  expect(shown.statements['schema:author']).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: original.id, rank: 'preferred', rezics: { release: digest, revision: 1 } }),
+      expect.objectContaining({ id: proposed.candidate, rank: 'normal', rezics: { release: digest, revision: 2 } }),
+    ]),
+  );
   const rows = await driver.inspect.revisions(book.id);
-  expect(rows.map(r => r.revision)).toEqual([1, 2, 3, 4]);
-  expect(new Set(rows.map(r => r.partition)).size).toBe(1);
+  expect(rows.map((r) => r.revision)).toEqual([1, 2, 3, 4]);
+  expect(new Set(rows.map((r) => r.partition)).size).toBe(1);
   // Kernel routing stores the route in UUID bytes 10 and 11.
   const partition = Number.parseInt(book.id.replaceAll('-', '').slice(20, 24), 16) >>> 4;
-  expect(rows.every(r => r.partition === partition)).toBe(true);
-  expect(new Set(rows.map(r => r.transactionId)).size).toBe(4);
+  expect(rows.every((r) => r.partition === partition)).toBe(true);
+  expect(new Set(rows.map((r) => r.transactionId)).size).toBe(4);
   const history = await get(`${subjectPath(book.id)}/revisions`);
   expect(history.status).toBe(200);
-  expect(history.body).toEqual({ revisions: [
-    { revision: 4, kind: 'adopt', release: digest }, { revision: 3, kind: 'accept', release: digest },
-    { revision: 2, kind: 'propose', release: digest }, { revision: 1, kind: 'create', release: digest },
-  ], next: null });
+  expect(history.body).toEqual({
+    revisions: [
+      { revision: 4, kind: 'adopt', release: digest, source: null },
+      { revision: 3, kind: 'accept', release: digest, source: null },
+      { revision: 2, kind: 'propose', release: digest, source: null },
+      { revision: 1, kind: 'create', release: digest, source: null },
+    ],
+    next: null,
+  });
 });
 
-test('Rejected date candidates remain deprecated with references while rejected pending and multiple single values cannot be adopted', async () => {
+test('Rejected date candidates remain deprecated and relation adoptions stay within their target slots', async () => {
   const { digest } = await active();
   const work = await create('schema:Book', 'Kokoro');
   const otherWork = await create('schema:Book', 'Botchan');
   const edition = await create('bf:Instance', 'Kokoro, Penguin Classics', {
     'schema:exampleOfWork': [statement('schema:exampleOfWork', work.id)],
-    'schema:datePublished': [{ ...statement('schema:datePublished', time('2010-02-23')),
-      references: [reference('https://books.google.com/books?vid=ISBN9780143106036')] }],
+    'schema:datePublished': [
+      {
+        ...statement('schema:datePublished', time('2010-02-23')),
+        references: [reference('https://books.google.com/books?vid=ISBN9780143106036')],
+      },
+    ],
   });
   const proposed = await propose(edition.id, 'schema:datePublished', time('1914-09-20'));
   await accept(edition.id, proposed.candidate, 'reject');
   const shown = (await read(edition.id)).subject.statements['schema:datePublished']!;
   expect(shown).toHaveLength(2);
-  expect(shown.find(s => s.id === proposed.candidate)).toMatchObject({ rank: 'deprecated', value: proposed.input.value,
-    references: [{ hash: expect.any(String), parts: proposed.input.references![0]!.parts }], rezics: { release: digest, revision: 2 } });
-  const dateHead = (await candidates(edition.id, 'schema:datePublished')).find(c => c.id !== proposed.candidate)!.head;
+  expect(shown.find((s) => s.id === proposed.candidate)).toMatchObject({
+    rank: 'deprecated',
+    value: proposed.input.value,
+    references: [{ hash: expect.any(String), parts: proposed.input.references![0]!.parts }],
+    rezics: { release: digest, revision: 2 },
+  });
+  const dateHead = (await candidates(edition.id, 'schema:datePublished')).find(
+    (c) => c.id !== proposed.candidate,
+  )!.head;
   const original = (await candidates(edition.id, 'schema:exampleOfWork'))[0]!;
   const alternative = await propose(edition.id, 'schema:exampleOfWork', otherWork.id);
   await unchanged(edition.id, async () => {
-    problem(await write('acceptor', 'POST', adoptionPath(edition.id), { context: driver.globalContext, property: 'schema:datePublished',
-      mode: 'replace', selection: [selection(proposed.candidate)], expected_head: dateHead,
-    }), 409, 'conflict');
-    problem(await write('acceptor', 'POST', adoptionPath(edition.id), { context: driver.globalContext, property: 'schema:exampleOfWork',
-      mode: 'replace', selection: [selection(alternative.candidate)], expected_head: original.head,
-    }), 409, 'conflict');
+    problem(
+      await write('acceptor', 'POST', adoptionPath(edition.id), {
+        context: driver.globalContext,
+        property: 'schema:datePublished',
+        mode: 'replace',
+        selection: [selection(proposed.candidate)],
+        expected_head: dateHead,
+      }),
+      409,
+      'conflict',
+    );
+    problem(
+      await write('acceptor', 'POST', adoptionPath(edition.id), {
+        context: driver.globalContext,
+        property: 'schema:exampleOfWork',
+        mode: 'replace',
+        selection: [selection(alternative.candidate)],
+        expected_head: null,
+      }),
+      409,
+      'conflict',
+    );
   });
   await accept(edition.id, alternative.candidate);
+  const secondSlot = await write('acceptor', 'POST', adoptionPath(edition.id), {
+    context: driver.globalContext,
+    property: 'schema:exampleOfWork',
+    target: otherWork.id,
+    mode: 'replace',
+    selection: [selection(alternative.candidate)],
+    expected_head: null,
+  });
+  expect(secondSlot.status).toBe(200);
+  expect((await read(edition.id, undefined, 'acceptor')).subject.statements['schema:exampleOfWork']).toHaveLength(2);
   await unchanged(edition.id, async () => {
-    field(await write('acceptor', 'POST', adoptionPath(edition.id), { context: driver.globalContext, property: 'schema:exampleOfWork',
-      mode: 'replace', selection: [selection(original.id), selection(alternative.candidate)], expected_head: original.head,
-    }), '/selection', 'out_of_range');
+    field(
+      await write('acceptor', 'POST', adoptionPath(edition.id), {
+        context: driver.globalContext,
+        property: 'schema:exampleOfWork',
+        mode: 'replace',
+        target: work.id,
+        selection: [selection(original.id), selection(alternative.candidate)],
+        expected_head: null,
+      }),
+      '/selection/1/candidate',
+      'unsupported',
+    );
   });
 });
 
@@ -450,23 +826,38 @@ test('Concurrent adoptions with one expected head commit exactly once and replay
   const { book, original } = await authoredBook();
   const before = await driver.inspect.revisions(book.id);
   const path = adoptionPath(book.id);
-  const first = { context: driver.globalContext, property: 'schema:author', mode: 'replace', selection: [selection(original.id, 'preferred')], expected_head: original.head };
+  const first = {
+    context: driver.globalContext,
+    property: 'schema:author',
+    mode: 'replace',
+    selection: [selection(original.id, 'preferred')],
+    expected_head: original.head,
+  };
   const second = { ...first, selection: [selection(original.id)] };
   const keys = [key(), key()];
   const results = await Promise.all([
-    write('acceptor', 'POST', path, first, keys[0]), write('acceptor', 'POST', path, second, keys[1]),
+    write('acceptor', 'POST', path, first, keys[0]),
+    write('acceptor', 'POST', path, second, keys[1]),
   ]);
-  expect(results.map(r => r.status).sort()).toEqual([200, 409]);
-  problem(results.find(r => r.status === 409)!, 409, 'stale_editorial_head');
+  expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+  problem(
+    results.find((r) => r.status === 409)!,
+    409,
+    'stale_editorial_head',
+  );
   const rows = await driver.inspect.revisions(book.id);
   expect(rows.slice(0, -1)).toEqual(before);
   expect(rows.at(-1)!.revision).toBe(2);
-  const winner = results.findIndex(r => r.status === 200);
+  const winner = results.findIndex((r) => r.status === 200);
   await unchanged(book.id, async () => {
     const replay = await write('acceptor', 'POST', path, winner === 0 ? first : second, keys[winner]);
     expect(replay.status).toBe(200);
     expect(replay.body).toEqual(results[winner]!.body);
-    problem(await write('acceptor', 'POST', path, winner === 0 ? second : first, keys[winner]), 422, 'idempotency_conflict');
+    problem(
+      await write('acceptor', 'POST', path, winner === 0 ? second : first, keys[winner]),
+      422,
+      'idempotency_conflict',
+    );
   });
 });
 
@@ -479,11 +870,18 @@ test('Community decisions override Global and suppression inheritance replacemen
   await driver.grant('acceptor', ['context:accept', 'context:adopt'], context);
   expect((await read(book.id, context)).subject.statements).toEqual(book.statements);
   const rejected = await accept(book.id, original.id, 'reject', context);
-  expect((await candidates(book.id, 'schema:author', context))[0]).toMatchObject({ decision: 'rejected', head: expect.any(Number) });
+  expect((await candidates(book.id, 'schema:author', context))[0]).toMatchObject({
+    decision: 'rejected',
+    head: expect.any(Number),
+  });
   expect((await read(book.id, context)).subject.statements['schema:author'] ?? []).toEqual([]);
   expect((await read(book.id)).subject.statements).toEqual(book.statements);
-  const suppress = await write('acceptor', 'POST', adoptionPath(book.id), { context, property: 'schema:author',
-    mode: 'suppress', selection: [], expected_head: null,
+  const suppress = await write('acceptor', 'POST', adoptionPath(book.id), {
+    context,
+    property: 'schema:author',
+    mode: 'suppress',
+    selection: [],
+    expected_head: null,
   });
   expect(suppress.status).toBe(200);
   const suppressed = (await read(book.id, context)).subject;
@@ -492,27 +890,62 @@ test('Community decisions override Global and suppression inheritance replacemen
   // Inheritance still honors this Context's rejection. Accept locally before
   // restoring the full Global result, so the two rules do not contradict.
   const local = await write('acceptor', 'POST', acceptancePath(book.id, original.id), {
-    context, expected_head: (rejected.body.acceptance as { head: number }).head,
+    context,
+    expected_head: (rejected.body.acceptance as { head: number }).head,
   });
   expect(local.status).toBe(200);
-  const inherited = await write('acceptor', 'POST', adoptionPath(book.id), { context, property: 'schema:author',
-    mode: 'inherit', selection: [], expected_head: (suppress.body.adoption as { head: number }).head,
+  const inherited = await write('acceptor', 'POST', adoptionPath(book.id), {
+    context,
+    property: 'schema:author',
+    mode: 'inherit',
+    selection: [],
+    expected_head: (suppress.body.adoption as { head: number }).head,
   });
   expect(inherited.status).toBe(200);
   const restored = (await read(book.id, context)).subject;
   expect(restored.statements).toEqual(book.statements);
   expect(restored.resolution).toEqual({});
-  const replace = await write('acceptor', 'POST', adoptionPath(book.id), { context, property: 'schema:author',
-    mode: 'replace', selection: [selection(original.id)], expected_head: (inherited.body.adoption as { head: number }).head,
+  const replace = await write('acceptor', 'POST', adoptionPath(book.id), {
+    context,
+    property: 'schema:author',
+    mode: 'replace',
+    selection: [selection(original.id)],
+    expected_head: (inherited.body.adoption as { head: number }).head,
   });
   expect(replace.status).toBe(200);
-  expect((await read(book.id, context)).subject.statements['schema:author']).toMatchObject([{ id: original.id, rank: 'normal' }]);
+  expect((await read(book.id, context)).subject.statements['schema:author']).toMatchObject([
+    { id: original.id, rank: 'normal' },
+  ]);
   expect((await read(book.id)).subject.statements).toEqual(book.statements);
   const other = await community('Another community');
   await unchanged(book.id, async () => {
-    problem(await write('acceptor', 'POST', acceptancePath(book.id, original.id), { context: other, expected_head: null }), 403, 'forbidden');
-    problem(await write('acceptor', 'POST', adoptionPath(book.id), { context: other, property: 'schema:author', mode: 'suppress', selection: [], expected_head: null }), 403, 'forbidden');
-    field(await write('acceptor', 'POST', adoptionPath(book.id), { context: driver.globalContext, property: 'schema:author', mode: 'inherit', selection: [], expected_head: original.head }), '/mode', 'unsupported');
+    problem(
+      await write('acceptor', 'POST', acceptancePath(book.id, original.id), { context: other, expected_head: null }),
+      403,
+      'forbidden',
+    );
+    problem(
+      await write('acceptor', 'POST', adoptionPath(book.id), {
+        context: other,
+        property: 'schema:author',
+        mode: 'suppress',
+        selection: [],
+        expected_head: null,
+      }),
+      403,
+      'forbidden',
+    );
+    field(
+      await write('acceptor', 'POST', adoptionPath(book.id), {
+        context: driver.globalContext,
+        property: 'schema:author',
+        mode: 'inherit',
+        selection: [],
+        expected_head: original.head,
+      }),
+      '/mode',
+      'unsupported',
+    );
   });
 });
 
@@ -522,34 +955,83 @@ test('Persona denials and invalid proposals append no revisions and leave public
   await unchanged(book.id, async () => {
     const proposePath = `${subjectPath(book.id)}/candidates`;
     const proposal = { statement: { ...statement('schema:author', author.id), references: [reference()] } };
-    field(await write('editor', 'POST', proposePath, { statement: statement('schema:author', author.id) }), '/statement/references', 'required');
-    field(await write('editor', 'POST', proposePath, { statement: { ...proposal.statement, references: [] } }), '/statement/references', 'required');
-    for (const [persona, status, code] of [ ['editor', 403, 'forbidden'], ['anonymous', 401, 'authentication_required'],
-      ['suspended', 401, 'invalid_credentials'] ] as const) {
-      problem(await write(persona, 'POST', acceptancePath(book.id, original.id), { context: driver.globalContext, expected_head: original.head }), status, code);
-      problem(await write(persona, 'POST', adoptionPath(book.id), { context: driver.globalContext, property: 'schema:author', mode: 'replace', selection: [], expected_head: original.head }), status, code);
-      problem(await write(persona, 'POST', mergePath, { subjects: [book.id, other.id] }), status, code);
+    field(
+      await write('editor', 'POST', proposePath, { statement: statement('schema:author', author.id) }),
+      '/statement/references',
+      'required',
+    );
+    field(
+      await write('editor', 'POST', proposePath, { statement: { ...proposal.statement, references: [] } }),
+      '/statement/references',
+      'required',
+    );
+    for (const [persona, status, code] of [
+      ['editor', 403, 'forbidden'],
+      ['anonymous', 401, 'authentication_required'],
+      ['suspended', 401, 'invalid_credentials'],
+    ] as const) {
+      problem(
+        await write(persona, 'POST', acceptancePath(book.id, original.id), {
+          context: driver.globalContext,
+          expected_head: original.head,
+        }),
+        status,
+        code,
+      );
+      problem(
+        await write(persona, 'POST', adoptionPath(book.id), {
+          context: driver.globalContext,
+          property: 'schema:author',
+          mode: 'replace',
+          selection: [],
+          expected_head: original.head,
+        }),
+        status,
+        code,
+      );
+      problem(
+        await write(persona, 'POST', mergePath, { subjects: [book.id, other.id] }),
+        persona === 'anonymous' ? 403 : status,
+        persona === 'anonymous' ? 'platform_closed' : code,
+      );
       if (persona !== 'editor') {
-        problem(await write(persona, 'POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Denied' } }), status, code);
+        problem(
+          await write(persona, 'POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Denied' } }),
+          status,
+          code,
+        );
         problem(await write(persona, 'POST', proposePath, proposal), status, code);
         problem(await write(persona, 'POST', '/v1/contexts', { labels: { en: 'Denied' } }), status, code);
       }
     }
   });
   for (const persona of ['steward', 'acceptor'] as const) {
-    const created = await write(persona, 'POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Standing grant' } });
+    const created = await write(persona, 'POST', '/v1/subjects', {
+      type: 'schema:Book',
+      labels: { en: 'Standing grant' },
+    });
     expect(created.status).toBe(201);
     const subject = created.body.subject as Subject;
     const path = `${subjectPath(subject.id)}/candidates`;
     const proposal = { statement: { ...statement('schema:author', author.id), references: [reference()] } };
     expect((await write(persona, 'POST', path, proposal)).status).toBe(201);
-    problem(await write('suspended', 'POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Denied' } }), 401, 'invalid_credentials');
+    problem(
+      await write('suspended', 'POST', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Denied' } }),
+      401,
+      'invalid_credentials',
+    );
     problem(await write('suspended', 'POST', path, proposal), 401, 'invalid_credentials');
   }
   expect(await driver.inspect.revisions(other.id)).toHaveLength(1);
-  for (const path of ['/v1/definitions/active', `/v1/definitions/releases/${(await active()).digest}`,
-    subjectPath(book.id), `${subjectPath(book.id)}/revisions`, `${subjectPath(book.id)}/candidates`,
-    `${subjectPath(book.id)}/links`, `/v1/contexts/${driver.globalContext}`]) {
+  for (const path of [
+    '/v1/definitions/active',
+    `/v1/definitions/releases/${(await active()).digest}`,
+    subjectPath(book.id),
+    `${subjectPath(book.id)}/revisions`,
+    `${subjectPath(book.id)}/candidates?property=schema:author`,
+    `${subjectPath(book.id)}/links`,
+    `/v1/contexts/${driver.globalContext}`,
+  ]) {
     problem(await get(path, 'suspended'), 401, 'invalid_credentials', false);
   }
   for (const persona of ['editor', 'acceptor', 'steward'] as const) {
@@ -557,12 +1039,41 @@ test('Persona denials and invalid proposals append no revisions and leave public
   }
 });
 
-interface Link { subject: string; property: string; statement: string }
+interface Link {
+  subject: string;
+  property: string;
+  statement: string;
+  type: string;
+  label: string;
+  summary: {
+    id: string;
+    type: string;
+    types: string[];
+    label: { value: string; language: string };
+    creativeWork: boolean;
+    cover: null;
+  };
+}
+const instanceSummary = (id: string, label: string): Link['summary'] => ({
+  id,
+  type: 'bf:Instance',
+  types: ['bf:Instance', 'schema:CreativeWork', 'schema:Thing'],
+  label: { value: label, language: 'en' },
+  creativeWork: true,
+  cover: null,
+});
 async function links(id: string, persona: Persona) {
-  const response = await get(`${subjectPath(id)}/links?property=${encodeURIComponent('schema:exampleOfWork')}`, persona);
+  const response = await get(
+    `${subjectPath(id)}/links?property=${encodeURIComponent('schema:exampleOfWork')}`,
+    persona,
+  );
   expect(response.status).toBe(200);
   expect(response.body.next).toBeNull();
-  expect(response.body.freshness).toMatchObject({ consistency: 'eventual', target_seconds: 10, caught_up: expect.any(Boolean) });
+  expect(response.body.freshness).toMatchObject({
+    consistency: 'eventual',
+    target_seconds: 10,
+    caught_up: expect.any(Boolean),
+  });
   return response.body as { links: Link[]; freshness: { caught_up: boolean } };
 }
 async function eventuallyLink(work: string, expected: Link, persona: Persona) {
@@ -570,7 +1081,7 @@ async function eventuallyLink(work: string, expected: Link, persona: Persona) {
   do {
     // Poll actual HTTP without fixed sleeps or a simulated projection drain.
     const result = await links(work, persona);
-    if (result.links.some(link => link.statement === expected.statement)) {
+    if (result.links.some((link) => link.statement === expected.statement)) {
       expect(performance.now()).toBeLessThanOrEqual(deadline);
       expect(result.links).toContainEqual(expected);
       return result;
@@ -582,9 +1093,17 @@ async function eventuallyLink(work: string, expected: Link, persona: Persona) {
 test('Incoming links honor the editor session and become visible anonymously within fifteen seconds', async () => {
   const work = await create('schema:Book', 'Kokoro');
   const edition = await create('bf:Instance', 'Kokoro, Penguin Classics', {
-    'schema:exampleOfWork': [statement('schema:exampleOfWork', work.id)], 'schema:isbn': [statement('schema:isbn', '9780143106036')],
+    'schema:exampleOfWork': [statement('schema:exampleOfWork', work.id)],
+    'schema:isbn': [statement('schema:isbn', '9780143106036')],
   });
-  const expected = { subject: edition.id, property: 'schema:exampleOfWork', statement: edition.statements['schema:exampleOfWork']![0]!.id };
+  const expected = {
+    subject: edition.id,
+    property: 'schema:exampleOfWork',
+    statement: edition.statements['schema:exampleOfWork']![0]!.id,
+    type: 'bf:Instance',
+    label: 'Kokoro, Penguin Classics',
+    summary: instanceSummary(edition.id, 'Kokoro, Penguin Classics'),
+  };
   const own = await links(work.id, 'editor');
   expect(own.links).toContainEqual(expected);
   expect(own.freshness.caught_up).toBe(true);
@@ -596,9 +1115,17 @@ test('Paused projection answers the editor within three seconds with stale links
   await driver.projection('paused');
   try {
     const edition = await create('bf:Instance', 'Kokoro, another edition', {
-      'schema:exampleOfWork': [statement('schema:exampleOfWork', work.id)], 'schema:isbn': [statement('schema:isbn', '9780804813286')],
+      'schema:exampleOfWork': [statement('schema:exampleOfWork', work.id)],
+      'schema:isbn': [statement('schema:isbn', '9780804813286')],
     });
-    const expected = { subject: edition.id, property: 'schema:exampleOfWork', statement: edition.statements['schema:exampleOfWork']![0]!.id };
+    const expected = {
+      subject: edition.id,
+      property: 'schema:exampleOfWork',
+      statement: edition.statements['schema:exampleOfWork']![0]!.id,
+      type: 'bf:Instance',
+      label: 'Kokoro, another edition',
+      summary: instanceSummary(edition.id, 'Kokoro, another edition'),
+    };
     const started = performance.now();
     const stale = await links(work.id, 'editor');
     expect(performance.now() - started).toBeLessThan(3_000);
@@ -630,23 +1157,39 @@ test('Acceptor merges persons by smallest UUID with redirects related labels and
   expect(redirect.headers.get('location')).toBe(subjectPath(survivor!.id));
   const book = redirected!.id === first.id ? bookA : bookB;
   const result = await read(book.id);
-  expect(result.related[redirected!.id]).toEqual({ redirect: survivor!.id, labels: survivor!.labels });
+  expect(result.related[redirected!.id]).toEqual({
+    redirect: survivor!.id,
+    labels: survivor!.labels,
+    type: 'schema:Person',
+    types: ['schema:Person', 'schema:Thing'],
+    cover: null,
+  });
   expect(result.subject.statements).toEqual(book.statements);
   expect(await driver.inspect.revisions(survivor!.id)).toEqual(survivorBefore);
   const rows = await driver.inspect.revisions(redirected!.id);
   expect(rows.slice(0, -1)).toEqual(redirectedBefore);
-  expect(rows.map(r => r.revision)).toEqual([1, 2]);
+  expect(rows.map((r) => r.revision)).toEqual([1, 2]);
   expect(rows[1]!.partition).toBe(rows[0]!.partition);
   expect(rows[1]!.transactionId).not.toBe(rows[0]!.transactionId);
   const history = await get(`${subjectPath(redirected!.id)}/revisions`);
   expect(history.status).toBe(200);
-  expect(history.body).toEqual({ revisions: [{ revision: 2, kind: 'merge', release: digest }, { revision: 1, kind: 'create', release: digest }], next: null });
+  expect(history.body).toEqual({
+    revisions: [
+      { revision: 2, kind: 'merge', release: digest, source: null },
+      { revision: 1, kind: 'create', release: digest, source: null },
+    ],
+    next: null,
+  });
   const replay = await write('acceptor', 'POST', mergePath, body, token);
   expect(replay.status).toBe(200);
   expect(replay.body).toEqual(merged.body);
-  problem(await write('editor', 'POST', `${subjectPath(redirected!.id)}/candidates`, {
-    statement: { ...statement('schema:url', 'https://www.aozora.gr.jp/'), references: [reference()] },
-  }), 409, 'conflict');
+  problem(
+    await write('editor', 'POST', `${subjectPath(redirected!.id)}/candidates`, {
+      statement: { ...statement('schema:url', 'https://www.aozora.gr.jp/'), references: [reference()] },
+    }),
+    409,
+    'conflict',
+  );
   problem(await write('acceptor', 'POST', mergePath, body), 409, 'conflict');
   problem(await write('acceptor', 'POST', mergePath, { subjects: [survivor!.id, survivor!.id] }), 409, 'conflict');
   const third = await create('schema:Person', 'Natsume Kinnosuke');

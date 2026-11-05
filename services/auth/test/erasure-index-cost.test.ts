@@ -1,9 +1,16 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
-import { createAuthService, type AccessAccount, type EffectAuthorization } from '../src/index.ts';
+import {
+  createAuthService,
+  type AccessAccount,
+  type CredentialEffectAuthorization,
+  type CredentialEffectBinding,
+  type EffectAuthorization,
+} from '../src/index.ts';
 
 // Other suites can remove an exited fixture between the shared helper's list and inspect.
 // Retry only that cleanup race; database creation, migration and operation failures still fail.
@@ -31,14 +38,24 @@ test('native account erasure preserves authorization, invalidation order and unr
     const issuer = 'https://erase.auth.test';
     const password = 'correct horse battery staple';
     const accounts = new Map<string, AccessAccount>();
+    const credentialApprovals = new Map<
+      string,
+      { stage: CredentialEffectBinding; expiresAt: string; consumed: boolean }
+    >();
     const delivered = new Map<string, string>();
     const events: string[] = [];
     let outage = false;
     let inspectRead = false;
+    pool.on('connect', (client) => {
+      const query = client.query.bind(client);
+      client.query = ((...args: Parameters<typeof query>) => {
+        if (args[0] === 'DELETE FROM "user" WHERE id=$1') events.push('native-delete');
+        return query(...args);
+      }) as typeof client.query;
+    });
     const originalQuery = pool.query.bind(pool);
     let inflight = 0;
     pool.query = ((...args: Parameters<Pool['query']>) => {
-      if (args[0] === 'DELETE FROM "user" WHERE id=$1') events.push('native-delete');
       if (typeof args.at(-1) === 'function') return originalQuery(...args);
       inflight++;
       return Promise.resolve(originalQuery(...args)).finally(() => {
@@ -91,7 +108,10 @@ test('native account erasure preserves authorization, invalidation order and unr
           delivered.set(input.accountId, input.token);
         },
       },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
+        async readFencedAccount(id) {
+          return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+        },
         async readAccount(id) {
           if (outage) throw new Error('Access unavailable');
           if (inspectRead) {
@@ -114,8 +134,45 @@ test('native account erasure preserves authorization, invalidation order and unr
         async completeRecovery() {
           throw new Error('Deleted accounts cannot complete recovery');
         },
+        async approveCredentialEffect({ stage }) {
+          const reference = `credential-opening-${stage.operationKey}`;
+          const expiresAt = new Date(Date.now() + 60_000).toISOString();
+          credentialApprovals.set(reference, { stage, expiresAt, consumed: false });
+          return { reference, expiresAt };
+        },
         async consumeAuthorization(input): Promise<EffectAuthorization> {
           const subject = accounts.get(input.subjectAccountId)!;
+          if (input.purpose !== 'session') {
+            const opening = credentialApprovals.get(input.authorization);
+            const stage = opening?.stage;
+            if (
+              !opening ||
+              opening.consumed ||
+              !stage ||
+              stage.subjectAccountId !== subject.accountId ||
+              stage.purpose !== input.purpose ||
+              stage.operationKey !== input.operationKey ||
+              stage.effectReference !== input.effectReference ||
+              stage.actingHumanId !== input.human.account_id ||
+              stage.clientId !== input.human.client_id ||
+              JSON.stringify(stage.scopes) !== JSON.stringify(input.human.scope)
+            )
+              throw new Error('Credential approval mismatch');
+            opening.consumed = true;
+            return {
+              ...stage,
+              receiptId: input.authorization,
+              subjectAccountId: subject.accountId,
+              actingHumanId: input.human.account_id,
+              operatorAccountId: subject.automated ? input.human.account_id : null,
+              purpose: stage.purpose,
+              clientId: input.human.client_id,
+              scopes: input.human.scope,
+              humanEpoch: input.human.authn_epoch,
+              subjectEpoch: subject.authnEpoch,
+              expiresAt: opening.expiresAt,
+            } satisfies CredentialEffectAuthorization;
+          }
           return {
             receiptId: input.authorization,
             subjectAccountId: subject.accountId,
@@ -129,7 +186,12 @@ test('native account erasure preserves authorization, invalidation order and unr
             expiresAt: new Date(Date.now() + 60_000).toISOString(),
           };
         },
-      },
+        async revalidateCredentialEffect({ stage, authorization }) {
+          const opening = credentialApprovals.get(authorization);
+          if (!opening || JSON.stringify(opening.stage) !== JSON.stringify(stage))
+            throw new Error('Credential opening mismatch');
+        },
+      }),
     });
     const request = (path: string, body?: unknown, cookie = '') =>
       service.handler(
@@ -165,11 +227,24 @@ test('native account erasure preserves authorization, invalidation order and unr
     expect(login.status).toBe(200);
     const cookie = cookieOf(login);
     expect((await request('/consent', { client_id: 'erase-external', scope: ['read'] }, cookie)).status).toBe(200);
-    await service.internal.setCredential({
+    const stagedKey = await service.internal.stageCredentialEffect({
+      key: 'add-erasure-key',
       subjectAccountId: subject.accountId,
-      authorization: 'add-erasure-key',
       headers: new Headers({ cookie }),
       credential: { kind: 'key', kid: publicJwk.kid, publicJwk },
+    });
+    const keyApproval = await service.internal.approveCredentialEffect({
+      effectRef: stagedKey.effectRef,
+      key: stagedKey.key,
+      subjectAccountId: subject.accountId,
+      headers: new Headers({ cookie }),
+    });
+    await service.internal.applyCredentialEffect({
+      authorization: keyApproval.reference,
+      effectRef: stagedKey.effectRef,
+      key: stagedKey.key,
+      subjectAccountId: subject.accountId,
+      headers: new Headers({ cookie }),
     });
     const now = Math.floor(Date.now() / 1000);
     const assertion = (jti: string) =>
@@ -267,11 +342,20 @@ test('native account erasure preserves authorization, invalidation order and unr
     expect((await request('/session', undefined, cookie)).status).toBe(401);
     expect((await request('/token', {}, cookie)).status).toBe(401);
     expect(await snapshot()).toEqual(baseline);
+    const beforeErasure = (await pool.query<{ at: Date }>('SELECT clock_timestamp() AS at')).rows[0]!.at;
     inspectRead = true;
     await service.internal.eraseAccount(subject.accountId);
     inspectRead = false;
     expect(events).toEqual(['access-invalidation-committed', 'access-read', 'native-delete']);
     const erased = await snapshot(subject.accountId);
+    expect(erased.find(({ table }) => table === 'user')!.rows).toEqual([]);
+    const scheduled = await pool.query<{ due_at: Date; at: Date }>(
+      'SELECT due_at, clock_timestamp() AS at FROM auth_consent_erasure WHERE account_id=$1',
+      [subject.accountId],
+    );
+    expect(scheduled.rows).toHaveLength(1);
+    expect(scheduled.rows[0]!.due_at.getTime()).toBeGreaterThanOrEqual(beforeErasure.getTime() + 310_000);
+    expect(scheduled.rows[0]!.due_at.getTime()).toBeLessThanOrEqual(scheduled.rows[0]!.at.getTime() + 310_000);
     expect(erased.find(({ table }) => table === 'auth_consent')!.rows).toEqual(
       selected.find(({ table }) => table === 'auth_consent')!.rows,
     );
@@ -292,7 +376,12 @@ test('native account erasure preserves authorization, invalidation order and unr
         .rows,
     ).toEqual([{ value: subject.accountId }]);
     expect(
-      (await pool.query('SELECT account_id FROM auth_effect_receipt WHERE receipt_id=$1', ['add-erasure-key'])).rows,
+      (
+        await pool.query('SELECT account_id FROM auth_effect_receipt WHERE account_id=$1 AND operation_key=$2', [
+          subject.accountId,
+          'add-erasure-key',
+        ])
+      ).rows,
     ).toEqual([{ account_id: subject.accountId }]);
     expect(
       (
@@ -345,9 +434,9 @@ test('native account erasure preserves authorization, invalidation order and unr
       }),
     ).rejects.toThrow('Authentication denied');
     await expect(
-      service.internal.setCredential({
+      service.internal.stageCredentialEffect({
+        key: 'replay-credential',
         subjectAccountId: subject.accountId,
-        authorization: 'replay-credential',
         headers: new Headers({ cookie }),
         credential: { kind: 'password', password },
       }),

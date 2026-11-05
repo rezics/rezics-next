@@ -13,6 +13,7 @@ import { EVENT_TYPES, readBatch, type CloudEvent, type Envelope } from '../../sr
 import { newId, partitionOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 import { checkStatement } from '../support/partition-binding.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const db = await openGrowthDatabase();
 afterAll(() => db.close());
@@ -73,7 +74,13 @@ async function source(targetBoard = boardId) {
     );
     return {
       value: { threadId, itemId, revisionId },
-      events: [{ type: created, subject: threadId, data: { threadId, itemId, revisionId, actorId: authorId } }],
+      events: [
+        {
+          type: created,
+          subject: threadId,
+          data: { threadId, itemId, revisionId, actorId: authorId, ...SUBJECT_THREAD_EVENT_FIELDS },
+        },
+      ],
     };
   });
   return { ...command.value, command };
@@ -102,8 +109,8 @@ async function eventFor(threadId: string): Promise<CloudEvent> {
 
 test('closed content events are registered in the kernel relay catalogue', () => {
   for (const type of [created, revised]) {
-    expect(Object.hasOwn(CONTENT_EVENTS, type)).toBe(true);
-    expect(Object.hasOwn(EVENT_TYPES, type)).toBe(true);
+    expect(Object.hasOwn(CONTENT_EVENTS(), type)).toBe(true);
+    expect(Object.hasOwn(EVENT_TYPES(), type)).toBe(true);
   }
 });
 
@@ -239,7 +246,13 @@ test('source references survive edits and erasure and old creation replay cannot
         {
           type: revised,
           subject: fixture.threadId,
-          data: { threadId: fixture.threadId, itemId: fixture.itemId, revisionId, actorId: authorId },
+          data: {
+            threadId: fixture.threadId,
+            itemId: fixture.itemId,
+            revisionId,
+            actorId: authorId,
+            ...SUBJECT_THREAD_EVENT_FIELDS,
+          },
         },
       ],
     };

@@ -1,8 +1,22 @@
+# Temporary files at any depth, including workspace-local .temp directories.
 .temp/
+# Retain the named implementation continuation through source landing.
+!/.temp/
+/.temp/*
+!/.temp/continuation/
+/.temp/continuation/*
+!/.temp/continuation/shelf-type-observers.md
 node_modules/
+/apps/web/.cache/
+/.cache/
 .DS_Store
 .env
 .env.*
 !.env.example
+services/kernel/dist/
+apps/web/storybook-static/
 # Reference projects cloned by research tasks; see tools/goal/README.md, Research.
 .reference/
+
+# Generated kernel check diagnostics are evidence, not source.
+services/kernel/.temp/schema-diagnostics/

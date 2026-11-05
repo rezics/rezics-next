@@ -1,3 +1,25 @@
+import {
+  isRecoveryResponseProjection,
+  recoveryAcknowledgement,
+  recoveryNativeError,
+  recoveryResponseByteBounds,
+  CONSENT_PAGE_MAX_SCOPES,
+  securityScopeLimit,
+  securityResponseByteBudgets,
+  securityResponseLimits,
+  isCredentialEffectApprovalExpiry,
+  isCredentialEffectApprovalReference,
+  isPasswordCredentialEffectApprovalReference,
+  type ReviewedConsentDecisionResponse,
+  type CredentialEffectStageResponse,
+  type CredentialEffectApprovalResponse,
+  type CredentialEffectApplyResponse,
+} from '@rezics/auth-contract';
+import { securityId, securityDisplay, securityPasskey } from './security-response-bounds.ts';
+import { AuthRestoreAdmissionError, requireRestoredAuthAdmission } from './restore-admission.ts';
+import { configureClientLabel, scrubMetadataConfigurationPage } from './metadata-scrub.ts';
+import { DBOS } from '@dbos-inc/dbos-sdk';
+import { emitAuthDiagnostic } from './diagnostics.ts';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { betterAuth } from 'better-auth';
@@ -8,19 +30,54 @@ import { pruneExpiredProtocolState } from './protocol-maintenance.ts';
 import { APIError, createAuthEndpoint } from 'better-auth/api';
 import { setSessionCookie } from 'better-auth/cookies';
 import { serializeCookie } from 'better-call';
-import { publicCredential, verifyKeyAssertion } from './key-credentials.ts';
+import { InvalidKeyAssertion, verifyKeyAssertion } from './key-credentials.ts';
+import {
+  passkeyPlugin,
+  passkeyCeremonies,
+  registrationInput,
+  receiveRegistrationOptions,
+  receiveAuthenticationOptions,
+  type PasskeyAssertion,
+} from './passkeys.ts';
 import { credentialEffects } from './credential-effects.ts';
 import { betterAuthOptions, credentialOwnerSchema } from './better-auth.ts';
 import { createSigner } from './signing.ts';
 import { signSessionAccessToken } from './session-proof-capability.ts';
 import { issuerOrigin } from './issuer.ts';
-import { attemptStatement, nativeAttemptRequest } from './rate-limit.ts';
+import { securityInventory, type SecurityInventoryInput } from './security-inventory.ts';
+import { composeSecurityPage } from './security-page.ts';
+import { readNativeAccountIdentity } from './account-identity.ts';
+import { normalizeConsentRequestedScopes, parseConsentRequestedScopes, projectConsentPage } from './consent-page.ts';
+import { signInPage, type SignInPageViewer } from './signin-page.ts';
+import { isRecoveryPageStage, observeRecoveryViewer, recoveryPage } from './recovery-page.ts';
+import {
+  securityPageInput,
+  securityPageQuery,
+  type SecurityPageInput,
+  type SecurityCursorBinding,
+} from './security-cursor.ts';
+import { nativeAttemptRequest } from './rate-limit.ts';
 import { nativeSessionLimits, pruneExpiredSessions, trimSessionHistory, sessionUpgradePage } from './session-limits.ts';
 import { nativeVerificationPlugin, pruneExpiredVerifications } from './verification-maintenance.ts';
+import {
+  bindErasureBarrier,
+  dischargeErasureSource,
+  publishErasureProofs,
+  redriveErasureHistory,
+} from './erasure-history.ts';
+import { beginAuthReceivingClosure, createAuthReceivingClosureProducer } from './receiving-closure.ts';
+import { startNativeErasure, nativeErasurePage, redriveNativeErasure } from './erasure-native.ts';
+import { installNativeRoleProducer, installNativeRoleCoverage } from './erasure-coverage.ts';
+import { recordRecoveryCompletion } from './erasure-consumers.ts';
+import { completeCopy, eraseCopy } from './erasure-copy.ts';
+import { chargeAccountAttempt } from './rate-limit.ts';
+import { eraseDueConsents, hasDueConsentErasure } from './consent-erasure.ts';
 import { clientAuthority } from './account-workflows.ts';
+import { createKindConsentParticipant } from './kind-consent.ts';
 import { createBarrierProofVerifier, type BarrierProof } from './barrier-proofs.ts';
 import { createRecoveryEstablishmentVerifier } from './recovery-establishment.ts';
 import { recoveryDelivery } from './recovery-delivery.ts';
+import { withCredentialRequestDeadline } from '@rezics/auth-contract';
 import type { PoolClient } from 'pg';
 import {
   createProvisioningEvidenceVerifier,
@@ -32,32 +89,52 @@ import type {
   AccessAccount,
   AuthService,
   AuthServiceOptions,
-  CredentialAuthorizationInput,
+  CredentialFloorPurpose,
   CredentialEffectAuthorization,
-  CredentialFloorReceipt,
   EffectAuthorization,
-  EffectPurpose,
+  CredentialFloorReceipt,
   InvalidationReceipt,
-  LegacyCredentialAuthorizationInput,
   SessionAuthorizationInput,
   SessionProof,
+  WebsiteClientRegistration,
 } from './index.ts';
 
 export { WEBSITE_CLIENT_ID } from './website.ts';
+
+class StepUpRequired extends Error {
+  readonly status = 401;
+  readonly code = 'step_up_required';
+}
 
 class Denied extends Error {
   constructor(readonly status = 401) {
     super('Authentication denied');
   }
 }
+class RecoveryProjectionError extends Error {
+  constructor() {
+    super('Invalid native recovery response projection');
+  }
+}
+class AccountSuspended extends Denied {
+  constructor(readonly account: AccessAccount) {
+    super();
+  }
+}
+class SuspendedSignIn extends APIError {
+  constructor() {
+    super('FORBIDDEN', { code: 'ACCOUNT_SUSPENDED', message: 'Account suspended' });
+  }
+}
 interface Binding {
   clientId: string;
   scopes: string[];
-  method?: 'pwd' | 'private_key_jwt' | 'operator';
+  method?: 'pwd' | 'pop' | 'private_key_jwt' | 'operator';
   subjectId?: string;
   epoch?: number;
   opening?: EffectAuthorization;
   authTime?: number;
+  refusal?: SuspendedSignIn;
 }
 interface Client {
   client_id: string;
@@ -68,14 +145,17 @@ interface Client {
 const scopePattern = /^[\x21\x23-\x5b\x5d-\x7e]+$/;
 const assignmentUuid = '[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const assignmentReference = new RegExp(`^urn:rezics:request:(${assignmentUuid}):(${assignmentUuid})$`);
-function scopes(value: unknown): string[] {
+function normalizeScopes(value: unknown, limit: number): string[] {
   if (
     !Array.isArray(value) ||
-    value.length > 100 ||
+    value.length > limit ||
     value.some((v) => typeof v !== 'string' || v.length > 128 || !scopePattern.test(v))
   )
     throw new Denied(400);
   return [...new Set(value as string[])].sort();
+}
+function sameScopeSet(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((scope) => right.includes(scope));
 }
 function text(value: unknown): string {
   if (typeof value !== 'string' || !value || value.length > 1024) throw new Denied(400);
@@ -92,13 +172,27 @@ function fields(body: Record<string, unknown>, names: string[]): void {
   if (Object.keys(body).some((key) => !names.includes(key))) throw new Denied(400);
 }
 function json(data: unknown, status = 200, cookies: string[] = []): Response {
+  return jsonText(JSON.stringify(data), status, cookies);
+}
+function jsonText(body: string, status: number, cookies: string[] = []): Response {
   const headers = new Headers({
     'content-type': 'application/json',
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
   });
   for (const cookie of cookies) headers.append('set-cookie', cookie);
-  return new Response(JSON.stringify(data), { status, headers });
+  return new Response(body, { status, headers });
+}
+function recoveryJson(data: unknown, status = 200): Response {
+  const body = JSON.stringify(data);
+  const maxBytes = status === 200 ? recoveryResponseByteBounds.acknowledgement : recoveryResponseByteBounds.nativeError;
+  if (
+    body === undefined ||
+    !isRecoveryResponseProjection(data, status) ||
+    new TextEncoder().encode(body).byteLength > maxBytes
+  )
+    throw new RecoveryProjectionError();
+  return jsonText(body, status);
 }
 async function bodyOf(request: Request): Promise<Record<string, unknown>> {
   if (request.headers.get('content-type')?.split(';')[0]?.trim() !== 'application/json') throw new Denied(415);
@@ -130,7 +224,38 @@ async function bodyOf(request: Request): Promise<Record<string, unknown>> {
 }
 
 export async function buildAuthService(options: AuthServiceOptions): Promise<AuthService> {
+  const kindConsentReceiver = options.kindConsentReceiver ?? options.restoredGeneration?.kindConsentReceiver;
+  const kindConsent = createKindConsentParticipant({
+    database: options.database,
+    ...(kindConsentReceiver ? { receiver: kindConsentReceiver } : {}),
+  });
+  if (options.restoredGeneration) {
+    const fenced = await kindConsent.writer.fenceAll({
+      transitionKey: `kind-consent:restore:${options.restoredGeneration.generation}`,
+      operation: 'restore-admission',
+      identity: options.restoredGeneration.generation,
+    });
+    if (fenced.status !== 'applied') throw new AuthRestoreAdmissionError('source-consumer-pending');
+  }
+  await requireRestoredAuthAdmission(options.database, options.restoredGeneration);
+  installNativeRoleProducer(options.database);
+  await installNativeRoleCoverage(options.database);
   const { trustedAccess } = options;
+  const trustedNowSeconds = () => {
+    let now: Date;
+    try {
+      now = options.clock === undefined ? new Date() : options.clock();
+    } catch {
+      throw new APIError('SERVICE_UNAVAILABLE', { message: 'Authentication temporarily unavailable' });
+    }
+    const milliseconds = now instanceof Date ? now.getTime() : Number.NaN;
+    if (!Number.isFinite(milliseconds))
+      throw new APIError('SERVICE_UNAVAILABLE', { message: 'Authentication temporarily unavailable' });
+    return Math.floor(milliseconds / 1000);
+  };
+  const scopeLimit = securityScopeLimit(options.siteActions?.keys());
+  securityResponseByteBudgets(scopeLimit);
+  const scopes = (value: unknown) => normalizeScopes(value, scopeLimit);
   const authority = clientAuthority(
     options.database,
     trustedAccess,
@@ -138,8 +263,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       throw new Denied();
     },
     scopes,
+    kindConsent.writer,
   );
-  const { database, withIssuance, withConsent, materialize } = authority;
+  const { database, withIssuance, withConsent, afterIssuance, materialize } = authority;
+  const inventory = securityInventory(database, options.secret, options.issuer, trustedNowSeconds, scopeLimit);
   issuerOrigin(options.issuer);
   const audience = new URL(options.audience);
   if (audience.protocol !== 'https:') throw new Error('The API audience must be an HTTPS URL');
@@ -156,6 +283,21 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   // request cannot install it through a header, body or native endpoint name.
   const attemptDispatch = new AsyncLocalStorage<() => Promise<Response>>();
   const proofHash = (token: string) => createHash('sha256').update(token).digest('hex');
+  async function fenceKindConsentErasure(
+    obligationId: string,
+    _restoreGeneration?: string,
+    receivingDeadline = Date.now() + 5000,
+  ) {
+    // Receiving availability cannot hold already-authorized source cleanup.
+    // No binding means no current closure, even when ordinary erasure completes.
+    await beginAuthReceivingClosure(database, trustedAccess, obligationId, receivingDeadline).catch(() => false);
+    const changed = await kindConsent.writer.fenceAll({
+      transitionKey: `kind-consent:erasure:${digestOf(obligationId)}`,
+      operation: 'erasure-drain',
+      identity: obligationId,
+    });
+    if (changed.status !== 'applied') throw new Denied(503);
+  }
 
   const credentials = credentialEffects(database, options.secret);
   const barrierProofs = createBarrierProofVerifier({ database });
@@ -214,19 +356,38 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     );
   }
 
-  async function activeActor(accountId: string): Promise<AccessAccount> {
-    const account = await trustedAccess.readAccount(accountId);
+  // A barrier fences its account, so only the steps that finish a committed barrier may read it fenced.
+  async function activeActor(accountId: string, barrier = false, signIn = false): Promise<AccessAccount> {
+    const account =
+      (await trustedAccess.readAccount(accountId, signIn ? 'signin' : undefined)) ??
+      (barrier ? await trustedAccess.readFencedAccount(accountId) : null);
     if (
       !account ||
       account.accountId !== accountId ||
       account.kind !== 'actor' ||
-      account.state !== 'active' ||
-      account.fenced === true ||
       !Number.isSafeInteger(account.authnEpoch) ||
       account.authnEpoch < 0
     )
       throw new Denied();
+    if (account.state === 'suspended') throw new AccountSuspended(account);
+    if (account.state !== 'active' || (account.fenced === true && !barrier)) throw new Denied();
     return account;
+  }
+  // A suspended human may still prove a credential, but only the session hook can disclose the refusal.
+  async function credentialActor(accountId: string): Promise<AccessAccount> {
+    try {
+      return await activeActor(accountId, false, true);
+    } catch (error) {
+      if (error instanceof AccountSuspended && !error.account.automated) return error.account;
+      throw error;
+    }
+  }
+  async function sessionBinding<T>(selected: Binding, callback: () => Promise<T>): Promise<T> {
+    const context = { ...selected };
+    // Better Auth serializes APIError into its response; retain the typed refusal for our public aliases.
+    const result = await binding.run(context, callback);
+    if (context.refusal) throw context.refusal;
+    return result;
   }
   async function provisioningAccount(
     accountId: string,
@@ -261,7 +422,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     // confidential OAuth client. Its registry identity is reserved for bootstrap.
     if (clientId === WEBSITE_CLIENT_ID) throw new Denied(status);
     const result = await database.query<Client>(
-      'SELECT client_id, display_name, first_party, scopes FROM auth_client WHERE client_id=$1 AND EXISTS (SELECT 1 FROM auth_client_coverage v WHERE v.client_id=auth_client.client_id AND v.ready) AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=auth_client.client_id)',
+      `SELECT client_id, CASE WHEN display_name_writer=1 THEN display_name END AS display_name, first_party, scopes
+       FROM auth_client WHERE client_id=$1
+        AND EXISTS (SELECT 1 FROM auth_client_coverage v WHERE v.client_id=auth_client.client_id AND v.ready)
+        AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=auth_client.client_id)`,
       [clientId],
     );
     if (!result.rows[0]) throw new Denied(status);
@@ -276,18 +440,79 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       [accountId, selected.clientId],
     );
     const consent = result.rows[0];
+    // An approved operator opening is the managing person's consent act, so it needs no stored consent;
+    // issuance records it. Only a reduction in progress still bounds it.
+    const consentRequired = selected.opening
+      ? consent?.pending_scopes != null
+      : !client.first_party || consent?.pending_scopes != null;
     if (
-      ((!client.first_party || consent?.pending_scopes != null) &&
-        (!consent || selected.scopes.some((scope) => !consent.scopes.includes(scope)))) ||
+      (consentRequired && (!consent || selected.scopes.some((scope) => !consent.scopes.includes(scope)))) ||
       (consent?.pending_scopes && selected.scopes.some((scope) => !consent.pending_scopes!.includes(scope)))
     )
       throw new Denied();
     if (binding.getStore()) await materialize(accountId, selected.clientId, client.scopes, client.first_party);
     return client;
   }
+  // Consent via issuance: the consumed opening is the managing person's consent act for its client and
+  // scopes. It adds to the stored consent and never narrows it; only the reduction barrier does that.
+  async function recordOpeningConsent(accountId: string, selected: Binding) {
+    if ((await clientFor(selected.clientId)).first_party) return;
+    const previous = await withConsent(
+      accountId,
+      selected.clientId,
+      async (connection) =>
+        (
+          await connection.query<{ scopes: string[]; revision: string; pending_reference: string | null }>(
+            'SELECT scopes,revision::text,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+            [accountId, selected.clientId],
+          )
+        ).rows[0] ?? null,
+    );
+    const previousScopes = previous?.scopes ?? [];
+    const granted = [...new Set([...previousScopes, ...selected.scopes])].sort();
+    const expectedRevision = previous?.revision ?? '0';
+    const sameScopes = (left: readonly string[], right: readonly string[]) =>
+      JSON.stringify([...left].sort()) === JSON.stringify([...right].sort());
+    const transitionKey = `kind-consent:opening:${createHash('sha256')
+      .update(JSON.stringify([accountId, selected.clientId, expectedRevision, granted]))
+      .digest('hex')}`;
+    await afterIssuance(async () => {
+      const changed = await kindConsent.writer.change({
+        transitionKey,
+        kind: 'consent',
+        accountId,
+        clientId: selected.clientId,
+        target: { operation: 'consent-upsert', scopes: granted, pendingScopes: null, pendingReference: null },
+        async apply(connection) {
+          const current =
+            (
+              await connection.query<{ scopes: string[]; revision: string; pending_reference: string | null }>(
+                'SELECT scopes,revision::text,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+                [accountId, selected.clientId],
+              )
+            ).rows[0] ?? null;
+          if (
+            (current?.revision ?? '0') !== expectedRevision ||
+            !sameScopes(current?.scopes ?? [], previousScopes) ||
+            current?.pending_reference !== (previous?.pending_reference ?? null)
+          )
+            return;
+          await connection.query(
+            `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)
+             ON CONFLICT (account_id,client_id) DO UPDATE SET scopes=EXCLUDED.scopes
+             WHERE auth_consent.pending_reference IS NULL`,
+            [accountId, selected.clientId, granted],
+          );
+        },
+      });
+      if (changed.status !== 'applied') throw new Denied(503);
+    });
+  }
   const website = websiteRoutes({
     options,
+    scopeLimit,
     database,
+    materialize,
     native: getAuth,
     withIssuance,
     sessionProof,
@@ -305,6 +530,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       },
       plugins: [
         credentialOwnerSchema,
+        passkeyPlugin(options.issuer),
         nativeVerificationPlugin,
         nativeSessionLimits(database),
         jwt({
@@ -332,10 +558,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               if (!selected?.subjectId) throw new APIError('UNAUTHORIZED');
               const user = await ctx.context.internalAdapter.findUserById(selected.subjectId);
               if (!user) throw new APIError('UNAUTHORIZED');
-              const session = await ctx.context.internalAdapter.createSession(user.id);
-              if (!session) throw new APIError('UNAUTHORIZED');
-              try {
-                if (selected.opening)
+              // The session, its opening record and the opening's consent commit together or not at all.
+              await ctx.context.adapter.transaction(async () => {
+                const session = await ctx.context.internalAdapter.createSession(user.id);
+                if (!session) throw new APIError('UNAUTHORIZED');
+                if (selected.opening) {
                   await database.query(
                     'INSERT INTO auth_session_opening (session_id, subject_account_id, acting_human_id, operator_account_id, receipt_id) VALUES ($1,$2,$3,$4,$5)',
                     [
@@ -346,12 +573,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                       selected.opening.receiptId,
                     ],
                   );
+                  await recordOpeningConsent(user.id, selected);
+                }
                 await setSessionCookie(ctx, { session, user });
-                return ctx.json({ success: true });
-              } catch (error) {
-                await ctx.context.internalAdapter.deleteSession(session.token);
-                throw error;
-              }
+              });
+              return ctx.json({ success: true });
             }),
           },
         },
@@ -367,7 +593,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               const selected = binding.getStore();
               if (!selected) throw new APIError('UNAUTHORIZED', { message: 'Trusted session establishment required' });
               try {
-                const account = await activeActor(session.userId);
+                const account = await activeActor(session.userId, false, !selected.opening);
                 await allowed(account.accountId, selected);
                 if (
                   (selected.subjectId && selected.subjectId !== session.userId) ||
@@ -382,15 +608,21 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                 return {
                   data: {
                     ...session,
+                    userAgent: securityDisplay(session.userAgent, securityResponseLimits.userAgent),
                     clientId: selected.clientId,
                     grantedScope: selected.scopes.join(' '),
                     authnEpoch: account.authnEpoch,
-                    authTime: selected.authTime ?? Math.floor(Date.now() / 1000),
+                    authTime: selected.authTime ?? trustedNowSeconds(),
                     authMethods: selected.method ?? 'pwd',
                   },
                 };
-              } catch {
-                throw new APIError('UNAUTHORIZED', { message: 'Authentication denied' });
+              } catch (error) {
+                if (error instanceof AccountSuspended && !error.account.automated && !selected.opening) {
+                  selected.refusal = new SuspendedSignIn();
+                  throw selected.refusal;
+                }
+                if (error instanceof Denied) throw new APIError('UNAUTHORIZED', { message: 'Authentication denied' });
+                throw new APIError('SERVICE_UNAVAILABLE', { message: 'Authentication temporarily unavailable' });
               }
             },
           },
@@ -421,15 +653,15 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       !Number.isSafeInteger(session.authnEpoch) ||
       session.authnEpoch < account.authnEpoch ||
       !Number.isSafeInteger(session.authTime) ||
-      session.authTime > Math.floor(Date.now() / 1000) ||
-      !['pwd', 'private_key_jwt', 'operator'].includes(session.authMethods)
+      session.authTime > trustedNowSeconds() ||
+      !['pwd', 'pop', 'private_key_jwt', 'operator'].includes(session.authMethods)
     )
       throw new Denied();
     const granted = session.grantedScope ? scopes(session.grantedScope.split(' ')) : [];
     await allowed(account.accountId, { clientId: session.clientId, scopes: granted });
     const proof: SessionProof = {
-      account_id: account.accountId,
-      client_id: session.clientId,
+      account_id: securityId(account.accountId),
+      client_id: securityId(session.clientId),
       scope: granted,
       authn_epoch: session.authnEpoch,
       auth_time: session.authTime,
@@ -443,6 +675,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   }
 
   async function owner(accountId: string): Promise<void> {
+    // Existing owners need no lock. Taking the only pool connection and then reading
+    // through the pool deadlocks a single-connection Auth host.
+    if (await (await getContext()).internalAdapter.findUserById(accountId)) return;
     // Advisory locking makes concurrent first establishment use one native owner.
     const connection = await database.connect();
     try {
@@ -487,15 +722,103 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     if ((await activeActor(human.account_id)).automated || human.amr.includes('operator')) throw new Denied();
     return human;
   }
-  async function withCredentialProof<T>(human: SessionProof, callback: () => Promise<T>): Promise<T> {
-    const scope = { proof: human, live: true };
-    return proofScope.run(scope, async () => {
-      try {
-        return await callback();
-      } finally {
-        scope.live = false;
-      }
+  async function readAccountIdentity(headers: Headers) {
+    const initial = await humanProof(headers);
+    const currentClient = async () => {
+      const admitted = await database.query(
+        'SELECT client_id FROM auth_client WHERE client_id=$1 AND disabled=false AND NOT erasure_fenced',
+        [initial.client_id],
+      );
+      if (!admitted.rowCount) throw new Denied();
+    };
+    const same = (previous: SessionProof, current: SessionProof) => {
+      if (
+        previous.account_id !== current.account_id ||
+        proofSources.get(previous)!.id !== proofSources.get(current)!.id ||
+        previous.client_id !== current.client_id ||
+        previous.authn_epoch !== current.authn_epoch ||
+        previous.auth_time !== current.auth_time ||
+        JSON.stringify(previous.scope) !== JSON.stringify(current.scope) ||
+        JSON.stringify(previous.amr) !== JSON.stringify(current.amr)
+      )
+        throw new Denied();
+    };
+    // Preserve native client/consent issuance admission around the exact-self I/O.
+    return withIssuance(initial.client_id, async () => {
+      const human = await humanProof(headers);
+      same(initial, human);
+      await currentClient();
+      const identity = await readNativeAccountIdentity(database, human.account_id);
+      await currentClient();
+      same(human, await humanProof(headers));
+      return identity;
     });
+  }
+  async function readSecurityInventory<T>(
+    input: SecurityInventoryInput,
+    read: (binding: SecurityCursorBinding, page: SecurityPageInput) => Promise<T>,
+  ): Promise<T> {
+    if (!input || typeof input !== 'object' || !(input.headers instanceof Headers)) throw new Denied(400);
+    fields(input, ['headers', 'cursor', 'limit']);
+    const { headers, ...query } = input;
+    const page = securityPageInput(query);
+    if (headers.get('origin') !== options.issuer || headers.get('sec-fetch-site') === 'cross-site')
+      throw new Denied(403);
+    const initial = await humanProof(headers);
+    return withIssuance(initial.client_id, async () => {
+      const human = await humanProof(headers);
+      const binding: SecurityCursorBinding = {
+        accountId: human.account_id,
+        sessionId: proofSources.get(human)!.id,
+        clientId: human.client_id,
+        epoch: human.authn_epoch,
+        scopes: human.scope,
+      };
+      const result = await read(binding, page);
+      const current = await humanProof(headers);
+      if (
+        current.account_id !== binding.accountId ||
+        current.authn_epoch !== binding.epoch ||
+        proofSources.get(current)!.id !== binding.sessionId ||
+        current.client_id !== binding.clientId ||
+        JSON.stringify(current.scope) !== JSON.stringify(binding.scopes)
+      )
+        throw new Denied();
+      return result;
+    });
+  }
+  async function operatorOpening(session: { id: string; userId: string; authMethods: string }) {
+    if (session.authMethods !== 'operator') throw new Denied();
+    const opening = (
+      await database.query<{ acting_human_id: string; receipt_id: string }>(
+        'SELECT acting_human_id,receipt_id FROM auth_session_opening WHERE session_id=$1 AND subject_account_id=$2',
+        [session.id, session.userId],
+      )
+    ).rows[0];
+    if (!opening || (await activeActor(opening.acting_human_id)).automated) throw new Denied();
+    return opening.receipt_id;
+  }
+  function freshAuthentication(human: SessionProof) {
+    if (trustedNowSeconds() - human.auth_time > 600) throw new StepUpRequired();
+  }
+  function freshCredentialProof(human: SessionProof, subjectId: string) {
+    if (human.account_id === subjectId) freshAuthentication(human);
+  }
+  async function withCredentialProof<T>(
+    human: SessionProof,
+    callback: () => Promise<T>,
+    deadline?: number,
+  ): Promise<T> {
+    const scope = { proof: human, live: true };
+    const work = () =>
+      proofScope.run(scope, async () => {
+        try {
+          return await callback();
+        } finally {
+          scope.live = false;
+        }
+      });
+    return deadline === undefined ? work() : withCredentialRequestDeadline(human, deadline, work);
   }
   async function credentialStage(
     input: { key: string; effectRef: string; subjectAccountId: string },
@@ -522,9 +845,20 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     )
       throw new Denied();
   }
+  // Nothing is applied for a receipt Access does not confirm for this account, purpose, operation and floor.
+  async function confirmReceipt(receipt: InvalidationReceipt, purpose: BarrierProof['purpose'], operationKey: string) {
+    const confirmed = await trustedAccess.confirmBarrier({
+      accountId: receipt.accountId,
+      purpose,
+      operationKey,
+      receiptId: receipt.receiptId,
+      minimumAuthnEpoch: receipt.minimumAuthnEpoch,
+    });
+    if (confirmed !== true) throw new Denied();
+  }
   async function consume(
     input: { authorization: string; subjectAccountId: string; headers: Headers },
-    purpose: EffectPurpose,
+    purpose: 'session',
   ) {
     if (!trustedAccess.consumeAuthorization) throw new Denied();
     const human = await humanProof(input.headers);
@@ -533,7 +867,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     const scope = { proof: human, live: true };
     const receipt = await proofScope.run(scope, async () => {
       try {
-        const authorization: SessionAuthorizationInput | LegacyCredentialAuthorizationInput = {
+        const authorization: SessionAuthorizationInput = {
           authorization: text(input.authorization),
           subjectAccountId: input.subjectAccountId,
           purpose,
@@ -573,6 +907,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     return { receipt, subject, previousEpoch, human };
   }
   async function established(response: Response): Promise<Response> {
+    if (response.status >= 500) throw new APIError('SERVICE_UNAVAILABLE');
     if (!response.ok) throw new Denied();
     const setCookies = response.headers.getSetCookie();
     const headers = new Headers({ cookie: setCookies.map((cookie) => cookie.split(';')[0]).join('; ') });
@@ -587,7 +922,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   async function establish(selected: Binding, headers: Headers): Promise<Response> {
     return await withIssuance(selected.clientId, async () =>
       established(
-        await binding.run(selected, () =>
+        await sessionBinding(selected, () =>
           getAuth().api.establish({
             headers: new Headers({
               origin: options.issuer,
@@ -645,7 +980,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     const key = createHmac('sha256', options.secret)
       .update(JSON.stringify(['auth-recovery-mail-v1', accountId]))
       .digest('hex');
-    const consumed = await database.query<{ allowed: boolean }>(attemptStatement, [key, 60, 1]);
+    const consumed = await chargeAccountAttempt(database, accountId, key, 60, 1);
     if (!consumed.rows[0]?.allowed) return;
     // requestPasswordReset resolves after a failed send; Better Auth only logs it.
     const outcome = { failed: false };
@@ -662,14 +997,10 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
     }
   }
   async function presentedSession(headers: Headers) {
-    try {
-      return await getAuth().api.getSession({
-        headers,
-        query: { disableCookieCache: true, disableRefresh: true },
-      });
-    } catch {
-      return null;
-    }
+    return await getAuth().api.getSession({
+      headers,
+      query: { disableCookieCache: true, disableRefresh: true },
+    });
   }
   async function replacePreviousSession(previous: Awaited<ReturnType<typeof presentedSession>>, response: Response) {
     if (!previous || !response.ok) return response;
@@ -728,6 +1059,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
   async function commitProvisioning(input: {
     authorization: string;
     receiptKey: string;
+    sourceRegistrationId: string | undefined;
     account: AccessAccount;
     receipt: ProvisioningReceiptMetadata | undefined;
     email: string | null;
@@ -752,14 +1084,62 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         `auth-owner:${account.accountId}`,
       ]);
       await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`auth-provision:${receiptKey}`]);
+      // Lock the exact source before touching credential models. The receipt's
+      // party INSERT below reads this same locked row in this transaction.
+      const creationStage = (
+        await connection.query<{
+          registration_id: string;
+          reservation_id: string | null;
+          expires_at: Date | null;
+          creation_context_version: number;
+          creation_scope_digest: Buffer | null;
+        }>(
+          `SELECT registration_id,reservation_id,expires_at,creation_context_version,creation_scope_digest
+           FROM auth_registration_stage WHERE account_id=$1
+             AND ($2::text IS NULL OR registration_id=$2) FOR UPDATE`,
+          [account.accountId, input.sourceRegistrationId ?? null],
+        )
+      ).rows[0];
+      if (input.sourceRegistrationId !== undefined && !creationStage) throw new Denied();
+      if (
+        creationStage &&
+        (creationStage.creation_context_version !== 1 ||
+          !creationStage.creation_scope_digest ||
+          (receipt &&
+            (creationStage.reservation_id !== receipt.reservationId ||
+              receipt.registrationId !== creationStage.reservation_id ||
+              creationStage.expires_at?.getTime() !== Date.parse(receipt.expiresAt))))
+      )
+        throw new Denied();
+      const digest = creationStage
+        ? createHmac('sha256', options.secret)
+            .update(input.digest)
+            .update(creationStage.creation_scope_digest!)
+            .update(creationStage.registration_id)
+            .digest()
+        : input.digest;
       const previous = (
-        await connection.query<{ account_id: string; digest: Buffer }>(
-          'SELECT account_id, digest FROM auth_provisioning_receipt WHERE idempotency_key=$1',
+        await connection.query<{
+          account_id: string;
+          digest: Buffer;
+          creation_context_version: number;
+          erasure_stage_id: string | null;
+          creation_scope_digest: Buffer | null;
+        }>(
+          'SELECT account_id,digest,creation_context_version,erasure_stage_id,creation_scope_digest FROM auth_provisioning_receipt WHERE idempotency_key=$1',
           [receiptKey],
         )
       ).rows[0];
       if (previous) {
-        if (previous.account_id !== account.accountId || !previous.digest.equals(input.digest)) throw new Denied();
+        if (
+          previous.account_id !== account.accountId ||
+          !previous.digest.equals(digest) ||
+          (previous.creation_context_version === 1 &&
+            (!creationStage ||
+              previous.erasure_stage_id !== creationStage.registration_id ||
+              !previous.creation_scope_digest?.equals(creationStage.creation_scope_digest!)))
+        )
+          throw new Denied();
       } else {
         // These are the installed Better Auth owner and credential models, not a
         // second credential registry. Their receipt commits in this same transaction.
@@ -772,23 +1152,57 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           'INSERT INTO account (id,"accountId","providerId","userId",password,"updatedAt") VALUES ($1,$2,\'credential\',$2,$3,CURRENT_TIMESTAMP)',
           [credentialId, account.accountId, input.hash],
         );
-        await connection.query(
-          `INSERT INTO auth_provisioning_receipt
-            (idempotency_key,account_id,digest,registration_id,reservation_id,authn_epoch,expires_at,owner_id,credential_id,provisioning_kind)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-          [
-            receiptKey,
-            account.accountId,
-            input.digest,
-            receipt?.registrationId ?? null,
-            receipt?.reservationId ?? null,
-            receipt?.authnEpoch ?? null,
-            receipt?.expiresAt ?? null,
-            receipt ? account.accountId : null,
-            receipt ? credentialId : null,
-            receipt ? (input.hash === null ? 'credentialless' : 'password') : null,
-          ],
-        );
+        if (creationStage) {
+          const copied = await connection.query(
+            `INSERT INTO auth_provisioning_receipt
+             (idempotency_key,account_id,digest,registration_id,reservation_id,authn_epoch,expires_at,
+              owner_id,credential_id,provisioning_kind,erasure_stage_id,
+              erasure_creator_id,erasure_operator_id,erasure_initiator_id,erasure_delegate_id,erasure_actor_version,
+              creation_context_version,creation_scope_digest,creation_context,creation_approval_reference,
+              erasure_actor_id,erasure_human_id,erasure_principal_id,erasure_native_operator_id,
+              erasure_client_id,erasure_source_client_id,erasure_client_owner_id,erasure_source_client_owner_id)
+             SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,registration_id,
+              erasure_creator_id,erasure_operator_id,erasure_initiator_id,erasure_delegate_id,erasure_actor_version,
+              creation_context_version,creation_scope_digest,creation_context,creation_approval_reference,
+              erasure_actor_id,erasure_human_id,erasure_principal_id,erasure_native_operator_id,
+              erasure_client_id,erasure_source_client_id,erasure_client_owner_id,erasure_source_client_owner_id
+             FROM auth_registration_stage WHERE registration_id=$11 AND account_id=$2
+               AND creation_context_version=1 AND creation_scope_digest=$12`,
+            [
+              receiptKey,
+              account.accountId,
+              digest,
+              receipt?.registrationId ?? null,
+              receipt?.reservationId ?? null,
+              receipt?.authnEpoch ?? null,
+              receipt?.expiresAt ?? null,
+              receipt ? account.accountId : null,
+              receipt ? credentialId : null,
+              receipt ? (input.hash === null ? 'credentialless' : 'password') : null,
+              creationStage.registration_id,
+              creationStage.creation_scope_digest,
+            ],
+          );
+          if (copied.rowCount !== 1) throw new Denied();
+        } else
+          await connection.query(
+            `INSERT INTO auth_provisioning_receipt
+            (idempotency_key,account_id,digest,registration_id,reservation_id,authn_epoch,expires_at,owner_id,credential_id,provisioning_kind,erasure_stage_id)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            [
+              receiptKey,
+              account.accountId,
+              digest,
+              receipt?.registrationId ?? null,
+              receipt?.reservationId ?? null,
+              receipt?.authnEpoch ?? null,
+              receipt?.expiresAt ?? null,
+              receipt ? account.accountId : null,
+              receipt ? credentialId : null,
+              receipt ? (input.hash === null ? 'credentialless' : 'password') : null,
+              input.sourceRegistrationId ?? null,
+            ],
+          );
       }
       if (receipt) await recheck();
       await connection.query('COMMIT');
@@ -820,7 +1234,14 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
       algorithms: ['ES256'],
       accessTokenLifetimeSeconds: 300,
     },
+    async registrationPasswordLimits() {
+      const config = (await getContext()).password.config;
+      return { minLength: config.minPasswordLength, maxLength: config.maxPasswordLength };
+    },
     internal: {
+      receivingClosure: createAuthReceivingClosureProducer(database, trustedAccess, fenceKindConsentErasure),
+      kindConsentParticipant: kindConsent.participant,
+      continueKindConsentInvalidations: () => kindConsent.writer.continuePending(),
       resolveRecoveryEstablishment: recoveryEstablishment.resolve,
       async accessTokenForProof(proof) {
         const scope = proofScope.getStore();
@@ -874,8 +1295,49 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (issued.expiresAt <= Date.now()) throw new Denied();
         return issued.token;
       },
+      async hasCurrentAuthSession(headers) {
+        const current = await getAuth().api.getSession({
+          headers,
+          query: { disableCookieCache: true, disableRefresh: true },
+        });
+        return current !== null;
+      },
+      async isProofSessionCurrent(proof) {
+        const scope = proofScope.getStore();
+        const source = proofSources.get(proof);
+        if (!source || !scope?.live || scope.proof !== proof || source.expiresAt <= Date.now()) return false;
+        const current = (
+          await database.query<{
+            userId: string;
+            clientId: string;
+            grantedScope: string;
+            authnEpoch: number;
+            authTime: number;
+            authMethods: string;
+            expiresAt: Date;
+          }>(
+            'SELECT "userId","clientId","grantedScope","authnEpoch","authTime","authMethods","expiresAt" FROM session WHERE id=$1',
+            [source.id],
+          )
+        ).rows[0];
+        return Boolean(
+          current &&
+          current.userId === proof.account_id &&
+          current.clientId === proof.client_id &&
+          current.grantedScope === proof.scope.join(' ') &&
+          current.authnEpoch === proof.authn_epoch &&
+          current.authTime === proof.auth_time &&
+          current.authMethods === proof.amr.join(' ') &&
+          current.expiresAt.getTime() > Date.now(),
+        );
+      },
       pruneExpiredVerifications: () => pruneExpiredVerifications(database),
       pruneExpiredSessions: (batch) => pruneExpiredSessions(database, batch),
+      async eraseDueConsents(batch) {
+        await fenceKindConsentErasure('consent-erasure-maintenance');
+        return eraseDueConsents(database, batch);
+      },
+      hasDueConsentErasure: () => hasDueConsentErasure(database),
       pruneExpiredProtocolState: (batch) => pruneExpiredProtocolState(database, batch),
       trimSessionHistory: (accountId, batch) => trimSessionHistory(database, accountId, batch),
       sessionUpgradePage: (after, limit) => sessionUpgradePage(database, after, limit),
@@ -911,6 +1373,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           return commitProvisioning({
             authorization: input.authorization,
             receiptKey: input.idempotencyKey ?? `password:${account.accountId}`,
+            sourceRegistrationId: input.sourceRegistrationId,
             account,
             receipt,
             email: input.email.toLowerCase(),
@@ -975,6 +1438,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         return commitProvisioning({
           authorization: input.authorization,
           receiptKey: input.idempotencyKey ?? `credentialless:${account.accountId}`,
+          sourceRegistrationId: input.sourceRegistrationId,
           account,
           receipt,
           email: null,
@@ -982,16 +1446,81 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           digest,
         });
       },
+      async startAccountErasure(accountId) {
+        const account = trustedAccess.readErasureAccount
+          ? await trustedAccess.readErasureAccount(accountId)
+          : await trustedAccess.readAccount(accountId);
+        if (!account || account.accountId !== accountId || account.state !== 'deleted' || !account.fenced)
+          throw new Denied();
+        const identity = await trustedAccess.readAuthErasureBarrier?.(accountId);
+        if (!identity) {
+          const expiry = await database.query(
+            'SELECT 1 FROM auth_registration_stage WHERE account_id=$1 AND expired_at IS NOT NULL AND completed_at IS NULL AND erasure_release_at IS NOT NULL LIMIT 1',
+            [accountId],
+          );
+          if (!expiry.rowCount) throw new Denied(503);
+        }
+        // Pending registration expiry has no active-account erasure barrier.
+        // It retains its separate native cleanup semantics and emits no proof.
+        const id = await startNativeErasure(database, accountId, account.authnEpoch, identity ?? undefined);
+        if (identity) await bindErasureBarrier(database, id, identity);
+        return id;
+      },
+      async consumeAccountErasure(accountId, receiptId, workflowId) {
+        if (DBOS.workflowID !== workflowId) throw new Denied();
+        if (!trustedAccess.readAuthErasureSource) throw new Denied(503);
+        const source = await trustedAccess.readAuthErasureSource({ accountId, receiptId });
+        if (!source || source.accountId !== accountId || source.receiptId !== receiptId) throw new Denied();
+        const account = trustedAccess.readErasureAccount
+          ? await trustedAccess.readErasureAccount(accountId)
+          : await trustedAccess.readAccount(accountId);
+        if (!account || account.accountId !== accountId || account.state !== 'deleted' || !account.fenced)
+          throw new Denied();
+        const id = await startNativeErasure(database, accountId, account.authnEpoch, source, {
+          identity: source,
+          workflowId,
+        });
+        // No consumer resumes against Kernel evidence after this transfer. The
+        // local obligation has everything required by its fixed native pages.
+        const verified = await trustedAccess.readAuthErasureSource({ accountId, receiptId });
+        if (!verified || JSON.stringify(verified) !== JSON.stringify(source)) throw new Denied();
+        await dischargeErasureSource(database, id, source);
+        try {
+          await publishErasureProofs(database, trustedAccess, id);
+        } catch {
+          // Publication is independently redriven from the committed native
+          // transfer. A lost reply must not strand other authorized releases.
+          await database.query("UPDATE auth_erasure SET pending_code='source-submission' WHERE id=$1", [id]);
+        }
+        return id;
+      },
+      redriveErasureHistory: () => redriveErasureHistory(database, trustedAccess),
+      async retireWorkflowCopy(id) {
+        await completeCopy(database, id);
+        return eraseCopy(database, id);
+      },
+      fenceKindConsentErasure,
+      nativeErasurePage: (id) => nativeErasurePage(database, id, undefined, undefined, fenceKindConsentErasure),
+      redriveNativeErasure: () => redriveNativeErasure(database, undefined, fenceKindConsentErasure),
       async eraseAccount(accountId) {
         const account = trustedAccess.readErasureAccount
           ? await trustedAccess.readErasureAccount(accountId)
           : await trustedAccess.readAccount(accountId);
-        if (!account || account.state !== 'deleted' || !account.fenced) throw new Denied();
-        await database.query('DELETE FROM "user" WHERE id=$1', [accountId]);
+        if (!account || account.accountId !== accountId || account.state !== 'deleted' || !account.fenced)
+          throw new Denied();
+        const id = await service.internal.startAccountErasure(accountId);
+        // Direct native callers share the exact obligation with host recovery.
+        // Every page commits/releases before continuing; no owner/client list is retained.
+        for (;;) {
+          const page = await nativeErasurePage(database, id, undefined, undefined, fenceKindConsentErasure);
+          if (page.state !== 'more') return;
+        }
       },
       async stageCredentialEffect(input) {
         const human = await humanProof(input.headers);
+        freshCredentialProof(human, input.subjectAccountId);
         await activeActor(text(input.subjectAccountId));
+        if ((input.credential as { kind?: string })?.kind === 'passkey') throw new Denied(400);
         const { credential } = await credentials.normalize(input.credential);
         if (credential.kind === 'password' && credential.password !== null) {
           const config = (await getContext()).password.config;
@@ -1002,7 +1531,36 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             throw new Denied(400);
         }
         await owner(input.subjectAccountId);
-        const stage = await credentials.stage({ ...input, credential, human });
+        const stage = await credentials.stage({
+          ...input,
+          credential,
+          human,
+          sourceSessionId: proofSources.get(human)?.id,
+        });
+        if (stage.purpose === 'add-passkey' || stage.purpose === 'remove-passkey') throw new Denied(400);
+        return {
+          effectRef: stage.effectReference,
+          key: stage.operationKey,
+          subjectId: stage.subjectAccountId,
+          purpose: stage.purpose,
+          digest: stage.effectDigest,
+        } satisfies CredentialEffectStageResponse;
+      },
+      async stagePasskeyEffect(input) {
+        const human = await humanProof(input.headers);
+        freshCredentialProof(human, input.subjectAccountId);
+        const subject = await activeActor(text(input.subjectAccountId));
+        if (subject.automated || human.account_id !== input.subjectAccountId) throw new Denied();
+        if (input.credential?.kind !== 'passkey' || input.credential.remove !== true) throw new Denied(400);
+        const { credential } = await credentials.normalize(input.credential);
+        await owner(input.subjectAccountId);
+        const stage = await credentials.stage({
+          ...input,
+          credential,
+          human,
+          sourceSessionId: proofSources.get(human)?.id,
+        });
+        if (stage.purpose !== 'remove-passkey') throw new Denied();
         return {
           effectRef: stage.effectReference,
           key: stage.operationKey,
@@ -1011,19 +1569,41 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           digest: stage.effectDigest,
         };
       },
+      async withFreshHuman(input, work) {
+        const human = await humanProof(input.headers);
+        if (input.fresh !== false) freshAuthentication(human);
+        return withCredentialProof(human, () => work(human));
+      },
       async approveCredentialEffect(input) {
+        // Direct internal callers also receive one boundary deadline here;
+        // Auth hosts pass the one created when their request arrived.
+        const deadline = input.deadline ?? Date.now() + 3000;
         if (!trustedAccess.approveCredentialEffect) throw new Denied(503);
         const human = await humanProof(input.headers);
+        freshCredentialProof(human, input.subjectAccountId);
         await activeActor(input.subjectAccountId);
         const stage = await credentialStage(input, human);
         if (!stage.row.committed_at) await credentials.current(database, stage);
-        const approval = await withCredentialProof(human, () =>
-          trustedAccess.approveCredentialEffect!({ stage: stage.binding, human }),
+        const approval = await withCredentialProof(
+          human,
+          () => {
+            if (trustedAccess.passkeys)
+              return trustedAccess.approveCredentialEffect!({ stage: stage.binding, human, deadline });
+            const purpose = stage.binding.purpose;
+            if (purpose === 'add-passkey' || purpose === 'remove-passkey') throw new Denied(503);
+            return trustedAccess.approveCredentialEffect!({ stage: { ...stage.binding, purpose }, human, deadline });
+          },
+          deadline,
         );
         const expires = Date.parse(approval?.expiresAt);
         const source = proofSources.get(human);
+        const approvalReferenceValid =
+          stage.binding.purpose === 'set-password'
+            ? isPasswordCredentialEffectApprovalReference(approval?.reference)
+            : isCredentialEffectApprovalReference(approval?.reference);
         if (
-          !approval?.reference ||
+          !approvalReferenceValid ||
+          !isCredentialEffectApprovalExpiry(approval?.expiresAt) ||
           !Number.isFinite(expires) ||
           expires <= Date.now() ||
           expires > Date.now() + 60000 ||
@@ -1036,17 +1616,24 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           [approval.expiresAt],
         );
         if (live.rowCount !== 1) throw new Denied();
-        return { reference: approval.reference, expiresAt: approval.expiresAt };
+        return {
+          reference: approval.reference,
+          expiresAt: approval.expiresAt,
+        } satisfies CredentialEffectApprovalResponse;
       },
       async applyCredentialEffect(input) {
-        if (!trustedAccess.consumeAuthorization || !trustedAccess.revalidateCredentialEffect) throw new Denied(503);
+        // Direct internal callers also receive one boundary deadline here;
+        // Auth hosts pass the one created when their request arrived.
+        const deadline = input.deadline ?? Date.now() + 3000;
+        if (!trustedAccess.revalidateCredentialEffect) throw new Denied(503);
         const human = await humanProof(input.headers);
+        freshCredentialProof(human, input.subjectAccountId);
         const subject = await activeActor(input.subjectAccountId);
         const stage = await credentialStage(input, human);
-        const authorization = text(input.authorization);
+        const authorization = input.authorization;
         const revalidate = async (
           replay: boolean,
-          consumedOpening?: CredentialEffectAuthorization,
+          consumedOpening?: CredentialEffectAuthorization<CredentialFloorPurpose>,
           floorReceipt?: CredentialFloorReceipt,
           committedOpeningReceiptId?: string,
         ) => {
@@ -1057,27 +1644,56 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             human,
             authorization,
             replay,
+            deadline,
             ...(consumedOpening ? { consumedOpening } : {}),
             ...(floorReceipt ? { floorReceipt } : {}),
             ...(committedOpeningReceiptId ? { committedOpeningReceiptId } : {}),
           };
-          await withCredentialProof(human, () => trustedAccess.revalidateCredentialEffect!(validation));
+          await withCredentialProof(
+            human,
+            () => {
+              if (trustedAccess.passkeys) return trustedAccess.revalidateCredentialEffect!(validation);
+              const purpose = validation.stage.purpose;
+              if (purpose === 'add-passkey' || purpose === 'remove-passkey') throw new Denied(503);
+              const { consumedOpening: opening, ...pendingValidation } = validation;
+              return trustedAccess.revalidateCredentialEffect!({
+                ...pendingValidation,
+                stage: { ...validation.stage, purpose },
+                ...(opening ? { consumedOpening: { ...opening, purpose } } : {}),
+              });
+            },
+            deadline,
+          );
         };
         if (stage.row.committed_at) {
           await revalidate(true, undefined, undefined, stage.row.opening_receipt_id ?? undefined);
           await humanProof(input.headers);
-          return { receiptId: stage.row.receipt_id, replayed: true };
+          return { receiptId: stage.row.receipt_id, replayed: true } satisfies CredentialEffectApplyResponse;
         }
         await credentials.current(database, stage);
-        const receipt = await withCredentialProof(human, () =>
-          trustedAccess.consumeAuthorization!({
-            authorization,
-            subjectAccountId: input.subjectAccountId,
-            purpose: stage.binding.purpose,
-            operationKey: stage.binding.operationKey,
-            effectReference: stage.binding.effectReference,
-            human,
-          } satisfies CredentialAuthorizationInput),
+        const consumeInput = {
+          authorization,
+          subjectAccountId: input.subjectAccountId,
+          operationKey: stage.binding.operationKey,
+          effectReference: stage.binding.effectReference,
+          human,
+          deadline,
+        };
+        const purpose = stage.binding.purpose;
+        const receipt = await withCredentialProof<
+          EffectAuthorization | CredentialEffectAuthorization<CredentialFloorPurpose>
+        >(
+          human,
+          () => {
+            if (purpose === 'add-passkey' || purpose === 'remove-passkey') {
+              if (subject.automated || human.account_id !== subject.accountId) throw new Denied();
+              if (!trustedAccess.consumePasskeyAuthorization) throw new Denied(503);
+              return trustedAccess.consumePasskeyAuthorization({ ...consumeInput, purpose });
+            }
+            if (!trustedAccess.consumeAuthorization) throw new Denied(503);
+            return trustedAccess.consumeAuthorization({ ...consumeInput, purpose });
+          },
+          deadline,
         );
         const b = stage.binding;
         if (
@@ -1101,10 +1717,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             : receipt.operatorAccountId !== null || human.account_id !== subject.accountId)
         )
           throw new Denied();
-        const consumed = receipt as CredentialEffectAuthorization;
+        const consumed = receipt as CredentialEffectAuthorization<CredentialFloorPurpose>;
         const destructive =
           b.purpose === 'remove-password' ||
           b.purpose === 'remove-key' ||
+          b.purpose === 'remove-passkey' ||
           (b.purpose === 'set-password' && b.credentialRowId !== null);
         let hash: string | null = null;
         if (stage.credential.kind === 'password' && stage.credential.password !== null)
@@ -1112,6 +1729,12 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         const connection = await database.connect();
         try {
           await connection.query('BEGIN');
+          // Match native erasure's client-before-source-row order. Admission is
+          // repeated by the existing write guard at the atomic credential CAS.
+          await connection.query(
+            'SELECT auth_erasure_admit_client($1),auth_erasure_admit($2),auth_erasure_admit($3),auth_erasure_admit($4)',
+            [b.clientId, b.subjectAccountId, b.actingHumanId, consumed.operatorAccountId],
+          );
           // Same native owner lock as session issuance/revocation. Credential-row
           // CAS still arbitrates recovery and legacy writers that use other locks.
           await connection.query('SELECT auth_assert_session_capacity($1,true)', [subject.accountId]);
@@ -1123,13 +1746,16 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             return { receiptId: locked.row.receipt_id, replayed: true };
           }
           await credentials.current(connection, locked);
-          if (!subject.automated && (b.purpose === 'remove-password' || b.purpose === 'remove-key')) {
+          if (
+            !subject.automated &&
+            (b.purpose === 'remove-password' || b.purpose === 'remove-key' || b.purpose === 'remove-passkey')
+          ) {
             const remaining = (
               await connection.query(
                 `SELECT
               EXISTS(SELECT 1 FROM account WHERE "userId"=$1 AND "providerId"='credential' AND password IS NOT NULL AND $2 <> 'remove-password')
-              OR EXISTS(SELECT 1 FROM auth_public_key WHERE account_id=$1 AND ($2 <> 'remove-key' OR kid<>$3) LIMIT 1) AS allowed`,
-                [subject.accountId, b.purpose, stage.credential.kind === 'key' ? stage.credential.kid : ''],
+              OR EXISTS(SELECT 1 FROM passkey WHERE "userId"=$1 AND ($2 <> 'remove-passkey' OR id<>$3) LIMIT 1) AS allowed`,
+                [subject.accountId, b.purpose, stage.credential.kind === 'passkey' ? stage.credential.id : ''],
               )
             ).rows[0];
             if (!remaining.allowed) throw new Denied(409);
@@ -1141,14 +1767,28 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           let floor: CredentialFloorReceipt | undefined;
           if (destructive) {
             if (!trustedAccess.advanceCredentialFloor) throw new Denied(503);
-            floor = await withCredentialProof(human, () =>
-              trustedAccess.advanceCredentialFloor!({
-                stage: b,
-                consumedOpening: consumed,
-                expectedPreviousFloor: subject.authnEpoch,
-                key: b.operationKey,
-                purpose: b.purpose,
-              }),
+            floor = await withCredentialProof(
+              human,
+              () => {
+                const input = {
+                  stage: b,
+                  consumedOpening: consumed,
+                  expectedPreviousFloor: subject.authnEpoch,
+                  key: b.operationKey,
+                  purpose: b.purpose,
+                  deadline,
+                };
+                if (trustedAccess.passkeys) return trustedAccess.advanceCredentialFloor!(input);
+                const purpose = b.purpose;
+                if (purpose === 'add-passkey' || purpose === 'remove-passkey') throw new Denied(503);
+                return trustedAccess.advanceCredentialFloor!({
+                  ...input,
+                  stage: { ...b, purpose },
+                  consumedOpening: { ...consumed, purpose },
+                  purpose,
+                });
+              },
+              deadline,
             );
             if (
               !floor?.receiptId ||
@@ -1184,11 +1824,11 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             .then((result) => {
               if (result.rowCount !== 1) throw new Denied();
             });
-          const result = { receiptId: locked.row.receipt_id, replayed: false };
+          const result: CredentialEffectApplyResponse = { receiptId: locked.row.receipt_id, replayed: false };
           const committed = await connection.query(
-            `UPDATE auth_effect_receipt SET opening_receipt_id=$2,minimum_authn_epoch=$3,committed_result=$4,committed_at=statement_timestamp()
+            `UPDATE auth_effect_receipt SET opening_receipt_id=$2,minimum_authn_epoch=$3,committed_result=$4,opening_reference=$5,committed_at=statement_timestamp()
             WHERE receipt_id=$1 AND committed_at IS NULL`,
-            [locked.row.receipt_id, consumed.receiptId, current.authnEpoch, result],
+            [locked.row.receipt_id, consumed.receiptId, current.authnEpoch, result, authorization],
           );
           if (committed.rowCount !== 1) throw new Denied();
           await connection.query('COMMIT');
@@ -1201,68 +1841,6 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         }
       },
       verifyCredentialEffect: credentials.verify,
-      async setCredential(input) {
-        const value = input.credential;
-        const purpose =
-          value.kind === 'password'
-            ? value.password === null
-              ? 'remove-password'
-              : 'set-password'
-            : value.remove
-              ? 'remove-key'
-              : 'add-key';
-        // Validate material before spending Access authorization or changing its floor.
-        let hash: string | null = null;
-        let publicJwk;
-        if (value.kind === 'password' && value.password !== null) {
-          if (
-            value.password.length < (await getContext()).password.config.minPasswordLength ||
-            value.password.length > (await getContext()).password.config.maxPasswordLength
-          )
-            throw new Denied(400);
-          hash = await (await getContext()).password.hash(value.password);
-        } else if (value.kind === 'key') {
-          text(value.kid);
-          if (!value.remove) publicJwk = await publicCredential(value.publicJwk, value.kid);
-        }
-        const { receipt, subject, previousEpoch } = await consume(input, purpose);
-        const oldPassword = await (await getContext()).internalAdapter.findCredentialAccount(subject.accountId);
-        const destructive =
-          purpose === 'remove-password' ||
-          purpose === 'remove-key' ||
-          (purpose === 'set-password' && !!oldPassword?.password);
-        if (destructive) {
-          if (!receipt.invalidation) throw new Denied();
-          invalidation(receipt.invalidation, subject.accountId, previousEpoch);
-        }
-        await owner(subject.accountId);
-        if (value.kind === 'password') {
-          if (hash !== null) await (await getContext()).internalAdapter.updatePassword(subject.accountId, hash);
-          else
-            await (
-              await getContext()
-            ).adapter.update({
-              model: 'account',
-              where: [
-                { field: 'userId', value: subject.accountId },
-                { field: 'providerId', value: 'credential' },
-              ],
-              update: { password: null },
-            });
-        } else if (value.remove)
-          await database.query('DELETE FROM auth_public_key WHERE account_id=$1 AND kid=$2', [
-            subject.accountId,
-            value.kid,
-          ]);
-        else
-          await database.query('INSERT INTO auth_public_key (account_id, kid, public_jwk) VALUES ($1,$2,$3)', [
-            subject.accountId,
-            value.kid,
-            publicJwk,
-          ]);
-        if (destructive || receipt.invalidation)
-          await (await getContext()).internalAdapter.deleteUserSessions(subject.accountId);
-      },
       async reduceConsent(input) {
         const granted = scopes(input.scopes);
         const client = await clientFor(text(input.clientId));
@@ -1281,43 +1859,45 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           current.authnEpoch < input.barrier.minimumAuthnEpoch
         )
           throw new Denied();
-        const connection = await database.connect();
-        try {
-          await connection.query('BEGIN');
-          await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
-            `auth-consent:${input.accountId}:${client.client_id}`,
-          ]);
-          const prior = (
-            await connection.query<{ scopes: string[] }>(
-              'SELECT scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
-              [input.accountId, client.client_id],
-            )
-          ).rows[0];
-          if (!prior || granted.some((scope) => !prior.scopes.includes(scope))) throw new Denied();
-          const receipt = (
-            await connection.query<{ account_id: string; purpose: string; minimum_authn_epoch: number }>(
-              'INSERT INTO auth_effect_receipt (receipt_id,account_id,purpose,minimum_authn_epoch) VALUES ($1,$2,$3,$4) ON CONFLICT (receipt_id) DO UPDATE SET receipt_id=EXCLUDED.receipt_id RETURNING account_id,purpose,minimum_authn_epoch',
-              [input.barrier.receiptId, input.accountId, 'consent-reduction', input.barrier.minimumAuthnEpoch],
-            )
-          ).rows[0]!;
-          if (
-            receipt.account_id !== input.accountId ||
-            receipt.purpose !== 'consent-reduction' ||
-            receipt.minimum_authn_epoch !== input.barrier.minimumAuthnEpoch
-          )
-            throw new Denied();
-          await connection.query('UPDATE auth_consent SET scopes=$3 WHERE account_id=$1 AND client_id=$2', [
+        const changed = await kindConsent.writer.change({
+          transitionKey: `kind-consent:barrier-reduction:${digestOf([
             input.accountId,
             client.client_id,
-            granted,
-          ]);
-          await connection.query('COMMIT');
-        } catch (error) {
-          await connection.query('ROLLBACK');
-          throw error;
-        } finally {
-          connection.release();
-        }
+            input.barrier.receiptId,
+            input.barrier.minimumAuthnEpoch,
+          ])}`,
+          kind: 'consent',
+          accountId: input.accountId,
+          clientId: client.client_id,
+          target: { operation: 'consent-upsert', scopes: granted },
+          async apply(connection) {
+            const prior = (
+              await connection.query<{ scopes: string[] }>(
+                'SELECT scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+                [input.accountId, client.client_id],
+              )
+            ).rows[0];
+            if (!prior || granted.some((scope) => !prior.scopes.includes(scope))) throw new Denied();
+            const receipt = (
+              await connection.query<{ account_id: string; purpose: string; minimum_authn_epoch: number }>(
+                'INSERT INTO auth_effect_receipt (receipt_id,account_id,purpose,minimum_authn_epoch) VALUES ($1,$2,$3,$4) ON CONFLICT (receipt_id) DO UPDATE SET receipt_id=EXCLUDED.receipt_id RETURNING account_id,purpose,minimum_authn_epoch',
+                [input.barrier.receiptId, input.accountId, 'consent-reduction', input.barrier.minimumAuthnEpoch],
+              )
+            ).rows[0]!;
+            if (
+              receipt.account_id !== input.accountId ||
+              receipt.purpose !== 'consent-reduction' ||
+              receipt.minimum_authn_epoch !== input.barrier.minimumAuthnEpoch
+            )
+              throw new Denied();
+            await connection.query('UPDATE auth_consent SET scopes=$3 WHERE account_id=$1 AND client_id=$2', [
+              input.accountId,
+              client.client_id,
+              granted,
+            ]);
+          },
+        });
+        if (changed.status !== 'applied') throw new Denied(503);
         await (await getContext()).internalAdapter.deleteUserSessions(input.accountId);
       },
       ...authority.internal,
@@ -1325,8 +1905,66 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (cleanup?.boundedCleanup) return authority.cleanupFencedSessions(accountId, cleanup.barrier);
         await (await getContext()).internalAdapter.deleteUserSessions(accountId);
       },
-      registerWebsiteClient: website.register,
+      async registerWebsiteClient(registration: WebsiteClientRegistration) {
+        const granted = scopes(registration.scopes);
+        const previous = (
+          await database.query<{ scopes: string[]; first_party: boolean }>(
+            'SELECT scopes,first_party FROM auth_client WHERE client_id=$1',
+            [WEBSITE_CLIENT_ID],
+          )
+        ).rows[0];
+        if (previous && previous.first_party && JSON.stringify(previous.scopes) === JSON.stringify(granted)) {
+          await website.register({ ...registration, scopes: granted });
+          return;
+        }
+        const desired = { operation: 'client-config', scopes: granted, firstParty: true };
+        const open = (
+          await database.query<{ transition_key: string; target: unknown }>(
+            `SELECT transition_key,target FROM auth_kind_consent_transition
+             WHERE client_id=$1 AND account_id IS NULL AND state<>'applied'
+             ORDER BY created_at DESC LIMIT 1`,
+            [WEBSITE_CLIENT_ID],
+          )
+        ).rows[0];
+        const sameTarget = (target: unknown) => {
+          if (!target || typeof target !== 'object') return false;
+          const value = target as Record<string, unknown>;
+          return (
+            value.operation === desired.operation &&
+            value.firstParty === desired.firstParty &&
+            JSON.stringify(value.scopes) === JSON.stringify(desired.scopes)
+          );
+        };
+        const previousTransition =
+          (
+            await database.query<{ transition_id: string }>(
+              `SELECT transition_id::text FROM auth_kind_consent_transition
+             WHERE client_id=$1 ORDER BY created_at DESC,transition_id DESC LIMIT 1`,
+              [WEBSITE_CLIENT_ID],
+            )
+          ).rows[0]?.transition_id ?? null;
+        const transitionKey =
+          open && sameTarget(open.target)
+            ? open.transition_key
+            : `kind-consent:website-client:${digestOf([
+                previous?.scopes ?? null,
+                previous?.first_party ?? null,
+                granted,
+                previousTransition,
+                registration,
+              ])}`;
+        const changed = await kindConsent.writer.change({
+          transitionKey,
+          kind: 'client',
+          clientId: WEBSITE_CLIENT_ID,
+          target: desired,
+          apply: (connection) => website.register({ ...registration, scopes: granted }, connection),
+        });
+        if (changed.status !== 'applied') throw new Denied(503);
+      },
+      scrubMetadataConfiguration: (store) => scrubMetadataConfigurationPage(database, store),
       async registerClient(input) {
+        if (input.mode !== undefined && input.mode !== 'create-or-match') throw new Denied(400);
         const id = text(input.clientId);
         let displayName: string | null = null;
         if (input.displayName !== undefined) {
@@ -1337,21 +1975,47 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         if (typeof input.firstParty !== 'boolean') throw new Denied(400);
         const granted = scopes(input.scopes);
         if (id === WEBSITE_CLIENT_ID || granted.includes('media:complete')) throw new Denied(400);
-        const connection = await database.connect();
-        try {
-          await connection.query('BEGIN');
-          await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`auth-client:${id}`]);
+        const observed =
+          (
+            await database.query<{ scopes: string[]; first_party: boolean }>(
+              'SELECT scopes,first_party FROM auth_client WHERE client_id=$1',
+              [id],
+            )
+          ).rows[0] ?? null;
+        const sameAuthority =
+          !!observed &&
+          observed.first_party === input.firstParty &&
+          JSON.stringify(observed.scopes) === JSON.stringify(granted);
+        const applyRegistration = async (connection: PoolClient, expected: typeof observed) => {
           if ((await connection.query('SELECT client_id FROM auth_client_reduction WHERE client_id=$1', [id])).rowCount)
             throw new Denied();
-          const previous = (
-            await connection.query<Client>('SELECT * FROM auth_client WHERE client_id=$1 FOR UPDATE', [id])
-          ).rows[0];
-          // Shrink requires a durable multi-account coordinator. Refuse it at this boundary.
+          const previous =
+            (await connection.query<Client>('SELECT * FROM auth_client WHERE client_id=$1 FOR UPDATE', [id])).rows[0] ??
+            null;
+          if (
+            expected &&
+            (!previous ||
+              previous.first_party !== expected.first_party ||
+              JSON.stringify(previous.scopes) !== JSON.stringify(expected.scopes))
+          )
+            return false;
+          if (!expected && previous) return false;
+          // Shrink requires the existing durable multi-account coordinator.
           if (
             previous &&
             (previous.scopes.some((scope) => !granted.includes(scope)) || (previous.first_party && !input.firstParty))
           )
             throw new Denied();
+          if (previous && input.mode === 'create-or-match') {
+            if (
+              previous.first_party !== input.firstParty ||
+              new Set(previous.scopes).size !== granted.length ||
+              previous.scopes.some((scope) => !granted.includes(scope))
+            )
+              throw new Denied();
+            return true;
+          }
+          await configureClientLabel(connection, id, displayName);
           await connection.query(
             'INSERT INTO auth_client (client_id, first_party, scopes, display_name) VALUES ($1,$2,$3,$4) ON CONFLICT (client_id) DO UPDATE SET first_party=EXCLUDED.first_party, scopes=EXCLUDED.scopes, display_name=EXCLUDED.display_name',
             [id, input.firstParty, granted, displayName],
@@ -1361,24 +2025,196 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               'INSERT INTO auth_client_coverage (client_id,ready,ready_after) VALUES ($1,true,CURRENT_TIMESTAMP)',
               [id],
             );
-          await connection.query('COMMIT');
-        } catch (error) {
-          await connection.query('ROLLBACK');
-          throw error;
-        } finally {
-          connection.release();
+          return true;
+        };
+        if (!observed || sameAuthority) {
+          const connection = await database.connect();
+          try {
+            await connection.query('BEGIN');
+            await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`auth-client:${id}`]);
+            if (!(await applyRegistration(connection, observed))) throw new Denied(503);
+            await connection.query('COMMIT');
+          } catch (error) {
+            await connection.query('ROLLBACK');
+            throw error;
+          } finally {
+            connection.release();
+          }
+          return;
         }
+        const desired = { operation: 'client-config', scopes: granted, firstParty: input.firstParty };
+        const open = (
+          await database.query<{ transition_key: string; target: unknown }>(
+            `SELECT transition_key,target FROM auth_kind_consent_transition
+             WHERE client_id=$1 AND account_id IS NULL AND state<>'applied'
+             ORDER BY created_at DESC LIMIT 1`,
+            [id],
+          )
+        ).rows[0];
+        const matchesTarget = (target: unknown) => {
+          if (!target || typeof target !== 'object') return false;
+          const value = target as Record<string, unknown>;
+          return (
+            value.operation === desired.operation &&
+            value.firstParty === desired.firstParty &&
+            JSON.stringify(value.scopes) === JSON.stringify(desired.scopes)
+          );
+        };
+        const lastTransition =
+          (
+            await database.query<{ transition_id: string }>(
+              `SELECT transition_id::text FROM auth_kind_consent_transition
+             WHERE client_id=$1 ORDER BY created_at DESC,transition_id DESC LIMIT 1`,
+              [id],
+            )
+          ).rows[0]?.transition_id ?? null;
+        const transitionKey =
+          open && matchesTarget(open.target)
+            ? open.transition_key
+            : `kind-consent:client:${digestOf([id, observed.scopes, observed.first_party, desired, lastTransition])}`;
+        const changed = await kindConsent.writer.change({
+          transitionKey,
+          kind: 'client',
+          clientId: id,
+          target: desired,
+          async apply(connection) {
+            await applyRegistration(connection, observed);
+          },
+        });
+        if (changed.status !== 'applied') throw new Denied(503);
+        const committed = (
+          await database.query<{ scopes: string[]; first_party: boolean }>(
+            'SELECT scopes,first_party FROM auth_client WHERE client_id=$1',
+            [id],
+          )
+        ).rows[0];
+        if (
+          !committed ||
+          committed.first_party !== input.firstParty ||
+          JSON.stringify(committed.scopes) !== JSON.stringify(granted)
+        )
+          throw new Denied(503);
       },
     },
+    security: {
+      listClients: (input) => readSecurityInventory(input, inventory.clients),
+      listConsents: (input) => readSecurityInventory(input, inventory.consents),
+    },
     async handler(request) {
+      const url = new URL(request.url);
+      const inventoryRead = request.method === 'GET' && (url.pathname === '/clients' || url.pathname === '/consents');
+      const consentRead = request.method === 'GET' && /^\/consent\/[^/]+$/.test(url.pathname);
+      const identityRead = url.pathname === '/account-identity';
+      const signInPageRead = url.pathname === '/signin/page';
+      const recoveryPageRead = url.pathname === '/recovery/page';
+      const securityRead = url.pathname === '/security-page';
+      const respond = (data: unknown, status = 200) => {
+        const response = json(data, status);
+        if (inventoryRead || consentRead || identityRead || signInPageRead || recoveryPageRead || securityRead)
+          response.headers.set('cache-control', 'private, no-store');
+        return response;
+      };
+      const deadline = Date.now() + 3000;
       try {
         const protocol = await website.handler(request);
         if (protocol) return protocol;
-        const url = new URL(request.url);
-        if (url.origin !== options.issuer || url.search) throw new Denied(400);
+        if (url.origin !== options.issuer || (url.search && !inventoryRead && !consentRead)) throw new Denied(400);
+        if (identityRead) {
+          if (
+            request.method !== 'POST' ||
+            request.headers.get('origin') !== options.issuer ||
+            request.headers.get('sec-fetch-site') === 'cross-site' ||
+            request.headers.has('authorization')
+          )
+            throw new Denied(403);
+          fields(await bodyOf(request), []);
+          return respond(await readAccountIdentity(request.headers));
+        }
+        if (signInPageRead || recoveryPageRead) {
+          if (
+            request.method !== 'POST' ||
+            request.headers.get('origin') !== options.issuer ||
+            request.headers.get('sec-fetch-site') === 'cross-site' ||
+            request.headers.has('authorization')
+          )
+            throw new Denied(403);
+          const body = await bodyOf(request);
+          fields(body, recoveryPageRead ? ['stage'] : ['query']);
+          if (recoveryPageRead ? !isRecoveryPageStage(body.stage) : typeof body.query !== 'string')
+            throw new Denied(400);
+          const stage = body.stage;
+          if (recoveryPageRead && isRecoveryPageStage(stage) && stage !== 'step-up')
+            return respond(recoveryPage(stage, (await getContext()).password.config));
+          let viewer: SignInPageViewer;
+          try {
+            const identity = await (recoveryPageRead
+              ? observeRecoveryViewer(() => readAccountIdentity(request.headers))
+              : readAccountIdentity(request.headers));
+            viewer = { kind: 'signed-in', account_id: identity.account_id, email: identity.email };
+          } catch (error) {
+            if (!(error instanceof Denied) || error.status !== 401) throw error;
+            viewer = { kind: 'signed-out' };
+          }
+          const page =
+            recoveryPageRead && isRecoveryPageStage(stage)
+              ? recoveryPage(stage, (await getContext()).password.config, viewer)
+              : signInPage(body.query as string, options.issuer, viewer);
+          if (!page) throw new Denied(400);
+          return respond(page);
+        }
+        if (securityRead) {
+          if (request.method !== 'GET' || request.headers.has('authorization')) throw new Denied(403);
+          return respond(
+            await readSecurityInventory({ headers: request.headers }, async (binding) => {
+              const human = await humanProof(request.headers);
+              if (human.account_id !== binding.accountId || proofSources.get(human)!.id !== binding.sessionId)
+                throw new Denied();
+              const admitted = await database.query(
+                'SELECT client_id FROM auth_client WHERE client_id=$1 AND disabled=false AND NOT erasure_fenced',
+                [binding.clientId],
+              );
+              if (!admitted.rowCount) throw new Denied();
+              return composeSecurityPage(database, {
+                account_id: binding.accountId,
+                session_id: binding.sessionId,
+                client_id: binding.clientId,
+                now: trustedNowSeconds(),
+                fresh: trustedNowSeconds() - human.auth_time <= 600,
+                passwordCommands: !!(
+                  trustedAccess.approveCredentialEffect &&
+                  trustedAccess.revalidateCredentialEffect &&
+                  trustedAccess.advanceCredentialFloor
+                ),
+                credentialCommands: !!(
+                  trustedAccess.passkeys &&
+                  trustedAccess.approveCredentialEffect &&
+                  trustedAccess.revalidateCredentialEffect &&
+                  trustedAccess.advanceCredentialFloor
+                ),
+              });
+            }),
+          );
+        }
+        if (inventoryRead) {
+          const input = { ...securityPageQuery(url.searchParams), headers: request.headers };
+          return respond(
+            await (url.pathname === '/clients'
+              ? service.security.listClients(input)
+              : service.security.listConsents(input)),
+          );
+        }
         if (url.pathname === '/.well-known/jwks.json' && request.method === 'GET') return json(await signer.getJwks());
         if (url.pathname === '/session' && request.method === 'GET') return json(await sessionProof(request.headers));
-        if (request.method === 'GET' && /^\/consent\/[^/]+$/.test(url.pathname)) {
+        if (url.pathname === '/passkeys' && request.method === 'GET') {
+          if (request.headers.get('origin') !== options.issuer) throw new Denied(403);
+          const human = await humanProof(request.headers);
+          const result = await database.query(
+            'SELECT id,name,"createdAt" AS created_at,last_used_at FROM passkey WHERE "userId"=$1 ORDER BY id LIMIT 32',
+            [human.account_id],
+          );
+          return json({ passkeys: result.rows.map(securityPasskey) });
+        }
+        if (consentRead) {
           const human = await humanProof(request.headers);
           let clientId: string;
           try {
@@ -1388,29 +2224,75 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           }
           const client = await clientFor(clientId, 404);
           if (client.first_party) throw new Denied(404);
-          const consent = (
-            await database.query<{ scopes: string[]; pending_scopes: string[] | null }>(
-              'SELECT scopes,pending_scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2',
-              [human.account_id, client.client_id],
+          if ([...url.searchParams.keys()].some((key) => key !== 'scope')) throw new Denied(400);
+          const requestedValues = url.searchParams.getAll('scope');
+          if (requestedValues.length > 1) throw new Denied(400);
+          const requested = parseConsentRequestedScopes(requestedValues[0] ?? '');
+          if (!requested) throw new Denied(400);
+          const page = await withIssuance(clientId, async () => {
+            const before = await humanProof(request.headers);
+            const beforeSource = proofSources.get(before);
+            const initialSource = proofSources.get(human);
+            if (
+              !beforeSource ||
+              !initialSource ||
+              beforeSource.id !== initialSource.id ||
+              before.account_id !== human.account_id ||
+              before.client_id !== human.client_id ||
+              before.authn_epoch !== human.authn_epoch ||
+              before.auth_time !== human.auth_time ||
+              JSON.stringify(before.scope) !== JSON.stringify(human.scope) ||
+              JSON.stringify(before.amr) !== JSON.stringify(human.amr)
             )
-          ).rows[0];
-          return json({
-            client_id: client.client_id,
-            display_name: client.display_name,
-            scopes: client.scopes,
-            granted:
-              consent?.scopes.filter(
-                (scope) =>
-                  client.scopes.includes(scope) &&
-                  (consent.pending_scopes === null || consent.pending_scopes.includes(scope)),
-              ) ?? [],
+              throw new Denied(409);
+            const currentClient = await clientFor(clientId, 404);
+            if (currentClient.first_party) throw new Denied(404);
+            return withConsent(before.account_id, clientId, async (connection) => {
+              const identity = await readNativeAccountIdentity(database, before.account_id);
+              const consent =
+                (
+                  await connection.query<{ scopes: string[]; pending_scopes: string[] | null }>(
+                    'SELECT scopes,pending_scopes FROM auth_consent WHERE account_id=$1 AND client_id=$2',
+                    [before.account_id, currentClient.client_id],
+                  )
+                ).rows[0] ?? null;
+              const afterClient = await clientFor(clientId, 404);
+              const after = await humanProof(request.headers);
+              const afterSource = proofSources.get(after);
+              if (
+                !afterSource ||
+                afterSource.id !== beforeSource.id ||
+                after.account_id !== before.account_id ||
+                after.client_id !== before.client_id ||
+                after.authn_epoch !== before.authn_epoch ||
+                after.auth_time !== before.auth_time ||
+                JSON.stringify(after.scope) !== JSON.stringify(before.scope) ||
+                JSON.stringify(after.amr) !== JSON.stringify(before.amr) ||
+                identity.account_id !== before.account_id ||
+                afterClient.display_name !== currentClient.display_name ||
+                afterClient.first_party !== currentClient.first_party ||
+                !sameScopeSet(afterClient.scopes, currentClient.scopes)
+              )
+                throw new Denied(409);
+              const projected = projectConsentPage({
+                client: currentClient,
+                identity,
+                requested,
+                consent,
+              });
+              if (!projected) throw new Denied(503);
+              return projected;
+            });
           });
+          const response = json(page);
+          response.headers.set('cache-control', 'private, no-store');
+          return response;
         }
         if (url.pathname === '/sessions' && request.method === 'GET') {
           const human = await humanProof(request.headers);
           const currentId = proofSources.get(human)!.id;
           const sessions = await database.query(
-            `SELECT s.id,s."clientId" AS client_id,c.display_name AS client_display_name,
+            `SELECT s.id,s."clientId" AS client_id,CASE WHEN c.display_name_writer=1 THEN c.display_name END AS client_display_name,
                     s."createdAt" AS created_at,s."expiresAt" AS expires_at,
                     s."userAgent" AS user_agent,s.id=$2 AS current
              FROM session s LEFT JOIN auth_client c ON c.client_id=s."clientId"
@@ -1424,6 +2306,12 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           ![
             '/signin',
             '/signin/key',
+            '/signin/passkey/options',
+            '/signin/passkey',
+            '/passkeys/register/options',
+            '/passkeys/register',
+            '/passkeys/remove',
+            '/passkeys/rename',
             '/recovery/start',
             '/recovery/complete',
             '/token',
@@ -1443,22 +2331,34 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         const attemptPath = {
           '/signin': '/sign-in/email',
           '/signin/key': '/sign-in/email',
+          '/signin/passkey/options': '/sign-in/email',
+          '/signin/passkey': '/sign-in/email',
+          '/passkeys/register/options': '/sign-in/email',
+          '/passkeys/register': '/sign-in/email',
+          '/passkeys/remove': '/sign-in/email',
+          '/passkeys/rename': '/sign-in/email',
           '/recovery/start': '/request-password-reset',
           '/recovery/complete': '/reset-password',
         }[url.pathname];
         if (attemptPath && !attemptDispatch.getStore()) {
+          const recoveryCommand = url.pathname === '/recovery/start' || url.pathname === '/recovery/complete';
           const response = await attemptDispatch.run(
             () => service.handler(request),
             () => getAuth().handler(nativeAttemptRequest(request, options.issuer, attemptPath)),
           );
           if (response.status === 429) {
-            const denied = json({ error: 'authentication_denied' }, 429);
+            const denied = recoveryCommand
+              ? recoveryJson(recoveryNativeError, 429)
+              : json({ error: 'authentication_denied' }, 429);
             // The pinned router emits X-Retry-After; expose the standard header
             // without forwarding endpoint bodies or releasing session cookies.
             denied.headers.set('retry-after', response.headers.get('x-retry-after') ?? '1');
             return denied;
           }
-          if (response.status >= 500) return json({ error: 'authentication_denied' }, 503);
+          if (response.status >= 500)
+            return recoveryCommand
+              ? recoveryJson(recoveryNativeError, 503)
+              : json({ error: 'authentication_denied' }, 503);
           return response;
         }
         const body = await bodyOf(request);
@@ -1466,8 +2366,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           fields(body, ['session_id']);
           const sessionId = text(body.session_id);
           const human = await humanProof(request.headers);
-          // The native session identity is immutable. Include its owner in the
-          // delete too, so a foreign or unknown id cannot mutate any session.
+          // Preserve unknown/foreign concealment before attempting the mutation.
           const target = (
             await database.query<{ userId: string }>('SELECT "userId" FROM session WHERE id=$1', [sessionId])
           ).rows[0];
@@ -1478,16 +2377,24 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             for (const cookie of [authCookies.sessionToken, authCookies.sessionData, authCookies.dontRememberToken])
               cookies.push(serializeCookie(cookie.name, '', { ...cookie.attributes, maxAge: 0 }));
           }
-          await database.query('DELETE FROM session WHERE id=$1 AND "userId"=$2', [sessionId, human.account_id]);
+          // Both mutation and ownership proof address only the exact key. An
+          // ordinary owner predicate here lets the planner scan owner history.
+          // Recheck ownership in this statement's snapshot, including key reuse
+          // since the read above. Native (id,userId) immutability also preserves
+          // that guard if DELETE must recheck a concurrently updated tuple.
+          await database.query('DELETE FROM session WHERE id=$1 AND (SELECT "userId" FROM session WHERE id=$1)=$2', [
+            sessionId,
+            human.account_id,
+          ]);
           return json({}, 200, cookies);
         }
         if (url.pathname === '/recovery/start') {
           const email = recoveryAddress(body);
           // Lookup, Access and delivery stay off this response. Failures are logged without the address.
           void deliverRecovery(email).catch(() => {
-            console.error('Recovery start failed');
+            emitAuthDiagnostic('recovery_start_failed');
           });
-          return json({ success: true });
+          return recoveryJson(recoveryAcknowledgement);
         }
         if (url.pathname === '/recovery/complete') {
           fields(body, ['account_id', 'token', 'new_password']);
@@ -1520,7 +2427,8 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             if (!success || completed.evidence[8] !== effectCommitment || success.authnEpoch !== account.authnEpoch)
               throw new Denied();
             await trustedAccess.completeRecovery(completed.reference);
-            return json({ success: true });
+            await recordRecoveryCompletion(database, completed.reference);
+            return recoveryJson(recoveryAcknowledgement);
           }
           // Native adapter reads use the same pool. Finish them before leasing a
           // transaction connection, including with a real max=1 pool.
@@ -1611,6 +2519,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             operationKey,
           });
           invalidation(receipt, accountId, proof.previousEpoch);
+          await confirmReceipt(receipt, 'recovery', operationKey);
           if (
             receipt.minimumAuthnEpoch > 2147483647 ||
             (await recoveryAccount(accountId)).authnEpoch !== receipt.minimumAuthnEpoch
@@ -1665,11 +2574,141 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             mutation.release();
           }
           await trustedAccess.completeRecovery(proof.reference);
+          await recordRecoveryCompletion(database, proof.reference);
+          return recoveryJson(recoveryAcknowledgement);
+        }
+        if (url.pathname === '/signin/passkey/options' || url.pathname === '/passkeys/register/options') {
+          fields(body, []);
+          const registering = url.pathname === '/passkeys/register/options';
+          if (registering) {
+            const human = await humanProof(request.headers);
+            freshCredentialProof(human, human.account_id);
+          }
+          const response = registering
+            ? await getAuth().api.generatePasskeyRegistrationOptions({ headers: request.headers, asResponse: true })
+            : await getAuth().api.generatePasskeyAuthenticationOptions({
+                headers: new Headers({ origin: options.issuer }),
+                asResponse: true,
+              });
+          if (response.status >= 500) throw new APIError('SERVICE_UNAVAILABLE');
+          if (!response.ok) throw new Denied();
+          const result = registering
+            ? await receiveRegistrationOptions(response)
+            : await receiveAuthenticationOptions(response);
+          return json(result, 200, response.headers.getSetCookie());
+        }
+        if (url.pathname === '/signin/passkey') {
+          fields(body, ['response', 'client_id', 'scope']);
+          if (!body.response || typeof body.response !== 'object' || Array.isArray(body.response))
+            throw new Denied(400);
+          const previous = await presentedSession(request.headers);
+          const selected: Binding = { clientId: text(body.client_id), scopes: scopes(body.scope), method: 'pop' };
+          await clientFor(selected.clientId);
+          const response = await withIssuance(selected.clientId, async () =>
+            established(
+              await sessionBinding(selected, () =>
+                getAuth().api.verifyPasskeyAuthentication({
+                  headers: request.headers,
+                  body: { response: body.response as PasskeyAssertion },
+                  asResponse: true,
+                }),
+              ),
+            ),
+          );
+          return await replacePreviousSession(previous, response);
+        }
+        if (url.pathname === '/passkeys/rename') {
+          fields(body, ['id', 'name', 'reviewed_account_id']);
+          const id = text(body.id);
+          const name = text(body.name).trim();
+          if (!name || name.length > securityResponseLimits.passkeyName) throw new Denied(400);
+          const human = await humanProof(request.headers);
+          if (human.account_id !== text(body.reviewed_account_id)) throw new Denied(409);
+          freshCredentialProof(human, human.account_id);
+          // A label is not a new credential: retain its key material and epoch.
+          // The row CAS still invalidates any older prepared credential change.
+          const updated = await database.query(
+            'UPDATE passkey SET name=$3 WHERE id=$1 AND "userId"=$2 RETURNING id,name',
+            [id, human.account_id, name],
+          );
+          if (!updated.rowCount) throw new Denied(404);
+          return json({ id, name });
+        }
+        if (url.pathname === '/passkeys/register' || url.pathname === '/passkeys/remove') {
+          const registering = url.pathname === '/passkeys/register';
+          fields(body, registering ? ['response', 'name'] : ['id']);
+          const human = await humanProof(request.headers);
+          freshCredentialProof(human, human.account_id);
+          let stage;
+          if (registering) {
+            const input = registrationInput(body.response, body.name);
+            const existing = (
+              await database.query(
+                'SELECT effect_reference FROM auth_effect_receipt WHERE account_id=$1 AND operation_key=$2',
+                [human.account_id, input.key],
+              )
+            ).rows[0];
+            if (existing) {
+              stage = await credentials.read(existing.effect_reference);
+              if (
+                stage.credential.kind !== 'passkey' ||
+                stage.credential.remove ||
+                stage.credential.registrationDigest !== input.digest ||
+                stage.binding.actingHumanId !== human.account_id ||
+                stage.binding.clientId !== human.client_id ||
+                JSON.stringify(stage.binding.scopes) !== JSON.stringify(human.scope)
+              )
+                throw new Denied(409);
+            } else {
+              const ceremony: Parameters<typeof passkeyCeremonies.run>[0] = {};
+              await passkeyCeremonies.run(ceremony, () =>
+                getAuth().api.verifyPasskeyRegistration({
+                  headers: request.headers,
+                  body: { response: body.response, ...(input.name === null ? {} : { name: input.name }) },
+                  asResponse: true,
+                }),
+              );
+              if (!ceremony.credential) throw new Denied();
+              const binding = await credentials.stage({
+                key: input.key,
+                subjectAccountId: human.account_id,
+                credential: ceremony.credential,
+                human,
+                sourceSessionId: proofSources.get(human)?.id,
+              });
+              stage = await credentials.read(binding.effectReference);
+            }
+          } else {
+            const staged = await service.internal.stagePasskeyEffect({
+              key: `passkey-remove:${randomUUID()}`,
+              subjectAccountId: human.account_id,
+              headers: request.headers,
+              credential: { kind: 'passkey', id: text(body.id), remove: true },
+            });
+            stage = await credentials.read(staged.effectRef);
+          }
+          const input = {
+            key: stage.binding.operationKey,
+            effectRef: stage.binding.effectReference,
+            subjectAccountId: human.account_id,
+            headers: request.headers,
+            deadline,
+          };
+          const reference = stage.row.committed_at
+            ? stage.row.opening_reference
+            : (await service.internal.approveCredentialEffect(input)).reference;
+          if (!reference) throw new Denied();
+          await service.internal.applyCredentialEffect({ ...input, authorization: reference });
+          if (registering && stage.credential.kind === 'passkey' && !stage.credential.remove)
+            return json(
+              { id: stage.credential.id, name: stage.credential.name, created_at: stage.credential.createdAt },
+              201,
+            );
           return json({ success: true });
         }
         if (url.pathname === '/signin/key') {
           fields(body, ['account_id', 'assertion', 'client_id', 'scope']);
-          const account = await activeActor(text(body.account_id));
+          const account = await credentialActor(text(body.account_id));
           const selected: Binding = {
             clientId: text(body.client_id),
             scopes: scopes(body.scope),
@@ -1683,8 +2722,9 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             throw new Denied(400);
           try {
             await verifyKeyAssertion(database, account.accountId, body.assertion, `${options.issuer}/token`);
-          } catch {
-            throw new Denied();
+          } catch (error) {
+            if (error instanceof InvalidKeyAssertion) throw new Denied();
+            throw error;
           }
           return await establish(selected, request.headers);
         }
@@ -1694,7 +2734,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           let response: Response;
           if (body.account_id !== undefined) {
             if (body.email !== undefined) throw new Denied(400);
-            const account = await activeActor(text(body.account_id));
+            const account = await credentialActor(text(body.account_id));
             const password = text(body.password);
             if (password.length > (await getContext()).password.config.maxPasswordLength) throw new Denied(400);
             const credential = await (await getContext()).internalAdapter.findCredentialAccount(account.accountId);
@@ -1717,7 +2757,7 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
             const selected = { clientId: text(body.client_id), scopes: scopes(body.scope) };
             await clientFor(selected.clientId);
             response = await withIssuance(selected.clientId, async () => {
-              const signed = await binding.run(selected, () =>
+              const signed = await sessionBinding(selected, () =>
                 getAuth().api.signInEmail({
                   headers: request.headers,
                   body: { email: text(body.email), password: text(body.password) },
@@ -1775,20 +2815,37 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
           });
         }
         if (url.pathname === '/consent') {
-          fields(body, ['client_id', 'scope']);
+          fields(body, ['client_id', 'scope', 'reviewed_account_id', 'reviewed_scopes', 'reviewed_requested']);
           const clientId = text(body.client_id);
           const granted = scopes(body.scope);
-          const reduction = await withIssuance(clientId, async () => {
+          const reviewedAccountId = body.reviewed_account_id === undefined ? undefined : text(body.reviewed_account_id);
+          const reviewedScopes = body.reviewed_scopes === undefined ? undefined : scopes(body.reviewed_scopes);
+          const reviewedRequested =
+            body.reviewed_requested === undefined
+              ? undefined
+              : normalizeConsentRequestedScopes(body.reviewed_requested);
+          if (
+            (body.reviewed_requested !== undefined && !reviewedRequested) ||
+            (reviewedAccountId !== undefined && (reviewedScopes === undefined || reviewedRequested === undefined)) ||
+            (reviewedAccountId === undefined && reviewedRequested !== undefined) ||
+            (reviewedScopes !== undefined &&
+              (granted.length > CONSENT_PAGE_MAX_SCOPES || reviewedScopes.length > CONSENT_PAGE_MAX_SCOPES))
+          )
+            throw new Denied(400);
+          const outcome = await withIssuance(clientId, async () => {
             const native = await getAuth().api.getSession({
               headers: request.headers,
               query: { disableCookieCache: true, disableRefresh: true },
             });
             if (!native) throw new Denied();
             const session = native.session;
-            const account = await activeActor(session.userId);
-            if (account.automated) throw new Denied();
+            const account = await activeActor(session.userId, true);
+            // An automated account is reduced only from a session its operator's manager opened for it.
+            const operated = account.automated;
+            const openingReceiptId = operated ? await operatorOpening(session) : undefined;
             const client = await clientFor(clientId);
             if (client.first_party || granted.some((scope) => !client.scopes.includes(scope))) throw new Denied(400);
+            if (reviewedAccountId !== undefined && reviewedAccountId !== account.accountId) throw new Denied(409);
             return withConsent(account.accountId, clientId, async (connection) => {
               const previous = (
                 await connection.query<{
@@ -1800,17 +2857,37 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                   [account.accountId, clientId],
                 )
               ).rows[0];
+              if (reviewedScopes !== undefined && !sameScopeSet(previous?.scopes ?? [], reviewedScopes))
+                throw new Denied(409);
+              if (reviewedAccountId !== undefined) {
+                const union = [
+                  ...new Set([
+                    ...reviewedScopes!,
+                    ...reviewedRequested!.filter((scope) => client.scopes.includes(scope)),
+                  ]),
+                ];
+                // A registration change can make an old request's union exceed
+                // the fixed browser acknowledgement contract. Refuse it under
+                // the existing locks before any grant or barrier effect.
+                if (union.length > CONSENT_PAGE_MAX_SCOPES) throw new Denied(409);
+                const expected = scopes(union);
+                if (!sameScopeSet(granted, expected)) throw new Denied(409);
+              }
+              if (operated && (!previous || granted.some((scope) => !previous.scopes.includes(scope))))
+                throw new Denied();
               if (!previous?.scopes.some((scope) => !granted.includes(scope))) {
+                if (operated) throw new Denied();
                 // Only a current native human session can supersede a pending
                 // request. A first-party materialization never clears it.
                 await humanProof(request.headers);
-                await connection.query(
-                  `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)
-                   ON CONFLICT (account_id,client_id) DO UPDATE
-                   SET scopes=EXCLUDED.scopes,pending_scopes=NULL,pending_reference=NULL`,
-                  [account.accountId, clientId, granted],
-                );
-                return null;
+                return {
+                  kind: 'grant' as const,
+                  accountId: account.accountId,
+                  revision: previous?.revision ?? '0',
+                  previousScopes: previous?.scopes ?? [],
+                  pendingReference: previous?.pending_reference ?? null,
+                  sessionId: session.id,
+                };
               }
               if (!trustedAccess.invalidateAccount) throw new Denied();
               const evidence = [
@@ -1827,38 +2904,127 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
                 previous.revision,
                 previous.scopes,
                 granted,
+                ...(openingReceiptId === undefined ? [] : [openingReceiptId]),
               ];
               const operationKey = digestOf(['auth-consent-v1', evidence]);
               const resuming = session.authnEpoch < account.authnEpoch || previous.pending_reference !== null;
-              if (!resuming) {
+              if (!resuming && !operated) {
                 const human = await humanProof(request.headers);
                 if (human.account_id !== account.accountId || human.authn_epoch !== account.authnEpoch)
                   throw new Denied();
               }
-              const proof = await publishBarrier(
-                connection,
-                'consent-reduction',
-                account.accountId,
-                session.authnEpoch,
-                operationKey,
-                evidence,
-                session.expiresAt,
-                resuming,
-              );
+              const proof = {
+                ...(await publishBarrier(
+                  connection,
+                  'consent-reduction',
+                  account.accountId,
+                  session.authnEpoch,
+                  operationKey,
+                  evidence,
+                  session.expiresAt,
+                  resuming,
+                )),
+                ...(openingReceiptId === undefined ? {} : { openingReceiptId }),
+              };
               if (resuming && previous.pending_reference !== proof.reference) throw new Denied();
-              // Publish the ceiling with the proof, preserving original scopes
-              // and revision for immutable evidence and the final compare-and-set.
-              await connection.query(
-                'UPDATE auth_consent SET pending_scopes=$3,pending_reference=$4 WHERE account_id=$1 AND client_id=$2',
-                [account.accountId, clientId, granted, proof.reference],
-              );
-              return { proof, revision: previous.revision, clientScopes: client.scopes };
+              // The native Kind frontier is closed and receiving fences commit
+              // before the pending ceiling becomes visible.
+              return {
+                kind: 'reduction' as const,
+                proof,
+                revision: previous.revision,
+                previousScopes: previous.scopes,
+                clientScopes: client.scopes,
+              };
             });
           });
-          if (reduction) {
+          if (outcome?.kind === 'grant') {
+            const transitionKey = `kind-consent:grant:${digestOf([
+              outcome.accountId,
+              clientId,
+              outcome.sessionId,
+              outcome.revision,
+              outcome.previousScopes,
+              outcome.pendingReference,
+              granted,
+            ])}`;
+            let staleReview = false;
+            const changed = await kindConsent.writer.change({
+              transitionKey,
+              kind: 'consent',
+              accountId: outcome.accountId,
+              clientId,
+              target: { operation: 'consent-upsert', scopes: granted, pendingScopes: null, pendingReference: null },
+              async apply(connection) {
+                const current =
+                  (
+                    await connection.query<{
+                      scopes: string[];
+                      revision: string;
+                      pending_reference: string | null;
+                    }>(
+                      'SELECT scopes,revision::text,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+                      [outcome.accountId, clientId],
+                    )
+                  ).rows[0] ?? null;
+                if (
+                  (current?.revision ?? '0') !== outcome.revision ||
+                  JSON.stringify(current?.scopes ?? []) !== JSON.stringify(outcome.previousScopes) ||
+                  (current?.pending_reference ?? null) !== outcome.pendingReference
+                ) {
+                  staleReview = true;
+                  return;
+                }
+                await connection.query(
+                  `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3)
+                   ON CONFLICT (account_id,client_id) DO UPDATE
+                   SET scopes=EXCLUDED.scopes,pending_scopes=NULL,pending_reference=NULL`,
+                  [outcome.accountId, clientId, granted],
+                );
+              },
+            });
+            if (changed.status !== 'applied') throw new Denied(503);
+            if (staleReview) throw new Denied(409);
+          }
+          if (outcome?.kind === 'reduction') {
             // Both issuance context and every Auth connection/client lock have
             // ended. Access's verifier may borrow the very same max=1 pool.
-            const { proof } = reduction;
+            const { proof } = outcome;
+            let staleReview = false;
+            const changed = await kindConsent.writer.change({
+              transitionKey: `kind-consent:reduction:${proof.operationKey}`,
+              kind: 'consent',
+              accountId: proof.accountId,
+              clientId,
+              target: { operation: 'consent-pending', pendingScopes: granted, pendingReference: proof.reference },
+              async apply(connection) {
+                const current = (
+                  await connection.query<{
+                    scopes: string[];
+                    revision: string;
+                    pending_reference: string | null;
+                  }>(
+                    'SELECT scopes,revision::text,pending_reference FROM auth_consent WHERE account_id=$1 AND client_id=$2 FOR UPDATE',
+                    [proof.accountId, clientId],
+                  )
+                ).rows[0];
+                if (
+                  !current ||
+                  current.revision !== outcome.revision ||
+                  JSON.stringify(current.scopes) !== JSON.stringify(outcome.previousScopes) ||
+                  (current.pending_reference !== null && current.pending_reference !== proof.reference)
+                ) {
+                  staleReview = true;
+                  return;
+                }
+                await connection.query(
+                  'UPDATE auth_consent SET pending_scopes=$3,pending_reference=$4 WHERE account_id=$1 AND client_id=$2',
+                  [proof.accountId, clientId, granted, proof.reference],
+                );
+              },
+            });
+            if (changed.status !== 'applied') throw new Denied(503);
+            if (staleReview) throw new Denied(409);
             if (!(await barrierProofs.verify(proof.reference, proof))) throw new Denied();
             const receipt = await trustedAccess.invalidateAccount!({
               accountId: proof.accountId,
@@ -1866,36 +3032,63 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
               reason: 'consent-reduction',
               proofReference: proof.reference,
               operationKey: proof.operationKey,
+              ...(proof.openingReceiptId === undefined ? {} : { openingReceiptId: proof.openingReceiptId }),
             });
             invalidation(receipt, proof.accountId, proof.previousEpoch);
-            await withIssuance(clientId, () =>
-              withConsent(proof.accountId, clientId, async (connection) => {
-                const client = await clientFor(clientId);
-                if (
-                  client.first_party ||
-                  JSON.stringify(client.scopes) !== JSON.stringify(reduction.clientScopes) ||
-                  granted.some((scope) => !client.scopes.includes(scope)) ||
-                  (await activeActor(proof.accountId)).authnEpoch !== receipt.minimumAuthnEpoch ||
-                  !(await barrierProofs.verify(proof.reference, proof))
-                )
-                  throw new Denied();
+            await confirmReceipt(receipt, 'consent-reduction', proof.operationKey);
+            const client = await clientFor(clientId);
+            if (
+              client.first_party ||
+              JSON.stringify(client.scopes) !== JSON.stringify(outcome.clientScopes) ||
+              granted.some((scope) => !client.scopes.includes(scope)) ||
+              (await activeActor(proof.accountId, true)).authnEpoch !== receipt.minimumAuthnEpoch ||
+              !(await barrierProofs.verify(proof.reference, proof))
+            )
+              throw new Denied();
+            const completed = await kindConsent.writer.change({
+              transitionKey: `kind-consent:reduction-complete:${proof.operationKey}`,
+              kind: 'consent',
+              accountId: proof.accountId,
+              clientId,
+              target: {
+                operation: 'consent-upsert',
+                scopes: granted,
+                pendingScopes: null,
+                pendingReference: null,
+              },
+              async apply(connection) {
                 if (
                   !(
                     await connection.query(
                       `UPDATE auth_consent SET scopes=$3,pending_scopes=NULL,pending_reference=NULL
                        WHERE account_id=$1 AND client_id=$2 AND revision=$4 AND pending_reference=$5
                        AND pending_scopes=$3 RETURNING account_id`,
-                      [proof.accountId, clientId, granted, reduction.revision, proof.reference],
+                      [proof.accountId, clientId, granted, outcome.revision, proof.reference],
                     )
                   ).rowCount
                 )
                   throw new Denied();
                 await applyBarrier(connection, proof.reference, receipt, 'consent-reduction');
-              }),
-            );
+              },
+            });
+            if (completed.status !== 'applied') throw new Denied(503);
             await (await getContext()).internalAdapter.deleteUserSessions(proof.accountId);
+            await trustedAccess.completeBarrier?.({
+              accountId: proof.accountId,
+              purpose: 'consent-reduction',
+              operationKey: proof.operationKey,
+              receiptId: receipt.receiptId,
+              minimumAuthnEpoch: receipt.minimumAuthnEpoch,
+            });
           }
-          return json({ client_id: clientId, scope: granted });
+          if (reviewedAccountId === undefined) return json({ client_id: clientId, scope: granted });
+          const acknowledgement: ReviewedConsentDecisionResponse = {
+            account_id: reviewedAccountId,
+            client_id: clientId,
+            requested: reviewedRequested!,
+            scope: granted,
+          };
+          return json(acknowledgement);
         }
         fields(body, []);
         // Better Auth owns cookie clearing and deletion of its own persistent session.
@@ -1904,7 +3097,27 @@ export async function buildAuthService(options: AuthServiceOptions): Promise<Aut
         );
         return json({ success: response.ok }, response.status, response.headers.getSetCookie());
       } catch (error) {
-        return json({ error: 'authentication_denied' }, error instanceof Denied ? error.status : 503);
+        if (error instanceof SuspendedSignIn) return json({ error: 'account_suspended', code: error.body?.code }, 403);
+        if (error instanceof StepUpRequired)
+          return json({ error: 'step_up_required', effect_status: 'not_applied' }, 401);
+        if (error instanceof RecoveryProjectionError) throw error;
+        const status =
+          error && typeof error === 'object' && 'status' in error && typeof error.status === 'number'
+            ? error.status
+            : error instanceof APIError
+              ? error.statusCode
+              : 503;
+        const credentialRoute = new URL(request.url).pathname.startsWith('/passkeys/');
+        const recoveryCommand =
+          new URL(request.url).pathname === '/recovery/start' || new URL(request.url).pathname === '/recovery/complete';
+        if (recoveryCommand && isRecoveryResponseProjection(recoveryNativeError, status))
+          return recoveryJson(recoveryNativeError, status);
+        return respond(
+          credentialRoute
+            ? { error: 'credential_effect_denied', effect_status: 'not_applied' }
+            : { error: 'authentication_denied', ...(status === 409 ? { code: 'stale_review' } : {}) },
+          status,
+        );
       }
     },
   };

@@ -2,5 +2,26 @@
   "printWidth": 120,
   "singleQuote": true,
   "sortPackageJson": false,
-  "ignorePatterns": ["contracts/**", "packages/client/src/kernel/**", "packages/document/schema/**"]
+  "ignorePatterns": [
+    "services/kernel/test/semantic/subject-reference-contract.test.ts",
+    "services/kernel/test/library/shelf-active.test.ts",
+    "services/kernel/test/library/shelf-heads.test.ts",
+    "services/kernel/test/library/shelf-http-schema.test.ts",
+    "contracts/**",
+    "services/kernel/test/library/bulk-target-schema.test.ts",
+    "services/kernel/test/library/type-preparation-schema.test.ts",
+    "services/kernel/test/rating/own-votes.test.ts",
+    "services/kernel/test/library/bulk-outcome-page.test.ts",
+    "services/kernel/test/library/listing-public-history-schema.test.ts",
+    "services/kernel/test/library/listing-source-observer.test.ts",
+    "services/kernel/test/library/sitemap-contract.test.ts",
+    "packages/client/src/kernel/**",
+    "packages/document/schema/**",
+    "packages/ui/src/shadcn/**",
+    "packages/ui/src/lib/highlighter.tsx",
+    "packages/ui/src/hooks/use-mobile.ts",
+    "packages/ui/src/hooks/use-highlighted-code.ts",
+    "packages/ui/shadcn-registry.json",
+    "packages/ui/SHADCN.md"
+  ]
 }

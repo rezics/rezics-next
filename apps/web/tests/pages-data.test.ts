@@ -1,9 +1,14 @@
 import { expect, test } from 'bun:test';
-import { createElement } from 'react';
+import { slug } from '@rezics/definitions/slug';
+import { createElement, useContext } from 'react';
 import { renderToString } from 'react-dom/server';
-import { dataComponents, PageData, type PageMessages } from '../src/features/pages/data.tsx';
+import type { CompositionDocument } from '@rezics/composition';
+import { dataComponents, PageData, SubjectSources, type PageMessages } from '../src/features/pages/data.tsx';
 import { layoutComponents, pageDefinitions, PageRoot } from '../src/features/pages/layout.tsx';
 import { CompositionRender } from '../src/features/pages/render.tsx';
+import { memberContinuationPlan } from '../src/features/pages/member-list-query';
+import { memberContinuationDocument } from '../src/kernel/fake/composed-member-list';
+import { OverviewContext } from '../src/features/pages/overview';
 
 const subjectId = '01a1740d-7480-71e4-841f-66c04022d7d0';
 const author = '01a1740d-7480-71e4-841f-66c04022d7d1';
@@ -65,11 +70,20 @@ const read = {
     'rezics:role': { labels: { en: 'Role' } },
   },
 };
+// A subject list reads the inverse links; the kernel names each holder in the reader's language.
 const list = {
-  subjects: [{ id: work, type: 'schema:Book', labels: { en: 'Night Flight', fr: 'Vol de nuit' } }],
-  total: { value: 1, relation: 'exact' },
+  links: [
+    {
+      subject: work,
+      property: 'schema:author',
+      statement: '01a1740d-7480-71e4-841f-66c04022d7f2',
+      type: 'schema:Book',
+      label: 'Vol de nuit',
+      summary: null,
+    },
+  ],
+  count: { value: 1, exact: true },
   next: null,
-  as_of: '2026-10-25T00:00:00.000Z',
 };
 const messages: PageMessages = {
   unknown: 'Unknown value',
@@ -83,6 +97,7 @@ const document = {
   root: { props: {} },
   content: [
     node('SubjectHeader', 'header'),
+    node('Summary', 'about'),
     node('Statements', 'facts', { properties: ['schema:author', 'schema:numberOfPages', 'schema:genre'] }),
     node('MoreStatements', 'more'),
     node('SubjectList', 'works', { title: { en: 'Works', fr: 'Œuvres' }, property: 'schema:author', limit: 6 }),
@@ -111,38 +126,58 @@ test("data components render the subject read in the reader's locale", () => {
   expect(html).toMatch(/<p[^>]*lang="en"[^>]*>A novella<\/p>/);
   expect(text(html)).toContain('Le Petit Prince illustré');
   expect(html).toMatch(/<dt[^>]*>Auteur<\/dt>/);
-  expect(html).toMatch(new RegExp(`href="/fr/subjects/${author}"[^>]*>Antoine de &lt;Saint-Exupéry&gt;</a>`));
+  expect(html).toMatch(
+    new RegExp(
+      `href="/fr/subjects/${author}/${slug('Antoine de <Saint-Exupéry>')}"[^>]*>Antoine de &lt;Saint-Exupéry&gt;</a>`,
+    ),
+  );
   expect(text(html)).toMatch(/Role No value/);
   expect(text(html)).toMatch(/Pages 1\s?096/);
   expect(text(html)).toContain('978-0156012195');
   expect(html).not.toContain('000-old');
   expect(text(html)).toMatch(/Illustrator Unknown value/);
   expect(text(html)).toMatch(/Published 1943/);
-  expect(html.match(/href="https:\/\/example\.com\/a"/g)).toHaveLength(1);
-  expect(html.match(/Antoine de/g)).toHaveLength(1);
+  // A fact's sources are listed once, in the Sources section, not under the fact.
+  expect(html).not.toContain('https://example.com/a');
+  const sources = renderToString(
+    createElement(
+      PageData,
+      { locale: 'fr', subject: subjectId, document, reads: ok, messages } as never,
+      createElement(SubjectSources),
+    ),
+  );
+  expect(sources.match(/href="https:\/\/example\.com\/a"/g)).toHaveLength(1);
+  // The author is linked from the header and from the fact row.
+  expect(
+    html.match(new RegExp(`href="/fr/subjects/${author}/${slug('Antoine de <Saint-Exupéry>')}"`, 'g')),
+  ).toHaveLength(2);
   const order = ['Auteur', 'Pages', 'ISBN', 'Illustrator', 'Published', 'Œuvres', 'Fin'].map((needle) =>
     html.indexOf(needle),
   );
   expect(order.every((position, index) => position > 0 && (index === 0 || position > order[index - 1]!))).toBe(true);
-  expect(html).toMatch(new RegExp(`href="/fr/subjects/${work}"[^>]*>Vol de nuit</a>`));
+  expect(html).toMatch(new RegExp(`href="/fr/subjects/${work}/${slug('Vol de nuit')}"[^>]*>Vol de nuit</a>`));
   const english = render('en', ok);
   expect(english).toMatch(/<h1[^>]*>The Little Prince<\/h1>/);
   expect(english).toMatch(/<dt[^>]*>Author<\/dt>/);
   expect(text(english)).toContain('The end');
 });
 
-test('failed and empty reads leave their components out', () => {
+test('a failed read says so under its heading and an empty one leaves its component out', () => {
   const failed = render('fr', {
     r0: { status: 404, body: { code: 'not_found' } },
     r1: { status: 503, body: { code: 'index_not_ready' } },
   });
   expect(failed).not.toMatch(/<h1/);
-  expect(failed).not.toContain('Œuvres');
+  // A list whose read failed says so with a retry instead of silently vanishing.
+  expect(failed).toMatch(/data-slot="subject-list" data-state="failed"/);
+  // The list names its failed section with a retry; the header and the facts, whose read also failed, are left out.
+  expect(failed).toContain('data-state="failed"');
+  expect(failed).toContain('Œuvres');
   expect(failed).not.toContain('Auteur');
   expect(failed).toContain('Fin');
   const empty = render('fr', {
     r0: { status: 200, body: { ...read, subject: { ...read.subject, statements: {} } } },
-    r1: { status: 200, body: { ...list, subjects: [] } },
+    r1: { status: 200, body: { ...list, links: [] } },
   });
   expect(empty).toMatch(/<h1[^>]*>Le Petit Prince<\/h1>/);
   expect(empty).not.toContain('Auteur');
@@ -176,7 +211,44 @@ test('values are text and links stay safe', () => {
       } as never),
     ),
   );
-  expect(linked).toMatch(new RegExp(`<a href="/ja/subjects/${work}"[^>]*data-router="yes"`));
+  expect(linked).toMatch(new RegExp(`<a href="/ja/subjects/${work}/${slug('Vol de nuit')}"[^>]*data-router="yes"`));
   expect(linked).toMatch(/<h1[^>]*>星の王子さま<\/h1>/);
-  expect(linked).toMatch(/lang="en"[^>]*>Night Flight/);
+  expect(linked).toMatch(/>Vol de nuit</);
+});
+
+test('member continuations plan account descriptors from the resolved page account', () => {
+  const document = {
+    ...memberContinuationDocument,
+    content: [node('AccountCollections', 'collections', { limit: 12 }), ...memberContinuationDocument.content],
+  } as CompositionDocument;
+  const account = { id: '01a1740d-7480-71e4-841f-66c04022d7d3', handle: 'resolved-account' };
+  const plan = memberContinuationPlan({ subject: null, account }, document, {
+    node: 'members',
+    cursor: 'opaque:account-continuation==',
+  });
+  expect(plan.reads[plan.nodes.collections!]).toEqual({
+    kind: 'accountCollections',
+    id: account.id,
+    limit: 12,
+  });
+  expect(plan.reads[plan.nodes.members!]).toMatchObject({
+    kind: 'members',
+    source: { kind: 'everything' },
+    cursor: 'opaque:account-continuation==',
+  });
+});
+
+test('a public page keeps an explicit anonymous reader partition for its continuations', () => {
+  function ReaderPartition() {
+    const value = useContext(OverviewContext);
+    return createElement('output', { 'data-reader': value?.cacheReader === null ? 'anonymous' : 'missing' });
+  }
+  const html = renderToString(
+    createElement(
+      PageData,
+      { locale: 'en', subject: subjectId, document, reads: {}, messages } as never,
+      createElement(ReaderPartition),
+    ),
+  );
+  expect(html).toContain('data-reader="anonymous"');
 });

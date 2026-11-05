@@ -8,6 +8,9 @@ import {
   type DumpCounters,
 } from './dumps-bytes';
 
+/** Declared Open Library dump-set family; unset keeps mixed single-dump skipping. */
+export type OpenLibraryDumpFamily = 'author' | 'work' | 'edition';
+
 function invalid(): never {
   throw new Error('Invalid dump record or framing');
 }
@@ -23,6 +26,40 @@ function object(text: string): Record<string, unknown> {
 }
 const positive = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+
+type WikiScan = { depth: number; quoted: boolean; escaped: boolean; started: boolean; bytes: number };
+function scanWikiEntity(text: string, scan: WikiScan): boolean | null {
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i]!;
+    const code = text.charCodeAt(i);
+    if (code <= 0x7f) scan.bytes++;
+    else if (code <= 0x7ff) scan.bytes += 2;
+    else if (code >= 0xd800 && code <= 0xdbff) {
+      scan.bytes += 4;
+      i++;
+    } else scan.bytes += 3;
+    if (scan.quoted) {
+      if (scan.escaped) scan.escaped = false;
+      else if (char === '\\') scan.escaped = true;
+      else if (char === '"') scan.quoted = false;
+      continue;
+    }
+    if (char === '"') scan.quoted = true;
+    else if (char === '{') {
+      scan.started = true;
+      scan.depth++;
+    } else if (char === '}') {
+      if (scan.depth === 0) return invalid();
+      if (--scan.depth === 0) {
+        const tail = text.slice(i + 1).trim();
+        if (tail !== '' && tail !== ',') return invalid();
+        return tail === ',';
+      }
+    }
+  }
+  if (!scan.started) return invalid();
+  return null;
+}
 
 function copyCell(cell: string, memory: DumpMemory, counters: DumpCounters): string | null {
   if (cell === '\\N') return null;
@@ -76,6 +113,9 @@ export async function* readDump(
     maxRecordBytes?: number | undefined;
     maxChunkBytes?: number;
     counters?: DumpCounters;
+    openLibraryFamily?: OpenLibraryDumpFamily;
+    /** Explicitly keyed Bangumi imports also accept pinned PersonDetail TSV rows. */
+    bangumiPersonDetailRows?: boolean;
   } = {},
 ): AsyncGenerator<SourceRecord> {
   const chunkCap = dumpChunkLimit(options.maxChunkBytes);
@@ -87,7 +127,11 @@ export async function* readDump(
   memory.hold(8, source, 'metadata');
   let columns: string[] | null = null;
   let table: string | null = null;
-  let wiki: 'start' | 'lines' | 'first' | 'value' | 'separator' | 'closed' = 'start';
+  let allowPersonDetailTrailingLine = false;
+  let wiki: 'start' | 'lines' | 'first' | 'value' | 'valueOrClose' | 'separator' | 'closed' = 'start';
+  let wikiParts: string[] | null = null;
+  let wikiBytes = 0;
+  const wikiScan: WikiScan = { depth: 0, quoted: false, escaped: false, started: false, bytes: 0 };
   const lineCap = () =>
     source === 'vndb' && table === null ? Math.max(cap + 1, 65536) : cap + (source === 'wikidata' ? 2 : 1);
   try {
@@ -100,9 +144,15 @@ export async function* readDump(
           return invalid();
         }
         memory.hold(3, text);
+        if (source === 'bangumi' && options.bangumiPersonDetailRows && text === '' && allowPersonDetailTrailingLine) {
+          allowPersonDetailTrailingLine = false;
+          continue;
+        }
+        allowPersonDetailTrailingLine = false;
         let recordBytes = bytes.length;
         if (source === 'wikidata') {
           text = text.trim();
+          let assembled = false;
           if (!text) continue;
           if (wiki === 'closed') return invalid();
           if (wiki === 'start') {
@@ -117,27 +167,51 @@ export async function* readDump(
             wiki = 'lines';
           }
           if (wiki !== 'lines') {
-            if (text === ']') {
-              if (wiki !== 'first' && wiki !== 'separator') return invalid();
-              wiki = 'closed';
+            if (wikiParts === null) {
+              if (text === ']') {
+                if (wiki !== 'first' && wiki !== 'separator' && wiki !== 'valueOrClose') return invalid();
+                wiki = 'closed';
+                continue;
+              }
+              if (text === ',') {
+                if (wiki !== 'separator') return invalid();
+                wiki = 'value';
+                continue;
+              }
+              if (wiki !== 'first' && wiki !== 'value' && wiki !== 'valueOrClose') return invalid();
+              wikiParts = [];
+              wikiBytes = 0;
+              wikiScan.depth = 0;
+              wikiScan.quoted = false;
+              wikiScan.escaped = false;
+              wikiScan.started = false;
+              wikiScan.bytes = 0;
+            }
+            wikiParts.push(text);
+            if (wikiParts.length > 1) wikiScan.bytes++;
+            wikiBytes += bytes.length + (wikiParts.length > 1 ? 1 : 0);
+            memory.hold(4, wikiParts);
+            const comma = scanWikiEntity(text, wikiScan);
+            if (comma === null) {
+              if (wikiBytes > cap + 1) return invalid();
               continue;
             }
-            if (text === ',') {
-              if (wiki !== 'separator') return invalid();
-              wiki = 'value';
-              continue;
+            if (comma) {
+              const last = wikiParts.length - 1;
+              wikiParts[last] = wikiParts[last]!.slice(0, -1);
             }
-            if (wiki !== 'first' && wiki !== 'value') return invalid();
-            const comma = text.endsWith(',');
-            if (comma) text = text.slice(0, -1).trimEnd();
-            wiki = comma ? 'value' : 'separator';
+            text = wikiParts.join('\n');
+            memory.hold(14, text);
+            wikiParts = null;
+            memory.hold(4, null);
+            memory.hold(4, text);
+            memory.hold(14, null);
+            wiki = comma ? 'valueOrClose' : 'separator';
+            assembled = true;
           }
           memory.hold(4, text);
-          const encoded = new TextEncoder().encode(text);
-          memory.hold(11, encoded);
-          counters.copiedBytes += encoded.length;
-          recordBytes = encoded.length;
-          memory.hold(11, null);
+          if (assembled) counters.copiedBytes += wikiScan.bytes;
+          recordBytes = wikiScan.bytes;
         }
         if (source === 'vndb') {
           if (table === null) {
@@ -204,27 +278,77 @@ export async function* readDump(
             (payload.type as Record<string, unknown>).key !== type
           )
             return invalid();
-          if (type !== '/type/work' && type !== '/type/edition') continue;
-          if (!(type === '/type/work' ? /^\/works\/OL[1-9]\d*W$/ : /^\/books\/OL[1-9]\d*M$/).test(id!))
-            return invalid();
-          key = id!;
-          revision = rev!;
-        } else {
-          payload = object(text);
-          if (source === 'bangumi') {
-            if (!positive(payload.id) || ![1, 2, 3, 4, 6].includes(payload.type as number)) return invalid();
-            key = String(payload.id);
+          const family = options.openLibraryFamily;
+          if (family) {
+            const expectedType =
+              family === 'author' ? '/type/author' : family === 'work' ? '/type/work' : '/type/edition';
+            const identity =
+              family === 'author'
+                ? /^\/authors\/OL[1-9]\d*A$/
+                : family === 'work'
+                  ? /^\/works\/OL[1-9]\d*W$/
+                  : /^\/books\/OL[1-9]\d*M$/;
+            if (type !== expectedType || !identity.test(id!)) return invalid();
+            if (family === 'author') continue;
+            key = id!;
+            revision = rev!;
           } else {
-            const hasRevision = Object.prototype.hasOwnProperty.call(payload, 'lastrevid');
+            if (type !== '/type/work' && type !== '/type/edition') continue;
+            if (!(type === '/type/work' ? /^\/works\/OL[1-9]\d*W$/ : /^\/books\/OL[1-9]\d*M$/).test(id!))
+              return invalid();
+            key = id!;
+            revision = rev!;
+          }
+        } else {
+          if (source === 'bangumi' && options.bangumiPersonDetailRows && text.includes('\t')) {
+            const cells = text.split('\t');
+            memory.hold(12, cells);
+            if (cells.length !== 5) return invalid();
+            const [type, id, sourceRevision, responseEtag, json] = cells;
             if (
-              payload.type !== 'item' ||
-              typeof payload.id !== 'string' ||
-              !/^Q[1-9]\d*$/.test(payload.id) ||
-              (hasRevision && !positive(payload.lastrevid))
+              type !== '/type/person' ||
+              !/^person:[1-9][0-9]*$/u.test(id!) ||
+              sourceRevision !== 'unversioned' ||
+              responseEtag!.length > 64 ||
+              !/^[\x20-\x7e]*$/u.test(responseEtag!) ||
+              Buffer.byteLength(json!, 'utf8') > 65_536
             )
               return invalid();
-            key = payload.id;
-            if (hasRevision) revision = String(payload.lastrevid);
+            payload = object(json!);
+            const requestedId = Number(id!.slice('person:'.length));
+            if (!Number.isSafeInteger(requestedId) || payload.id !== requestedId || payload.type !== 1)
+              return invalid();
+            key = id!;
+            revision = null;
+            allowPersonDetailTrailingLine = true;
+          } else {
+            payload = object(text);
+            if (source === 'bangumi') {
+              const career = Object.prototype.hasOwnProperty.call(payload, 'career') ? payload.career : undefined;
+              if (Array.isArray(career)) {
+                if (!positive(payload.id) || ![1, 2, 3].includes(payload.type as number)) return invalid();
+                key = `person:${payload.id}`;
+              } else {
+                if (!positive(payload.id) || ![1, 2, 3, 4, 6].includes(payload.type as number)) return invalid();
+                key = String(payload.id);
+              }
+            } else {
+              const hasRevision = Object.prototype.hasOwnProperty.call(payload, 'lastrevid');
+              const identity =
+                payload.type === 'item' ? /^Q[1-9][0-9]*/ : payload.type === 'property' ? /^P[1-9][0-9]*/ : null;
+              if (
+                !identity ||
+                typeof payload.id !== 'string' ||
+                // Compare the whole match: JavaScript's $ also admits a final newline.
+                identity.exec(payload.id)?.[0] !== payload.id ||
+                (hasRevision && !positive(payload.lastrevid))
+              )
+                return invalid();
+              // Properties consume framing but never become catalogue source members.
+              if (payload.type === 'property') continue;
+              key = payload.id;
+              if (hasRevision) revision = String(payload.lastrevid);
+            }
           }
         }
         memory.hold(13, key);
@@ -232,10 +356,15 @@ export async function* readDump(
         memory.sample();
         yield { source, key, revision, payload };
       } finally {
-        for (const slot of [3, 4, 5, 6, 7, 11, 12, 13]) memory.hold(slot, null);
+        for (const slot of [3, 5, 6, 7, 11, 12, 13]) memory.hold(slot, null);
+        if (wikiParts === null) memory.hold(4, null);
       }
     }
-    if (table !== null || (source === 'wikidata' && !['start', 'lines', 'closed'].includes(wiki))) return invalid();
+    if (
+      table !== null ||
+      (source === 'wikidata' && (wikiParts !== null || !['start', 'lines', 'closed'].includes(wiki)))
+    )
+      return invalid();
   } finally {
     memory.close();
   }

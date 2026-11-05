@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
-import type { DataType, Release } from '@rezics/definitions';
+import type { DataType, RelationDefinition, Release } from '@rezics/definitions';
 import { checkSubjectStructure, type Violation } from '@rezics/definitions/validate';
 export type { Violation } from '@rezics/definitions/validate';
 import { derivedId, routeOf } from '../route/route.ts';
+import type { SourceRecord } from './source-records.ts';
 
 export type Value = { type: 'value'; content: unknown } | { type: 'somevalue' } | { type: 'novalue' };
 export type Snak = { property: { id: string; data_type: DataType }; value: Value };
@@ -23,10 +24,12 @@ export type Item = {
   release: string;
   context: string;
   resolution: Record<string, 'unresolved' | 'suppressed'>;
+  relationCounts: Record<string, number>;
   labels: Record<string, string>;
   descriptions: Record<string, string>;
   aliases: Record<string, string[]>;
   statements: Record<string, Statement[]>;
+  sourceRecords: SourceRecord[];
 };
 export type Fact = {
   slot_id: string;
@@ -83,8 +86,121 @@ export class SubjectInputError extends Error {
 
 export const SLOT_NS = 'c30d6caa-d9e8-4108-a42a-35701219e8ec';
 const STATEMENT_NS = '9f44e74c-b77c-47aa-96d0-b7a4aa330182';
+export const RELATION_GROUPS = new Set([
+  'order',
+  'derivation',
+  'world',
+  'membership',
+  'association',
+  'credit',
+  'appearance',
+]);
+const OCCUPATION_PROPERTY = 'wdt:P106';
 const isObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === 'object' && !Array.isArray(value);
+
+export function isRelationProperty(release: Release, property: string): boolean {
+  const definition = release.properties[property];
+  if (RELATION_GROUPS.has(definition?.relation?.group ?? '')) return true;
+  return (
+    property === OCCUPATION_PROPERTY &&
+    release.types['schema:Person']?.properties.includes(property) === true &&
+    definition?.datatype === 'wikibase-item' &&
+    definition.relation?.group === 'classification' &&
+    definition.targets?.length === 1 &&
+    definition.targets[0] === 'skos:Concept'
+  );
+}
+
+function hasRelationSlots(property: string, relation: RelationDefinition | undefined): boolean {
+  return (
+    RELATION_GROUPS.has(relation?.group ?? '') ||
+    (property === OCCUPATION_PROPERTY && relation?.group === 'classification')
+  );
+}
+
+export function statementSlotId(subject: string, property: string): string {
+  return derivedId(SLOT_NS, `${subject}\nstatement\n${property}`, routeOf(subject)!);
+}
+
+/** Relation slots isolate one target (and, where declared, one repeatable item qualifier). */
+export function relationSlotId(
+  subject: string,
+  property: string,
+  target: string,
+  slotKey?: { declared: boolean; value: string },
+): string {
+  const relation = `${subject}\nrelation\n${property}\n${target}${slotKey?.declared ? `\n${slotKey.value}` : ''}`;
+  return derivedId(SLOT_NS, relation, routeOf(subject)!);
+}
+
+function absoluteIri(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$/.test(value);
+}
+
+export function relationSlotForStatement(
+  subject: string,
+  property: string,
+  body: unknown,
+  relation?: RelationDefinition,
+): string {
+  const fallback = statementSlotId(subject, property);
+  if (!hasRelationSlots(property, relation) || !isObject(body) || !isObject(body.value)) return fallback;
+  const value = body.value as { type?: unknown; content?: unknown };
+  if (value.type === 'value' && typeof value.content === 'string' && routeOf(value.content) !== null) {
+    const key = relation.slotKey
+      ? Array.isArray(body.qualifiers)
+        ? (body.qualifiers.find(
+            (qualifier) =>
+              isObject(qualifier) &&
+              qualifier.property === relation.slotKey &&
+              isObject(qualifier.value) &&
+              qualifier.value.type === 'value' &&
+              typeof qualifier.value.content === 'string',
+          )?.value as { content: string } | undefined)
+        : undefined
+      : undefined;
+    return relationSlotId(subject, property, value.content, {
+      declared: relation.slotKey !== undefined,
+      value: key?.content ?? '',
+    });
+  }
+  if (value.type === 'somevalue' && Array.isArray(body.qualifiers)) {
+    const sameAs = body.qualifiers.find(
+      (qualifier) =>
+        isObject(qualifier) &&
+        qualifier.property === 'schema:sameAs' &&
+        isObject(qualifier.value) &&
+        qualifier.value.type === 'value' &&
+        absoluteIri(qualifier.value.content),
+    ) as { value: { content: string } } | undefined;
+    if (sameAs)
+      return derivedId(
+        SLOT_NS,
+        `${subject}\nrelation\n${property}\nexternal\n${sameAs.value.content}`,
+        routeOf(subject)!,
+      );
+  }
+  return fallback;
+}
+
+export function relationSlotForApi(
+  subject: string,
+  property: string,
+  relation: RelationDefinition | undefined,
+  input: { target?: string; sameAs?: string; key?: string },
+): string {
+  if (!hasRelationSlots(property, relation)) return statementSlotId(subject, property);
+  if (input.target !== undefined) {
+    return relationSlotId(subject, property, input.target, {
+      declared: relation.slotKey !== undefined,
+      value: input.key ?? '',
+    });
+  }
+  if (input.sameAs !== undefined)
+    return derivedId(SLOT_NS, `${subject}\nrelation\n${property}\nexternal\n${input.sameAs}`, routeOf(subject)!);
+  return statementSlotId(subject, property);
+}
 
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -96,11 +212,21 @@ function canonical(value: unknown): string {
   return JSON.stringify(value) ?? 'null';
 }
 
-export function itemFacts(subjectId: string, input: unknown, _type?: string): Fact[] {
+export function itemFacts(subjectId: string, input: unknown, _type?: string, release?: Release): Fact[] {
   const route = routeOf(subjectId);
   if (route === null) throw new RangeError('Subject id must be a canonical routed id');
-  const { violations, terms, aliasTerms, drafts } = checkSubjectStructure(input);
-  if (violations.length) throw new SubjectInputError(violations);
+  const { violations, terms, aliasTerms, drafts } = checkSubjectStructure(input, release);
+  // Typed statement fragments describe an existing subject; creation validates its full item separately.
+  const statementFragment =
+    _type !== undefined &&
+    release !== undefined &&
+    isObject(input) &&
+    Object.keys(input).every((key) => key === 'statements') &&
+    isObject(input.statements);
+  const errors = statementFragment
+    ? violations.filter((violation) => violation.pointer !== '/labels' || violation.code !== 'required')
+    : violations;
+  if (errors.length) throw new SubjectInputError(errors);
   const facts: Fact[] = [];
   const put = (
     kind: Fact['kind'],
@@ -110,9 +236,10 @@ export function itemFacts(subjectId: string, input: unknown, _type?: string): Fa
     language: string | null,
     property: string | null,
     statementId: string | null,
+    explicitSlotId?: string,
   ) =>
     facts.push({
-      slot_id: derivedId(SLOT_NS, `${subjectId}\n${kind}\n${key}`, route),
+      slot_id: explicitSlotId ?? derivedId(SLOT_NS, `${subjectId}\n${kind}\n${key}`, route),
       log_seq: seq,
       operation: 'assert',
       kind,
@@ -128,26 +255,32 @@ export function itemFacts(subjectId: string, input: unknown, _type?: string): Fa
     aliasSeq.set(t.language, seq);
     put('alias', t.language, seq, t.body, t.language, null, null);
   }
-  for (const group of drafts)
-    group.entries.forEach((entry, i) => {
-      const seq = i + 1;
-      const slotId = derivedId(SLOT_NS, `${subjectId}\nstatement\n${group.property}`, route);
-      const statementId = derivedId(STATEMENT_NS, `${slotId}\n${seq}`, route);
+  for (const group of drafts) {
+    const sequences = new Map<string, number>();
+    group.entries.forEach((entry) => {
       const bare = (snak: unknown) => {
         const s = snak as { property: string; value: unknown };
         return { property: s.property, value: s.value };
       };
       const references = entry.references.map((ref) => ({ parts: ref.parts.map(bare) }));
-      put(
-        'statement',
+      const body = {
+        rank: entry.rank,
+        value: entry.value,
+        qualifiers: entry.qualifiers.map(bare),
+        references,
+      };
+      const slot = relationSlotForStatement(
+        subjectId,
         group.property,
-        seq,
-        { rank: entry.rank, value: entry.value, qualifiers: entry.qualifiers.map(bare), references },
-        null,
-        group.property,
-        statementId,
+        body,
+        release?.properties[group.property]?.relation,
       );
+      const seq = (sequences.get(slot) ?? 0) + 1;
+      sequences.set(slot, seq);
+      const statementId = derivedId(STATEMENT_NS, `${slot}\n${seq}`, route);
+      put('statement', group.property, seq, body, null, group.property, statementId, slot);
     });
+  }
   return facts;
 }
 
@@ -161,6 +294,7 @@ export function resolveItem(
     release: string;
     context: string;
     resolution?: Record<string, 'unresolved' | 'suppressed'>;
+    relationCounts?: Record<string, number>;
   },
 ): Item {
   const labels: Record<string, string> = {};
@@ -224,9 +358,11 @@ export function resolveItem(
     type,
     ...metadata,
     resolution: metadata.resolution ?? {},
+    relationCounts: metadata.relationCounts ?? {},
     labels,
     descriptions,
     aliases: Object.fromEntries([...aliases].filter(([, values]) => values.length)),
     statements: Object.fromEntries([...statements].filter(([, values]) => values.length)),
+    sourceRecords: [],
   };
 }

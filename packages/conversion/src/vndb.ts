@@ -1,30 +1,39 @@
-import { checkBatchWrite, type BatchCommand, type BatchReference, type BatchStatement } from '@rezics/definitions/bulk';
+import { types } from 'node:util';
+import {
+  BATCH_LIMIT,
+  checkBatchWrite,
+  type BatchCommand,
+  type BatchReference,
+  type BatchStatement,
+} from '@rezics/definitions/bulk';
 import { ConversionError, type ConversionInput, type ConvertedRecord, type ConversionDiagnostic } from './index.ts';
 import {
   canonicalLanguageTag,
   commandKey,
   inLanguageTag,
-  safeSourceUrl,
+  latinLanguageTag,
   sourceDigest,
   sourceEnvelope,
+  sourceWebsiteUrl,
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'vndb@4';
+export const converter_revision = 'vndb@8';
 export const vndbLimits = Object.freeze({
   maxTitles: 64,
   maxTitleCandidates: 64,
+  maxAliases: 64,
   maxLinks: 32,
   stringBytes: 4096,
   recordBytes: 64 * 1024,
-  // One identifier + 64 title candidates + 32 links + one original language = 98 of 100.
-  maxCommands: 98,
+  // One identifier + 64 names + 64 alternate names + 32 links + one original language.
+  maxCommands: 162,
 });
 
 type Title = { id: string; lang: string; official: boolean; title: string; latin: string | null };
 type NormalizedRecord = {
-  vn: { id: string; olang?: string };
-  entry_meta: { id: string; revision: number };
+  vn: { id: string; olang?: string; c_votecount?: number; c_average?: number | null; alias?: string };
+  entry_meta: { id: string; revision: number; lastmod?: string };
   vn_titles: Title[];
   vn_extlinks: { id: string; link: number }[];
   extlinks: { id: number; site: string; value: string }[];
@@ -44,6 +53,7 @@ function row(value: unknown, pointer: string): object {
   if (
     !value ||
     typeof value !== 'object' ||
+    types.isProxy(value) ||
     Array.isArray(value) ||
     ![Object.prototype, null].includes(Object.getPrototypeOf(value))
   )
@@ -73,6 +83,19 @@ function titleText(value: unknown, pointer: string): string {
   if ([...result].length > 1500 || !result.trim()) fail('Invalid or oversized title', pointer);
   return result;
 }
+function aliasLines(value: unknown, pointer: string): string[] {
+  if (value === undefined || value === null || value === '') return [];
+  if (typeof value !== 'string' || !value.isWellFormed() || Buffer.byteLength(value, 'utf8') > vndbLimits.recordBytes)
+    fail('Invalid or oversized alias list', pointer);
+  const source = value as string;
+  const aliases: string[] = [];
+  for (const [index, line] of source.split(/\r?\n/u).entries()) {
+    if (line === '') continue;
+    aliases.push(titleText(line, `${pointer}/${index}`));
+    if (aliases.length > vndbLimits.maxAliases) fail('Alias lines exceed source cap', pointer);
+  }
+  return aliases;
+}
 function nativeId(value: unknown, pointer: string): string {
   const result = text(value, pointer);
   if (result.length > 32 || !/^v[1-9][0-9]*$/u.test(result)) fail('Expected a VNDB visual novel ID', pointer);
@@ -83,9 +106,27 @@ function integer(value: unknown, pointer: string): number {
     fail('Expected a positive dump integer', pointer);
   return value as number;
 }
+function nativeTimestamp(value: unknown, pointer: string): string {
+  const result = text(value, pointer);
+  if (
+    result.trim() !== result ||
+    !/^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}(?::?\d{2})?)?)?$/u.test(result)
+  )
+    fail('Invalid native modification timestamp', pointer);
+  const day = result.slice(0, 10);
+  const parsed = new Date(`${day}T00:00:00Z`);
+  if (
+    !Number.isFinite(parsed.getTime()) ||
+    parsed.toISOString().slice(0, 10) !== day ||
+    (result.length > 10 &&
+      (Number(result.slice(11, 13)) > 23 || Number(result.slice(14, 16)) > 59 || Number(result.slice(17, 19)) > 59))
+  )
+    fail('Invalid native modification timestamp', pointer);
+  return result;
+}
 function rows(value: unknown, pointer: string, cap: number, optional = false): unknown[] {
   if (value === undefined && optional) return [];
-  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype)
+  if (types.isProxy(value) || !Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype)
     fail('Expected grouped dump rows', pointer);
   const array = value as unknown[];
   const length = Object.getOwnPropertyDescriptor(array, 'length')!.value as number;
@@ -100,27 +141,17 @@ function rows(value: unknown, pointer: string, cap: number, optional = false): u
 }
 function website(value: string, pointer: string): string {
   try {
-    const host = new URL(value).hostname;
-    // Public website citations only; these URLs are never fetched by this module.
-    if (value.length > 1500 || !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/u.test(host))
-      fail('Invalid external website URL', pointer);
-    return safeSourceUrl(value, [host]);
+    return sourceWebsiteUrl(value);
   } catch {
     return fail('Invalid external website URL', pointer);
   }
 }
 
-function latinLanguageTag(tag: string): string | null {
-  const parts = tag.split('-');
-  if (/^[A-Z][a-z]{3}$/u.test(parts[1] ?? '')) parts[1] = 'Latn';
-  else parts.splice(1, 0, 'Latn');
-  return canonicalLanguageTag(parts.join('-'));
-}
-
 /**
  * Projection of decoded dump tables, not a live API response. Schema authority:
  * https://g.blicky.net/vndb.git/tree/sql/schema.sql and https://vndb.org/d14.
- * Allowlist: vn.id/olang; entry_meta.id/revision; vn_titles.id/lang/official/title/latin;
+ * Allowlist: vn.id/olang/alias/c_average/c_votecount; entry_meta.id/revision/lastmod;
+ * vn_titles.id/lang/official/title/latin;
  * vn_extlinks.id/link; extlinks.id/site/value. All other fields/tables are untouched.
  * https://vndb.org/d17#4 distinguishes ODbL database and DbCL contents licensing.
  * Neither licenses description/image republication; no creative content is projected.
@@ -134,12 +165,32 @@ function project(input: ConversionInput): NormalizedRecord {
   const olangValue = field(vn, 'olang', '/vn/olang');
   const projectedVn: NormalizedRecord['vn'] = { id };
   if (olangValue !== undefined) projectedVn.olang = text(olangValue, '/vn/olang');
+  const nativeAliases = aliasLines(field(vn, 'alias', '/vn/alias'), '/vn/alias');
+  if (nativeAliases.length) projectedVn.alias = nativeAliases.join('\n');
+  const voteCount = field(vn, 'c_votecount', '/vn/c_votecount');
+  const average = field(vn, 'c_average', '/vn/c_average');
+  if ((voteCount === undefined) !== (average === undefined))
+    fail('VNDB source statistic fields must be supplied together', '/vn');
+  if (voteCount !== undefined && average !== undefined) {
+    if (typeof voteCount !== 'number' || !Number.isSafeInteger(voteCount) || voteCount < 0 || voteCount > 2_147_483_647)
+      fail('Invalid source vote count', '/vn/c_votecount');
+    if (
+      average !== null &&
+      (typeof average !== 'number' || !Number.isSafeInteger(average) || average < 0 || average > 1000)
+    )
+      fail('Invalid source average', '/vn/c_average');
+    projectedVn.c_votecount = voteCount as number;
+    projectedVn.c_average = average as number | null;
+  }
   const meta = row(field(record, 'entry_meta', '/entry_meta'), '/entry_meta');
   if (nativeId(field(meta, 'id', '/entry_meta/id'), '/entry_meta/id') !== id)
     fail('entry_meta ID does not match vn.id', '/entry_meta/id');
   const revision = integer(field(meta, 'revision', '/entry_meta/revision'), '/entry_meta/revision');
   if (input.record_revision !== String(revision))
     fail('Source envelope revision does not match entry_meta', '/record_revision');
+  const projectedMeta: NormalizedRecord['entry_meta'] = { id, revision };
+  const lastmod = field(meta, 'lastmod', '/entry_meta/lastmod');
+  if (lastmod !== undefined) projectedMeta.lastmod = nativeTimestamp(lastmod, '/entry_meta/lastmod');
   const titles = rows(field(record, 'vn_titles', '/vn_titles'), '/vn_titles', vndbLimits.maxTitles).map((value, i) => {
     const p = `/vn_titles/${i}`;
     const entry = row(value, p);
@@ -156,7 +207,7 @@ function project(input: ConversionInput): NormalizedRecord {
       lang,
       official: official as boolean,
       title,
-      latin: latin === null ? null : titleText(latin, `${p}/latin`),
+      latin: latin === null ? null : latin === '' ? '' : titleText(latin, `${p}/latin`),
     };
   });
   if (!titles.length) fail('No source title for bootstrap', '/vn_titles');
@@ -190,7 +241,7 @@ function project(input: ConversionInput): NormalizedRecord {
     fail('External link group has mismatched or duplicate IDs', '/vn_extlinks');
   const normalized = {
     vn: projectedVn,
-    entry_meta: { id, revision },
+    entry_meta: projectedMeta,
     vn_titles: titles,
     vn_extlinks: links,
     extlinks: external,
@@ -227,8 +278,23 @@ export function convertVndb(
       parts: [
         { property: { id: 'wdt:P3180' }, value: { type: 'value', content: id } },
         { property: { id: 'schema:url' }, value: { type: 'value', content: `https://vndb.org/${id}.${revision}` } },
+        { property: { id: 'schema:version' }, value: { type: 'value', content: revision } },
       ],
     };
+    if (normalizedRecord.entry_meta.lastmod !== undefined) {
+      reference.parts.push({
+        property: { id: 'schema:dateModified' },
+        value: {
+          type: 'value',
+          content: {
+            // Cite the native calendar day, without shifting it through the timestamp's offset.
+            time: `+${normalizedRecord.entry_meta.lastmod.slice(0, 10)}T00:00:00Z`,
+            precision: 11,
+            calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
+          },
+        },
+      });
+    }
     const statement = (property: string, content: unknown): BatchStatement => ({
       property: { id: property },
       value: { type: 'value', content },
@@ -237,7 +303,7 @@ export function convertVndb(
     const titles: { language: string; text: string; official: boolean }[] = [];
     for (const title of normalizedRecord.vn_titles) {
       titles.push({ language: title.lang, text: title.title, official: title.official });
-      if (title.latin !== null) {
+      if (title.latin !== null && title.latin !== '') {
         const language = latinLanguageTag(title.lang);
         if (language === null) throw new ConversionError('Invalid title language', '/vn_titles');
         titles.push({ language, text: title.latin, official: false });
@@ -258,9 +324,16 @@ export function convertVndb(
     for (const title of uniqueTitles.values()) {
       if (labels[title.language] !== title.text) (aliases[title.language] ??= []).push(title.text);
     }
+    const nativeAliases = aliasLines(normalizedRecord.vn.alias, '/vn/alias');
+    if (nativeAliases.length) {
+      const undetermined = new Set(aliases.und ?? []);
+      for (const alias of nativeAliases) undetermined.add(alias);
+      aliases.und = Array.from(undetermined);
+    }
     const statements = [
       statement('wdt:P3180', id),
       ...Array.from(uniqueTitles.values(), (title) => statement('schema:name', title)),
+      ...nativeAliases.map((alias) => statement('schema:alternateName', { language: 'und', text: alias })),
     ];
     const diagnostics: ConversionDiagnostic[] = [];
     if (normalizedRecord.vn.olang !== undefined) {
@@ -305,8 +378,10 @@ export function convertVndb(
             statement: entry,
           }));
     if (proposals.length > vndbLimits.maxCommands) fail('Command count exceeds source cap', '/proposals');
-    if (checkBatchWrite({ commands: proposals }).length)
-      fail('Generated commands failed portable validation', '/proposals');
+    for (let offset = 0; offset < proposals.length; offset += BATCH_LIMIT) {
+      if (checkBatchWrite({ commands: proposals.slice(offset, offset + BATCH_LIMIT) }).length)
+        fail('Generated commands failed portable validation', '/proposals');
+    }
     return {
       source: 'vndb',
       external_id: id,

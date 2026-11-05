@@ -1,0 +1,25 @@
+{
+  "publishedLog": {
+    "id": "01a17a3b-70dd-709a-b040-f4cc8099977b",
+    "accountId": "01a17a3a-20f5-72aa-9f14-f4cc56678188",
+    "subjectId": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
+    "sessionState": "active",
+    "startedAt": "2026-10-26T18:22:28.378Z",
+    "completedAt": null,
+    "note": "Halfway through. The summer chapters are slow and exact; I am reading them on the train.",
+    "publishedAt": "2026-10-26T18:22:28.397Z",
+    "subject": {
+      "id": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
+      "type": "schema:Book",
+      "label": "Kokoro",
+      "types": ["schema:Book"],
+      "cover": null
+    },
+    "account": {
+      "id": "01a17a3a-20f5-72aa-9f14-f4cc56678188",
+      "handle": "mira",
+      "displayName": "Mira Okabe"
+    }
+  },
+  "status": 200
+}

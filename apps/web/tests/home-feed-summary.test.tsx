@@ -1,0 +1,290 @@
+import { expect, test } from 'bun:test';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { ContentItem } from '@rezics/ui/content-item';
+import { HomeFeed } from '../src/features/pages/home-feed';
+import { homeFeedItemPresentation } from '../src/features/feed/home-feed-item';
+import { homeFeedDestination } from '../src/features/pages/home-feed-destination';
+import type { FeedItem, FeedPage } from '../src/features/pages/home-feed-read';
+import { exactRevisionHref } from '../src/threads/exact-revision-href';
+import { threadLocation } from '../src/threads/thread-href';
+import { locales, setLocale } from '../src/paraglide/runtime.js';
+import { m } from '../src/paraglide/messages.js';
+
+function row(kind: 'thread' | 'post', identity = true): FeedItem {
+  const id = '12345678-1234-1234-1234-123456789abc';
+  return {
+    id: 'activity:1',
+    source: 'following',
+    key: { owner: 'content', kind, route: 4660, id },
+    occurredAt: '2026-11-03T00:00:00Z',
+    summary: {
+      id,
+      kind: 'discussion',
+      threadId: id,
+      title: 'A discussion',
+      createdAt: '2026-11-03T00:00:00Z',
+      excerpt: 'Opening <script> & post text',
+      ...(identity
+        ? {
+            author: {
+              displayName: 'Current Reader',
+              handle: 'reader',
+              avatar: {
+                media: '12345678-1234-1234-1234-123456789def',
+                width: 96,
+                height: 96,
+                placeholder: { thumbhash: '', color: '#888888' },
+                variants: [{ format: 'webp', width: 96 }],
+                focalPoint: null,
+                credit: null,
+              },
+            },
+          }
+        : {}),
+    },
+    destination:
+      kind === 'thread'
+        ? { kind, id, title: 'A discussion' }
+        : { kind, id, threadId: id, postId: id, title: 'A discussion' },
+  } as FeedItem;
+}
+
+test('Thread and post rows expose supplied identity beside the primary destination without reads', () => {
+  for (const kind of ['thread', 'post'] as const) {
+    const presentation = homeFeedItemPresentation(row(kind), 'en');
+    const html = renderToStaticMarkup(<ContentItem {...presentation} />);
+    expect(html).toContain('Current Reader');
+    expect(html).toContain('@reader');
+    expect(html).toContain('/media/12345678-1234-1234-1234-123456789def/webp-96');
+    expect(html).toContain('href="/en/@reader"');
+    expect(presentation.href).toContain('/threads/');
+    if (kind === 'post') expect(presentation.href).toContain('#post-');
+    expect(html).toContain('Opening &lt;script&gt; &amp; post text');
+    expect(html).not.toContain('<script>');
+    const omitted = row(kind, false);
+    delete (omitted.summary as { excerpt?: string }).excerpt;
+    const hidden = renderToStaticMarkup(<ContentItem {...homeFeedItemPresentation(omitted, 'en')} />);
+    expect(hidden).not.toContain('Current Reader');
+    expect(hidden).not.toContain('/@');
+    expect(hidden).not.toContain('Opening');
+  }
+});
+
+const collectionId = '01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7ba2';
+const reviewId = '01a17a3b-09b4-77bf-a24b-1234ebeab5b3';
+const spaceId = '01a1a000-0000-7000-8000-000000000811';
+const reviewedSubjectId = '12345678-1234-1234-1234-123456789abd';
+const questionId = '12345678-1234-1234-1234-123456789abe';
+const parentId = '12345678-1234-1234-1234-123456789abf';
+const parentRevisionId = '12345678-1234-1234-1234-123456789ab0';
+
+function collectionRow(source: 'following' | 'discovery' = 'following'): FeedItem {
+  return {
+    id: `activity:${collectionId}`,
+    source,
+    key:
+      source === 'discovery'
+        ? { owner: 'commerce', kind: 'collection', route: 4660, id: collectionId }
+        : { owner: 'library', kind: 'collection', route: 4660, id: collectionId },
+    occurredAt: '2026-11-03T00:00:00Z',
+    summary: { id: collectionId, title: 'Books I come back to', description: 'Short novels.' },
+    destination: { kind: 'collection', id: collectionId, title: 'Books I come back to' },
+  };
+}
+
+function reviewRow(): FeedItem {
+  return {
+    id: `activity:${reviewId}`,
+    source: 'following',
+    key: { owner: 'content', kind: 'thread', route: 4660, id: reviewId },
+    occurredAt: '2026-11-03T00:00:00Z',
+    summary: {
+      id: reviewId,
+      kind: 'review',
+      title: 'A careful reread',
+      createdAt: '2026-11-03T00:00:00Z',
+      excerpt: 'The opening holds.',
+      reviewContext: {
+        target: {
+          state: 'available',
+          subject: {
+            id: reviewedSubjectId,
+            kind: 'schema:Book',
+            label: { value: 'The reviewed edition', language: 'en' },
+          },
+        },
+        citation: {
+          state: 'available',
+          question: {
+            id: questionId,
+            revision: 7,
+            label: 'Does the ending hold up?',
+            grain: 'work',
+            scale: { min: 0, max: 10, displayStep: 1 },
+          },
+          units: 8,
+          voteRevision: 5,
+        },
+      },
+    },
+    destination: { kind: 'thread', id: reviewId, title: 'A careful reread' },
+  } as FeedItem;
+}
+
+function postWithParent(parent: unknown): FeedItem {
+  const item = row('post');
+  return {
+    ...item,
+    summary: { ...item.summary, parentContext: { kind: 'reply', parent } },
+  } as FeedItem;
+}
+
+function reviewWithCitation(citation: unknown): FeedItem {
+  const item = reviewRow();
+  return {
+    ...item,
+    summary: {
+      ...item.summary,
+      reviewContext: {
+        target: {
+          state: 'available',
+          subject: {
+            id: reviewedSubjectId,
+            kind: 'schema:Book',
+            label: { value: 'The reviewed edition', language: 'en' },
+          },
+        },
+        citation,
+      },
+    },
+  } as FeedItem;
+}
+
+function spaceRow(): FeedItem {
+  return {
+    id: `activity:${spaceId}`,
+    source: 'discovery',
+    key: { owner: 'content', kind: 'space', route: 4660, id: spaceId },
+    occurredAt: null,
+    summary: {
+      id: spaceId,
+      title: 'Home Reading Room',
+      address: 'home-reading-room',
+      summary: 'A quiet room.',
+      realm: { id: '01a1a000-0000-7000-8000-000000000812', title: 'Atlas' },
+    },
+    destination: { kind: 'space', id: spaceId, title: 'Home Reading Room', address: 'home-reading-room' },
+  };
+}
+
+test('Collection, review and Space rows keep native identity and omit missing enrichment', () => {
+  const collection = homeFeedItemPresentation(collectionRow(), 'en');
+  const review = homeFeedItemPresentation(reviewRow(), 'en');
+  const space = homeFeedItemPresentation(spaceRow(), 'en');
+  expect(homeFeedDestination(collectionRow(), 'en')).toBe(`/en/collections/${collectionId}`);
+  expect(homeFeedDestination(collectionRow('discovery'), 'en')).toBe(`/en/collections/${collectionId}`);
+  expect(review.href).toContain(`/en/threads/${reviewId}`);
+  expect(review.href).not.toContain('/subjects/');
+  expect(homeFeedDestination(spaceRow(), 'en')).toBe('/en/spaces/home-reading-room');
+  const html = [collection, review, space].map((item) => renderToStaticMarkup(<ContentItem {...item} />));
+  expect(html[0]).toContain('Collection');
+  expect(html[0]).toContain('Books I come back to');
+  expect(html[0]).toContain('Short novels.');
+  expect(html[0]).not.toContain('Current Reader');
+  expect(html[1]).toContain('Review');
+  expect(html[1]).toContain('A careful reread');
+  expect(html[1]).toContain('The reviewed edition');
+  expect(html[1]).toContain('Does the ending hold up?');
+  expect(html[1]).toContain(questionId);
+  expect(html[1]).toContain('8 units');
+  expect(html[2]).toContain('Space');
+  expect(html[2]).toContain('Home Reading Room');
+  expect(html[2]).toContain('Atlas');
+  expect(html[2]).toContain('A quiet room.');
+  expect(html[2]).not.toContain('/realms/');
+  expect(collection.visual).toBeUndefined();
+  expect(review.visual).toBeUndefined();
+  expect(space.visual).toBeUndefined();
+  const page: FeedPage = {
+    feedItems: [collectionRow(), reviewRow(), spaceRow()],
+    next: 'opaque-continuation',
+    asOf: '2026-11-03T00:00:00.000Z',
+    sources: { discovery: 'ready', following: 'ready', continue: 'not_requested' },
+  };
+  const list = renderToStaticMarkup(<HomeFeed result={{ state: 'ready', page }} locale="en" />);
+  expect(list.indexOf('Books I come back to')).toBeLessThan(list.indexOf('A careful reread'));
+  expect(list.indexOf('A careful reread')).toBeLessThan(list.indexOf('Home Reading Room'));
+  expect(list).toContain('data-feed-has-next="true"');
+  for (const locale of locales) {
+    setLocale(locale, { reload: false });
+    const labeled = renderToStaticMarkup(<ContentItem {...homeFeedItemPresentation(reviewRow(), locale)} />);
+    expect(labeled).toContain(m.home_feed_kind_review({}, { locale }));
+    expect(labeled).toContain('A careful reread');
+  }
+  setLocale('en', { reload: false });
+});
+
+test('Home review and reply cards keep current citation and immediate-parent identities exact', () => {
+  const review = renderToStaticMarkup(<ContentItem {...homeFeedItemPresentation(reviewRow(), 'en')} />);
+  expect(review).toContain(`data-feed-review-subject="${reviewedSubjectId}"`);
+  expect(review).toContain(`data-feed-review-question="${questionId}"`);
+  expect(review).toContain('data-feed-review-question-revision="7"');
+  expect(review).toContain('data-feed-review-units="8"');
+
+  const absentHtml = renderToStaticMarkup(
+    <ContentItem {...homeFeedItemPresentation(reviewWithCitation({ state: 'absent' }), 'en')} />,
+  );
+  expect(absentHtml).not.toContain(questionId);
+
+  const withheldHtml = renderToStaticMarkup(
+    <ContentItem {...homeFeedItemPresentation(reviewWithCitation({ state: 'withheld' }), 'en')} />,
+  );
+  expect(withheldHtml).toContain(m.post_history_score_concealed({}, { locale: 'en' }));
+  expect(withheldHtml).not.toContain(questionId);
+
+  const failedHtml = renderToStaticMarkup(
+    <ContentItem {...homeFeedItemPresentation(reviewWithCitation({ state: 'failed' }), 'en')} />,
+  );
+  expect(failedHtml).toContain(m.post_history_score_failed({}, { locale: 'en' }));
+  expect(failedHtml).not.toContain(questionId);
+
+  const threadId = '12345678-1234-1234-1234-123456789abc';
+  const thread = { id: threadId, title: 'A discussion' };
+  const available = renderToStaticMarkup(
+    <ContentItem
+      {...homeFeedItemPresentation(
+        postWithParent({
+          state: 'available',
+          id: parentId,
+          revisionId: parentRevisionId,
+          createdAt: '2026-11-03T00:00:00Z',
+          author: { id: '12345678-1234-1234-1234-123456789ab1', displayName: 'Current Parent', handle: 'parent' },
+          excerpt: 'Hidden parent spoiler',
+          language: 'ja',
+          spoiler: true,
+        }),
+        'en',
+      )}
+    />,
+  );
+  expect(available).toContain(`href="${threadLocation('en', thread, undefined, parentId)}"`);
+  expect(available).toContain(`href="${exactRevisionHref({ postId: parentId, revisionId: parentRevisionId }, 'en')}"`);
+  expect(available).toContain('Current Parent');
+  expect(available).toContain('/en/@parent');
+  expect(available).toContain('data-feed-parent-language="ja"');
+  expect(available).not.toContain('Hidden parent spoiler');
+
+  const removed = renderToStaticMarkup(
+    <ContentItem {...homeFeedItemPresentation(postWithParent({ state: 'removed', id: parentId }), 'en')} />,
+  );
+  expect(removed).toContain(m.thread_reply_parent_deleted({}, { locale: 'en' }));
+  expect(removed).toContain(`href="${threadLocation('en', thread, undefined, parentId)}"`);
+
+  const concealed = renderToStaticMarkup(
+    <ContentItem {...homeFeedItemPresentation(postWithParent({ state: 'withheld' }), 'en')} />,
+  );
+  expect(concealed).toContain(m.thread_reply_parent_unavailable({}, { locale: 'en' }));
+  expect(concealed).not.toContain(parentId);
+  expect(concealed).not.toContain('Current Parent');
+  expect(concealed).not.toContain('Hidden parent spoiler');
+});

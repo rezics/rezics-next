@@ -1,3 +1,7 @@
+import { accessClock } from './access-clock.ts';
+import { systemClock } from '../clock.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import type { Access } from '../request/access.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import type { CredentialFloorPort, CredentialFloorReceipt } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
@@ -12,14 +16,18 @@ import type { BarrierProofPort, TrustedAccessPorts } from '@rezics/auth-contract
 import type { AuthBindingCapabilities } from './auth-bindings.ts';
 import { AuthBindingDeniedError } from './auth-bindings.ts';
 import type { createLifecycleInternals, LifecycleFenceReceipt } from './lifecycle.ts';
+import { openingManagement } from './operator.ts';
 
 type Lifecycle = Pick<
   ReturnType<typeof createLifecycleInternals>,
-  'advanceAuthenticationFloor' | 'readFenceReceipt' | 'readFenceState'
+  'advanceAuthenticationFloor' | 'readFenceReceipt' | 'readFenceState' | 'confirmBarrier' | 'completeConsentBarrier'
 >;
 type Proofs = Pick<BarrierProofPort, 'verify'>;
 type Capabilities = Required<Pick<AuthBindingCapabilities, 'invalidateAccount' | 'authorizeRecovery'>>;
-type Ports = Required<Pick<TrustedAccessPorts, 'invalidateAccount' | 'authorizeRecovery'>>;
+type Ports = Required<
+  Pick<TrustedAccessPorts, 'invalidateAccount' | 'authorizeRecovery' | 'confirmBarrier' | 'completeBarrier'>
+>;
+const AUTH_BARRIER_BUDGET_MS = 3_000;
 function allowed(value: unknown): asserts value {
   if (!value) throw new AuthBindingDeniedError();
 }
@@ -28,9 +36,17 @@ function allowed(value: unknown): asserts value {
  * proof verifier closure and its database. Kernel receives neither credentials
  * nor a proof-minting facility. Structural substitutes prove boundary denial only.
  */
-export function createAuthBarrierCapabilities({ lifecycle, proofs }: { lifecycle: Lifecycle; proofs: Proofs }) {
+export function createAuthBarrierCapabilities({
+  lifecycle,
+  proofs,
+  access,
+}: {
+  lifecycle: Lifecycle;
+  proofs: Proofs;
+  access?: Access;
+}) {
   async function commit(
-    value: { accountId: string; proofReference?: string; operationKey?: string },
+    value: { accountId: string; proofReference?: string; operationKey?: string; openingReceiptId?: string },
     purpose: 'consent-reduction' | 'recovery',
     previousEpoch: number,
   ): Promise<LifecycleFenceReceipt> {
@@ -47,13 +63,22 @@ export function createAuthBarrierCapabilities({ lifecycle, proofs }: { lifecycle
         proofs?.verify,
     );
     const reference = input.proofReference;
-    const expected = { accountId: input.accountId, purpose, previousEpoch, operationKey: input.operationKey };
+    // Only a consent reduction from an operator-opened session names its opening.
+    const openingReceiptId = purpose === 'consent-reduction' ? input.openingReceiptId : undefined;
+    allowed(input.openingReceiptId === openingReceiptId);
+    const expected = {
+      accountId: input.accountId,
+      purpose,
+      previousEpoch,
+      operationKey: input.operationKey,
+      ...(openingReceiptId === undefined ? {} : { openingReceiptId }),
+    };
     const resolve = async () => {
       try {
         return await proofs.verify(reference, expected);
       } catch (error) {
         throwAccessUnavailable(error);
-        return null;
+        throw error;
       }
     };
     const proof = await resolve();
@@ -63,8 +88,9 @@ export function createAuthBarrierCapabilities({ lifecycle, proofs }: { lifecycle
         proof.purpose === purpose &&
         proof.previousEpoch === previousEpoch &&
         proof.operationKey === expected.operationKey &&
+        proof.openingReceiptId === openingReceiptId &&
         /^[a-f0-9]{64}$/.test(proof.digest) &&
-        Date.parse(proof.expiresAt) > Date.now(),
+        Date.parse(proof.expiresAt) > (access ? accessClock(access) : systemClock)().getTime(),
     );
     const bound = { ...proof };
     const outcome = await lifecycle.advanceAuthenticationFloor(
@@ -76,6 +102,7 @@ export function createAuthBarrierCapabilities({ lifecycle, proofs }: { lifecycle
         proofReference: reference,
         proofDigest: bound.digest,
         proofExpiresAt: bound.expiresAt,
+        ...(openingReceiptId === undefined ? {} : { openingReceiptId }),
       },
       async () => {
         const current = await resolve();
@@ -85,10 +112,13 @@ export function createAuthBarrierCapabilities({ lifecycle, proofs }: { lifecycle
           current.purpose === bound.purpose &&
           current.previousEpoch === bound.previousEpoch &&
           current.operationKey === bound.operationKey &&
+          current.openingReceiptId === bound.openingReceiptId &&
           current.digest === bound.digest &&
           current.expiresAt === bound.expiresAt
         );
       },
+      // The operator commands built on this Access decide whether the opening's human still manages the operator.
+      openingReceiptId === undefined || !access ? undefined : openingManagement(access),
     );
     // Read committed native identity and state, never synthesize a receipt from
     // expected numbers. Supersession after COMMIT denies this Auth effect.
@@ -104,8 +134,9 @@ export function createAuthBarrierCapabilities({ lifecycle, proofs }: { lifecycle
         receipt.minimumAuthnEpoch === String(previousEpoch + 1) &&
         state &&
         state.minimumAuthnEpoch === receipt.minimumAuthnEpoch &&
-        state.receiptId === receipt.receiptId &&
-        (purpose !== 'recovery' || state.fenced),
+        state.fenced &&
+        // A consent barrier on an already fenced account leaves that fence and its receipt in place.
+        (purpose === 'consent-reduction' || state.receiptId === receipt.receiptId),
     );
     return receipt;
   }
@@ -129,6 +160,13 @@ export function createAuthBarrierCapabilities({ lifecycle, proofs }: { lifecycle
   const trustedAccess: Ports = {
     invalidateAccount: async (input) => translate(await capabilities.invalidateAccount(input)),
     authorizeRecovery: async (input) => translate(await capabilities.authorizeRecovery(input)),
+    async confirmBarrier(input) {
+      return await lifecycle.confirmBarrier({ ...input });
+    },
+    async completeBarrier(input) {
+      allowed(input.purpose === 'consent-reduction');
+      await lifecycle.completeConsentBarrier({ ...input });
+    },
   };
   return { ...capabilities, trustedAccess };
 }
@@ -139,6 +177,7 @@ export function createAuthBarrierCapabilities({ lifecycle, proofs }: { lifecycle
  */
 export function createCredentialFloorHook(config: {
   pool: Pool;
+  access?: Access;
   validate(
     input: Parameters<CredentialFloorPort>[0],
     prior: CredentialFloorReceipt | null,
@@ -147,6 +186,9 @@ export function createCredentialFloorHook(config: {
 }): CredentialFloorPort {
   return async (value) => {
     const input = structuredClone(value);
+    const deadline = input.deadline ?? deadlineFor(AUTH_BARRIER_BUDGET_MS);
+    input.deadline = deadline;
+    requireAccessDeadline(deadline);
     const { stage, consumedOpening: opening, expectedPreviousFloor: previous } = input;
     const route = routeOf(stage.subjectAccountId);
     allowed(
@@ -158,6 +200,7 @@ export function createCredentialFloorHook(config: {
         input.purpose === stage.purpose &&
         (stage.purpose === 'remove-password' ||
           stage.purpose === 'remove-key' ||
+          stage.purpose === 'remove-passkey' ||
           (stage.purpose === 'set-password' && stage.credentialRowId !== null)),
     );
     const parameters = { route, account_id: stage.subjectAccountId, opening_receipt_id: opening.receiptId };
@@ -172,12 +215,13 @@ export function createCredentialFloorHook(config: {
           }
         : null;
     }
-    const digest = createHash('sha256').update(canonicalize(input)!).digest();
-    const deadline = Math.min(Date.now() + 3000, Date.parse(opening.expiresAt));
+    const { deadline: _deadline, ...operation } = input;
+    const digest = createHash('sha256').update(canonicalize(operation)!).digest();
     const result = await runCommand(
       config.pool,
       {
         partition: partitionOf(route),
+        clock: config.access ? accessClock(config.access) : systemClock,
         deadline,
         authorization: {
           action: 'credential-floor',

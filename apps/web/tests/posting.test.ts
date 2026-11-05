@@ -1,3 +1,4 @@
+import { browserSessionToken, waitForPersonalRead } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -8,6 +9,7 @@ import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import { chromium, type Browser, type Page, type Request as BrowserRequest } from 'playwright';
 import type { KernelClient } from '@rezics/client';
 import { hasDocumentContent } from '@rezics/document';
+import { threadHref } from '../src/threads/thread-href';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -61,7 +63,7 @@ type Problem = NonNullable<Awaited<ReturnType<ThreadResource['posts']['post']>>[
 type Snapshot = NonNullable<Posts['posts'][number]['body']>;
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const boardPath = (locale = 'en') => `/${locale}/boards/${id(1)}`;
-const threadPath = (locale = 'en') => `/${locale}/threads/${id(2)}`;
+const threadPath = (locale = 'en') => `/${locale}${threadHref({ id: id(2), title: 'A shared reading' })}`;
 const licence = 'LicenseRef-rezics-terms';
 const metadata = {
   route: 0,
@@ -424,6 +426,7 @@ async function open(path: string, signedIn = true): Promise<{ page: Page; access
 }
 async function hydrated(page: Page) {
   await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+  await waitForPersonalRead(page, ['session']);
 }
 afterAll(async () => {
   await browser?.close();
@@ -440,6 +443,7 @@ const title = (page: Page) => page.getByRole('textbox', { name: /title|タイト
 const send = (page: Page) => page.locator('main').getByRole('button', { name: /send|publish|post|送信|投稿/i });
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 async function labelledEditor(page: Page) {
+  await editor(page).waitFor();
   expect(await editor(page).count(), 'a visibly labelled rich-text composer is present').toBe(1);
   expect(await editor(page).getAttribute('contenteditable')).toBe('true');
   // An accessible name alone is insufficient: the label must also be visible on the page.
@@ -493,7 +497,7 @@ async function checkWrite(
   expect(new URL(request.url()).origin).toBe(await site());
   expect(request.headers()['content-type']).toContain('application/json');
   expect(request.postDataJSON()).toMatchObject({ body: draft.body });
-  const csrf = await page.locator('meta[name="csrf-token"]').getAttribute('content');
+  const csrf = await browserSessionToken(page);
   expect(csrf).toBeTruthy();
   expect(request.headers()['x-csrf-token']).toBe(csrf!);
 }
@@ -519,7 +523,7 @@ test(
       const html = await page.content();
       const requests = observe(page);
       await send(page).click();
-      await page.waitForURL(`${await site()}/ja/threads/${id(3)}`);
+      await page.waitForURL(`${await site()}/ja${threadHref({ id: id(3), title: 'Reading together' })}`);
       expect(writes()).toHaveLength(1);
       expect(requests).toHaveLength(1);
       await checkWrite(
@@ -716,7 +720,7 @@ test(
             expect(requests).toHaveLength(2);
             expect(requests[1]!.headers()['x-csrf-token']).toBe(requests[0]!.headers()['x-csrf-token']);
             if (newThread) {
-              await page.waitForURL(`${await site()}/${locale}/threads/${id(3)}`);
+              await page.waitForURL(`${await site()}/${locale}${threadHref({ id: id(3), title: 'Keep this title' })}`);
             } else {
               await eventually(() => posts.posts.length === 2);
               await page.locator('main li').filter({ hasText: 'Keep this argument' }).waitFor();

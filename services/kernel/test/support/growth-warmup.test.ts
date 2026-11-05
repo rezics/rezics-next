@@ -1,6 +1,15 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import type { PoolClient } from 'pg';
 import { withConnection } from '../../src/database/pool.ts';
-import { checkGrowth, openGrowthDatabase, type GrowthCheck, type GrowthDatabase, type GrowthReport } from './growth.ts';
+import {
+  checkGrowth,
+  GrowthBoundError,
+  measure,
+  openGrowthDatabase,
+  type GrowthCheck,
+  type GrowthDatabase,
+  type GrowthReport,
+} from './growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -8,6 +17,7 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const schema = 'growth_warmup_test';
 const probes = `${schema}.probes`;
 const catalog = `${schema}.catalog`;
+const staged = `${schema}.staged`;
 const route = 1;
 const spareProbe = 1_000_000;
 const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
@@ -32,6 +42,10 @@ beforeAll(async () => {
     payload jsonb NOT NULL,
     PRIMARY KEY (route, id)
   )`);
+  await db.admin.query(`CREATE TABLE ${staged} (
+    id integer PRIMARY KEY,
+    payload text NOT NULL
+  )`);
 });
 
 afterAll(async () => {
@@ -45,6 +59,24 @@ function record(calls: Call[], kind: Call['kind']): GrowthCheck['operation'] {
     calls.push({ kind, scale, repetition });
   };
 }
+
+test('checkGrowth refuses fewer than one warm-up per scale and names the warmup hook', async () => {
+  const calls: string[] = [];
+  await expect(
+    checkGrowth(db!, {
+      name: 'zero warm-ups',
+      warmups: 0,
+      bounds,
+      grow: async () => {
+        calls.push('grow');
+      },
+      operation: async () => {
+        calls.push('operation');
+      },
+    }),
+  ).rejects.toMatchObject({ name: 'RangeError', message: expect.stringContaining('warmup') });
+  expect(calls).toEqual([]);
+});
 
 test('a warmup hook runs in place of the operation for every unmeasured run', async () => {
   const calls: Call[] = [];
@@ -72,6 +104,55 @@ test('a warmup hook runs in place of the operation for every unmeasured run', as
     { kind: 'operation', scale: 64, repetition: 11 },
   ]);
 });
+
+test('prepare writes settle before measurement and stay out of product cost', async () => {
+  const database = db!;
+  const calls: string[] = [];
+  const vacuumBeforePrepare = new Map<string, number>();
+  await database.admin.query(`TRUNCATE ${staged}`);
+  const report = await checkGrowth(database, {
+    name: 'prepare writes settle',
+    repetitions: 1,
+    bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+    grow: async () => {},
+    warmup: async (_growthDb, scale, repetition) => {
+      calls.push(`warmup:${scale}:${repetition}`);
+      await withConnection(database.pool, (client) => client.query('SELECT 1'));
+    },
+    prepare: async (growthDb, scale, repetition) => {
+      calls.push(`prepare:${scale}:${repetition}`);
+      const before = await growthDb.admin.query<{ vacuumCount: number }>(
+        `SELECT vacuum_count::integer AS "vacuumCount" FROM pg_stat_user_tables WHERE relid = $1::regclass`,
+        [staged],
+      );
+      vacuumBeforePrepare.set(`${scale}:${repetition}`, before.rows[0]?.vacuumCount ?? 0);
+      await withConnection(growthDb.pool, (client) =>
+        client.query(`INSERT INTO ${staged} (id, payload) VALUES ($1, 'prepare')`, [repetition]),
+      );
+    },
+    operation: async (growthDb, scale, repetition) => {
+      calls.push(`operation:${scale}:${repetition}`);
+      const after = await growthDb.admin.query<{ vacuumCount: number }>(
+        `SELECT vacuum_count::integer AS "vacuumCount" FROM pg_stat_user_tables WHERE relid = $1::regclass`,
+        [staged],
+      );
+      expect(after.rows[0]!.vacuumCount).toBeGreaterThan(vacuumBeforePrepare.get(`${scale}:${repetition}`)!);
+      await withConnection(growthDb.pool, (client) =>
+        client.query(`SELECT payload FROM ${staged} WHERE id = $1`, [repetition]),
+      );
+    },
+  });
+  expect(calls.some((call) => call === 'prepare:1:0')).toBe(false);
+  for (const scale of [1, 8, 64]) {
+    const operations = calls.filter((call) => call.startsWith(`operation:${scale}:`));
+    expect(operations.length).toBeGreaterThanOrEqual(1);
+    expect(calls.filter((call) => call.startsWith(`prepare:${scale}:`))).toEqual(
+      operations.map((call) => call.replace('operation:', 'prepare:')),
+    );
+  }
+  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([1, 1, 1]);
+  expect(report.samples.map(({ cost }) => cost.rows)).toEqual([1, 1, 1]);
+}, 60_000);
 
 test('without a warmup hook the unmeasured runs call the operation as before', async () => {
   const calls: Call[] = [];
@@ -136,9 +217,9 @@ async function seed(database: GrowthDatabase): Promise<void> {
 
 function probeCheck(database: GrowthDatabase, warmup?: GrowthCheck['warmup']): Promise<GrowthReport> {
   return checkGrowth(database, {
-    name: warmup ? 'warmed probe read' : 'cold probe read',
+    name: warmup ? 'spare-state warmed probe read' : 'operation-warmed probe read',
     repetitions: 1,
-    ...(warmup ? { warmup } : { warmups: 0 }),
+    ...(warmup ? { warmup } : {}),
     bounds,
     grow: async () => {},
     operation: (growthDb, _scale, repetition) => consume(growthDb, repetition),
@@ -148,31 +229,125 @@ function probeCheck(database: GrowthDatabase, warmup?: GrowthCheck['warmup']): P
 test('a first run that costs more than later runs reaches no sample once each scale is warmed', async () => {
   const database = db!;
   await seed(database);
-  const coldReport = await probeCheck(database);
+  const coldSample = await measure(database, () => consume(database, 0));
+
+  await seed(database);
+  const operationReport = await probeCheck(database);
 
   await seed(database);
   const warmReport = await probeCheck(database, (growthDb, _scale, repetition) =>
     consume(growthDb, spareProbe + repetition),
   );
 
-  expect(coldReport.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
-  expect(coldReport.samples.map(({ cost }) => cost.rows)).toEqual([2, 1, 1]);
-  expect(coldReport.samples.map(({ cost }) => cost.statements)).toEqual([2, 1, 1]);
-  const coldBlocks = coldReport.samples[0]!.cost.blocks;
-  const warmBaseline = coldReport.samples[1]!.cost.blocks;
+  expect(coldSample.cost.rows).toBe(2);
+  expect(coldSample.cost.statements).toBe(2);
+  const coldBlocks = coldSample.cost.blocks;
+  const warmBaseline = operationReport.samples[0]!.cost.blocks;
   expect(coldBlocks).toBeGreaterThan(warmBaseline);
-  expect(coldReport.samples[0]!.cost.relations?.[catalog]?.blocks).toBeGreaterThan(0);
-  expect(coldReport.samples[1]!.cost.relations?.[catalog]).toBeUndefined();
-  expect(coldReport.samples[2]!.cost.relations?.[catalog]).toBeUndefined();
+  expect(coldSample.cost.relations?.[catalog]?.blocks).toBeGreaterThan(0);
 
-  expect(warmReport.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
-  expect(warmReport.samples.map(({ cost }) => cost.rows)).toEqual([1, 1, 1]);
-  expect(warmReport.samples.map(({ cost }) => cost.statements)).toEqual([1, 1, 1]);
-  for (const sample of warmReport.samples) {
-    expect(sample.cost.blocks).toBeGreaterThanOrEqual(warmBaseline - 1);
-    expect(sample.cost.blocks).toBeLessThanOrEqual(warmBaseline + 1);
-    expect(sample.cost.blocks).toBeLessThan(coldBlocks);
-    expect(sample.cost.relations?.[catalog]).toBeUndefined();
-    expect(sample.cost.relations?.[probes]).toMatchObject({ rows: 1, sequentialScans: 0 });
+  for (const report of [operationReport, warmReport]) {
+    expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
+    expect(report.samples.map(({ cost }) => cost.rows)).toEqual([1, 1, 1]);
+    expect(report.samples.map(({ cost }) => cost.statements)).toEqual([1, 1, 1]);
+    for (const sample of report.samples) {
+      expect(sample.cost.blocks).toBeGreaterThanOrEqual(warmBaseline - 1);
+      expect(sample.cost.blocks).toBeLessThanOrEqual(warmBaseline + 1);
+      expect(sample.cost.blocks).toBeLessThan(coldBlocks);
+      expect(sample.cost.relations?.[catalog]).toBeUndefined();
+      expect(sample.cost.relations?.[probes]).toMatchObject({ rows: 1, sequentialScans: 0 });
+    }
   }
+}, 60_000);
+
+async function captureReviews<T>(run: () => Promise<T>): Promise<{ value: T; lines: string[] }> {
+  const lines: string[] = [];
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    const text = String(chunk);
+    if (text.startsWith('GROWTH_REVIEW ')) lines.push(text.trimEnd());
+    else originalWrite(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    return { value: await run(), lines };
+  } finally {
+    process.stderr.write = originalWrite;
+  }
+}
+
+async function alwaysCold(database: GrowthDatabase, scale: number): Promise<void> {
+  const pool = database.openPool({ max: 1 });
+  for (let n = 0; n < scale; n++) await pool.query('SELECT 1 AS cold');
+}
+
+test('exhausted cold backends stay in the report and do not certify a compatible or violating series', async () => {
+  const captured = await captureReviews(() =>
+    checkGrowth(db!, {
+      name: 'exhausted cold backends',
+      scales: [1, 4, 16],
+      repetitions: 2,
+      bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+      warmup: (database) => alwaysCold(database, 1),
+      grow: async () => {},
+      operation: alwaysCold,
+    }),
+  );
+
+  expect(captured.value.samples).toHaveLength(3);
+  for (const sample of captured.value.samples) {
+    expect(sample.coldBackendDiscards).toBe(4);
+    expect(sample.coldBackendExhaustion).toEqual([0, 1]);
+    expect(sample.repetitions).toHaveLength(2);
+    expect(sample.repetitions.map(({ statements }) => statements)).toEqual([sample.scale, sample.scale]);
+    expect(sample.backendRepetitions).toHaveLength(2);
+    expect(sample.backendRepetitions.every((backends) => backends.length === 1)).toBe(true);
+  }
+  expect(new Set(captured.value.samples.flatMap(({ backendRepetitions }) => backendRepetitions.flat())).size).toBe(6);
+  for (const metric of ['rows', 'blocks', 'statements'] as const) {
+    expect(captured.value.verdicts[metric]).toMatchObject({ outcome: 'inconclusive', reason: 'backends' });
+  }
+  expect(captured.lines).toHaveLength(3);
+  expect(captured.lines.every((line) => line.includes('"reason":"backends"'))).toBe(true);
+}, 60_000);
+
+test('a warmed series that still grows fails after discard exhaustion', async () => {
+  const database = db!;
+  let held: PoolClient | undefined;
+  let calls = 0;
+  let error: unknown;
+  try {
+    await checkGrowth(database, {
+      name: 'warmed growth after cold exhaustion',
+      scales: [1, 4, 16],
+      repetitions: 2,
+      bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
+      grow: async () => {
+        calls = 0;
+      },
+      warmup: async () => {
+        if (!held) held = await database.pool.connect();
+        await held.query('SELECT 1 AS warm');
+      },
+      operation: async (_growthDb, scale) => {
+        const index = calls++;
+        if (index === 0) {
+          for (let n = 0; n < scale; n++) await held!.query('SELECT 1 AS grown');
+          return;
+        }
+        await alwaysCold(database, 1);
+      },
+    });
+  } catch (failure) {
+    error = failure;
+  } finally {
+    held?.release();
+  }
+  expect(error).toBeInstanceOf(GrowthBoundError);
+  expect((error as GrowthBoundError).message).toContain('statements');
+  expect(
+    (error as GrowthBoundError).samples.every(
+      (sample) => ((sample as GrowthReport['samples'][number]).coldBackendExhaustion?.length ?? 0) > 0,
+    ),
+  ).toBe(true);
 }, 60_000);

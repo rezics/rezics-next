@@ -3,7 +3,9 @@ import { randomBytes } from 'node:crypto';
 import { createPool } from '../../src/database/pool.ts';
 import { subjectGenerations, subjectIndexName } from '../../src/search/indices.ts';
 import { createOpenSearch } from '../../src/search/opensearch.ts';
-import { readSearchConfig, searchWorkModule } from '../../src/search/work.ts';
+import { readSearchConfig, createSearchWorkModule } from '../../src/search/work.ts';
+import { createDiscoveryProducerEntry } from '../../src/composition/discovery.ts';
+import { createKernelRuntimeDefaults } from '../../src/composition/runtime-defaults.ts';
 import { ConfigError, readConfig, startServer } from '../../src/server.ts';
 import type { WorkContext, WorkService } from '../../src/work/registry.ts';
 
@@ -16,6 +18,7 @@ const search = createOpenSearch(searchUrl);
 const kernelDirectory = new URL('../..', import.meta.url).pathname;
 const key = () => randomBytes(32).toString('base64url');
 const env = { DATABASE_URL: databaseUrl, KERNEL_ROUTE_KEY: key(), KERNEL_SESSION_KEYS: `1:${key()}`, KERNEL_PORT: '0' };
+const searchWorkModule = createSearchWorkModule(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
 const prefixes: string[] = [];
 afterAll(async () => {
   for (const prefix of prefixes) {
@@ -66,7 +69,11 @@ async function registered(moduleEnv: Record<string, string>) {
 
 /** The worker's indexing runner on its own prefix, once it has created generation 1. */
 async function indexing(prefix: string): Promise<WorkService> {
-  const services = await registered({ OPENSEARCH_URL: searchUrl!, KERNEL_SEARCH_PREFIX: prefix });
+  const services = await registered({
+    OPENSEARCH_URL: searchUrl!,
+    KERNEL_SEARCH_PREFIX: prefix,
+    KERNEL_ROUTE_KEY: env.KERNEL_ROUTE_KEY,
+  });
   expect(services).toHaveLength(1);
   const running = await services[0]!();
   await eventually(async () => (await subjectGenerations(search, prefix)).active === 1);
@@ -115,6 +122,34 @@ test('the search work module starts the indexing runner only when search is conf
   expect(await subjectGenerations(search, prefix)).toEqual({ generations: [1], active: 1 });
 }, 30_000);
 
+test('a configured Search worker refuses a missing or malformed route key', async () => {
+  const malformed = 'not-a-canonical-route-key';
+  for (const routeKey of [undefined, malformed]) {
+    const services: (() => WorkService | Promise<WorkService>)[] = [];
+    const context = {
+      pool,
+      env: {
+        OPENSEARCH_URL: searchUrl!,
+        KERNEL_SEARCH_PREFIX: freshPrefix(),
+        ...(routeKey === undefined ? {} : { KERNEL_ROUTE_KEY: routeKey }),
+      },
+      addService(start: () => WorkService | Promise<WorkService>) {
+        services.push(start);
+      },
+    } as unknown as WorkContext;
+    let error: unknown;
+    try {
+      await searchWorkModule.register(context);
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect((error as Error).message).toBe('Invalid or missing KERNEL_ROUTE_KEY');
+    expect((error as Error).message).not.toContain(malformed);
+    expect(services).toEqual([]);
+  }
+});
+
 test('a server answers search and suggest from the index the worker feeds', async () => {
   const prefix = freshPrefix();
   const running = await indexing(prefix);
@@ -123,7 +158,9 @@ test('a server answers search and suggest from the index the worker feeds', asyn
   try {
     const searched = await searchRequest(origin, { text: 'kokoro' });
     expect(searched.status).toBe(200);
-    expect(await searched.json()).toMatchObject({ subjects: [], total: { value: 0, relation: 'exact' }, next: null });
+    const body = await searched.json();
+    expect(body).toMatchObject({ subjects: [], next: null });
+    for (const field of ['total', 'count', 'counts', 'lower_bound', 'estimate']) expect(body).not.toHaveProperty(field);
     const suggested = await fetch(`${origin}/v1/subjects:suggest?q=Koko`);
     expect(suggested.status).toBe(200);
     expect(await suggested.json()).toMatchObject({ subjects: [] });
@@ -139,7 +176,13 @@ test('the rebuild command builds the next generation and switches the alias', as
   try {
     const run = Bun.spawn(['bun', 'scripts/search.ts', 'rebuild'], {
       cwd: kernelDirectory,
-      env: { ...process.env, DATABASE_URL: databaseUrl, OPENSEARCH_URL: searchUrl, KERNEL_SEARCH_PREFIX: prefix },
+      env: {
+        ...process.env,
+        DATABASE_URL: databaseUrl,
+        OPENSEARCH_URL: searchUrl,
+        KERNEL_SEARCH_PREFIX: prefix,
+        KERNEL_ROUTE_KEY: env.KERNEL_ROUTE_KEY,
+      },
       stdout: 'pipe',
       stderr: 'pipe',
     });

@@ -1,0 +1,249 @@
+import { createServer } from 'node:net';
+import { join } from 'node:path';
+import { chromium, type Browser, type BrowserContextOptions } from 'playwright';
+import { cleanupAll, ownBunProcess, withCleanup } from './server-custody.ts';
+
+// Render budgets start at Vite's ready line, independently of its startup budget.
+const phaseBudgets = { ready: 150_000, firstResponse: 120_000, warmUp: 120_000 };
+type Phase = 'ready' | 'first response' | 'warm-up';
+type PhaseTiming = { phase: Phase; path: string; elapsedMs: number };
+export type DevServerOptions = {
+  env?: NodeJS.ProcessEnv;
+  warmUpPaths: readonly string[];
+  javaScriptEnabled?: boolean;
+  contextOptions?: BrowserContextOptions;
+  firstPath?: string;
+  cwd?: string;
+  command?: (context: { port: number; origin: string }) => string[];
+  budgets?: Partial<typeof phaseBudgets>;
+  signal?: AbortSignal;
+  pollIntervalMs?: number;
+  onPhase?: (timing: PhaseTiming) => void;
+  /** A clock seam for deterministic budget tests; timers still use the remaining phase budget. */
+  now?: () => number;
+};
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address() as { port: number };
+      probe.close((error) => (error ? reject(error) : resolve(port)));
+    });
+  });
+}
+
+/** One process group and one warm-up for each browser test file. Always await stop() in afterAll. */
+export async function startDevServer(
+  options: DevServerOptions,
+): Promise<{ origin: string; stop: () => Promise<void>; diagnostics: () => string }> {
+  const port = await freePort();
+  if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
+  const origin = `http://127.0.0.1:${port}`;
+  const now = options.now ?? Date.now;
+  const spawnedAt = now();
+  const command = options.command?.({ port, origin }) ?? [
+    'bun',
+    'run',
+    'dev',
+    '--host',
+    '127.0.0.1',
+    '--port',
+    String(port),
+    '--strictPort',
+  ];
+  const budgets = { ...phaseBudgets, ...options.budgets };
+  const firstPath = options.firstPath ?? '/en';
+  let readyAt: number | undefined;
+  let phase: Phase = 'ready';
+  let path = firstPath;
+  let phaseStart = spawnedAt;
+  let lastError: unknown = new Error('Vite ready line has not been printed');
+  let browser: Browser | undefined;
+  let stopped: Promise<void> | undefined;
+  let abortCleanupError: unknown;
+  let output = '';
+  let ready!: () => void;
+  const readiness = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
+  const keep = (chunk: Uint8Array) => {
+    const combined = output + Buffer.from(chunk).toString();
+    output = combined.slice(-8000);
+    if (
+      readyAt === undefined &&
+      /\bVITE\s+v\S+\s+ready in\s+[\d.]+\s*(?:ms|s)\b/i.test(combined.replace(/\x1b\[[0-9;]*m/g, ''))
+    ) {
+      readyAt = now();
+      ready();
+    }
+  };
+  let child: Bun.Subprocess<'ignore', 'pipe', 'pipe'>;
+  let custody: ReturnType<typeof ownBunProcess>;
+  try {
+    const childEnvironment: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...options.env,
+      REZICS_TEST_RUNTIME: '1',
+    };
+    if (options.env?.WEB_TEST_STATE_DIR && !options.env.WEB_TEST_STATE_INSTANCE_DIR)
+      childEnvironment.WEB_TEST_STATE_INSTANCE_DIR = options.env.WEB_TEST_STATE_DIR;
+    child = Bun.spawn(command, {
+      cwd: options.cwd ?? join(import.meta.dir, '../..'),
+      env: childEnvironment,
+      detached: true,
+      stdin: 'ignore',
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    custody = ownBunProcess(child, {
+      label: 'Vite dev server',
+      onOutput: keep,
+    });
+  } catch (error) {
+    throw new Error(
+      `dev server ready failed for ${path}; elapsed ${now() - spawnedAt} ms; last error: ${String(error)}\nCaptured output:\n${output}`,
+    );
+  }
+  const exited = child.exited.then((code) => new Error(`dev server exited with ${code}`));
+  const exitFailure = exited.then((error) => {
+    throw error;
+  });
+  // The server can exit between phases, when no race is attached yet.
+  void exitFailure.catch(() => {});
+
+  let abortServer: () => void;
+  const stop = () =>
+    (stopped ??= (async () => {
+      options.signal?.removeEventListener('abort', abortServer);
+      await cleanupAll([
+        { label: 'dev-server browser', run: () => browser?.close(), timeoutMs: 5000 },
+        { label: 'dev-server process group', run: () => custody.close(), timeoutMs: 7000 },
+      ]);
+    })());
+  abortServer = () => {
+    void stop().catch((error) => {
+      abortCleanupError = error;
+    });
+  };
+
+  const record = (started: number) => {
+    const timing = { phase, path, elapsedMs: now() - started };
+    console.info(`[dev-server] ${phase} ${path}: ${timing.elapsedMs} ms`);
+    options.onPhase?.(timing);
+  };
+  async function bounded<T>(
+    deadline: number,
+    operation: (remaining: () => number, signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const controller = new AbortController();
+    const remaining = () => Math.max(1, deadline - now());
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let abortListener: (() => void) | undefined;
+    try {
+      if (now() >= deadline) throw new Error('phase budget exhausted');
+      if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
+      const aborted = options.signal
+        ? new Promise<never>((_, reject) => {
+            abortListener = () => {
+              controller.abort();
+              reject(new DOMException('The dev server startup was aborted', 'AbortError'));
+            };
+            options.signal!.addEventListener('abort', abortListener, { once: true });
+          })
+        : undefined;
+      return await Promise.race([
+        operation(remaining, controller.signal),
+        exitFailure,
+        ...(aborted ? [aborted] : []),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            controller.abort();
+            reject(new Error(`phase timed out; last error: ${String(lastError)}`));
+          }, remaining());
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+      if (abortListener) options.signal?.removeEventListener('abort', abortListener);
+      controller.abort();
+    }
+  }
+  try {
+    await bounded(spawnedAt + budgets.ready, async () => readiness);
+    record(spawnedAt);
+    phase = 'first response';
+    phaseStart = readyAt!;
+    lastError = new Error(`no response from ${firstPath}`);
+    await bounded(readyAt! + budgets.firstResponse, async (remaining, signal) => {
+      for (;;) {
+        try {
+          const response = await fetch(`${origin}${firstPath}`, { redirect: 'manual', signal });
+          await response.body?.cancel();
+          if (response.status < 500) return;
+          lastError = new Error(`HTTP ${response.status} for ${firstPath}`);
+        } catch (error) {
+          lastError = error;
+          if (signal.aborted) throw error;
+        }
+        await Bun.sleep(Math.min(options.pollIntervalMs ?? 500, remaining()));
+        if (signal.aborted) throw lastError;
+      }
+    });
+    record(readyAt!);
+    if (options.warmUpPaths.length > 0) {
+      phase = 'warm-up';
+      const deadline = readyAt! + budgets.warmUp;
+      path = options.warmUpPaths[0]!;
+      lastError = new Error('browser has not started');
+      await bounded(deadline, async (remaining, signal) => {
+        const launched = await chromium.launch({ timeout: remaining() });
+        browser = launched;
+        if (signal.aborted) {
+          await launched.close();
+          throw new Error('browser launch exceeded warm-up budget');
+        }
+        const context = await browser.newContext({
+          ...options.contextOptions,
+          javaScriptEnabled: options.javaScriptEnabled ?? options.contextOptions?.javaScriptEnabled ?? true,
+        });
+        await withCleanup(async () => {
+          const page = await context.newPage();
+          for (const warmUpPath of options.warmUpPaths) {
+            path = warmUpPath;
+            const began = now();
+            lastError = new Error(`navigation to ${path} has not completed`);
+            const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle', timeout: remaining() });
+            if (!response || response.status() >= 500)
+              throw new Error(`HTTP ${response?.status() ?? 'no response'} for ${path}`);
+            if (options.javaScriptEnabled ?? options.contextOptions?.javaScriptEnabled ?? true) {
+              lastError = new Error(`waiting for html[data-hydrated] on ${path}`);
+              await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: remaining() });
+            }
+            record(began);
+          }
+        }, [{ label: 'dev-server warm-up context', run: () => context.close(), timeoutMs: 5000 }]);
+      });
+      await cleanupAll([{ label: 'dev-server warm-up browser', run: () => browser?.close(), timeoutMs: 5000 }]);
+      browser = undefined;
+    }
+    if (options.signal?.aborted) throw new DOMException('The dev server startup was aborted', 'AbortError');
+    options.signal?.addEventListener('abort', abortServer, { once: true });
+    return {
+      origin,
+      stop,
+      diagnostics: () => (abortCleanupError ? `${output}\nCleanup error: ${String(abortCleanupError)}` : output),
+    };
+  } catch (error) {
+    const elapsed = now() - phaseStart;
+    const primary = new Error(
+      `dev server ${phase} failed for ${path}; elapsed ${elapsed} ms; last error: ${String(error)}\nCaptured output:\n${output}`,
+      { cause: error },
+    );
+    await withCleanup(async () => {
+      throw primary;
+    }, [{ label: 'dev-server startup cleanup', run: stop, timeoutMs: 8000 }]);
+    throw primary;
+  }
+}

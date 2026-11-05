@@ -1,0 +1,23 @@
+{
+  "realm": {
+    "realmId": "01a1892f-38cc-7216-ac34-89581d8f1059",
+    "spaceId": "01a1892f-3777-750a-b4aa-89582037e6f0",
+    "state": "active",
+    "visibility": "public",
+    "contextId": "00000000-0000-8000-8000-000000000000",
+    "boardSchemeId": "01a1892f-31b5-734b-b261-a6762254e26c",
+    "headRevisionId": "01a1892f-3aba-7689-a5e6-8958dbe985fa",
+    "createdAt": "2026-10-29T19:42:15.756Z",
+    "creator": "075527fc-8bbe-831e-acee-488c9440adda",
+    "predecessor": "01a1892f-38cc-7217-ba5a-895839fe483b",
+    "title": "Native document authoring realm",
+    "summary": "",
+    "revisionCreatedAt": "2026-10-29T19:42:16.113Z",
+    "author": "075527fc-8bbe-831e-acee-488c9440adda",
+    "votes": {
+      "upvote": 1,
+      "downvote": -1
+    }
+  },
+  "status": 200
+}

@@ -1,0 +1,478 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { fromPlainText } from '@rezics/document';
+import type { Release } from '@rezics/definitions';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
+import { eraseAccountReactionsPage, type ReactionErasureCursor } from '../../src/content/account-erasure-reactions.ts';
+import { createReactionCountEffect } from '../../src/content/reaction-projection.ts';
+import { createReportLocatorEffect } from '../../src/content/report-locator.ts';
+import { createReportEffect } from '../../src/content/report-effect.ts';
+import { createReportOutcomeEffect } from '../../src/content/report-outcomes.ts';
+import { createModerationDecisionEffect } from '../../src/content/moderation-decisions.ts';
+import { setupContent } from '../../src/content/setup.ts';
+import { projectBatch } from '../../src/events/log.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
+import { nativeFixture, cookies, password } from '../access/native-account-bindings-fixture.ts';
+import { deletePersona, drainEffects } from '../support/account-deletion.ts';
+import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+import { createPersonas, type Persona } from '../support/personas.ts';
+import { registerTestClient, testKernel, type TestKernel } from '../support/test-kernel.ts';
+import { actionCatalogue } from '../../src/http/request.ts';
+
+let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
+let auth: Awaited<ReturnType<typeof nativeFixture>>;
+let kernel: TestKernel;
+let people: Awaited<ReturnType<typeof createPersonas>>;
+let reporter: Persona;
+let growthActor: Persona;
+let subjectId: string;
+let boardId: string;
+
+async function call(method: string, path: string, person: Persona, body?: unknown, status = 200, head?: string) {
+  const response = await kernel.handle(
+    new Request(`http://kernel.test${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${person.bearer}`,
+        'content-type': 'application/json',
+        'idempotency-key': JSON.stringify(crypto.randomUUID()),
+        ...(head === undefined ? {} : { 'if-match': JSON.stringify(head) }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }),
+  );
+  const value = await response.json();
+  expect({ status: response.status, ...(response.status === status ? {} : { path, value }) }).toEqual({ status });
+  return value;
+}
+
+beforeAll(async () => {
+  db = await openGrowthDatabase();
+  auth = await nativeFixture(db.pool);
+  kernel = testKernel({
+    pool: db.pool,
+    auth: { ...auth.host.service.verifier, fetch: (url, init) => auth.host.service.handler(new Request(url, init)) },
+    writeRate: createWriteRateLimiter({
+      secret: 'account-erasure-reactions-native-write-secret',
+      overrides: JSON.stringify({
+        'new-account': { write: { maximum: 100000, seconds: 86400 }, report: { maximum: 100000, seconds: 86400 } },
+      }),
+    }),
+  });
+  people = await createPersonas(kernel, { version: 1, pool: db.pool, auth });
+  // These accounts have no organization ownership or software-operator obligations.
+  const clientId = `erasure_${crypto.randomUUID()}`;
+  const scopes = [...new Set([...actionCatalogue(kernel).keys(), ...LIFECYCLE_ACTIONS.keys()])]
+    .filter((action) => action !== 'media:complete')
+    .sort();
+  await registerTestClient(auth.host.service, { clientId, firstParty: true, scopes });
+  async function ordinary(): Promise<Persona> {
+    const account = await auth.person(`erasure_${crypto.randomUUID()}`);
+    const signed = await auth.request('/signin', {
+      account_id: account.accountId,
+      password,
+      client_id: clientId,
+      scope: scopes,
+    });
+    expect(signed.status).toBe(200);
+    const token = await auth.request('/token', {}, cookies(signed));
+    expect(token.status).toBe(200);
+    return { accountId: account.accountId, bearer: (await token.json()).access_token };
+  }
+  reporter = await ordinary();
+  growthActor = await ordinary();
+  // Keep native community setup independent of the full product catalogue.
+  const release: Release = {
+    format: 'https://rezics.com/definitions/release/1',
+    catalogue: { id: 'https://rezics.com/catalogue/erasure', version: '1.0.0' },
+    generator: { name: '@neverblink/linkml', version: '0.17.1' },
+    prefixes: { skos: 'http://www.w3.org/2004/02/skos/core#' },
+    types: {
+      'skos:Concept': {
+        iri: 'http://www.w3.org/2004/02/skos/core#Concept',
+        labels: { en: 'Concept' },
+        mappings: [],
+        bases: [],
+        properties: ['skos:inScheme'],
+        facets: [],
+      },
+      'skos:ConceptScheme': {
+        iri: 'http://www.w3.org/2004/02/skos/core#ConceptScheme',
+        labels: { en: 'Concept Scheme' },
+        mappings: [],
+        bases: [],
+        properties: [],
+        facets: [],
+      },
+    },
+    properties: {
+      'skos:inScheme': {
+        iri: 'http://www.w3.org/2004/02/skos/core#inScheme',
+        labels: { en: 'In scheme' },
+        mappings: [],
+        datatype: 'wikibase-item',
+        multivalued: true,
+        qualifiers: [],
+        value: { type: 'string', pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' },
+        targets: ['skos:ConceptScheme'],
+      },
+    },
+  };
+  await bootstrapRelease(db.pool, release);
+  await setupContent(db.pool);
+  const schemeId = (
+    await call(
+      'POST',
+      '/v1/subjects',
+      people.staff,
+      { type: 'skos:ConceptScheme', labels: { en: 'Erasure scheme' } },
+      201,
+    )
+  ).subject.id;
+  subjectId = (
+    await call(
+      'POST',
+      '/v1/subjects',
+      people.staff,
+      {
+        type: 'skos:Concept',
+        labels: { en: 'Erasure subject' },
+        statements: {
+          'skos:inScheme': [{ property: { id: 'skos:inScheme' }, value: { type: 'value', content: schemeId } }],
+        },
+      },
+      201,
+    )
+  ).subject.id;
+  const space = (await call('POST', '/v1/spaces', people.staff, { title: 'Erasure space' }, 201)).space;
+  const realm = (
+    await call(
+      'POST',
+      '/v1/realms',
+      people.staff,
+      {
+        spaceId: space.spaceId,
+        title: 'Erasure realm',
+        visibility: 'public',
+        contextId: GLOBAL_CONTEXT,
+      },
+      201,
+    )
+  ).realm;
+  await settle();
+  await call('PUT', `/v1/realms/${realm.realmId}/boardScheme`, people.staff, { schemeId }, 200, realm.headRevisionId);
+  await settle();
+  boardId = (
+    await call(
+      'POST',
+      `/v1/realms/${realm.realmId}/boards`,
+      people.staff,
+      { conceptId: subjectId, title: 'Erasure board', visibility: 'published', purpose: 'discussion' },
+      201,
+    )
+  ).board.id;
+}, 360000);
+
+afterAll(async () => {
+  try {
+    await auth?.close();
+  } finally {
+    await db?.close();
+  }
+});
+
+async function thread() {
+  return (
+    await call(
+      'POST',
+      '/v1/threads',
+      people.staff,
+      {
+        boardId,
+        title: 'Retained target',
+        visibility: 'published',
+        body: fromPlainText('Retained contribution'),
+        licence: 'MIT',
+        subjectIds: [],
+      },
+      201,
+    )
+  ).thread;
+}
+
+// Use the native log consumer and real effects, then the shared deletion drain.
+// A locator is explicitly delivered before the phase, as required by its committed-locator boundary.
+async function settle() {
+  const effects = [
+    createReactionCountEffect(db.pool),
+    createReportEffect(db.pool),
+    createModerationDecisionEffect(db.pool),
+    createReportOutcomeEffect(db.pool),
+    createReportLocatorEffect(db.pool),
+  ];
+  for (let pass = 0; pass < 20; pass++) {
+    let advanced = false;
+    const { rows } = await db.admin.query<{ partition_no: number }>(
+      'SELECT partition_no FROM core.partition WHERE position>0',
+    );
+    for (const row of rows) {
+      const batch = await projectBatch(db.pool, {
+        consumer: 'effects',
+        partition: row.partition_no,
+        async apply(envelopes) {
+          for (const envelope of envelopes)
+            for (const event of envelope.events)
+              for (const effect of effects) if (effect.types.includes(event.type)) await effect.run(event);
+        },
+      });
+      if (batch.status !== 'read') throw new Error('Effects partition unavailable');
+      const links = await linkProjection(db.pool).run(row.partition_no);
+      if (links.status !== 'read') throw new Error('Semantic links partition unavailable');
+      advanced = advanced || batch.envelopes > 0 || links.envelopes > 0;
+    }
+    if (!advanced) {
+      for (const row of rows) await drainEffects(db.pool, row.partition_no);
+      return;
+    }
+  }
+  throw new Error('Effects did not settle');
+}
+
+async function erase(person: Persona) {
+  await deletePersona({ version: 1, pool: db.pool, auth }, person);
+  await settle();
+  let cursor: ReactionErasureCursor | null = null;
+  let total = 0;
+  for (let page = 0; page < 30; page++) {
+    const result = await eraseAccountReactionsPage(db, person.accountId, cursor);
+    expect(result.found).toBeLessThanOrEqual(50);
+    total += result.found;
+    cursor = result.next;
+    if (!cursor) {
+      await settle();
+      return total;
+    }
+  }
+  throw new Error('Erasure did not finish');
+}
+
+test("account erasure clears the account's reactions with their counts and projections and leaves other reactors' reactions", async () => {
+  const first = await thread();
+  const second = await thread();
+  const targets = [`posts/${first.firstPost.id}`, `posts/${second.firstPost.id}`, `subjects/${subjectId}`];
+  for (const target of targets)
+    for (const person of [people.alice, people.bob])
+      await call('PUT', `/v1/${target}/reaction`, person, { kind: 'like' });
+  await settle();
+  for (const target of targets) {
+    const id = target.split('/')[1]!;
+    expect(
+      (
+        await db.admin.query('SELECT count FROM content.reaction_total WHERE route=$1 AND target_id=$2 AND kind=$3', [
+          routeOf(id),
+          id,
+          'like',
+        ])
+      ).rows,
+    ).toEqual([{ count: 2 }]);
+  }
+  expect(await erase(people.alice)).toBe(3);
+  expect(
+    (
+      await db.admin.query('SELECT * FROM content.reaction WHERE route=$1 AND actor_account_id=$2', [
+        routeOf(people.alice.accountId),
+        people.alice.accountId,
+      ])
+    ).rows,
+  ).toHaveLength(0);
+  for (const target of targets) {
+    const id = target.split('/')[1]!;
+    if (target.startsWith('subjects/'))
+      expect((await call('GET', `/v1/${target}/reaction`, people.bob)).kind).toBe('like');
+    else {
+      const threadId = id === first.firstPost.id ? first.id : second.id;
+      const fresh = await call('GET', `/v1/threads/${threadId}/posts`, people.bob);
+      const post = fresh.posts.find((post: { id: string }) => post.id === id);
+      expect(post.viewerReaction).toBe('like');
+      expect(post.reactions.like).toBe(1);
+    }
+    expect(
+      (
+        await db.admin.query('SELECT count FROM content.reaction_total WHERE route=$1 AND target_id=$2 AND kind=$3', [
+          routeOf(id),
+          id,
+          'like',
+        ])
+      ).rows,
+    ).toEqual([{ count: 1 }]);
+    expect(
+      (
+        await db.admin.query(
+          'SELECT sum(count)::integer AS count FROM content.reaction_count WHERE route=$1 AND target_id=$2 AND kind=$3',
+          [routeOf(id), id, 'like'],
+        )
+      ).rows,
+    ).toEqual([{ count: 1 }]);
+  }
+  expect(
+    (
+      await db.admin.query('SELECT actor_account_id FROM content.subject_reactor WHERE route=$1 AND subject_id=$2', [
+        routeOf(subjectId),
+        subjectId,
+      ])
+    ).rows,
+  ).toEqual([{ actor_account_id: people.bob.accountId }]);
+  const posts = await call('GET', `/v1/threads/${first.id}/posts`, people.bob);
+  expect(posts.posts[0].reactions.like).toBe(1);
+  const subject = await call('GET', `/v1/subjects/${subjectId}/reactions`, people.bob);
+  expect(subject.counts).toEqual([{ kind: 'like', count: 1 }]);
+  expect(await eraseAccountReactionsPage(db, people.alice.accountId, null)).toEqual({
+    next: { phase: 'reports', after: null },
+    found: 0,
+  });
+}, 180000);
+
+test("account erasure removes the account's report evidence text and reporter id and keeps the report and its decision", async () => {
+  const target = await thread();
+  const reports: string[] = [];
+  for (const person of [reporter, people.bob])
+    reports.push(
+      (
+        await call(
+          'POST',
+          '/v1/reports',
+          person,
+          {
+            target: { kind: 'thread', id: target.id },
+            reason: 'other',
+            evidence: `Private evidence ${person.accountId}`,
+          },
+          201,
+        )
+      ).reportId,
+    );
+  await settle();
+  await call('POST', `/v1/threads/${target.id}:takeDown`, people.staff, { reason: 'Retained decision' });
+  await settle();
+  const before = await call('GET', `/v1/reports/${reports[0]}`, people.staff);
+  const other = await call('GET', `/v1/reports/${reports[1]}`, people.staff);
+  const decision = (await db.admin.query('SELECT * FROM content.moderation_decision WHERE target_id=$1', [target.id]))
+    .rows;
+  expect(decision).toHaveLength(1);
+  expect(before.report.outcome).toBe('actioned');
+  expect(await erase(reporter)).toBe(1);
+  const after = await call('GET', `/v1/reports/${reports[0]}`, people.staff);
+  expect(after.report).toEqual({ ...before.report, evidence: null, reporterId: null });
+  expect(await call('GET', `/v1/reports/${reports[1]}`, people.staff)).toEqual(other);
+  expect(
+    (await db.admin.query('SELECT * FROM content.moderation_decision WHERE target_id=$1', [target.id])).rows,
+  ).toEqual(decision);
+  expect(
+    (
+      await db.admin.query('SELECT * FROM content.report_reporter WHERE route=$1 AND reporter_account_id=$2', [
+        routeOf(reporter.accountId),
+        reporter.accountId,
+      ])
+    ).rows,
+  ).toHaveLength(0);
+  // A replay consults the minimized source and cannot recreate the reporter locator.
+  const { rows: events } = await db.admin.query('SELECT * FROM core.outbox WHERE type=$1 AND subject=$2', [
+    'com.rezics.content.report.created.v1',
+    reports[0],
+  ]);
+  const event = events[0];
+  await createReportLocatorEffect(db.pool).run({
+    specversion: '1.0',
+    id: event.id,
+    source: `urn:rezics:log:${event.partition_no}.${event.epoch}`,
+    sequence: String(event.position).padStart(19, '0'),
+    type: event.type,
+    subject: event.subject,
+    datacontenttype: 'application/json',
+    time: new Date(event.recorded_at).toISOString(),
+    data: event.data,
+  });
+  expect(
+    (
+      await db.admin.query('SELECT * FROM content.report_reporter WHERE route=$1 AND reporter_account_id=$2', [
+        routeOf(reporter.accountId),
+        reporter.accountId,
+      ])
+    ).rows,
+  ).toHaveLength(0);
+}, 180000);
+
+test("an account reaction and report erasure page stays within its bound as other accounts' reactions and reports grow", async () => {
+  const person = growthActor;
+  const target = await thread();
+  await call('PUT', `/v1/posts/${target.firstPost.id}/reaction`, person, { kind: 'like' });
+  await call(
+    'POST',
+    '/v1/reports',
+    person,
+    { target: { kind: 'thread', id: target.id }, reason: 'spam', evidence: 'Native evidence' },
+    201,
+  );
+  await deletePersona({ version: 1, pool: db.pool, auth }, person);
+  await settle();
+  // Fixed-size consumable pages for warmups and repetitions; distractors grow in the same routes.
+  // Raw writes here are cost fixtures, after native creation and terminal account deletion above.
+  const home = routeOf(person.accountId)!;
+  const reportRoute = home ^ 0x1000;
+  const ownTargets = Array.from({ length: 1000 }, () => newId(reportRoute));
+  const ownReports = Array.from({ length: 1000 }, () => newId(reportRoute));
+  await db.admin.query(
+    "INSERT INTO content.reaction(route,actor_account_id,target_kind,target_route,target_id,kind,updated_at) SELECT $1,$2,'post',$3,id,'like',now() FROM unnest($4::uuid[]) id",
+    [home, person.accountId, reportRoute, ownTargets],
+  );
+  await db.admin.query(
+    "INSERT INTO content.report(route,report_id,target_kind,target_id,reason,evidence,reporter_account_id,created_at,recorded_transaction_id) SELECT $1,id,'thread',$2,'spam','Private evidence',$3,now(),$4 FROM unnest($5::uuid[]) id",
+    [reportRoute, target.id, person.accountId, crypto.randomUUID(), ownReports],
+  );
+  await db.admin.query(
+    'INSERT INTO content.report_reporter(route,reporter_account_id,report_route,report_id) SELECT $1,$2,$3,id FROM unnest($4::uuid[]) id',
+    [home, person.accountId, reportRoute, ownReports],
+  );
+  let reactionCursor: ReactionErasureCursor = { phase: 'reactions', after: null };
+  let reportCursor: ReactionErasureCursor = { phase: 'reports', after: null };
+  const growth = await checkGrowth(db, {
+    name: 'Account reactor and reporter erasure',
+    rule: 'series',
+    scales: [256, 1024, 4096],
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    async grow(database, scale, previous) {
+      const actors = Array.from({ length: scale - previous }, () => newId(home));
+      const ids = actors.map(() => newId(reportRoute));
+      await database.admin.query(
+        "INSERT INTO content.reaction(route,actor_account_id,target_kind,target_route,target_id,kind,updated_at) SELECT $1,id,'post',$2,$3,'like',now() FROM unnest($4::uuid[]) id",
+        [home, routeOf(target.firstPost.id), target.firstPost.id, actors],
+      );
+      await database.admin.query(
+        "INSERT INTO content.report(route,report_id,target_kind,target_id,reason,evidence,reporter_account_id,created_at,recorded_transaction_id) SELECT $1,id,'thread',$2,'spam','Other evidence',actor,now(),$3 FROM unnest($4::uuid[],$5::uuid[]) row(id,actor)",
+        [reportRoute, target.id, crypto.randomUUID(), ids, actors],
+      );
+      await database.admin.query(
+        'INSERT INTO content.report_reporter(route,reporter_account_id,report_route,report_id) SELECT $1,actor,$2,id FROM unnest($3::uuid[],$4::uuid[]) row(id,actor)',
+        [home, reportRoute, ids, actors],
+      );
+    },
+    async operation() {
+      const reactions = await eraseAccountReactionsPage(db, person.accountId, reactionCursor);
+      const reports = await eraseAccountReactionsPage(db, person.accountId, reportCursor);
+      expect(reactions.found).toBe(50);
+      expect(reports.found).toBe(50);
+      expect(reactions.next?.phase).toBe('reactions');
+      expect(reports.next?.phase).toBe('reports');
+      reactionCursor = reactions.next!;
+      reportCursor = reports.next!;
+    },
+  });
+  expect(growth.samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
+  for (const sample of growth.samples) {
+    expect(sample.cost.rows).toBe(growth.samples[0]!.cost.rows);
+    expect(sample.cost.statements).toBe(growth.samples[0]!.cost.statements);
+  }
+  expect(partitionOf(home)).not.toBe(partitionOf(reportRoute));
+}, 240000);

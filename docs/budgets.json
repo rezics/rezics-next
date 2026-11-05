@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "budgets": [
+    {
+      "path": "AGENTS.md",
+      "kind": "file",
+      "bytes": 3000
+    },
+    {
+      "path": "docs/development/*.md",
+      "kind": "file",
+      "bytes": 16000
+    },
+    {
+      "path": "docs/development/**/*.md",
+      "kind": "directory",
+      "bytes": 120000
+    },
+    {
+      "path": "docs/goals/*.md",
+      "kind": "file",
+      "bytes": 12000
+    },
+    {
+      "path": "docs/goals/*.capabilities.*",
+      "kind": "file",
+      "bytes": 40000
+    },
+    {
+      "path": "docs/goals/**/*.capabilities.*",
+      "kind": "directory",
+      "bytes": 300000
+    },
+    {
+      "path": "docs/*.md",
+      "kind": "file",
+      "bytes": 40000
+    },
+    {
+      "path": "apps/**/README.md",
+      "kind": "file",
+      "bytes": 40000
+    },
+    {
+      "path": "packages/**/README.md",
+      "kind": "file",
+      "bytes": 40000
+    },
+    {
+      "path": "services/**/README.md",
+      "kind": "file",
+      "bytes": 40000
+    },
+    {
+      "path": "apps/**/src/**/*-contract.md",
+      "kind": "file",
+      "bytes": 40000
+    },
+    {
+      "path": "packages/**/src/**/*-contract.md",
+      "kind": "file",
+      "bytes": 40000
+    },
+    {
+      "path": "services/**/src/**/*-contract.md",
+      "kind": "file",
+      "bytes": 40000
+    },
+    {
+      "path": "tools/goal/README.md",
+      "kind": "file",
+      "bytes": 80000
+    },
+    {
+      "path": "tools/goal/prompts/worker.md",
+      "kind": "file",
+      "bytes": 3500
+    },
+    {
+      "path": "tools/goal/prompts/manager.md",
+      "kind": "file",
+      "bytes": 5000
+    },
+    {
+      "path": "tools/goal/prompts/researcher.md",
+      "kind": "file",
+      "bytes": 2500
+    },
+    {
+      "path": "tools/goal/prompts/supermanager.md",
+      "kind": "file",
+      "bytes": 8000
+    },
+    {
+      "path": "tools/goal/prompts/conditions/**/*.md",
+      "kind": "directory",
+      "bytes": 1500
+    },
+    {
+      "path": "tools/goal/prompts/**/*.md",
+      "kind": "directory",
+      "bytes": 30000
+    },
+    {
+      "path": ".agents/skills/**/SKILL.md",
+      "kind": "file",
+      "bytes": 5000
+    },
+    {
+      "path": ".agents/skills/**/references/**/*.md",
+      "kind": "file",
+      "bytes": 6000
+    },
+    {
+      "path": ".agents/skills/**/*.md",
+      "kind": "directory",
+      "bytes": 30000
+    },
+    {
+      "path": "docs/research/**/*.md",
+      "kind": "file",
+      "bytes": 100000
+    },
+    {
+      "path": ".temp/**",
+      "kind": "file",
+      "bytes": 0
+    },
+    {
+      "path": ".temp/continuation/**",
+      "kind": "directory",
+      "bytes": 0
+    }
+  ]
+}

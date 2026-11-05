@@ -36,13 +36,25 @@ const invalid = [
 
 test('parseExposure accepts public and gate groups and refuses missing malformed and reserved values', () => {
   expect(parseExposure({ 'x-exposure': 'public' })).toEqual({ kind: 'public' });
-  for (const group of ['a', 'catalogue_import', 'realm_appeals', 'any_feature', 'open_feature', 'a'.repeat(63)]) {
+  for (const group of [
+    'a',
+    'catalogue_import',
+    'realm_appeals',
+    'any_feature',
+    'open_feature',
+    'agent_verification',
+    'a'.repeat(63),
+  ]) {
     expect(parseExposure({ 'x-exposure': `gate:${group}` })).toEqual({ kind: 'gate', group });
   }
   for (const value of invalid) {
     expect(() => parseExposure({ operationId: 'thing.read', 'x-exposure': value })).toThrow('thing.read');
   }
   for (const detail of [undefined, null, false, 1, 'public', [], {}]) expect(() => parseExposure(detail)).toThrow();
+});
+
+test('a hyphenated gate group is refused', () => {
+  expect(() => parseExposure({ 'x-exposure': 'gate:two-words' })).toThrow();
 });
 
 test('createKernel refuses to build with a visible route that has no valid x-exposure', () => {
@@ -91,6 +103,7 @@ test('every route of the production kernel declares a valid x-exposure', () => {
   expect(exposures).toContain('personal_library');
   expect(exposures).toContain('reading_progress');
   expect(exposures).toContain('collections');
+  expect(exposures).toContain('agent_verification');
 });
 
 test('the generated OpenAPI contract carries x-exposure on every operation', async () => {
@@ -108,4 +121,5 @@ test('the generated OpenAPI contract carries x-exposure on every operation', asy
   expect(exposures).toContain('personal_library');
   expect(exposures).toContain('reading_progress');
   expect(exposures).toContain('collections');
+  expect(exposures).toContain('agent_verification');
 });

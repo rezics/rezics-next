@@ -5,28 +5,44 @@ import tailwindcss from '@tailwindcss/vite';
 
 const local = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const components = local('../src/components');
-const arkEntries = [
+// The shadcn components import their primitives from many packages. Pre-bundle them up front: Vite otherwise
+// optimizes each on first use, reloads the page mid-run, and loads React twice.
+const shadcn = local('../src/shadcn');
+const shadcnEntries = [
   ...new Set(
-    readdirSync(components)
+    readdirSync(shadcn)
       .filter((file) => file.endsWith('.tsx'))
       .flatMap((file) =>
-        [...readFileSync(`${components}/${file}`, 'utf8').matchAll(/from ['"](@ark-ui\/react(?:\/[\w-]+)?)/g)].map(
+        [...readFileSync(`${shadcn}/${file}`, 'utf8').matchAll(/from ["']([^"'./][^"']*)["']/g)].map(
           (match) => match[1]!,
         ),
-      ),
+      )
+      .filter((specifier) => !/^(?:react(?:-dom)?(?:\/|$)|@rezics\/|cn$)/.test(specifier)),
   ),
 ].sort();
 
 const config: StorybookConfig = {
   framework: { name: '@storybook/react-vite', options: {} },
-  stories: ['../src/**/*.stories.tsx'],
-  addons: ['@storybook/addon-vitest', '@storybook/addon-a11y'],
+  // Match Web's local JSON/MCP contract instead of the alpha's server-side docgen default.
+  features: {
+    viewportStoryGlobals: true,
+    componentsManifest: true,
+    docgenServer: false,
+  } as NonNullable<StorybookConfig['features']> & { viewportStoryGlobals: true },
+  stories: [
+    '../src/**/*.stories.tsx',
+    ...(process.env.REZICS_UI_ACCESSIBILITY_PROBE === '1' ? ['../tests/fixtures/accessibility-probe.stories.tsx'] : []),
+  ],
+  storySorts: [{ order: ['Components', 'shadcn'] }],
+  addons: ['@storybook/addon-vitest', '@storybook/addon-a11y', '@storybook/addon-mcp'],
   core: { disableTelemetry: true },
   async viteFinal(config) {
     config.plugins ??= [];
     config.plugins.push(tailwindcss());
     config.optimizeDeps ??= {};
-    config.optimizeDeps.include = [...new Set([...(config.optimizeDeps.include ?? []), ...arkEntries])];
+    config.optimizeDeps.include = [
+      ...new Set([...(config.optimizeDeps.include ?? []), ...shadcnEntries, 'date-fns/locale']),
+    ];
     return config;
   },
 };

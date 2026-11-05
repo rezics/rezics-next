@@ -27,7 +27,7 @@ test('the recorded page read replays as the kernel answered it', async () => {
 });
 
 test('the subject story renders the real subject page', async () => {
-  const loaded = await loadSubjectPage(client, id);
+  const loaded = await loadSubjectPage(client, id, undefined, 'fr');
   if (loaded.kind !== 'page') throw new Error('expected the recorded page');
   const html = renderToString(createElement(SubjectPage, { page: loaded.page, locale: 'fr', messages }));
   expect(html).toMatch(/<h1[^>]*>Le Petit Prince<\/h1>/);

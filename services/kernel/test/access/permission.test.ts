@@ -1,9 +1,24 @@
+import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import pg from 'pg';
 import { readAccount } from '../../src/access/account-data.ts';
+import { governanceReachUse, PLATFORM_RESOURCE, usedGovernanceReach } from '../../src/access/governance-reach.ts';
 import { createAccess, checkPermission, checkDelegationBounds } from '../../src/access/permission.ts';
+import {
+  decideNativePermission,
+  nativePolicyCatalogueForAccess,
+  type NativePermissionProjection,
+} from '../../src/access/policy-core.ts';
 import { AccessUnavailableError, createResourcePublicEligibility } from '../../src/access/index.ts';
-import { accessCheck, type AccountActor, type Actor, type Resource } from '../../src/request/access.ts';
+import {
+  accessCheck,
+  accessExplicitCheck,
+  prepareReadDecisions,
+  type AccountActor,
+  type Actor,
+  type Resource,
+} from '../../src/request/access.ts';
+import { newId } from '../../src/route/route.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -21,11 +36,19 @@ const transactionId = id('1234', '7');
 const resource: Resource = { route: 0x6789, id: id('6789', '8') };
 const otherResource: Resource = { route: 0x789a, id: id('789a', '9') };
 const action = 'subject:read';
+const ownAccountAction = 'commerce_sale:list';
 const actions = new Map([
-  [action, { anonymous: false }],
+  [action, { anonymous: false, 'x-resource-types': ['subject'] }],
   ['subject:update', { anonymous: false }],
   ['access:grant', { anonymous: false }],
-  ['subject:public', { anonymous: true }],
+  ['subject:public', { anonymous: true, 'x-resource-types': ['subject'] }],
+  [ownAccountAction, { anonymous: false, authority: 'own-account' as const }],
+  ['post:read', { anonymous: true }],
+  ['post:revise', { anonymous: false }],
+  ['post:erase', { anonymous: false }],
+  ['media:create', { anonymous: false }],
+  ['reaction:set', { anonymous: false }],
+  ['report:create', { anonymous: false }],
 ]);
 const identity = (overrides: Partial<AccountActor> = {}): AccountActor => ({
   kind: 'account',
@@ -87,7 +110,14 @@ async function context(actor: Actor = identity(), deadline = Date.now() + 5000) 
     account: actor.kind === 'account' ? await readAccount(pool, routeOf(actor.accountId), actor.accountId) : null,
   };
 }
-const access = createAccess({ actions, accountEvidence: (_actor, ctx) => ctx.account });
+const access = createAccess({
+  actions,
+  resourceRoles: {
+    roles: { 'fixture.subject.reader': [action] },
+    types: { subject: { owner: 'fixture.subject.reader', standing: [] } },
+  },
+  accountEvidence: (_actor, ctx) => ctx.account,
+});
 async function prepare(actor: Actor = identity(), verb = action, target = resource, deadline?: number) {
   return accessCheck(access, actor, verb, target, await context(actor, deadline));
 }
@@ -152,6 +182,89 @@ test('actor grant, verified consented scope and principal grant independently ca
   expect(await run(identity({ requestedBy: null }))).toBe(true);
 });
 
+test('scalar, explicit and batched decisions admit 1000 inverse entries per operand and fail closed beyond coverage', async () => {
+  const groups = Array.from({ length: 1001 }, () => newId(0x4567));
+  await pool.query(
+    `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+     SELECT $1,id,'organization','active',$3 FROM unnest($2::uuid[]) id`,
+    [0x4567, groups, transactionId],
+  );
+  async function resetInverse() {
+    // Fixture reset uses the same TRUNCATE as beforeEach. Production DELETE
+    // remains guarded by the authoritative terminal-compensation proof.
+    await pool.query('TRUNCATE access.membership_inverse');
+    for (const subject of [actorId, principalId])
+      await pool.query(
+        `INSERT INTO access.membership_inverse(route,account_id,kind,group_id,reservation_id,transaction_id)
+         SELECT $1,$2,'organization',id,id,$4 FROM unnest($3::uuid[]) id`,
+        [routeOf(subject), subject, groups.slice(0, 1000), transactionId],
+      );
+  }
+  for (const subject of [actorId, principalId]) {
+    await removeGrant(subject);
+    // Only the last admitted group supplies authority. The other 999 rows are
+    // admission evidence, with real negative organization membership proofs.
+    await membership('owner', subject, groups[999]!);
+  }
+  await resetInverse();
+  await grant(groups[999]!, action, resource, 'owner');
+  const ordinary = identity({ requestedBy: null });
+  const delegated = identity();
+  async function decisions(actor: AccountActor, allowed: boolean) {
+    const ctx = await context(actor);
+    expect(await (await accessCheck(access, actor, action, resource, ctx))(pool)).toBe(allowed);
+    expect(await (await accessExplicitCheck(access, actor, action, resource, await context(actor)))(pool)).toEqual({
+      allowed,
+      explicit: allowed,
+    });
+    const input = { actor, context: await context(actor), actions: new Set([action]) };
+    if (!allowed) {
+      await expect(prepareReadDecisions(access, input)).rejects.toBeInstanceOf(AccessUnavailableError);
+      return;
+    }
+    const prepared = await prepareReadDecisions(access, input);
+    expect(
+      await prepared.decide(pool, { action, resourceType: 'subject', ids: [resource.id, otherResource.id] }),
+    ).toEqual({
+      [resource.id]: { allowed: true, explicit: true },
+      [otherResource.id]: { allowed: false, explicit: false },
+    });
+  }
+  await decisions(ordinary, true);
+  await decisions(delegated, true);
+  for (const subject of [actorId, principalId]) {
+    const actor = subject === actorId ? ordinary : delegated;
+    await pool.query(
+      `INSERT INTO access.membership_inverse(route,account_id,kind,group_id,reservation_id,transaction_id)
+       VALUES ($1,$2,'organization',$3,$3,$4)`,
+      [routeOf(subject), subject, groups[1000], transactionId],
+    );
+    await decisions(actor, false);
+    await resetInverse();
+    await pool.query('UPDATE access.account SET membership_inverse_complete=false WHERE route=$1 AND account_id=$2', [
+      routeOf(subject),
+      subject,
+    ]);
+    await decisions(actor, false);
+    await pool.query('UPDATE access.account SET membership_inverse_complete=true WHERE route=$1 AND account_id=$2', [
+      routeOf(subject),
+      subject,
+    ]);
+    await decisions(actor, true);
+  }
+  // A cached actor observation cannot stand in for missing inverse coverage.
+  const ctx = await context(ordinary);
+  await pool.query('DELETE FROM access.account WHERE route=$1 AND account_id=$2', [routeOf(actorId), actorId]);
+  expect(await (await accessCheck(access, ordinary, action, resource, ctx))(pool)).toBe(false);
+  expect(await (await accessExplicitCheck(access, ordinary, action, resource, ctx))(pool)).toEqual({
+    allowed: false,
+    explicit: false,
+  });
+  await expect(
+    prepareReadDecisions(access, { actor: ordinary, context: ctx, actions: new Set([action]) }),
+  ).rejects.toBeInstanceOf(AccessUnavailableError);
+}, 30000);
+
 test('resource, actor and action must match; operators and first-party preconsent supply no grants', async () => {
   expect(await run()).toBe(true);
   await removeGrant(actorId);
@@ -170,14 +283,73 @@ test('resource, actor and action must match; operators and first-party preconsen
   expect(await run(identity({ scopes: [action, 'arbitrary:read'] }), 'arbitrary:read')).toBe(false);
 });
 
+test('a missing required primitive remains unavailable even when the grant facts are positive', () => {
+  const catalogue = nativePolicyCatalogueForAccess(access)!;
+  const projection = {
+    assignmentValid: null,
+    deadlineLive: true,
+    localDenied: false,
+    actorActionGrant: true,
+    actorResourceRoleGrant: false,
+  } as unknown as NativePermissionProjection;
+  expect(
+    decideNativePermission(
+      catalogue,
+      {
+        action,
+        resourceType: 'subject',
+        anonymous: false,
+        hasPrincipal: false,
+        authenticatedBenefit: false,
+        scope: true,
+        floor: false,
+        mode: 'ordinary',
+      },
+      projection,
+    ).decision,
+  ).toBe('unavailable');
+});
+
+test('exact own-account and registered Global profiles retain their native ceilings and provenance', async () => {
+  const ownActor = identity({ scopes: [ownAccountAction], requestedBy: null });
+  const ownResource = { route: routeOf(actorId), id: actorId };
+  expect(await run(ownActor, ownAccountAction, ownResource)).toBe(true);
+  expect(await run(ownActor, ownAccountAction, { route: routeOf(principalId), id: principalId })).toBe(false);
+
+  const ownBatch = await prepareReadDecisions(access, {
+    actor: ownActor,
+    context: await context(ownActor),
+    actions: new Set([ownAccountAction]),
+  });
+  await expect(
+    ownBatch.decide(pool, { action: ownAccountAction, resourceType: 'access.account', ids: [principalId] }),
+  ).rejects.toBeInstanceOf(RangeError);
+  expect(
+    await ownBatch.decide(pool, { action: ownAccountAction, resourceType: 'access.account', ids: [actorId] }),
+  ).toEqual({ [actorId]: { allowed: true, explicit: false } });
+
+  const governor = identity({ scopes: ['post:erase'], requestedBy: null });
+  await grant(actorId, 'post:erase', PLATFORM_RESOURCE);
+  const evidence = await access.prepare!(governor, 'post:erase', resource, await context(governor));
+  expect(await checkPermission(pool, governor, 'post:erase', resource, evidence)).toBe(true);
+  expect(usedGovernanceReach(evidence)).toBe(true);
+  expect(governanceReachUse(evidence, governor, 'post:erase', resource)?.resources).toEqual([resource]);
+
+  await pool.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2', [
+    PLATFORM_RESOURCE.route,
+    PLATFORM_RESOURCE.id,
+  ]);
+  await removeGrant(actorId);
+  await removeGrant(principalId);
+  await grant(actorId, action, PLATFORM_RESOURCE);
+  const noGlobalReach = identity({ requestedBy: null });
+  expect(await run(noGlobalReach, action)).toBe(false);
+});
+
 test('the already-read actor state and epoch fail closed without an actor reread', async () => {
   expect(await run()).toBe(true);
   for (const state of ['pending', 'suspended', 'deleted']) {
-    await pool.query('UPDATE access.account SET state=$3 WHERE route=$1 AND account_id=$2', [
-      routeOf(actorId),
-      actorId,
-      state,
-    ]);
+    await setFixtureAccountState(pool, actorId, state);
     expect(await run()).toBe(false);
   }
   await pool.query("UPDATE access.account SET state='active',minimum_authn_epoch=2 WHERE route=$1 AND account_id=$2", [
@@ -244,7 +416,6 @@ test('grant ranges use exact inclusive start and exclusive end at the final data
       floor: false,
       at: null,
       roles: '[]',
-      evidence_valid: '(,)',
       deadline: 'infinity',
     };
     const values = statement.params.map((key) => parameters[key as keyof typeof parameters]);
@@ -338,7 +509,7 @@ test('principal-created assignments bind canonical requestedBy, principal state 
     actorId,
   ]);
   for (const state of ['suspended', 'deleted']) {
-    await pool.query('UPDATE access.account SET state=$2 WHERE route=$1', [routeOf(principalId), state]);
+    await setFixtureAccountState(pool, principalId, state);
     expect(await run()).toBe(false);
   }
 });

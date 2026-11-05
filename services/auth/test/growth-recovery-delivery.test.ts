@@ -1,7 +1,9 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createHash, createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
+import { runPlacedTests } from '../scripts/placed-tests.ts';
 import { createAuthService, type AccessAccount } from '../src/index.ts';
 import { withAuthTransport } from '../src/rate-limit.ts';
 import { capture, checkGrowth, costOf, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
@@ -9,12 +11,12 @@ import { capture, checkGrowth, costOf, openGrowthDatabase } from '../../kernel/t
 // Native production admission is decided at module load; keep the actual limiter.
 if (process.env.AUTH_DELIVERY_GROWTH_CHILD !== '1') {
   test('native failed recovery delivery stays bounded with same identifier and owner history', async () => {
-    const child = Bun.spawn(['bun', 'test', import.meta.path], {
+    const child = await runPlacedTests(['bun', 'test', import.meta.path], {
       env: { ...process.env, NODE_ENV: 'production', AUTH_DELIVERY_GROWTH_CHILD: '1' },
-      stdout: 'inherit',
-      stderr: 'inherit',
+      timeout: 180_000,
     });
-    expect(await child.exited).toBe(0);
+    if (child.output) console.info(child.output);
+    expect(child.code).toBe(0);
   }, 180000);
 } else {
   test('checkGrowth captures full native failed recovery start at 1/8/64 with duplicate identifier and owner history', async () => {
@@ -45,7 +47,10 @@ if (process.env.AUTH_DELIVERY_GROWTH_CHILD !== '1') {
         audience: 'https://api.test',
         secret: 'persistent-growth-delivery-secret-32-bytes',
         signing: { activeKid: key.kid, privateKeys: [key] },
-        trustedAccess: {
+        trustedAccess: trustedAccessPorts({
+          async readFencedAccount(id) {
+            return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+          },
           async readAccount(id) {
             const row = (await db.pool.query('SELECT epoch FROM test_access WHERE id=$1', [id])).rows[0];
             return row ? { ...account, accountId: id, authnEpoch: row.epoch } : null;
@@ -58,7 +63,7 @@ if (process.env.AUTH_DELIVERY_GROWTH_CHILD !== '1') {
           async authorizeRecovery() {
             throw new Error('Failed delivery cannot change Access');
           },
-        },
+        }),
         recoveryDelivery: {
           async deliver(value) {
             proofHash = createHash('sha256').update(value.token).digest('hex');

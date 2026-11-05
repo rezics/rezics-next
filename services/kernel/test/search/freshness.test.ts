@@ -99,13 +99,45 @@ test('a partition without a checkpoint row counts from position zero', async () 
   expect(result.asOf.toISOString()).toBe(recent);
 });
 
-test('the cached reader answers from one statement per interval', async () => {
+/** The test pool, with each statement held at `gate` after it ran, so a read can stay in flight. */
+function heldPool() {
+  let open!: () => void;
+  const gate = new Promise<void>((resolve) => (open = resolve));
+  let statements = 0;
+  const held = new Proxy(pool, {
+    get(target, key) {
+      if (key !== 'query') return Reflect.get(target, key, target);
+      return async (...args: Parameters<typeof target.query>) => {
+        statements++;
+        const result = await (target.query as (...args: unknown[]) => Promise<unknown>)(...args);
+        await gate;
+        return result;
+      };
+    },
+  });
+  return { pool: held, open, statements: () => statements };
+}
+
+test('the reader answers each call from a read that began after the call', async () => {
   const consumer = freshConsumer();
-  const cached = createFreshness(pool, consumer, { ttlMs: 60_000 });
-  const [a, b] = await Promise.all([cached.current(), cached.current()]);
-  expect(a).toEqual(b);
-  await append(500, '2026-01-01T00:00:03.000Z');
-  expect(await cached.current()).toEqual(a);
-  const uncached = createFreshness(pool, consumer, { ttlMs: 0 });
-  expect((await uncached.current()).asOf.toISOString()).toBe('2026-01-01T00:00:01.000Z');
+  const held = heldPool();
+  const reader = createFreshness(held.pool, consumer);
+  const first = reader.current();
+  await Bun.sleep(50);
+  expect(held.statements()).toBe(1);
+  await append(600, '2025-12-31T00:00:00.000Z');
+  const waiting = [reader.current(), reader.current(), reader.current()];
+  await Bun.sleep(50);
+  expect(held.statements()).toBe(1);
+  held.open();
+  const before = await first;
+  const after = await Promise.all(waiting);
+  expect(held.statements()).toBe(2);
+  expect(before.asOf.getTime()).toBeGreaterThan(Date.parse('2025-12-31T00:00:00.000Z'));
+  for (const result of after) expect(result.asOf.toISOString()).toBe('2025-12-31T00:00:00.000Z');
+  expect(after[1]).toEqual(after[0]);
+  expect(after[2]).toEqual(after[0]);
+  await append(601, '2025-12-30T00:00:00.000Z');
+  expect((await reader.current()).asOf.toISOString()).toBe('2025-12-30T00:00:00.000Z');
+  expect(held.statements()).toBe(3);
 });

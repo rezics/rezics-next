@@ -1,29 +1,27 @@
+import { notFound } from '@tanstack/react-router';
+import { deletionEvidence, nativeRevision, type DeletionEvidence } from './copies-receipt';
 import type { KernelClient } from '@rezics/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
+import { assertPublicCacheReadAllowed } from '../security/page-cache';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
+import { PublishedLogListError, requireMyLogsSearch } from './my-logs';
 import {
   LIBRARY_PAGE_LIMIT,
   libraryFullQuery,
   libraryListQuery,
   readLibraryResult,
   StaleCursorError,
+  subjectOf,
   type LibraryAccount,
   type LibrarySubject,
 } from './reads';
 
-type RawPublishedLog = {
-  id: string;
-  accountId: string;
-  subjectId: string;
-  sessionState: 'active' | 'completed' | 'abandoned';
-  startedAt: string;
-  completedAt: string | null;
-  note: string | null;
-  publishedAt: string;
-  subject?: { id: string; type: string; label: string } | null;
-  account?: { id: string; handle: string | null; displayName: string | null } | null;
-};
+type NativePublishedLogPage = Extract<
+  NonNullable<Awaited<ReturnType<KernelClient['publishedLogs']['get']>>['data']>,
+  { publishedLogs: unknown[] }
+>;
+type RawPublishedLog = NativePublishedLogPage['publishedLogs'][number];
 
 export type PublishedLog = {
   id: string;
@@ -40,6 +38,7 @@ export type PublishedLogPage = {
   signedIn: boolean;
   logs: PublishedLog[];
   next: string | null;
+  restarted?: true;
 };
 
 function present(log: RawPublishedLog): PublishedLog {
@@ -50,36 +49,81 @@ function present(log: RawPublishedLog): PublishedLog {
     completedAt: log.completedAt,
     note: log.note,
     publishedAt: log.publishedAt,
-    subject: log.subject ? { id: log.subject.id, type: log.subject.type, label: log.subject.label } : null,
+    subject: subjectOf(log.subject),
     account: log.account ? { handle: log.account.handle, displayName: log.account.displayName } : null,
   };
 }
 
-/** Reads the public snapshot and determines ownership from the current authenticated identity. */
+export type PublishedLogDetail = { log: PublishedLog; isOwner: boolean; revision?: number };
+export type PublishedLogOwner = { sessionSubject: string; accountId: string; id: string; revision: number };
+export type PublishedLogCurrentRead = PublishedLogDetail & { requestedId: string; owner: PublishedLogOwner | null };
+
+async function readPublishedLogSnapshot(
+  client: KernelClient,
+  sourceRequest: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: { id: string },
+): Promise<PublishedLogCurrentRead> {
+  assertPublicCacheReadAllowed(sourceRequest, 'session');
+  const headers = new Headers(sourceRequest.headers);
+  const cookie = sourceRequest.headers.get('cookie');
+  if (cookie !== null) headers.set('cookie', cookie);
+  const request = new Request(sourceRequest, { headers });
+  const refused = await prepareSession(request, sessionEnv);
+  const authorization = refused ? null : viewerCredential(request);
+  // Capture the successful preparation before dispatch, never from a later preparation
+  // or an explicit bearer's unrelated retained Request subject.
+  const accountId =
+    refused || !authorization || request.headers.has('authorization') ? undefined : sessionSubject(request);
+  const result = await client.publishedLogs({ logId: input.id }).get({
+    query: libraryFullQuery(),
+    fetch: { cache: 'no-store', redirect: 'manual' },
+    ...(authorization ? { headers: { authorization } } : {}),
+  });
+  const log = readLibraryResult(result).publishedLog;
+  if ('deleted' in log) throw notFound();
+  const isOwner = Boolean(accountId && accountId === log.accountId);
+  const revision = isOwner ? nativeRevision(result.response.headers.get('Library-Published-Log-Revision')) : undefined;
+  const owner =
+    isOwner && accountId && log.id === input.id && revision !== undefined
+      ? { sessionSubject: accountId, accountId: log.accountId, id: input.id, revision }
+      : null;
+  return { log: present(log), isOwner, ...(revision === undefined ? {} : { revision }), requestedId: input.id, owner };
+}
+
+/** Compatible pure public reader; owner metadata never comes from the public account handle. */
 export async function loadPublishedLog(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
   input: { id: string },
-): Promise<{ log: PublishedLog; isOwner: boolean }> {
-  await prepareSession(request, sessionEnv);
-  const authorization = viewerCredential(request);
-  const result = await client.publishedLogs({ logId: input.id }).get({
-    query: libraryFullQuery(),
-    ...(authorization ? { headers: { authorization } } : {}),
-  });
-  const log = readLibraryResult(result).publishedLog as RawPublishedLog;
-  return { log: present(log), isOwner: Boolean(sessionSubject(request) && sessionSubject(request) === log.accountId) };
+): Promise<PublishedLogDetail> {
+  const { log, isOwner, revision } = await readPublishedLogSnapshot(client, request, sessionEnv, input);
+  return { log, isOwner, ...(revision === undefined ? {} : { revision }) };
+}
+
+/** One preparation and one point read, with no retained Request WeakMap provenance. */
+export function loadPublishedLogCurrent(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: { id: string },
+): Promise<PublishedLogCurrentRead> {
+  return readPublishedLogSnapshot(client, request, sessionEnv, input);
 }
 
 async function readLogPage(client: KernelClient, accountId: string, authorization: string, cursor?: string) {
   const result = await client.publishedLogs.get({
     query: { ...libraryListQuery(cursor, LIBRARY_PAGE_LIMIT), accountId },
     headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
   });
-  // Keep an owner's progress page usable while published-log listing is unavailable.
-  if (statusOf(result) === 404) return { publishedLogs: [], next: null };
-  return readLibraryResult(result) as { publishedLogs: RawPublishedLog[]; next: string | null };
+  const status = result.response.status;
+  if (status === 202) throw new PublishedLogListError('preparing');
+  if (status === 401 || status === 403 || status === 404) throw new PublishedLogListError('denied');
+  const page = readLibraryResult(result);
+  if (!('publishedLogs' in page) || !Array.isArray(page.publishedLogs)) throw new PublishedLogListError('unavailable');
+  return page;
 }
 
 /** Reads one newest-first page of the viewer's own public snapshots. */
@@ -89,23 +133,31 @@ export async function loadMyPublishedLogs(
   sessionEnv: Partial<SessionEnv>,
   input: { cursor?: string },
 ): Promise<PublishedLogPage> {
-  await prepareSession(request, sessionEnv);
+  const { cursor } = requireMyLogsSearch(input);
+  if (await prepareSession(request, sessionEnv)) return { signedIn: false, logs: [], next: null };
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) return { signedIn: false, logs: [], next: null };
 
-  let page: { publishedLogs: RawPublishedLog[]; next: string | null };
+  let page: NativePublishedLogPage;
+  let restarted = false;
   try {
-    page = await readLogPage(client, accountId, authorization, input.cursor);
+    page = await readLogPage(client, accountId, authorization, cursor);
   } catch (error) {
-    if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
+    if (!(error instanceof StaleCursorError) || !cursor) throw error;
     page = await readLogPage(client, accountId, authorization);
+    restarted = true;
   }
-  return { signedIn: true, logs: page.publishedLogs.map(present), next: page.next };
+  return {
+    signedIn: true,
+    logs: page.publishedLogs.map(present),
+    next: page.next,
+    ...(restarted ? { restarted: true } : {}),
+  };
 }
 
 export type PublishedLogWriteResult =
-  | { ok: true; id: string }
+  | { ok: true; id: string; undo?: DeletionEvidence; revision?: number }
   | { ok: false; reason: 'closed' | 'conflict' | 'forbidden' | 'invalid' | 'unavailable' };
 
 type WriteResult<T> = { data?: T | null; error?: unknown; status?: number };
@@ -128,7 +180,7 @@ function codeOf(error: unknown): string | undefined {
 }
 
 function writeHeaders(authorization: string, idempotencyKey: string) {
-  return { authorization, 'idempotency-key': idempotencyKey } as { 'idempotency-key': string };
+  return { authorization, 'idempotency-key': JSON.stringify(idempotencyKey) } as { 'idempotency-key': string };
 }
 
 function writeFailure(result: WriteResult<unknown>): PublishedLogWriteResult {
@@ -152,7 +204,7 @@ export async function publishProgressLog(
   sessionEnv: Partial<SessionEnv>,
   input: { sessionId: string; note?: string; idempotencyKey: string },
 ): Promise<PublishedLogWriteResult> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return { ok: false, reason: 'forbidden' };
   const authorization = viewerCredential(request);
   if (!authorization) return { ok: false, reason: 'forbidden' };
   const note = input.note?.trim();
@@ -183,24 +235,65 @@ export async function deletePublishedLog(
   client: KernelClient,
   request: Request,
   sessionEnv: Partial<SessionEnv>,
-  input: { id: string; idempotencyKey: string },
+  input: { id: string; revision?: number; idempotencyKey: string },
 ): Promise<PublishedLogWriteResult> {
-  await prepareSession(request, sessionEnv);
+  if (await prepareSession(request, sessionEnv)) return { ok: false, reason: 'forbidden' };
   const authorization = viewerCredential(request);
   if (!authorization) return { ok: false, reason: 'forbidden' };
-  if (!routeIdPattern.test(input.id) || !idempotencyKeyPattern.test(input.idempotencyKey))
+  if (
+    !routeIdPattern.test(input.id) ||
+    !idempotencyKeyPattern.test(input.idempotencyKey) ||
+    (input.revision !== undefined &&
+      (!Number.isSafeInteger(input.revision) || input.revision < 1 || input.revision > 2147483644))
+  )
     return { ok: false, reason: 'invalid' };
 
   try {
     const result = await client.publishedLogs({ logId: input.id }).delete(undefined, {
+      ...(input.revision === undefined ? {} : { query: { revision: input.revision } }),
       headers: writeHeaders(authorization, input.idempotencyKey),
     });
     const status = statusOf(result);
     const id = result.data?.publishedLog?.id;
     if (status >= 400 || result.error || !id) return writeFailure(result);
-    return { ok: true, id };
+    const undo = deletionEvidence(result.response.headers, 'Published-Log');
+    return { ok: true, id, ...(undo ? { undo } : {}) };
   } catch (error) {
     if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
     return { ok: false, reason: 'unavailable' };
+  }
+}
+
+/** Reinstates the original public snapshot with its exact retained episode, never the current session. */
+export async function restorePublishedLog(
+  client: KernelClient,
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  input: { id: string; deletionId: string; revision: number; idempotencyKey: string },
+): Promise<PublishedLogWriteResult> {
+  if (
+    !routeIdPattern.test(input.id) ||
+    !idempotencyKeyPattern.test(input.idempotencyKey) ||
+    !idempotencyKeyPattern.test(input.deletionId) ||
+    !Number.isSafeInteger(input.revision) ||
+    input.revision < 1 ||
+    input.revision > 2147483646
+  )
+    return { ok: false, reason: 'invalid' };
+  if (await prepareSession(request, sessionEnv)) return { ok: false, reason: 'forbidden' };
+  const authorization = viewerCredential(request);
+  if (!authorization) return { ok: false, reason: 'forbidden' };
+  try {
+    const result = await client
+      .publishedLogs({ logId: input.id })
+      .$restore.post(
+        { deletionId: input.deletionId, revision: input.revision },
+        { headers: writeHeaders(authorization, input.idempotencyKey) },
+      );
+    if (result.error || !result.data?.publishedLog) return writeFailure(result);
+    const revision = nativeRevision(result.response.headers.get('Library-Published-Log-Revision'));
+    return { ok: true, id: result.data.publishedLog.id, ...(revision === undefined ? {} : { revision }) };
+  } catch (error) {
+    return { ok: false, reason: isPlatformClosedError(error) ? 'closed' : 'unavailable' };
   }
 }

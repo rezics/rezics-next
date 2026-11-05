@@ -2,8 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { Value } from 'typebox/value';
-import { readAccount, type Account } from '../../src/access/account-data.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
@@ -13,6 +12,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 
 const route = 0x21b0;
 const eventType = 'com.rezics.library.progress_session.updated.v1';
@@ -31,8 +31,8 @@ const persona = (accountId: string, permissions = scopes): AccountActor => ({
   requestedBy: null,
   authnEpoch: 1,
 });
-const owner = persona(newId(route));
-const other = persona(newId(route));
+let owner = persona(newId(route));
+let other = persona(newId(route));
 const suspended = persona(newId(route));
 const anonymous: Actor = { kind: 'anonymous' };
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(59)]]) };
@@ -78,20 +78,26 @@ async function snapshot() {
 beforeAll(async () => {
   database = await openGrowthDatabase();
   await bootstrapRelease(database.pool, bundledRelease);
-  const accounts = new Map<string, Account>();
   for (const actor of [owner, other, suspended]) {
     await database.admin.query(
       `INSERT INTO access.account
       (route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch)
       VALUES ($1, $2, 'actor', $3, $4, false, 1)`,
-      [route, actor.accountId, actor === suspended ? 'suspended' : 'active', newId(route)],
+      [route, actor.accountId, 'active', newId(route)],
     );
-    accounts.set(actor.accountId, (await readAccount(database.admin, route, actor.accountId))!);
+    if (actor === suspended) await suspendAccount(database.admin, actor.accountId);
   }
-  const access = createAccess({
-    actions: new Map([['subject:read', { anonymous: true }]]),
-    accountEvidence: (actor) => accounts.get(actor.accountId) ?? null,
+  const access = admittedAccess({
+    actions: new Map<string, { anonymous: boolean; authority?: 'own-account' }>([
+      ['subject:read', { anonymous: true }],
+      ...['progress_session:create', 'progress_session:update', 'progress_session:read', 'progress_session:list'].map(
+        (action) => [action, { anonymous: false, authority: 'own-account' as const }] as const,
+      ),
+    ]),
   });
+  const context = { pool: database.pool, deadline: Date.now() + 300_000 };
+  owner = await authenticateAccount(access, context, owner);
+  other = await authenticateAccount(access, context, other);
   commands = createSessionCommands({ pool: database.pool, access, tokens, clock });
   subjectId = await subject();
   versionSubjectId = await subject();
@@ -314,6 +320,64 @@ test('replays return the original result without repeated rows or events', async
   });
 });
 
+test('journal receipts retain public command identity across private admission changes', async () => {
+  const session = await start('scalar_amount');
+  const request = key();
+  const patch = { revision: 0, reflection: 'Original reflection' };
+  let admissions = 0;
+  const accepted = await commands.patchSessionJournal(owner, session.id, patch, request, {
+    identity: { review: 'original' },
+    async assert() {
+      admissions++;
+    },
+  });
+  expect(admissions).toBe(1);
+  await commands.patchSessionJournal(owner, session.id, { revision: 1, reflection: null }, key());
+  const before = await snapshot();
+  for (const admission of [
+    undefined,
+    {
+      identity: { review: 'replaced' },
+      async assert() {
+        throw new Error('Obsolete import review must not replace a completed receipt');
+      },
+    },
+  ]) {
+    expect(await commands.patchSessionJournal(owner, session.id, patch, request, admission)).toMatchObject({
+      value: accepted.value,
+      replayed: true,
+    });
+  }
+  await expect(
+    commands.patchSessionJournal(owner, session.id, { ...patch, reflection: 'Different body' }, request),
+  ).rejects.toThrow();
+  await expect(
+    commands.patchSessionJournal(persona(owner.accountId, []), session.id, patch, request),
+  ).rejects.toThrow();
+  expect((await commands.readSessionJournal(owner, session.id)).reflection).toBeNull();
+  expect(await snapshot()).toEqual(before);
+});
+
+test('failed private journal admission rolls back without acknowledging the command', async () => {
+  const session = await start('scalar_amount');
+  const request = key();
+  const patch = { revision: 0, reflection: 'Retained after retry' };
+  const before = await snapshot();
+  await expect(
+    commands.patchSessionJournal(owner, session.id, patch, request, {
+      identity: { review: 'stale' },
+      async assert() {
+        throw new Error('Stale import review');
+      },
+    }),
+  ).rejects.toThrow('Stale import review');
+  expect(await snapshot()).toEqual(before);
+  expect((await commands.readSessionJournal(owner, session.id)).revision).toBe(0);
+  const accepted = await commands.patchSessionJournal(owner, session.id, patch, request);
+  expect(accepted.replayed).toBe(false);
+  expect(accepted.value).toEqual({ sessionId: session.id, revision: 1, changed: true });
+});
+
 test('unknown subjects and versions are not found; invalid creation changes nothing', async () => {
   const before = await snapshot();
   for (const input of [
@@ -396,7 +460,7 @@ test('signed keyset cursors bind the operation, account and session or subject',
 });
 
 test('events are closed, ID-only, and use the account as their subject in its partition', async () => {
-  const schema = EVENT_TYPES[eventType];
+  const schema = EVENT_TYPES()[eventType];
   expect(Value.Check(schema, { sessionId: newId(route) })).toBe(true);
   expect(Value.Check(schema, { sessionId: newId(route), subjectId })).toBe(false);
   const rows = await database.admin.query('SELECT partition_no, subject, data FROM core.outbox WHERE type = $1', [

@@ -3,11 +3,11 @@ import pg, { type Pool, type PoolClient } from 'pg';
 import type { CopyChanges, CopyDraft, EntryDraft, EntryState } from '../../src/library/entry-model.ts';
 import * as store from '../../src/library/entry-store.ts';
 import {
-  assertGrowth,
-  measure,
+  checkGrowth,
   openGrowthDatabase,
+  placement,
   seed,
-  type GrowthSample,
+  type GrowthDatabase,
   type Population,
 } from '../support/growth.ts';
 
@@ -179,7 +179,7 @@ test('copies of one edition keep separate ids and ignore a stale revision', asyn
     expect(
       await store.updateCopy(client, route, first.id, 1, { ...changes, status: 'disposed' }, context(45)),
     ).toBeNull();
-    expect(await store.deleteCopy(client, route, first.id, 1)).toBeNull();
+    expect(await store.deleteCopy(client, route, first.id, 1, context(49, later))).toBeNull();
     expect(await store.readCopy(client, route, first.id)).toEqual(changed);
     expect(await store.readCopy(client, route, second.id)).toEqual(second);
 
@@ -205,7 +205,7 @@ test('copies of one edition keep separate ids and ignore a stale revision', asyn
     await expectSqlState(client, '23514', () =>
       store.insertCopy(client, route, { ...draft(id(48), 'y'.repeat(1001)) }, context(48)),
     );
-    expect(await store.deleteCopy(client, route, first.id, 2)).toEqual(changed);
+    expect(await store.deleteCopy(client, route, first.id, 2, context(50, later))).toEqual(changed);
     expect(await store.readCopy(client, route, first.id)).toBeNull();
     expect(await store.readCopy(client, route, second.id)).toEqual(gone);
   });
@@ -390,14 +390,44 @@ const population: Population = {
   },
 };
 
+function seededRows(): { readonly transactionIds: string[] } {
+  return {
+    transactionIds: Array.from({ length: 8_000 }, (_, ordinal) => {
+      const place = placement(population, ordinal);
+      return routed('40000000', place.route, place.ordinal);
+    }),
+  };
+}
+
+async function clearSeededRows(database: GrowthDatabase): Promise<void> {
+  const { transactionIds } = seededRows();
+  await database.admin.query('DELETE FROM library.entry WHERE transaction_id = ANY($1::uuid[])', [transactionIds]);
+  await database.admin.query('DELETE FROM library.copy WHERE transaction_id = ANY($1::uuid[])', [transactionIds]);
+}
+
+type GrowthReport = Awaited<ReturnType<typeof checkGrowth>>;
+
+function expectGrowthReport(report: GrowthReport, relation: string): void {
+  expect(report.samples.map(({ scale }) => scale)).toEqual([1, 4, 16]);
+  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([1, 1, 1]);
+  const relationRows = report.samples.map((sample) => sample.cost.relations?.[relation]?.rows ?? 0);
+  expect(relationRows.every((rows) => rows === relationRows[0] && rows > 0)).toBe(true);
+  const totalRows = report.samples.map(({ cost }) => cost.rows);
+  expect(totalRows.every((rows) => rows === totalRows[0] && rows > 0)).toBe(true);
+  expect(
+    report.samples.every(({ cost }) =>
+      Object.entries(cost.relations ?? {})
+        .filter(([name]) => name.startsWith('library.'))
+        .every(([, relationCost]) => relationCost.sequentialScans === 0),
+    ),
+  ).toBe(true);
+}
+
 test('entry write, entry page and copy page touch the same rows and statements at three scales', async () => {
   const database = await openGrowthDatabase();
   const owner = id(900_000);
   const subjectId = id(900_001);
   const copyId = id(900_002);
-  const scales = [256, 1_024, 4_096] as const;
-  // A table of a few hundred rows is cheaper to scan than to probe, so pin the planner to the indexes the pages are built on.
-  const planned = database.openPool({ options: '-c enable_seqscan=off' });
   try {
     await database.admin.query(
       `INSERT INTO library.entry
@@ -413,76 +443,60 @@ test('entry write, entry page and copy page touch the same rows and statements a
       [route, copyId, owner, subjectId, time, id(900_011)],
     );
 
-    const writeSamples: GrowthSample[] = [];
-    const entryPageSamples: GrowthSample[] = [];
-    const copyPageSamples: GrowthSample[] = [];
-    let previous = 0;
-    for (const scale of scales) {
-      await seed(database, population, { from: previous, to: scale });
-
-      const written = await measure(database, () =>
-        inTransaction(planned, (client) =>
-          store.updateEntryState(client, route, owner, subjectId, 1, 'paused', context(900_100 + scale, later)),
-        ),
-      );
-      expect(written.value).toMatchObject({ accountId: owner, subjectId, state: 'paused', revision: 2 });
-      expect(written.cost.statements).toBe(1);
-      expect(written.cost.relations?.['library.entry']?.sequentialScans ?? 0).toBe(0);
-      writeSamples.push({ scale, cost: written.cost });
-
-      const entryPage = await measure(database, () =>
-        inTransaction(planned, (client) =>
-          store.pageEntries(client, route, owner, { after: null, state: null, limit: 1 }),
-        ),
-      );
-      expect(entryPage.value).toMatchObject([{ accountId: owner, subjectId }]);
-      expect(entryPage.cost.statements).toBe(1);
-      expect(entryPage.cost.relations?.['library.entry']?.sequentialScans ?? 0).toBe(0);
-      entryPageSamples.push({ scale, cost: entryPage.cost });
-
-      const copyPage = await measure(database, () =>
-        inTransaction(planned, (client) => store.pageCopies(client, route, owner, { after: null, limit: 1 })),
-      );
-      expect(copyPage.value).toMatchObject([{ id: copyId, accountId: owner }]);
-      expect(copyPage.cost.statements).toBe(1);
-      expect(copyPage.cost.relations?.['library.copy']?.sequentialScans ?? 0).toBe(0);
-      copyPageSamples.push({ scale, cost: copyPage.cost });
-      previous = scale;
-    }
-
-    const relationRows = (samples: GrowthSample[], relation: string) =>
-      samples.map((sample) => sample.cost.relations?.[relation]?.rows ?? 0);
-    const same = (values: number[]) => values.every((value) => value === values[0] && value > 0);
-    expect(writeSamples.map((sample) => sample.cost.statements)).toEqual([1, 1, 1]);
-    expect(entryPageSamples.map((sample) => sample.cost.statements)).toEqual([1, 1, 1]);
-    expect(copyPageSamples.map((sample) => sample.cost.statements)).toEqual([1, 1, 1]);
-    expect(same(relationRows(writeSamples, 'library.entry'))).toBe(true);
-    expect(same(relationRows(entryPageSamples, 'library.entry'))).toBe(true);
-    expect(same(relationRows(copyPageSamples, 'library.copy'))).toBe(true);
-    expect(same(writeSamples.map((sample) => sample.cost.rows))).toBe(true);
-    expect(same(entryPageSamples.map((sample) => sample.cost.rows))).toBe(true);
-    expect(same(copyPageSamples.map((sample) => sample.cost.rows))).toBe(true);
-
-    const bounded = (samples: GrowthSample[], relation: string): GrowthSample[] =>
-      samples.map((sample) => ({
-        scale: sample.scale,
-        cost: { ...sample.cost, rows: sample.cost.relations?.[relation]?.rows ?? 0 },
-      }));
-    assertGrowth(bounded(writeSamples, 'library.entry'), {
-      rows: 'constant',
-      blocks: 'logarithmic',
-      statements: 'constant',
+    const write = await checkGrowth(database, {
+      name: 'Library entry write',
+      scales: [1, 4, 16],
+      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      grow: (growthDatabase, scale, previous) =>
+        seed(growthDatabase, population, { from: 500 * previous, to: 500 * scale }),
+      operation: (growthDatabase) =>
+        inTransaction(growthDatabase.pool, async (client) => {
+          const written = await store.updateEntryState(
+            client,
+            route,
+            owner,
+            subjectId,
+            1,
+            'paused',
+            context(900_100, later),
+          );
+          expect(written).toMatchObject({ accountId: owner, subjectId, state: 'paused', revision: 2 });
+          return written;
+        }),
     });
-    assertGrowth(bounded(entryPageSamples, 'library.entry'), {
-      rows: 'constant',
-      blocks: 'logarithmic',
-      statements: 'constant',
+    expectGrowthReport(write, 'library.entry');
+
+    await clearSeededRows(database);
+    const entryPage = await checkGrowth(database, {
+      name: 'Library entry page',
+      scales: [1, 4, 16],
+      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      grow: (growthDatabase, scale, previous) =>
+        seed(growthDatabase, population, { from: 500 * previous, to: 500 * scale }),
+      operation: (growthDatabase) =>
+        inTransaction(growthDatabase.pool, async (client) => {
+          const page = await store.pageEntries(client, route, owner, { after: null, state: null, limit: 1 });
+          expect(page).toMatchObject([{ accountId: owner, subjectId }]);
+          return page;
+        }),
     });
-    assertGrowth(bounded(copyPageSamples, 'library.copy'), {
-      rows: 'constant',
-      blocks: 'logarithmic',
-      statements: 'constant',
+    expectGrowthReport(entryPage, 'library.entry');
+
+    await clearSeededRows(database);
+    const copyPage = await checkGrowth(database, {
+      name: 'Library copy page',
+      scales: [1, 4, 16],
+      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      grow: (growthDatabase, scale, previous) =>
+        seed(growthDatabase, population, { from: 500 * previous, to: 500 * scale }),
+      operation: (growthDatabase) =>
+        inTransaction(growthDatabase.pool, async (client) => {
+          const page = await store.pageCopies(client, route, owner, { after: null, limit: 1 });
+          expect(page).toMatchObject([{ id: copyId, accountId: owner }]);
+          return page;
+        }),
     });
+    expectGrowthReport(copyPage, 'library.copy');
   } finally {
     await database.close();
   }

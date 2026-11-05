@@ -1,0 +1,754 @@
+[
+  {
+    "status": {
+      "format": "https://rezics.com/formats/library-export",
+      "version": 1,
+      "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+      "capturedAt": "2026-11-03 23:14:55.59+00",
+      "expiresAt": "2026-11-03 23:29:55.59+00",
+      "privacy": "private",
+      "completeness": "supported-native-facts",
+      "sections": [
+        "entries",
+        "labels",
+        "assignments",
+        "sessions",
+        "holdings",
+        "collections",
+        "collectionPins",
+        "bangumiUploads",
+        "bangumiEvidence",
+        "malImports",
+        "units",
+        "history",
+        "occurrences",
+        "malEvidence"
+      ],
+      "omissions": {
+        "trash": "excluded; current live facts and retained session history only",
+        "providerIdentifiers": "stored personal import evidence only; no shared custody scan or inferred identifiers",
+        "personalImportEvidence": "retained Bangumi and unexpired MAL row evidence; raw XML, credentials and internal review/apply capabilities excluded",
+        "commerce": "excluded; orders and financial evidence use Commerce retention/export policy",
+        "publication": "excluded; stored rules only, no dynamic evaluation or working publication output",
+        "reimport": "unavailable; this format does not promise an installed re-import endpoint"
+      },
+      "fullExport": false,
+      "state": "collecting",
+      "first": "AQF7ImUiOjEsImEiOlswLCIiLCIiLDAsMF0sInQiOjE3OTM3NDc2OTU1OTB9.t-MYVKutFldf12veRFwZEgV1f2FtCW7YUl3MO3uKB_A"
+    },
+    "pages": [
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOlsxLCIiLCIiLDAsMF0sInQiOjE3OTM3NDc2OTU1OTB9.QulFE9f4vfn6JQra_Y0V6DBY7bihpgOWxWplXAXKCrE",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOlsyLCIiLCIiLDAsMF0sInQiOjE3OTM3NDc2OTU1OTB9.tmQ6WDFMnRyQ0ox_Rs9Xq3eoZ-BlVtekFOiJzmWp6fw",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOlszLCIiLCIiLDAsMF0sInQiOjE3OTM3NDc2OTU1OTB9.QggwVcBYqX_FdqBVjeyCL3xBnN2RDVcMuZnAtGJnTFI",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [
+          {
+            "section": "sessions",
+            "mode": "completed_units",
+            "unit": "chapter",
+            "state": "active",
+            "total": null,
+            "amount": null,
+            "locator": null,
+            "position": null,
+            "revision": 1,
+            "session_id": "01a1a3b1-c943-77dc-8b95-2200d4d53e8b",
+            "started_at": "2026-11-03 23:14:55.59+00",
+            "subject_id": "01a1a3b1-b7d4-7737-8f31-22005e04f73c",
+            "completed_at": null,
+            "last_changed_at": null,
+            "version_subject_id": null,
+            "additional_measures": [],
+            "library_profile_pin": null,
+            "completed_unit_count": 0,
+            "subject_id_reference": {
+              "id": "01a1a3b1-b7d4-7737-8f31-22005e04f73c",
+              "href": "https://rezics.com/subjects/01a1a3b1-b7d4-7737-8f31-22005e04f73c"
+            }
+          },
+          {
+            "section": "sessions",
+            "mode": "completed_units",
+            "unit": "chapter",
+            "state": "active",
+            "total": null,
+            "amount": null,
+            "locator": null,
+            "position": null,
+            "revision": 1,
+            "session_id": "01a1a3b1-c94f-70a5-9e35-2200270b4fc2",
+            "started_at": "2026-11-03 23:14:55.59+00",
+            "subject_id": "01a1a3b1-b7d4-7737-8f31-22005e04f73c",
+            "completed_at": null,
+            "last_changed_at": null,
+            "version_subject_id": null,
+            "additional_measures": [],
+            "library_profile_pin": null,
+            "completed_unit_count": 0,
+            "subject_id_reference": {
+              "id": "01a1a3b1-b7d4-7737-8f31-22005e04f73c",
+              "href": "https://rezics.com/subjects/01a1a3b1-b7d4-7737-8f31-22005e04f73c"
+            }
+          }
+        ],
+        "next": "AQF7ImUiOjEsImEiOls0LCIiLCIiLDIsMTE3Ml0sInQiOjE3OTM3NDc2OTU1OTB9.Snr637dZYcgxScDbhkwvgNkv1Zjt2pcrdm7EsRpVvpQ",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOls1LCIiLCIiLDIsMTE3Ml0sInQiOjE3OTM3NDc2OTU1OTB9.lWrD2mmrLPromGolO3SWGlLcUnxWKzftpzs23yNmI2Y",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOls2LCIiLCIiLDIsMTE3Ml0sInQiOjE3OTM3NDc2OTU1OTB9.T3riqn9hSw_qhGk2IHO42BFgl5wRhxHSzTnJo3kNKXg",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOls3LCIiLCIiLDIsMTE3Ml0sInQiOjE3OTM3NDc2OTU1OTB9.wHsbtDzcYTWsw5wuxUD70Mpjir-vJQcpe9MQ_SD_tMc",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOls4LCIiLCIiLDIsMTE3Ml0sInQiOjE3OTM3NDc2OTU1OTB9.kREqBUDCnuPGFQiL-Nj_o_CQFK0OmiZoviiG1NdcszY",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOls5LCIiLCIiLDIsMTE3Ml0sInQiOjE3OTM3NDc2OTU1OTB9.2tXmSp8Hnr8kFYN2qFWUxU_EtEMAiPq_OwWMKceVvrg",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOlsxMCwiIiwiIiwyLDExNzJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.Ewu-tIqh4wP2-7OCmB-8zMFtn-z6bjYL5GFodkpgaXA",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOlsxMCwiIiwiMDFhMWEzYjEtYzk0My03N2RjLThiOTUtMjIwMGQ0ZDUzZThiIiwyLDExNzJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.HzGnTCD6JM-DeD5VwtQAX-IhHfSN_4Kj4AkGCcqcL9I",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOlsxMCwiIiwiMDFhMWEzYjEtYzk0Zi03MGE1LTllMzUtMjIwMDI3MGI0ZmMyIiwyLDExNzJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.V-kjz5x2yi-h_SoHZw1sjGizvavrhuR9C-dsP6AEcDs",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOlsxMSwiIiwiIiwyLDExNzJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.pWrt8FvCWRuCB7W6b8L2UGtVvaBCAAXAbafSy49zkm4",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOlsxMSwiIiwiMDFhMWEzYjEtYzk0My03N2RjLThiOTUtMjIwMGQ0ZDUzZThiIiwyLDExNzJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.vewdD9Hp2_gtraM2WiJ4BVBnQGRO_P2C42gYWgK6eYU",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOlsxMSwiIiwiMDFhMWEzYjEtYzk0Zi03MGE1LTllMzUtMjIwMDI3MGI0ZmMyIiwyLDExNzJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.k4U-pEGGA9dDXWGcBmDvowxijifII_FMnTEBHc4lR_0",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOlsxMiwiIiwiIiwyLDExNzJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.gSzHrZwZfjRIlhNAUTOn7pgU7z4Qq4SMkw2Rrhr2vpI",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjEsImEiOlsxMywiIiwiIiwyLDExNzJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.sNlVkyRRugcOzCgKw-cA7uv_aBjd_YAzkncjwQv3TwE",
+        "manifest": null
+      },
+      {
+        "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+        "state": "ready",
+        "records": [],
+        "next": null,
+        "manifest": {
+          "format": "https://rezics.com/formats/library-export",
+          "version": 1,
+          "exportId": "dd71b50b-c5d8-81d8-b8c3-2200718bd3d5",
+          "capturedAt": "2026-11-03 23:14:55.59+00",
+          "expiresAt": "2026-11-03 23:29:55.59+00",
+          "privacy": "private",
+          "completeness": "supported-native-facts",
+          "sections": [
+            "entries",
+            "labels",
+            "assignments",
+            "sessions",
+            "holdings",
+            "collections",
+            "collectionPins",
+            "bangumiUploads",
+            "bangumiEvidence",
+            "malImports",
+            "units",
+            "history",
+            "occurrences",
+            "malEvidence"
+          ],
+          "omissions": {
+            "trash": "excluded; current live facts and retained session history only",
+            "providerIdentifiers": "stored personal import evidence only; no shared custody scan or inferred identifiers",
+            "personalImportEvidence": "retained Bangumi and unexpired MAL row evidence; raw XML, credentials and internal review/apply capabilities excluded",
+            "commerce": "excluded; orders and financial evidence use Commerce retention/export policy",
+            "publication": "excluded; stored rules only, no dynamic evaluation or working publication output",
+            "reimport": "unavailable; this format does not promise an installed re-import endpoint"
+          },
+          "fullExport": false,
+          "rows": 2,
+          "recordBytes": 1172
+        }
+      }
+    ],
+    "artifact": "{\"manifest\":{\"format\":\"https://rezics.com/formats/library-export\",\"version\":1,\"exportId\":\"dd71b50b-c5d8-81d8-b8c3-2200718bd3d5\",\"capturedAt\":\"2026-11-03 23:14:55.59+00\",\"expiresAt\":\"2026-11-03 23:29:55.59+00\",\"privacy\":\"private\",\"completeness\":\"supported-native-facts\",\"sections\":[\"entries\",\"labels\",\"assignments\",\"sessions\",\"holdings\",\"collections\",\"collectionPins\",\"bangumiUploads\",\"bangumiEvidence\",\"malImports\",\"units\",\"history\",\"occurrences\",\"malEvidence\"],\"omissions\":{\"trash\":\"excluded; current live facts and retained session history only\",\"providerIdentifiers\":\"stored personal import evidence only; no shared custody scan or inferred identifiers\",\"personalImportEvidence\":\"retained Bangumi and unexpired MAL row evidence; raw XML, credentials and internal review/apply capabilities excluded\",\"commerce\":\"excluded; orders and financial evidence use Commerce retention/export policy\",\"publication\":\"excluded; stored rules only, no dynamic evaluation or working publication output\",\"reimport\":\"unavailable; this format does not promise an installed re-import endpoint\"},\"fullExport\":false,\"rows\":2,\"recordBytes\":1172},\"records\":[{\"section\":\"sessions\",\"mode\":\"completed_units\",\"unit\":\"chapter\",\"state\":\"active\",\"total\":null,\"amount\":null,\"locator\":null,\"position\":null,\"revision\":1,\"session_id\":\"01a1a3b1-c943-77dc-8b95-2200d4d53e8b\",\"started_at\":\"2026-11-03 23:14:55.59+00\",\"subject_id\":\"01a1a3b1-b7d4-7737-8f31-22005e04f73c\",\"completed_at\":null,\"last_changed_at\":null,\"version_subject_id\":null,\"additional_measures\":[],\"library_profile_pin\":null,\"completed_unit_count\":0,\"subject_id_reference\":{\"id\":\"01a1a3b1-b7d4-7737-8f31-22005e04f73c\",\"href\":\"https://rezics.com/subjects/01a1a3b1-b7d4-7737-8f31-22005e04f73c\"}},{\"section\":\"sessions\",\"mode\":\"completed_units\",\"unit\":\"chapter\",\"state\":\"active\",\"total\":null,\"amount\":null,\"locator\":null,\"position\":null,\"revision\":1,\"session_id\":\"01a1a3b1-c94f-70a5-9e35-2200270b4fc2\",\"started_at\":\"2026-11-03 23:14:55.59+00\",\"subject_id\":\"01a1a3b1-b7d4-7737-8f31-22005e04f73c\",\"completed_at\":null,\"last_changed_at\":null,\"version_subject_id\":null,\"additional_measures\":[],\"library_profile_pin\":null,\"completed_unit_count\":0,\"subject_id_reference\":{\"id\":\"01a1a3b1-b7d4-7737-8f31-22005e04f73c\",\"href\":\"https://rezics.com/subjects/01a1a3b1-b7d4-7737-8f31-22005e04f73c\"}}]}"
+  },
+  {
+    "status": {
+      "format": "https://rezics.com/formats/library-export",
+      "version": 4,
+      "coverage": "private-library-owner-facts-v4",
+      "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+      "capturedAt": "2026-11-03 23:14:55.59+00",
+      "expiresAt": "2026-11-03 23:29:55.59+00",
+      "privacy": "private",
+      "completeness": "supported-native-facts",
+      "sections": [
+        "entries",
+        "labels",
+        "assignments",
+        "sessions",
+        "holdings",
+        "collections",
+        "collectionPins",
+        "bangumiUploads",
+        "bangumiEvidence",
+        "malImports",
+        "units",
+        "history",
+        "occurrences",
+        "malEvidence",
+        "annotations",
+        "provenance",
+        "journals",
+        "vndbUploads",
+        "vndbEvidence",
+        "anilistUploads",
+        "anilistEvidence"
+      ],
+      "omissions": {
+        "trash": "excluded; current live facts and retained session history only",
+        "providerIdentifiers": "only explicitly reviewed owner observations and retained import evidence; no shared custody scan or inferred identifiers",
+        "personalImportEvidence": "retained Bangumi, unexpired MAL and VNDB, and retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities excluded",
+        "commerce": "excluded; orders and financial evidence use Commerce retention/export policy",
+        "publication": "excluded; stored rules only, no dynamic evaluation or working publication output",
+        "reimport": "version 4 recovery unavailable to the installed V1/V2 archive consumer; evidence never authorizes execution"
+      },
+      "fullExport": false,
+      "state": "collecting",
+      "first": "AQF7ImUiOjQsImEiOlswLCIiLCIiLDAsMCwiW1swLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdXSJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.o175GluJkV0hDWtL9zAJrutBC3nuFfjPRFa25W2VofM"
+    },
+    "pages": [
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlsxLCIiLCIiLDAsMCwiW1swLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdXSJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.PhjSFfFNhomoVe108Z79FWLVT0yVIySgCRoGi3LCupA",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlsyLCIiLCIiLDAsMCwiW1swLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdXSJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.nSokp5YFu2ahC_8OZmBz-p5Vncbs9PRKhoE-UaXmiTc",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlszLCIiLCIiLDAsMCwiW1swLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdXSJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.ZJH6FtbFjE9hE6pXP0ELr8iGfzSEBtiRmfjTCHxPkYM",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [
+          {
+            "section": "sessions",
+            "mode": "completed_units",
+            "unit": "chapter",
+            "state": "active",
+            "total": null,
+            "amount": null,
+            "locator": null,
+            "position": null,
+            "revision": 1,
+            "session_id": "01a1a3b1-c943-77dc-8b95-2200d4d53e8b",
+            "started_at": "2026-11-03 23:14:55.59+00",
+            "subject_id": "01a1a3b1-b7d4-7737-8f31-22005e04f73c",
+            "completed_at": null,
+            "last_changed_at": null,
+            "version_subject_id": null,
+            "additional_measures": [],
+            "library_profile_pin": null,
+            "completed_unit_count": 0,
+            "subject_id_reference": {
+              "id": "01a1a3b1-b7d4-7737-8f31-22005e04f73c",
+              "href": "https://rezics.com/subjects/01a1a3b1-b7d4-7737-8f31-22005e04f73c"
+            }
+          },
+          {
+            "section": "sessions",
+            "mode": "completed_units",
+            "unit": "chapter",
+            "state": "active",
+            "total": null,
+            "amount": null,
+            "locator": null,
+            "position": null,
+            "revision": 1,
+            "session_id": "01a1a3b1-c94f-70a5-9e35-2200270b4fc2",
+            "started_at": "2026-11-03 23:14:55.59+00",
+            "subject_id": "01a1a3b1-b7d4-7737-8f31-22005e04f73c",
+            "completed_at": null,
+            "last_changed_at": null,
+            "version_subject_id": null,
+            "additional_measures": [],
+            "library_profile_pin": null,
+            "completed_unit_count": 0,
+            "subject_id_reference": {
+              "id": "01a1a3b1-b7d4-7737-8f31-22005e04f73c",
+              "href": "https://rezics.com/subjects/01a1a3b1-b7d4-7737-8f31-22005e04f73c"
+            }
+          }
+        ],
+        "next": "AQF7ImUiOjQsImEiOls0LCIiLCIiLDIsMTE3MiwiW1swLDBdLFswLDBdLFswLDBdLFsyLDExNzJdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdXSJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.-ID8hGI0zHzDJXwFP_U28z_nF5Hzp8VXWXWZVheyEoE",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOls1LCIiLCIiLDIsMTE3MiwiW1swLDBdLFswLDBdLFswLDBdLFsyLDExNzJdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdXSJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.BIIbmuKmMXGqkgEFzo4fLb8g_I12ktmmd2JeX3FOGPw",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOls2LCIiLCIiLDIsMTE3MiwiW1swLDBdLFswLDBdLFswLDBdLFsyLDExNzJdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdXSJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.wLJyabkEb156Iz65mtd8zycGvC-pJEVEo_wlTM7Ju_k",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOls3LCIiLCIiLDIsMTE3MiwiW1swLDBdLFswLDBdLFswLDBdLFsyLDExNzJdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdXSJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.9cTTRl2i_I7pk0ET0UkA7DE0ggkTq636R5h3QhcCQvY",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOls4LCIiLCIiLDIsMTE3MiwiW1swLDBdLFswLDBdLFswLDBdLFsyLDExNzJdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdXSJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.q7s_9SaamjOnOxw27u39qUZv9DtCQGpyUJ4PEdbZUbI",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOls5LCIiLCIiLDIsMTE3MiwiW1swLDBdLFswLDBdLFswLDBdLFsyLDExNzJdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdLFswLDBdXSJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.vmnUoqeVz9Loi3SBXuYvRkSe95vYMg_juCUAU1y5UYw",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlsxMCwiIiwiIiwyLDExNzIsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXV0iXSwidCI6MTc5Mzc0NzY5NTU5MH0.tSvPFENS-8tflZeR0pPBMBytjCy6AfzYrU6se1WHpTw",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlsxMCwiIiwiMDFhMWEzYjEtYzk0My03N2RjLThiOTUtMjIwMGQ0ZDUzZThiIiwyLDExNzIsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXV0iXSwidCI6MTc5Mzc0NzY5NTU5MH0.m0RZ7hgiAdP9RjW29LreGoLe8wBujzAHUI6LBdQfuKM",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlsxMCwiIiwiMDFhMWEzYjEtYzk0Zi03MGE1LTllMzUtMjIwMDI3MGI0ZmMyIiwyLDExNzIsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXV0iXSwidCI6MTc5Mzc0NzY5NTU5MH0.ggBaEPTYW3gckPBZ2y1347uVgqGRYKJK8GuarF4qshM",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlsxMSwiIiwiIiwyLDExNzIsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXV0iXSwidCI6MTc5Mzc0NzY5NTU5MH0.UBZFhvoyaPiTbMFcvCZCbS9nNLGuDeiJJAqGSk5Qdd4",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlsxMSwiIiwiMDFhMWEzYjEtYzk0My03N2RjLThiOTUtMjIwMGQ0ZDUzZThiIiwyLDExNzIsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXV0iXSwidCI6MTc5Mzc0NzY5NTU5MH0.qzTNwkQzUgiJ9Gt_Wrkv_r9rE5KsUh_pplEkdjd-liU",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlsxMSwiIiwiMDFhMWEzYjEtYzk0Zi03MGE1LTllMzUtMjIwMDI3MGI0ZmMyIiwyLDExNzIsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXV0iXSwidCI6MTc5Mzc0NzY5NTU5MH0.8PUmXhV0xR4gc4JYPGeW4lA-zH60ILJyZpIoYICeZH8",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlsxMiwiIiwiIiwyLDExNzIsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXV0iXSwidCI6MTc5Mzc0NzY5NTU5MH0.KkoQ3fsCYSKI6Qi-rDDmxwjzkXUNJiFV7pAZRPlQ6uM",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlsxMywiIiwiIiwyLDExNzIsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXV0iXSwidCI6MTc5Mzc0NzY5NTU5MH0.IZV5LPYeuegzc8rR0DtxNC3FEsL0SPvpcg_8xnE5SWc",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlsxNCwiIiwiIiwyLDExNzIsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXV0iXSwidCI6MTc5Mzc0NzY5NTU5MH0.C4-JW_KFqO2vltXrt9i-MoEiHh15BzPReqw4GorNPCQ",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlsxNSwiIiwiIiwyLDExNzIsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXV0iXSwidCI6MTc5Mzc0NzY5NTU5MH0.yvj6ci32BjRAu3aIes8X6oCDJF2Q0PNuDu3fOo-Xk-Y",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlsxNiwiIiwiIiwyLDExNzIsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXV0iXSwidCI6MTc5Mzc0NzY5NTU5MH0.Xz3PgNkihwVBp-4ymLCT2SA-h8YJ7YC_63aQPSSKlqs",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [
+          {
+            "section": "journals",
+            "accountId": "01a1a3b1-b7d4-7736-9cd2-2200583c3cf5",
+            "sessionId": "01a1a3b1-c943-77dc-8b95-2200d4d53e8b",
+            "subjectId": "01a1a3b1-b7d4-7737-8f31-22005e04f73c",
+            "versionSubjectId": null,
+            "state": "active",
+            "progressRevision": 1,
+            "libraryProfilePin": null,
+            "startedAt": "2026-11-03 23:14:55.59+00",
+            "completedAt": null,
+            "lastChangedAt": null,
+            "journal": {
+              "sessionId": "01a1a3b1-c943-77dc-8b95-2200d4d53e8b",
+              "revision": 1,
+              "startDate": { "year": 2004 },
+              "finishDate": null,
+              "reflection": "",
+              "assessment": { "meaningRevision": 1, "units": null }
+            }
+          },
+          {
+            "section": "journals",
+            "accountId": "01a1a3b1-b7d4-7736-9cd2-2200583c3cf5",
+            "sessionId": "01a1a3b1-c94f-70a5-9e35-2200270b4fc2",
+            "subjectId": "01a1a3b1-b7d4-7737-8f31-22005e04f73c",
+            "versionSubjectId": null,
+            "state": "active",
+            "progressRevision": 1,
+            "libraryProfilePin": null,
+            "startedAt": "2026-11-03 23:14:55.59+00",
+            "completedAt": null,
+            "lastChangedAt": null,
+            "journal": {
+              "sessionId": "01a1a3b1-c94f-70a5-9e35-2200270b4fc2",
+              "revision": 1,
+              "startDate": { "year": 2004 },
+              "finishDate": null,
+              "reflection": "",
+              "assessment": { "meaningRevision": 1, "units": 0 }
+            }
+          }
+        ],
+        "next": "AQF7ImUiOjQsImEiOlsxNywiIiwiIiw0LDIyMjEsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMDQ5XSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXV0iXSwidCI6MTc5Mzc0NzY5NTU5MH0.BxD-uMdLxjbuBJNJdr4MwvSkNRMejmh5kNm4noeh2lc",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [
+          {
+            "section": "vndbUploads",
+            "upload_id": "01a1a3b1-b7d4-7738-9f8b-2200fe3e8395",
+            "state": "cancelled",
+            "expires_at": "2026-11-04 23:14:55.59+00"
+          }
+        ],
+        "next": "AQF7ImUiOjQsImEiOlsxOCwiIiwiIiw1LDIzNTgsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMDQ5XSxbMSwxMzddLFswLDBdLFswLDBdLFswLDBdXSJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.29vzWutv0zrPfT2QYHm_XddBbLzj-F3ZkrhnF5uW-0w",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [
+          {
+            "section": "vndbEvidence",
+            "upload_id": "01a1a3b1-b7d4-7738-9f8b-2200fe3e8395",
+            "ordinal": 0,
+            "evidence": {
+              "kind": "vn",
+              "title": "",
+              "fields": {
+                "notes": { "raw": null, "kind": "missing" },
+                "score": { "raw": "0", "kind": "invalid" },
+                "status": { "raw": "Unfamiliar", "kind": "value", "value": "Unfamiliar" },
+                "privacy": { "raw": null, "kind": "missing" },
+                "started": { "raw": "2004-02-00", "kind": "value", "value": "2004-02", "precision": "month" },
+                "finished": { "raw": null, "kind": "missing" },
+                "progress": { "raw": null, "kind": "missing" },
+                "progressMeasure": { "raw": null, "kind": "missing" }
+              },
+              "labels": ["Unfamiliar"],
+              "ordinal": 0,
+              "evidence": {
+                ":@": { "id": "v1" },
+                "vn": [
+                  { "vote": [{ "#text": "0" }] },
+                  { "started": [{ "#text": "2004-02-00" }] },
+                  { "label": [{ "#text": "Unfamiliar" }] }
+                ]
+              },
+              "identifier": { "kind": "vn", "value": "v1", "provider": "vndb" },
+              "suggestedRole": null,
+              "retainedReason": "Only an explicitly selected released entry state can be applied; all other source fields remain private evidence."
+            }
+          },
+          {
+            "section": "vndbEvidence",
+            "upload_id": "01a1a3b1-b7d4-7738-9f8b-2200fe3e8395",
+            "ordinal": 1,
+            "evidence": {
+              "kind": "retained",
+              "title": "",
+              "fields": {},
+              "labels": [],
+              "ordinal": 1,
+              "evidence": { "attributes": { "version": "1.0" } },
+              "identifier": null,
+              "suggestedRole": null,
+              "retainedReason": "Export metadata and exact original XML remain private source evidence."
+            }
+          }
+        ],
+        "next": "AQF7ImUiOjQsImEiOlsxOCwiIiwiMDFhMWEzYjEtYjdkNC03NzM4LTlmOGItMjIwMGZlM2U4Mzk1Iiw3LDM2MTEsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMDQ5XSxbMSwxMzddLFsyLDEyNTNdLFswLDBdLFswLDBdXSJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.AFWZ_VEWPagga2dPnOKixQbXAL-yxx-MTRMKCnWs5Aw",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [],
+        "next": "AQF7ImUiOjQsImEiOlsxOSwiIiwiIiw3LDM2MTEsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMDQ5XSxbMSwxMzddLFsyLDEyNTNdLFswLDBdLFswLDBdXSJdLCJ0IjoxNzkzNzQ3Njk1NTkwfQ.1M4LxtXQDjUMxjU6nwnc2AKYLh-_txtZMXggFLCowMs",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [
+          {
+            "section": "anilistUploads",
+            "upload_id": "01a1a3b1-b7d4-7738-9f8b-2200fe3e8395",
+            "cancelled": true,
+            "score_format": "POINT_10_DECIMAL",
+            "row_count": 1
+          }
+        ],
+        "next": "AQF7ImUiOjQsImEiOlsyMCwiIiwiIiw4LDM3NTUsIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMDQ5XSxbMSwxMzddLFsyLDEyNTNdLFsxLDE0NF0sWzAsMF1dIl0sInQiOjE3OTM3NDc2OTU1OTB9.-HcR4CazCBZ40_A03iBcMOHyGnGSRPOMwDkuDNKFC_A",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "collecting",
+        "records": [
+          {
+            "section": "anilistEvidence",
+            "upload_id": "01a1a3b1-b7d4-7738-9f8b-2200fe3e8395",
+            "ordinal": 0,
+            "evidence": {
+              "group": null,
+              "fields": [
+                {
+                  "field": "mediaId",
+                  "reason": "No native admission for this field; retained privately",
+                  "validity": "valid"
+                },
+                {
+                  "field": "score",
+                  "reason": "Original POINT_10_DECIMAL; no exact conversion to native units. Owner choice is required.",
+                  "validity": "valid"
+                },
+                {
+                  "field": "notes",
+                  "reason": "No native admission for this field; retained privately",
+                  "validity": "unknown"
+                },
+                { "field": "status", "reason": "Review native state role mapping", "validity": "invalid" },
+                {
+                  "field": "startedAt",
+                  "reason": "Fuzzy components retained exactly; no historical session admission",
+                  "validity": "invalid"
+                }
+              ],
+              "evidence": {
+                "notes": null,
+                "score": 0,
+                "status": "FUTURE_STATUS",
+                "mediaId": 1,
+                "startedAt": { "day": 0, "year": 2004, "month": null }
+              },
+              "identifiers": [{ "source": "anilist", "externalId": "1" }],
+              "scoreLexeme": "0"
+            }
+          }
+        ],
+        "next": "AQF7ImUiOjQsImEiOlsyMCwiIiwiMDFhMWEzYjEtYjdkNC03NzM4LTlmOGItMjIwMGZlM2U4Mzk1Iiw5LDQ2MjksIltbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMTcyXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMCwwXSxbMiwxMDQ5XSxbMSwxMzddLFsyLDEyNTNdLFsxLDE0NF0sWzEsODc0XV0iXSwidCI6MTc5Mzc0NzY5NTU5MH0.1HSS1N1hJ9NwjBnEou5oMZJaZRP0bIKUGIJG6Kvn0m0",
+        "manifest": null
+      },
+      {
+        "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+        "state": "ready",
+        "records": [],
+        "next": null,
+        "manifest": {
+          "format": "https://rezics.com/formats/library-export",
+          "version": 4,
+          "coverage": "private-library-owner-facts-v4",
+          "exportId": "0f097144-00fa-85c5-8667-2200c7da9382",
+          "capturedAt": "2026-11-03 23:14:55.59+00",
+          "expiresAt": "2026-11-03 23:29:55.59+00",
+          "privacy": "private",
+          "completeness": "supported-native-facts",
+          "sections": [
+            "entries",
+            "labels",
+            "assignments",
+            "sessions",
+            "holdings",
+            "collections",
+            "collectionPins",
+            "bangumiUploads",
+            "bangumiEvidence",
+            "malImports",
+            "units",
+            "history",
+            "occurrences",
+            "malEvidence",
+            "annotations",
+            "provenance",
+            "journals",
+            "vndbUploads",
+            "vndbEvidence",
+            "anilistUploads",
+            "anilistEvidence"
+          ],
+          "omissions": {
+            "trash": "excluded; current live facts and retained session history only",
+            "providerIdentifiers": "only explicitly reviewed owner observations and retained import evidence; no shared custody scan or inferred identifiers",
+            "personalImportEvidence": "retained Bangumi, unexpired MAL and VNDB, and retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities excluded",
+            "commerce": "excluded; orders and financial evidence use Commerce retention/export policy",
+            "publication": "excluded; stored rules only, no dynamic evaluation or working publication output",
+            "reimport": "version 4 recovery unavailable to the installed V1/V2 archive consumer; evidence never authorizes execution"
+          },
+          "fullExport": false,
+          "rows": 9,
+          "recordBytes": 4629,
+          "sectionTotals": {
+            "entries": { "rows": 0, "recordBytes": 0 },
+            "labels": { "rows": 0, "recordBytes": 0 },
+            "assignments": { "rows": 0, "recordBytes": 0 },
+            "sessions": { "rows": 2, "recordBytes": 1172 },
+            "holdings": { "rows": 0, "recordBytes": 0 },
+            "collections": { "rows": 0, "recordBytes": 0 },
+            "collectionPins": { "rows": 0, "recordBytes": 0 },
+            "bangumiUploads": { "rows": 0, "recordBytes": 0 },
+            "bangumiEvidence": { "rows": 0, "recordBytes": 0 },
+            "malImports": { "rows": 0, "recordBytes": 0 },
+            "units": { "rows": 0, "recordBytes": 0 },
+            "history": { "rows": 0, "recordBytes": 0 },
+            "occurrences": { "rows": 0, "recordBytes": 0 },
+            "malEvidence": { "rows": 0, "recordBytes": 0 },
+            "annotations": { "rows": 0, "recordBytes": 0 },
+            "provenance": { "rows": 0, "recordBytes": 0 },
+            "journals": { "rows": 2, "recordBytes": 1049 },
+            "vndbUploads": { "rows": 1, "recordBytes": 137 },
+            "vndbEvidence": { "rows": 2, "recordBytes": 1253 },
+            "anilistUploads": { "rows": 1, "recordBytes": 144 },
+            "anilistEvidence": { "rows": 1, "recordBytes": 874 }
+          }
+        }
+      }
+    ],
+    "artifact": "{\"manifest\":{\"format\":\"https://rezics.com/formats/library-export\",\"version\":4,\"coverage\":\"private-library-owner-facts-v4\",\"exportId\":\"0f097144-00fa-85c5-8667-2200c7da9382\",\"capturedAt\":\"2026-11-03 23:14:55.59+00\",\"expiresAt\":\"2026-11-03 23:29:55.59+00\",\"privacy\":\"private\",\"completeness\":\"supported-native-facts\",\"sections\":[\"entries\",\"labels\",\"assignments\",\"sessions\",\"holdings\",\"collections\",\"collectionPins\",\"bangumiUploads\",\"bangumiEvidence\",\"malImports\",\"units\",\"history\",\"occurrences\",\"malEvidence\",\"annotations\",\"provenance\",\"journals\",\"vndbUploads\",\"vndbEvidence\",\"anilistUploads\",\"anilistEvidence\"],\"omissions\":{\"trash\":\"excluded; current live facts and retained session history only\",\"providerIdentifiers\":\"only explicitly reviewed owner observations and retained import evidence; no shared custody scan or inferred identifiers\",\"personalImportEvidence\":\"retained Bangumi, unexpired MAL and VNDB, and retained AniList parsed rows; raw uploads, wrapper documents, credentials and review/apply capabilities excluded\",\"commerce\":\"excluded; orders and financial evidence use Commerce retention/export policy\",\"publication\":\"excluded; stored rules only, no dynamic evaluation or working publication output\",\"reimport\":\"version 4 recovery unavailable to the installed V1/V2 archive consumer; evidence never authorizes execution\"},\"fullExport\":false,\"rows\":9,\"recordBytes\":4629,\"sectionTotals\":{\"entries\":{\"rows\":0,\"recordBytes\":0},\"labels\":{\"rows\":0,\"recordBytes\":0},\"assignments\":{\"rows\":0,\"recordBytes\":0},\"sessions\":{\"rows\":2,\"recordBytes\":1172},\"holdings\":{\"rows\":0,\"recordBytes\":0},\"collections\":{\"rows\":0,\"recordBytes\":0},\"collectionPins\":{\"rows\":0,\"recordBytes\":0},\"bangumiUploads\":{\"rows\":0,\"recordBytes\":0},\"bangumiEvidence\":{\"rows\":0,\"recordBytes\":0},\"malImports\":{\"rows\":0,\"recordBytes\":0},\"units\":{\"rows\":0,\"recordBytes\":0},\"history\":{\"rows\":0,\"recordBytes\":0},\"occurrences\":{\"rows\":0,\"recordBytes\":0},\"malEvidence\":{\"rows\":0,\"recordBytes\":0},\"annotations\":{\"rows\":0,\"recordBytes\":0},\"provenance\":{\"rows\":0,\"recordBytes\":0},\"journals\":{\"rows\":2,\"recordBytes\":1049},\"vndbUploads\":{\"rows\":1,\"recordBytes\":137},\"vndbEvidence\":{\"rows\":2,\"recordBytes\":1253},\"anilistUploads\":{\"rows\":1,\"recordBytes\":144},\"anilistEvidence\":{\"rows\":1,\"recordBytes\":874}}},\"records\":[{\"section\":\"sessions\",\"mode\":\"completed_units\",\"unit\":\"chapter\",\"state\":\"active\",\"total\":null,\"amount\":null,\"locator\":null,\"position\":null,\"revision\":1,\"session_id\":\"01a1a3b1-c943-77dc-8b95-2200d4d53e8b\",\"started_at\":\"2026-11-03 23:14:55.59+00\",\"subject_id\":\"01a1a3b1-b7d4-7737-8f31-22005e04f73c\",\"completed_at\":null,\"last_changed_at\":null,\"version_subject_id\":null,\"additional_measures\":[],\"library_profile_pin\":null,\"completed_unit_count\":0,\"subject_id_reference\":{\"id\":\"01a1a3b1-b7d4-7737-8f31-22005e04f73c\",\"href\":\"https://rezics.com/subjects/01a1a3b1-b7d4-7737-8f31-22005e04f73c\"}},{\"section\":\"sessions\",\"mode\":\"completed_units\",\"unit\":\"chapter\",\"state\":\"active\",\"total\":null,\"amount\":null,\"locator\":null,\"position\":null,\"revision\":1,\"session_id\":\"01a1a3b1-c94f-70a5-9e35-2200270b4fc2\",\"started_at\":\"2026-11-03 23:14:55.59+00\",\"subject_id\":\"01a1a3b1-b7d4-7737-8f31-22005e04f73c\",\"completed_at\":null,\"last_changed_at\":null,\"version_subject_id\":null,\"additional_measures\":[],\"library_profile_pin\":null,\"completed_unit_count\":0,\"subject_id_reference\":{\"id\":\"01a1a3b1-b7d4-7737-8f31-22005e04f73c\",\"href\":\"https://rezics.com/subjects/01a1a3b1-b7d4-7737-8f31-22005e04f73c\"}},{\"section\":\"journals\",\"accountId\":\"01a1a3b1-b7d4-7736-9cd2-2200583c3cf5\",\"sessionId\":\"01a1a3b1-c943-77dc-8b95-2200d4d53e8b\",\"subjectId\":\"01a1a3b1-b7d4-7737-8f31-22005e04f73c\",\"versionSubjectId\":null,\"state\":\"active\",\"progressRevision\":1,\"libraryProfilePin\":null,\"startedAt\":\"2026-11-03 23:14:55.59+00\",\"completedAt\":null,\"lastChangedAt\":null,\"journal\":{\"sessionId\":\"01a1a3b1-c943-77dc-8b95-2200d4d53e8b\",\"revision\":1,\"startDate\":{\"year\":2004},\"finishDate\":null,\"reflection\":\"\",\"assessment\":{\"meaningRevision\":1,\"units\":null}}},{\"section\":\"journals\",\"accountId\":\"01a1a3b1-b7d4-7736-9cd2-2200583c3cf5\",\"sessionId\":\"01a1a3b1-c94f-70a5-9e35-2200270b4fc2\",\"subjectId\":\"01a1a3b1-b7d4-7737-8f31-22005e04f73c\",\"versionSubjectId\":null,\"state\":\"active\",\"progressRevision\":1,\"libraryProfilePin\":null,\"startedAt\":\"2026-11-03 23:14:55.59+00\",\"completedAt\":null,\"lastChangedAt\":null,\"journal\":{\"sessionId\":\"01a1a3b1-c94f-70a5-9e35-2200270b4fc2\",\"revision\":1,\"startDate\":{\"year\":2004},\"finishDate\":null,\"reflection\":\"\",\"assessment\":{\"meaningRevision\":1,\"units\":0}}},{\"section\":\"vndbUploads\",\"upload_id\":\"01a1a3b1-b7d4-7738-9f8b-2200fe3e8395\",\"state\":\"cancelled\",\"expires_at\":\"2026-11-04 23:14:55.59+00\"},{\"section\":\"vndbEvidence\",\"upload_id\":\"01a1a3b1-b7d4-7738-9f8b-2200fe3e8395\",\"ordinal\":0,\"evidence\":{\"kind\":\"vn\",\"title\":\"\",\"fields\":{\"notes\":{\"raw\":null,\"kind\":\"missing\"},\"score\":{\"raw\":\"0\",\"kind\":\"invalid\"},\"status\":{\"raw\":\"Unfamiliar\",\"kind\":\"value\",\"value\":\"Unfamiliar\"},\"privacy\":{\"raw\":null,\"kind\":\"missing\"},\"started\":{\"raw\":\"2004-02-00\",\"kind\":\"value\",\"value\":\"2004-02\",\"precision\":\"month\"},\"finished\":{\"raw\":null,\"kind\":\"missing\"},\"progress\":{\"raw\":null,\"kind\":\"missing\"},\"progressMeasure\":{\"raw\":null,\"kind\":\"missing\"}},\"labels\":[\"Unfamiliar\"],\"ordinal\":0,\"evidence\":{\":@\":{\"id\":\"v1\"},\"vn\":[{\"vote\":[{\"#text\":\"0\"}]},{\"started\":[{\"#text\":\"2004-02-00\"}]},{\"label\":[{\"#text\":\"Unfamiliar\"}]}]},\"identifier\":{\"kind\":\"vn\",\"value\":\"v1\",\"provider\":\"vndb\"},\"suggestedRole\":null,\"retainedReason\":\"Only an explicitly selected released entry state can be applied; all other source fields remain private evidence.\"}},{\"section\":\"vndbEvidence\",\"upload_id\":\"01a1a3b1-b7d4-7738-9f8b-2200fe3e8395\",\"ordinal\":1,\"evidence\":{\"kind\":\"retained\",\"title\":\"\",\"fields\":{},\"labels\":[],\"ordinal\":1,\"evidence\":{\"attributes\":{\"version\":\"1.0\"}},\"identifier\":null,\"suggestedRole\":null,\"retainedReason\":\"Export metadata and exact original XML remain private source evidence.\"}},{\"section\":\"anilistUploads\",\"upload_id\":\"01a1a3b1-b7d4-7738-9f8b-2200fe3e8395\",\"cancelled\":true,\"score_format\":\"POINT_10_DECIMAL\",\"row_count\":1},{\"section\":\"anilistEvidence\",\"upload_id\":\"01a1a3b1-b7d4-7738-9f8b-2200fe3e8395\",\"ordinal\":0,\"evidence\":{\"group\":null,\"fields\":[{\"field\":\"mediaId\",\"reason\":\"No native admission for this field; retained privately\",\"validity\":\"valid\"},{\"field\":\"score\",\"reason\":\"Original POINT_10_DECIMAL; no exact conversion to native units. Owner choice is required.\",\"validity\":\"valid\"},{\"field\":\"notes\",\"reason\":\"No native admission for this field; retained privately\",\"validity\":\"unknown\"},{\"field\":\"status\",\"reason\":\"Review native state role mapping\",\"validity\":\"invalid\"},{\"field\":\"startedAt\",\"reason\":\"Fuzzy components retained exactly; no historical session admission\",\"validity\":\"invalid\"}],\"evidence\":{\"notes\":null,\"score\":0,\"status\":\"FUTURE_STATUS\",\"mediaId\":1,\"startedAt\":{\"day\":0,\"year\":2004,\"month\":null}},\"identifiers\":[{\"source\":\"anilist\",\"externalId\":\"1\"}],\"scoreLexeme\":\"0\"}}]}"
+  }
+]

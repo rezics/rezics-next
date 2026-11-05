@@ -4,7 +4,7 @@
 @import '@rezics/ui/styles.css';
 @source "../../../packages/ui/src/**/*.{ts,tsx}";
 
-header [data-slot='combobox-control'] > [data-slot='input-group'] {
+header [data-slot='input-group'] {
   height: 36px;
   border-color: var(--border);
   border-radius: 9999px;
@@ -12,11 +12,11 @@ header [data-slot='combobox-control'] > [data-slot='input-group'] {
   box-shadow: none;
 }
 
-header [data-slot='combobox-control'] > [data-slot='input-group']:hover {
+header [data-slot='input-group']:hover {
   border-color: var(--border);
 }
 
-header [data-slot='combobox-control'] > [data-slot='input-group']::before {
+header [data-slot='input-group']::before {
   position: absolute;
   z-index: 1;
   inset-inline-start: 0.75rem;
@@ -29,7 +29,7 @@ header [data-slot='combobox-control'] > [data-slot='input-group']::before {
     no-repeat center / contain;
 }
 
-header [data-slot='combobox-control'] > [data-slot='input-group']:has([data-slot='input-group-control']:focus-visible) {
+header [data-slot='input-group']:has([data-slot='input-group-control']:focus-visible) {
   border-color: var(--primary);
   outline: 2px solid var(--primary);
   outline-offset: 2px;
@@ -41,50 +41,128 @@ header [data-slot='input-group-control'] {
   border-radius: 9999px;
 }
 
-header [data-slot='select-trigger'] {
-  height: 36px;
-  border-color: var(--border);
-  border-radius: 9999px;
-  background: transparent;
-  box-shadow: none;
-  outline: none;
+/* The navigation column's background is painted by the sidebar's gap, which stretches the full height of the page, so a
+   full-page capture shows the column down to the last line; the fixed container above it keeps the links in view. */
+[data-slot='sidebar-gap'] {
+  height: 100%;
+  border-inline-end: 1px solid var(--sidebar-border);
+  background-color: var(--sidebar);
 }
 
-header [data-slot='select-trigger']:hover {
-  border-color: var(--border);
+/* Interface links are plain at rest and underline on hover and focus. Controls drawn as buttons keep their own states,
+   and links inside prose keep their underline. These rules are unlayered, so they decide over utilities in components. */
+a:not([data-slot$='button']) {
+  text-decoration-line: none;
 }
 
-header [data-slot='select-trigger']:focus-visible,
-header [data-slot='select-trigger'][data-state='open'] {
-  border-color: var(--primary);
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 2px color-mix(in oklab, var(--primary) 20%, transparent);
+a:not([data-slot$='button']):is(:hover, :focus-visible) {
+  text-decoration-line: underline;
 }
 
-header [data-slot='select-trigger']::before {
-  width: 1rem;
-  height: 1rem;
-  flex: none;
-  background-color: currentColor;
-  content: '';
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M2 12h20'/%3E%3Cpath d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10Z'/%3E%3C/svg%3E")
-    no-repeat center / contain;
+/* Keep fixed selection surfaces clear of the phone bar before hydration measures it. */
+[data-phone-navigation-clearance] {
+  --bottom-nav-height: calc(5rem + env(safe-area-inset-bottom, 0px));
 }
 
-header [data-slot='select-indicator'] {
+@media (min-width: 768px), (display-mode: standalone) {
+  [data-phone-navigation-clearance] {
+    --bottom-nav-height: 0px;
+  }
+}
+
+[data-phone-navigation-clearance][data-standalone] [data-phone-navigation] {
+  display: none !important;
+}
+
+@media (display-mode: standalone) {
+  [data-phone-navigation] {
+    display: none !important;
+  }
+}
+
+:is(
+    .rezics-document,
+    .prose,
+    [data-slot='field-description'],
+    [data-slot='empty-description'],
+    [data-slot='subject-sources'],
+    [data-slot='subject-creators']
+  )
+  a:not([data-slot$='button']) {
+  text-decoration-line: underline;
+}
+
+/* Reply starts as one line and a new thread starts near eight. Both grow, then scroll inside the viewport. */
+.thread-reply-editor [data-slot='rich-text-editor'],
+.thread-opening-editor [data-slot='rich-text-editor'] {
+  display: flex;
+  max-height: 100dvh;
+  flex-direction: column;
+}
+
+.thread-reply-editor.thread-editor-pending [data-slot='rich-text-editor'],
+.thread-opening-editor.thread-editor-pending [data-slot='rich-text-editor'] {
   display: none;
 }
 
-@media (max-width: 767px) {
-  header [data-slot='select-trigger'] {
-    width: 36px;
-    max-width: 36px;
-    justify-content: center;
-    padding-inline: 0;
+.thread-reply-editor [data-slot='rich-text-editor'] > div,
+.thread-opening-editor [data-slot='rich-text-editor'] > div {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.thread-reply-editor .document-editor .tiptap {
+  min-height: 1lh;
+}
+
+.thread-opening-editor .document-editor .tiptap {
+  min-height: 8lh;
+}
+
+.thread-reply-fallback,
+.thread-opening-fallback {
+  box-sizing: border-box;
+  max-height: 100dvh;
+  overflow-y: auto;
+  font-family: var(--font-interface);
+  font-size: 1.125rem;
+  line-height: 1.8;
+}
+
+.thread-reply-fallback {
+  min-height: calc(1lh + 1.5rem);
+}
+
+.thread-opening-fallback {
+  min-height: calc(8lh + 1.5rem);
+}
+
+/* Apply the saved rail width before React hydrates the expanded, reader-independent document. */
+@media (min-width: 768px) {
+  html[data-nav='collapsed']:not([data-hydrated]) :is([data-slot='sidebar-gap'], [data-slot='sidebar-container']) {
+    width: var(--sidebar-width-icon);
+    transition: none;
   }
 
-  header [data-slot='select-trigger'] [data-scope='select'][data-part='value-text'] {
+  html[data-nav='collapsed']:not([data-hydrated]) [data-slot='sidebar-menu-button'] {
+    width: 2rem;
+    padding: 0.5rem;
+  }
+
+  html[data-nav='collapsed']:not([data-hydrated]) [data-slot='sidebar-menu-button'] > span {
     display: none;
   }
+}
+
+/* Module loading can fail before client.tsx runs. Keep the native server response usable. */
+[data-client-load-recovery] {
+  display: none;
+}
+
+html[data-client-load-failed]:not([data-hydrated]) [data-client-load-recovery] {
+  display: block;
+}
+
+html[data-client-load-failed]:not([data-hydrated]) [data-session-pending] {
+  display: none;
 }

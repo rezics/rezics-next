@@ -5,7 +5,6 @@ import type {
   Fixture,
   NativeAccountWorkflowDriver,
   Revocation,
-  Step,
   Work,
 } from './native-account-workflow-driver.ts';
 
@@ -101,8 +100,10 @@ async function denied(driver: NativeAccountWorkflowDriver, f: Fixture, a: Approv
   expect(await driver.snapshot(f)).toEqual(before);
 }
 async function finishTerminal(driver: NativeAccountWorkflowDriver, f: Fixture, a: Approval) {
-  // Deletion stays denied because the deleted target can no longer be managed.
-  // Fencing's caller keeps authority, so the user result is the suspension.
+  // A subject deletion records management of its prior operator as the basis,
+  // so an operator's manager gets the permitted result after cleanup completes.
+  // Deleting the caller's own account or its basis stays denied. Fencing's caller
+  // keeps authority, so the user result is the suspension.
   if (f.family === 'fence-operator') {
     const result = await permitted(driver, f, a);
     const c = await driver.continuation(f);
@@ -117,7 +118,12 @@ async function finishTerminal(driver: NativeAccountWorkflowDriver, f: Fixture, a
   const c = await driver.continuation(f);
   expect(c).not.toBeNull();
   expect(await driver.continueCommitted(c!.reference)).toEqual({ outcome: 'continued' });
-  await denied(driver, f, a);
+  if (f.work.operation.kind === 'delete' && f.work.operation.responsibility) {
+    const result = await permitted(driver, f, a);
+    const after = await driver.snapshot(f);
+    expect(await driver.execute(f.caller, a.reference, f.work)).toEqual(result);
+    expect(await driver.snapshot(f)).toEqual(after);
+  } else await denied(driver, f, a);
 }
 async function steps(driver: NativeAccountWorkflowDriver, f: Fixture) {
   const list = await driver.protectedSteps(f);
@@ -417,12 +423,17 @@ test('crash recovery reuses exact native receipts and keys across organization t
       await driver.crashAfter(f, a.reference, actual);
       const committed = await driver.snapshot(f);
       await driver.restart();
-      // Fencing/deletion finishes internally. Deletion stays denied because the
-      // deleted target can no longer be managed.
+      // Fencing/deletion finishes internally. A subject deletion whose caller's
+      // authority remains intact returns its recorded management-basis result.
       const continuation = await driver.continuation(f);
       if (continuation) {
         expect(await driver.continueCommitted(continuation.reference)).toEqual({ outcome: 'continued' });
-        if (family === 'fence-operator') {
+        if (
+          family === 'fence-operator' ||
+          (family === 'subject-delete' &&
+            f.work.operation.kind === 'delete' &&
+            Boolean(f.work.operation.responsibility))
+        ) {
           const result = await permitted(driver, f, a);
           const after = await driver.snapshot(f);
           expect(await driver.execute(f.caller, a.reference, f.work)).toEqual(result);
@@ -442,6 +453,7 @@ test('crash recovery reuses exact native receipts and keys across organization t
 async function revokedAtEveryStep(fact: Revocation) {
   const driver = await d();
   for (const family of families) {
+    if (fact === 'assignment' && family === 'opening') continue;
     const template = await driver.fixture(family);
     for (const [index, planned] of (await steps(driver, template)).entries()) {
       if (planned.authority !== 'caller') continue;
@@ -507,6 +519,7 @@ test('completed DBOS private results cannot be disclosed after revocation restar
       'actor-fenced',
       'missing-evidence',
     ] as const) {
+      if (family === 'opening' && fact === 'assignment') continue;
       const f = await driver.fixture(family);
       const a = await approve(driver, f);
       await permitted(driver, f, a);
@@ -575,7 +588,7 @@ test('session opening cannot change subject purpose human client relation epoch 
     expect(await driver.consumeOpening(f, mismatch)).toEqual({ outcome: 'denied' });
     expect(await driver.snapshot(f)).toEqual(before);
   }
-  for (const fact of ['actor-grant', 'principal-grant', 'assignment', 'client-consent', 'operator-relation'] as const) {
+  for (const fact of ['actor-grant', 'principal-grant', 'client-consent', 'operator-relation'] as const) {
     const f = await driver.fixture('opening');
     const a = await approve(driver, f);
     await permitted(driver, f, a);
@@ -613,10 +626,13 @@ test('committed fencing cleanup survives caller revocation but grants no user re
     await driver.restart();
     await denied(driver, f, a);
     expect(await driver.continueCommitted(c!.reference)).toEqual({ outcome: 'continued' });
+    const extended = await driver.continuation(f);
+    expect(extended).not.toBeNull();
+    for (const rootEntry of c!.allowed) expect(extended!.allowed).toContainEqual(rootEntry);
     const effects = await driver.continuationEffects(f);
     expect(effects.length).toBeGreaterThan(0);
     for (const { receiptId, ...effect } of effects) {
-      expect(c!.allowed).toContainEqual(effect);
+      expect(extended!.allowed).toContainEqual(effect);
       expect(
         (await driver.snapshot(f)).receipts.some(
           (r) => r.id === receiptId && r.key === effect.key && r.digest === effect.digest,

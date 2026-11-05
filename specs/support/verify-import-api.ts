@@ -24,7 +24,7 @@ export function assertIndexedSqlite(
   }
   if (statement.classification === 'transaction-control') {
     assert(
-      /^\s*(?:BEGIN(?:\s+(?:DEFERRED|IMMEDIATE|EXCLUSIVE))?(?:\s+TRANSACTION)?|COMMIT|END|ROLLBACK(?:\s+TO(?:\s+SAVEPOINT)?\s+\w+)?|SAVEPOINT\s+\w+|RELEASE(?:\s+SAVEPOINT)?\s+\w+)\s*;?\s*$/i.test(
+      /^\s*(?:BEGIN(?:\s+(?:DEFERRED|IMMEDIATE|EXCLUSIVE))?(?:\s+TRANSACTION)?|(?:COMMIT|END)(?:\s+TRANSACTION)?|ROLLBACK(?:\s+TRANSACTION)?(?:\s+TO\s+(?:SAVEPOINT\s+)?(?:"(?:[^"]|"")+"|\w+))?|SAVEPOINT\s+(?:"(?:[^"]|"")+"|\w+)|RELEASE\s+(?:SAVEPOINT\s+)?(?:"(?:[^"]|"")+"|\w+))\s*;?\s*$/i.test(
         statement.sql,
       ),
     );
@@ -36,11 +36,14 @@ export function assertIndexedSqlite(
   if (statement.classification === 'keyed-insert') {
     // Only one bound VALUES tuple on an actual declared unique key. No SELECT,
     // UPSERT subquery, UPDATE or DELETE can acquire this exemption by spelling.
+    // An upsert must conflict on exactly a declared unique key and may only
+    // assign excluded values, or add them to the conflicting row's own value.
     const insert =
-      /^\s*INSERT(?:\s+OR\s+(?:IGNORE|ABORT|FAIL|ROLLBACK))?\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)\s*;?\s*$/i.exec(
+      /^\s*INSERT(?:\s+OR\s+(?:IGNORE|ABORT|FAIL|ROLLBACK))?\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)(?:\s*ON\s+CONFLICT\s*\(([^)]+)\)\s*DO\s+(?:NOTHING|UPDATE\s+SET\s+([^;]+?)))?\s*;?\s*$/i.exec(
         statement.sql,
       );
     assert(insert);
+    assert(!/\bSELECT\b/i.test(statement.sql));
     const table = metadata.growingRelations.find((r) => r.table === insert[1]);
     assert(table);
     const columns = insert[2]!.split(',').map((v) => v.trim());
@@ -50,6 +53,16 @@ export function assertIndexedSqlite(
     const keys = table.indexes.filter((i) => i.unique).map((i) => i.columns);
     if (table.integerPrimaryKey) keys.push([table.integerPrimaryKey]);
     assert(keys.some((key) => key.length > 0 && key.every((column) => columns.includes(column))));
+    if (insert[4]) {
+      const target = insert[4].split(',').map((v) => v.trim());
+      assert(keys.some((key) => key.length === target.length && key.every((column) => target.includes(column))));
+    }
+    for (const assignment of insert[5]?.split(',') ?? []) {
+      const set = /^\s*(\w+)\s*=\s*(?:(\w+)\.(\w+)\s*\+\s*)?excluded\.(\w+)\s*$/i.exec(assignment);
+      assert(set, assignment);
+      assert(columns.includes(set[1]!) && set[4] === set[1]);
+      if (set[2]) assert(set[2] === table.table && set[3] === set[1]);
+    }
     assert.deepEqual(plan, []);
     assert.deepEqual(statement.reads, []);
     return;
@@ -63,14 +76,21 @@ export function assertIndexedSqlite(
     const nodes = searches.filter((row) => row.detail.split(/\s+/)[1] === read.alias);
     assert(nodes.length > 0, `Missing indexed search for ${read.alias}`);
     for (const node of nodes) {
-      const access = / USING (?:COVERING )?(?:INDEX (\S+)|INTEGER PRIMARY KEY) \((.+)\)$/i.exec(node.detail);
+      // WITHOUT ROWID tables report their declared primary key as PRIMARY KEY.
+      const access = / USING (?:COVERING )?(?:INDEX (\S+)|(INTEGER )?PRIMARY KEY) \((.+)\)$/i.exec(node.detail);
       assert(access, node.detail);
-      const index: GrowingRelation['indexes'][number] | undefined = table.indexes.find((i) => i.name === access[1]);
-      if (access[1]) assert(index);
-      else assert(table.integerPrimaryKey);
-      const first: string = access[2]!.split(/ AND /i)[0]!;
+      const first: string = access[3]!.split(/ AND /i)[0]!;
       assert(/^[\w]+\s*(?:=|>|<|>=|<=)\s*\?$/.test(first));
-      assert.equal(first.split(/\s*[=<>]/)[0], index?.columns[0] ?? 'rowid');
+      const column = first.split(/\s*[=<>]/)[0];
+      const index: GrowingRelation['indexes'][number] | undefined = access[1]
+        ? table.indexes.find((i) => i.name === access[1])
+        : access[2]
+          ? undefined
+          : table.indexes.find((i) => i.unique && i.columns[0] === column);
+      if (access[1] || !access[2]) assert(index, node.detail);
+      if (access[2]) assert(table.integerPrimaryKey);
+      else if (!access[1]) assert(!table.integerPrimaryKey);
+      assert.equal(column, index?.columns[0] ?? 'rowid');
     }
   }
   for (const node of searches)

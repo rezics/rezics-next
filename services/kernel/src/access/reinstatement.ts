@@ -6,6 +6,8 @@ import type { Access, AccessContext, Actor } from '../request/access.ts';
 import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import globalRead from './bootstrap-governance-read.sql';
+import { continuationEntryDigest, insertDeletionContinuation } from './committed-continuations.ts';
+import fenceSource from './committed-continuation-fence-source.sql';
 import { GrantDeniedError } from './grant-commands.ts';
 import fenceClear from './lifecycle-fence-clear.sql';
 import { resourceAuthorization } from './resource-authorization.ts';
@@ -32,6 +34,21 @@ function fenceCleared(result: unknown): boolean {
   return Array.isArray(result) ? result.length > 0 : result != null;
 }
 
+export const reinstatementDeclaration = Object.freeze({
+  action: 'account:reinstate',
+  operationId: 'account.reinstate',
+} as const);
+
+export function reinstatementRequestDigest(
+  actor: Extract<Actor, { kind: 'account' }>,
+  input: ReinstatementInput,
+): Buffer {
+  const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
+  return createHash('sha256')
+    .update(canonicalize([routeOf(input.accountId), input.accountId, basis, input.reason ?? null])!)
+    .digest();
+}
+
 /** Suspended accounts only. Authorization uses the Global Context, then releases
  * it before target checkout. Every attempt, including receipt replay, admits the
  * current actor and checks the same action before reading the subject partition's
@@ -40,12 +57,13 @@ function fenceCleared(result: unknown): boolean {
  * One transaction locks that account while it is suspended, sets it active,
  * clears the suspension reason, and lowers the authentication fence through
  * lifecycle-fence-clear.sql. The floor stays where suspension put it. No other
- * fence, hold, or account is touched.
+ * fence or hold is touched. An immutable root reverses the suspended operator's
+ * own fanout in bounded committed pages.
  *
  * Cost: one actor admission seek and the native Global Context formula cost
  * O((1 + K) log G), K <= 1000. The subject transaction locks one account and
- * updates that row, O(log R), R = N + U*t + M. It does not probe coordination,
- * organization, operator, or suspension history.
+ * updates that row, O(log R), R = N + U*t + M. One exact suspension-root
+ * lookup and at most one continuation insert add O(log R).
  */
 export function createReinstatementCommands(config: { pool: Pool; access: Access; clock: () => Date }) {
   return {
@@ -70,13 +88,11 @@ export function createReinstatementCommands(config: { pool: Pool; access: Access
         throw new GrantDeniedError();
       const partition = partitionOf(route);
       const basis = { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy };
-      const digest = createHash('sha256')
-        .update(canonicalize([route, input.accountId, basis, input.reason ?? null])!)
-        .digest();
+      const digest = reinstatementRequestDigest(actor, input);
       const authorization = resourceAuthorization({
         access: config.access,
         actor,
-        action: 'account:reinstate',
+        action: reinstatementDeclaration.action,
         anchor: {
           resource: PLATFORM_RESOURCE,
           async validate(client) {
@@ -122,9 +138,48 @@ export function createReinstatementCommands(config: { pool: Pool; access: Access
             minimumAuthnEpoch: restored.minimumAuthnEpoch,
             receiptId,
           };
+          let continuationOperationKey: string | undefined;
+          const source = await fenceSource.run(tx, {
+            route,
+            account_id: input.accountId,
+            receipt_id: restored.fenceReceiptId,
+          });
+          if (source) {
+            const binding = {
+              operationKey: `reinstate:${receiptId}`,
+              operationDigest: digest.toString('hex'),
+              commandKeyPrefix: `wf:${createHash('sha256').update(receiptId).digest('hex')}`,
+            };
+            const allowlist = [
+              {
+                step: 'operator-unfence-page',
+                target: input.accountId,
+                key: `${binding.commandKeyPrefix}:operator-unfence-page`,
+              },
+              { step: 'operator-fence-source', target: source.continuationId, key: source.commandKeyPrefix },
+            ].map((entry) => ({ ...entry, digest: continuationEntryDigest(entry) }));
+            await insertDeletionContinuation(tx, {
+              accountId: input.accountId,
+              handle: null,
+              operatorAccountId: null,
+              reservationId: null,
+              binding,
+              barrierReceiptId: receiptId,
+              minimumAuthnEpoch: restored.minimumAuthnEpoch,
+              transactionId,
+              allowlist,
+            });
+            continuationOperationKey = binding.operationKey;
+          }
           return {
             value,
-            events: [{ type: 'com.rezics.access.account.reinstated.v1', subject: input.accountId, data: value }],
+            events: [
+              {
+                type: 'com.rezics.access.account.reinstated.v1',
+                subject: input.accountId,
+                data: continuationOperationKey ? { ...value, continuationOperationKey } : value,
+              },
+            ],
           };
         },
       );

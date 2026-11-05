@@ -10,6 +10,8 @@ import {
   type MediaImportStatus,
 } from '@rezics/definitions/media-import';
 import { checkBatch, checkRequest, checkResult } from './accepted-checks.ts';
+import { isImportSourceRecord, isImportSourceRecordMetadataResult } from './source-record-runtime.ts';
+import { type ImportSourceRecordMetadataCommand, type ImportSourceRecordMetadataResult } from './import-contract.ts';
 
 const { Errors } = createRequire(import.meta.resolve('@rezics/definitions/media-import'))('typebox/schema') as {
   Errors(schema: unknown, input: unknown): [unknown, Iterable<unknown>];
@@ -25,6 +27,7 @@ export type Candidate = Journal & { candidate: string; subject: string; field_gr
 export type Claim = { state: 'pending' } | { state: 'bound'; subject: string } | { state: 'taken-down' };
 /** The exact POST and observed responses; a reserved receipt does not make its media available. */
 export type PendingMedia = Journal & { accepted: MediaImportAccepted | null; status: MediaImportStatus | null };
+export type MetadataJournal = Journal & { result: ImportSourceRecordMetadataResult | null };
 
 type Binding = {
   state: Claim['state'];
@@ -174,7 +177,125 @@ export class RecordBindings {
         bytes TEXT NOT NULL, signature TEXT NOT NULL, accepted TEXT, status TEXT,
         PRIMARY KEY (source, external_id, key)
       ) WITHOUT ROWID;
+      CREATE TABLE IF NOT EXISTS binding_metadata_journal (
+        source TEXT NOT NULL, external_id TEXT NOT NULL, key TEXT NOT NULL,
+        bytes TEXT NOT NULL, signature TEXT NOT NULL, acknowledgement TEXT,
+        PRIMARY KEY (source, external_id, key)
+      ) WITHOUT ROWID;
+      CREATE TABLE IF NOT EXISTS binding_metadata_current (
+        source TEXT NOT NULL, external_id TEXT NOT NULL, key TEXT NOT NULL,
+        PRIMARY KEY (source, external_id)
+      ) WITHOUT ROWID;
     `);
+  }
+
+  /** One exact current intent pointer; historical request/result bytes stay immutable. */
+  metadata(owner: Owner): MetadataJournal | null {
+    const o = ownerInput(owner);
+    const current = this.get<{ key: string }>(
+      'SELECT key FROM binding_metadata_current WHERE source=? AND external_id=?',
+      o.source,
+      o.external_id,
+    );
+    if (!current) return null;
+    const entry = this.get<Entry>(
+      'SELECT key,bytes,signature,acknowledgement FROM binding_metadata_journal WHERE source=? AND external_id=? AND key=?',
+      o.source,
+      o.external_id,
+      current.key,
+    )!;
+    return { ...journal(entry), result: entry.acknowledgement === null ? null : JSON.parse(entry.acknowledgement) };
+  }
+
+  prepareMetadata(
+    owner: Owner,
+    key: string,
+    signature: string,
+    command: ImportSourceRecordMetadataCommand,
+  ): MetadataJournal {
+    const o = ownerInput(owner);
+    requestKey(o, key);
+    const { value, bytes } = snapshot(command);
+    ensure(
+      Object.keys(value).sort().join(',') === 'expected_metadata_revision,external_id,metadata,source' &&
+        value.source === o.source &&
+        value.external_id === o.external_id &&
+        isImportSourceRecord(value.metadata) &&
+        (value.expected_metadata_revision === null ||
+          (Number.isSafeInteger(value.expected_metadata_revision) && value.expected_metadata_revision > 0)),
+    );
+    ensure(/^[a-f0-9]{64}$/.test(signature));
+    return this.atomic(() => {
+      this.bound(o);
+      const previous = this.metadata(o);
+      if (previous && !previous.result) {
+        ensure(previous.key === key && previous.signature === signature && previous.bytes === bytes);
+        return previous;
+      }
+      ensure(value.expected_metadata_revision === (previous?.result?.metadata_revision ?? null));
+      const existing = this.get<Entry>(
+        'SELECT key,bytes,signature,acknowledgement FROM binding_metadata_journal WHERE source=? AND external_id=? AND key=?',
+        o.source,
+        o.external_id,
+        key,
+      );
+      if (existing) ensure(existing.bytes === bytes && existing.signature === signature);
+      else
+        this.run(
+          'INSERT INTO binding_metadata_journal (source,external_id,key,bytes,signature,acknowledgement) VALUES(?,?,?,?,?,?)',
+          o.source,
+          o.external_id,
+          key,
+          bytes,
+          signature,
+          null,
+        );
+      this.run(
+        `INSERT INTO binding_metadata_current VALUES(?,?,?) ON CONFLICT(source,external_id) DO UPDATE SET key=excluded.key`,
+        o.source,
+        o.external_id,
+        key,
+      );
+      return this.metadata(o)!;
+    });
+  }
+
+  acknowledgeMetadata(owner: Owner, key: string, result: ImportSourceRecordMetadataResult): void {
+    const o = ownerInput(owner);
+    requestKey(o, key);
+    const observed = snapshot(result);
+    ensure(isImportSourceRecordMetadataResult(observed.value));
+    this.atomic(() => {
+      const pending = this.metadata(o);
+      ensure(pending?.key === key);
+      const command = JSON.parse(pending.bytes) as ImportSourceRecordMetadataCommand;
+      const expected = command.metadata;
+      const actual = observed.value.record;
+      // Fill may preserve extra optional leaves; correction replaces the entire record.
+      ensure(
+        command.expected_metadata_revision === null
+          ? actual.name === expected.name &&
+              actual.url === expected.url &&
+              (expected.attribution === undefined || actual.attribution === expected.attribution) &&
+              (!expected.licence ||
+                (actual.licence?.id === expected.licence.id &&
+                  (expected.licence.url === undefined || actual.licence.url === expected.licence.url))) &&
+              observed.value.effect !== 'corrected'
+          : isDeepStrictEqual(JSON.parse(JSON.stringify(actual)), expected) &&
+              observed.value.effect !== 'filled' &&
+              observed.value.metadata_revision ===
+                command.expected_metadata_revision + (observed.value.effect === 'corrected' ? 1 : 0),
+      );
+      if (pending.result) ensure(isDeepStrictEqual(pending.result, JSON.parse(observed.bytes)));
+      else
+        this.run(
+          'UPDATE binding_metadata_journal SET acknowledgement=? WHERE source=? AND external_id=? AND key=?',
+          observed.bytes,
+          o.source,
+          o.external_id,
+          key,
+        );
+    });
   }
 
   private statement(sql: string): Statement {
@@ -536,6 +657,16 @@ export class RecordBindings {
     requestKey(o, key);
     const entry = this.mediaEntry(o, key);
     return entry ? mediaJournal(entry) : null;
+  }
+
+  /** Exact current-intent points keep an unadmitted asset eligible on an unchanged source refresh. */
+  hasUnsubmittedMedia(input: Owner, digest: string): boolean {
+    const o = ownerInput(input);
+    ensure(typeof digest === 'string' && /^[a-f0-9]{64}$/.test(digest));
+    const binding = this.binding(o);
+    if (!binding?.cover_key) return false;
+    const entry = this.mediaEntry(o, binding.cover_key);
+    return entry?.accepted === null && (JSON.parse(entry.bytes) as MediaImportRequest).provenance.digest === digest;
   }
 
   /** The current job contributes a cover ID only after a real matching available snapshot. */

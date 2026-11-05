@@ -1,9 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText } from '@rezics/document';
 import { createHash } from 'node:crypto';
-import { createAccess } from '../../src/access/permission.ts';
-import { readAccount, type Account } from '../../src/access/account-data.ts';
-import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
+import { accessCommandAuthorization, type Access, type AccountActor } from '../../src/request/access.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { authoritativeTimeValue, principalCommandIdentity, runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import {
@@ -20,34 +19,32 @@ import insertPost from '../../src/content/insert-post.sql';
 import insertRevision from '../../src/content/insert-revision.sql';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { productionActions } from '../support/production-actions.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
 const route = 0x4312;
-const author: AccountActor = {
+const authorScopes = [
+  'media:create',
+  'media:complete',
+  'media:read_reservation',
+  'thread:read',
+  'post:read',
+  'board:read',
+  'post:create',
+] as const;
+let author: AccountActor = {
   kind: 'account',
   accountId: newId(0x1234),
   clientId: 'rezics-website',
-  scopes: [
-    'media:create',
-    'media:complete',
-    'media:read_reservation',
-    'thread:read',
-    'post:read',
-    'board:read',
-    'post:create',
-  ],
+  scopes: authorScopes,
   requestedBy: null,
   authnEpoch: 1,
 };
-const other: AccountActor = { ...author, accountId: newId(0x2345) };
+let other: AccountActor = { ...author, accountId: newId(0x2345) };
 const board = newId(0x9876);
 const thread = newId(route);
 const secondThread = newId(route);
-const accounts = new Map<string, Account>();
-const access = createAccess({
-  actions: productionActions(),
-  accountEvidence: (actor) => accounts.get(actor.accountId),
-});
+let access: Access;
 const dependencies = () => ({ pool: db.pool, access });
 const context = () => ({
   idempotencyKey: Bun.randomUUIDv7(),
@@ -95,7 +92,6 @@ beforeAll(async () => {
       "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
       [routeOf(actor.accountId), actor.accountId],
     );
-    accounts.set(actor.accountId, (await readAccount(db.admin, routeOf(actor.accountId)!, actor.accountId))!);
   }
   await db.admin.query(
     `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
@@ -105,6 +101,10 @@ beforeAll(async () => {
   await grant(author.accountId, 'board:read', board);
   await container(thread);
   await container(secondThread);
+  access = admittedAccess({ actions: productionActions() });
+  const boundary = { pool: db.pool, deadline: Date.now() + 10_000 };
+  author = await authenticateAccount(access, boundary, author);
+  other = await authenticateAccount(access, boundary, other);
 });
 afterAll(() => db?.close());
 
@@ -389,13 +389,35 @@ async function reference(
         events: [
           {
             type: 'com.rezics.content.post.created.v1',
-            data: { threadId: thread, itemId: postId, revisionId, actorId: actor.accountId },
+            data: {
+              threadId: thread,
+              itemId: postId,
+              revisionId,
+              actorId: actor.accountId,
+              ...SUBJECT_THREAD_EVENT_FIELDS,
+            },
           },
         ],
       };
     },
   );
 }
+
+test('collection fences refuse both first completion and completion receipt replay', async () => {
+  for (const completed of [false, true]) {
+    const media = await reserved();
+    const body = completion(media.request.idempotencyKey);
+    const request = context();
+    if (completed) await completeMedia(dependencies(), author, media.id, body, request);
+    await db.admin.query('UPDATE content.media SET collection_pending=true WHERE route=$1 AND media_id=$2', [
+      routeOf(media.id),
+      media.id,
+    ]);
+    const before = await row(media.id);
+    await unchanged(() => completeMedia(dependencies(), author, media.id, body, request));
+    expect(await row(media.id)).toEqual(before);
+  }
+});
 
 test('claims use the referencing transaction, actual container, verified author and shared T', async () => {
   const media = await available();
@@ -404,7 +426,7 @@ test('claims use the referencing transaction, actual container, verified author 
   expect(new Date((await row(media.id)).claimed_at).toISOString()).toBe(new Date(result.value.at).toISOString());
   const before = await row(media.id);
   expect((await reference([media.id], { key: requestKey })).replayed).toBe(true);
-  await reference([media.id]);
+  await unchanged(() => reference([media.id]));
   expect(await row(media.id)).toEqual(before);
   const wrongContainer = await available({ containerId: secondThread });
   await unchanged(() => reference([wrongContainer.id]));

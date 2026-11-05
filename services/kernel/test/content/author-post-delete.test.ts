@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { createAuthService } from '@rezics/auth';
@@ -23,12 +24,15 @@ import {
   costOf,
   openGrowthDatabase,
   seed,
+  settle,
   type GrowthSample,
   type Population,
 } from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { assertSetupResponse } from './support/setup-response.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const route = 0x6b21;
 const routeKey = new Uint8Array(32).fill(7);
@@ -68,7 +72,7 @@ beforeAll(async () => {
     audience: 'https://api.rezics.test',
     secret: 'author-delete-test-only-secret-at-least-32-bytes',
     signing: { activeKid: signing.kid, privateKeys: [signing] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(db.admin, routeOf(id)!, id);
         return (
@@ -85,7 +89,7 @@ beforeAll(async () => {
         if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'web', firstParty: true, scopes: actions });
   for (const id of [author, other, moderator, suspended]) {
@@ -295,7 +299,12 @@ test('an author deletes their own post: removed slots preserve replies and clean
     next: null,
   });
   expect((await request(`/posts/${f.post}/revisions/${f.revision}`, 'GET', author)).status).toBe(404);
-  const { pageSizes: sizes } = await clearErasedPostRevisions(db.pool, { postId: f.post }, Date.now() + 10_000);
+  const { pageSizes: sizes } = await clearErasedPostRevisions(
+    db.pool,
+    { postId: f.post },
+    Date.now() + 10_000,
+    () => new Date(Date.now() + 31 * 86400000),
+  );
   expect(sizes).toEqual([100, 100, 5]);
   expect(
     (
@@ -310,7 +319,12 @@ test('an author deletes their own post: removed slots preserve replies and clean
     'SELECT * FROM content.revision WHERE route=$1 AND post_id=$2 ORDER BY recorded_at,revision_id',
     [route, f.post],
   );
-  const replay = await clearErasedPostRevisions(db.pool, { postId: f.post }, Date.now() + 10_000);
+  const replay = await clearErasedPostRevisions(
+    db.pool,
+    { postId: f.post },
+    Date.now() + 10_000,
+    () => new Date(Date.now() + 31 * 86400000),
+  );
   expect(replay.clearedRevisions).toBe(0);
   expect(
     (
@@ -326,10 +340,7 @@ test('an author deletes their own post: removed slots preserve replies and clean
 test('another account, a moderator without post:erase, anonymous and suspended accounts delete nothing; replay returns the stored outcome', async () => {
   const f = await fixture();
   const s = await fixture(suspended);
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(suspended),
-    suspended,
-  ]);
+  await suspendAccount(db.admin, suspended);
   for (const [account, target, status] of [
     [other, f.post, 403],
     [moderator, f.post, 403],
@@ -483,7 +494,14 @@ test('delete is one bounded tombstone and cleanup runs in bounded pages as posts
             epoch: 1,
             id: revision,
             type: 'com.rezics.content.post.created.v1',
-            data: { postId: post },
+            subject: post,
+            data: {
+              threadId: neighbour.thread,
+              itemId: post,
+              revisionId: revision,
+              actorId: author,
+              ...SUBJECT_THREAD_EVENT_FIELDS,
+            },
           },
         ],
         'editorial.write_basis': [
@@ -512,6 +530,11 @@ test('delete is one bounded tombstone and cleanup runs in bounded pages as posts
   const bounds = { rows: 'constant', statements: 'constant', blocks: 'logarithmic' } as const;
   const report = await checkGrowth(db, {
     name: 'Author post delete',
+    rule: 'series',
+    // Content Cost: two scope seeks and two tombstone/parent seeks; Access P/Q:
+    // two account observations, account/inverse preparation and 13 local/Global formula probes;
+    // command C: receipt, basis, outbox and receipt write; one write-rate counter.
+    indexProbes: 4 + 2 + 2 + 13 + 4 + 1,
     scales: [256, 1024, 4096],
     bounds,
     repetitions: 1,
@@ -521,7 +544,7 @@ test('delete is one bounded tombstone and cleanup runs in bounded pages as posts
       warmupProbe = await fixture(author, 205, neighbour);
       const erased = await fixture(author, 205, neighbour);
       expect((await request(`/posts/${erased.post}`, 'DELETE', author)).status).toBe(204);
-      await db.admin.query('VACUUM (ANALYZE) content.post, content.revision');
+      await settle(db, { analyze: true });
       const page = await capture(db, () => cleanup(erased.post));
       expect(page.value).toHaveLength(100);
       pages.push({ scale, cost: costOf(page.capture) });

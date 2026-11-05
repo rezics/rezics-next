@@ -43,6 +43,9 @@ const context = {
   queues: WORK_QUEUES,
   env,
   clock: systemClock,
+  getAuthorization() {
+    throw new Error('Membership component fixture does not consume worker authorization');
+  },
   addEffects() {},
   addService() {},
 };
@@ -320,6 +323,45 @@ test('configuration is validated before registration with the offending variable
     expect(step).not.toHaveBeenCalled();
   } finally {
     step.mockRestore();
+  }
+});
+
+test('invalid configuration registers no operations and a later valid registration succeeds', async () => {
+  const operations = new Set<string>();
+  const register = (fn: (...args: any[]) => any, name: string) => {
+    if (operations.has(name)) throw new Error(`Operation ${name} is already registered`);
+    operations.add(name);
+    return fn;
+  };
+  const step = spyOn(DBOS, 'registerStep').mockImplementation(((
+    fn: (...args: any[]) => any,
+    options: { name: string },
+  ) => register(fn, options.name)) as never);
+  const workflow = spyOn(DBOS, 'registerWorkflow').mockImplementation(((
+    fn: (...args: any[]) => any,
+    options: { name: string },
+  ) => register(fn, options.name)) as never);
+  try {
+    const invalid = [
+      ['KERNEL_WORKFLOW_REFERENCE_KEYS', 'invalid'],
+      ['KERNEL_ROUTE_KEY', 'invalid'],
+      ['AUTH_ISSUER', 'invalid'],
+      ['AUTH_AUDIENCE', 'invalid'],
+      ['AUTH_JWKS_URL', 'invalid'],
+    ] as const;
+    for (const [variable, value] of invalid) {
+      await expect(
+        createAccountsWorkModule().register({ ...context, env: { ...env, [variable]: value } }),
+      ).rejects.toThrow(variable);
+      expect(operations.size).toBe(0);
+    }
+
+    await createAccountsWorkModule().register(context);
+    expect(operations.size).toBeGreaterThan(0);
+    await expect(createAccountsWorkModule().register(context)).rejects.toThrow('already registered');
+  } finally {
+    step.mockRestore();
+    workflow.mockRestore();
   }
 });
 

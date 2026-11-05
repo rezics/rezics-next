@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool, type PoolClient } from 'pg';
 import { createLocalJWKSet, decodeJwt, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
@@ -7,6 +8,8 @@ import {
   type AccessAccount,
   type AuthService,
   type AuthServiceOptions,
+  type CredentialEffectAuthorization,
+  type CredentialEffectBinding,
   type EffectAuthorization,
   type SessionProof,
 } from '../src/index.ts';
@@ -70,6 +73,7 @@ let fence = false;
 let sequence = 0;
 let recoveryReceipt: { receiptId: string; accountId: string; minimumAuthnEpoch: number } | undefined;
 const completedRecoveries = new Set<string>();
+const credentialApprovals = new Map<string, { stage: CredentialEffectBinding; expiresAt: string; consumed: boolean }>();
 async function recoverySnapshot() {
   return {
     credential: (await pool.query(`SELECT id,password,"updatedAt" FROM account WHERE "userId"='effects-human'`)).rows,
@@ -127,12 +131,7 @@ async function proof(headers: Headers): Promise<SessionProof> {
   expect(response.status).toBe(200);
   return response.json() as Promise<SessionProof>;
 }
-async function authorization(
-  subjectAccountId: string,
-  purpose: EffectAuthorization['purpose'],
-  headers: Headers,
-  invalidates = false,
-) {
+async function authorization(subjectAccountId: string, purpose: 'session', headers: Headers, invalidates = false) {
   const human = await proof(headers);
   const subject = accounts.get(subjectAccountId)!;
   const receipt: EffectAuthorization = {
@@ -153,23 +152,23 @@ async function authorization(
 async function credential(
   subjectAccountId: string,
   headers: Headers,
-  value: Parameters<AuthService['internal']['setCredential']>[0]['credential'],
+  value: Parameters<AuthService['internal']['stageCredentialEffect']>[0]['credential'],
 ) {
-  const purpose =
-    value.kind === 'password'
-      ? value.password === null
-        ? 'remove-password'
-        : 'set-password'
-      : value.remove
-        ? 'remove-key'
-        : 'add-key';
-  const ref = await authorization(
+  const key = `credential-${subjectAccountId}-${++sequence}`;
+  const stage = await service.internal.stageCredentialEffect({ key, subjectAccountId, headers, credential: value });
+  const approval = await service.internal.approveCredentialEffect({
+    effectRef: stage.effectRef,
+    key,
     subjectAccountId,
-    purpose,
     headers,
-    purpose === 'remove-password' || purpose === 'remove-key' || purpose === 'set-password',
-  );
-  return service.internal.setCredential({ subjectAccountId, authorization: ref, headers, credential: value });
+  });
+  return service.internal.applyCredentialEffect({
+    authorization: approval.reference,
+    effectRef: stage.effectRef,
+    key,
+    subjectAccountId,
+    headers,
+  });
 }
 async function assertion(id: string, overrides: Record<string, unknown> = {}, kid = 'own-key') {
   const now = Math.floor(Date.now() / 1000);
@@ -237,10 +236,14 @@ beforeAll(async () => {
         deliveries.set(input.accountId, input.token);
       },
     },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+      },
       async readAccount(id) {
         if (outage) throw new Error('Access unavailable');
-        return fence ? null : (accounts.get(id) ?? null);
+        const account = fence ? null : (accounts.get(id) ?? null);
+        return account ? { ...account } : null;
       },
       async readRecoveryAccount(id) {
         if (outage) throw new Error('Access unavailable');
@@ -249,8 +252,48 @@ beforeAll(async () => {
       async authorizeProvisioning(id) {
         return { accountId: id };
       },
+      async approveCredentialEffect({ stage }) {
+        if (outage) throw new Error('Access unavailable');
+        const reference = `credential-approval-${++sequence}`;
+        const expiresAt = new Date(Date.now() + 60000).toISOString();
+        credentialApprovals.set(reference, { stage, expiresAt, consumed: false });
+        return { reference, expiresAt };
+      },
       async consumeAuthorization(input) {
         if (outage) throw new Error('Access unavailable');
+        if (input.purpose !== 'session') {
+          const opening = credentialApprovals.get(input.authorization);
+          const stage = opening?.stage;
+          const subject = accounts.get(input.subjectAccountId);
+          if (
+            !opening ||
+            opening.consumed ||
+            !stage ||
+            !subject ||
+            stage.purpose !== input.purpose ||
+            stage.operationKey !== input.operationKey ||
+            stage.effectReference !== input.effectReference ||
+            stage.subjectAccountId !== input.subjectAccountId ||
+            stage.actingHumanId !== input.human.account_id ||
+            stage.clientId !== input.human.client_id ||
+            JSON.stringify(stage.scopes) !== JSON.stringify(input.human.scope)
+          )
+            throw new Error('Access denied');
+          opening.consumed = true;
+          const receipt: CredentialEffectAuthorization = {
+            ...stage,
+            receiptId: input.authorization,
+            actingHumanId: input.human.account_id,
+            operatorAccountId: subject.automated ? 'effects-human' : null,
+            purpose: stage.purpose,
+            clientId: input.human.client_id,
+            scopes: input.human.scope,
+            humanEpoch: input.human.authn_epoch,
+            subjectEpoch: subject.authnEpoch,
+            expiresAt: opening.expiresAt,
+          };
+          return receipt;
+        }
         const result = await pool.query('DELETE FROM test_effect_receipt WHERE id=$1 RETURNING value, invalidates', [
           input.authorization,
         ]);
@@ -282,6 +325,29 @@ beforeAll(async () => {
           };
         }
         return receipt;
+      },
+      async revalidateCredentialEffect({ stage, authorization }) {
+        if (outage) throw new Error('Access unavailable');
+        const opening = credentialApprovals.get(authorization);
+        if (!opening || JSON.stringify(opening.stage) !== JSON.stringify(stage)) throw new Error('Access denied');
+      },
+      async advanceCredentialFloor({ stage, consumedOpening, expectedPreviousFloor }) {
+        if (outage) throw new Error('Access unavailable');
+        const subject = accounts.get(stage.subjectAccountId);
+        if (!subject || subject.authnEpoch !== expectedPreviousFloor) throw new Error('Access denied');
+        subject.authnEpoch++;
+        return {
+          receiptId: `credential-floor-${++sequence}`,
+          accountId: stage.subjectAccountId,
+          minimumAuthnEpoch: subject.authnEpoch,
+          operationKey: stage.operationKey,
+          effectReference: stage.effectReference,
+          effectDigest: stage.effectDigest,
+          purpose: stage.purpose,
+          openingReceiptId: consumedOpening.receiptId,
+          previousFloor: expectedPreviousFloor,
+          fenced: !!subject.fenced,
+        };
       },
       async invalidateAccount(input) {
         if (outage) throw new Error('Access unavailable');
@@ -337,7 +403,7 @@ beforeAll(async () => {
         };
         return recoveryReceipt;
       },
-    },
+    }),
   };
   service = await createAuthService(options);
   await service.internal.registerClient({ clientId: 'effects-web', firstParty: true, scopes: ['read', 'write'] });
@@ -506,22 +572,16 @@ test('approved credential effects toggle independent automated signin and enforc
   expect((await sign()).status).toBeGreaterThanOrEqual(400);
   await credential('effects-agent', headers, { kind: 'key', kid: 'own-key', remove: true });
   expect((await keySignin('effects-agent', await assertion('effects-agent'))).status).toBeGreaterThanOrEqual(400);
-  await expect(
-    service.internal.setCredential({
-      subjectAccountId: 'effects-agent',
-      headers,
-      authorization: 'forged',
-      credential: { kind: 'password', password },
-    }),
-  ).rejects.toThrow();
+  expect(service.internal).not.toHaveProperty('setCredential');
   await expect(credential('effects-org', headers, { kind: 'password', password })).rejects.toThrow();
   expect((await pool.query('SELECT id FROM "user" WHERE id=$1', ['effects-org'])).rows).toEqual([]);
   const noPorts = await createAuthService({
     ...options,
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      readFencedAccount: options.trustedAccess.readFencedAccount,
       readAccount: options.trustedAccess.readAccount,
       authorizeProvisioning: options.trustedAccess.authorizeProvisioning,
-    },
+    }),
   });
   await expect(
     noPorts.internal.openAutomatedSession({ subjectAccountId: 'effects-agent', authorization: 'unused', headers }),
@@ -614,7 +674,7 @@ test('consent reductions invalidate already-issued signed authority through Acce
   expect(accounts.get('effects-human')!.authnEpoch).toBe(before);
   const noInvalidation = await createAuthService({
     ...options,
-    trustedAccess: { ...options.trustedAccess, invalidateAccount: undefined },
+    trustedAccess: trustedAccessPorts({ ...options.trustedAccess, invalidateAccount: undefined }),
   });
   expect(
     (await request('/consent', { client_id: 'effects-external', scope: ['read'] }, human, noInvalidation)).status,

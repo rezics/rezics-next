@@ -1,0 +1,20 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as ExactRevisionStories from './exact-revision.stories';
+
+<Meta of={ExactRevisionStories} />
+
+# Exact revision
+
+The served page and these examples reuse `ExactRevisionView`, `DocumentBody` and the integrated revision provenance
+region inside the shared `ContentItemFrame`. The page keeps its level-one title and complete canonical document;
+`LongDocument` checks that the final paragraph remains present. SelectedRevision retains the selected document,
+licence, subject IDs and immutable vote citation.
+DifferentCurrentHead adds current thread context without replacing any recorded values. DocumentMediaAvailable and
+DocumentMediaUnavailable use the original per-revision media result. Unavailable exposes no body or back-link; a 404
+gives no deletion explanation. Loading replaces previous content. NativeRetry clicks the retry
+control and calls the same exact native client resource, followed by one current thread read.
+
+Pages reuse this region in the existing AppShell, with its one header search. Use the same IDs with phone390 or
+desktop1280 viewport globals and the existing locale/theme globals. Plays cover keyboard focus, neutral absence
+and retry. Examples are constructed native response DTOs, not recordings or proof of served native behavior.
+Acceptance runs after integration; Web review and Root screenshots remain separate.

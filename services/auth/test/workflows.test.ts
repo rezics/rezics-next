@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
@@ -226,10 +227,13 @@ beforeAll(async () => {
       activeKid: 'workflow-signer',
       privateKeys: [{ ...(await exportJWK(signing.privateKey)), kid: 'workflow-signer', alg: 'ES256' }],
     },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       readAccount: async (id) => accounts.get(id) ?? null,
       authorizeProvisioning: async (id) => ({ accountId: id }),
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'workflow-web', firstParty: true, scopes: ['read'] });
   const effects = {

@@ -7,6 +7,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { createRealAccess } from './real-access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { subjectPartition } from '../../src/search/source.ts';
+import { documentActions } from '../../src/search/document.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { subjectSource } from '../../src/semantic/search-source.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
@@ -97,6 +98,10 @@ test("the source reads a subject's terms and adopted Global statements in one sn
         descriptions: { en: 'A satirical novel' },
         aliases: { ja: ['猫'], en: ['Wagahai wa Neko de Aru', 'I am a cat'] },
         statements: {
+          'schema:name': [statement('schema:name', { language: 'ja', text: '吾輩は猫である' })],
+          'schema:alternateName': [
+            statement('schema:alternateName', { language: 'ja-Latn', text: 'Wagahai wa Neko de Aru' }),
+          ],
           'schema:author': [statement('schema:author', soseki.id)],
           'schema:inLanguage': [statement('schema:inLanguage', 'ja')],
           'schema:datePublished': [
@@ -147,20 +152,34 @@ test("the source reads a subject's terms and adopted Global statements in one sn
         ],
         descriptions: [{ language: 'en', value: 'A satirical novel' }],
         statements: expect.arrayContaining([
-          { property: 'schema:author', value: soseki.id, facet: { kind: 'item' } },
+          { property: 'schema:name', value: '吾輩は猫である', language: 'ja' },
+          { property: 'schema:alternateName', value: 'Wagahai wa Neko de Aru', language: 'ja-Latn' },
           { property: 'schema:inLanguage', value: 'ja', facet: { kind: 'code' } },
-          { property: 'schema:datePublished', value: '+1905-01-01T00:00:00Z', facet: { kind: 'time', year: 1905 } },
+          {
+            property: 'schema:datePublished',
+            value: '+1905-01-01T00:00:00Z',
+            facet: { kind: 'time', year: 1905, month: 1, day: 1 },
+          },
         ]),
       },
     ],
   });
-  expect(snapshot.subjects[0]!.statements).toHaveLength(3);
+  expect(snapshot.subjects[0]!.statements).toHaveLength(4);
+  const indexed = documentActions(snapshot, [work.id])[0]!;
+  expect(indexed).toMatchObject({
+    op: 'index',
+    document: { names: expect.arrayContaining(['吾輩は猫である', 'Wagahai wa Neko de Aru']) },
+  });
 
   const [language] = work.statements['schema:inLanguage'].map(({ id }: { id: string }) => id);
   await ok(`/v1/subjects/${work.id}/candidates/${language}:hide`, { reason: 'spam' });
   const hidden = (await source.read(partition, [work.id])).subjects[0]!;
   expect(hidden.securityRevision).toBe(1);
-  expect(hidden.statements.map(({ property }) => property).sort()).toEqual(['schema:author', 'schema:datePublished']);
+  expect(hidden.statements.map(({ property }) => property).sort()).toEqual([
+    'schema:alternateName',
+    'schema:datePublished',
+    'schema:name',
+  ]);
 
   const elsewhere = newId((routeOf(work.id)! + 16) % 65_536);
   await expect(source.read(partition, [elsewhere])).rejects.toThrow(TypeError);
@@ -170,6 +189,38 @@ test("the source reads a subject's terms and adopted Global statements in one sn
       Array.from({ length: 257 }, () => newId(routeOf(work.id)!)),
     ),
   ).rejects.toThrow(TypeError);
+});
+
+test('complete work-link reads distinguish absence from concealed targets without returning hidden identities', async () => {
+  const work = (await ok('/v1/subjects', { type: 'schema:Book', labels: { en: 'Link source work' } }, 201))
+    .subject as Record<string, any>;
+  const edition = (
+    await ok(
+      '/v1/subjects',
+      {
+        type: 'schema:Book',
+        labels: { en: 'Link source edition' },
+        statements: { 'schema:exampleOfWork': [statement('schema:exampleOfWork', work.id)] },
+      },
+      201,
+    )
+  ).subject as Record<string, any>;
+  const missing = (await ok('/v1/subjects', { type: 'schema:Book', labels: { en: 'Unlinked edition' } }, 201))
+    .subject as Record<string, any>;
+
+  const reservations: { operations: number; keys: number }[] = [];
+  const current = await source.readCompleteWorkLinks(subjectPartition(edition.id), [edition.id, missing.id], {
+    reserve: (reservation) => reservations.push(reservation),
+  });
+  expect(current.get(edition.id)).toEqual({ complete: true, values: [{ kind: 'work', id: work.id }] });
+  expect(current.get(missing.id)).toEqual({ complete: true, values: [] });
+  expect(reservations.reduce((total, reservation) => total + reservation.operations, 0)).toBeGreaterThan(0);
+  expect(reservations.reduce((total, reservation) => total + reservation.keys, 0)).toBeGreaterThan(0);
+
+  await ok(`/v1/subjects/${work.id}:hide`, { reason: 'private target' });
+  const concealed = await source.readCompleteWorkLinks(subjectPartition(edition.id), [edition.id]);
+  expect(concealed.get(edition.id)).toEqual({ complete: true, values: [{ kind: 'unknown' }] });
+  expect(JSON.stringify(concealed.get(edition.id))).not.toContain(work.id);
 });
 
 test('subjects that are not visible or redirected are reported for deletion and the count follows them', async () => {
@@ -236,6 +287,10 @@ test('every command that appends a revision names the subject in a subject event
   ]);
   const read = (await source.read(subjectPartition(subject.id), [subject.id])).subjects[0]!;
   expect(read.statements).toEqual([
-    { property: 'schema:birthDate', value: '+1892-03-01T00:00:00Z', facet: { kind: 'time', year: 1892 } },
+    {
+      property: 'schema:birthDate',
+      value: '+1892-03-01T00:00:00Z',
+      facet: { kind: 'time', year: 1892, month: 3, day: 1 },
+    },
   ]);
 });

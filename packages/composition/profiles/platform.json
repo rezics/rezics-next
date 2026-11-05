@@ -1,27 +1,11 @@
 {
   "format": "https://rezics.com/presentation/profile/1",
   "generic": {
-    "root": { "props": {} },
-    "content": [
-      {
-        "type": "Slot",
-        "props": {
-          "id": "header",
-          "name": "header",
-          "children": [
-            { "type": "SubjectHeader", "props": { "id": "subject-header" } },
-            { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
-          ]
-        }
-      },
-      { "type": "MoreStatements", "props": { "id": "more-statements" } }
-    ]
-  },
-  "bases": [
-    {
-      "base": "schema:CreativeWork",
-      "document": {
-        "root": { "props": {} },
+    "views": {
+      "overview": {
+        "root": {
+          "props": {}
+        },
         "content": [
           {
             "type": "Slot",
@@ -29,381 +13,2918 @@
               "id": "header",
               "name": "header",
               "children": [
-                { "type": "SubjectHeader", "props": { "id": "subject-header" } },
-                { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
+                {
+                  "type": "SubjectHeader",
+                  "props": {
+                    "id": "subject-header"
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "actions",
+                    "name": "actions",
+                    "children": []
+                  }
+                }
               ]
             }
           },
           {
-            "type": "Statements",
+            "type": "Summary",
             "props": {
-              "id": "statements",
-              "properties": [
-                "schema:author",
-                "schema:illustrator",
-                "schema:translator",
-                "schema:publisher",
-                "schema:datePublished",
-                "schema:inLanguage",
-                "schema:genre",
-                "schema:isPartOf"
-              ]
+              "id": "summary"
             }
           },
           {
-            "type": "SubjectList",
+            "type": "OutgoingRelations",
             "props": {
-              "id": "editions",
-              "title": {
-                "en": "Editions",
-                "zh-Hant": "版本",
-                "zh-Hans": "版本",
-                "ja": "版",
-                "ko": "판",
-                "de": "Ausgaben",
-                "fr": "Éditions",
-                "es": "Ediciones"
-              },
+              "id": "edition-work",
               "property": "schema:exampleOfWork",
               "limit": 12
             }
           },
-          { "type": "MoreStatements", "props": { "id": "more-statements" } }
+          {
+            "type": "RelationGroups",
+            "props": {
+              "id": "side-stories",
+              "title": {
+                "en": "Side stories",
+                "zh-Hant": "外傳",
+                "zh-Hans": "外传",
+                "ja": "外伝",
+                "ko": "외전",
+                "de": "Nebengeschichten",
+                "fr": "Histoires parallèles",
+                "es": "Historias paralelas"
+              },
+              "property": "rezics:sideStoryOf",
+              "limit": 12
+            }
+          },
+          {
+            "type": "RelationGroups",
+            "props": {
+              "id": "adaptations",
+              "title": {
+                "en": "Adaptations",
+                "zh-Hant": "改編作品",
+                "zh-Hans": "改编作品",
+                "ja": "派生作品",
+                "ko": "파생 작품",
+                "de": "Adaptionen",
+                "fr": "Adaptations",
+                "es": "Adaptaciones"
+              },
+              "property": "wdt:P144",
+              "limit": 12
+            }
+          },
+          {
+            "type": "RelationGroups",
+            "props": {
+              "id": "versions",
+              "title": {
+                "en": "Alternative versions",
+                "zh-Hant": "其他版本",
+                "zh-Hans": "其他版本",
+                "ja": "別バージョン",
+                "ko": "다른 버전",
+                "de": "Alternative Fassungen",
+                "fr": "Versions alternatives",
+                "es": "Versiones alternativas"
+              },
+              "property": "rezics:alternativeVersion",
+              "limit": 12
+            }
+          },
+          {
+            "type": "RelationGroups",
+            "props": {
+              "id": "related",
+              "title": {
+                "en": "Related",
+                "zh-Hant": "相關作品",
+                "zh-Hans": "相关作品",
+                "ja": "関連作品",
+                "ko": "관련 작품",
+                "de": "Verwandtes",
+                "fr": "Œuvres liées",
+                "es": "Obras relacionadas"
+              },
+              "property": "rezics:bangumiRelatedTo",
+              "limit": 12
+            }
+          },
+          {
+            "type": "ThreadList",
+            "props": {
+              "id": "threads"
+            }
+          },
+          {
+            "type": "CollectionList",
+            "props": {
+              "id": "lists",
+              "title": {
+                "en": "Lists",
+                "zh-Hant": "清單",
+                "zh-Hans": "清单",
+                "ja": "リスト",
+                "ko": "목록",
+                "de": "Listen",
+                "fr": "Listes",
+                "es": "Listas"
+              },
+              "limit": 6
+            }
+          },
+          {
+            "type": "Sources",
+            "props": {
+              "id": "sources"
+            }
+          }
         ]
+      },
+      "relations": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "OutgoingRelations",
+            "props": {
+              "id": "edition-work",
+              "property": "schema:exampleOfWork",
+              "limit": 12,
+              "paged": true
+            }
+          },
+          {
+            "type": "RelationGroups",
+            "props": {
+              "id": "side-stories",
+              "title": {
+                "en": "Side stories",
+                "zh-Hant": "外傳",
+                "zh-Hans": "外传",
+                "ja": "外伝",
+                "ko": "외전",
+                "de": "Nebengeschichten",
+                "fr": "Histoires parallèles",
+                "es": "Historias paralelas"
+              },
+              "property": "rezics:sideStoryOf",
+              "limit": 24,
+              "paged": true
+            }
+          },
+          {
+            "type": "RelationGroups",
+            "props": {
+              "id": "adaptations",
+              "title": {
+                "en": "Adaptations",
+                "zh-Hant": "改編作品",
+                "zh-Hans": "改编作品",
+                "ja": "派生作品",
+                "ko": "파생 작품",
+                "de": "Adaptionen",
+                "fr": "Adaptations",
+                "es": "Adaptaciones"
+              },
+              "property": "wdt:P144",
+              "limit": 24,
+              "paged": true
+            }
+          },
+          {
+            "type": "RelationGroups",
+            "props": {
+              "id": "versions",
+              "title": {
+                "en": "Alternative versions",
+                "zh-Hant": "其他版本",
+                "zh-Hans": "其他版本",
+                "ja": "別バージョン",
+                "ko": "다른 버전",
+                "de": "Alternative Fassungen",
+                "fr": "Versions alternatives",
+                "es": "Versiones alternativas"
+              },
+              "property": "rezics:alternativeVersion",
+              "limit": 24,
+              "paged": true
+            }
+          },
+          {
+            "type": "RelationGroups",
+            "props": {
+              "id": "related",
+              "title": {
+                "en": "Related",
+                "zh-Hant": "相關作品",
+                "zh-Hans": "相关作品",
+                "ja": "関連作品",
+                "ko": "관련 작품",
+                "de": "Verwandtes",
+                "fr": "Œuvres liées",
+                "es": "Obras relacionadas"
+              },
+              "property": "rezics:bangumiRelatedTo",
+              "limit": 24,
+              "paged": true
+            }
+          }
+        ]
+      },
+      "discussion": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "ThreadList",
+            "props": {
+              "id": "threads",
+              "paged": true
+            }
+          }
+        ]
+      },
+      "lists": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "CollectionList",
+            "props": {
+              "id": "lists",
+              "title": {
+                "en": "Lists",
+                "zh-Hant": "清單",
+                "zh-Hans": "清单",
+                "ja": "リスト",
+                "ko": "목록",
+                "de": "Listen",
+                "fr": "Listes",
+                "es": "Listas"
+              },
+              "limit": 6,
+              "paged": true
+            }
+          }
+        ]
+      },
+      "details": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "MoreStatements",
+            "props": {
+              "id": "more-statements"
+            }
+          },
+          {
+            "type": "Sources",
+            "props": {
+              "id": "sources"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "bases": [
+    {
+      "base": "schema:CreativeWork",
+      "views": {
+        "overview": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "Slot",
+              "props": {
+                "id": "header",
+                "name": "header",
+                "children": [
+                  {
+                    "type": "SubjectHeader",
+                    "props": {
+                      "id": "subject-header"
+                    }
+                  },
+                  {
+                    "type": "Slot",
+                    "props": {
+                      "id": "actions",
+                      "name": "actions",
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Summary",
+              "props": {
+                "id": "summary"
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "edition-work",
+                "property": "schema:exampleOfWork",
+                "limit": 12
+              }
+            },
+            {
+              "type": "Statements",
+              "props": {
+                "id": "statements",
+                "properties": [
+                  "schema:author",
+                  "schema:illustrator",
+                  "schema:translator",
+                  "schema:publisher",
+                  "schema:datePublished",
+                  "schema:inLanguage",
+                  "schema:genre",
+                  "schema:isPartOf"
+                ]
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "editions",
+                "title": {
+                  "en": "Editions",
+                  "zh-Hant": "版本",
+                  "zh-Hans": "版本",
+                  "ja": "版",
+                  "ko": "판",
+                  "de": "Ausgaben",
+                  "fr": "Éditions",
+                  "es": "Ediciones"
+                },
+                "property": "schema:exampleOfWork",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 12
+              }
+            },
+            {
+              "type": "Appearances",
+              "props": {
+                "id": "characters",
+                "direction": "forward",
+                "property": "schema:character",
+                "limit": 12
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credits",
+                "direction": "forward",
+                "property": "schema:contributor",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RatingSummary",
+              "props": {
+                "id": "ratings"
+              }
+            },
+            {
+              "type": "ReviewList",
+              "props": {
+                "id": "reviews"
+              }
+            },
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads"
+              }
+            },
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
+            }
+          ]
+        },
+        "characters": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "Appearances",
+              "props": {
+                "id": "characters",
+                "direction": "forward",
+                "property": "schema:character",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "credits": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credits",
+                "direction": "forward",
+                "property": "schema:contributor",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "relations": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "OutgoingRelations",
+              "props": {
+                "id": "edition-work",
+                "property": "schema:exampleOfWork",
+                "limit": 12,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "reviews": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "RatingSummary",
+              "props": {
+                "id": "ratings"
+              }
+            },
+            {
+              "type": "ReviewList",
+              "props": {
+                "id": "reviews",
+                "paged": true
+              }
+            }
+          ]
+        },
+        "discussion": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads",
+                "paged": true
+              }
+            }
+          ]
+        },
+        "lists": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "details": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "Statements",
+              "props": {
+                "id": "statements",
+                "properties": [
+                  "schema:author",
+                  "schema:illustrator",
+                  "schema:translator",
+                  "schema:publisher",
+                  "schema:datePublished",
+                  "schema:inLanguage",
+                  "schema:genre",
+                  "schema:isPartOf"
+                ]
+              }
+            },
+            {
+              "type": "MoreStatements",
+              "props": {
+                "id": "more-statements"
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
+            }
+          ]
+        },
+        "editions": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "editions",
+                "title": {
+                  "en": "Editions",
+                  "zh-Hant": "版本",
+                  "zh-Hans": "版本",
+                  "ja": "版",
+                  "ko": "판",
+                  "de": "Ausgaben",
+                  "fr": "Éditions",
+                  "es": "Ediciones"
+                },
+                "property": "schema:exampleOfWork",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        }
       }
     },
     {
       "base": "schema:CreativeWorkSeries",
-      "document": {
-        "root": { "props": {} },
-        "content": [
-          {
-            "type": "Slot",
-            "props": {
-              "id": "header",
-              "name": "header",
-              "children": [
-                { "type": "SubjectHeader", "props": { "id": "subject-header" } },
-                { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
-              ]
-            }
+      "views": {
+        "overview": {
+          "root": {
+            "props": {}
           },
-          {
-            "type": "Statements",
-            "props": {
-              "id": "statements",
-              "properties": [
-                "schema:author",
-                "schema:illustrator",
-                "schema:translator",
-                "schema:publisher",
-                "schema:datePublished",
-                "schema:inLanguage",
-                "schema:genre",
-                "schema:isPartOf"
-              ]
+          "content": [
+            {
+              "type": "Slot",
+              "props": {
+                "id": "header",
+                "name": "header",
+                "children": [
+                  {
+                    "type": "SubjectHeader",
+                    "props": {
+                      "id": "subject-header"
+                    }
+                  },
+                  {
+                    "type": "Slot",
+                    "props": {
+                      "id": "actions",
+                      "name": "actions",
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Summary",
+              "props": {
+                "id": "summary"
+              }
+            },
+            {
+              "type": "Statements",
+              "props": {
+                "id": "statements",
+                "properties": [
+                  "schema:author",
+                  "schema:illustrator",
+                  "schema:translator",
+                  "schema:publisher",
+                  "schema:datePublished",
+                  "schema:inLanguage",
+                  "schema:genre",
+                  "schema:isPartOf"
+                ]
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "series-works",
+                "title": {
+                  "en": "Works in the series",
+                  "zh-Hant": "系列作品",
+                  "zh-Hans": "系列作品",
+                  "ja": "シリーズの作品",
+                  "ko": "시리즈의 작품",
+                  "de": "Werke der Serie",
+                  "fr": "Œuvres de la série",
+                  "es": "Obras de la serie"
+                },
+                "property": "wdt:P179",
+                "limit": 12
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "parts",
+                "title": {
+                  "en": "Parts",
+                  "zh-Hant": "部分",
+                  "zh-Hans": "部分",
+                  "ja": "部分",
+                  "ko": "부분",
+                  "de": "Teile",
+                  "fr": "Parties",
+                  "es": "Partes"
+                },
+                "property": "schema:isPartOf",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 12
+              }
+            },
+            {
+              "type": "Appearances",
+              "props": {
+                "id": "characters",
+                "direction": "forward",
+                "property": "schema:character",
+                "limit": 12
+              }
+            },
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credits",
+                "direction": "forward",
+                "property": "schema:contributor",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RatingSummary",
+              "props": {
+                "id": "ratings"
+              }
+            },
+            {
+              "type": "ReviewList",
+              "props": {
+                "id": "reviews"
+              }
+            },
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads"
+              }
+            },
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
             }
+          ]
+        },
+        "characters": {
+          "root": {
+            "props": {}
           },
-          {
-            "type": "SubjectList",
-            "props": {
-              "id": "series-works",
-              "title": {
-                "en": "Works in the series",
-                "zh-Hant": "系列作品",
-                "zh-Hans": "系列作品",
-                "ja": "シリーズの作品",
-                "ko": "시리즈의 작품",
-                "de": "Werke der Serie",
-                "fr": "Œuvres de la série",
-                "es": "Obras de la serie"
-              },
-              "property": "wdt:P179",
-              "limit": 24
+          "content": [
+            {
+              "type": "Appearances",
+              "props": {
+                "id": "characters",
+                "direction": "forward",
+                "property": "schema:character",
+                "limit": 24,
+                "paged": true
+              }
             }
+          ]
+        },
+        "credits": {
+          "root": {
+            "props": {}
           },
-          {
-            "type": "SubjectList",
-            "props": {
-              "id": "parts",
-              "title": {
-                "en": "Parts",
-                "zh-Hant": "部分",
-                "zh-Hans": "部分",
-                "ja": "部分",
-                "ko": "부분",
-                "de": "Teile",
-                "fr": "Parties",
-                "es": "Partes"
-              },
-              "property": "schema:isPartOf",
-              "limit": 24
+          "content": [
+            {
+              "type": "Credits",
+              "props": {
+                "id": "credits",
+                "direction": "forward",
+                "property": "schema:contributor",
+                "limit": 24,
+                "paged": true
+              }
             }
+          ]
+        },
+        "relations": {
+          "root": {
+            "props": {}
           },
-          { "type": "MoreStatements", "props": { "id": "more-statements" } }
-        ]
+          "content": [
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "reviews": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "RatingSummary",
+              "props": {
+                "id": "ratings"
+              }
+            },
+            {
+              "type": "ReviewList",
+              "props": {
+                "id": "reviews",
+                "paged": true
+              }
+            }
+          ]
+        },
+        "discussion": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads",
+                "paged": true
+              }
+            }
+          ]
+        },
+        "lists": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "details": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "Statements",
+              "props": {
+                "id": "statements",
+                "properties": [
+                  "schema:author",
+                  "schema:illustrator",
+                  "schema:translator",
+                  "schema:publisher",
+                  "schema:datePublished",
+                  "schema:inLanguage",
+                  "schema:genre",
+                  "schema:isPartOf"
+                ]
+              }
+            },
+            {
+              "type": "MoreStatements",
+              "props": {
+                "id": "more-statements"
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
+            }
+          ]
+        },
+        "contents": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "series-works",
+                "title": {
+                  "en": "Works in the series",
+                  "zh-Hant": "系列作品",
+                  "zh-Hans": "系列作品",
+                  "ja": "シリーズの作品",
+                  "ko": "시리즈의 작품",
+                  "de": "Werke der Serie",
+                  "fr": "Œuvres de la série",
+                  "es": "Obras de la serie"
+                },
+                "property": "wdt:P179",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "parts",
+                "title": {
+                  "en": "Parts",
+                  "zh-Hant": "部分",
+                  "zh-Hans": "部分",
+                  "ja": "部分",
+                  "ko": "부분",
+                  "de": "Teile",
+                  "fr": "Parties",
+                  "es": "Partes"
+                },
+                "property": "schema:isPartOf",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        }
       }
     }
   ],
   "types": [
     {
       "type": "schema:Organization",
-      "document": {
-        "root": { "props": {} },
-        "content": [
-          {
-            "type": "Slot",
-            "props": {
-              "id": "header",
-              "name": "header",
-              "children": [
-                { "type": "SubjectHeader", "props": { "id": "subject-header" } },
-                { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
-              ]
-            }
+      "views": {
+        "overview": {
+          "root": {
+            "props": {}
           },
-          {
-            "type": "SubjectList",
-            "props": {
-              "id": "publisher",
-              "title": {
-                "en": "Published works",
-                "zh-Hant": "出版作品",
-                "zh-Hans": "出版作品",
-                "ja": "出版した作品",
-                "ko": "발행한 작품",
-                "de": "Verlegte Werke",
-                "fr": "Publications",
-                "es": "Obras publicadas"
-              },
-              "property": "schema:publisher",
-              "limit": 12
+          "content": [
+            {
+              "type": "Slot",
+              "props": {
+                "id": "header",
+                "name": "header",
+                "children": [
+                  {
+                    "type": "SubjectHeader",
+                    "props": {
+                      "id": "subject-header"
+                    }
+                  },
+                  {
+                    "type": "AccountIdentity",
+                    "props": {
+                      "id": "account-identity"
+                    }
+                  },
+                  {
+                    "type": "Slot",
+                    "props": {
+                      "id": "actions",
+                      "name": "actions",
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Summary",
+              "props": {
+                "id": "summary"
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "publisher",
+                "title": {
+                  "en": "Published works",
+                  "zh-Hant": "出版作品",
+                  "zh-Hans": "出版作品",
+                  "ja": "出版した作品",
+                  "ko": "발행한 작품",
+                  "de": "Verlegte Werke",
+                  "fr": "Publications",
+                  "es": "Obras publicadas"
+                },
+                "property": "schema:publisher",
+                "limit": 12
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "production-company",
+                "title": {
+                  "en": "Productions",
+                  "zh-Hant": "製作作品",
+                  "zh-Hans": "制作作品",
+                  "ja": "制作作品",
+                  "ko": "제작한 작품",
+                  "de": "Produktionen",
+                  "fr": "Productions",
+                  "es": "Producciones"
+                },
+                "property": "schema:productionCompany",
+                "limit": 12
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "developer",
+                "title": {
+                  "en": "Developed works",
+                  "zh-Hant": "開發作品",
+                  "zh-Hans": "开发作品",
+                  "ja": "開発した作品",
+                  "ko": "개발한 작품",
+                  "de": "Entwickelte Werke",
+                  "fr": "Œuvres développées",
+                  "es": "Obras desarrolladas"
+                },
+                "property": "wdt:P178",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 12
+              }
+            },
+            {
+              "type": "AccountPosts",
+              "props": {
+                "id": "account-posts",
+                "limit": 4
+              }
+            },
+            {
+              "type": "AccountThreads",
+              "props": {
+                "id": "account-reviews",
+                "threadKind": "review",
+                "limit": 4
+              }
+            },
+            {
+              "type": "AccountCollections",
+              "props": {
+                "id": "account-collections",
+                "limit": 3
+              }
+            },
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads"
+              }
+            },
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
             }
+          ]
+        },
+        "works": {
+          "root": {
+            "props": {}
           },
-          {
-            "type": "SubjectList",
-            "props": {
-              "id": "production-company",
-              "title": {
-                "en": "Productions",
-                "zh-Hant": "製作作品",
-                "zh-Hans": "制作作品",
-                "ja": "制作作品",
-                "ko": "제작한 작품",
-                "de": "Produktionen",
-                "fr": "Productions",
-                "es": "Producciones"
-              },
-              "property": "schema:productionCompany",
-              "limit": 12
+          "content": [
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "publisher",
+                "title": {
+                  "en": "Published works",
+                  "zh-Hant": "出版作品",
+                  "zh-Hans": "出版作品",
+                  "ja": "出版した作品",
+                  "ko": "발행한 작품",
+                  "de": "Verlegte Werke",
+                  "fr": "Publications",
+                  "es": "Obras publicadas"
+                },
+                "property": "schema:publisher",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "production-company",
+                "title": {
+                  "en": "Productions",
+                  "zh-Hant": "製作作品",
+                  "zh-Hans": "制作作品",
+                  "ja": "制作作品",
+                  "ko": "제작한 작품",
+                  "de": "Produktionen",
+                  "fr": "Productions",
+                  "es": "Producciones"
+                },
+                "property": "schema:productionCompany",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "developer",
+                "title": {
+                  "en": "Developed works",
+                  "zh-Hant": "開發作品",
+                  "zh-Hans": "开发作品",
+                  "ja": "開発した作品",
+                  "ko": "개발한 작품",
+                  "de": "Entwickelte Werke",
+                  "fr": "Œuvres développées",
+                  "es": "Obras desarrolladas"
+                },
+                "property": "wdt:P178",
+                "limit": 24,
+                "paged": true
+              }
             }
+          ]
+        },
+        "relations": {
+          "root": {
+            "props": {}
           },
-          {
-            "type": "SubjectList",
-            "props": {
-              "id": "developer",
-              "title": {
-                "en": "Developed works",
-                "zh-Hant": "開發作品",
-                "zh-Hans": "开发作品",
-                "ja": "開発した作品",
-                "ko": "개발한 작품",
-                "de": "Entwickelte Werke",
-                "fr": "Œuvres développées",
-                "es": "Obras desarrolladas"
-              },
-              "property": "wdt:P178",
-              "limit": 12
+          "content": [
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
             }
+          ]
+        },
+        "discussion": {
+          "root": {
+            "props": {}
           },
-          { "type": "MoreStatements", "props": { "id": "more-statements" } }
-        ]
+          "content": [
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads",
+                "paged": true
+              }
+            }
+          ]
+        },
+        "lists": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "details": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "MoreStatements",
+              "props": {
+                "id": "more-statements"
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
+            }
+          ]
+        },
+        "posts": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "AccountPosts",
+              "props": {
+                "id": "account-posts",
+                "limit": 20,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "reviews": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "AccountThreads",
+              "props": {
+                "id": "account-reviews",
+                "threadKind": "review",
+                "limit": 20,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "collections": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "AccountCollections",
+              "props": {
+                "id": "account-collections",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        }
       }
     },
     {
       "type": "schema:Person",
-      "document": {
-        "root": { "props": {} },
-        "content": [
-          {
-            "type": "Slot",
-            "props": {
-              "id": "header",
-              "name": "header",
-              "children": [
-                { "type": "SubjectHeader", "props": { "id": "subject-header" } },
-                { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
-              ]
-            }
+      "views": {
+        "overview": {
+          "root": {
+            "props": {}
           },
-          {
-            "type": "SubjectList",
-            "props": {
-              "id": "author",
-              "title": {
-                "en": "Written works",
-                "zh-Hant": "著作",
-                "zh-Hans": "著作",
-                "ja": "著作",
-                "ko": "저술한 작품",
-                "de": "Geschriebene Werke",
-                "fr": "Œuvres écrites",
-                "es": "Obras escritas"
-              },
-              "property": "schema:author",
-              "limit": 12
+          "content": [
+            {
+              "type": "Slot",
+              "props": {
+                "id": "header",
+                "name": "header",
+                "children": [
+                  {
+                    "type": "SubjectHeader",
+                    "props": {
+                      "id": "subject-header"
+                    }
+                  },
+                  {
+                    "type": "AccountIdentity",
+                    "props": {
+                      "id": "account-identity"
+                    }
+                  },
+                  {
+                    "type": "Slot",
+                    "props": {
+                      "id": "actions",
+                      "name": "actions",
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Summary",
+              "props": {
+                "id": "summary"
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "author",
+                "title": {
+                  "en": "Written works",
+                  "zh-Hant": "著作",
+                  "zh-Hans": "著作",
+                  "ja": "著作",
+                  "ko": "저술한 작품",
+                  "de": "Geschriebene Werke",
+                  "fr": "Œuvres écrites",
+                  "es": "Obras escritas"
+                },
+                "property": "schema:author",
+                "limit": 11
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "illustrator",
+                "title": {
+                  "en": "Illustrated works",
+                  "zh-Hant": "插畫作品",
+                  "zh-Hans": "插画作品",
+                  "ja": "挿絵を担当した作品",
+                  "ko": "삽화를 맡은 작품",
+                  "de": "Illustrierte Werke",
+                  "fr": "Œuvres illustrées",
+                  "es": "Obras ilustradas"
+                },
+                "property": "schema:illustrator",
+                "limit": 11
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "director",
+                "title": {
+                  "en": "Directed works",
+                  "zh-Hant": "執導作品",
+                  "zh-Hans": "执导作品",
+                  "ja": "監督作品",
+                  "ko": "연출한 작품",
+                  "de": "Werke als Regisseur",
+                  "fr": "Réalisations",
+                  "es": "Obras dirigidas"
+                },
+                "property": "schema:director",
+                "limit": 11
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "music",
+                "title": {
+                  "en": "Music",
+                  "zh-Hant": "音樂作品",
+                  "zh-Hans": "音乐作品",
+                  "ja": "音楽を担当した作品",
+                  "ko": "음악을 맡은 작품",
+                  "de": "Werke als Komponist",
+                  "fr": "Musique",
+                  "es": "Música"
+                },
+                "property": "schema:musicBy",
+                "limit": 11
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "voice-roles",
+                "title": {
+                  "en": "Voice roles",
+                  "zh-Hant": "配音角色",
+                  "zh-Hans": "配音角色",
+                  "ja": "声の出演",
+                  "ko": "성우 출연",
+                  "de": "Sprechrollen",
+                  "fr": "Rôles vocaux",
+                  "es": "Papeles de voz"
+                },
+                "property": "wdt:P725",
+                "limit": 11
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 12
+              }
+            },
+            {
+              "type": "AccountPosts",
+              "props": {
+                "id": "account-posts",
+                "limit": 4
+              }
+            },
+            {
+              "type": "AccountThreads",
+              "props": {
+                "id": "account-reviews",
+                "threadKind": "review",
+                "limit": 4
+              }
+            },
+            {
+              "type": "AccountCollections",
+              "props": {
+                "id": "account-collections",
+                "limit": 3
+              }
+            },
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads"
+              }
+            },
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
             }
+          ]
+        },
+        "works": {
+          "root": {
+            "props": {}
           },
-          {
-            "type": "SubjectList",
-            "props": {
-              "id": "illustrator",
-              "title": {
-                "en": "Illustrated works",
-                "zh-Hant": "插畫作品",
-                "zh-Hans": "插画作品",
-                "ja": "挿絵を担当した作品",
-                "ko": "삽화를 맡은 작품",
-                "de": "Illustrierte Werke",
-                "fr": "Œuvres illustrées",
-                "es": "Obras ilustradas"
-              },
-              "property": "schema:illustrator",
-              "limit": 12
+          "content": [
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "author",
+                "title": {
+                  "en": "Written works",
+                  "zh-Hant": "著作",
+                  "zh-Hans": "著作",
+                  "ja": "著作",
+                  "ko": "저술한 작품",
+                  "de": "Geschriebene Werke",
+                  "fr": "Œuvres écrites",
+                  "es": "Obras escritas"
+                },
+                "property": "schema:author",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "illustrator",
+                "title": {
+                  "en": "Illustrated works",
+                  "zh-Hant": "插畫作品",
+                  "zh-Hans": "插画作品",
+                  "ja": "挿絵を担当した作品",
+                  "ko": "삽화를 맡은 작품",
+                  "de": "Illustrierte Werke",
+                  "fr": "Œuvres illustrées",
+                  "es": "Obras ilustradas"
+                },
+                "property": "schema:illustrator",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "director",
+                "title": {
+                  "en": "Directed works",
+                  "zh-Hant": "執導作品",
+                  "zh-Hans": "执导作品",
+                  "ja": "監督作品",
+                  "ko": "연출한 작품",
+                  "de": "Werke als Regisseur",
+                  "fr": "Réalisations",
+                  "es": "Obras dirigidas"
+                },
+                "property": "schema:director",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "music",
+                "title": {
+                  "en": "Music",
+                  "zh-Hant": "音樂作品",
+                  "zh-Hans": "音乐作品",
+                  "ja": "音楽を担当した作品",
+                  "ko": "음악을 맡은 작품",
+                  "de": "Werke als Komponist",
+                  "fr": "Musique",
+                  "es": "Música"
+                },
+                "property": "schema:musicBy",
+                "limit": 24,
+                "paged": true
+              }
             }
+          ]
+        },
+        "relations": {
+          "root": {
+            "props": {}
           },
-          {
-            "type": "SubjectList",
-            "props": {
-              "id": "director",
-              "title": {
-                "en": "Directed works",
-                "zh-Hant": "執導作品",
-                "zh-Hans": "执导作品",
-                "ja": "監督作品",
-                "ko": "연출한 작품",
-                "de": "Werke als Regisseur",
-                "fr": "Réalisations",
-                "es": "Obras dirigidas"
-              },
-              "property": "schema:director",
-              "limit": 12
+          "content": [
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
             }
+          ]
+        },
+        "discussion": {
+          "root": {
+            "props": {}
           },
-          {
-            "type": "SubjectList",
-            "props": {
-              "id": "music",
-              "title": {
-                "en": "Music",
-                "zh-Hant": "音樂作品",
-                "zh-Hans": "音乐作品",
-                "ja": "音楽を担当した作品",
-                "ko": "음악을 맡은 작품",
-                "de": "Werke als Komponist",
-                "fr": "Musique",
-                "es": "Música"
-              },
-              "property": "schema:musicBy",
-              "limit": 12
+          "content": [
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads",
+                "paged": true
+              }
             }
+          ]
+        },
+        "lists": {
+          "root": {
+            "props": {}
           },
-          {
-            "type": "SubjectList",
-            "props": {
-              "id": "voice-roles",
-              "title": {
-                "en": "Voice roles",
-                "zh-Hant": "配音角色",
-                "zh-Hans": "配音角色",
-                "ja": "声の出演",
-                "ko": "성우 출연",
-                "de": "Sprechrollen",
-                "fr": "Rôles vocaux",
-                "es": "Papeles de voz"
-              },
-              "property": "wdt:P725",
-              "limit": 12
+          "content": [
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6,
+                "paged": true
+              }
             }
+          ]
+        },
+        "details": {
+          "root": {
+            "props": {}
           },
-          { "type": "MoreStatements", "props": { "id": "more-statements" } }
-        ]
+          "content": [
+            {
+              "type": "MoreStatements",
+              "props": {
+                "id": "more-statements"
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
+            }
+          ]
+        },
+        "characters": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "voice-roles",
+                "title": {
+                  "en": "Voice roles",
+                  "zh-Hant": "配音角色",
+                  "zh-Hans": "配音角色",
+                  "ja": "声の出演",
+                  "ko": "성우 출연",
+                  "de": "Sprechrollen",
+                  "fr": "Rôles vocaux",
+                  "es": "Papeles de voz"
+                },
+                "property": "wdt:P725",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "posts": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "AccountPosts",
+              "props": {
+                "id": "account-posts",
+                "limit": 20,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "reviews": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "AccountThreads",
+              "props": {
+                "id": "account-reviews",
+                "threadKind": "review",
+                "limit": 20,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "collections": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "AccountCollections",
+              "props": {
+                "id": "account-collections",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        }
       }
     },
     {
       "type": "skos:Concept",
-      "document": {
-        "root": { "props": {} },
-        "content": [
-          {
-            "type": "Slot",
-            "props": {
-              "id": "header",
-              "name": "header",
-              "children": [
-                { "type": "SubjectHeader", "props": { "id": "subject-header" } },
-                { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
-              ]
-            }
+      "views": {
+        "overview": {
+          "root": {
+            "props": {}
           },
-          {
-            "type": "SubjectList",
-            "props": {
-              "id": "works",
-              "title": {
-                "en": "Works",
-                "zh-Hant": "作品",
-                "zh-Hans": "作品",
-                "ja": "作品",
-                "ko": "작품",
-                "de": "Werke",
-                "fr": "Œuvres",
-                "es": "Obras"
-              },
-              "property": "schema:genre",
-              "limit": 24
+          "content": [
+            {
+              "type": "Slot",
+              "props": {
+                "id": "header",
+                "name": "header",
+                "children": [
+                  {
+                    "type": "SubjectHeader",
+                    "props": {
+                      "id": "subject-header"
+                    }
+                  },
+                  {
+                    "type": "Slot",
+                    "props": {
+                      "id": "actions",
+                      "name": "actions",
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Summary",
+              "props": {
+                "id": "summary"
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "works",
+                "title": {
+                  "en": "Works",
+                  "zh-Hant": "作品",
+                  "zh-Hans": "作品",
+                  "ja": "作品",
+                  "ko": "작품",
+                  "de": "Werke",
+                  "fr": "Œuvres",
+                  "es": "Obras"
+                },
+                "property": "schema:genre",
+                "limit": 24
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 12
+              }
+            },
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads"
+              }
+            },
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
             }
+          ]
+        },
+        "works": {
+          "root": {
+            "props": {}
           },
-          { "type": "MoreStatements", "props": { "id": "more-statements" } }
-        ]
+          "content": [
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "works",
+                "title": {
+                  "en": "Works",
+                  "zh-Hant": "作品",
+                  "zh-Hans": "作品",
+                  "ja": "作品",
+                  "ko": "작품",
+                  "de": "Werke",
+                  "fr": "Œuvres",
+                  "es": "Obras"
+                },
+                "property": "schema:genre",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "relations": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "discussion": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads",
+                "paged": true
+              }
+            }
+          ]
+        },
+        "lists": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "details": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "MoreStatements",
+              "props": {
+                "id": "more-statements"
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
+            }
+          ]
+        }
       }
     },
     {
       "type": "wd:Q95074",
-      "document": {
-        "root": { "props": {} },
-        "content": [
-          {
-            "type": "Slot",
-            "props": {
-              "id": "header",
-              "name": "header",
-              "children": [
-                { "type": "SubjectHeader", "props": { "id": "subject-header" } },
-                { "type": "Slot", "props": { "id": "actions", "name": "actions", "children": [] } }
-              ]
-            }
+      "views": {
+        "overview": {
+          "root": {
+            "props": {}
           },
-          {
-            "type": "SubjectList",
-            "props": {
-              "id": "appearances",
-              "title": {
-                "en": "Appearances",
-                "zh-Hant": "登場作品",
-                "zh-Hans": "登场作品",
-                "ja": "登場作品",
-                "ko": "등장 작품",
-                "de": "Auftritte",
-                "fr": "Apparitions",
-                "es": "Apariciones"
-              },
-              "property": "schema:character",
-              "limit": 24
+          "content": [
+            {
+              "type": "Slot",
+              "props": {
+                "id": "header",
+                "name": "header",
+                "children": [
+                  {
+                    "type": "SubjectHeader",
+                    "props": {
+                      "id": "subject-header"
+                    }
+                  },
+                  {
+                    "type": "Slot",
+                    "props": {
+                      "id": "actions",
+                      "name": "actions",
+                      "children": []
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Summary",
+              "props": {
+                "id": "summary"
+              }
+            },
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "appearances",
+                "title": {
+                  "en": "Appearances",
+                  "zh-Hant": "登場作品",
+                  "zh-Hans": "登场作品",
+                  "ja": "登場作品",
+                  "ko": "등장 작품",
+                  "de": "Auftritte",
+                  "fr": "Apparitions",
+                  "es": "Apariciones"
+                },
+                "property": "schema:character",
+                "limit": 24
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 12
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 12
+              }
+            },
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads"
+              }
+            },
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
             }
+          ]
+        },
+        "appearances": {
+          "root": {
+            "props": {}
           },
-          { "type": "MoreStatements", "props": { "id": "more-statements" } }
-        ]
+          "content": [
+            {
+              "type": "SubjectList",
+              "props": {
+                "id": "appearances",
+                "title": {
+                  "en": "Appearances",
+                  "zh-Hant": "登場作品",
+                  "zh-Hans": "登场作品",
+                  "ja": "登場作品",
+                  "ko": "등장 작품",
+                  "de": "Auftritte",
+                  "fr": "Apparitions",
+                  "es": "Apariciones"
+                },
+                "property": "schema:character",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "relations": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "side-stories",
+                "title": {
+                  "en": "Side stories",
+                  "zh-Hant": "外傳",
+                  "zh-Hans": "外传",
+                  "ja": "外伝",
+                  "ko": "외전",
+                  "de": "Nebengeschichten",
+                  "fr": "Histoires parallèles",
+                  "es": "Historias paralelas"
+                },
+                "property": "rezics:sideStoryOf",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "adaptations",
+                "title": {
+                  "en": "Adaptations",
+                  "zh-Hant": "改編作品",
+                  "zh-Hans": "改编作品",
+                  "ja": "派生作品",
+                  "ko": "파생 작품",
+                  "de": "Adaptionen",
+                  "fr": "Adaptations",
+                  "es": "Adaptaciones"
+                },
+                "property": "wdt:P144",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "versions",
+                "title": {
+                  "en": "Alternative versions",
+                  "zh-Hant": "其他版本",
+                  "zh-Hans": "其他版本",
+                  "ja": "別バージョン",
+                  "ko": "다른 버전",
+                  "de": "Alternative Fassungen",
+                  "fr": "Versions alternatives",
+                  "es": "Versiones alternativas"
+                },
+                "property": "rezics:alternativeVersion",
+                "limit": 24,
+                "paged": true
+              }
+            },
+            {
+              "type": "RelationGroups",
+              "props": {
+                "id": "related",
+                "title": {
+                  "en": "Related",
+                  "zh-Hant": "相關作品",
+                  "zh-Hans": "相关作品",
+                  "ja": "関連作品",
+                  "ko": "관련 작품",
+                  "de": "Verwandtes",
+                  "fr": "Œuvres liées",
+                  "es": "Obras relacionadas"
+                },
+                "property": "rezics:bangumiRelatedTo",
+                "limit": 24,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "discussion": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "ThreadList",
+              "props": {
+                "id": "threads",
+                "paged": true
+              }
+            }
+          ]
+        },
+        "lists": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "CollectionList",
+              "props": {
+                "id": "lists",
+                "title": {
+                  "en": "Lists",
+                  "zh-Hant": "清單",
+                  "zh-Hans": "清单",
+                  "ja": "リスト",
+                  "ko": "목록",
+                  "de": "Listen",
+                  "fr": "Listes",
+                  "es": "Listas"
+                },
+                "limit": 6,
+                "paged": true
+              }
+            }
+          ]
+        },
+        "details": {
+          "root": {
+            "props": {}
+          },
+          "content": [
+            {
+              "type": "MoreStatements",
+              "props": {
+                "id": "more-statements"
+              }
+            },
+            {
+              "type": "Sources",
+              "props": {
+                "id": "sources"
+              }
+            }
+          ]
+        }
       }
     }
   ],
@@ -411,82 +2932,33 @@
     {
       "route": "/",
       "document": {
-        "root": { "props": {} },
+        "root": {
+          "props": {}
+        },
         "content": [
           {
-            "type": "SearchBox",
+            "type": "Heading",
             "props": {
-              "id": "search",
-              "placeholder": {
-                "en": "Search books, anime, visual novels and recipes",
-                "zh-Hant": "搜尋書籍、動畫、視覺小說和食譜",
-                "zh-Hans": "搜索图书、动画、视觉小说和食谱",
-                "ja": "書籍、アニメ、ビジュアルノベル、レシピを検索",
-                "ko": "도서, 애니메이션, 비주얼 노벨, 레시피 검색",
-                "de": "Nach Büchern, Anime, Visual Novels und Rezepten suchen",
-                "fr": "Rechercher des livres, des anime, des visual novels et des recettes",
-                "es": "Buscar libros, anime, novelas visuales y recetas"
+              "id": "heading",
+              "level": 1,
+              "text": {
+                "en": "Home",
+                "zh-Hant": "首頁",
+                "zh-Hans": "首页",
+                "ja": "ホーム",
+                "ko": "홈",
+                "de": "Startseite",
+                "fr": "Accueil",
+                "es": "Inicio"
               }
             }
           },
           {
-            "type": "LinkGrid",
+            "type": "Slot",
             "props": {
-              "id": "verticals",
-              "links": [
-                {
-                  "label": {
-                    "en": "Books",
-                    "zh-Hant": "書籍",
-                    "zh-Hans": "图书",
-                    "ja": "書籍",
-                    "ko": "도서",
-                    "de": "Bücher",
-                    "fr": "Livres",
-                    "es": "Libros"
-                  },
-                  "href": "/search?type=schema%3ABook"
-                },
-                {
-                  "label": {
-                    "en": "Anime",
-                    "zh-Hant": "動畫",
-                    "zh-Hans": "动画",
-                    "ja": "アニメ",
-                    "ko": "애니메이션",
-                    "de": "Anime",
-                    "fr": "Anime",
-                    "es": "Anime"
-                  },
-                  "href": "/search?type=schema%3ATVSeries"
-                },
-                {
-                  "label": {
-                    "en": "Visual novels",
-                    "zh-Hant": "視覺小說",
-                    "zh-Hans": "视觉小说",
-                    "ja": "ビジュアルノベル",
-                    "ko": "비주얼 노벨",
-                    "de": "Visual Novels",
-                    "fr": "Visual novels",
-                    "es": "Novelas visuales"
-                  },
-                  "href": "/search?type=wd%3AQ689445"
-                },
-                {
-                  "label": {
-                    "en": "Recipes",
-                    "zh-Hant": "食譜",
-                    "zh-Hans": "食谱",
-                    "ja": "レシピ",
-                    "ko": "레시피",
-                    "de": "Rezepte",
-                    "fr": "Recettes",
-                    "es": "Recetas"
-                  },
-                  "href": "/search?type=schema%3ARecipe"
-                }
-              ]
+              "id": "personal",
+              "name": "personal",
+              "children": []
             }
           },
           {

@@ -1,0 +1,30 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as Stories from './content-edition.stories';
+
+<Meta of={Stories} />
+
+# Content edition reader
+
+The buyer opens the actual edition linked from Commerce, reads its fixed document and can inspect the source licence,
+document revision and SHA-256 in an optional details disclosure after the text. The declared licence stays visible.
+A currently readable, exactly bound subject supplies the heading and
+backlink. A visible creator identity supplies a plain name. Missing identity points leave a neutral Edition heading
+and an explicit unknown creator; they never authorize the document.
+
+The served route and Pages use the same `ContentEditionPage` region inside the existing AppShell, which owns the main.
+Patterns omit the shell. Use phone390/desktop1280 and the existing light/dark and locale globals.
+
+Published and Longtext show constructed responses to the exact two assigned protected edition reads. They do not
+demonstrate native availability or real buyer delivery. Loading conceals the body and has no actions. Unavailable
+stays unavailable, including on retry. Only the explicitly constructed Retry recovers unavailable edition transition
+returns a published response after a keyboard retry of the protected reads. Refused and Withdrawn show no body or
+remembered attribution and offer Back to purchases. A signed-out refusal offers the real sign-in return flow.
+Versionmismatch rejects a different revision, including otherwise valid document bytes; a secondary reread retains
+the protected state until a fresh result arrives.
+
+The served reader binds the first-party authenticated Kernel transport to the mounted native Content endpoints.
+Real buyer proof and generated client declaration refresh remain integration work; a missing or refused source conceals the document.
+Independent native media presentations supply exact document images when available; omission or failure keeps a
+truthful image fallback and the authorized text. The reader never
+constructs an original, paid image, file or origin URL. See the [Web owner contract](../../../../README.md) for the
+assigned wire, route, cost and pending integration boundary. These stories await Web visual review.

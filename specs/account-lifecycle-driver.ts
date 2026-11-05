@@ -20,10 +20,18 @@
  * durable completion unless a documented registration/revocation barrier stops them.
  */
 export type Outcome = 'permitted' | 'denied';
-export interface Credential { readonly opaque: unknown }
-export interface Session { readonly opaque: unknown }
-export interface Token { readonly opaque: unknown }
-export interface RecoveryProof { readonly opaque: unknown }
+export interface Credential {
+  readonly opaque: unknown;
+}
+export interface Session {
+  readonly opaque: unknown;
+}
+export interface Token {
+  readonly opaque: unknown;
+}
+export interface RecoveryProof {
+  readonly opaque: unknown;
+}
 export type Login = { outcome: 'denied' } | { outcome: 'authenticated'; session: Session };
 export interface Account {
   id: string;
@@ -34,7 +42,10 @@ export interface Account {
   minimumAuthnEpoch: number;
   fenced: boolean;
 }
-export interface Registration { accountId: string; expiresAt: string }
+export interface Registration {
+  accountId: string;
+  expiresAt: string;
+}
 export interface PublicView {
   id: string;
   kind: 'actor' | 'organization';
@@ -43,7 +54,11 @@ export interface PublicView {
   /** Complete public response, including nested fields, before test normalization. */
   raw: unknown;
 }
-export interface FenceReceipt { id: string; accountId: string; minimumAuthnEpoch: number }
+export interface FenceReceipt {
+  id: string;
+  accountId: string;
+  minimumAuthnEpoch: number;
+}
 export interface AccountLifecycleDriver {
   close(): Promise<void>;
   advanceTo(instant: string): Promise<void>;
@@ -64,10 +79,21 @@ export interface AccountLifecycleDriver {
   validateToken(token: Token): Promise<Outcome>;
   createOrganization(owner: Session, handle: string): Promise<string>;
   createAutomated(actingHuman: Session, operatorId: string, handle: string): Promise<string | 'denied'>;
-  patchAccount(actingHuman: Session, id: string, patch: { id?: string; kind?: string; handle?: string }): Promise<Outcome>;
+  patchAccount(
+    actingHuman: Session,
+    id: string,
+    patch: { id?: string; kind?: string; handle?: string },
+  ): Promise<Outcome>;
   setOperator(actingHuman: Session, id: string, operatorId: string): Promise<Outcome>;
+  /** The destination operator's manager accepts operating id; the source's next setOperator to operatorId uses it. */
+  acceptOperator(actingHuman: Session, id: string, operatorId: string): Promise<Outcome>;
   setManagement(actingHuman: Session, operatorId: string, humanId: string, allowed: boolean): Promise<Outcome>;
-  setMembership(owner: Session, organizationId: string, accountId: string, role: 'owner' | 'member' | null): Promise<Outcome>;
+  setMembership(
+    owner: Session,
+    organizationId: string,
+    accountId: string,
+    role: 'owner' | 'member' | null,
+  ): Promise<Outcome>;
   members(organizationId: string): Promise<{ accountId: string; role: 'owner' | 'member' }[]>;
   setCredential(manager: Session, subjectId: string, credential: Credential, installed: boolean): Promise<Outcome>;
   startEmailRecovery(subjectId: string): Promise<RecoveryProof | 'denied'>;
@@ -76,7 +102,9 @@ export interface AccountLifecycleDriver {
   populatePrivateData(subjectId: string): Promise<{ secretValues: string[]; populated: boolean }>;
   profile(subjectId: string): Promise<PublicView>;
   attribution(subjectId: string): Promise<PublicView>;
-  audit(subjectId: string): Promise<{ action: 'session-opened'; actingHumanId: string; subjectId: string; operatorId: string }[]>;
+  audit(
+    subjectId: string,
+  ): Promise<{ action: 'session-opened'; actingHumanId: string; subjectId: string; operatorId: string }[]>;
   /** Real fixture resource and direct grants; test resource has no ambient grants. */
   createResource(owner: Session): Promise<string>;
   grantResource(owner: Session, resourceId: string, accountId: string): Promise<Outcome>;
@@ -91,9 +119,12 @@ export interface AccountLifecycleDriver {
    * failAuthRevocation injects an Auth outage, not a failure of the Access commit.
    * Hook exceptions propagate; they must never become a revocation-failed result.
    */
-  revokeSessions(subjectId: string, controls: {
-    beforeAuthRevocation: () => Promise<void>;
-    failAuthRevocation?: boolean;
-  }): Promise<'revoked' | 'revocation-failed'>;
+  revokeSessions(
+    subjectId: string,
+    controls: {
+      beforeAuthRevocation: () => Promise<void>;
+      failAuthRevocation?: boolean;
+    },
+  ): Promise<'revoked' | 'revocation-failed'>;
   fenceReceipt(subjectId: string): Promise<FenceReceipt | null>;
 }

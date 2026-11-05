@@ -1,11 +1,11 @@
-import { actionCatalogue } from '../http/request.ts';
-import type { Access, ActionCatalogue } from '../request/access.ts';
+import type { Access, ActionCatalogue, ActionMetadata } from '../request/access.ts';
+import { accessRoot } from './derived-access.ts';
 import defaults from './resource-roles.json';
 import governance from './platform-governance.json';
 
 /** Trusted composition-root data, never request JSON. Organization owner/member
  * membership roles are unrelated to these resource-local grant role identifiers.
- * Arbitrary definitions must resolve entirely against mounted action metadata.
+ * Arbitrary definitions must resolve entirely against supported action metadata.
  * The reserved governance role is composed from explicit platform action data.
  */
 export type ResourceRoleCatalogue = Readonly<{
@@ -24,9 +24,23 @@ export type UnresolvedResourceType = Readonly<{
   missingRoles: readonly string[];
   unmountedActions: readonly string[];
 }>;
-const installed = new WeakMap<Access, ResolvedResourceRoles>();
-const identifier = /^[a-z][a-z0-9_.-]*$/;
-const actionName = /^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$/;
+// Function declarations stay callable during circular Access composition; module
+// consts remain uninitialized while http/request loads this file.
+function isRoleIdentifier(value: string): boolean {
+  return /^[a-z][a-z0-9_.-]*$/.test(value);
+}
+function isActionName(value: string): boolean {
+  return /^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$/.test(value);
+}
+function resourceRoleInstalled(): WeakMap<Access, ResolvedResourceRoles> {
+  const holder = resourceRoleInstalled as typeof resourceRoleInstalled & {
+    map?: WeakMap<Access, ResolvedResourceRoles>;
+  };
+  return (holder.map ??= new WeakMap());
+}
+// Role compilation uses mounted names and creation declarations only. Anonymous
+// admission remains owned by the full ActionCatalogue in the Access evaluator.
+type RoleActions = ReadonlyMap<string, Partial<ActionMetadata>>;
 
 type CompiledResourceRoles = {
   roles: Map<string, readonly string[]>;
@@ -36,27 +50,27 @@ type CompiledResourceRoles = {
   declaredTypes: ReadonlyMap<string, readonly string[]>;
 };
 
-function unmountedActions(actions: ActionCatalogue, values: unknown): readonly string[] {
+function unmountedActions(actions: RoleActions, values: unknown): readonly string[] {
   if (!Array.isArray(values)) return [];
   const missing = new Set<string>();
   for (const action of values) {
-    if (typeof action !== 'string' || !actionName.test(action) || !actions.has(action)) {
+    if (typeof action !== 'string' || !isActionName(action) || !actions.has(action)) {
       if (typeof action === 'string') missing.add(action);
     }
   }
   return [...missing].sort();
 }
 
-function roleResolves(actions: ActionCatalogue, role: string, values: unknown): values is readonly string[] {
+function roleResolves(actions: RoleActions, role: string, values: unknown): values is readonly string[] {
   return (
-    identifier.test(role) &&
+    isRoleIdentifier(role) &&
     Array.isArray(values) &&
     values.length > 0 &&
-    values.every((action) => typeof action === 'string' && actionName.test(action) && actions.has(action))
+    values.every((action) => typeof action === 'string' && isActionName(action) && actions.has(action))
   );
 }
 
-function declaredResourceTypes(actions: ActionCatalogue): ReadonlyMap<string, readonly string[]> {
+function declaredResourceTypes(actions: RoleActions): ReadonlyMap<string, readonly string[]> {
   const declared = new Map<string, readonly string[]>();
   for (const [action, metadata] of actions) {
     const types = metadata['x-resource-types'];
@@ -64,7 +78,7 @@ function declaredResourceTypes(actions: ActionCatalogue): ReadonlyMap<string, re
     if (
       !Array.isArray(types) ||
       types.length === 0 ||
-      types.some((type) => typeof type !== 'string' || !identifier.test(type)) ||
+      types.some((type) => typeof type !== 'string' || !isRoleIdentifier(type)) ||
       new Set(types).size !== types.length
     )
       throw new TypeError(`${action} declares invalid resource types`);
@@ -74,7 +88,7 @@ function declaredResourceTypes(actions: ActionCatalogue): ReadonlyMap<string, re
 }
 
 /** Shared drop rules for resolution and the composition explanation. */
-function compileResourceRoles(actions: ActionCatalogue, extension?: ResourceRoleCatalogue): CompiledResourceRoles {
+function compileResourceRoles(actions: RoleActions, extension?: ResourceRoleCatalogue): CompiledResourceRoles {
   if (
     !Array.isArray(governance.globalReach) ||
     governance.globalReach.some((action) => !governance.actions.includes(action))
@@ -99,7 +113,7 @@ function compileResourceRoles(actions: ActionCatalogue, extension?: ResourceRole
   const dropped = new Map<string, readonly string[]>();
   for (const [role, values] of Object.entries(definitions)) {
     if (!roleResolves(actions, role, values)) {
-      if (identifier.test(role)) dropped.set(role, unmountedActions(actions, values));
+      if (isRoleIdentifier(role)) dropped.set(role, unmountedActions(actions, values));
       continue;
     }
     roles.set(role, Object.freeze([...new Set(values)].sort()));
@@ -107,7 +121,7 @@ function compileResourceRoles(actions: ActionCatalogue, extension?: ResourceRole
   const types = new Map<string, ResourceRoleTemplate>();
   for (const [type, template] of Object.entries(templates)) {
     if (
-      !identifier.test(type) ||
+      !isRoleIdentifier(type) ||
       !template ||
       !Array.isArray(template.standing) ||
       (template.owner !== undefined && !roles.has(template.owner)) ||
@@ -129,17 +143,14 @@ function compileResourceRoles(actions: ActionCatalogue, extension?: ResourceRole
  * Extensions cannot replace a built-in definition, including the empty report
  * template. Missing roles/actions disable the whole referring template.
  */
-export function resolveResourceRoles(
-  actions: ActionCatalogue,
-  extension?: ResourceRoleCatalogue,
-): ResolvedResourceRoles {
+export function resolveResourceRoles(actions: RoleActions, extension?: ResourceRoleCatalogue): ResolvedResourceRoles {
   const compiled = compileResourceRoles(actions, extension);
   return { roles: compiled.roles, types: compiled.types, declaredTypes: compiled.declaredTypes };
 }
 
 /** Names why a type did not resolve. Undefined means the same rules kept the type. */
 export function explainUnresolvedResourceType(
-  actions: ActionCatalogue,
+  actions: RoleActions,
   type: string,
   extension?: ResourceRoleCatalogue,
 ): UnresolvedResourceType | undefined {
@@ -157,15 +168,18 @@ export function explainUnresolvedResourceType(
 }
 
 /** Refuses composition when a mounted command declares a resource type that does not resolve. */
-export function assertDeclaredResourceTypes(app: Parameters<typeof actionCatalogue>[0]): void {
-  const actions = actionCatalogue(app);
+export function assertDeclaredResourceTypes(
+  _app: object,
+  extension: ResourceRoleCatalogue | undefined,
+  actions: ActionCatalogue,
+): void {
   const declared = new Set<string>();
   for (const metadata of actions.values()) {
     for (const type of metadata['x-resource-types'] ?? []) declared.add(type);
   }
   const failures: string[] = [];
   for (const type of [...declared].sort()) {
-    const unresolved = explainUnresolvedResourceType(actions, type);
+    const unresolved = explainUnresolvedResourceType(actions, type, extension);
     if (!unresolved) continue;
     failures.push(
       `Resource type ${unresolved.type} does not resolve: missing roles ${unresolved.missingRoles.join(', ')}; unmounted actions ${unresolved.unmountedActions.join(', ')}`,
@@ -175,13 +189,14 @@ export function assertDeclaredResourceTypes(app: Parameters<typeof actionCatalog
 }
 
 export function installResourceRoleCatalogue(access: Access, catalogue: ResolvedResourceRoles): void {
-  const previous = installed.get(access)?.declaredTypes;
+  const root = accessRoot(access);
+  const previous = resourceRoleInstalled().get(root)?.declaredTypes;
   if (catalogue.declaredTypes !== undefined || previous === undefined) {
-    installed.set(access, catalogue);
+    resourceRoleInstalled().set(root, catalogue);
     return;
   }
-  installed.set(access, { roles: catalogue.roles, types: catalogue.types, declaredTypes: previous });
+  resourceRoleInstalled().set(root, { roles: catalogue.roles, types: catalogue.types, declaredTypes: previous });
 }
 export function resourceRoleCatalogue(access: Access): ResolvedResourceRoles | undefined {
-  return installed.get(access);
+  return resourceRoleInstalled().get(accessRoot(access));
 }

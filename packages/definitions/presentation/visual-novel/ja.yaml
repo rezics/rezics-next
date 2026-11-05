@@ -2,8 +2,37 @@ types:
   wd:Q689445: ビジュアルノベル
 properties:
   wdt:P144: 派生元
-  wdt:P156: 次
   wdt:P1889: 以下と異なる
-  wdt:P2512: スピンオフ
   wdt:P361: 以下の一部分
-  wdt:P4969: 派生作品
+  rezics:spinOffOf: 'スピンオフ元'
+inverseProperties:
+  wdt:P144: '翻案作品'
+  wdt:P361: '構成作品'
+  rezics:spinOffOf: 'スピンオフ作品'
+libraryProfiles:
+  visual-novel.reading:
+    states:
+      planned: '予定'
+      in_progress: '進行中'
+      completed: '完了'
+      paused: '中断'
+      dropped: '断念'
+    units:
+      scalar_amount:
+        percent: 'パーセント'
+    copyKinds:
+      physical: '物理'
+      digital: 'デジタル'
+    copyStatuses:
+      physical:
+        owned: '所持'
+        disposed: '手放した'
+      digital:
+        owned: '所持'
+typeDescriptions:
+  wd:Q689445: '言語や機種ごとのリリースから独立したビジュアルノベル作品。キャラクターやスタッフは作品上の文で関連付けます。'
+propertyDescriptions:
+  wdt:P144: 'このビジュアルノベルが原作とする創作作品。方向不明の別媒体の関連ではなく、元の作品を示します。'
+  wdt:P1889: '同じ世界や連続性を持つ別のビジュアルノベル作品。二つは独立した作品として扱います。'
+  wdt:P361: 'この作品を含む、より大きな作品。上位の物語や編集作品などを指定します。'
+  rezics:spinOffOf: 'このスピンオフが派生した元の作品。'

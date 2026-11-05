@@ -1,10 +1,18 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createHash, createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { derivedId, newId, partitionOf } from '../../kernel/src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population, type Row } from '../../kernel/test/support/growth.ts';
 import { testDatabase } from '../scripts/database.ts';
-import { createAuthService, type AccessAccount, type EffectAuthorization } from '../src/index.ts';
+import {
+  createAuthService,
+  type AccessAccount,
+  type AuthService,
+  type CredentialEffectAuthorization,
+  type CredentialEffectBinding,
+  type EffectAuthorization,
+} from '../src/index.ts';
 
 // One database. Each case used to leave its growth seed behind, and the next
 // case then filled the fixture until Postgres restarted.
@@ -24,6 +32,31 @@ const publicJwk = { ...(await exportJWK(key.publicKey)), alg: 'ES256', use: 'sig
 const privateJwk = await exportJWK(key.privateKey);
 type Axis = 'A' | 'S' | 'C' | 'D' | 'K' | 'P' | 'J' | 'E' | 'O' | 'H' | 'V' | 'T';
 
+async function applyCredentialEffect(
+  service: AuthService,
+  input: {
+    key: string;
+    subjectAccountId: string;
+    headers: Headers;
+    credential: Parameters<AuthService['internal']['stageCredentialEffect']>[0]['credential'];
+  },
+) {
+  const stage = await service.internal.stageCredentialEffect(input);
+  const approval = await service.internal.approveCredentialEffect({
+    effectRef: stage.effectRef,
+    key: input.key,
+    subjectAccountId: input.subjectAccountId,
+    headers: input.headers,
+  });
+  return service.internal.applyCredentialEffect({
+    authorization: approval.reference,
+    effectRef: stage.effectRef,
+    key: input.key,
+    subjectAccountId: input.subjectAccountId,
+    headers: input.headers,
+  });
+}
+
 async function setup(name: string, axes: readonly Axis[]) {
   const db = await openGrowthDatabase(owned.url);
   const namespace = newId(route);
@@ -39,8 +72,13 @@ async function setup(name: string, axes: readonly Axis[]) {
   const accounts = new Map<string, AccessAccount>();
   const authorizations = new Map<string, EffectAuthorization>();
   const invalidates = new Set<string>();
+  const credentialApprovals = new Map<
+    string,
+    { stage: CredentialEffectBinding; expiresAt: string; consumed: boolean }
+  >();
   let recoveryToken = '';
   let sequence = 0;
+  const nextCredentialKey = () => id(`credential-operation-${sequence++}`);
   const actor = (accountId: string, automated = false) => {
     const account: AccessAccount = { accountId, kind: 'actor', state: 'pending', automated, authnEpoch: 1 };
     accounts.set(accountId, account);
@@ -88,9 +126,15 @@ async function setup(name: string, axes: readonly Axis[]) {
       audience: 'https://growth.api.test',
       secret,
       signing: { activeKid: signingKid, privateKeys: [{ ...privateJwk, kid: signingKid }] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
+        async readFencedAccount(id) {
+          return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+        },
         async readAccount(accountId) {
-          return accounts.get(accountId) ?? null;
+          const account = accounts.get(accountId);
+          // Auth compares the epoch it read before the floor hook with the receipt.
+          // The hook advances the stored account, so the read must be a snapshot.
+          return account ? { ...account } : null;
         },
         async readRecoveryAccount(accountId) {
           return accounts.get(accountId) ?? null;
@@ -118,7 +162,47 @@ async function setup(name: string, axes: readonly Axis[]) {
           )
             throw new Error('Completion denied');
         },
-        async consumeAuthorization({ authorization, subjectAccountId, purpose, human: proof }) {
+        async approveCredentialEffect({ stage }) {
+          const reference = id(`credential-opening-${sequence++}`);
+          const expiresAt = new Date(Date.now() + 60_000).toISOString();
+          credentialApprovals.set(reference, { stage, expiresAt, consumed: false });
+          return { reference, expiresAt };
+        },
+        async consumeAuthorization(input) {
+          const { authorization, subjectAccountId, purpose, human: proof } = input;
+          if (purpose !== 'session') {
+            const opening = credentialApprovals.get(authorization);
+            const stage = opening?.stage;
+            const subject = accounts.get(subjectAccountId);
+            if (
+              !opening ||
+              opening.consumed ||
+              !stage ||
+              !subject ||
+              stage.subjectAccountId !== subjectAccountId ||
+              stage.purpose !== purpose ||
+              stage.operationKey !== input.operationKey ||
+              stage.effectReference !== input.effectReference ||
+              stage.actingHumanId !== proof.account_id ||
+              stage.clientId !== proof.client_id ||
+              JSON.stringify(stage.scopes) !== JSON.stringify(proof.scope)
+            )
+              throw new Error('Invalid test credential approval');
+            opening.consumed = true;
+            return {
+              ...stage,
+              receiptId: authorization,
+              subjectAccountId,
+              actingHumanId: proof.account_id,
+              operatorAccountId: subject.automated ? human : null,
+              purpose: stage.purpose,
+              clientId: proof.client_id,
+              scopes: proof.scope,
+              humanEpoch: proof.authn_epoch,
+              subjectEpoch: subject.authnEpoch,
+              expiresAt: opening.expiresAt,
+            } satisfies CredentialEffectAuthorization;
+          }
           const receipt = authorizations.get(authorization);
           if (
             !receipt ||
@@ -139,7 +223,29 @@ async function setup(name: string, axes: readonly Axis[]) {
           }
           return receipt;
         },
-      },
+        async revalidateCredentialEffect({ stage, authorization }) {
+          const opening = credentialApprovals.get(authorization);
+          if (!opening || JSON.stringify(opening.stage) !== JSON.stringify(stage))
+            throw new Error('Invalid test credential opening');
+        },
+        async advanceCredentialFloor({ stage, consumedOpening, expectedPreviousFloor }) {
+          const subject = accounts.get(stage.subjectAccountId)!;
+          if (subject.authnEpoch !== expectedPreviousFloor) throw new Error('Invalid test floor');
+          subject.authnEpoch++;
+          return {
+            receiptId: id(`credential-floor-${sequence++}`),
+            accountId: subject.accountId,
+            minimumAuthnEpoch: subject.authnEpoch,
+            operationKey: stage.operationKey,
+            effectReference: stage.effectReference,
+            effectDigest: stage.effectDigest,
+            purpose: stage.purpose,
+            openingReceiptId: consumedOpening.receiptId,
+            previousFloor: expectedPreviousFloor,
+            fenced: !!subject.fenced,
+          };
+        },
+      }),
       recoveryDelivery: {
         async deliver({ token }) {
           recoveryToken = token;
@@ -185,12 +291,7 @@ async function setup(name: string, axes: readonly Axis[]) {
     await request('/consent', { client_id: external, scope: ['read'] }, firstParty);
     const cookie = cookies(await signin());
     const headers = new Headers({ cookie });
-    const authorize = (
-      subject: string,
-      purpose: EffectAuthorization['purpose'],
-      destructive = false,
-      firstParty = false,
-    ) => {
+    const authorize = (subject: string, purpose: 'session', destructive = false, firstParty = false) => {
       const account = accounts.get(subject)!;
       const receiptId = id(`effect-${sequence++}`);
       const receipt: EffectAuthorization = {
@@ -214,8 +315,8 @@ async function setup(name: string, axes: readonly Axis[]) {
       kid: id('credential'),
       publicJwk: { ...publicJwk, kid: id('credential') },
     } as const;
-    await service.internal.setCredential({
-      authorization: authorize(human, 'add-key'),
+    await applyCredentialEffect(service, {
+      key: nextCredentialKey(),
       subjectAccountId: human,
       headers,
       credential,
@@ -383,6 +484,7 @@ async function setup(name: string, axes: readonly Axis[]) {
       db,
       service,
       id,
+      nextCredentialKey,
       human,
       robot,
       external,
@@ -521,9 +623,15 @@ test.serial(
   () =>
     fixture('Authorized account effects stays within its bound as s grows', ['A', 'P', 'E', 'O'], async (f) => {
       // The bounded case holds the subject's s=1 fixed while A/P/E/O and the hot partition grow.
+      await applyCredentialEffect(f.service, {
+        key: f.nextCredentialKey(),
+        subjectAccountId: f.robot,
+        headers: f.headers,
+        credential: { kind: 'password', password },
+      });
       await f.check(async () => {
-        await f.service.internal.setCredential({
-          authorization: f.authorize(f.robot, 'set-password', true),
+        await applyCredentialEffect(f.service, {
+          key: f.nextCredentialKey(),
           subjectAccountId: f.robot,
           headers: f.headers,
           credential: { kind: 'password', password },

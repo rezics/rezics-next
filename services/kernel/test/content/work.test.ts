@@ -1,3 +1,4 @@
+import { workerTestEnv } from '../support/worker-env.ts';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
@@ -29,7 +30,7 @@ import { decideDownload } from '../../src/content/media.ts';
 import { runCommand, type CommandOutcome } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import type { WorkModule } from '../../src/work/registry.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { startWorker } from '../../src/worker.ts';
@@ -100,22 +101,23 @@ if (process.argv.includes('--content-worker')) {
     KERNEL_WORK_MODULES.map((module) =>
       module === registerContent ? contentWithStepRetryDelay(STEP_RETRY_DELAY_SECONDS) : module,
     ),
-    {
+    workerTestEnv({
       CONTENT_R2_ENDPOINT: storageEndpoint,
       CONTENT_R2_BUCKET: 'media-test',
       CONTENT_R2_ACCESS_KEY_ID: 'fixture',
       CONTENT_R2_SECRET_ACCESS_KEY: 'fixture-secret',
       CONTENT_SOURCE_HOSTS: 'images.example.org',
-      CONTENT_AUTH_CONSENT_URL: `${consentEndpoint}/internal/v1/consents:read`,
+      KERNEL_AUTH_CONSENT_URL: `${consentEndpoint}/internal/v1/consents:read`,
       CF_ACCESS_CLIENT_ID: 'fixture.access',
       CF_ACCESS_CLIENT_SECRET: 'fixture-secret',
+      KERNEL_RATING_COUNTER_SECRET: Buffer.alloc(32, 43).toString('base64url'),
       AUTH_ISSUER: 'https://auth.example.test',
       AUTH_AUDIENCE: 'https://api.example.test',
       AUTH_JWKS_URL: 'https://auth.example.test/.well-known/jwks.json',
       KERNEL_ROUTE_KEY: process.env.CONTENT_TEST_ROUTE_KEY ?? Buffer.alloc(32, 7).toString('base64url'),
       KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 8).toString('base64url')}`,
       CONTENT_TEST_COLLECTION_PARTITIONS: String(partition),
-    },
+    }),
   );
   console.log('ready');
   for await (const line of console) {

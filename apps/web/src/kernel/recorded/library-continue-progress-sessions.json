@@ -1,0 +1,126 @@
+{
+  "status": 200,
+  "progressSessions": [
+    {
+      "id": "01a17ff1-e427-757d-9bbc-52f0787cfc0e",
+      "subjectId": "01a17ff1-7bf0-727b-b8b0-dd59cf6e7a7f",
+      "versionSubjectId": null,
+      "mode": "completed_units",
+      "unit": "chapter",
+      "total": null,
+      "amount": null,
+      "locator": null,
+      "position": null,
+      "completedUnitCount": 5,
+      "state": "active",
+      "revision": 2,
+      "startedAt": "2026-10-28T00:38:41.446Z",
+      "completedAt": null,
+      "subject": {
+        "id": "01a17ff1-7bf0-727b-b8b0-dd59cf6e7a7f",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "Le Petit Prince", "language": "fr" },
+        "creativeWork": true,
+        "cover": null
+      }
+    },
+    {
+      "id": "01a17ff1-e3c7-73e2-9f87-52f046720435",
+      "subjectId": "01a17ff1-d6a1-7302-b992-e5a5a68a35f4",
+      "versionSubjectId": null,
+      "mode": "scalar_amount",
+      "unit": "percent",
+      "total": null,
+      "amount": "64",
+      "locator": null,
+      "position": null,
+      "completedUnitCount": 0,
+      "state": "active",
+      "revision": 2,
+      "startedAt": "2026-10-28T00:38:41.349Z",
+      "completedAt": null,
+      "subject": {
+        "id": "01a17ff1-d6a1-7302-b992-e5a5a68a35f4",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "Norwegian Wood", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      }
+    },
+    {
+      "id": "01a17ff1-e2f8-717e-8d81-52f08a65152e",
+      "subjectId": "01a17ff1-d6b9-76c5-b107-1a9645f15f80",
+      "versionSubjectId": null,
+      "mode": "scalar_amount",
+      "unit": "episode",
+      "total": "12",
+      "amount": "3",
+      "locator": null,
+      "position": null,
+      "completedUnitCount": 0,
+      "state": "active",
+      "revision": 2,
+      "startedAt": "2026-10-28T00:38:41.142Z",
+      "completedAt": null,
+      "subject": {
+        "id": "01a17ff1-d6b9-76c5-b107-1a9645f15f80",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "The Tale of Genji", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      }
+    },
+    {
+      "id": "01a17ff1-e358-71ef-a258-52f0950b3d55",
+      "subjectId": "01a17ff1-d6cd-7761-b3ee-ac88a44ef1b2",
+      "versionSubjectId": null,
+      "mode": "scalar_amount",
+      "unit": "page",
+      "total": null,
+      "amount": "118",
+      "locator": null,
+      "position": null,
+      "completedUnitCount": 0,
+      "state": "active",
+      "revision": 2,
+      "startedAt": "2026-10-28T00:38:41.238Z",
+      "completedAt": null,
+      "subject": {
+        "id": "01a17ff1-d6cd-7761-b3ee-ac88a44ef1b2",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "I Am a Cat", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      }
+    },
+    {
+      "id": "01a17ff1-dcf0-7077-97a2-52f0fc5c23cd",
+      "subjectId": "01a17ff1-d687-75b6-ac1f-86c0da7a09ef",
+      "versionSubjectId": null,
+      "mode": "cursor_position",
+      "unit": "chapter",
+      "total": null,
+      "amount": null,
+      "locator": "Part 2, chapter 14",
+      "position": "42",
+      "completedUnitCount": 0,
+      "state": "active",
+      "revision": 2,
+      "startedAt": "2026-10-28T00:38:39.599Z",
+      "completedAt": null,
+      "subject": {
+        "id": "01a17ff1-d687-75b6-ac1f-86c0da7a09ef",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "Kokoro", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      }
+    }
+  ],
+  "next": null
+}

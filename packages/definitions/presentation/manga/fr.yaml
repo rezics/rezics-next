@@ -1,3 +1,6 @@
 types:
   schema:ComicSeries: série de manga
   schema:PublicationVolume: volume
+typeDescriptions:
+  schema:ComicSeries: 'Une œuvre de manga ou série de bande dessinée, indépendante de ses volumes publiés ; sans restriction à l’origine japonaise.'
+  schema:PublicationVolume: 'Un volume publié de manga identifiable séparément ; relier sa série et indiquer son numéro par la position.'

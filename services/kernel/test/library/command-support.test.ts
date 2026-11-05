@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createPool } from '../../src/database/pool.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
@@ -84,16 +85,10 @@ beforeAll(async () => {
     await pool.query(
       `INSERT INTO access.account(route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch)
        VALUES ($1, $2, 'actor', $3, $4, $5, $6)`,
-      [
-        route,
-        accountId,
-        name === 'suspended' ? 'suspended' : 'active',
-        transactionId,
-        name === 'fenced',
-        name === 'staleEpoch' ? 2 : 1,
-      ],
+      [route, accountId, 'active', transactionId, name === 'fenced', name === 'staleEpoch' ? 2 : 1],
     );
   }
+  await suspendAccount(pool, accountIds.suspended);
 });
 
 afterAll(async () => {
@@ -194,7 +189,7 @@ test('denied actors and stale account state change nothing, including on a repla
     { name: 'fenced', identity: actor(accountIds.fenced) },
     { name: 'anonymous', identity: { kind: 'anonymous' } },
   ];
-  const before = await position();
+  let before = await position();
 
   for (const refusal of refusals) {
     const targetId = newId(route);
@@ -217,10 +212,9 @@ test('denied actors and stale account state change nothing, including on a repla
     return commandBody(accountIds.transition, targetId)(tx, command);
   };
   await runner.ownAccount(transitionActor, request(transitionKey, { targetId }), body);
-  await pool.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    route,
-    accountIds.transition,
-  ]);
+  const beforeSuspension = await position();
+  await suspendAccount(pool, accountIds.transition);
+  before += (await position()) - beforeSuspension;
   const replayDenied = await runner
     .ownAccount(transitionActor, request(transitionKey, { targetId }), body)
     .catch((error: unknown) => error);
@@ -263,10 +257,7 @@ test('trusted workflow steps replay by step key, keep account attribution, and r
   expect(receipt.rows).toEqual([]);
   expect(attributedReceipt.rows).toEqual([{ principalId: accountIds.other }]);
 
-  await pool.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    route,
-    accountIds.other,
-  ]);
+  await suspendAccount(pool, accountIds.other);
   const denied = await runner
     .trustedAccount(accountIds.other, { kind, stepKey: `${stepKey}:next`, input: { targetId: newId(route) } }, body)
     .catch((error: unknown) => error);

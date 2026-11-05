@@ -162,6 +162,91 @@
       }
     },
     {
+      "route": "releases",
+      "document": {
+        "root": {
+          "props": {}
+        },
+        "content": [
+          {
+            "type": "Stack",
+            "props": {
+              "id": "page",
+              "gap": "md",
+              "children": [
+                {
+                  "type": "Heading",
+                  "props": {
+                    "id": "title",
+                    "text": "Anime releases",
+                    "level": 2
+                  }
+                },
+                {
+                  "type": "Text",
+                  "props": {
+                    "id": "intro",
+                    "text": "Independently identified anime publications and distributed versions. Tracking stays on the anime work."
+                  }
+                },
+                {
+                  "type": "TypeList",
+                  "props": {
+                    "id": "releases",
+                    "title": {
+                      "en": "Anime releases",
+                      "de": "Anime-Veröffentlichungen",
+                      "es": "Ediciones de anime",
+                      "fr": "Éditions d’anime",
+                      "ja": "アニメ刊行版",
+                      "ko": "애니메이션 발행판",
+                      "zh-Hans": "动画发行版",
+                      "zh-Hant": "動畫發行版"
+                    },
+                    "types": ["rezics:AnimeRelease"],
+                    "sort": "name",
+                    "limit": 24
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "hero",
+                    "name": "hero",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "entity",
+                    "name": "entity",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "aside",
+                    "name": "aside",
+                    "children": []
+                  }
+                },
+                {
+                  "type": "Slot",
+                  "props": {
+                    "id": "footer",
+                    "name": "footer",
+                    "children": []
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "route": "series",
       "document": {
         "root": {
@@ -228,5 +313,5 @@
       }
     }
   ],
-  "scope": ["anime/all", "anime/films", "anime/series", "anime/before-2000"]
+  "scope": ["anime/all", "anime/films", "anime/series", "anime/before-2000", "anime/releases"]
 }

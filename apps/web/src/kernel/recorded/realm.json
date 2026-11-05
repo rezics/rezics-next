@@ -1,0 +1,20 @@
+{
+  "status": 200,
+  "realm": {
+    "realmId": "01a1a000-0000-7000-8000-000000000002",
+    "spaceId": "01a1a000-0000-7000-8000-000000000001",
+    "state": "active",
+    "visibility": "public",
+    "contextId": "01a1a000-0000-7000-8000-000000000005",
+    "boardSchemeId": null,
+    "headRevisionId": "01a1a000-0000-7000-8000-000000000006",
+    "createdAt": "2026-10-26T18:22:28.427Z",
+    "creator": "01a1a000-0000-7000-8000-000000000004",
+    "predecessor": null,
+    "title": "The Quiet Novel Club",
+    "summary": "A reading circle for long evenings and short novels.",
+    "revisionCreatedAt": "2026-10-26T18:22:28.427Z",
+    "author": "01a1a000-0000-7000-8000-000000000004",
+    "votes": {}
+  }
+}

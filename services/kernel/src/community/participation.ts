@@ -6,8 +6,11 @@ import { deadlineClient, within } from '../access/authenticate.ts';
 import { commandTime, mintReadTime, type AuthoritativeTime, type CommandTransaction } from '../command/command.ts';
 import { accessCheck, type Access, type AccessClient, type Actor, type Resource } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
+import { ProblemError } from '../http/problem.ts';
 import { routeOf } from '../route/route.ts';
 import read from './realm-read.sql';
+import { realmReadEligibility } from './realm.ts';
+import { participationEligibilityAccessWork } from './eligibility-access-work.ts';
 
 export type RealmParticipationReadDecision = { readable?: boolean };
 export type RealmParticipationCheck = (
@@ -35,15 +38,39 @@ export async function prepareRealmParticipationResult(
 ): Promise<RealmParticipationResult> {
   if (realmId === null || !check) return { realmId, allowed: true, readable: true };
   return within(deadline, async () => {
-    const client = await pool.connect();
-    try {
-      const readDecision: RealmParticipationReadDecision = {};
-      const allowed = await check(deadlineClient(client, deadline), { realmId, actor, readDecision }, time);
-      return { realmId, allowed, readable: readDecision.readable };
-    } finally {
-      client.release();
-    }
+    // Access prepares its evidence through independent pool reads before it
+    // evaluates the Realm anchor. Passing a checked-out client here would hold
+    // one connection across those reads and deadlock a bounded single-connection
+    // pool. Keep this client lazy so each anchored query gets its own checkout.
+    const readDecision: RealmParticipationReadDecision = {};
+    const allowed = await check(deadlineClient(pool, deadline), { realmId, actor, readDecision }, time);
+    return { realmId, allowed, readable: readDecision.readable };
   });
+}
+
+/** The native participation eligibility shared by checks and parent validation. */
+export function realmParticipationAnchor(resource: Resource) {
+  let visibility: 'public' | 'protected' | null = null;
+  const native = participationEligibilityAccessWork<{ route: number; id: string }>(resource);
+  const eligibility = createResourcePublicEligibility({
+    resource,
+    action: 'realm:participate',
+    work: native.work,
+    prepare(context) {
+      return native.prepare(context, async () => ({ route: resource.route, id: resource.id }));
+    },
+    verify(context) {
+      return native.verify(context, async (dispatch) => {
+        const { client, at } = context;
+        const parameters = { route: resource.route, id: resource.id, at };
+        const row = await dispatch(native.realmPlan, parameters, () => read.run(client, parameters));
+        if (!row) throw new ProblemError('not_found');
+        visibility = row?.visibility === 'public' || row?.visibility === 'protected' ? row.visibility : null;
+        return visibility === 'public';
+      });
+    },
+  });
+  return { resource: { ...resource, eligibility }, visibility: () => visibility };
 }
 
 /** Checks participation and the independent Realm read anchor at one T.
@@ -61,28 +88,11 @@ export function createRealmParticipationCheck(input: {
     if (route === null) return false;
     const resource: Resource = { route, id: realmId };
     const context = { pool: input.pool, deadline: deadlineFor(1500) };
-    let visibility: 'public' | 'protected' | null = null;
-    const eligibility = createResourcePublicEligibility({
-      resource,
-      action: 'realm:participate',
-      async prepare() {
-        return { route, id: realmId };
-      },
-      async verify({ client: checked, at }) {
-        const row = await read.run(checked, { route, id: realmId, at });
-        visibility = row?.visibility === 'public' || row?.visibility === 'protected' ? row.visibility : null;
-        return visibility === 'public';
-      },
-    });
-    const participationCheck = await accessCheck(
-      input.access,
-      actor,
-      'realm:participate',
-      { ...resource, eligibility },
-      context,
-    );
+    const anchor = realmParticipationAnchor(resource);
+    const participationCheck = await accessCheck(input.access, actor, 'realm:participate', anchor.resource, context);
     const checkedTime = time ?? commandTime(client) ?? (await mintReadTime(client, input.clock));
     const participates = await participationCheck(client, checkedTime);
+    const visibility = anchor.visibility();
     if (visibility === 'public') {
       if (readDecision) readDecision.readable = true;
       return participates;
@@ -96,21 +106,11 @@ export function createRealmParticipationCheck(input: {
     // to conceal an unreadable protected Realm before choosing 404 or 403.
     if (!participates && !time) return false;
 
-    const readEligibility = createResourcePublicEligibility({
-      resource,
-      action: 'realm:read',
-      async prepare() {
-        return visibility === 'protected' ? true : undefined;
-      },
-      async verify() {
-        return false;
-      },
-    });
     const readCheck = await accessCheck(
       input.access,
       actor,
       'realm:read',
-      { ...resource, eligibility: readEligibility },
+      { ...resource, eligibility: realmReadEligibility(resource) },
       context,
     );
     const readable = await readCheck(client, checkedTime);

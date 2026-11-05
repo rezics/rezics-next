@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, expect, setDefaultTimeout, test } from 'bun:test';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { AccountLifecycleDriver, Credential, Login, Registration, Session, Token } from './account-lifecycle-driver';
+import type {
+  AccountLifecycleDriver,
+  Credential,
+  Login,
+  Registration,
+  Session,
+  Token,
+} from './account-lifecycle-driver';
 
 setDefaultTimeout(30_000);
 let driver: AccountLifecycleDriver | undefined;
@@ -74,14 +81,20 @@ test('person registration claims pending handle and authenticates the same immut
   expect(await d().resolveHandle('person')).toEqual({ accountId: pending.accountId, redirect: false });
   const credential = await d().newCredential('password');
   expect(await d().installRegistrationCredential(pending, credential)).toBe('permitted');
-  expect(await d().authInventory()).toEqual({ identityAccountIds: [pending.accountId], credentialAccountIds: [pending.accountId] });
+  expect(await d().authInventory()).toEqual({
+    identityAccountIds: [pending.accountId],
+    credentialAccountIds: [pending.accountId],
+  });
   expect(await d().signIn(pending.accountId, credential)).toEqual({ outcome: 'denied' });
   expect(await d().activate(pending)).toBe('permitted');
   const session = await authenticated(d().signIn(pending.accountId, credential));
   expect(await d().session(session)).toMatchObject({ subjectId: pending.accountId });
   await token(session);
   expect(await d().account(pending.accountId)).toMatchObject({ id: pending.accountId, state: 'active' });
-  expect(await d().authInventory()).toEqual({ identityAccountIds: [pending.accountId], credentialAccountIds: [pending.accountId] });
+  expect(await d().authInventory()).toEqual({
+    identityAccountIds: [pending.accountId],
+    credentialAccountIds: [pending.accountId],
+  });
 });
 
 test('interrupted registration cannot issue a token and retry installs exactly one identity and credential', async () => {
@@ -96,7 +109,10 @@ test('interrupted registration cannot issue a token and retry installs exactly o
   expect(await d().activate(pending)).toBe('permitted');
   expect(await d().activate(pending)).toBe('permitted');
   await token(await authenticated(d().signIn(pending.accountId, credential)));
-  expect(await d().authInventory()).toEqual({ identityAccountIds: [pending.accountId], credentialAccountIds: [pending.accountId] });
+  expect(await d().authInventory()).toEqual({
+    identityAccountIds: [pending.accountId],
+    credentialAccountIds: [pending.accountId],
+  });
 });
 
 test('expired pending registration releases its handle and orphan credentials cannot sign in', async () => {
@@ -197,7 +213,9 @@ test('human and organization operators are eligible but automated operators and 
 test('a person opens a session only with its own credential', async () => {
   const human = await person('human');
   const unrelated = await person('unrelated');
-  expect(await d().session(await authenticated(d().signIn(human.id, human.credential)))).toMatchObject({ subjectId: human.id });
+  expect(await d().session(await authenticated(d().signIn(human.id, human.credential)))).toMatchObject({
+    subjectId: human.id,
+  });
   expect(await d().signIn(human.id, unrelated.credential)).toEqual({ outcome: 'denied' });
   expect(await d().openSession(unrelated.session, human.id)).toEqual({ outcome: 'denied' });
 });
@@ -207,7 +225,10 @@ test('an automated actor with a credential permits exactly self login and author
   const agent = await automated(owner);
   const credential = await credentialFor(owner.session, agent);
   expect(await d().session(await authenticated(d().signIn(agent, credential)))).toMatchObject({ subjectId: agent });
-  expect(await d().session(await authenticated(d().openSession(owner.session, agent)))).toMatchObject({ subjectId: agent, actingHumanId: owner.id });
+  expect(await d().session(await authenticated(d().openSession(owner.session, agent)))).toMatchObject({
+    subjectId: agent,
+    actingHumanId: owner.id,
+  });
   const stranger = await person('stranger');
   const otherOperator = await person('other-operator');
   await automated(otherOperator, 'other-agent');
@@ -227,7 +248,10 @@ test('a credentialless automated actor permits only its authorized operator to o
   expect((await d().authInventory()).credentialAccountIds).not.toContain(agent);
   expect(await d().signIn(agent)).toEqual({ outcome: 'denied' });
   expect(await d().signIn(agent, owner.credential)).toEqual({ outcome: 'denied' });
-  expect(await d().session(await authenticated(d().openSession(owner.session, agent)))).toMatchObject({ subjectId: agent, actingHumanId: owner.id });
+  expect(await d().session(await authenticated(d().openSession(owner.session, agent)))).toMatchObject({
+    subjectId: agent,
+    actingHumanId: owner.id,
+  });
   const stranger = await person('stranger');
   const otherOperator = await person('other-operator');
   await automated(otherOperator, 'other-agent');
@@ -243,13 +267,26 @@ test('organization owners and delegated members may manage while ordinary member
   const org = await d().createOrganization(owner.session, 'organization');
   expect(await d().setMembership(owner.session, org, member.id, 'member')).toBe('permitted');
   const agent = await automated(owner, 'agent', org);
-  expect(await d().session(await authenticated(d().openSession(owner.session, agent)))).toMatchObject({ subjectId: agent, actingHumanId: owner.id });
-  expect(await d().audit(agent)).toContainEqual({ action: 'session-opened', actingHumanId: owner.id, subjectId: agent, operatorId: org });
+  expect(await d().session(await authenticated(d().openSession(owner.session, agent)))).toMatchObject({
+    subjectId: agent,
+    actingHumanId: owner.id,
+  });
+  expect(await d().audit(agent)).toContainEqual({
+    action: 'session-opened',
+    actingHumanId: owner.id,
+    subjectId: agent,
+    operatorId: org,
+  });
   expect(await d().openSession(member.session, agent)).toEqual({ outcome: 'denied' });
   expect(await d().setManagement(owner.session, org, member.id, true)).toBe('permitted');
   const managed = await authenticated(d().openSession(member.session, agent));
   expect(await d().session(managed)).toMatchObject({ subjectId: agent, actingHumanId: member.id });
-  expect(await d().audit(agent)).toContainEqual({ action: 'session-opened', actingHumanId: member.id, subjectId: agent, operatorId: org });
+  expect(await d().audit(agent)).toContainEqual({
+    action: 'session-opened',
+    actingHumanId: member.id,
+    subjectId: agent,
+    operatorId: org,
+  });
   expect(await d().setManagement(owner.session, org, member.id, false)).toBe('permitted');
   expect(await d().openSession(member.session, agent)).toEqual({ outcome: 'denied' });
 });
@@ -282,6 +319,9 @@ test('operator transfer invalidates old management and never inherits either ope
   expect(await d().useResource(next.session, nextResource)).toBe('permitted');
   const before = await authenticated(d().openSession(old.session, agent));
   expect(await d().useResource(before, oldResource)).toBe('denied');
+  expect(await d().setOperator(old.session, agent, next.id)).toBe('denied');
+  expect(await d().acceptOperator(old.session, agent, next.id)).toBe('denied');
+  expect(await d().acceptOperator(next.session, agent, next.id)).toBe('permitted');
   expect(await d().setOperator(old.session, agent, next.id)).toBe('permitted');
   expect(await d().account(agent)).toMatchObject({ operatorId: next.id });
   expect(await d().openSession(old.session, agent)).toEqual({ outcome: 'denied' });
@@ -304,6 +344,7 @@ test('an operator cannot be deleted until its operated accounts transfer or dele
   const second = await automated(owner, 'second');
   expect(await d().deleteAccount(owner.session, owner.id)).toBe('denied');
   expect(await d().account(owner.id)).toMatchObject({ state: 'active' });
+  expect(await d().acceptOperator(next.session, first, next.id)).toBe('permitted');
   expect(await d().setOperator(owner.session, first, next.id)).toBe('permitted');
   expect(await d().deleteAccount(owner.session, owner.id)).toBe('denied');
   expect(await d().deleteAccount(owner.session, second)).toBe('permitted');
@@ -338,17 +379,23 @@ async function fenceBeforeRevocation(failAuthRevocation: boolean) {
   expect(proof).not.toBe('denied');
   if (proof === 'denied') throw new Error('Recovery positive control failed');
   let observed = false;
-  const result = await d().revokeSessions(human.id, { failAuthRevocation, beforeAuthRevocation: async () => {
-    observed = true;
-    const receipt = await d().fenceReceipt(human.id);
-    expect(receipt).not.toBeNull();
-    expect(receipt!.id.length).toBeGreaterThan(0);
-    expect(receipt!.accountId).toBe(human.id);
-    expect(receipt!.minimumAuthnEpoch).toBeGreaterThan(oldEpoch);
-    expect(await d().account(human.id)).toMatchObject({ fenced: true, minimumAuthnEpoch: receipt!.minimumAuthnEpoch });
-    expect(await d().validateSession(human.session)).toBe('denied');
-    expect(await d().validateToken(oldToken)).toBe('denied');
-  } });
+  const result = await d().revokeSessions(human.id, {
+    failAuthRevocation,
+    beforeAuthRevocation: async () => {
+      observed = true;
+      const receipt = await d().fenceReceipt(human.id);
+      expect(receipt).not.toBeNull();
+      expect(receipt!.id.length).toBeGreaterThan(0);
+      expect(receipt!.accountId).toBe(human.id);
+      expect(receipt!.minimumAuthnEpoch).toBeGreaterThan(oldEpoch);
+      expect(await d().account(human.id)).toMatchObject({
+        fenced: true,
+        minimumAuthnEpoch: receipt!.minimumAuthnEpoch,
+      });
+      expect(await d().validateSession(human.session)).toBe('denied');
+      expect(await d().validateToken(oldToken)).toBe('denied');
+    },
+  });
   expect(observed).toBe(true);
   expect(result).toBe(failAuthRevocation ? 'revocation-failed' : 'revoked');
   expect(await d().validateSession(human.session)).toBe('denied');

@@ -44,19 +44,20 @@ function yearsFrom(base: number, years: number): Date {
   return date;
 }
 async function bearer() {
+  const issuedAt = Math.floor(Date.now() / 1000);
   return new SignJWT({
     client_id: owner.clientId,
     scope: owner.scopes.join(' '),
     authn_epoch: owner.authnEpoch,
-    auth_time: Math.floor(Date.now() / 1000),
+    auth_time: issuedAt,
     amr: ['pwd'],
   })
     .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt', kid: 'kernel-clock' })
     .setIssuer(issuer)
     .setAudience(audience)
     .setSubject(owner.accountId)
-    .setIssuedAt()
-    .setExpirationTime('5m')
+    .setIssuedAt(issuedAt)
+    .setExpirationTime(issuedAt + 300)
     .sign(signingKey);
 }
 async function call(method: string, path: string, body?: unknown) {
@@ -156,6 +157,18 @@ test.serial('a create and the following read share a kernel clock two years ahea
     mediaId,
   ]);
   expect(row.rowCount).toBe(1);
+});
+
+test.serial('a wall-time token is accepted with the kernel clock two years ahead of PostgreSQL', async () => {
+  kernelNow = yearsFrom(databaseNow, 2);
+  const response = await call('POST', '/v1/media', {
+    containerId: thread,
+    purpose: 'post-image',
+    mediaType: 'image/png',
+    byteCount: 256,
+    sha256: hash,
+  });
+  expect(response.status).toBe(201);
 });
 
 function normalize(statement: string): string {

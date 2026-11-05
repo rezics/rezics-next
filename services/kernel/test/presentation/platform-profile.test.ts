@@ -6,6 +6,7 @@ import {
   platformRegistry,
   profileDigest,
   resolveTemplate,
+  templateViews,
   validateProfile,
   type CompositionDocument,
 } from '@rezics/composition';
@@ -27,17 +28,17 @@ const release = bundledRelease as unknown as FilterRelease;
 const placeholder = '00000000-0000-8000-8000-000000000000';
 
 test('the platform profile is valid and gives every bundled type a default page', () => {
-  expect(validateProfile(platformRegistry, platformProfile)).toEqual([]);
-  expect(platformProfile.bases.map(({ base }) => base)).toEqual(['schema:CreativeWork', 'schema:CreativeWorkSeries']);
-  expect(platformProfile.types.map(({ type }) => type)).toEqual([
+  expect(validateProfile(platformRegistry, platformProfile())).toEqual([]);
+  expect(platformProfile().bases.map(({ base }) => base)).toEqual(['schema:CreativeWork', 'schema:CreativeWorkSeries']);
+  expect(platformProfile().types.map(({ type }) => type)).toEqual([
     'schema:Organization',
     'schema:Person',
     'skos:Concept',
     'wd:Q95074',
   ]);
-  expect(platformProfile.routes.map(({ route }) => route)).toEqual(['/']);
+  expect(platformProfile().routes.map(({ route }) => route)).toEqual(['/']);
   for (const [type, definition] of Object.entries(bundledRelease.types)) {
-    const { scope, key } = resolveTemplate(platformProfile, { type, bases: definition.bases });
+    const { scope, key } = resolveTemplate(platformProfile(), { type, bases: definition.bases });
     const typeKey =
       type === 'schema:Organization' || type === 'schema:Person' || type === 'skos:Concept' || type === 'wd:Q95074'
         ? type
@@ -56,10 +57,18 @@ test('the platform profile is valid and gives every bundled type a default page'
 });
 
 test('every list in a shipped document is admitted by the bundled release', () => {
+  const templates = [
+    ['generic', platformProfile().generic] as const,
+    ...platformProfile().bases.map((entry) => [entry.base, entry] as const),
+    ...platformProfile().types.map((entry) => [entry.type, entry] as const),
+  ];
   const documents: [string, CompositionDocument][] = [
-    ['generic', platformProfile.generic],
-    ...platformProfile.bases.map(({ base, document }): [string, CompositionDocument] => [base, document]),
-    ...platformProfile.types.map(({ type, document }): [string, CompositionDocument] => [type, document]),
+    ...templates.flatMap(([name, template]) =>
+      Object.entries(templateViews(template)).map(([view, document]): [string, CompositionDocument] => [
+        `${name}/${view}`,
+        document!,
+      ]),
+    ),
     ...starters.flatMap(({ vertical, value }) =>
       ((value as { pages?: { route: string; document: CompositionDocument }[] }).pages ?? []).map(
         ({ route, document }): [string, CompositionDocument] => [`${vertical}/${route}`, document],
@@ -86,7 +95,7 @@ const pool = createPool(url);
 afterAll(() => pool.end());
 
 test('setup activates the platform profile once', async () => {
-  const digest = profileDigest(platformProfile);
+  const digest = profileDigest(platformProfile());
   expect(await setupPresentation(pool)).toBe(digest);
   expect(await setupPresentation(pool)).toBe(digest);
   expect((await activeProfile(pool))?.digest).toBe(digest);

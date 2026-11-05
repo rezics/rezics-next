@@ -9,6 +9,7 @@ import { actionCatalogue, SESSION_HEADER } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
 import { checkGrowth, openGrowthDatabase } from '../support/growth.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const routeKey = new Uint8Array(32).fill(7);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(8)]]) };
@@ -93,7 +94,13 @@ async function thread(boardId: string, text = 'current searchable sentinel', at 
         {
           type: 'com.rezics.content.thread.created.v1',
           subject: id,
-          data: { threadId: id, itemId: post, revisionId: revision, actorId: fixture.actor },
+          data: {
+            threadId: id,
+            itemId: post,
+            revisionId: revision,
+            actorId: fixture.actor,
+            ...SUBJECT_THREAD_EVENT_FIELDS,
+          },
         },
       ],
     };
@@ -137,9 +144,20 @@ test('board metadata and listing mount once with the actual read action and plur
   const detail = await get(`/v1/boards/${id}`);
   expect(detail.response.status).toBe(200);
   expect(Object.keys(detail.body.board).sort()).toEqual(
-    ['id', 'route', 'title', 'visibility', 'securityRevision', 'availability', 'createdAt'].sort(),
+    [
+      'id',
+      'route',
+      'title',
+      'purpose',
+      'visibility',
+      'securityRevision',
+      'availability',
+      'createdAt',
+      'realmId',
+    ].sort(),
   );
-  expect((await get(path(id))).body).toEqual({ threads: [], next: null, rankRefreshedAt: null });
+  expect(detail.body.board.realmId).toBeNull();
+  expect((await get(path(id))).body).toEqual({ pinnedThreads: [], threads: [], next: null, rankRefreshedAt: null });
   for (const values of [{ limit: '0' }, { limit: '101' }, { limit: '1.5' }, { sort: 'popular' }])
     await invalid(path(id, values));
 });
@@ -211,7 +229,7 @@ test('every returned candidate passes current thread root and board disclosure w
   ] as const) {
     for (const visibility of ['protected', 'taken_down']) {
       await state(kind, target, visibility);
-      expect((await get(path(id))).body).toEqual({ threads: [], next: null, rankRefreshedAt: null });
+      expect((await get(path(id))).body).toEqual({ pinnedThreads: [], threads: [], next: null, rankRefreshedAt: null });
     }
     await state(kind, target, 'published');
   }
@@ -324,7 +342,7 @@ test('query matches only current authorized revision text and never erased text 
   for (const query of ['erasuresentinel', 'replacementtoken']) {
     const result = await get(path(id, { query }));
     expect(result.response.status).toBe(200);
-    expect(result.body).toEqual({ threads: [], next: null, rankRefreshedAt: null });
+    expect(result.body).toEqual({ pinnedThreads: [], threads: [], next: null, rankRefreshedAt: null });
     expect(JSON.stringify(result.body)).not.toContain(query);
   }
 });

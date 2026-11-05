@@ -1,5 +1,5 @@
 SELECT m.container_id, m.key, m.actual_byte_count, m.sha256, m.state,
-       m.erased, m.collection_pending,
+       m.erased, m.collection_pending, m.crop, m.focal_x, m.focal_y,
        v.format, v.width, v.height, v.media_type, v.byte_count,
        v.sha256 AS variant_sha256, v.key AS variant_key
 FROM content.media AS m

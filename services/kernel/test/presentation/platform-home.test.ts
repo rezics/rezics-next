@@ -9,6 +9,7 @@ import {
   resolveTemplate,
   UI_LOCALES,
   validateComposition,
+  validateDocumentFilters,
 } from '@rezics/composition';
 import { platformProfile } from '../../src/presentation/setup.ts';
 
@@ -21,21 +22,16 @@ function* walk(nodes: readonly Node[]): Generator<Node> {
         yield* walk(value as Node[]);
   }
 }
-const home = () => resolveTemplate(platformProfile, { route: '/' });
+const home = () => resolveTemplate(platformProfile(), { route: '/' });
 
-test('the site home is a route page with search, vertical entry points and popular lists', () => {
+test('the site home is a route page with search and a popular list per vertical', () => {
   const page = home();
   expect(page).toMatchObject({ scope: 'route', key: '/' });
   expect(validateComposition(platformRegistry, page.document)).toEqual([]);
+  expect(validateDocumentFilters(platformRegistry, page.document, bundledRelease)).toEqual([]);
   const nodes = [...walk(page.document.content as Node[])];
-  expect(nodes[0]?.type).toBe('SearchBox');
-  const grid = nodes.find(({ type }) => type === 'LinkGrid')!;
-  expect((grid.props.links as { href: string }[]).map(({ href }) => href)).toEqual([
-    '/search?type=schema%3ABook',
-    '/search?type=schema%3ATVSeries',
-    '/search?type=wd%3AQ689445',
-    '/search?type=schema%3ARecipe',
-  ]);
+  expect(nodes.slice(0, 2).map((node) => node.type)).toEqual(['Heading', 'SearchBox']);
+  expect(nodes.some(({ type }) => type === 'LinkGrid')).toBe(false);
   const reads = Object.values(planReads(platformRegistry, page.document, { subject: null }).reads);
   expect(
     reads.map((read) => (read.kind === 'search' && 'type' in read.body.filter ? read.body.filter.type.in : [])),
@@ -47,15 +43,24 @@ test('the site home is a route page with search, vertical entry points and popul
   expect(reads.reduce((sum, read) => sum + readCost(read), 0)).toBeLessThanOrEqual(MAX_PAGE_COST);
 });
 
+test('a TypeList whose selector is absent from the release stays invalid', () => {
+  const page = home();
+  const list = [...walk(page.document.content as Node[])].find((node) => node.type === 'TypeList')!;
+  list.props.types = ['schema:NotReleased'];
+  expect(validateDocumentFilters(platformRegistry, page.document, bundledRelease)).toContainEqual({
+    pointer: '/content/2/props/filter/type/in/0',
+    code: 'invalid',
+  });
+});
+
 test('every home text is written in all eight locales', () => {
   const texts: unknown[] = [];
   for (const node of walk(home().document.content as Node[])) {
     if (node.type === 'SearchBox') texts.push(node.props.placeholder);
     if (node.type === 'TypeList' || node.type === 'Heading' || node.type === 'Text')
       texts.push(node.props.title ?? node.props.text);
-    if (node.type === 'LinkGrid') for (const link of node.props.links as { label: unknown }[]) texts.push(link.label);
   }
-  expect(texts.length).toBeGreaterThanOrEqual(9);
+  expect(texts.length).toBeGreaterThanOrEqual(6);
   for (const text of texts) {
     expect(Object.keys(text as object).sort()).toEqual([...UI_LOCALES].sort());
     for (const value of Object.values(text as Record<string, string>)) expect(value.trim().length).toBeGreaterThan(0);

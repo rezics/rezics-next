@@ -1,0 +1,219 @@
+# Viewer actions
+
+Viewer actions tell an interface which actions and operations current Access permits for its caller on resources
+already displayed. A Collection curator and a delegated editor receive the same editing operations when their
+current authority and client scopes permit them. Curator identity describes attribution; it does not decide editing.
+
+This document owns the viewer-actions contract. [Research](research/viewer-actions.md) supplies evidence, while the
+[Access README](../services/kernel/src/access/README.md) owns the permission formula and [accounts](accounts.md) owns
+account behaviour. The outcome suite in [viewer-actions-outcomes.test.ts](../specs/viewer-actions-outcomes.test.ts)
+is an executable specification; implementation must bind its real kernel driver before claiming product acceptance.
+
+## Personal batch read
+
+Send `POST /v1/viewerActions` with 1–100 distinct `{ type, id }` resource references. A detail page sends one; a list
+sends its displayed rows in one request. Use the same bearer credential as the eventual command, or no credential
+for an anonymous read. The body never supplies actor, client, principal, scopes, routes or partitions. The kernel
+derives identity from authentication and resolves resource routes and partitions itself.
+
+For example, a detail request is:
+
+```json
+{
+  "resources": [{ "type": "library.collection", "id": "00000000-0000-8000-8000-000000000001" }]
+}
+```
+
+A response can offer Collection editing and member operations on their Collection authority:
+
+```json
+{
+  "resources": [
+    {
+      "type": "library.collection",
+      "id": "00000000-0000-8000-8000-000000000001",
+      "viewerActions": [
+        {
+          "action": "collection:read",
+          "operations": ["collection.get", "collection_member.list"]
+        },
+        {
+          "action": "collection:update",
+          "operations": [
+            "collection.update",
+            "collection_member.create",
+            "collection_member.delete",
+            "collection_member.move",
+            "collection_member.update"
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+The response preserves reference order. Each resource's entries are sorted by action, with operation IDs sorted
+within each entry. Both are unique, and an entry always has at least one operation. The result is allow-only:
+`viewerActions: []` is a complete negative for a visible resource. No denial reasons or grant provenance are returned.
+
+A concealed resource and an unknown resource both produce exactly `{ type, id, error: "not_found" }`, without
+`viewerActions` or other fields. One failing dependency makes the whole request answer 503, with no partial positives.
+Malformed JSON or references, duplicates, more than 100 references, and unsupported types answer 400 before any
+permission work. Authentication failures retain their normal statuses. In particular, a suspended caller receives
+its normal credential refusal; a refused bearer must never become an anonymous request or reuse an old positive.
+
+## Content references
+
+The kernel registers `content.board` (`board:read`), `content.thread` (`thread:read`),
+`content.post` (`post:read`) and `content.edition` (`edition:read`). Container authority, current
+Realm bans and the complete bounded reply ancestry determine disclosure before operations are offered.
+Removed, taken-down, draft posts and threads, missing ancestors and unreadable containers are concealed.
+Draft edition metadata remains visible to its creator under the ordinary source checks, so that its owner can
+obtain `edition:sell` / `content_edition.publish`; other callers receive `not_found`.
+Edition creation binds `content_edition.create` to the source post's `post:revise`, independently of `post.revise`.
+Interfaces require that exact operation, and treat a concealed reference as a source refusal.
+
+## Actions and operations
+
+An action can back several operations whose platform gates differ. A control is enabled only when **both** its
+action and its particular operation ID occur in the answer. One admitted operation never enables another operation
+merely because they share an action.
+
+The kernel compiles bindings from mounted declarations. An operation whose route names the resource uses its
+`x-action` and `x-resource-types` to bind directly to that resource. Only an operation authorized on a different
+anchor declares an authority anchor: for example, a Collection-member command binds to its Collection. Modules do
+not redeclare direct bindings, enumerate callers' ACLs, infer actions from role names, or add frontend action lists.
+Composition rejects more than 64 candidate actions or 256 operation bindings for any resource type; it never
+silently truncates an answer. The read action counts toward that candidate limit even when it has no offered
+operation. The authority declaration is `x-authority-resource-types`, a list of resource type names that replaces
+that operation's direct types for viewer-action binding. Direct declarations are per operation; the action
+catalogue retains their union for resource creation, without copying bindings between operations.
+
+## Decision path and time
+
+Every candidate operation first uses admission's existing gate rule: the group is open, or the caller holds
+`gate:<group>` or `gate:any` on the Global Context as admission requires, including the principal when present.
+It then uses the installed Access formula with the real actor, client and principal: actor grants intersect
+consented client scopes and, when assigned, principal grants. A grant-derived positive requires the exact action
+in the client's scopes. Neither an open gate nor a gate grant supplies the operation's action or its scope.
+
+The verified anonymous floor retains its existing semantics, including its scope exception. Public visibility
+alone does not invent an anonymous floor. Account state, current assignment, membership evidence, denials and
+validity intervals remain operands of Access. A Realm ban removes its exact join and participate actions; unrelated
+reads keep their own answers. There is no curator, role-name or staff shortcut. Access's supported Global governance
+reach is included, without recording governance use during this read.
+
+One kernel read time T applies to the entire batch, including gate and formula evaluations. Share actor, principal
+and gate preparation within that request and keep native evidence deadlines. T aligns temporal decisions; it does
+not promise a distributed snapshot or authorize reuse of prepared evidence on the next request.
+
+## Authorization and domain state
+
+The answer covers Access and platform gates. Locked, deleted, published and membership state remain on resource
+reads and in commands. Modules supply no additional domain-eligibility readers for this endpoint. Existence and
+visibility still determine whether a reference is concealed; they do not predict command payload eligibility.
+
+A command always authorizes again at its own T. The answer is advice, not a capability or approval for a future
+payload. Revision checks, input validation, workflow prerequisites and domain-state refusals still belong to the
+command. An interface treats a command refusal as final, withdraws the offered control and refetches as appropriate.
+
+## Freshness and interfaces
+
+Every response uses `Cache-Control: private, no-store`, including anonymous responses. Recompute on every read;
+resource ETags, content revisions, browser TTLs and stale-while-revalidate must not preserve viewer answers.
+Viewer fields never enter public DTOs, anonymous HTML, sitemaps or shared hydration payloads.
+
+After hydration, fetch the personal batch for the current detail page or displayed list rows. Enable no mutation
+control while the read is pending or unavailable. An unavailable answer offers retry and must not look like
+"not allowed". Refetch on navigation, focus, identity change and after a permission-changing command. Identity
+includes client, consent and principal context. Discard old controls and in-flight results when that context or the
+page generation changes, so another persona's response cannot replace the current answer. An idle tab need not
+receive instantaneous push revocation; the next read must observe current authority, even with the same bearer.
+
+## Cost
+
+### Personal viewer-actions batch
+
+- Touches: Bounded indexed existence/visibility reads for the supplied references, one shared actor, principal and
+  gate preparation, then the installed formula's pages for the mounted candidate actions. Include account floors,
+  assignments, membership proofs, denials and Global governance reach; release each authority connection before
+  acquiring another. No ACL enumeration, resource search or history scan fills the response.
+- Bound: For N ≤ 100 references of H resource types with at most A ≤ 64 candidate actions per type, at most A·H
+  formula pages, each with at most 100 IDs, after the shared preparation. Operation filtering is bounded by the
+  composition cap of 256 bindings per type. At fixed selected neighbourhood, admitted membership and catalogue,
+  statements and examined rows stay constant as unrelated grants, resources and history grow; indexed blocks grow
+  logarithmically. Count preparation, visibility, gate and failure work in this budget, not only successful formula
+  results. Request-local reuse must preserve each real authority anchor and operation's gate.
+- Growth check: The outcome "statements and rows stay constant as unrelated grants resources and history grow"
+  measures native statements, examined rows and shared blocks at three geometric scales, growing each axis
+  independently while fixing the selected batch. It includes allowed, denied, empty and unavailable paths, mixed
+  types and distinct physical authority partitions, and observes formula-page and shared-preparation bounds.
+
+### Subject and TypeList personal actions
+
+The four mounted personal operations (`follow.put`, `follow.delete`, `library_entry.put`, and
+`library_entry.delete`) declare `x-authority-anchor: own-account` alongside
+`x-authority-resource-types`, whose displayed types come from the bundled semantic catalogue. This trusted
+metadata selects the verified Actor's account, never an ID or actor supplied in the batch body. These operations
+keep their existing native Collection and Space follow-target behaviour.
+
+Own-account authority is the verified acting account's native owner authority, the same basis as `runner.ownAccount`.
+The mounted declaration contributes that self-account authority to Access's existing formula; the operation keeps
+its own exact action and consented scope, current actor, assignment, principal, membership and denials. A subject mutation grant cannot supply
+this authority. Public subject visibility supplies only the subject read floor. Anonymous readers receive no
+personal mutation operations. The ordinary commands still enforce their current owner checks and domain state.
+The mounted own-account declaration requires an authenticated account and the exact credential scope before a
+domain-state refusal; the command then evaluates the full native permission formula as usual.
+
+Preparation includes `access.account` and the four personal actions. Each operation's own-account decision is made once
+per request and reused across displayed subjects; subject existence, released primary type and public visibility
+come from Semantic's native public-evidence reader, also used by ordinary subject read eligibility. Hidden,
+taken-down and unknown subjects are all concealed even when an independent subject read grant exists.
+
+- Touches: At most 100 subject full keys, one shared account/principal preparation and gate preparation, then one
+  account-anchored formula page per personal action and per-type subject read pages. Connections are released before
+  another authority connection is acquired.
+- Bound: O(N) assembly for N ≤ 100; the existing 64-action and 256-binding caps apply per displayed type. No subject
+  search, ACL enumeration or revision history read is needed. At fixed selected neighbourhood, native statements
+  and examined rows stay constant under unrelated subjects, same-partition grants and history; indexed blocks grow
+  logarithmically. Evidence is never reused between requests.
+- Growth check: `services/kernel/test/access/growth-viewer-actions-surfaces.test.ts` fixes 20 displayed rows and
+  measures anonymous, permitted, missing-scope and concealed outcomes at three geometric scales independently for
+  each growth axis. The complete frozen surface suite binds through native Auth, Access, Semantic and Library HTTP.
+
+### Account management operations
+
+`createKernel` registers `access.account` with `accountViewerActionResource`. Its bounded full-key reader
+`readAccountActionStates(client, ids)` supplies active, unfenced account eligibility; pending, fenced, deleted and
+unknown management references all return `not_found`. Public identity visibility and `account:read` grants confer
+no mutation permission. This private batch does not change the ordinary public identity tombstone DTO.
+
+Mounted Account routes declare `x-authority-resource-types: ['access.account']` and `x-account-authority`: `profile`
+for the editable profile GET and profile PATCH, `self` for preferences, and `verification` for verification
+request/read/withdraw. These authority declarations do not initialize an Account resource or add resource roles.
+`compileViewerActionBindings` preserves those declarations. No unmounted operator, governance or issuer operation
+is invented. The native conditional actions count toward the existing 64-action and 256-binding limits.
+
+The installed `prepareReadDecisions` handle supplies `prepareAccountAuthority(ids)` for at most 100 Account keys.
+Prepare it before target checkout with `account:read`, `account:update` and `account:manage` admitted for
+`access.account`. Its server-only `decide(client, { kind, action, ids }, T)` returns the actual action and the existing
+`allowed`/`explicit` decisions. It binds the verified actor, fixed deadline, shared T, exact targets and current
+operator relationship. It accepts no client-selected operator, principal, proof callback or authorization boolean.
+
+Profile reads and advertised updates share the command's `accountProfileAuthorityAnchor`: an ordinary target uses
+`account:update` on itself; an operated actor uses `account:manage` on its current operator. Native formula pages
+evaluate those anchors on released connections before the target snapshot rechecks the exact relationship.
+Preferences additionally require the verified actor to equal the target. Verification uses a human actor's own
+`account:read`/`account:update`, or `account:manage` on a target organization, matching its mounted handlers.
+Each operation keeps its gate and exact consented action scope, including conditional management actions.
+
+Preparation reads at most 100 targets and 101 actor/operator keys in pages of at most 100, followed by at most one
+native page per actual action (each at most 100 anchors). Target revalidation uses full-key pages, without nested
+checkout, ACL enumeration, history scans or one HTTP read per row. All evidence is request-local.
+
+The public profile fetches these private actions after hydration through its session BFF. Links require both the
+returned action and operation ID. It refetches on mount, focus, reconnect and session-context changes, discards
+controls while fetching, and offers retry on unavailability. Existing Settings, Accounts and verification pages
+remain the destinations; the security link uses the configured issuer's existing `/security` page. These links do
+not add managed profile forms or new issuer operations.

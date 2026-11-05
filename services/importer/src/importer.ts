@@ -1,7 +1,8 @@
 import type { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import type { SourceRecord } from '@rezics/conversion';
+import { validateSourceClassificationProjection, type SourceRecord } from '@rezics/conversion';
+import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
 import {
   FIELD_GROUPS,
   type BatchCommand,
@@ -12,21 +13,79 @@ import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import { checkBatch, checkResult } from './accepted-checks.ts';
 import type {
   ImportConversion,
+  ImportConversionContext,
   ImportTransport,
+  ImportSourceRecord,
+  ImportSourceRecordMetadataCommand,
+  ImportDestination,
+  ImportProgressObserver,
+  ImportProgressKind,
   RunResultSink,
   RunStatus,
   SourceRegistration,
+  StagingCheckpointRequest,
 } from './import-contract.ts';
+import { evaluateAdmission, insertSourceDestination, throwAdmissionRefusal } from './source-destination.ts';
+import { ImportTransportError } from './import-client.ts';
+import {
+  DIGEST,
+  ObservationConflictError,
+  ObservationRefusedError,
+  aggregateOperationId,
+  classifyObservation,
+  effectiveAlias,
+  headFromClear,
+  headFromStatistic,
+  intendedPayload,
+  observationDigest,
+  parseObservationReason,
+  type IntendedObservation,
+  type ObservationHeadRead,
+  type ObservationReason,
+  type RetainedObservationHead,
+} from './source-observation.ts';
+import {
+  ClassificationConflictError,
+  ClassificationRefusedError,
+  classificationAssociationKey,
+  classificationOperationDigest,
+  classificationOperationId,
+  classifyClassification,
+  headFromClassification,
+  intendedClassificationRequest,
+  intendedFromProjection,
+  isIntendedClassification,
+  parseClassificationReason,
+  type ClassificationHeadRead,
+  type ClassificationReason,
+  type IntendedClassification,
+  type RetainedClassificationHead,
+} from './source-classification.ts';
+import type { ClassificationAssociation } from './import-contract.ts';
+import { DumpInputError } from './dump-input.ts';
 import { readDump } from './dumps.ts';
-import { ImportSession } from './import-session.ts';
+import { ImportSession, type ImportOwnership } from './import-session.ts';
 import type { Candidate, Owner } from './record-bindings.ts';
-import type { RecordRow } from './record-store.ts';
 import type { DeferredCover, Omission, Pending, Run, SourceProjection, Staged } from './run-store.ts';
 import { createSourceRegistration } from './source-registry.ts';
+import { resolveOwnReferences } from './own-references.ts';
+import { ConversionDiagnosticError, type ConversionDiagnosticPhase } from './conversion-diagnostics.ts';
+import { OpenLibraryDumpSetError } from './open-library-dump-set.ts';
+import {
+  STAGING_ACTIVE_GENERATION,
+  STAGING_INCOMPATIBLE,
+  STAGING_MISSING_GENERATION,
+  STAGING_RETIRED_GENERATION,
+  StagingCheckpointError,
+  evaluateResume,
+  isStagingStreamEvent,
+  type StagingStreamEvent,
+} from './staging-checkpoint.ts';
+import { RETENTION_LOCAL_MAINTENANCE } from './retention.ts';
 
 export type ImportMediaResolution =
   | { status: 'available'; mediaIds: Readonly<Record<string, string>> }
-  | { status: 'pending' | 'rejected' };
+  | { status: 'pending' | 'rejected' | 'unavailable' };
 /** Actual public media availability, never a URL statement or locally allocated ID. */
 export interface ImportMediaResolver {
   resolve(input: {
@@ -43,34 +102,99 @@ export interface ImportIdentifierLookup {
     owner: Owner;
     conversion: ImportConversion;
     signal: AbortSignal;
-  }): Promise<Readonly<Record<string, string>>>;
+  }): Promise<ImportIdentifierResolution>;
+}
+export type ImportIdentifierResolution =
+  | Readonly<Record<string, string>>
+  | Readonly<{
+      status: 'unavailable';
+      preserveProperties: readonly string[];
+      resolvedReferences?: Readonly<Record<string, string>>;
+    }>;
+type UnavailableIdentifierResolution = Extract<ImportIdentifierResolution, { status: 'unavailable' }>;
+
+export function isUnavailableIdentifierResolution(
+  value: ImportIdentifierResolution,
+): value is UnavailableIdentifierResolution {
+  if (value === null || typeof value !== 'object') return false;
+  const status = Object.getOwnPropertyDescriptor(value, 'status')?.value;
+  const preserveProperties = Object.getOwnPropertyDescriptor(value, 'preserveProperties')?.value;
+  return (
+    status === 'unavailable' &&
+    Array.isArray(preserveProperties) &&
+    preserveProperties.every((item) => typeof item === 'string')
+  );
 }
 
 type Kind = 'new' | 'changed' | 'unchanged' | 'vanished';
 export type ImportRunResult = {
   status: RunStatus;
+  skipped: number;
   counts: Record<Kind, number>;
   new: string[];
   changed: string[];
   unchanged: string[];
   vanished: string[];
   diagnostic: string;
+  runId?: string;
+  committedPrefix?: number;
+  checkpointed?: boolean;
 };
 export type ImportRunOptions = {
   disappearanceThreshold?: number;
   maxRecordBytes?: number;
+  /** Permit explicitly keyed, pinned Bangumi PersonDetail TSV rows. */
+  bangumiPersonDetailRows?: boolean;
   signal?: AbortSignal;
   /** Explicit fixture/diagnostic bound; production defaults to no collected keys. */
   collectionLimit?: number;
   sink?: RunResultSink;
+  progress?: ImportProgressObserver;
+  checkpoint?: StagingCheckpointRequest;
+};
+export type ResumeRunOptions = ImportRunOptions & {
+  /** Credentials and live transport are constructed only after sealed work is admitted. */
+  activateNetwork?: () => void | Promise<void>;
 };
 export type ImporterOptions = {
   path: string | Database;
+  session?: ImportSession;
+  existing?: boolean;
   transport: ImportTransport;
+  /** Normalized API origin for this coordinator. Production callers must supply it. */
+  destination?: ImportDestination;
+  create?: boolean;
   recordConcurrency?: number;
   mediaDeadlineMs?: number;
   mediaResolver?: ImportMediaResolver;
   identifierLookup?: ImportIdentifierLookup;
+  /** Admitted classification facts and authentic Semantic association; public dump fields never populate this. */
+  classificationAdmission?: {
+    /** Source-side facts; a native subject is optional and never invents an association. */
+    facts?(input: { owner: Owner; conversion: ImportConversion; subject?: string }): unknown;
+    association?(input: {
+      owner: Owner;
+      subject: string;
+      conversion: ImportConversion;
+    }): ClassificationAssociation | null;
+  };
+  /**
+   * Caller-owned source vocabulary rows and current native scheme/concept bindings.
+   * Binding availability is re-read each convert; unchanged source bytes must not hide it.
+   */
+  vocabularyAdmission?: {
+    request?(input: {
+      owner: Owner;
+      conversion: ImportConversion;
+      subject?: string;
+    }): ConversionContext['sourceVocabulary'];
+    resolve?(input: {
+      owner: Owner;
+      conversion: ImportConversion;
+      subject?: string;
+      signal: AbortSignal;
+    }): Promise<ConversionContext['sourceVocabulary']>;
+  };
   onConversionOutput?(output: ImportConversion): void;
   afterBulkSuccess?(request: BatchWriteRequest, result: BatchWriteResult): void | Promise<void>;
   instrumentDatabase?: (database: Database) => Database;
@@ -83,14 +207,48 @@ export type ImporterOptions = {
       records: readonly { recordKey: string; bytes: number }[],
     ): void;
     onAcknowledged?(recordKey: string): void;
+    onStagingConversion?(recordKey: string): void;
   };
 };
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const success = (result: BatchWriteResult['results'][number]) => result.status === 200 || result.status === 201;
+function sameSerializedStatement(left: unknown, right: unknown): boolean {
+  try {
+    const serialized = JSON.stringify(left);
+    return serialized !== undefined && isDeepStrictEqual(JSON.parse(serialized), right);
+  } catch {
+    return false;
+  }
+}
 class Interrupted extends Error {}
 type Phase = 'staged' | 'vanished' | 'resumed' | 'media';
-type Planned = { kind: Kind; deferredCover: boolean; conversion?: ImportConversion };
+type Write = <T>(operation: () => Promise<T>) => Promise<T>;
+type ClassificationConfirmation = Readonly<{
+  state: 'available' | 'absent' | 'unavailable';
+  head: RetainedClassificationHead | null;
+  figure: unknown;
+  figureUnavailable: boolean;
+}>;
+
+function classificationDeliveryHead(
+  intended: IntendedClassification,
+  confirmed: ClassificationConfirmation,
+): RetainedClassificationHead | null {
+  if (intended.kind === 'clear') return confirmed.state === 'absent' ? headFromClassification(intended) : null;
+  if (confirmed.state !== 'available' || confirmed.head?.digest !== classificationOperationDigest(intended))
+    return null;
+  return confirmed.head;
+}
+
+// Platform policy per logical write and run, independent of width recovery.
+const MAX_WRITE_INVOCATIONS = 8;
+type Planned = {
+  kind: Kind;
+  deferredCover: boolean;
+  conversion?: ImportConversion;
+  observationConflict?: boolean;
+};
 
 // Native source keys are not normalized into different record identities. Compound
 // planner identities are hashed so their printable public keys remain bounded.
@@ -108,7 +266,11 @@ export class Importer {
   private readonly running = new Set<Promise<ImportRunResult>>();
   private readonly shutdown = new AbortController();
   private readonly runControllers = new WeakMap<AbortSignal, AbortController>();
+  private readonly progressObservers = new WeakMap<AbortSignal, ImportProgressObserver>();
   private readonly recordConcurrency: number;
+  private readonly writeWidths = new WeakMap<AbortSignal, { width: number }>();
+  private readonly planInflight = new WeakMap<AbortSignal, Map<string, Promise<Planned | 'failed' | null>>>();
+  private readonly planningStack = new WeakMap<AbortSignal, Set<string>>();
   private readonly mediaDeadlineMs: number;
   private closing = false;
 
@@ -121,34 +283,84 @@ export class Importer {
       throw new TypeError('mediaDeadlineMs must be a non-negative finite number');
     this.recordConcurrency = concurrency;
     this.mediaDeadlineMs = mediaDeadlineMs;
-    this.session = new ImportSession(
-      options.path,
-      options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {},
-    );
+    this.session =
+      options.session ??
+      new ImportSession(options.path, {
+        ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
+        ...(options.create === false ? { create: false } : {}),
+        ...(options.existing ? { existing: true } : {}),
+      });
   }
 
-  runDump(
+  private takeOwnership(source: string, recordFirstUse = true): ImportOwnership | 'busy' {
+    const existing = this.session.heldOwnership(source);
+    if (existing) {
+      if (this.options.destination) {
+        const origin = this.options.destination.origin;
+        const decision = evaluateAdmission(this.session.store.database, source, origin);
+        if (decision === 'first-use') {
+          if (recordFirstUse) insertSourceDestination(this.session.store.database, source, origin, 'first-use');
+        } else if (decision !== 'match') throwAdmissionRefusal(source, origin, decision);
+      }
+      return existing;
+    }
+    if (!this.options.destination) return this.session.acquire(source);
+    const ownership = this.session.admit(source, this.options.destination.origin, { recordFirstUse });
+    if (ownership === 'busy') return 'busy';
+    if ('kind' in ownership) throwAdmissionRefusal(source, this.options.destination.origin, ownership);
+    return ownership;
+  }
+
+  async runDump(
     registration: SourceRegistration,
     bytes: AsyncIterable<Uint8Array>,
     options: ImportRunOptions = {},
   ): Promise<ImportRunResult> {
+    const acquiring = options.progress?.onPhase?.('acquiring');
+    if (acquiring !== undefined) await acquiring;
     return this.runRecords(
       registration,
       readDump(registration.sourceKind, bytes, {
-        maxRecordBytes: options.maxRecordBytes,
+        ...(options.maxRecordBytes === undefined ? {} : { maxRecordBytes: options.maxRecordBytes }),
+        ...(options.bangumiPersonDetailRows === undefined
+          ? {}
+          : { bangumiPersonDetailRows: options.bangumiPersonDetailRows }),
       }),
       options,
     );
   }
 
+  /** One Open Library dump-set generation; callers compose members into `records`. */
+  runDumpSet(
+    registration: SourceRegistration,
+    records: AsyncIterable<SourceRecord | StagingStreamEvent>,
+    options: ImportRunOptions = {},
+  ): Promise<ImportRunResult> {
+    if (registration.sourceKind !== 'openlibrary')
+      return Promise.reject(new TypeError('Dump-set import requires Open Library'));
+    return this.runRecords(registration, records, options);
+  }
+
   /** VNDB grouped loaders pass their actual SourceRecord stream here. */
   runRecords(
     registration: SourceRegistration,
-    records: AsyncIterable<SourceRecord>,
+    records: AsyncIterable<SourceRecord | StagingStreamEvent>,
     options: ImportRunOptions = {},
   ): Promise<ImportRunResult> {
     if (this.closing) return Promise.reject(new Error('Importer is closing'));
     const task = this.run(registration, records, options);
+    this.running.add(task);
+    void task.finally(() => this.running.delete(task)).catch(() => {});
+    return task;
+  }
+
+  /**
+   * Finish one existing sealed generation. Never begins, stages, seals, abandons
+   * or replaces acquisition, and never consumes dump or empty replacement input.
+   */
+  resumeExisting(registration: SourceRegistration, options: ResumeRunOptions = {}): Promise<ImportRunResult> {
+    if (this.closing) return Promise.reject(new Error('Importer is closing'));
+    const task = this.resumeSealed(registration, options);
     this.running.add(task);
     void task.finally(() => this.running.delete(task)).catch(() => {});
     return task;
@@ -168,19 +380,276 @@ export class Importer {
       subjectId?: string;
       mediaIds?: Readonly<Record<string, string>>;
       resolvedReferences?: Readonly<Record<string, string>>;
+      sourceClassification?: unknown;
+      sourceVocabulary?: ConversionContext['sourceVocabulary'];
     } = {},
   ): ImportConversion {
+    const conversionContext =
+      context.sourceVocabulary === undefined && staged.projection.sourceVocabulary !== undefined
+        ? { ...context, sourceVocabulary: staged.projection.sourceVocabulary }
+        : context;
     const result = registration.convert(
       {
         external_id: staged.row.recordKey,
         record_revision: staged.row.recordRevision,
         record: staged.projection.normalizedRecord,
       },
-      { ...context, source: registration.source },
+      {
+        source: registration.source,
+        ...(conversionContext.subjectId === undefined ? {} : { subjectId: conversionContext.subjectId }),
+        ...(conversionContext.mediaIds === undefined ? {} : { mediaIds: conversionContext.mediaIds }),
+        ...(conversionContext.resolvedReferences === undefined
+          ? {}
+          : { resolvedReferences: conversionContext.resolvedReferences }),
+        ...(conversionContext.sourceClassification === undefined
+          ? {}
+          : { sourceClassification: conversionContext.sourceClassification }),
+        ...(conversionContext.sourceVocabulary === undefined
+          ? {}
+          : { sourceVocabulary: conversionContext.sourceVocabulary }),
+      },
     );
     if (result.digest !== staged.row.digest || result.converter_revision !== staged.row.converter_revision)
       throw new Error('Persisted source conversion differs from its registered projection');
-    return result;
+    const produced = result.sourceClassification
+      ? validateSourceClassificationProjection(result.sourceClassification)
+      : undefined;
+    const registered = staged.projection.sourceClassification;
+    if (produced !== undefined && !isDeepStrictEqual(produced, registered))
+      throw new Error('Persisted source classification differs from its registered projection');
+    const converted =
+      produced === undefined && registered !== undefined ? { ...result, sourceClassification: registered } : result;
+    // A sealed generation owns its observation date and body even when today's
+    // caller has admitted a different archive or no longer supplies provenance.
+    const { sourceStatistic: _write, sourceStatisticClear: _clear, ...semantic } = converted;
+    return {
+      ...semantic,
+      ...(staged.projection.sourceStatistic ? { sourceStatistic: staged.projection.sourceStatistic } : {}),
+      ...(staged.projection.sourceStatisticClear
+        ? { sourceStatisticClear: staged.projection.sourceStatisticClear }
+        : {}),
+    };
+  }
+
+  private async stageCapture(
+    registration: SourceRegistration,
+    records: AsyncIterable<SourceRecord | StagingStreamEvent>,
+    run: Run,
+    options: ImportRunOptions,
+    signal: AbortSignal,
+    state: { resume: number; skipped: number; checkpointed: boolean; action: 'acquire' | 'resume' | 'ordinary' },
+  ): Promise<
+    { skipped: number; committedPrefix: number } | { status: RunStatus; diagnostic: string; committedPrefix: number }
+  > {
+    const store = this.session.store;
+    const pageSize = state.checkpointed ? 1 : 100;
+    const buffered: {
+      staged: Staged<SourceProjection>;
+      conversion: ImportConversion;
+      skipped: boolean;
+      memberIndex: number;
+    }[] = [];
+    let skipped = state.skipped;
+    let ordinal = 0;
+    let rolling = state.resume;
+    let memberIndex = 0;
+    let stagingStarted = false;
+    let verifyingStarted = false;
+    const enterVerifying = () => {
+      if (verifyingStarted || state.action !== 'resume') return;
+      verifyingStarted = true;
+      return options.progress?.onPhase?.('verifying');
+    };
+    const enterStaging = () => {
+      if (stagingStarted) return;
+      stagingStarted = true;
+      return options.progress?.onPhase?.('staging');
+    };
+    const flush = () => {
+      if (buffered.length === 0) return;
+      const commit = () => {
+        const page = buffered.splice(0);
+        let failure: unknown;
+        let stagedCount = 0;
+        this.atomic(() => {
+          for (const item of page) {
+            try {
+              store.stage(run, item.staged);
+              this.retainDiagnostics(run, item.staged, item.conversion, 'staging');
+              stagedCount++;
+              if (state.checkpointed) {
+                rolling++;
+                store.commitStagingRecord(
+                  run,
+                  {
+                    ordinal: rolling,
+                    recordKey: item.staged.row.recordKey,
+                    digest: item.staged.row.digest,
+                    memberIndex: item.memberIndex,
+                  },
+                  item.skipped ? 1 : 0,
+                );
+              }
+            } catch (error) {
+              if (error instanceof ConversionDiagnosticError) throw error;
+              failure = error;
+              return;
+            }
+          }
+        });
+        options.progress?.onStaged?.(stagedCount);
+        if (failure !== undefined) throw failure;
+      };
+      const phase = enterStaging();
+      return phase !== undefined ? Promise.resolve(phase).then(commit) : commit();
+    };
+    const acceptRecord = async (record: SourceRecord, recordMember: number) => {
+      if (record.source !== registration.sourceKind) throw new Error('Source stream registration mismatch');
+      ordinal++;
+      if (state.checkpointed && ordinal <= state.resume) {
+        const verifying = enterVerifying();
+        if (verifying !== undefined) await verifying;
+        const prefix = store.prefixRecord(run, ordinal);
+        if (!prefix || prefix.recordKey !== record.key || (prefix.memberIndex ?? 0) !== recordMember)
+          throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
+        const staged = store.stagedIdentity(run, record.key);
+        if (!staged || staged.digest !== prefix.digest || !staged.projection)
+          throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
+        options.progress?.onVerifiedPrefix?.(1);
+        return;
+      }
+      this.options.observer?.onStagingConversion?.(record.key);
+      const input = {
+        external_id: record.key,
+        record_revision: record.revision ?? 'unversioned',
+        record: record.payload,
+      };
+      let conversion = registration.convert(input, { source: registration.source });
+      const ignored = 'outcome' in conversion && conversion.outcome === 'ignored';
+      if (ignored) {
+        if (skipped === Number.MAX_SAFE_INTEGER) throw new Interrupted('Skipped input count exceeded its bound');
+        skipped++;
+        options.progress?.onSkipped?.(1);
+      } else {
+        const facts = this.options.classificationAdmission?.facts?.({
+          owner: { source: registration.source, external_id: record.key },
+          conversion,
+        });
+        if (facts !== undefined)
+          conversion = registration.convert(input, {
+            source: registration.source,
+            sourceClassification: facts,
+          });
+      }
+      buffered.push({
+        conversion,
+        skipped: ignored,
+        memberIndex: recordMember,
+        staged: {
+          row: {
+            source: registration.source,
+            recordKey: record.key,
+            recordRevision: conversion.record_revision ?? 'unversioned',
+            converter_revision: registration.converter_revision,
+            digest: conversion.digest,
+            state: 'present',
+          },
+          projection: {
+            sourceKind: registration.sourceKind,
+            normalizedRecord: conversion.normalized,
+            ...(conversion.sourceStatistic ? { sourceStatistic: conversion.sourceStatistic } : {}),
+            ...(conversion.sourceStatisticClear ? { sourceStatisticClear: conversion.sourceStatisticClear } : {}),
+            ...(conversion.sourceClassification === undefined
+              ? {}
+              : { sourceClassification: conversion.sourceClassification }),
+            ...(conversion.sourceVocabulary === undefined ? {} : { sourceVocabulary: conversion.sourceVocabulary }),
+            ...(ignored
+              ? {}
+              : registration.describeSourceRecord
+                ? { sourceRecordMetadata: registration.describeSourceRecord(record.key) }
+                : {}),
+          },
+        },
+      });
+      if (buffered.length >= pageSize) {
+        const pending = flush();
+        if (pending !== undefined) await pending;
+      }
+    };
+    try {
+      if (state.action === 'resume' && state.checkpointed) {
+        const verifying = enterVerifying();
+        if (verifying !== undefined) await verifying;
+      }
+      for await (const item of records) {
+        if (signal.aborted) throw new Interrupted('Import was interrupted');
+        if (isStagingStreamEvent(item)) {
+          if (item.kind === 'member-end') {
+            const pending = flush();
+            if (pending !== undefined) await pending;
+            if (state.checkpointed) store.commitStagingMember(run, item.memberIndex);
+            memberIndex = item.memberIndex + 1;
+            continue;
+          }
+          memberIndex = item.memberIndex;
+          await acceptRecord(item.record, item.memberIndex);
+          continue;
+        }
+        await acceptRecord(item, memberIndex);
+      }
+      if (state.checkpointed && ordinal < state.resume)
+        throw new StagingCheckpointError('corrupt', STAGING_INCOMPATIBLE);
+      const phase = enterStaging();
+      if (phase !== undefined) await phase;
+      const pending = flush();
+      if (pending !== undefined) await pending;
+    } catch (error) {
+      const interrupted =
+        signal.aborted ||
+        error instanceof Interrupted ||
+        (error instanceof DOMException && error.name === 'AbortError');
+      const preserve = interrupted || state.action === 'resume';
+      if (!preserve) store.seal(run, { complete: false, reason: 'malformed' });
+      if (error instanceof StagingCheckpointError)
+        return { status: 'invalid-dump', diagnostic: error.message, committedPrefix: rolling };
+      const member =
+        error instanceof OpenLibraryDumpSetError && error.memberIndex !== null
+          ? ` (member ${error.memberIndex}${error.reason ? `, ${error.reason}` : ''})`
+          : '';
+      return {
+        status: interrupted ? 'interrupted' : 'invalid-dump',
+        diagnostic:
+          error instanceof OpenLibraryDumpSetError || !(error instanceof DumpInputError)
+            ? `Input is incomplete or invalid${member}`
+            : error.message,
+        committedPrefix: rolling,
+      };
+    }
+    const seal = store.seal(run, { complete: true, skipped });
+    options.progress?.onSourceCompleted?.();
+    if (seal.status !== 'ready')
+      return {
+        status: seal.status === 'mass-disappearance' ? 'mass-disappearance' : 'invalid-dump',
+        diagnostic: seal.diagnostic,
+        committedPrefix: rolling,
+      };
+    return { skipped, committedPrefix: rolling };
+  }
+
+  private retainDiagnostics(
+    run: Run,
+    staged: Staged<SourceProjection>,
+    conversion: ImportConversion,
+    phase: ConversionDiagnosticPhase,
+  ): void {
+    this.session.store.retainConversionDiagnostics(run, {
+      recordKey: staged.row.recordKey,
+      digest: conversion.digest,
+      converterRevision: conversion.converter_revision,
+      recordRevision: conversion.record_revision ?? staged.row.recordRevision,
+      phase,
+      diagnostics: conversion.diagnostics,
+    });
   }
 
   private async fences(owner: Owner, signal: AbortSignal): Promise<Omission[]> {
@@ -223,11 +692,11 @@ export class Importer {
     }
   }
 
-  private async send(request: BatchWriteRequest, signal: AbortSignal): Promise<BatchWriteResult> {
+  private async send(request: BatchWriteRequest, signal: AbortSignal, write: Write): Promise<BatchWriteResult> {
     if (signal.aborted) throw new Interrupted('Import was interrupted');
     const text = JSON.stringify(request);
     if (checkBatch(request).length || Buffer.byteLength(text) > 65536) throw new Error('Invalid public envelope');
-    const response = await this.options.transport.batchWrite(request);
+    const response = await write(() => this.options.transport.batchWrite(request));
     if (signal.aborted) throw new Interrupted('Import was interrupted');
     this.validateResult(request, response);
     if (response.results.some(success)) {
@@ -263,6 +732,10 @@ export class Importer {
     });
   }
 
+  private progress(signal: AbortSignal): ImportProgressObserver | undefined {
+    return this.progressObservers.get(signal);
+  }
+
   private retain(phase: Phase, rows: readonly { recordKey: string; value: unknown }[]): void {
     this.options.observer?.onPageRetained?.(
       phase,
@@ -275,38 +748,120 @@ export class Importer {
     values: readonly T[],
     signal: AbortSignal,
     key: (value: T) => string,
-    operation: (value: T) => Promise<R>,
+    operation: (value: T, write: Write) => Promise<R>,
   ): Promise<R[]> {
     const results = new Array<R>(values.length);
+    const width = this.writeWidths.get(signal) ?? { width: this.recordConcurrency };
+    this.writeWidths.set(signal, width);
     let next = 0;
+    let active = 0;
+    let running = 0;
     let stopped = false;
     let failure: unknown;
-    const worker = async () => {
-      for (;;) {
-        if (stopped) return;
-        if (signal.aborted) {
-          failure ??= new Interrupted('Import was interrupted');
-          stopped = true;
-          return;
+    // Paused records retain their stack at the failed write, including its exact
+    // envelope. Earlier planning, bootstrap and media effects are not repeated.
+    type Retry = { resume(): void; next: Retry | undefined };
+    let retry: Retry | undefined;
+    await new Promise<void>((done) => {
+      const resume = () => {
+        const entry = retry!;
+        retry = entry.next;
+        active++;
+        entry.resume();
+      };
+      const aborted = () => {
+        failure ??= new Interrupted('Import was interrupted');
+        stopped = true;
+        pump();
+      };
+      const pump = () => {
+        if (stopped) {
+          while (retry) resume();
+        } else {
+          while (active < width.width && (retry || next < values.length)) {
+            if (retry) resume();
+            else start(next++);
+          }
         }
-        const index = next++;
-        if (index >= values.length) return;
+        if (!running && (stopped || next >= values.length)) {
+          signal.removeEventListener('abort', aborted);
+          done();
+        }
+      };
+      const write: Write = async (effect) => {
+        let invocations = 0;
+        let prior: ImportTransportError | undefined;
+        for (;;) {
+          if (signal.aborted) throw new Interrupted('Import was interrupted');
+          if (prior?.retry) {
+            const { notBefore, deadline } = prior.retry;
+            if (this.now() >= deadline) throw prior;
+            if (notBefore !== undefined) {
+              await this.sleep(notBefore - this.now(), signal);
+              if (signal.aborted) throw new Interrupted('Import was interrupted');
+              // Never send early even if an injected sleeper wakes prematurely.
+              if (this.now() < notBefore || this.now() >= deadline) throw prior;
+            }
+          }
+          const singleWriter = width.width === 1 && active === 1;
+          invocations++;
+          try {
+            const result = await effect();
+            width.width = Math.min(this.recordConcurrency, width.width + 1);
+            pump();
+            return result;
+          } catch (error) {
+            const overload =
+              error instanceof ImportTransportError &&
+              (error.status === 429 || (error.status === 503 && error.retryable));
+            // An older wide cohort can finish after another record narrowed to
+            // one. An isolated width-one failure can stop sooner than the cap.
+            if (
+              !overload ||
+              singleWriter ||
+              signal.aborted ||
+              invocations >= MAX_WRITE_INVOCATIONS ||
+              error.retry?.stopped
+            )
+              throw error;
+            prior = error;
+            width.width = Math.max(1, Math.floor(width.width / 2));
+            active--;
+            await new Promise<void>((resolve) => {
+              retry = { resume: resolve, next: retry };
+              pump();
+            });
+          }
+        }
+      };
+      const start = (index: number) => {
+        active++;
+        running++;
         const value = values[index]!;
         const recordKey = key(value);
         this.options.observer?.onRecordActive?.(phase, recordKey, true);
-        try {
-          results[index] = await operation(value);
-        } catch (error) {
-          failure ??= error;
-          stopped = true;
-          this.runControllers.get(signal)?.abort(error);
-          return;
-        } finally {
-          this.options.observer?.onRecordActive?.(phase, recordKey, false);
-        }
-      }
-    };
-    await Promise.all(Array.from({ length: Math.min(this.recordConcurrency, values.length) }, worker));
+        void operation(value, write)
+          .then(
+            (result) => {
+              results[index] = result;
+            },
+            (error: unknown) => {
+              failure ??= error;
+              stopped = true;
+              this.runControllers.get(signal)?.abort(error);
+            },
+          )
+          .finally(() => {
+            active--;
+            running--;
+            this.options.observer?.onRecordActive?.(phase, recordKey, false);
+            pump();
+          });
+      };
+      signal.addEventListener('abort', aborted, { once: true });
+      if (signal.aborted) aborted();
+      else pump();
+    });
     if (failure !== undefined) throw failure;
     return results;
   }
@@ -323,14 +878,18 @@ export class Importer {
     this.options.observer?.onAcknowledged?.(recordKey);
   }
 
-  private acknowledge(owner: Owner, request: BatchWriteRequest, result: BatchWriteResult): void {
+  private acknowledge(owner: Owner, request: BatchWriteRequest, result: BatchWriteResult): number {
     // The complete response is validated before the first local acknowledgement.
     this.validateResult(request, result);
+    let acknowledgedEffects = 0;
     for (const entry of result.results) {
-      if (success(entry)) this.session.bindings.acknowledge(owner, entry.key, { results: [entry] });
-      else if (entry.status === 404 && request.commands.find((c) => c.key === entry.key)?.op !== 'create')
+      if (success(entry)) {
+        this.session.bindings.acknowledge(owner, entry.key, { results: [entry] });
+        acknowledgedEffects++;
+      } else if (entry.status === 404 && request.commands.find((c) => c.key === entry.key)?.op !== 'create')
         this.session.bindings.takenDown(owner, { status: 404 });
     }
+    return acknowledgedEffects;
   }
 
   private current(owner: Owner): Candidate[] {
@@ -348,11 +907,60 @@ export class Importer {
     return candidates;
   }
 
+  private async metadata(
+    owner: Owner,
+    descriptor: ImportSourceRecord | undefined,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<void> {
+    const bindings = this.session.bindings;
+    if (!descriptor) return;
+    const signature = hash(JSON.stringify(descriptor));
+    let journal = bindings.metadata(owner);
+    if (journal?.result && journal.signature === signature) return;
+    const port = this.options.transport.setSourceRecordMetadata;
+    if (!port) throw new Error('Source record metadata transport is unavailable');
+    const send = async (pending: NonNullable<typeof journal>) => {
+      const result = await write(() =>
+        port.call(
+          this.options.transport,
+          {
+            command: JSON.parse(pending.bytes) as ImportSourceRecordMetadataCommand,
+            idempotencyKey: pending.key,
+          },
+          signal,
+        ),
+      );
+      if (signal.aborted) throw new Interrupted('Import was interrupted');
+      bindings.acknowledgeMetadata(owner, pending.key, result);
+      if (result.effect !== 'noEffect') this.progress(signal)?.onAcknowledgedEffects?.(1);
+    };
+    // Never consume a new descriptor in place of a response-lost immutable intent.
+    if (journal && !journal.result) {
+      await send(journal);
+      journal = bindings.metadata(owner);
+      if (journal?.signature === signature) return;
+    }
+    const revision = journal?.result?.metadata_revision ?? null;
+    const pending = bindings.prepareMetadata(
+      owner,
+      operationKey(owner, `metadata:${signature}:${revision}`),
+      signature,
+      {
+        ...owner,
+        metadata: descriptor,
+        expected_metadata_revision: revision,
+      },
+    );
+    await send(pending);
+  }
+
   private async bootstrap(
     registration: SourceRegistration,
     staged: Staged<SourceProjection>,
     conversion: ImportConversion,
     signal: AbortSignal,
+    write: Write,
   ): Promise<string | null> {
     const owner = { source: staged.row.source, external_id: staged.row.recordKey };
     const bindings = this.session.bindings;
@@ -372,19 +980,22 @@ export class Importer {
       });
     }
     const request = JSON.parse(journal.bytes) as BatchWriteRequest;
-    const result = await this.send(request, signal);
-    this.acknowledge(owner, request, result);
+    const result = await this.send(request, signal, write);
+    const acknowledgedEffects = this.acknowledge(owner, request, result);
+    this.progress(signal)?.onAcknowledgedEffects?.(acknowledgedEffects);
     const bound = bindings.claim(owner);
     return bound?.state === 'bound' ? bound.subject : null;
   }
 
-  private async dispatch(run: Run, pending: Pending, signal: AbortSignal): Promise<boolean> {
+  private async dispatch(run: Run, pending: Pending, signal: AbortSignal, write: Write): Promise<boolean> {
     const owner = { source: run.source, external_id: pending.recordKey };
     const omissions = await this.fences(owner, signal);
     // An empty commands argument augments only omission proof, retaining the
     // original immutable journal and each of its public operation bodies.
-    this.session.store.prepare(run, pending.recordKey, { commands: [], omissions });
-    const proved = this.session.store.key(run.source, pending.recordKey, run).omissions;
+    const { omissions: proved } = this.session.store.prepareWithOmissions(run, pending.recordKey, {
+      commands: [],
+      omissions,
+    });
     const original = JSON.parse(pending.bytes) as BatchWriteRequest;
     const commands = original.commands.filter(
       (command) => !proved.some((o) => o.field_group === command.source.field_group),
@@ -395,12 +1006,14 @@ export class Importer {
       for (const command of commands)
         this.session.bindings.prepare(owner, hash(`${run.id}:${command.key}`), { commands: [command] });
     });
-    const result = await this.send(request, signal);
+    const result = await this.send(request, signal, write);
     // Returned identities must be durable before RunStore can resolve a record.
-    this.atomic(() => {
-      this.acknowledge(owner, request, result);
+    const acknowledgedEffects = this.atomic(() => {
+      const count = this.acknowledge(owner, request, result);
       this.session.store.acknowledge(run, result, { recordKey: pending.recordKey });
+      return count;
     });
+    this.progress(signal)?.onAcknowledgedEffects?.(acknowledgedEffects);
     if (this.session.store.key(run.source, pending.recordKey, run).acknowledged) this.acknowledged(pending.recordKey);
     return result.results.every(success);
   }
@@ -419,9 +1032,9 @@ export class Importer {
         page,
         signal,
         (pending) => pending.recordKey,
-        async (pending) => {
+        async (pending, write) => {
           try {
-            return await this.dispatch(run, pending, signal);
+            return await this.dispatch(run, pending, signal, write);
           } catch (error) {
             if (error instanceof Interrupted) throw error;
             return false;
@@ -435,19 +1048,911 @@ export class Importer {
     }
   }
 
+  private async readObservationHead(
+    owner: Owner,
+    subjectId: string,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<ObservationHeadRead> {
+    const read = this.options.transport.readSourceStatistics;
+    const retained = this.session.store.retainedAggregateHead(owner.source, subjectId);
+    if (!read) return retained ? { kind: 'head', head: retained } : { kind: 'absent' };
+    try {
+      const rows = await write(() => read.call(this.options.transport, { subjectId }, signal));
+      const row = rows.find((item) => item.source === 'vndb');
+      if (row && typeof row.sourceRecordId === 'string' && typeof row.asOf === 'string')
+        return { kind: 'head', head: headFromStatistic(subjectId, row) };
+      return retained?.cleared ? { kind: 'head', head: retained } : { kind: 'absent' };
+    } catch (error) {
+      if (
+        error instanceof ImportTransportError &&
+        (error.status === 401 || error.status === 403 || error.status === 404 || error.status === 503)
+      )
+        return {
+          kind: 'unavailable',
+          ...(error.status === undefined ? {} : { status: error.status }),
+          ...(error.code === undefined ? {} : { code: error.code }),
+        };
+      throw error;
+    }
+  }
+
+  private async confirmObservation(
+    subjectId: string,
+    intended: IntendedObservation,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<{ head: RetainedObservationHead | null; figure: unknown; figureUnavailable: boolean }> {
+    const read = this.options.transport.readSourceStatistics;
+    let head: RetainedObservationHead | null = null;
+    if (read) {
+      try {
+        const rows = await write(() => read.call(this.options.transport, { subjectId }, signal));
+        const row = rows.find((item) => item.source === 'vndb');
+        if (row) head = headFromStatistic(subjectId, row);
+      } catch {
+        return { head: null, figure: null, figureUnavailable: true };
+      }
+    }
+    if (intended.kind === 'clear' && !head) head = headFromClear(subjectId, intended);
+    let figure: unknown = null;
+    let figureUnavailable = false;
+    const readFigure = this.options.transport.readPublicFigure;
+    if (readFigure) {
+      try {
+        figure = await write(() => readFigure.call(this.options.transport, { subjectId }, signal));
+      } catch {
+        figureUnavailable = true;
+      }
+    }
+    return { head, figure, figureUnavailable };
+  }
+
+  private async deliverObservation(
+    owner: Owner,
+    subjectId: string,
+    intended: IntendedObservation,
+    commandKey: string,
+    requestBytes: string,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<'delivered' | 'conflict'> {
+    const body = JSON.parse(requestBytes) as Record<string, unknown>;
+    try {
+      if (intended.kind === 'write') {
+        const put = this.options.transport.writeSourceStatistic;
+        if (!put) throw new Error('Source statistic transport is unavailable');
+        await write(() =>
+          put.call(
+            this.options.transport,
+            { subjectId, source: 'vndb', value: body as never, idempotencyKey: commandKey },
+            signal,
+          ),
+        );
+      } else {
+        const clear = this.options.transport.clearSourceStatistic;
+        if (!clear) throw new Error('Source statistic clear transport is unavailable');
+        await write(() =>
+          clear.call(
+            this.options.transport,
+            { subjectId, source: 'vndb', value: body as never, idempotencyKey: commandKey },
+            signal,
+          ),
+        );
+      }
+      return 'delivered';
+    } catch (error) {
+      if (error instanceof ImportTransportError && error.status === 409) return 'conflict';
+      throw error;
+    }
+  }
+
+  private async applyObservation(
+    run: Run,
+    owner: Owner,
+    subjectId: string,
+    intended: IntendedObservation,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<boolean> {
+    const store = this.session.store;
+    const operationId = aggregateOperationId({ runId: run.id, recordKey: owner.external_id, subjectId, intended });
+    const existing =
+      store.aggregateOperation(run, operationId) ?? store.unresolvedAggregate(run, owner.external_id, 'statistic');
+    const commandKey = operationKey(
+      owner,
+      `${run.id}:source-statistic${intended.kind === 'clear' ? '-clear' : ''}:${hash(JSON.stringify(intendedPayload(intended)))}`,
+    );
+    const requestBytes = JSON.stringify(intendedPayload(intended));
+    if (existing?.status === 'delivered' && existing.operationId === operationId) return true;
+    if (existing?.status === 'uncertain' || existing?.status === 'prepared') {
+      const sealed = existing.requestBytes;
+      const key = existing.commandKey;
+      store.markAggregate(run, existing.operationId, { status: 'uncertain' });
+      const result = await this.deliverObservation(owner, subjectId, intended, key, sealed, signal, write);
+      if (result === 'conflict') {
+        store.markAggregate(run, existing.operationId, {
+          status: 'conflict',
+          nativeReason: 'cas-mismatch',
+        });
+        throw new ObservationConflictError(existing.operationId, 'cas-mismatch');
+      }
+      const confirmed = await this.confirmObservation(subjectId, intended, signal, write);
+      const head =
+        intended.kind === 'clear'
+          ? headFromClear(subjectId, intended)
+          : (confirmed.head ??
+            headFromStatistic(subjectId, {
+              source: 'vndb',
+              ...intended,
+              licence: 'ODbL-1.0',
+              attribution: 'VNDB',
+            } as never));
+      store.retainAggregateHead(owner.source, { ...head, subjectId });
+      store.markAggregate(run, existing.operationId, {
+        status: 'delivered',
+        reviewedHead: head,
+        outcome: { figure: confirmed.figure, figureUnavailable: confirmed.figureUnavailable },
+      });
+      this.progress(signal)?.onAcknowledgedEffects?.(1);
+      return true;
+    }
+    if (existing?.status === 'conflict' || existing?.status === 'refused') {
+      const reason =
+        parseObservationReason(existing.nativeReason) ??
+        (existing.status === 'refused' ? 'older-date' : 'cas-mismatch');
+      if (existing.status === 'refused') throw new ObservationRefusedError(existing.operationId, reason);
+      throw new ObservationConflictError(existing.operationId, reason);
+    }
+    const head = await this.readObservationHead(owner, subjectId, signal, write);
+    if (head.kind === 'unavailable') throw new ImportTransportError(head.status, undefined, head.code);
+    const decision = classifyObservation(intended, subjectId, head);
+    if (decision.action === 'identical') return true;
+    const reviewed = head.kind === 'head' ? head.head : null;
+    if (decision.action === 'refused' || decision.action === 'conflict') {
+      store.prepareAggregate(run, {
+        operationId,
+        recordKey: owner.external_id,
+        subjectId,
+        sourceAlias: effectiveAlias(intended.sourceAlias),
+        intended,
+        commandKey,
+        requestBytes,
+        reviewedHead: reviewed,
+        status: decision.action === 'refused' ? 'refused' : 'conflict',
+        nativeReason: decision.reason,
+      });
+      if (decision.action === 'refused') throw new ObservationRefusedError(operationId, decision.reason);
+      throw new ObservationConflictError(operationId, decision.reason);
+    }
+    store.prepareAggregate(run, {
+      operationId,
+      recordKey: owner.external_id,
+      subjectId,
+      sourceAlias: effectiveAlias(intended.sourceAlias),
+      intended,
+      commandKey,
+      requestBytes,
+      reviewedHead: reviewed,
+      status: 'prepared',
+    });
+    try {
+      store.markAggregate(run, operationId, { status: 'uncertain' });
+      const result = await this.deliverObservation(owner, subjectId, intended, commandKey, requestBytes, signal, write);
+      if (result === 'conflict') {
+        store.markAggregate(run, operationId, { status: 'conflict', nativeReason: 'concurrent-head' });
+        throw new ObservationConflictError(operationId, 'concurrent-head');
+      }
+    } catch (error) {
+      if (error instanceof ObservationConflictError) throw error;
+      if (error instanceof Interrupted) throw error;
+      store.markAggregate(run, operationId, { status: 'uncertain' });
+      throw error;
+    }
+    const confirmed = await this.confirmObservation(subjectId, intended, signal, write);
+    const retained =
+      intended.kind === 'clear'
+        ? headFromClear(subjectId, intended)
+        : (confirmed.head ?? {
+            provider: 'vndb' as const,
+            sourceAlias: effectiveAlias(intended.sourceAlias),
+            sourceRecordId: intended.sourceRecordId,
+            asOf: intended.asOf,
+            count: intended.count,
+            cleared: false,
+            digest: observationDigest(subjectId, intended),
+            ...(intended.kind === 'write' ? { scale: intended.scale, mean: intended.mean } : {}),
+          });
+    store.retainAggregateHead(owner.source, { ...retained, subjectId });
+    store.markAggregate(run, operationId, {
+      status: 'delivered',
+      reviewedHead: retained,
+      outcome: { figure: confirmed.figure, figureUnavailable: confirmed.figureUnavailable },
+    });
+    this.progress(signal)?.onAcknowledgedEffects?.(1);
+    return true;
+  }
+
+  async pageObservationConflicts(source: string, after?: string, limit = 20) {
+    const run = this.session.store.activeRun(source);
+    if (!run) return { operations: [], next: null as string | null };
+    return this.session.store.pageUnresolvedAggregates(run, {
+      ...(after ? { after } : {}),
+      limit,
+      family: 'statistic',
+    });
+  }
+
+  observationDetail(source: string, operationId: string) {
+    const run = this.session.store.activeRun(source);
+    if (!run) return null;
+    const detail = this.session.store.aggregateOperation(run, operationId);
+    return detail && !isIntendedClassification(detail.intended) ? detail : null;
+  }
+
+  async resolveObservation(
+    source: string,
+    operationId: string,
+    reviewedObservation: string,
+    signal: AbortSignal = this.shutdown.signal,
+  ): Promise<{ status: 'delivered' | 'conflict' | 'refused' | 'busy' | 'unknown' | 'resume'; operationId: string }> {
+    if (!DIGEST.test(operationId) || !DIGEST.test(reviewedObservation))
+      throw new TypeError('Observation resolution requires exact operation and reviewed digests');
+    const ownership = this.takeOwnership(source);
+    if (ownership === 'busy') return { status: 'busy', operationId };
+    const write: Write = (operation) => operation();
+    try {
+      const run = this.session.store.activeRun(source);
+      if (!run) return { status: 'unknown', operationId };
+      const prior = this.session.store.aggregateOperation(run, operationId);
+      if (!prior || isIntendedClassification(prior.intended)) return { status: 'unknown', operationId };
+      if (prior.status === 'delivered' || prior.status === 'superseded')
+        return { status: 'delivered', operationId: prior.operationId };
+      if (prior.status === 'uncertain' || prior.status === 'prepared') return { status: 'resume', operationId };
+      if (prior.status === 'refused' || parseObservationReason(prior.nativeReason) === 'older-date')
+        return { status: 'refused', operationId };
+      if (prior.reviewedHead?.digest !== reviewedObservation) return { status: 'conflict', operationId };
+      const owner = { source, external_id: prior.recordKey };
+      const omissions = await this.fences(owner, signal);
+      if (prior.kind === 'write' && omissions.some((omission) => omission.field_group === 'facts'))
+        return { status: 'conflict', operationId };
+      const head = await this.readObservationHead(owner, prior.subjectId, signal, write);
+      if (head.kind === 'unavailable') throw new ImportTransportError(head.status, undefined, head.code);
+      const currentDigest = head.kind === 'head' ? head.head.digest : null;
+      if (currentDigest !== reviewedObservation) {
+        this.session.store.markAggregate(run, operationId, {
+          status: 'conflict',
+          nativeReason: 'concurrent-head',
+          reviewedHead: head.kind === 'head' ? head.head : null,
+        });
+        return { status: 'conflict', operationId };
+      }
+      const decision = classifyObservation(prior.intended, prior.subjectId, head);
+      if (decision.action === 'identical') {
+        this.session.store.markAggregate(run, operationId, {
+          status: 'delivered',
+          reviewedHead: head.kind === 'head' ? head.head : prior.reviewedHead,
+        });
+        return { status: 'delivered', operationId };
+      }
+      if (decision.action === 'refused') {
+        this.session.store.markAggregate(run, operationId, { status: 'refused', nativeReason: decision.reason });
+        return { status: 'refused', operationId };
+      }
+      const expectedObservation = reviewedObservation;
+      const successorId = aggregateOperationId({
+        runId: run.id,
+        recordKey: prior.recordKey,
+        subjectId: prior.subjectId,
+        intended: prior.intended,
+        expectedObservation,
+      });
+      const commandKey = operationKey(
+        owner,
+        `${run.id}:source-statistic${prior.kind === 'clear' ? '-clear' : ''}:cas:${expectedObservation}`,
+      );
+      const requestBytes = JSON.stringify({ ...intendedPayload(prior.intended), expectedObservation });
+      const successor = this.session.store.supersedeWithSuccessor(run, operationId, {
+        operationId: successorId,
+        recordKey: prior.recordKey,
+        subjectId: prior.subjectId,
+        sourceAlias: prior.sourceAlias,
+        intended: prior.intended,
+        commandKey,
+        requestBytes,
+        reviewedHead: head.kind === 'head' ? head.head : null,
+        expectedObservation,
+        status: 'prepared',
+      });
+      this.session.store.markAggregate(run, successor.operationId, { status: 'uncertain' });
+      const result = await this.deliverObservation(
+        owner,
+        prior.subjectId,
+        prior.intended,
+        successor.commandKey,
+        successor.requestBytes,
+        signal,
+        write,
+      );
+      if (result === 'conflict') {
+        this.session.store.markAggregate(run, successor.operationId, {
+          status: 'conflict',
+          nativeReason: 'cas-mismatch',
+        });
+        return { status: 'conflict', operationId: successor.operationId };
+      }
+      const confirmed = await this.confirmObservation(prior.subjectId, prior.intended, signal, write);
+      const retained =
+        prior.intended.kind === 'clear'
+          ? headFromClear(prior.subjectId, prior.intended)
+          : (confirmed.head ?? headFromStatistic(prior.subjectId, { source: 'vndb', ...prior.intended } as never));
+      this.session.store.retainAggregateHead(source, { ...retained, subjectId: prior.subjectId });
+      this.session.store.markAggregate(run, successor.operationId, {
+        status: 'delivered',
+        reviewedHead: retained,
+        outcome: { figure: confirmed.figure, figureUnavailable: confirmed.figureUnavailable },
+      });
+      return { status: 'delivered', operationId: successor.operationId };
+    } finally {
+      this.session.release(ownership);
+    }
+  }
+
+  private async readClassificationHead(
+    owner: Owner,
+    subjectId: string,
+    intended: IntendedClassification,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<ClassificationHeadRead> {
+    const associationKey = classificationAssociationKey(intended.association);
+    const retained = this.session.store.retainedClassificationHead(owner.source, subjectId, associationKey);
+    const read = this.options.transport.readSourceClassifications;
+    if (!read) return { kind: 'unavailable', reason: 'association-unavailable' };
+    try {
+      const items = await write(() =>
+        read.call(this.options.transport, { subjectId, associations: [intended.association] }, signal),
+      );
+      const item = items[0];
+      if (item?.state === 'available') {
+        if (classificationAssociationKey(item.value.association) !== associationKey)
+          return { kind: 'unavailable', reason: 'association-unavailable' };
+        return {
+          kind: 'head',
+          head: {
+            associationKey,
+            association: item.value.association,
+            sourceAlias: item.value.sourceAlias,
+            sourceRecordId: item.value.sourceRecordId,
+            sourceAssociationId: item.value.sourceAssociationId,
+            asOf: item.value.asOf,
+            cleared: false,
+            digest: item.value.observation.digest,
+          },
+        };
+      }
+      if (item?.state === 'unavailable' && item.reason === 'not_observed')
+        return retained?.cleared ? { kind: 'head', head: retained } : { kind: 'absent' };
+      return { kind: 'unavailable', reason: 'association-unavailable' };
+    } catch (error) {
+      if (
+        error instanceof ImportTransportError &&
+        (error.status === 401 || error.status === 403 || error.status === 404 || error.status === 503)
+      )
+        return {
+          kind: 'unavailable',
+          ...(error.status === undefined ? {} : { status: error.status }),
+          ...(error.code === undefined ? {} : { code: error.code }),
+        };
+      if (error instanceof TypeError) return { kind: 'unavailable', reason: 'association-unavailable' };
+      throw error;
+    }
+  }
+
+  private async confirmClassification(
+    subjectId: string,
+    intended: IntendedClassification,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<ClassificationConfirmation> {
+    const read = this.options.transport.readSourceClassifications;
+    let head: RetainedClassificationHead | null = null;
+    if (!read) return { state: 'unavailable', head, figure: null, figureUnavailable: true };
+    let state: ClassificationConfirmation['state'] = 'unavailable';
+    try {
+      const items = await write(() =>
+        read.call(this.options.transport, { subjectId, associations: [intended.association] }, signal),
+      );
+      const item = items[0];
+      if (item?.state === 'available') {
+        if (classificationAssociationKey(item.value.association) !== classificationAssociationKey(intended.association))
+          return { state: 'unavailable', head: null, figure: null, figureUnavailable: true };
+        head = {
+          associationKey: classificationAssociationKey(intended.association),
+          association: item.value.association,
+          sourceAlias: item.value.sourceAlias,
+          sourceRecordId: item.value.sourceRecordId,
+          sourceAssociationId: item.value.sourceAssociationId,
+          asOf: item.value.asOf,
+          cleared: false,
+          digest: item.value.observation.digest,
+        };
+        state = 'available';
+      } else if (item?.state === 'unavailable' && item.reason === 'not_observed') {
+        state = 'absent';
+      }
+    } catch {
+      return { state: 'unavailable', head: null, figure: null, figureUnavailable: true };
+    }
+    if (state === 'unavailable') return { state, head: null, figure: null, figureUnavailable: true };
+    let figure: unknown = null;
+    let figureUnavailable = false;
+    const readFigure = this.options.transport.readPublicFigure;
+    if (readFigure) {
+      try {
+        figure = await write(() => readFigure.call(this.options.transport, { subjectId }, signal));
+      } catch {
+        figureUnavailable = true;
+      }
+    }
+    return { state, head, figure, figureUnavailable };
+  }
+
+  private acknowledgeClassification(
+    run: Run,
+    owner: Owner,
+    subjectId: string,
+    operationId: string,
+    intended: IntendedClassification,
+    confirmed: ClassificationConfirmation,
+    signal: AbortSignal,
+    countEffect: boolean,
+  ): RetainedClassificationHead {
+    const store = this.session.store;
+    const head = classificationDeliveryHead(intended, confirmed);
+    if (!head) {
+      if (confirmed.state === 'available' && confirmed.head) {
+        store.markAggregate(run, operationId, {
+          status: 'conflict',
+          nativeReason: 'concurrent-head',
+          reviewedHead: confirmed.head,
+        });
+        throw new ClassificationConflictError(operationId, 'concurrent-head');
+      }
+      store.markAggregate(run, operationId, { status: 'uncertain' });
+      throw new Error('Source classification delivery could not be independently verified');
+    }
+    store.retainClassificationHead(owner.source, { ...head, subjectId });
+    store.markAggregate(run, operationId, {
+      status: 'delivered',
+      reviewedHead: head,
+      outcome: { figure: confirmed.figure, figureUnavailable: confirmed.figureUnavailable },
+    });
+    if (countEffect) this.progress(signal)?.onAcknowledgedEffects?.(1);
+    return head;
+  }
+
+  private async deliverClassification(
+    subjectId: string,
+    intended: IntendedClassification,
+    commandKey: string,
+    requestBytes: string,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<'delivered' | 'conflict'> {
+    const body = JSON.parse(requestBytes) as ReturnType<typeof intendedClassificationRequest>;
+    try {
+      const expectedDigest = classificationOperationDigest(intended);
+      if (intended.kind === 'write') {
+        const put = this.options.transport.writeSourceClassification;
+        if (!put) throw new Error('Source classification transport is unavailable');
+        const result = await write(() =>
+          put.call(
+            this.options.transport,
+            {
+              subjectId,
+              association: body.association,
+              value: body.value as never,
+              expectedObservation: body.expectedObservation,
+              idempotencyKey: commandKey,
+            },
+            signal,
+          ),
+        );
+        if (result.state !== 'published' || result.observationDigest !== expectedDigest)
+          throw new Error('Source classification response did not match its immutable request');
+      } else {
+        const clear = this.options.transport.clearSourceClassification;
+        if (!clear) throw new Error('Source classification clear transport is unavailable');
+        const result = await write(() =>
+          clear.call(
+            this.options.transport,
+            {
+              subjectId,
+              association: body.association,
+              value: body.value as never,
+              expectedObservation: body.expectedObservation,
+              idempotencyKey: commandKey,
+            },
+            signal,
+          ),
+        );
+        if (result.state !== 'cleared' || result.observationDigest !== expectedDigest)
+          throw new Error('Source classification clear response did not match its immutable request');
+      }
+      return 'delivered';
+    } catch (error) {
+      if (error instanceof ImportTransportError && error.status === 409) return 'conflict';
+      throw error;
+    }
+  }
+
+  private async applyClassification(
+    run: Run,
+    owner: Owner,
+    subjectId: string,
+    intended: IntendedClassification,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<boolean> {
+    if (intended.association.subjectId !== subjectId) return false;
+    const store = this.session.store;
+    const operationId = classificationOperationId({ runId: run.id, recordKey: owner.external_id, subjectId, intended });
+    const existing =
+      store.aggregateOperation(run, operationId) ?? store.unresolvedAggregate(run, owner.external_id, 'classification');
+    const commandKey = operationKey(
+      owner,
+      `${run.id}:source-classification${intended.kind === 'clear' ? '-clear' : ''}:${hash(JSON.stringify(intendedClassificationRequest(intended, null)))}`,
+    );
+    const requestBytes = JSON.stringify(intendedClassificationRequest(intended, null));
+    if (existing?.status === 'delivered' && existing.operationId === operationId) return true;
+    if (existing?.status === 'uncertain' || existing?.status === 'prepared') {
+      const sealed = existing.requestBytes;
+      const key = existing.commandKey;
+      store.markAggregate(run, existing.operationId, { status: 'uncertain' });
+      const result = await this.deliverClassification(subjectId, intended, key, sealed, signal, write);
+      if (result === 'conflict') {
+        store.markAggregate(run, existing.operationId, { status: 'conflict', nativeReason: 'cas-mismatch' });
+        throw new ClassificationConflictError(existing.operationId, 'cas-mismatch');
+      }
+      const confirmed = await this.confirmClassification(subjectId, intended, signal, write);
+      this.acknowledgeClassification(run, owner, subjectId, existing.operationId, intended, confirmed, signal, true);
+      return true;
+    }
+    if (existing?.status === 'conflict' || existing?.status === 'refused') {
+      const reason =
+        parseClassificationReason(existing.nativeReason) ??
+        (existing.status === 'refused' ? 'older-date' : 'cas-mismatch');
+      if (existing.status === 'refused') throw new ClassificationRefusedError(existing.operationId, reason);
+      throw new ClassificationConflictError(existing.operationId, reason);
+    }
+    const head = await this.readClassificationHead(owner, subjectId, intended, signal, write);
+    if (head.kind === 'unavailable') {
+      if (head.reason === 'association-unavailable') return false;
+      throw new ImportTransportError(head.status, undefined, head.code);
+    }
+    const decision = classifyClassification(intended, head);
+    if (decision.action === 'identical') return true;
+    const reviewed = head.kind === 'head' ? head.head : null;
+    if (decision.action === 'refused' || decision.action === 'conflict') {
+      store.prepareAggregate(run, {
+        operationId,
+        recordKey: owner.external_id,
+        subjectId,
+        sourceAlias: intended.sourceAlias,
+        intended,
+        commandKey,
+        requestBytes,
+        reviewedHead: reviewed,
+        status: decision.action === 'refused' ? 'refused' : 'conflict',
+        nativeReason: decision.reason,
+      });
+      if (decision.action === 'refused') throw new ClassificationRefusedError(operationId, decision.reason);
+      throw new ClassificationConflictError(operationId, decision.reason);
+    }
+    store.prepareAggregate(run, {
+      operationId,
+      recordKey: owner.external_id,
+      subjectId,
+      sourceAlias: intended.sourceAlias,
+      intended,
+      commandKey,
+      requestBytes,
+      reviewedHead: reviewed,
+      status: 'prepared',
+    });
+    try {
+      store.markAggregate(run, operationId, { status: 'uncertain' });
+      const result = await this.deliverClassification(subjectId, intended, commandKey, requestBytes, signal, write);
+      if (result === 'conflict') {
+        store.markAggregate(run, operationId, { status: 'conflict', nativeReason: 'concurrent-head' });
+        throw new ClassificationConflictError(operationId, 'concurrent-head');
+      }
+    } catch (error) {
+      if (error instanceof ClassificationConflictError) throw error;
+      if (error instanceof Interrupted) throw error;
+      store.markAggregate(run, operationId, { status: 'uncertain' });
+      throw error;
+    }
+    const confirmed = await this.confirmClassification(subjectId, intended, signal, write);
+    this.acknowledgeClassification(run, owner, subjectId, operationId, intended, confirmed, signal, true);
+    return true;
+  }
+
+  async pageClassificationConflicts(source: string, after?: string, limit = 20) {
+    const run = this.session.store.activeRun(source);
+    if (!run) return { operations: [], next: null as string | null };
+    return this.session.store.pageUnresolvedAggregates(run, {
+      ...(after ? { after } : {}),
+      limit,
+      family: 'classification',
+    });
+  }
+
+  classificationDetail(source: string, operationId: string) {
+    const run = this.session.store.activeRun(source);
+    if (!run) return null;
+    const detail = this.session.store.aggregateOperation(run, operationId);
+    return detail && isIntendedClassification(detail.intended) ? detail : null;
+  }
+
+  async resolveClassification(
+    source: string,
+    operationId: string,
+    reviewedObservation: string,
+    signal: AbortSignal = this.shutdown.signal,
+  ): Promise<{ status: 'delivered' | 'conflict' | 'refused' | 'busy' | 'unknown' | 'resume'; operationId: string }> {
+    if (!DIGEST.test(operationId) || !DIGEST.test(reviewedObservation))
+      throw new TypeError('Classification resolution requires exact operation and reviewed digests');
+    const ownership = this.takeOwnership(source);
+    if (ownership === 'busy') return { status: 'busy', operationId };
+    const write: Write = (operation) => operation();
+    try {
+      const run = this.session.store.activeRun(source);
+      if (!run) return { status: 'unknown', operationId };
+      const prior = this.session.store.aggregateOperation(run, operationId);
+      if (!prior || !isIntendedClassification(prior.intended)) return { status: 'unknown', operationId };
+      if (prior.status === 'delivered' || prior.status === 'superseded')
+        return { status: 'delivered', operationId: prior.operationId };
+      if (prior.status === 'uncertain' || prior.status === 'prepared') return { status: 'resume', operationId };
+      if (prior.status === 'refused' || parseClassificationReason(prior.nativeReason) === 'older-date')
+        return { status: 'refused', operationId };
+      const reviewedHead = prior.reviewedHead as RetainedClassificationHead | null;
+      if (reviewedHead?.digest !== reviewedObservation) return { status: 'conflict', operationId };
+      const owner = { source, external_id: prior.recordKey };
+      const omissions = await this.fences(owner, signal);
+      if (prior.kind === 'write' && omissions.some((omission) => omission.field_group === 'facts'))
+        return { status: 'conflict', operationId };
+      const head = await this.readClassificationHead(owner, prior.subjectId, prior.intended, signal, write);
+      if (head.kind === 'unavailable') {
+        if (head.reason === 'association-unavailable') {
+          this.session.store.markAggregate(run, operationId, {
+            status: 'conflict',
+            nativeReason: 'association-unavailable',
+            reviewedHead: null,
+          });
+          return { status: 'conflict', operationId };
+        }
+        throw new ImportTransportError(head.status, undefined, head.code);
+      }
+      const currentDigest = head.kind === 'head' ? head.head.digest : null;
+      if (currentDigest !== reviewedObservation) {
+        this.session.store.markAggregate(run, operationId, {
+          status: 'conflict',
+          nativeReason: 'concurrent-head',
+          reviewedHead: head.kind === 'head' ? head.head : null,
+        });
+        return { status: 'conflict', operationId };
+      }
+      const decision = classifyClassification(prior.intended, head);
+      if (decision.action === 'identical') {
+        this.session.store.markAggregate(run, operationId, {
+          status: 'delivered',
+          reviewedHead: head.kind === 'head' ? head.head : prior.reviewedHead,
+        });
+        return { status: 'delivered', operationId };
+      }
+      if (decision.action === 'refused') {
+        this.session.store.markAggregate(run, operationId, { status: 'refused', nativeReason: decision.reason });
+        return { status: 'refused', operationId };
+      }
+      const expectedObservation = reviewedObservation;
+      const successorId = classificationOperationId({
+        runId: run.id,
+        recordKey: prior.recordKey,
+        subjectId: prior.subjectId,
+        intended: prior.intended,
+        expectedObservation,
+      });
+      const commandKey = operationKey(
+        owner,
+        `${run.id}:source-classification${prior.kind === 'clear' ? '-clear' : ''}:cas:${expectedObservation}`,
+      );
+      const requestBytes = JSON.stringify(intendedClassificationRequest(prior.intended, expectedObservation));
+      const successor = this.session.store.supersedeWithSuccessor(run, operationId, {
+        operationId: successorId,
+        recordKey: prior.recordKey,
+        subjectId: prior.subjectId,
+        sourceAlias: prior.sourceAlias,
+        intended: prior.intended,
+        commandKey,
+        requestBytes,
+        reviewedHead: head.kind === 'head' ? head.head : null,
+        expectedObservation,
+        status: 'prepared',
+      });
+      this.session.store.markAggregate(run, successor.operationId, { status: 'uncertain' });
+      const result = await this.deliverClassification(
+        prior.subjectId,
+        prior.intended,
+        successor.commandKey,
+        successor.requestBytes,
+        signal,
+        write,
+      );
+      if (result === 'conflict') {
+        this.session.store.markAggregate(run, successor.operationId, {
+          status: 'conflict',
+          nativeReason: 'cas-mismatch',
+        });
+        return { status: 'conflict', operationId: successor.operationId };
+      }
+      const confirmed = await this.confirmClassification(prior.subjectId, prior.intended, signal, write);
+      try {
+        this.acknowledgeClassification(
+          run,
+          owner,
+          prior.subjectId,
+          successor.operationId,
+          prior.intended,
+          confirmed,
+          signal,
+          false,
+        );
+      } catch (error) {
+        if (error instanceof ClassificationConflictError)
+          return { status: 'conflict', operationId: successor.operationId };
+        throw error;
+      }
+      return { status: 'delivered', operationId: successor.operationId };
+    } finally {
+      this.session.release(ownership);
+    }
+  }
+
+  private openLibraryRelationKeys(projection: SourceProjection): string[] {
+    if (projection.sourceKind !== 'openlibrary') return [];
+    const normalized = projection.normalizedRecord as {
+      authors?: { key?: string }[];
+      works?: { key?: string }[];
+    };
+    const keys = [...(normalized.authors ?? []), ...(normalized.works ?? [])].flatMap((relation) =>
+      relation.key ? [relation.key] : [],
+    );
+    if (keys.length > 64) throw new Error('Open Library relation bound exceeded');
+    return keys;
+  }
+
+  private planOnce(
+    registration: SourceRegistration,
+    run: Run,
+    staged: Staged<SourceProjection>,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<Planned | 'failed' | null> {
+    let inflight = this.planInflight.get(signal);
+    if (!inflight) {
+      inflight = new Map();
+      this.planInflight.set(signal, inflight);
+    }
+    const existing = inflight.get(staged.row.recordKey);
+    if (existing) return existing;
+    const task = Promise.resolve().then(async () => {
+      let stack = this.planningStack.get(signal);
+      if (!stack) {
+        stack = new Set();
+        this.planningStack.set(signal, stack);
+      }
+      stack.add(staged.row.recordKey);
+      try {
+        return await this.plan(registration, run, staged, signal, write);
+      } catch (error) {
+        if (error instanceof Interrupted) throw error;
+        return 'failed';
+      } finally {
+        stack.delete(staged.row.recordKey);
+      }
+    });
+    inflight.set(staged.row.recordKey, task);
+    return task;
+  }
+
+  /** Bind staged same-run Open Library relations (at most 64 point reads) before converting. */
+  private async bindOwnDependencies(
+    registration: SourceRegistration,
+    run: Run,
+    staged: Staged<SourceProjection>,
+    signal: AbortSignal,
+    write: Write,
+  ): Promise<void> {
+    if (this.options.identifierLookup || staged.row.state !== 'present') return;
+    const stack = this.planningStack.get(signal);
+    for (const key of this.openLibraryRelationKeys(staged.projection)) {
+      if (signal.aborted) throw new Interrupted('Import was interrupted');
+      if (stack?.has(key)) continue;
+      const claim = this.session.bindings.claim({ source: staged.row.source, external_id: key });
+      if (claim?.state === 'bound' || claim?.state === 'taken-down') continue;
+      const dependency = this.session.store.key(staged.row.source, key, run).staged;
+      if (!dependency || dependency.row.state !== 'present') continue;
+      await this.planOnce(registration, run, dependency, signal, write);
+    }
+  }
+
   private async plan(
     registration: SourceRegistration,
     run: Run,
     staged: Staged<SourceProjection>,
     signal: AbortSignal,
+    write: Write,
   ): Promise<Planned | null> {
     if (signal.aborted) throw new Interrupted('Import was interrupted');
+    await this.bindOwnDependencies(registration, run, staged, signal, write);
     const store = this.session.store;
     const { row } = staged;
     const owner = { source: row.source, external_id: row.recordKey };
+    const claim = row.state === 'present' ? this.session.bindings.claim(owner) : null;
+    // Metadata is independent of semantic no-change detection. Failure keeps this
+    // record unclassified and the source baseline unchanged, with its own retry intent.
+    if (claim?.state === 'bound') await this.metadata(owner, staged.projection.sourceRecordMetadata, signal, write);
     let omissions = await this.fences(owner, signal);
-    const acknowledged = store.key(row.source, row.recordKey).acknowledged;
-    if (isDeepStrictEqual(acknowledged, row)) {
+    const recordState = store.key(row.source, row.recordKey, run);
+    const acknowledged = recordState.acknowledged;
+    const previousProjection = recordState.acknowledgedProjection;
+    const sameAdmission = isDeepStrictEqual(
+      [
+        previousProjection?.sourceVocabulary,
+        previousProjection?.sourceStatistic,
+        previousProjection?.sourceStatisticClear,
+      ],
+      [staged.projection.sourceVocabulary, staged.projection.sourceStatistic, staged.projection.sourceStatisticClear],
+    );
+    const unsubmittedMedia = this.session.bindings.hasUnsubmittedMedia(owner, row.digest);
+    // Disappearance has no source projection or references to resolve. Its exact
+    // owner still supplies the candidates to retract through ordinary reconciliation.
+    const ownReferences =
+      row.state !== 'present' || this.options.identifierLookup
+        ? null
+        : resolveOwnReferences(staged.projection, row.source, this.session.bindings);
+    if (ownReferences) {
+      const prior = store.referenceSignature(row.source, row.recordKey);
+      // A resolved entry belongs to this run's immutable command plan. If another
+      // record taught a binding after that entry resolved, the next input pass refreshes it.
+      if (recordState.resolved) return { kind: recordState.kind ?? 'unchanged', deferredCover: false };
+      if (
+        isDeepStrictEqual(acknowledged, row) &&
+        sameAdmission &&
+        prior === ownReferences.signature &&
+        !unsubmittedMedia &&
+        !staged.projection.sourceStatistic &&
+        !staged.projection.sourceStatisticClear &&
+        !staged.projection.sourceVocabulary &&
+        !this.options.classificationAdmission &&
+        !this.options.vocabularyAdmission
+      ) {
+        return { kind: store.classify(run, row.recordKey, { commands: [], omissions }), deferredCover: false };
+      }
+      store.stageReferenceSignature(run, row.recordKey, ownReferences.signature);
+    } else if (
+      isDeepStrictEqual(acknowledged, row) &&
+      sameAdmission &&
+      !unsubmittedMedia &&
+      !staged.projection.sourceStatistic &&
+      !staged.projection.sourceStatisticClear &&
+      !staged.projection.sourceVocabulary &&
+      !this.options.classificationAdmission &&
+      !this.options.vocabularyAdmission &&
+      !this.options.identifierLookup
+    ) {
       return { kind: store.classify(run, row.recordKey, { commands: [], omissions }), deferredCover: false };
     }
     const candidates = this.current(owner);
@@ -456,23 +1961,55 @@ export class Importer {
     let subject: string | null = null;
     let deferredCover = false;
     let skipCover = false;
+    let unavailableCover = false;
+    let statisticWritten = false;
+    let classificationWritten = false;
+    let conversionContext:
+      | {
+          subjectId: string;
+          mediaIds?: Readonly<Record<string, string>>;
+          resolvedReferences?: Readonly<Record<string, string>>;
+          sourceVocabulary?: ConversionContext['sourceVocabulary'];
+        }
+      | undefined;
+    let preserveProperties = new Set<string>();
+    let lookupUnavailable = false;
     if (row.state === 'present') {
       conversion = this.convert(registration, staged);
       observedConversion = conversion;
-      const claim = this.session.bindings.claim(owner);
+      this.retainDiagnostics(run, staged, conversion, 'application');
       if (claim?.state === 'bound') subject = claim.subject;
       else if (
         !omissions.some((o) => o.field_group === 'facts') &&
         !('outcome' in conversion && conversion.outcome === 'ignored')
       ) {
-        subject = await this.bootstrap(registration, staged, conversion, signal);
+        subject = await this.bootstrap(registration, staged, conversion, signal, write);
         if (!subject) return null;
+        await this.metadata(owner, staged.projection.sourceRecordMetadata, signal, write);
       }
       if (subject) {
         omissions = await this.fences(owner, signal);
-        const resolvedReferences = await this.options.identifierLookup?.resolve({ owner, conversion, signal });
-        const context = { subjectId: subject, ...(resolvedReferences ? { resolvedReferences } : {}) };
+        let resolvedReferences = ownReferences?.resolvedReferences;
+        if (this.options.identifierLookup) {
+          const resolution = await this.options.identifierLookup.resolve({ owner, conversion, signal });
+          if (isUnavailableIdentifierResolution(resolution)) {
+            lookupUnavailable = true;
+            preserveProperties = new Set(resolution.preserveProperties);
+            resolvedReferences = resolution.resolvedReferences;
+          } else resolvedReferences = resolution as Readonly<Record<string, string>>;
+        }
+        const admission = this.options.vocabularyAdmission;
+        const vocabulary = admission?.resolve
+          ? await admission.resolve({ owner, conversion, subject, signal })
+          : admission?.request?.({ owner, conversion, subject });
+        const context = {
+          subjectId: subject,
+          ...(resolvedReferences ? { resolvedReferences } : {}),
+          ...(vocabulary ? { sourceVocabulary: vocabulary } : {}),
+        };
+        conversionContext = context;
         conversion = this.convert(registration, staged, context);
+        this.retainDiagnostics(run, staged, conversion, 'application');
         const intents =
           'mediaImportIntents' in conversion ? (conversion.mediaImportIntents as MediaImportRequest[]) : [];
         if (intents.length && !omissions.some((o) => o.field_group === 'cover')) {
@@ -489,17 +2026,108 @@ export class Importer {
             for (const intent of intents)
               if (!uuid.test(resolution.mediaIds[intent.sourceUrl] ?? ''))
                 throw new Error('Media availability is incomplete');
-            conversion = this.convert(registration, staged, { ...context, mediaIds: resolution.mediaIds });
+            conversionContext = { ...context, mediaIds: resolution.mediaIds };
+            conversion = this.convert(registration, staged, conversionContext);
+            this.retainDiagnostics(run, staged, conversion, 'application');
           } else {
             skipCover = true;
             deferredCover = resolution.status === 'pending';
+            unavailableCover = resolution.status === 'unavailable';
+            this.progress(signal)?.onMedia?.(resolution.status === 'rejected' ? 'rejected' : 'deferred');
           }
+        }
+      }
+    }
+    if (subject && conversion?.sourceStatistic && !omissions.some((o) => o.field_group === 'facts')) {
+      const { source: _source, expectedObservation: _token, ...value } = conversion.sourceStatistic;
+      statisticWritten = await this.applyObservation(run, owner, subject, { kind: 'write', ...value }, signal, write);
+    }
+    // Removal addresses only this exact binding and remains permitted behind a facts fence.
+    if (subject && conversion?.sourceStatisticClear) {
+      const { source: _source, expectedObservation: _token, ...value } = conversion.sourceStatisticClear;
+      statisticWritten = await this.applyObservation(run, owner, subject, { kind: 'clear', ...value }, signal, write);
+    }
+    if (subject && conversion && conversionContext && !omissions.some((o) => o.field_group === 'facts')) {
+      const admitted = this.options.classificationAdmission;
+      const facts = admitted?.facts?.({ owner, subject, conversion });
+      if (facts !== undefined) {
+        conversion = this.convert(registration, staged, { ...conversionContext, sourceClassification: facts });
+        this.retainDiagnostics(run, staged, conversion, 'application');
+      }
+      const projection = conversion.sourceClassification;
+      const association = admitted?.association?.({ owner, subject, conversion }) ?? null;
+      const intended =
+        projection?.state === 'available' && association ? intendedFromProjection(projection, association) : null;
+      const pending = intended === null ? store.unresolvedAggregate(run, owner.external_id, 'classification') : null;
+      const resume = pending && isIntendedClassification(pending.intended) ? pending.intended : null;
+      const apply = intended ?? resume;
+      if (apply) classificationWritten = await this.applyClassification(run, owner, subject, apply, signal, write);
+    }
+    const retainedCandidates = new Map<Candidate, BatchCommand>();
+    const retainedProposals = new Set<BatchCommand>();
+    const preservedCandidates = new Set<Candidate>();
+    for (const candidate of candidates) {
+      if (
+        omissions.some((o) => o.field_group === candidate.field_group) ||
+        (skipCover && candidate.field_group === 'cover') ||
+        // A converter transition refreshes even older matching revisions left
+        // behind a fence. Only this run's acknowledged proposals can survive it.
+        (acknowledged?.converter_revision !== row.converter_revision &&
+          candidate.signature !== hash(`${run.id}:${candidate.key}`))
+      )
+        continue;
+      const prior = (JSON.parse(candidate.bytes) as BatchWriteRequest).commands[0]!;
+      if (prior.op !== 'propose') throw new Error('Owned candidate lacks its actual proposal');
+      if (lookupUnavailable && preserveProperties.has(prior.statement.property.id)) {
+        preservedCandidates.add(candidate);
+        continue;
+      }
+      const unchanged = conversion?.proposals.find(
+        (command) =>
+          command.op === 'propose' &&
+          // Equal facts from another converter revision still need fresh public
+          // provenance. Only the producing revision can justify retention.
+          command.source.converter_revision === prior.source.converter_revision &&
+          command.source.field_group === candidate.field_group &&
+          command.subject === candidate.subject &&
+          isDeepStrictEqual(JSON.parse(JSON.stringify(command.statement)), prior.statement) &&
+          !retainedProposals.has(command),
+      );
+      if (unchanged) {
+        retainedCandidates.set(candidate, unchanged);
+        retainedProposals.add(unchanged);
+      }
+    }
+    const statisticOnly =
+      (statisticWritten ||
+        classificationWritten ||
+        (registration.sourceKind === 'vndb' &&
+          acknowledged?.state === 'present' &&
+          acknowledged.recordRevision === row.recordRevision &&
+          acknowledged.converter_revision === row.converter_revision &&
+          !conversion?.sourceStatistic &&
+          !conversion?.sourceStatisticClear &&
+          conversion?.sourceClassification?.state !== 'available')) &&
+      !skipCover &&
+      candidates.length > 0 &&
+      retainedCandidates.size === candidates.length &&
+      conversion?.proposals.every((command) => command.op === 'create' || retainedProposals.has(command));
+    if (!statisticOnly) {
+      for (const [candidate, proposal] of retainedCandidates) {
+        const prior = (JSON.parse(candidate.bytes) as BatchWriteRequest).commands[0]!;
+        // Equal values still need the changed source's actual digest. An acknowledged
+        // proposal from this immutable run is already current and must survive replay.
+        if (prior.source.digest !== row.digest && candidate.signature !== hash(`${run.id}:${candidate.key}`)) {
+          retainedCandidates.delete(candidate);
+          retainedProposals.delete(proposal);
         }
       }
     }
     const commands: BatchCommand[] = [];
     for (const candidate of candidates) {
       if (
+        retainedCandidates.has(candidate) ||
+        preservedCandidates.has(candidate) ||
         omissions.some((o) => o.field_group === candidate.field_group) ||
         (skipCover && candidate.field_group === 'cover')
       )
@@ -524,6 +2152,7 @@ export class Importer {
     }
     for (const command of conversion?.proposals ?? []) {
       if (
+        retainedProposals.has(command) ||
         command.op === 'create' ||
         omissions.some((o) => o.field_group === command.source.field_group) ||
         (skipCover && command.source.field_group === 'cover')
@@ -533,24 +2162,44 @@ export class Importer {
         throw new Error('Converter did not produce bound proposals');
       commands.push({ ...command, key: operationKey(owner, `${run.id}:propose:${command.key}`) });
     }
+    const reported = conversion ?? observedConversion;
     if (!commands.length && !omissions.length && !deferredCover) {
       const kind = store.classify(run, row.recordKey, { commands: [] });
       if (conversion && 'outcome' in conversion && conversion.outcome === 'ignored')
         store.acknowledgeNoEffects(run, row.recordKey, { reason: 'converter-ignored' });
       else if (row.state === 'vanished' && !candidates.length)
         store.acknowledgeNoEffects(run, row.recordKey, { reason: 'no-owned-candidates' });
-      else throw new Error('Conversion has no justified final plan');
+      else if (statisticOnly) {
+        // A confirmed statistic-only refresh changes the input projection without
+        // replacing any acknowledged semantic candidate or its immutable journal.
+        if (!store.key(run.source, row.recordKey, run).resolved) store.acknowledgeStatisticRefresh(run, row.recordKey);
+      } else if (
+        (this.options.vocabularyAdmission ||
+          staged.projection.sourceVocabulary ||
+          this.options.identifierLookup ||
+          ownReferences ||
+          unavailableCover) &&
+        conversion &&
+        retainedCandidates.size === candidates.length &&
+        conversion.proposals.every((command) => command.op === 'create' || retainedProposals.has(command))
+      ) {
+        // Binding availability was re-read; the justified proposals are unchanged.
+        if (!recordState.resolved) store.acknowledgeNoEffects(run, row.recordKey, { reason: 'retained-candidates' });
+      } else if (lookupUnavailable && preservedCandidates.size > 0) {
+        // The source binding read was unavailable. Keep its exact acknowledged candidates for retry.
+      } else throw new Error('Conversion has no justified final plan');
       this.acknowledged(row.recordKey);
-      return { kind, deferredCover: false, ...(observedConversion ? { conversion: observedConversion } : {}) };
+      return { kind, deferredCover: false, ...(reported ? { conversion: reported } : {}) };
     }
     return {
       kind: store.prepare(run, row.recordKey, {
         commands,
         omissions,
         ...(deferredCover ? { deferredCover: true } : {}),
+        ...(conversion?.sourceVocabulary === undefined ? {} : { sourceVocabulary: conversion.sourceVocabulary }),
       }),
       deferredCover,
-      ...(observedConversion ? { conversion: observedConversion } : {}),
+      ...(reported ? { conversion: reported } : {}),
     };
   }
 
@@ -559,6 +2208,7 @@ export class Importer {
     run: Run,
     deferred: DeferredCover<SourceProjection>,
     signal: AbortSignal,
+    write: Write,
   ): Promise<{ outcome: 'pending' | 'failed' | 'resolved'; kind: Kind }> {
     const { row } = deferred;
     const owner = { source: row.source, external_id: row.recordKey };
@@ -573,9 +2223,13 @@ export class Importer {
     if (claim?.state !== 'bound') return { outcome: 'failed', kind: deferred.kind };
     // The context-free conversion exists only as input to identifier lookup.
     const lookup = this.options.identifierLookup;
-    const resolvedReferences = lookup
-      ? await lookup.resolve({ owner, conversion: this.convert(registration, deferred), signal })
-      : undefined;
+    const ownReferences = lookup ? null : resolveOwnReferences(deferred.projection, row.source, this.session.bindings);
+    let resolvedReferences = ownReferences?.resolvedReferences;
+    if (lookup) {
+      const resolution = await lookup.resolve({ owner, conversion: this.convert(registration, deferred), signal });
+      if (isUnavailableIdentifierResolution(resolution)) resolvedReferences = resolution.resolvedReferences;
+      else resolvedReferences = resolution as Readonly<Record<string, string>>;
+    }
     const context = {
       subjectId: claim.subject,
       ...(resolvedReferences ? { resolvedReferences } : {}),
@@ -596,7 +2250,11 @@ export class Importer {
       deferPending: false,
     });
     if (resolution.status !== 'available') {
-      if (resolution.status === 'pending') return { outcome: 'pending', kind: deferred.kind };
+      if (resolution.status === 'pending') {
+        this.progress(signal)?.onMedia?.('deferred');
+        return { outcome: 'pending', kind: deferred.kind };
+      }
+      this.progress(signal)?.onMedia?.(resolution.status === 'rejected' ? 'rejected' : 'deferred');
       const rejected = this.session.store.resolveDeferredCover(run, row.recordKey);
       if (rejected.resolved) this.acknowledged(row.recordKey);
       return { outcome: rejected.resolved ? 'resolved' : 'failed', kind: rejected.kind };
@@ -612,8 +2270,28 @@ export class Importer {
       return { outcome: result.resolved ? 'resolved' : 'failed', kind: result.kind };
     }
     conversion = this.convert(registration, deferred, { ...context, mediaIds: resolution.mediaIds });
+    const proposals: BatchCommand[] = [];
+    for (const command of conversion.proposals) {
+      if (command.op === 'create' || command.source.field_group !== 'cover') continue;
+      if (command.op !== 'propose' || command.subject !== claim.subject)
+        throw new Error('Converter did not produce bound cover proposals');
+      proposals.push({ ...command, key: operationKey(owner, `${run.id}:propose:${command.key}`) });
+    }
+    const proposalsByKey = new Map(proposals.map((command) => [command.key, command]));
+    if (proposalsByKey.size !== proposals.length) throw new Error('Cover proposals contain duplicate command keys');
+    const acknowledgedProposals = new Set<string>();
     const commands: BatchCommand[] = [];
     for (const candidate of this.current(owner).filter((value) => value.field_group === 'cover')) {
+      const proposal = proposalsByKey.get(candidate.key);
+      if (proposal) {
+        const bytes = JSON.stringify({ commands: [proposal] });
+        if (candidate.signature !== hash(`${run.id}:${proposal.key}`) || candidate.bytes !== bytes)
+          throw new Error('Acknowledged cover proposal conflicts with its original request');
+        // A candidate acknowledged from this run is already the result of its immutable
+        // proposal. Keep it and avoid replaying that proposal at the completion boundary.
+        acknowledgedProposals.add(candidate.key);
+        continue;
+      }
       const prior = (JSON.parse(candidate.bytes) as BatchWriteRequest).commands[0]!;
       if (prior.op !== 'propose') throw new Error('Owned candidate lacks its actual proposal');
       commands.push({
@@ -632,20 +2310,16 @@ export class Importer {
         references: prior.statement.references,
       });
     }
-    for (const command of conversion.proposals) {
-      if (command.op === 'create' || command.source.field_group !== 'cover') continue;
-      if (command.op !== 'propose' || command.subject !== claim.subject)
-        throw new Error('Converter did not produce bound cover proposals');
-      commands.push({ ...command, key: operationKey(owner, `${run.id}:propose:${command.key}`) });
-    }
+    commands.push(...proposals.filter((command) => !acknowledgedProposals.has(command.key)));
     if (commands.length) {
       const request = { commands };
       this.atomic(() => {
         for (const command of commands)
           this.session.bindings.prepare(owner, hash(`${run.id}:${command.key}`), { commands: [command] });
       });
-      const result = await this.send(request, signal);
-      this.acknowledge(owner, request, result);
+      const result = await this.send(request, signal, write);
+      const acknowledgedEffects = this.acknowledge(owner, request, result);
+      this.progress(signal)?.onAcknowledgedEffects?.(acknowledgedEffects);
       if (!result.results.every(success)) return { outcome: 'failed', kind: deferred.kind };
     }
     const result = this.session.store.resolveDeferredCover(run, row.recordKey);
@@ -663,6 +2337,7 @@ export class Importer {
       let after: string | undefined;
       let pending = false;
       let failed = false;
+      let stopped = false;
       for (;;) {
         const page = this.session.store.pageDeferredCovers(run, {
           ...(after ? { after } : {}),
@@ -677,21 +2352,27 @@ export class Importer {
           page,
           signal,
           (entry) => entry.row.recordKey,
-          async (entry) => {
+          async (entry, write) => {
             try {
-              return await this.resolveCover(registration, run, entry, signal);
+              return await this.resolveCover(registration, run, entry, signal, write);
             } catch (error) {
               if (error instanceof Interrupted) throw error;
-              return { outcome: 'failed' as const, kind: entry.kind };
+              const overload =
+                error instanceof ImportTransportError &&
+                (error.status === 429 || (error.status === 503 && error.retryable));
+              return { outcome: overload ? ('stopped' as const) : ('failed' as const), kind: entry.kind };
             }
           },
         );
         for (const outcome of outcomes) {
           if (outcome.outcome === 'pending') pending = true;
           else if (outcome.outcome === 'failed') failed = true;
+          else if (outcome.outcome === 'stopped') stopped = true;
         }
         if (page.length) after = page.at(-1)!.row.recordKey;
         this.options.observer?.onPageRetained?.('media', []);
+        // Polling availability must not open a new budget for a failed write.
+        if (stopped) return false;
         if (page.length < 100) break;
       }
       if (!pending && !failed) return true;
@@ -701,13 +2382,215 @@ export class Importer {
     }
   }
 
-  private async run(
+  private compatible(registration: SourceRegistration, run: Run): { ok: true } | { ok: false; reason: string } {
+    let after: string | undefined;
+    for (;;) {
+      const page = this.session.store.pageStaged(run, { ...(after ? { after } : {}), limit: 100 });
+      for (const staged of page) {
+        const projection = staged.projection as { sourceKind?: unknown; normalizedRecord?: unknown } | null;
+        if (!projection || typeof projection !== 'object' || typeof projection.sourceKind !== 'string')
+          return {
+            ok: false,
+            reason: 'Stored projections lack source-kind provenance for a safe compatibility check.',
+          };
+        if (projection.sourceKind !== registration.sourceKind)
+          return { ok: false, reason: 'Stored source kind does not match the configured registration.' };
+        const state = this.session.store.key(run.source, staged.row.recordKey, run);
+        if (state.resolved || state.kind) continue;
+        if (staged.row.converter_revision !== registration.converter_revision)
+          return { ok: false, reason: 'Stored converter revision does not match the configured registration.' };
+        try {
+          this.convert(registration, staged);
+        } catch {
+          return { ok: false, reason: 'Current converter cannot reproduce an unprepared staged projection.' };
+        }
+      }
+      if (page.length) after = page.at(-1)!.row.recordKey;
+      if (page.length < 100) return { ok: true };
+    }
+  }
+
+  private async finishCursor(
+    run: Run,
+    signal: AbortSignal,
+    current: 'more' | 'complete',
+  ): Promise<'complete' | 'incomplete'> {
+    let final: 'incomplete' | 'more' | 'complete' = current;
+    while (final === 'more') {
+      await Promise.resolve();
+      if (signal.aborted) throw new Interrupted('Import was interrupted');
+      final = this.session.store.finalize(run, 100);
+    }
+    return final === 'complete' ? 'complete' : 'incomplete';
+  }
+
+  private async applySealed(
     registration: SourceRegistration,
-    records: AsyncIterable<SourceRecord>,
-    options: ImportRunOptions,
+    run: Run,
+    work: {
+      observe: (kind: Kind, key: string) => void;
+      finish: (status: RunStatus, diagnostic: string) => ImportRunResult;
+      signal: AbortSignal;
+      mediaDeadline: number;
+      resumed: boolean;
+      finalizeOnly: boolean;
+    },
   ): Promise<ImportRunResult> {
+    const store = this.session.store;
+    const { observe, finish, signal, mediaDeadline } = work;
+    if (work.finalizeOnly) {
+      const finalizing = this.progress(signal)?.onPhase?.('finalizing');
+      if (finalizing !== undefined) await finalizing;
+      if (signal.aborted) throw new Interrupted('Import was interrupted');
+      let final = store.finalize(run, 100);
+      if (final === 'incomplete') return finish('bulk-failed', 'Records remain unresolved');
+      if (final === 'more') final = await this.finishCursor(run, signal, final);
+      return finish(
+        final === 'complete' ? 'committed' : 'bulk-failed',
+        final === 'complete' ? 'Resumed source finalization' : 'Records remain unresolved',
+      );
+    }
+    const reconciling = this.progress(signal)?.onPhase?.('reconciling');
+    if (reconciling !== undefined) await reconciling;
+    if (work.resumed && !(await this.drain(run, signal, 'resumed')))
+      return finish('bulk-failed', 'Durable operations remain unresolved');
+    let failed = false;
+    let observationConflict = false;
+    let after: string | undefined;
+    for (;;) {
+      const page = store.pageStaged(run, { ...(after ? { after } : {}), limit: 100 });
+      this.retain(
+        'staged',
+        page.map((staged) => ({ recordKey: staged.row.recordKey, value: staged })),
+      );
+      const outcomes = await this.concurrent(
+        'staged',
+        page,
+        signal,
+        (staged) => staged.row.recordKey,
+        async (staged, write): Promise<Planned | 'failed' | null> => {
+          const { row, projection } = staged;
+          if (row.state === 'vanished') return null;
+          const state = store.key(row.source, row.recordKey, run);
+          if (state.coverPending) return state.kind ? { kind: state.kind, deferredCover: true } : 'failed';
+          try {
+            const configured =
+              projection.sourceKind === registration.sourceKind &&
+              row.converter_revision === registration.converter_revision
+                ? registration
+                : createSourceRegistration(projection.sourceKind, {
+                    source: row.source,
+                    converterRevision: row.converter_revision,
+                  });
+            const planned = await this.planOnce(configured, run, staged, signal, write);
+            if (!planned || planned === 'failed') return planned === 'failed' ? 'failed' : null;
+            for (const pending of store.pendingRecord(run, row.recordKey))
+              if (!(await this.dispatch(run, pending, signal, write))) return 'failed';
+            return planned;
+          } catch (error) {
+            if (error instanceof Interrupted) throw error;
+            if (
+              error instanceof ObservationConflictError ||
+              error instanceof ObservationRefusedError ||
+              error instanceof ClassificationConflictError ||
+              error instanceof ClassificationRefusedError
+            )
+              return { kind: 'unchanged' as const, deferredCover: false, observationConflict: true };
+            return 'failed';
+          }
+        },
+      );
+      for (let index = 0; index < outcomes.length; index++) {
+        const outcome = outcomes[index];
+        if (outcome === 'failed') failed = true;
+        else if (outcome) {
+          if (outcome.observationConflict) observationConflict = true;
+          else {
+            if (outcome.conversion) this.options.onConversionOutput?.(outcome.conversion);
+            observe(outcome.kind, page[index]!.row.recordKey);
+          }
+        }
+      }
+      if (page.length) after = page.at(-1)!.row.recordKey;
+      this.options.observer?.onPageRetained?.('staged', []);
+      if (page.length < 100) break;
+    }
+    after = undefined;
+    for (;;) {
+      const page = store.pageVanished(run, { ...(after ? { after } : {}), limit: 100 });
+      this.retain(
+        'vanished',
+        page.map((prior) => ({ recordKey: prior.recordKey, value: prior })),
+      );
+      const outcomes = await this.concurrent(
+        'vanished',
+        page,
+        signal,
+        (prior) => prior.recordKey,
+        async (prior, write): Promise<Planned | 'failed'> => {
+          try {
+            const planned = await this.plan(
+              registration,
+              run,
+              {
+                row: { ...prior, state: 'vanished' },
+                projection: { sourceKind: registration.sourceKind, normalizedRecord: null },
+              },
+              signal,
+              write,
+            );
+            if (!planned) return 'failed';
+            for (const pending of store.pendingRecord(run, prior.recordKey))
+              if (!(await this.dispatch(run, pending, signal, write))) return 'failed';
+            return planned;
+          } catch (error) {
+            if (error instanceof Interrupted) throw error;
+            if (
+              error instanceof ObservationConflictError ||
+              error instanceof ObservationRefusedError ||
+              error instanceof ClassificationConflictError ||
+              error instanceof ClassificationRefusedError
+            )
+              return { kind: 'unchanged' as const, deferredCover: false, observationConflict: true };
+            return 'failed';
+          }
+        },
+      );
+      for (let index = 0; index < outcomes.length; index++) {
+        const outcome = outcomes[index]!;
+        if (outcome === 'failed') failed = true;
+        else if (outcome.observationConflict) observationConflict = true;
+        else observe(outcome.kind, page[index]!.recordKey);
+      }
+      if (page.length) after = page.at(-1)!.recordKey;
+      this.options.observer?.onPageRetained?.('vanished', []);
+      if (page.length < 100) break;
+    }
+    store.pagePending(run, { limit: 100 });
+    const deferredMedia = this.progress(signal)?.onPhase?.('deferred-media');
+    if (deferredMedia !== undefined) await deferredMedia;
+    if (!(await this.resolveCovers(registration, run, signal, mediaDeadline))) failed = true;
+    if (observationConflict || store.hasObservationConflicts(run)) {
+      const conflict = this.progress(signal)?.onPhase?.('observation-conflict');
+      if (conflict !== undefined) await conflict;
+      return finish('observation-conflict', 'Source observation requires explicit operator resolution');
+    }
+    if (failed || store.hasUnresolvedAggregates(run))
+      return finish('bulk-failed', 'Durable operations remain unresolved');
+    const finalizing = this.progress(signal)?.onPhase?.('finalizing');
+    if (finalizing !== undefined) await finalizing;
+    let final = store.finalize(run, 100);
+    if (final === 'more') final = await this.finishCursor(run, signal, final);
+    return finish(
+      final === 'complete' ? 'committed' : 'bulk-failed',
+      final === 'complete' ? 'Source snapshot committed' : 'Records remain unresolved',
+    );
+  }
+
+  private async resumeSealed(registration: SourceRegistration, options: ResumeRunOptions): Promise<ImportRunResult> {
     const result: ImportRunResult = {
       status: 'interrupted',
+      skipped: 0,
       counts: { new: 0, changed: 0, unchanged: 0, vanished: 0 },
       new: [],
       changed: [],
@@ -719,6 +2602,7 @@ export class Importer {
     if (!Number.isSafeInteger(limit) || limit < 0 || limit > 10000) throw new TypeError('Invalid key collection limit');
     const observe = (kind: Kind, key: string) => {
       result.counts[kind]++;
+      options.progress?.onClassified?.(kind);
       if (limit) {
         if (Object.values(result.counts).reduce((a, b) => a + b, 0) > limit)
           throw new Interrupted('Key collection bound exceeded');
@@ -732,7 +2616,9 @@ export class Importer {
       };
       sinks[kind]?.(key);
     };
-    const finish = (status: RunStatus, diagnostic: string) => Object.assign(result, { status, diagnostic });
+    let runId: string | undefined;
+    const finish = (status: RunStatus, diagnostic: string) =>
+      Object.assign(result, { status, diagnostic, ...(runId ? { runId } : {}) });
     const runController = new AbortController();
     const signal = AbortSignal.any([
       this.shutdown.signal,
@@ -741,13 +2627,179 @@ export class Importer {
     ]);
     this.runControllers.set(signal, runController);
     const mediaDeadline = this.now() + this.mediaDeadlineMs;
-    const ownership = this.session.acquire(registration.source);
+    const ownership = this.takeOwnership(registration.source, false);
+    if (ownership === 'busy') return finish('busy', 'Source has a live coordinator');
+    if (options.progress) this.progressObservers.set(signal, options.progress);
+    try {
+      if (this.session.store.localMaintenanceWork(registration.source))
+        return finish('busy', RETENTION_LOCAL_MAINTENANCE);
+      const peeked = this.session.peekActive(ownership);
+      if (!peeked)
+        return finish(
+          'invalid-dump',
+          'No resumable sealed acquisition for this source. Use ordinary import with complete input, or inspect this state read-only.',
+        );
+      if (peeked.status === 'staging')
+        return finish(
+          'invalid-dump',
+          'This source has incomplete staging and cannot be resumed without its original dump. Use ordinary import with complete input, or inspect this state read-only.',
+        );
+      if (peeked.status === 'unsupported')
+        return finish('invalid-dump', 'Stored generation status is not resumable. Use inspect for a read-only view.');
+      if (peeked.status === 'ready') {
+        let compatibility: { ok: true } | { ok: false; reason: string };
+        try {
+          compatibility = this.compatible(registration, peeked.run);
+        } catch {
+          return finish('invalid-dump', 'Importer state is damaged or unavailable.');
+        }
+        if (!compatibility.ok)
+          return finish('invalid-dump', `${compatibility.reason} The generation was not replaced.`);
+      }
+      if (options.activateNetwork) await options.activateNetwork();
+      const run = this.session.reopen(ownership);
+      if (!run) return finish('invalid-dump', 'Sealed acquisition disappeared after ownership was taken.');
+      const recheck = this.session.store.peekActive(ownership.source);
+      if (!recheck || recheck.run.id !== run.id)
+        return finish('invalid-dump', 'Sealed acquisition disappeared after ownership was taken.');
+      if (recheck.status !== peeked.status && recheck.status !== 'finalizing' && recheck.status !== 'ready')
+        return finish('invalid-dump', 'Stored generation status is not resumable. Use inspect for a read-only view.');
+      const skipped = this.session.store.skipped(run);
+      result.skipped = skipped;
+      runId = run.id;
+      options.progress?.onRun?.(run.id, true);
+      const resuming = options.progress?.onPhase?.('resuming');
+      if (resuming !== undefined) await resuming;
+      options.progress?.onSkipped?.(skipped);
+      options.progress?.onSourceCompleted?.();
+      return await this.applySealed(registration, run, {
+        observe,
+        finish,
+        signal,
+        mediaDeadline,
+        resumed: true,
+        finalizeOnly: recheck.status === 'finalizing',
+      });
+    } catch (error) {
+      if (error instanceof Interrupted) return finish('interrupted', error.message);
+      if (error instanceof Error && (error.name === 'CredentialInputError' || error.name === 'ResumeActivationError'))
+        throw error;
+      if (error instanceof ClassificationConflictError || error instanceof ClassificationRefusedError)
+        return finish('observation-conflict', 'Source classification requires explicit operator resolution');
+      if (error instanceof ObservationConflictError || error instanceof ObservationRefusedError)
+        return finish('observation-conflict', 'Source observation requires explicit operator resolution');
+      return finish('bulk-failed', 'Import operations remain unresolved');
+    } finally {
+      this.runControllers.delete(signal);
+      this.progressObservers.delete(signal);
+      this.planInflight.delete(signal);
+      this.planningStack.delete(signal);
+      this.session.release(ownership);
+    }
+  }
+
+  private async run(
+    registration: SourceRegistration,
+    records: AsyncIterable<SourceRecord | StagingStreamEvent>,
+    options: ImportRunOptions,
+  ): Promise<ImportRunResult> {
+    const result: ImportRunResult = {
+      status: 'interrupted',
+      skipped: 0,
+      counts: { new: 0, changed: 0, unchanged: 0, vanished: 0 },
+      new: [],
+      changed: [],
+      unchanged: [],
+      vanished: [],
+      diagnostic: '',
+    };
+    const limit = options.collectionLimit ?? 0;
+    if (!Number.isSafeInteger(limit) || limit < 0 || limit > 10000) throw new TypeError('Invalid key collection limit');
+    const observe = (kind: Kind, key: string) => {
+      result.counts[kind]++;
+      options.progress?.onClassified?.(kind);
+      if (limit) {
+        if (Object.values(result.counts).reduce((a, b) => a + b, 0) > limit)
+          throw new Interrupted('Key collection bound exceeded');
+        result[kind].push(key);
+      }
+      const sinks = {
+        new: options.sink?.onNew,
+        changed: options.sink?.onChanged,
+        unchanged: options.sink?.onUnchanged,
+        vanished: options.sink?.onVanished,
+      };
+      sinks[kind]?.(key);
+    };
+    const checkpoint = options.checkpoint;
+    let runId: string | undefined;
+    let committedPrefix: number | undefined;
+    const finish = (status: RunStatus, diagnostic: string) =>
+      Object.assign(result, {
+        status,
+        diagnostic,
+        ...(runId ? { runId } : {}),
+        ...(committedPrefix !== undefined ? { committedPrefix } : {}),
+        ...(checkpoint ? { checkpointed: true } : {}),
+      });
+    const runController = new AbortController();
+    const signal = AbortSignal.any([
+      this.shutdown.signal,
+      runController.signal,
+      ...(options.signal ? [options.signal] : []),
+    ]);
+    this.runControllers.set(signal, runController);
+    const mediaDeadline = this.now() + this.mediaDeadlineMs;
+    const existing = this.session.heldOwnership(registration.source);
+    const ownership = this.takeOwnership(registration.source);
     if (ownership === 'busy') return finish('busy', 'Source has a live coordinator');
     const store = this.session.store;
+    if (options.progress) this.progressObservers.set(signal, options.progress);
     try {
+      if (store.localMaintenanceWork(registration.source)) return finish('busy', RETENTION_LOCAL_MAINTENANCE);
       let run = this.session.reopen(ownership);
       let resumed = !!run;
-      if (run) {
+      let skipped = 0;
+      let checkpointed = false;
+      if (checkpoint?.action === 'resume') {
+        if (!run || run.id !== checkpoint.generation) {
+          const named = checkpoint.generation ? store.peekGeneration(registration.source, checkpoint.generation) : null;
+          if (named?.status === 'retired') return finish('invalid-dump', STAGING_RETIRED_GENERATION);
+          if (named?.status === 'retiring') return finish('busy', RETENTION_LOCAL_MAINTENANCE);
+          return finish('invalid-dump', STAGING_MISSING_GENERATION);
+        }
+        options.progress?.onRun?.(run.id, true);
+        runId = run.id;
+        const state = store.stagingResumeState(run);
+        const compatibility = evaluateResume(store.stagingCheckpoint(run.source, run.id), checkpoint.identity, state);
+        if (!compatibility.ok) return finish('invalid-dump', compatibility.message);
+        skipped = compatibility.checkpoint.skipped;
+        committedPrefix = compatibility.checkpoint.committedOrdinal;
+        result.skipped = skipped;
+        checkpointed = true;
+        const staged = await this.stageCapture(registration, records, run, options, signal, {
+          resume: compatibility.checkpoint.committedOrdinal,
+          skipped,
+          checkpointed: true,
+          action: 'resume',
+        });
+        if ('status' in staged) {
+          committedPrefix = staged.committedPrefix;
+          return finish(staged.status, staged.diagnostic);
+        }
+        skipped = staged.skipped;
+        committedPrefix = staged.committedPrefix;
+        result.skipped = skipped;
+        resumed = false;
+      } else if (run) {
+        options.progress?.onRun?.(run.id, true);
+        const resuming = options.progress?.onPhase?.('resuming');
+        if (resuming !== undefined) await resuming;
+        // Capture sealed accounting before finalization can mark or otherwise retire the run.
+        skipped = store.skipped(run);
+        result.skipped = skipped;
+        runId = run.id;
+        if (checkpoint?.action === 'acquire') return finish('invalid-dump', STAGING_ACTIVE_GENERATION);
         // A staging run has no permitted effects and can be discarded. A sealed
         // or finalizing run must finish its durable payload before newer input.
         let final: 'incomplete' | 'more' | 'complete' | null = null;
@@ -760,185 +2812,75 @@ export class Importer {
           if (store.abandon(run) !== 'abandoned') throw new Error('Cannot discard uncertain import');
           run = null;
           resumed = false;
-        } else if (final !== 'incomplete') {
-          while (final === 'more') final = store.finalize(run, 100);
-          return finish('committed', 'Resumed source finalization');
+          runId = undefined;
+        } else {
+          options.progress?.onSkipped?.(skipped);
+          if (final !== 'incomplete') {
+            options.progress?.onSourceCompleted?.();
+            return await this.applySealed(registration, run, {
+              observe,
+              finish,
+              signal,
+              mediaDeadline,
+              resumed: true,
+              finalizeOnly: true,
+            });
+          }
         }
       }
       if (!run) {
-        const next = store.begin(
-          registration.source,
+        if (checkpoint?.action === 'resume') return finish('invalid-dump', STAGING_MISSING_GENERATION);
+        const beginOptions =
           options.disappearanceThreshold === undefined
             ? {}
-            : { disappearanceThreshold: options.disappearanceThreshold },
-        );
+            : { disappearanceThreshold: options.disappearanceThreshold };
+        const next =
+          checkpoint?.action === 'acquire'
+            ? store.beginCheckpointed(registration.source, checkpoint.identity, beginOptions)
+            : store.begin(registration.source, beginOptions);
         if (next === 'busy') return finish('busy', 'Source has active durable work');
         run = next;
-        try {
-          // Staged rows need no durability before the seal, so a page of them shares one commit. The
-          // result equals staging one by one: the rows before a failure and its invalid mark persist.
-          const buffered: Staged<SourceProjection>[] = [];
-          const flush = () => {
-            const page = buffered.splice(0);
-            let failure: unknown;
-            this.atomic(() => {
-              for (const staged of page) {
-                try {
-                  store.stage(next, staged);
-                } catch (error) {
-                  failure = error;
-                  return;
-                }
-              }
-            });
-            if (failure !== undefined) throw failure;
-          };
-          for await (const record of records) {
-            if (signal.aborted) throw new Interrupted('Import was interrupted');
-            if (record.source !== registration.sourceKind) throw new Error('Source stream registration mismatch');
-            const conversion = registration.convert(
-              { external_id: record.key, record_revision: record.revision ?? 'unversioned', record: record.payload },
-              { source: registration.source },
-            );
-            buffered.push({
-              row: {
-                source: registration.source,
-                recordKey: record.key,
-                recordRevision: conversion.record_revision ?? 'unversioned',
-                converter_revision: registration.converter_revision,
-                digest: conversion.digest,
-                state: 'present',
-              },
-              projection: { sourceKind: registration.sourceKind, normalizedRecord: conversion.normalized },
-            });
-            if (buffered.length >= 100) flush();
-          }
-          flush();
-        } catch (error) {
-          store.seal(run, { complete: false, reason: 'malformed' });
-          return finish(
-            error instanceof Interrupted ? 'interrupted' : 'invalid-dump',
-            'Input is incomplete or invalid',
-          );
+        runId = run.id;
+        options.progress?.onRun?.(run.id, false);
+        checkpointed = checkpoint?.action === 'acquire';
+        const staged = await this.stageCapture(registration, records, run, options, signal, {
+          resume: 0,
+          skipped: 0,
+          checkpointed,
+          action: checkpointed ? 'acquire' : 'ordinary',
+        });
+        if ('status' in staged) {
+          committedPrefix = staged.committedPrefix;
+          return finish(staged.status, staged.diagnostic);
         }
-        const seal = store.seal(run, { complete: true });
-        if (seal.status !== 'ready')
-          return finish(seal.status === 'mass-disappearance' ? 'mass-disappearance' : 'invalid-dump', seal.diagnostic);
+        skipped = staged.skipped;
+        committedPrefix = staged.committedPrefix;
+        result.skipped = skipped;
       }
-      if (resumed && !(await this.drain(run, signal, 'resumed')))
-        return finish('bulk-failed', 'Durable operations remain unresolved');
-      let failed = false;
-      let after: string | undefined;
-      for (;;) {
-        const page = store.pageStaged(run, { ...(after ? { after } : {}), limit: 100 });
-        this.retain(
-          'staged',
-          page.map((staged) => ({ recordKey: staged.row.recordKey, value: staged })),
-        );
-        const outcomes = await this.concurrent(
-          'staged',
-          page,
-          signal,
-          (staged) => staged.row.recordKey,
-          async (staged): Promise<Planned | 'failed' | null> => {
-            const { row, projection } = staged;
-            // Prior attempts can already have classified disappeared rows in this
-            // journal. The dedicated vanished index owns that enumeration.
-            if (row.state === 'vanished') return null;
-            const state = store.key(row.source, row.recordKey, run);
-            if (state.coverPending) return state.kind ? { kind: state.kind, deferredCover: true } : 'failed';
-            try {
-              const configured =
-                projection.sourceKind === registration.sourceKind &&
-                row.converter_revision === registration.converter_revision
-                  ? registration
-                  : createSourceRegistration(projection.sourceKind, {
-                      source: row.source,
-                      converterRevision: row.converter_revision,
-                    });
-              const planned = await this.plan(configured, run, staged, signal);
-              if (!planned) return 'failed';
-              for (const pending of store.pendingRecord(run, row.recordKey))
-                if (!(await this.dispatch(run, pending, signal))) return 'failed';
-              return planned;
-            } catch (error) {
-              if (error instanceof Interrupted) throw error;
-              return 'failed';
-            }
-          },
-        );
-        for (let index = 0; index < outcomes.length; index++) {
-          const outcome = outcomes[index];
-          if (outcome === 'failed') failed = true;
-          else if (outcome) {
-            if (outcome.conversion) this.options.onConversionOutput?.(outcome.conversion);
-            observe(outcome.kind, page[index]!.row.recordKey);
-          }
-        }
-        if (page.length) after = page.at(-1)!.row.recordKey;
-        this.options.observer?.onPageRetained?.('staged', []);
-        if (page.length < 100) break;
-      }
-      after = undefined;
-      for (;;) {
-        const page = store.pageVanished(run, { ...(after ? { after } : {}), limit: 100 });
-        this.retain(
-          'vanished',
-          page.map((prior) => ({ recordKey: prior.recordKey, value: prior })),
-        );
-        const outcomes = await this.concurrent(
-          'vanished',
-          page,
-          signal,
-          (prior) => prior.recordKey,
-          async (prior): Promise<Planned | 'failed'> => {
-            try {
-              const planned = await this.plan(
-                registration,
-                run,
-                {
-                  row: { ...prior, state: 'vanished' },
-                  projection: { sourceKind: registration.sourceKind, normalizedRecord: null },
-                },
-                signal,
-              );
-              if (!planned) return 'failed';
-              for (const pending of store.pendingRecord(run, prior.recordKey))
-                if (!(await this.dispatch(run, pending, signal))) return 'failed';
-              return planned;
-            } catch (error) {
-              if (error instanceof Interrupted) throw error;
-              return 'failed';
-            }
-          },
-        );
-        for (let index = 0; index < outcomes.length; index++) {
-          const outcome = outcomes[index]!;
-          if (outcome === 'failed') failed = true;
-          else observe(outcome.kind, page[index]!.recordKey);
-        }
-        if (page.length) after = page.at(-1)!.recordKey;
-        this.options.observer?.onPageRetained?.('vanished', []);
-        if (page.length < 100) break;
-      }
-      // Inspect durable leftovers without retrying a failed record in the same run.
-      store.pagePending(run, { limit: 100 });
-      if (!(await this.resolveCovers(registration, run, signal, mediaDeadline))) failed = true;
-      if (failed) return finish('bulk-failed', 'Durable operations remain unresolved');
-      let final = store.finalize(run, 100);
-      while (final === 'more') final = store.finalize(run, 100);
-      return finish(
-        final === 'complete' ? 'committed' : 'bulk-failed',
-        final === 'complete' ? 'Source snapshot committed' : 'Records remain unresolved',
-      );
+      result.skipped = skipped;
+      return await this.applySealed(registration, run, {
+        observe,
+        finish,
+        signal,
+        mediaDeadline,
+        resumed,
+        finalizeOnly: false,
+      });
     } catch (error) {
+      if (error instanceof ClassificationConflictError || error instanceof ClassificationRefusedError)
+        return finish('observation-conflict', 'Source classification requires explicit operator resolution');
+      if (error instanceof ObservationConflictError || error instanceof ObservationRefusedError)
+        return finish('observation-conflict', 'Source observation requires explicit operator resolution');
       return finish(
         error instanceof Interrupted ? 'interrupted' : 'bulk-failed',
         error instanceof Interrupted ? error.message : 'Import operations remain unresolved',
       );
     } finally {
       this.runControllers.delete(signal);
-      this.session.release(ownership);
+      this.progressObservers.delete(signal);
+      this.planInflight.delete(signal);
+      this.planningStack.delete(signal);
+      if (!existing) this.session.release(ownership);
     }
   }
 }

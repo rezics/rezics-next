@@ -27,5 +27,7 @@ test('an Access failure in a Collection read is unavailability, not a denial', a
 });
 
 test('an Access failure in a FULL members read is unavailability, not a denial', async () => {
-  await expect(fullMembers({ pool, access, tokens }, anonymous, newId(4096), {})).rejects.toBe(failure);
+  await expect(
+    fullMembers({ routeKey: new Uint8Array(32).fill(1), pool, access, tokens }, anonymous, newId(4096), {}),
+  ).rejects.toBe(failure);
 });

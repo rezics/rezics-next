@@ -29,6 +29,8 @@ const release = {
     },
     'schema:Recipe': { labels: { en: 'recipe', es: 'receta' }, bases: [], facets: [author] },
     'schema:Person': { labels: { en: 'person', es: 'persona' }, bases: [], facets: [] },
+    [authorOne]: { labels: {}, bases: [book], facets: [] },
+    [authorTwo]: { labels: {}, bases: ['schema:Recipe'], facets: [] },
   },
   properties: {
     [author]: { labels: { en: 'author', es: 'autor', fr: 'auteur' }, datatype: 'wikibase-item' },
@@ -43,6 +45,7 @@ const release = {
 
 const calls: { method: string; path: string; query: string | null; body: any }[] = [];
 let failFacets = false;
+let emptySearch = false;
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   Response.json(body, { status, headers: { 'cache-control': 'no-store', ...headers } });
 
@@ -66,7 +69,9 @@ const fake = Bun.serve({
       const body = await request.json();
       calls.push({ method: request.method, path: url.pathname, query: null, body });
       return json({
-        subjects: [{ id: '00000000-0000-4000-8000-000000000111', type: book, labels: { en: 'Kokoro', es: 'Kokoro' } }],
+        subjects: emptySearch
+          ? []
+          : [{ id: '00000000-0000-4000-8000-000000000111', type: book, labels: { en: 'Kokoro', es: 'Kokoro' } }],
         total: { value: 1, relation: 'exact' },
         next: null,
         as_of: asOf,
@@ -81,14 +86,23 @@ const fake = Bun.serve({
           property,
           relation: 'exact',
           values:
-            property === author
+            property === 'type'
               ? [
-                  { value: authorOne, count: 7, labels: { en: 'Natsume Soseki', es: 'Natsume Sōseki' } },
-                  { value: authorTwo, count: 4, labels: { en: 'Unknown author' } },
+                  { value: 'schema:Recipe', count: 1, labels: { en: 'recipe', es: 'receta' } },
+                  { value: book, count: 9, labels: { en: 'book', es: 'libro' } },
+                  { value: 'schema:CreativeWork', count: 4, labels: { en: 'creative work', es: 'obra creativa' } },
                 ]
-              : property === genre
-                ? [{ value: genreOne, count: 3, labels: { en: 'Historical novel', es: 'novela histórica' } }]
-                : [],
+              : property === author
+                ? [
+                    { value: authorTwo, count: 1, labels: { en: 'Natsume Soseki', es: 'Natsume Sōseki' } },
+                    { value: authorOne, count: 7, labels: { en: 'Natsume Soseki', es: 'Natsume Sōseki' } },
+                    { value: authorOne, count: 2, labels: { en: 'Natsume Soseki', es: 'Natsume Sōseki' } },
+                  ]
+                : property === genre
+                  ? [{ value: genreOne, count: 3, labels: { en: 'Historical novel', es: 'novela histórica' } }]
+                  : property === 'schema:datePublished'
+                    ? [{ value: '2020-01-01T00:00:00Z', count: 1, labels: {} }]
+                    : [],
         })),
         total: { value: 1, relation: 'exact' },
         as_of: asOf,
@@ -179,21 +193,42 @@ afterAll(async () => {
 const callsAt = (since: number, path: string) => calls.slice(since).filter((call) => call.path === path);
 
 test(
-  'an unrestricted search offers type choices, and a chosen type shows its facets with counts',
+  'an unrestricted search offers type choices, and a chosen type shows localized facet checkboxes without counts',
   async () => {
+    const callsBefore = calls.length;
     const page = await open('/es/search?q=Kokoro');
     try {
       const main = page.getByRole('main');
-      expect(await main.getByRole('link', { name: 'libro', exact: true }).count()).toBe(1);
-      expect(await main.getByRole('link', { name: 'receta', exact: true }).count()).toBe(1);
+      expect(await main.getByRole('link', { name: 'Libro', exact: true }).count()).toBe(1);
+      expect(await main.getByRole('link', { name: 'Receta', exact: true }).count()).toBe(1);
       expect(await main.getByRole('link', { name: 'persona', exact: true }).count()).toBe(0);
-      await main.getByRole('link', { name: 'libro', exact: true }).click();
+      const typeChoices = await main
+        .locator('a[href*="type="]')
+        .evaluateAll((anchors) =>
+          anchors.map((anchor) => new URL((anchor as HTMLAnchorElement).href).searchParams.get('type')),
+        );
+      expect(typeChoices).toEqual(['schema:Recipe', book, 'schema:CreativeWork']);
+      const typeFacetCalls = calls
+        .slice(callsBefore)
+        .filter(
+          (call) =>
+            call.path === '/v1/subjects:facets' &&
+            call.body?.facets?.some((facet: { property: string }) => facet.property === 'type'),
+        );
+      expect(typeFacetCalls).toHaveLength(1);
+      await main.getByRole('link', { name: 'Libro', exact: true }).click();
       await page.waitForURL((url) => url.searchParams.get('type') === book);
       expect(new URL(page.url()).searchParams.get('q')).toBe('Kokoro');
-      expect(await main.getByRole('group', { name: 'autor' }).count()).toBe(1);
-      expect(await main.getByRole('group', { name: 'género' }).count()).toBe(1);
-      expect(await main.getByText('Natsume Sōseki (7)', { exact: true }).count()).toBe(1);
-      expect(await main.getByText('Unknown author (4)', { exact: true }).count()).toBe(1);
+      expect(await main.getByRole('group', { name: 'Autor' }).count()).toBe(1);
+      expect(await main.getByRole('group', { name: 'Género' }).count()).toBe(1);
+      expect(await main.getByRole('checkbox', { name: 'Natsume Sōseki (libro)' }).count()).toBe(1);
+      expect(await main.getByRole('checkbox', { name: 'Natsume Sōseki (receta)' }).count()).toBe(1);
+      expect(
+        await main
+          .locator(`input[name="f.${author}"]`)
+          .evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value)),
+      ).toEqual([authorTwo, authorOne]);
+      expect(await main.getByText('Natsume Sōseki (7)', { exact: true }).count()).toBe(0);
     } finally {
       await page.context().close();
     }
@@ -233,6 +268,7 @@ test(
       expect(facetCalls[0]!.body).toEqual({
         text: 'Kokoro',
         filter: expected,
+        languages: ['en'],
         facets: [
           { property: author, size: 10 },
           { property: genre, size: 10 },
@@ -252,13 +288,15 @@ test(
     const page = await open(`/es/search?q=Kokoro&type=${encodeURIComponent(book)}`);
     try {
       const main = page.getByRole('main');
-      expect(await main.getByText('libro', { exact: true }).count()).toBeGreaterThan(0);
-      const property = main.getByRole('group', { name: 'autor' });
+      expect(await main.getByText('Libro', { exact: true }).count()).toBeGreaterThan(0);
+      const property = main.getByRole('group', { name: 'Autor' });
       expect(await property.count()).toBe(1);
-      expect(await property.getByText('Natsume Sōseki (7)', { exact: true }).count()).toBe(1);
+      expect(await property.getByRole('checkbox', { name: 'Natsume Sōseki (libro)' }).count()).toBe(1);
+      expect(await property.getByRole('checkbox', { name: 'Natsume Sōseki (receta)' }).count()).toBe(1);
+      expect(await property.locator('input[type="checkbox"]').count()).toBe(2);
       expect(await property.locator('legend').getAttribute('lang')).toBe('es');
       expect(await property.locator('label').first().getAttribute('lang')).toBe('es');
-      const fallback = main.getByRole('group', { name: 'publication date' });
+      const fallback = main.getByRole('group', { name: 'Publication date' });
       expect(await fallback.locator('legend').getAttribute('lang')).toBe('en');
     } finally {
       await page.context().close();
@@ -314,6 +352,86 @@ test(
     }
     expect(calls.filter((call) => call.path === '/v1/definitions/releases/' + digest)).toHaveLength(1);
     expect(calls.filter((call) => call.path === '/v1/definitions/active').length).toBeLessThanOrEqual(1);
+  },
+  timeout,
+);
+
+test(
+  'empty queries and searches with no results show no facet list',
+  async () => {
+    const emptyPage = await open('/en/search');
+    try {
+      const main = emptyPage.getByRole('main');
+      expect(await main.getByRole('group').count()).toBe(0);
+      expect(await main.getByRole('checkbox').count()).toBe(0);
+      expect(await main.getByRole('button', { name: /Filters/ }).count()).toBe(0);
+    } finally {
+      await emptyPage.context().close();
+    }
+
+    emptySearch = true;
+    const noResultsPage = await open('/en/search?q=Kokoro');
+    try {
+      const main = noResultsPage.getByRole('main');
+      expect(await main.getByText('No results found.').count()).toBe(1);
+      expect(await main.getByRole('group').count()).toBe(0);
+      expect(await main.getByRole('checkbox').count()).toBe(0);
+      expect(await main.getByRole('button', { name: /Filters/ }).count()).toBe(0);
+    } finally {
+      emptySearch = false;
+      await noResultsPage.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'phone filters sit between the query and results and close with Done; desktop facets sit beside results',
+  async () => {
+    const page = await open(
+      `/en/search?q=Kokoro&type=${encodeURIComponent(book)}&f.${encodeURIComponent(author)}=${authorOne}`,
+    );
+    try {
+      await page.setViewportSize({ width: 390, height: 844 });
+      const main = page.getByRole('main');
+      const filterButton = main.getByRole('button', { name: 'Filters (2)' });
+      expect(await filterButton.count()).toBe(1);
+      const result = main.getByRole('link', { name: 'Kokoro', exact: true });
+      expect(await result.isVisible()).toBe(true);
+      const headingBox = await main.getByRole('heading', { level: 1 }).boundingBox();
+      const filterBox = await filterButton.boundingBox();
+      const mobileResultBox = await result.boundingBox();
+      expect(
+        headingBox && filterBox && mobileResultBox && headingBox.y < filterBox.y && filterBox.y < mobileResultBox.y,
+      ).toBe(true);
+      expect(await filterButton.evaluate((element) => getComputedStyle(element).borderTopColor)).not.toBe(
+        'rgba(0, 0, 0, 0)',
+      );
+      expect(await filterButton.locator('svg').count()).toBe(1);
+      expect(await main.getByRole('checkbox').count()).toBe(0);
+      await filterButton.click();
+      expect(await page.getByRole('dialog').count()).toBe(1);
+      const dialog = page.getByRole('dialog');
+      expect(await dialog.getByRole('heading', { name: 'Filters (2)' }).count()).toBe(1);
+      expect(
+        await dialog.getByRole('button', { name: 'Done' }).evaluate((button) => button.getBoundingClientRect().height),
+      ).toBeGreaterThanOrEqual(44);
+      expect(await dialog.locator('[data-slot="drawer-swipe-handle"]').count()).toBe(1);
+      expect(await page.getByRole('dialog').getByRole('checkbox').count()).toBeGreaterThan(0);
+      expect(
+        await page.getByRole('dialog').locator(`input[name="f.${author}"][value="${authorOne}"]`).isChecked(),
+      ).toBe(true);
+      await dialog.getByRole('button', { name: 'Done' }).click();
+      await page.getByRole('dialog').waitFor({ state: 'detached' });
+      expect(await filterButton.evaluate((button) => button === document.activeElement)).toBe(true);
+      await page.setViewportSize({ width: 1280, height: 860 });
+      expect(await main.getByRole('checkbox').count()).toBeGreaterThan(0);
+      const resultBox = await result.boundingBox();
+      const facetBox = await main.getByRole('group', { name: 'Author' }).boundingBox();
+      expect(resultBox && facetBox && facetBox.x).toBeLessThan(resultBox?.x ?? 0);
+    } finally {
+      await page.context().close();
+    }
   },
   timeout,
 );

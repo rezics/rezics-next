@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createRequire } from 'node:module';
@@ -93,7 +94,10 @@ beforeAll(async () => {
     audience,
     secret: 'proof-only-persistent-secret-at-least-32-bytes',
     signing: { activeKid: 'proof-key', privateKeys: [{ ...(await exportJWK(key.privateKey)), kid: 'proof-key' }] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id: string) {
+        return this.readAccount(id);
+      },
       async readAccount(id: string) {
         const row = await readAccount(pool, routeOf(id)!, id);
         return (
@@ -127,7 +131,7 @@ beforeAll(async () => {
           expiresAt: new Date(Date.now() + 60000).toISOString(),
         };
       },
-    },
+    }),
   };
   service = await createAuthService(options);
   foreign = await createAuthService(options);

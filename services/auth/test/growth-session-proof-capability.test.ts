@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { decodeJwt, exportJWK, generateKeyPair } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -36,7 +37,10 @@ test('checkGrowth live proof signing uses constant native evidence at 1x/8x/64x;
         activeKid: 'growth-proof',
         privateKeys: [{ ...(await exportJWK(key.privateKey)), kid: 'growth-proof' }],
       },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
+        async readFencedAccount(id) {
+          return this.readAccount(id);
+        },
         async readAccount(id) {
           return (
             (
@@ -57,7 +61,7 @@ test('checkGrowth live proof signing uses constant native evidence at 1x/8x/64x;
           // This fixture measures the identity boundary, not later operator authorization.
           throw completed;
         },
-      },
+      }),
     });
     await service.internal.registerClient({ clientId: 'growth-proof-web', firstParty: true, scopes: ['read'] });
     await service.internal.provisionPassword({

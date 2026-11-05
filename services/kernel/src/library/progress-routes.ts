@@ -1,73 +1,234 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
+import type { OperationCatalogue } from '@rezics/operations';
+import { createEpisodeProgressCommands, MAX_EPISODE_IDS } from './episode-progress.ts';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import type { KernelClock } from '../clock.ts';
 import { customMethod } from '../http/custom-method.ts';
+import { bindOperation } from '../http/operation-adapter.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
-import { IDEMPOTENCY_HEADER, idempotencyKeyOf } from '../http/request.ts';
+import { deadlineFor } from '../request/deadline.ts';
+import { IDEMPOTENCY_HEADER } from '../http/headers.ts';
+import { idempotencyKeyOf } from '../http/request.ts';
 import { AuthenticationError, type Access, type Actor } from '../request/access.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import type { KeyRing } from '../tokens/seal.ts';
-import type { ProgressIntent, ProgressSession } from './progress-model.ts';
+import type { ProgressIntent, ProgressPresentation, ProgressScalarMeasure, ProgressSession } from './progress-model.ts';
+import { MAX_PROGRESS_MEASURES } from './progress.ts';
 import { createSessionCommands, ProgressConflictError, ProgressInvalidError } from './sessions.ts';
-import { LibraryNotFoundError } from './command-support.ts';
+import { LibraryNotFoundError, WORK_STEP_DEADLINE_MS } from './command-support.ts';
 import { createPublishedLogCommands } from './published-logs.ts';
+import { libraryStoredVocabularySchema, libraryVocabularyIdSchema } from './profile-schemas.ts';
+import { MAX_JOURNAL_REFLECTION_CHARACTERS } from './progress-journal.ts';
+import { createConsumptionStatisticsReads, type ConsumptionSummary } from './consumption-statistics.ts';
+import { createReportedYearSummaryReads, type ReportedYearSummary } from './reported-year-summary.ts';
+import { readCurrentSubjectSummaries } from '../semantic/current-subject-summaries.ts';
+import { presentProgressDiscovery } from './progress-discovery-presentation.ts';
+import { progressPresentationSchema, sessionSchema } from './transport-contract.ts';
+
+const yearCount = t.String({ pattern: '^[0-9]{1,19}$' });
+const reportedCounts = {
+  completedOccurrences: yearCount,
+  distinctCompletedSubjects: yearCount,
+  repeatOccurrences: yearCount,
+  completedOccurrencesWithUnknownProfile: yearCount,
+  finishPrecision: t.Object({ year: yearCount, month: yearCount, day: yearCount }, { additionalProperties: false }),
+};
+const reportedYearResponse = t.Unsafe<ReportedYearSummary>(
+  t.Object(
+    {
+      ...reportedCounts,
+      scope: t.Literal('retained_native_sessions'),
+      year: t.Integer({ minimum: 1, maximum: 9999 }),
+      calendar: t.Literal('gregorian'),
+      dateSource: t.Literal('explicitly_reported_journal_finish'),
+      months: t.Array(
+        t.Object({ month: t.Integer({ minimum: 1, maximum: 12 }), ...reportedCounts }, { additionalProperties: false }),
+        { minItems: 12, maxItems: 12 },
+      ),
+      monthUnallocated: t.Object(reportedCounts, { additionalProperties: false }),
+      coverage: t.Object(
+        {
+          nativeSessions: t.Literal('complete'),
+          initializedSessions: yearCount,
+          retainedSessions: yearCount,
+          completedOccurrencesWithMissingFinish: yearCount,
+          completedOccurrencesWithUnsupportedFinish: yearCount,
+          otherHistory: t.Literal('unavailable'),
+          unitMeaning: t.Literal('not_evaluated'),
+        },
+        { additionalProperties: false },
+      ),
+      currentness: t.Object(
+        { state: t.Literal('snapshot'), revision: t.String({ maxLength: 36 }) },
+        { additionalProperties: false },
+      ),
+    },
+    { additionalProperties: false },
+  ),
+);
+
+const MAX_JOURNAL_PATCH_BODY_BYTES = 16_384;
 
 import { basicQuery, embedded, fullView, logFields, sessionFields, viewQuery } from './views.ts';
 
-type Dependencies = { pool: Pool; access: () => Access; tokens: KeyRing; clock: KernelClock };
+type Dependencies = {
+  routeKey: Uint8Array;
+  pool: Pool;
+  access: () => Access;
+  tokens: KeyRing;
+  clock: KernelClock;
+  operations: OperationCatalogue;
+};
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 const nullableString = t.Union([t.String(), t.Null()]);
 const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
+const journalRevision = t.Integer({ minimum: 0, maximum: 2_147_483_646 });
+const journalDate = t.Object(
+  {
+    year: t.Integer({ minimum: 1, maximum: 9_999 }),
+    month: t.Optional(t.Integer({ minimum: 1, maximum: 12 })),
+    day: t.Optional(t.Integer({ minimum: 1, maximum: 31 })),
+  },
+  closed,
+);
+const nullableJournalDate = t.Union([journalDate, t.Null()]);
+const assessmentUnits = t.Integer({ minimum: 0, maximum: 20 });
+const journalAssessment = t.Object(
+  { meaningRevision: t.Literal(1), units: t.Union([assessmentUnits, t.Null()]) },
+  closed,
+);
+const journalAssessmentPatch = t.Union([t.Object({ units: assessmentUnits }, closed), t.Null()]);
 const mode = t.Union([t.Literal('scalar_amount'), t.Literal('cursor_position'), t.Literal('completed_units')]);
-const unit = t.Union([
-  t.Literal('page'),
-  t.Literal('chapter'),
-  t.Literal('episode'),
-  t.Literal('volume'),
-  t.Literal('minute'),
-  t.Literal('percent'),
-]);
+function unitInput() {
+  return memoizedValue(unitInput, () => libraryVocabularyIdSchema);
+}
 const state = t.Union([t.Literal('active'), t.Literal('completed'), t.Literal('abandoned')]);
-const sessionSchema = t.Object(
+function presentationFields() {
+  return memoizedValue(presentationFields, () => ({
+    ...sessionFields(),
+    presentation: t.Optional(progressPresentationSchema),
+  }));
+}
+function progressSessionResponse() {
+  return memoizedValue(progressSessionResponse, () => t.Object({ progressSession: sessionSchema() }, closed));
+}
+const discoveryAction = t.Object(
   {
-    id,
-    subjectId: id,
-    versionSubjectId: t.Union([id, t.Null()]),
-    mode,
-    unit,
-    total: nullableString,
-    amount: nullableString,
-    locator: nullableString,
-    position: nullableString,
-    completedUnitCount: t.Integer({ minimum: 0, maximum: 20_000 }),
-    state,
-    revision,
-    startedAt: t.String(),
-    completedAt: nullableString,
+    allowed: t.Boolean(),
+    reason: t.Union([t.Literal('session_not_active'), t.Literal('not_authorized'), t.Null()]),
   },
   closed,
 );
-const progressSessionResponse = t.Object({ progressSession: sessionSchema }, closed);
-const changeIntent = t.Union([
-  t.Object({ amount: t.String() }, closed),
-  t.Object({ locator: t.String(), position: t.String() }, closed),
-  t.Object({ add: t.Array(t.String()), remove: t.Optional(t.Array(t.String())) }, closed),
-  t.Object({ remove: t.Array(t.String()) }, closed),
-]);
-const changeSchema = t.Object(
+const discoveryActions = t.Object(
   {
-    id: t.String(),
-    revision,
-    intent: changeIntent,
-    createdAt: t.String(),
+    open: discoveryAction,
+    edit: discoveryAction,
+    complete: discoveryAction,
+    abandon: discoveryAction,
   },
   closed,
 );
-const changePageResponse = t.Object({ changes: t.Array(changeSchema), next: nullableString }, closed);
+function progressDiscoverySession() {
+  return memoizedValue(progressDiscoverySession, () =>
+    embedded(sessionSchema(), {
+      ...presentationFields(),
+      allowedActions: discoveryActions,
+    }),
+  );
+}
+function progressDiscoveryResponse() {
+  return memoizedValue(progressDiscoveryResponse, () =>
+    t.Object(
+      {
+        viewerState: t.Literal('signed_in'),
+        progressSessions: t.Array(progressDiscoverySession()),
+        next: nullableString,
+      },
+      closed,
+    ),
+  );
+}
+function sessionJournalSchema() {
+  return memoizedValue(sessionJournalSchema, () =>
+    t.Object(
+      {
+        sessionId: id,
+        revision: journalRevision,
+        startDate: nullableJournalDate,
+        finishDate: nullableJournalDate,
+        reflection: t.Union([t.String({ maxLength: MAX_JOURNAL_REFLECTION_CHARACTERS }), t.Null()]),
+        assessment: journalAssessment,
+      },
+      closed,
+    ),
+  );
+}
+function sessionJournalResponse() {
+  return memoizedValue(sessionJournalResponse, () => t.Object({ journal: sessionJournalSchema() }, closed));
+}
+const sessionJournalWriteResponse = t.Object(
+  { journal: t.Object({ sessionId: id, revision: journalRevision, changed: t.Boolean() }, closed) },
+  closed,
+);
+function sessionJournalPatchBody() {
+  return memoizedValue(sessionJournalPatchBody, () =>
+    t.Object(
+      {
+        revision: journalRevision,
+        startDate: t.Optional(nullableJournalDate),
+        finishDate: t.Optional(nullableJournalDate),
+        reflection: t.Optional(t.Union([t.String({ maxLength: MAX_JOURNAL_REFLECTION_CHARACTERS }), t.Null()])),
+        assessment: t.Optional(journalAssessmentPatch),
+      },
+      closed,
+    ),
+  );
+}
+function changeIntent() {
+  return memoizedValue(changeIntent, () =>
+    t.Union([
+      t.Object(
+        {
+          lifecycle: t.Union([t.Literal('reopen'), t.Literal('retire')]),
+          previousState: state,
+          previousCompletedAt: nullableString,
+        },
+        closed,
+      ),
+      t.Object({ clear: t.Literal(true) }, closed),
+      t.Object({ measureId: libraryStoredVocabularySchema, clear: t.Literal(true) }, closed),
+      t.Object({ amount: t.String() }, closed),
+      t.Object({ measureId: libraryStoredVocabularySchema, amount: t.String() }, closed),
+      t.Object({ locator: t.String(), position: t.String() }, closed),
+      t.Object({ add: t.Array(t.String()), remove: t.Optional(t.Array(t.String())) }, closed),
+      t.Object({ remove: t.Array(t.String()) }, closed),
+    ]),
+  );
+}
+function changeSchema() {
+  return memoizedValue(changeSchema, () =>
+    t.Object(
+      {
+        id: t.String(),
+        revision,
+        intent: changeIntent(),
+        createdAt: t.String(),
+      },
+      closed,
+    ),
+  );
+}
+function changePageResponse() {
+  return memoizedValue(changePageResponse, () =>
+    t.Object({ changes: t.Array(changeSchema()), next: nullableString }, closed),
+  );
+}
 const unitPageResponse = t.Object({ completedUnits: t.Array(t.String()), next: nullableString }, closed);
 const publishedLogSchema = t.Object(
   {
@@ -82,39 +243,82 @@ const publishedLogSchema = t.Object(
   },
   closed,
 );
+const tombstoneSchema = t.Object({ id, deleted: t.Literal(true) }, closed);
+function publishedLogConflicts() {
+  return memoizedValue(publishedLogConflicts, () =>
+    problemSchema('published_log_restore_stale', 'published_log_restore_occupied', 'published_log_restore_expired'),
+  );
+}
+const revisionHeader = {
+  'Library-Published-Log-Revision': { schema: { type: 'string', pattern: '^[1-9][0-9]*$' } },
+} as const;
 const publishedLogResponse = t.Object({ publishedLog: publishedLogSchema }, closed);
-const idempotencyHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const invalid = problemSchema('invalid_request', 'invalid_cursor');
-const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
-const conflict = problemSchema('conflict', 'stale_cursor');
-const idempotencyConflict = problemSchema('idempotency_conflict');
-const forbidden = problemSchema('forbidden');
-const notFound = problemSchema('not_found');
-const unavailable = problemSchema(
-  'overloaded',
-  'partition_unavailable',
-  'transaction_retry_exhausted',
-  'deadline_exceeded',
-  'dependency_unavailable',
-);
+function idempotencyHeaders() {
+  return memoizedValue(idempotencyHeaders, () =>
+    t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+  );
+}
+function invalid() {
+  return memoizedValue(invalid, () => problemSchema('invalid_request', 'invalid_cursor'));
+}
+function unauthorized() {
+  return memoizedValue(unauthorized, () => problemSchema('authentication_required', 'invalid_credentials'));
+}
+function conflict() {
+  return memoizedValue(conflict, () => problemSchema('conflict', 'stale_cursor'));
+}
+function idempotencyConflict() {
+  return memoizedValue(idempotencyConflict, () => problemSchema('idempotency_conflict'));
+}
+function profileConflict() {
+  return memoizedValue(profileConflict, () => problemSchema('idempotency_conflict', 'unsupported_library_profile'));
+}
+function forbidden() {
+  return memoizedValue(forbidden, () => problemSchema('forbidden'));
+}
+function notFound() {
+  return memoizedValue(notFound, () => problemSchema('not_found'));
+}
+function unavailable() {
+  return memoizedValue(unavailable, () =>
+    problemSchema(
+      'semantic_not_ready',
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+      'dependency_unavailable',
+    ),
+  );
+}
 const bearer = [{ bearerAuth: [] }];
-const writeRate = defineRateLimit({ family: 'write', units: 1 });
-const pageQuery = {
-  ...viewQuery,
-  limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
-  cursor: t.Optional(t.String({ maxLength: 4096 })),
-};
-const recordBody = t.Object(
-  {
-    revision,
-    amount: t.Optional(t.String()),
-    locator: t.Optional(t.String()),
-    position: t.Optional(t.String()),
-    add: t.Optional(t.Array(t.String(), { maxItems: 100 })),
-    remove: t.Optional(t.Array(t.String(), { maxItems: 100 })),
-  },
-  closed,
-);
+function writeRate() {
+  return memoizedValue(writeRate, () => defineRateLimit({ family: 'write', units: 1 }));
+}
+function pageQuery() {
+  return memoizedValue(pageQuery, () => ({
+    ...viewQuery,
+    limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
+    cursor: t.Optional(t.String({ maxLength: 4096 })),
+  }));
+}
+function recordBody() {
+  return memoizedValue(recordBody, () =>
+    t.Object(
+      {
+        revision,
+        measureId: t.Optional(unitInput()),
+        clear: t.Optional(t.Literal(true)),
+        amount: t.Optional(t.String()),
+        locator: t.Optional(t.String()),
+        position: t.Optional(t.String()),
+        add: t.Optional(t.Array(t.String(), { maxItems: 100 })),
+        remove: t.Optional(t.Array(t.String(), { maxItems: 100 })),
+      },
+      closed,
+    ),
+  );
+}
 const transitionBody = t.Object({ revision }, closed);
 
 function detail(operationId: string, action: string, anonymous = false) {
@@ -123,11 +327,14 @@ function detail(operationId: string, action: string, anonymous = false) {
     'x-exposure': 'gate:reading_progress',
     'x-action': action,
     security: anonymous ? [...bearer, {}] : bearer,
-    ...(/:(?:create|update|delete)$/.test(action) ? { 'x-rate-limit': writeRate } : {}),
+    ...(['progress_session:list', 'progress_session:read'].includes(action)
+      ? { 'x-authority-anchor': 'own-account', 'x-authority-resource-types': Object.keys(bundledRelease.types) }
+      : {}),
+    ...(/:(?:create|update|delete)$/.test(action) ? { 'x-rate-limit': writeRate() } : {}),
   };
 }
 
-function sessionView(session: ProgressSession) {
+function sessionView(session: ProgressSession, presentations?: ReadonlyMap<string, ProgressPresentation>) {
   const {
     id,
     subjectId,
@@ -144,6 +351,10 @@ function sessionView(session: ProgressSession) {
     startedAt,
     completedAt,
   } = session;
+  const measures = session.measures?.map((measure: ProgressScalarMeasure) => ({
+    ...measure,
+    ...(presentations?.has(measure.unit) ? { presentation: presentations.get(measure.unit)! } : {}),
+  }));
   return {
     id,
     subjectId,
@@ -159,6 +370,7 @@ function sessionView(session: ProgressSession) {
     revision,
     startedAt,
     completedAt,
+    ...(measures === undefined ? {} : { measures }),
   };
 }
 
@@ -194,38 +406,254 @@ async function mapped<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_found
 
 /** HTTP transport for private progress sessions and their public published snapshots. */
 export function progressRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
-  const config = () => ({ ...dependencies, access: dependencies.access() });
-  const { pool, tokens, clock } = dependencies;
+  const { operations, ...runtimeDependencies } = dependencies;
+  const config = () => ({ ...runtimeDependencies, access: runtimeDependencies.access() });
+  const { pool, tokens, clock } = runtimeDependencies;
   let sessions: ReturnType<typeof createSessionCommands> | undefined;
   let published: ReturnType<typeof createPublishedLogCommands> | undefined;
+  let episodes: ReturnType<typeof createEpisodeProgressCommands> | undefined;
+  const episodeCommands = () => (episodes ??= createEpisodeProgressCommands(config()));
   const sessionCommands = () =>
-    (sessions ??= createSessionCommands({ pool, access: dependencies.access(), tokens, clock }));
+    (sessions ??= createSessionCommands({ pool, access: runtimeDependencies.access(), tokens, clock }));
   const publishedCommands = () =>
-    (published ??= createPublishedLogCommands({ pool, access: dependencies.access(), tokens, clock }));
+    (published ??= createPublishedLogCommands({ pool, access: runtimeDependencies.access(), tokens, clock }));
+  const statistics = createConsumptionStatisticsReads({ pool });
+  const reportedYears = createReportedYearSummaryReads({ pool });
+  const recordOperation = bindOperation(
+    operations,
+    'progress_session.record',
+    'POST',
+    {
+      params: {
+        reference: 'library.progress-session.record.params',
+        schema: t.Object({ sessionId: t.String() }, closed),
+      },
+      headers: { reference: 'library.idempotency.headers', schema: idempotencyHeaders() },
+      body: { reference: 'library.progress-session.record.request', schema: recordBody() },
+      response: {
+        reference: 'library.progress-session.write.response',
+        schema: {
+          200: progressSessionResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          409: problemSchema('conflict'),
+          422: profileConflict(),
+          503: unavailable(),
+        },
+      },
+    },
+    (schemas, detail) => ({
+      params: schemas.params.schema,
+      headers: schemas.headers.schema,
+      body: schemas.body.schema,
+      response: schemas.response.schema,
+      detail,
+    }),
+  );
+  const recordPath = '/v1/progressSessions/:sessionId/$record';
 
+  const episodeRow = t.Object(
+    {
+      episodeSubjectId: t.Union([id, t.Null()]),
+      completed: t.Union([t.Boolean(), t.Null()]),
+      membership: t.Union([t.Literal('member'), t.Literal('detached'), t.Literal('unavailable')]),
+      ordinal: nullableString,
+    },
+    closed,
+  );
   return app
+    .get(
+      '/v1/libraryReportedYearSummary',
+      {
+        query: t.Object({ year: t.Numeric({ minimum: 1, maximum: 9999, multipleOf: 1 }) }, closed),
+        transform: ({ request, set }) => {
+          set.headers['cache-control'] = 'private, no-store';
+          const query = new URL(request.url).searchParams;
+          if (
+            [...query.keys()].some((key) => key !== 'year') ||
+            query.getAll('year').length !== 1 ||
+            !/^[1-9][0-9]{0,3}$/.test(query.get('year') ?? '')
+          )
+            throw new ProblemError('invalid_request');
+        },
+        response: {
+          200: reportedYearResponse,
+          400: invalid(),
+          401: unauthorized(),
+          403: problemSchema('forbidden', 'platform_closed'),
+          503: unavailable(),
+        },
+        detail: detail('library_consumption.reported_year', 'progress_session:list'),
+      },
+      async ({ actor, admission, job, request, query }) => {
+        requireAccount(actor);
+        return admission.run('normal', job, () =>
+          reportedYears.summary(
+            actor,
+            query.year,
+            job.deadline,
+            request.signal,
+            (_value, encoded) =>
+              new Response(encoded, {
+                headers: { 'content-type': 'application/json', 'cache-control': 'private, no-store' },
+              }),
+          ),
+        );
+      },
+    )
+    .get(
+      '/v1/libraryConsumptionSummary',
+      {
+        query: t.Object({}, closed),
+        transform: ({ request, set }) => {
+          set.headers['cache-control'] = 'private, no-store';
+          if (new URL(request.url).searchParams.size) throw new ProblemError('invalid_request');
+        },
+        response: {
+          200: t.Unsafe<ConsumptionSummary>(
+            t.Object(
+              {
+                scope: t.Literal('retained_native_sessions'),
+                completedOccurrences: t.String({ pattern: '^[0-9]+$' }),
+                distinctCompletedSubjects: t.String({ pattern: '^[0-9]+$' }),
+                repeatOccurrences: t.String({ pattern: '^[0-9]+$' }),
+                completedOccurrencesWithUnknownProfile: t.String({ pattern: '^[0-9]+$' }),
+                coverage: t.Object(
+                  {
+                    nativeSessions: t.Literal('complete'),
+                    otherHistory: t.Literal('unavailable'),
+                    unitMeaning: t.Literal('not_evaluated'),
+                  },
+                  closed,
+                ),
+                currentness: t.Object({ state: t.Literal('snapshot'), revision: t.String() }, closed),
+              },
+              closed,
+            ),
+          ),
+          400: invalid(),
+          401: unauthorized(),
+          403: problemSchema('forbidden', 'platform_closed'),
+          503: unavailable(),
+        },
+        detail: detail('library_consumption.summary', 'progress_session:list'),
+      },
+      async ({ actor, admission, job, request }) => {
+        requireAccount(actor);
+        return admission.run('normal', job, () => statistics.summary(actor, job.deadline, request.signal));
+      },
+    )
+    .get(
+      '/v1/progressSessions/:sessionId/episodes',
+      {
+        params: t.Object({ sessionId: id }, closed),
+        query: t.Object(
+          {
+            ids: t.Optional(t.String({ maxLength: 739 })),
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: MAX_EPISODE_IDS, multipleOf: 1 })),
+          },
+          closed,
+        ),
+        response: {
+          200: t.Object({ revision, episodes: t.Array(episodeRow), next: nullableString }, closed),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          409: conflict(),
+          503: unavailable(),
+        },
+        detail: detail('progress_session.episodes', 'progress_session:read'),
+      },
+      async ({ params, query, actor, admission, job, set }) => {
+        requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () =>
+          mapped(
+            () =>
+              episodeCommands().readEpisodes(actor, params.sessionId, {
+                ...(query.ids === undefined ? {} : { ids: query.ids.split(',') }),
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                ...(query.limit === undefined ? {} : { limit: query.limit }),
+              }),
+            'not_found',
+          ),
+        );
+      },
+    )
+    .post(
+      customMethod('/v1/progressSessions/:sessionId', 'recordEpisodes'),
+      {
+        params: t.Object({ sessionId: id }, closed),
+        headers: idempotencyHeaders(),
+        body: t.Object(
+          {
+            revision,
+            clear: t.Optional(t.Literal(true)),
+            add: t.Optional(t.Array(id, { maxItems: MAX_EPISODE_IDS })),
+            remove: t.Optional(t.Array(id, { maxItems: MAX_EPISODE_IDS })),
+          },
+          closed,
+        ),
+        response: {
+          200: t.Object({ revision }, closed),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          409: problemSchema('conflict'),
+          422: profileConflict(),
+          503: unavailable(),
+        },
+        detail: detail('progress_session.record_episodes', 'progress_session:update'),
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        requireAccount(actor);
+        const result = await admission.run('normal', job, () =>
+          mapped(() =>
+            episodeCommands().recordEpisodes(
+              actor,
+              params.sessionId,
+              body,
+              idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+            ),
+          ),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return result.value;
+      },
+    )
     .post(
       '/v1/progressSessions',
       {
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
         body: t.Object(
           {
             subjectId: t.String(),
             versionSubjectId: t.Optional(t.Union([t.String(), t.Null()])),
             mode,
-            unit,
+            unit: unitInput(),
             total: t.Optional(nullableString),
+            additionalMeasures: t.Optional(
+              t.Array(t.Object({ unit: unitInput(), total: t.Optional(nullableString) }, closed), {
+                minItems: 1,
+                maxItems: MAX_PROGRESS_MEASURES - 1,
+              }),
+            ),
           },
           closed,
         ),
         response: {
-          201: progressSessionResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
-          422: idempotencyConflict,
-          503: unavailable,
+          201: progressSessionResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          422: profileConflict(),
+          503: unavailable(),
         },
         detail: detail('progress_session.create', 'progress_session:create'),
       },
@@ -243,18 +671,18 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
     .get(
       '/v1/progressSessions',
       {
-        query: t.Object({ subjectId: t.String(), ...pageQuery }, closed),
+        query: t.Object({ subjectId: t.String(), ...pageQuery() }, closed),
         response: {
           200: t.Object(
-            { progressSessions: t.Array(embedded(sessionSchema, sessionFields)), next: nullableString },
+            { progressSessions: t.Array(embedded(sessionSchema(), sessionFields())), next: nullableString },
             closed,
           ),
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          409: conflict,
-          404: notFound,
-          503: unavailable,
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          409: conflict(),
+          404: notFound(),
+          503: unavailable(),
         },
         detail: detail('progress_session.list', 'progress_session:list'),
       },
@@ -267,7 +695,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
             const options = query.view === 'FULL' ? { ...page, limit: Math.min(page.limit ?? 20, 99) } : page;
             const result = await sessionCommands().listSessions(actor, query.subjectId, options);
             return fullView(config(), actor, query.view, {
-              progressSessions: result.sessions.map(sessionView),
+              progressSessions: result.sessions.map((session) => sessionView(session)),
               next: result.next,
             });
           }),
@@ -275,73 +703,257 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       },
     )
     .get(
+      '/v1/progressSessionDiscovery',
+      {
+        query: t.Object(
+          {
+            subjectId: t.Optional(id),
+            state: t.Optional(t.Union([t.Literal('active'), t.Literal('completed'), t.Literal('abandoned')])),
+            mode: t.Optional(mode),
+            profileId: t.Optional(t.String({ minLength: 1, maxLength: 128 })),
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50, multipleOf: 1, default: 20 })),
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+          },
+          closed,
+        ),
+        transform: ({ request }) => {
+          const query = new URL(request.url).searchParams;
+          if (
+            [...query.keys()].some(
+              (key) => !['subjectId', 'state', 'mode', 'profileId', 'limit', 'cursor'].includes(key),
+            ) ||
+            [...query.keys()].some((key) => query.getAll(key).length !== 1) ||
+            ['state', 'mode', 'profileId'].filter((key) => query.has(key)).length > 1
+          )
+            throw new ProblemError('invalid_request');
+        },
+        response: {
+          200: progressDiscoveryResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: problemSchema('forbidden', 'account_suspended'),
+          409: conflict(),
+          503: unavailable(),
+        },
+        detail: detail('progress_session.discovery', 'progress_session:list'),
+      },
+      async ({ query, actor, admission, job, request, set }) => {
+        const viewer = requireAccount(actor);
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, () =>
+          mapped(async () => {
+            const filter = {
+              ...(query.subjectId === undefined ? {} : { subjectId: query.subjectId }),
+              ...(query.state === undefined ? {} : { state: query.state }),
+              ...(query.mode === undefined ? {} : { mode: query.mode }),
+              ...(query.profileId === undefined ? {} : { profileId: query.profileId }),
+            };
+            const result = await sessionCommands().listOwnerSessions(actor, filter, {
+              ...(query.limit === undefined ? {} : { limit: query.limit }),
+              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+              origin: new URL(request.url).origin,
+              language: request.headers.get('accept-language') ?? '',
+            });
+            const dependencies = config();
+            const subjectIds = [
+              ...new Set(
+                result.sessions.flatMap(({ session }) =>
+                  session.versionSubjectId ? [session.subjectId, session.versionSubjectId] : [session.subjectId],
+                ),
+              ),
+            ];
+            const [subjects, presentations] = await Promise.all([
+              readCurrentSubjectSummaries(
+                {
+                  pool,
+                  access: runtimeDependencies.access(),
+                  actor: viewer,
+                  routeKey: runtimeDependencies.routeKey,
+                  deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+                },
+                subjectIds,
+              ),
+              presentProgressDiscovery(pool, result.sessions),
+            ]);
+            await subjects.verify();
+            await sessionCommands().verifyOwnerDiscoveryCurrent(actor, result.generation, result.partitionEpoch);
+            return {
+              viewerState: 'signed_in' as const,
+              progressSessions: result.sessions.map(({ session }) => {
+                const active = session.state === 'active';
+                const readable = viewer.scopes.includes('progress_session:read');
+                const writable = viewer.scopes.includes('progress_session:update');
+                const action = (allowed: boolean, reason: 'session_not_active' | 'not_authorized' | null) => ({
+                  allowed,
+                  reason,
+                });
+                return {
+                  ...sessionView(
+                    session,
+                    new Map(
+                      (presentations.get(session.id)?.measures ?? []).map(({ unit, presentation }) => [
+                        unit,
+                        presentation,
+                      ]),
+                    ),
+                  ),
+                  ...(presentations.has(session.id)
+                    ? { presentation: presentations.get(session.id)!.presentation }
+                    : {}),
+                  subject: subjects.summaries.get(session.subjectId) ?? null,
+                  versionSubject: session.versionSubjectId
+                    ? (subjects.summaries.get(session.versionSubjectId) ?? null)
+                    : null,
+                  allowedActions: {
+                    open: action(readable, readable ? null : 'not_authorized'),
+                    edit: action(readable && writable, readable && writable ? null : 'not_authorized'),
+                    complete: action(
+                      active && writable,
+                      !writable ? 'not_authorized' : active ? null : 'session_not_active',
+                    ),
+                    abandon: action(
+                      active && writable,
+                      !writable ? 'not_authorized' : active ? null : 'session_not_active',
+                    ),
+                  },
+                };
+              }),
+              next: result.next,
+            };
+          }),
+        );
+      },
+    )
+    .get(
       '/v1/progressSessions/:sessionId',
       {
-        query: t.Object(viewQuery, closed),
+        query: t.Object({ ...viewQuery, presentation: t.Optional(t.Literal('FULL')) }, closed),
         params: t.Object({ sessionId: t.String() }, closed),
         response: {
-          200: t.Object({ progressSession: embedded(sessionSchema, sessionFields) }, closed),
-          400: invalid,
-          401: unauthorized,
-          404: notFound,
-          503: unavailable,
+          200: t.Object({ progressSession: embedded(sessionSchema(), presentationFields()) }, closed),
+          400: invalid(),
+          401: unauthorized(),
+          404: notFound(),
+          409: conflict(),
+          503: unavailable(),
         },
         detail: detail('progress_session.read', 'progress_session:read'),
       },
-      async ({ params, query, actor, admission, job }) =>
+      async ({ params, query, actor, admission, job, set }) =>
         admission.run('normal', job, () =>
-          mapped(
-            async () =>
-              fullView(config(), actor, query.view, {
-                progressSession: sessionView(await sessionCommands().readSession(actor, params.sessionId)),
-              }),
-            'not_found',
-          ),
+          mapped(async () => {
+            set.headers['cache-control'] = 'private, no-store';
+            if (query.presentation === 'FULL') {
+              return sessionCommands().readPresentedSession(
+                actor,
+                params.sessionId,
+                async (session, presentation, disclosure, measurePresentations) => {
+                  const value = {
+                    ...sessionView(
+                      session,
+                      new Map(measurePresentations.map((measure) => [measure.unit, measure.presentation])),
+                    ),
+                    presentation,
+                  };
+                  if (query.view !== 'FULL') return { progressSession: value };
+                  const summary = async (id: string | null, disclosed: boolean) => {
+                    if (!id || !disclosed) return null;
+                    return (
+                      (await fullView(config(), actor, 'FULL', { reference: { subjectId: id } })).reference.subject ??
+                      null
+                    );
+                  };
+                  const subject = await summary(session.subjectId, disclosure.subject);
+                  const versionSubject =
+                    session.versionSubjectId === session.subjectId
+                      ? subject
+                      : await summary(session.versionSubjectId, disclosure.versionSubject);
+                  return { progressSession: { ...value, subject, versionSubject } };
+                },
+              );
+            }
+            return fullView(config(), actor, query.view, {
+              progressSession: sessionView(await sessionCommands().readSession(actor, params.sessionId)),
+            });
+          }, 'not_found'),
         ),
     )
-    .post(
-      customMethod('/v1/progressSessions/:sessionId', 'record'),
+    .get(
+      '/v1/progressSessions/:sessionId/journal',
       {
         params: t.Object({ sessionId: t.String() }, closed),
-        headers: idempotencyHeaders,
-        body: recordBody,
         response: {
-          200: progressSessionResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
-          409: problemSchema('conflict'),
-          422: idempotencyConflict,
-          503: unavailable,
+          200: sessionJournalResponse(),
+          401: unauthorized(),
+          404: notFound(),
+          409: conflict(),
+          503: unavailable(),
         },
-        detail: detail('progress_session.record', 'progress_session:update'),
+        detail: detail('progress_session_journal.read', 'progress_session:read'),
+      },
+      async ({ params, actor, admission, job, set }) =>
+        admission.run('normal', job, () =>
+          mapped(async () => {
+            set.headers['cache-control'] = 'private, no-store';
+            return { journal: await sessionCommands().readSessionJournal(actor, params.sessionId) };
+          }, 'not_found'),
+        ),
+    )
+    .patch(
+      '/v1/progressSessions/:sessionId/journal',
+      {
+        params: t.Object({ sessionId: t.String() }, closed),
+        headers: idempotencyHeaders(),
+        body: sessionJournalPatchBody(),
+        response: {
+          200: sessionJournalWriteResponse,
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          409: problemSchema('conflict'),
+          413: problemSchema('content_too_large'),
+          503: unavailable(),
+        },
+        detail: {
+          ...detail('progress_session_journal.update', 'progress_session:update'),
+          'x-body-limit': MAX_JOURNAL_PATCH_BODY_BYTES,
+        },
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
         requireAccount(actor);
         const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
-          mapped(() => sessionCommands().recordProgress(actor, params.sessionId, body, requestKey)),
+          mapped(() => sessionCommands().patchSessionJournal(actor, params.sessionId, body, requestKey)),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
-        return { progressSession: sessionView(result.value) };
+        return { journal: result.value };
       },
     )
+    .post(recordPath, recordOperation.options, async ({ params, body, headers, actor, admission, job, session }) => {
+      requireAccount(actor);
+      const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+      const result = await admission.run('normal', job, () =>
+        mapped(() => sessionCommands().recordProgress(actor, params.sessionId, body, requestKey)),
+      );
+      session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+      return { progressSession: sessionView(result.value) };
+    })
     .post(
       customMethod('/v1/progressSessions/:sessionId', 'complete'),
       {
         params: t.Object({ sessionId: t.String() }, closed),
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
         body: transitionBody,
         response: {
-          200: progressSessionResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
+          200: progressSessionResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
           409: problemSchema('conflict'),
-          422: idempotencyConflict,
-          503: unavailable,
+          422: idempotencyConflict(),
+          503: unavailable(),
         },
         detail: detail('progress_session.complete', 'progress_session:update'),
       },
@@ -359,17 +971,17 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       customMethod('/v1/progressSessions/:sessionId', 'abandon'),
       {
         params: t.Object({ sessionId: t.String() }, closed),
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
         body: transitionBody,
         response: {
-          200: progressSessionResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
+          200: progressSessionResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
           409: problemSchema('conflict'),
-          422: idempotencyConflict,
-          503: unavailable,
+          422: idempotencyConflict(),
+          503: unavailable(),
         },
         detail: detail('progress_session.abandon', 'progress_session:update'),
       },
@@ -383,12 +995,68 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         return { progressSession: sessionView(result.value) };
       },
     )
+    .post(
+      customMethod('/v1/progressSessions/:sessionId', 'reopen'),
+      {
+        params: t.Object({ sessionId: t.String() }, closed),
+        headers: idempotencyHeaders(),
+        body: transitionBody,
+        response: {
+          200: progressSessionResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          409: problemSchema('conflict'),
+          422: idempotencyConflict(),
+          503: unavailable(),
+        },
+        detail: detail('progress_session.reopen', 'progress_session:update'),
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        requireAccount(actor);
+        const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() => sessionCommands().reopenSession(actor, params.sessionId, body, requestKey)),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return { progressSession: sessionView(result.value) };
+      },
+    )
+    .post(
+      customMethod('/v1/progressSessions/:sessionId', 'retire'),
+      {
+        params: t.Object({ sessionId: t.String() }, closed),
+        headers: idempotencyHeaders(),
+        body: transitionBody,
+        response: {
+          200: progressSessionResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          409: problemSchema('conflict'),
+          422: idempotencyConflict(),
+          503: unavailable(),
+        },
+        detail: detail('progress_session.retire', 'progress_session:update'),
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        requireAccount(actor);
+        const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        const result = await admission.run('normal', job, () =>
+          mapped(() => sessionCommands().retireSession(actor, params.sessionId, body, requestKey)),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        return { progressSession: sessionView(result.value) };
+      },
+    )
     .get(
       '/v1/progressSessions/:sessionId/completedUnits',
       {
         params: t.Object({ sessionId: t.String() }, closed),
-        query: t.Object(pageQuery, closed),
-        response: { 200: unitPageResponse, 400: invalid, 404: notFound, 409: conflict, 503: unavailable },
+        query: t.Object(pageQuery(), closed),
+        response: { 200: unitPageResponse, 400: invalid(), 404: notFound(), 409: conflict(), 503: unavailable() },
         detail: detail('progress_session.units', 'progress_session:read'),
       },
       async ({ params, query, actor, admission, job }) =>
@@ -403,8 +1071,8 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       '/v1/progressSessions/:sessionId/changes',
       {
         params: t.Object({ sessionId: t.String() }, closed),
-        query: t.Object(pageQuery, closed),
-        response: { 200: changePageResponse, 400: invalid, 404: notFound, 409: conflict, 503: unavailable },
+        query: t.Object(pageQuery(), closed),
+        response: { 200: changePageResponse(), 400: invalid(), 404: notFound(), 409: conflict(), 503: unavailable() },
         detail: detail('progress_session.changes', 'progress_session:read'),
       },
       async ({ params, query, actor, admission, job }) =>
@@ -418,21 +1086,24 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
     .post(
       '/v1/publishedLogs',
       {
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
         body: t.Object(
           { sessionId: t.String(), note: t.Optional(t.Union([t.String({ maxLength: 1000 }), t.Null()])) },
           closed,
         ),
         response: {
           201: publishedLogResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
-          422: idempotencyConflict,
-          503: unavailable,
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          422: idempotencyConflict(),
+          503: unavailable(),
         },
-        detail: detail('published_log.create', 'published_log:create'),
+        detail: {
+          ...detail('published_log.create', 'published_log:create'),
+          responses: { 201: { description: 'Snapshot published', headers: revisionHeader } },
+        },
       },
       async ({ body, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
@@ -442,6 +1113,8 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
         set.status = 201;
+        if (result.revision !== undefined) set.headers['Library-Published-Log-Revision'] = String(result.revision);
+        set.headers['cache-control'] = 'private, no-store';
         return { publishedLog: result.value };
       },
     )
@@ -451,37 +1124,44 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         query: t.Object(viewQuery, closed),
         params: t.Object({ logId: t.String() }, closed),
         response: {
-          200: t.Object({ publishedLog: embedded(publishedLogSchema, logFields) }, closed),
-          400: invalid,
-          404: notFound,
-          503: unavailable,
-        },
-        detail: detail('published_log.read', 'published_log:read', true),
-      },
-      async ({ params, query, actor, admission, job }) =>
-        admission.run('normal', job, () =>
-          mapped(
-            async () =>
-              fullView(config(), actor, query.view, {
-                publishedLog: await publishedCommands().readPublishedLog(actor, params.logId),
-              }),
-            'not_found',
+          200: t.Object(
+            { publishedLog: t.Union([embedded(publishedLogSchema, logFields()), tombstoneSchema]) },
+            closed,
           ),
+          400: invalid(),
+          404: notFound(),
+          503: unavailable(),
+        },
+        detail: {
+          ...detail('published_log.read', 'published_log:read', true),
+          responses: {
+            200: { description: 'Public snapshot or safe tombstone; revision is owner-only', headers: revisionHeader },
+          },
+        },
+      },
+      async ({ params, query, actor, admission, job, set }) =>
+        admission.run('normal', job, () =>
+          mapped(async () => {
+            const result = await publishedCommands().readWithRevision(actor, params.logId);
+            set.headers['cache-control'] = 'private, no-store';
+            if (result.revision !== undefined) set.headers['Library-Published-Log-Revision'] = String(result.revision);
+            return fullView(config(), actor, query.view, { publishedLog: result.publishedLog });
+          }, 'not_found'),
         ),
     )
     .get(
       '/v1/publishedLogs',
       {
-        query: t.Object({ accountId: t.String(), ...pageQuery }, closed),
+        query: t.Object({ accountId: t.String(), ...pageQuery() }, closed),
         response: {
           200: t.Object(
-            { publishedLogs: t.Array(embedded(publishedLogSchema, logFields)), next: nullableString },
+            { publishedLogs: t.Array(embedded(publishedLogSchema, logFields())), next: nullableString },
             closed,
           ),
-          400: invalid,
-          404: notFound,
-          409: conflict,
-          503: unavailable,
+          400: invalid(),
+          404: notFound(),
+          409: conflict(),
+          503: unavailable(),
         },
         detail: detail('published_log.list', 'published_log:read', true),
       },
@@ -497,25 +1177,82 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       '/v1/publishedLogs/:logId',
       {
         params: t.Object({ logId: t.String() }, closed),
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
+        query: t.Object(
+          { revision: t.Optional(t.Numeric({ minimum: 1, maximum: 2147483646, multipleOf: 1 })) },
+          closed,
+        ),
         response: {
           200: publishedLogResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
-          422: idempotencyConflict,
-          503: unavailable,
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          409: publishedLogConflicts(),
+          422: idempotencyConflict(),
+          503: unavailable(),
         },
-        detail: detail('published_log.delete', 'published_log:delete'),
+        detail: {
+          ...detail('published_log.delete', 'published_log:delete'),
+          responses: {
+            200: {
+              description: 'Snapshot retracted; exact old receipts may omit deletion headers',
+              headers: {
+                'Library-Published-Log-Deletion-Id': { schema: { type: 'string', format: 'uuid' } },
+                'Library-Published-Log-Deletion-Revision': { schema: { type: 'string', pattern: '^[1-9][0-9]*$' } },
+              },
+            },
+          },
+        },
       },
-      async ({ params, headers, actor, admission, job, session }) => {
+      async ({ params, query, headers, actor, admission, job, session, set }) => {
         requireAccount(actor);
         const requestKey = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const result = await admission.run('normal', job, () =>
-          mapped(() => publishedCommands().retractLog(actor, params.logId, requestKey)),
+          mapped(() => publishedCommands().retractLog(actor, params.logId, requestKey, query.revision)),
         );
         session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        if (result.deletionId !== undefined && result.revision !== undefined) {
+          set.headers['Library-Published-Log-Deletion-Id'] = result.deletionId;
+          set.headers['Library-Published-Log-Deletion-Revision'] = String(result.revision);
+        }
+        set.headers['cache-control'] = 'private, no-store';
+        return { publishedLog: result.value };
+      },
+    )
+    .post(
+      customMethod('/v1/publishedLogs/:logId', 'restore'),
+      {
+        params: t.Object({ logId: t.String() }, closed),
+        headers: idempotencyHeaders(),
+        body: t.Object({ deletionId: id, revision }, closed),
+        response: {
+          200: publishedLogResponse,
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          409: publishedLogConflicts(),
+          422: idempotencyConflict(),
+          503: unavailable(),
+        },
+        detail: {
+          ...detail('published_log.restore', 'published_log:create'),
+          responses: {
+            200: { description: 'Original snapshot restored', headers: revisionHeader },
+          },
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
+        requireAccount(actor);
+        const result = await admission.run('normal', job, () =>
+          mapped(() =>
+            publishedCommands().restoreLog(actor, params.logId, body, idempotencyKeyOf(headers[IDEMPOTENCY_HEADER])),
+          ),
+        );
+        session.record({ partition: result.partition, epoch: result.epoch, position: result.position });
+        if (result.revision !== undefined) set.headers['Library-Published-Log-Revision'] = String(result.revision);
+        set.headers['cache-control'] = 'private, no-store';
         return { publishedLog: result.value };
       },
     );

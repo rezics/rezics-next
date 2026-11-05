@@ -1,3 +1,5 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
+import { AuthenticationError } from '../../src/request/access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
@@ -30,11 +32,13 @@ const extras = [
   'realm:join',
   'realm:read',
   'realm:manage',
+  'realm:restore',
   'realm:ban',
   'realm:publish',
   'space:create',
   'space:read',
   'space:manage',
+  'space:restore',
   'board:create',
   'report:create',
   'reaction:set',
@@ -44,6 +48,8 @@ const extras = [
 let fixture: Awaited<ReturnType<typeof standingFixture>>;
 let staff: Awaited<ReturnType<typeof fixture.context>>['actor'];
 let owner: Awaited<ReturnType<typeof fixture.context>>['actor'];
+let spaceResource: Resource;
+let realmResource: Resource;
 let board: Resource;
 let threadId: string;
 let firstPostId: string;
@@ -156,6 +162,8 @@ beforeAll(async () => {
     },
     commandContext(),
   );
+  spaceResource = { route: routeOf(space.value.spaceId)!, id: space.value.spaceId };
+  realmResource = { route: routeOf(realm.value.realmId)!, id: realm.value.realmId };
   await setBoardScheme(
     { pool: fixture.pool, access: fixture.access, routeKey },
     owner,
@@ -213,6 +221,70 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => fixture?.close());
+
+test.serial('only the installed container owner and Realm moderator roles grant exact local restoration', async () => {
+  const caller = (await fixture.context(fixture.principal)).actor;
+  const before = await reachRows();
+  for (const [resource, restore, otherRestore, roles] of [
+    [spaceResource, 'space:restore', 'realm:restore', [['community.space.standing', false]]],
+    [
+      realmResource,
+      'realm:restore',
+      'space:restore',
+      [
+        ['community.realm.standing', false],
+        ['community.realm.member', false],
+        ['community.realm.moderator', true],
+      ],
+    ],
+  ] as const) {
+    expect(await check(owner, restore, resource)).toBe(true);
+    expect(await check(owner, otherRestore, resource)).toBe(false);
+    expect(await check(owner, restore, resource, [])).toBe(false);
+    expect(await check(caller, restore, resource)).toBe(false);
+    for (const [role, allowed] of roles) {
+      await fixture.reader.query(
+        `INSERT INTO access.resource_role_grant
+         (route,resource_id,subject_id,grant_role,valid,transaction_id) VALUES ($1,$2,$3,$4,'(,)',$3)`,
+        [resource.route, resource.id, caller.accountId, role],
+      );
+      expect(await check(caller, restore, resource)).toBe(allowed);
+      await fixture.reader.query(
+        `DELETE FROM access.resource_role_grant
+         WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND grant_role=$4`,
+        [resource.route, resource.id, caller.accountId, role],
+      );
+    }
+    expect(await check(caller, restore, resource)).toBe(false);
+  }
+  expect(await reachRows()).toEqual(before);
+});
+
+test.serial('Global container restoration grants reach only the exact action through ordinary Access', async () => {
+  const caller = (await fixture.context(fixture.principal)).actor;
+  const before = await reachRows();
+  for (const [resource, restore, otherResource, otherRestore, manage] of [
+    [spaceResource, 'space:restore', realmResource, 'realm:restore', 'space:manage'],
+    [realmResource, 'realm:restore', spaceResource, 'space:restore', 'realm:manage'],
+  ] as const) {
+    expect(await check(staff, restore, resource)).toBe(true);
+    expect(await check(caller, restore, resource)).toBe(false);
+    await fixture.grant(caller.accountId, restore, PLATFORM_RESOURCE);
+    expect(await check(caller, restore, resource)).toBe(true);
+    expect(await check(caller, restore, resource, [])).toBe(false);
+    expect(await check(caller, otherRestore, otherResource)).toBe(false);
+    expect(await check(caller, manage, resource)).toBe(false);
+    await fixture.grant(caller.accountId, manage, PLATFORM_RESOURCE);
+    expect(await check(caller, manage, resource)).toBe(false);
+    await fixture.reader.query(
+      `DELETE FROM access.resource_grant
+       WHERE route=0 AND resource_id=$1 AND subject_id=$2 AND action=ANY($3::text[])`,
+      [PLATFORM_RESOURCE.id, caller.accountId, [restore, manage]],
+    );
+    expect(await check(caller, restore, resource)).toBe(false);
+  }
+  expect(await reachRows()).toEqual(before);
+});
 
 test.serial(
   'platform governance reach is exact, recorded by commands, and retains ordinary Access floors',
@@ -317,10 +389,12 @@ test.serial(
       { fenced: true, state: 'active' },
       { fenced: false, state: 'suspended' },
     ]) {
-      await fixture.reader.query(
-        'UPDATE access.account SET authn_fenced=$3,state=$4 WHERE route=$1 AND account_id=$2',
-        [accountRoute, staff.accountId, change.fenced, change.state],
-      );
+      if (change.state === 'suspended') await suspendAccount(fixture.pool, staff.accountId);
+      else
+        await fixture.reader.query(
+          'UPDATE access.account SET authn_fenced=$3,state=$4 WHERE route=$1 AND account_id=$2',
+          [accountRoute, staff.accountId, change.fenced, change.state],
+        );
       await expect(
         takedown(
           context,
@@ -328,11 +402,16 @@ test.serial(
           { target: { kind: 'post', id: firstPostId }, reason: 'Platform policy' },
           commandContext(),
         ),
-      ).rejects.toBeInstanceOf(GrantDeniedError);
-      await fixture.reader.query(
-        "UPDATE access.account SET authn_fenced=false,state='active' WHERE route=$1 AND account_id=$2",
-        [accountRoute, staff.accountId],
-      );
+      ).rejects.toBeInstanceOf(change.state === 'suspended' ? AuthenticationError : GrantDeniedError);
+      if (change.state === 'suspended') {
+        await reinstateAccount(fixture.pool, staff.accountId);
+        staff = (await fixture.context(staff.accountId)).actor;
+        delegatedAgain = await fixture.context(fixture.actor, undefined, requestedBy);
+      } else
+        await fixture.reader.query(
+          "UPDATE access.account SET authn_fenced=false,state='active' WHERE route=$1 AND account_id=$2",
+          [accountRoute, staff.accountId],
+        );
       expect(await reachRows()).toEqual(recordsBeforeFloors);
     }
     const narrowStaff = (await fixture.context(staff.accountId, [])).actor;

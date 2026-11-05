@@ -225,6 +225,8 @@ test('resolving the facts gives back the item in the Wikibase shape', () => {
     release: bundledDigest,
     context: GLOBAL_CONTEXT,
     resolution: {},
+    relationCounts: {},
+    sourceRecords: [],
     labels: book.labels,
     descriptions: book.descriptions,
     aliases: book.aliases,

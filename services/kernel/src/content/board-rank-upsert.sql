@@ -13,9 +13,14 @@ SELECT route, board_id, thread_id, created_at, activity_at, 0,
        statement_timestamp(), source_epoch, source_position, source_revision_id
 FROM input
 ON CONFLICT (route, board_id, thread_id) DO UPDATE
-SET source_epoch = EXCLUDED.source_epoch,
-    source_position = EXCLUDED.source_position,
-    source_revision_id = EXCLUDED.source_revision_id,
+SET source_epoch = GREATEST(board_thread.source_epoch, EXCLUDED.source_epoch),
+    source_position = CASE WHEN board_thread.source_epoch > EXCLUDED.source_epoch
+      THEN board_thread.source_position
+      WHEN board_thread.source_epoch < EXCLUDED.source_epoch THEN EXCLUDED.source_position
+      ELSE GREATEST(board_thread.source_position, EXCLUDED.source_position) END,
+    source_revision_id = CASE WHEN (board_thread.source_epoch, board_thread.source_position)
+      < (EXCLUDED.source_epoch, EXCLUDED.source_position)
+      THEN EXCLUDED.source_revision_id ELSE board_thread.source_revision_id END,
     last_activity_at = GREATEST(board_thread.last_activity_at, EXCLUDED.last_activity_at),
     active_rank = content.board_thread_active_rank(
       board_thread.score,
@@ -26,4 +31,5 @@ SET source_epoch = EXCLUDED.source_epoch,
     rank_refreshed_at = statement_timestamp()
 WHERE (board_thread.source_epoch, board_thread.source_position)
     < (EXCLUDED.source_epoch, EXCLUDED.source_position)
+   OR board_thread.last_activity_at < EXCLUDED.last_activity_at
 RETURNING thread_id;

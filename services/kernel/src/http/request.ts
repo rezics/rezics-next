@@ -6,9 +6,7 @@ import { ANONYMOUS_PRINCIPAL_ID, normalizeCommandKey, type CommandPrincipal } fr
 import type { ActionCatalogue, Actor } from '../request/access.ts';
 import { anchorRoute, derivedId } from '../route/route.ts';
 import { kernelWriteRateFor } from './write-rate-routes.ts';
-
-export const SESSION_HEADER = 'rezics-session-token';
-export const IDEMPOTENCY_HEADER = 'idempotency-key';
+export { SESSION_HEADER, IDEMPOTENCY_HEADER } from './headers.ts';
 
 export function idempotencyKeyOf(header: string | null | undefined, principal?: CommandPrincipal): string {
   if (typeof header !== 'string')
@@ -65,7 +63,7 @@ export function anonymousRequestDigest(operation: string, input: { semantic: unk
 
 const ACTION_PATTERN = /^[a-z][a-z_]*:[a-z][a-z_]*$/;
 const OPERATION_PATTERN = /^[a-z][a-z_]*\.[a-z][a-z_]*$/;
-const RESOURCE_TYPE_PATTERN = /^[a-z][a-z0-9_.-]*$/;
+const RESOURCE_TYPE_PATTERN = /^[A-Za-z][A-Za-z0-9_.-]*(?::[A-Za-z][A-Za-z0-9_.-]*)?$/;
 
 export type MountedRoute = {
   method: string;
@@ -84,18 +82,11 @@ type RouteDeclaration = {
   anonymous: boolean;
   replay?: 'self-account-read';
   resourceTypes?: readonly string[];
+  authority?: 'own-account';
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function sameResourceTypes(left: readonly string[] | undefined, right: readonly string[] | undefined): boolean {
-  if (left === undefined || right === undefined) return left === right;
-  if (left.length !== right.length) return false;
-  const orderedLeft = [...left].sort();
-  const orderedRight = [...right].sort();
-  return orderedLeft.every((type, index) => type === orderedRight[index]);
 }
 
 function resourceTypesOf(route: MountedRoute, detail: Record<string, unknown>): readonly string[] | undefined {
@@ -127,48 +118,58 @@ function declaration(route: MountedRoute): RouteDeclaration {
   if (replay !== undefined && replay !== 'self-account-read')
     throw new Error(`${label}: unsupported x-replay-authorization`);
 
+  const authority = detail['x-authority-anchor'];
+  if (authority !== undefined && authority !== 'own-account')
+    throw new Error(`${label}: unsupported x-authority-anchor`);
   const resourceTypes = resourceTypesOf(route, detail);
   return {
     action,
     anonymous: security.some((requirement) => isRecord(requirement) && Object.keys(requirement).length === 0),
     ...(replay === undefined ? {} : { replay }),
     ...(resourceTypes === undefined ? {} : { resourceTypes }),
+    ...(authority === undefined ? {} : { authority }),
   };
 }
 
 const actionCatalogues = new WeakMap<object, ActionCatalogue>();
 
-/** Derives the configured action set from the routes mounted on an application. */
-export function actionCatalogue(app: RouteApp): ActionCatalogue {
+/** Composes mounted routes with trusted native declarations, checking their agreement. */
+export function actionCatalogue(app: RouteApp, nativeActions?: ActionCatalogue): ActionCatalogue {
   const mounted = mountedCatalogues.get(app);
-  if (mounted) return actionCatalogue(mounted);
-  const cached = actionCatalogues.get(app);
+  if (mounted) return actionCatalogue(mounted, nativeActions);
+  const cached = nativeActions === undefined ? actionCatalogues.get(app) : undefined;
   if (cached) return cached;
   const catalogue = new Map<
     string,
-    { anonymous: boolean; replay?: 'self-account-read'; 'x-resource-types'?: readonly string[] }
-  >();
+    {
+      anonymous: boolean;
+      replay?: 'self-account-read';
+      authority?: 'own-account';
+      'x-resource-types'?: readonly string[];
+    }
+  >(nativeActions);
   for (const route of app.routes) {
     const detail = isRecord(route.hooks?.detail) ? route.hooks.detail : {};
     if (detail.hide === true) continue;
 
-    const { action, anonymous, replay, resourceTypes } = declaration(route);
+    const { action, anonymous, replay, resourceTypes, authority } = declaration(route);
     const previous = catalogue.get(action);
     const label = `${route.method.toUpperCase()} ${route.path}`;
     if (previous && previous.anonymous !== anonymous)
       throw new Error(`${label}: ${action} is declared with different security`);
     if (previous && previous.replay !== replay)
       throw new Error(`${label}: ${action} is declared with different replay authorization`);
-    if (previous && !sameResourceTypes(previous['x-resource-types'], resourceTypes))
-      throw new Error(`${label}: ${action} is declared with different resource types`);
+    const declaredTypes = [...new Set([...(previous?.['x-resource-types'] ?? []), ...(resourceTypes ?? [])])].sort();
+    const mountedAuthority = authority ?? previous?.authority;
     catalogue.set(action, {
       anonymous,
+      ...(mountedAuthority === undefined ? {} : { authority: mountedAuthority }),
       ...(replay === undefined ? {} : { replay }),
-      ...(resourceTypes === undefined ? {} : { 'x-resource-types': resourceTypes }),
+      ...(declaredTypes.length ? { 'x-resource-types': declaredTypes } : {}),
     });
   }
   // Unsealed applications may still mount routes. Cache only the final snapshot.
-  if (app instanceof MountedRouteCatalogue) actionCatalogues.set(app, catalogue);
+  if (app instanceof MountedRouteCatalogue && nativeActions === undefined) actionCatalogues.set(app, catalogue);
   return catalogue;
 }
 

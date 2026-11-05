@@ -1,6 +1,7 @@
+import { configureTestReceiptKeys, testReceiptKeys } from './receipt-keys.ts';
 import type { AuthService } from '@rezics/auth';
 import { randomUUID } from 'node:crypto';
-import type { Pool } from 'pg';
+import { Pool } from 'pg';
 import type { AccessConfig } from '../../src/access/index.ts';
 import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
 import type { ResourceRoleCatalogue } from '../../src/access/resource-roles.ts';
@@ -14,13 +15,19 @@ import type { KeyRing } from '../../src/tokens/seal.ts';
 import type { WorkClient } from '../../src/work/client.ts';
 import { createKernelRuntimeDefaults, type KernelRuntimeOverrides } from '../../src/server.ts';
 import { createApp } from '../../src/http/app.ts';
-import { createKernel, createKernelAccessResolver, type Kernel } from '../../src/http/kernel.ts';
+import {
+  createKernel,
+  createKernelAccessResolver,
+  type Kernel,
+  type KernelDependencies,
+} from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
-import type { SearchService } from '../../src/search/http/routes.ts';
 
 const TEST_KEY = 0x6b;
 const testIssuer = 'https://test-auth.example.test';
 const testAudience = 'https://test-api.example.test';
+
+export const TEST_REQUEST_DEADLINE_MS = 30_000;
 
 export const testAuth: AuthenticationConfig = {
   issuer: testIssuer,
@@ -53,10 +60,12 @@ function runtimeDefaults(options: KernelRuntimeOverrides & { auth: Authenticatio
   return createKernelRuntimeDefaults({
     ...options,
     tokens: options.tokens ?? testTokens(),
+    receiptKeys: testReceiptKeys(),
   });
 }
 
 export function testAccess(options: TestAccessOptions): Access {
+  configureTestReceiptKeys(options.pool);
   const defaults = runtimeDefaults({ auth: authConfig(options), ...(options.clock ? { clock: options.clock } : {}) });
   const accessFactory = (config: AccessConfig) =>
     defaults.access!({
@@ -88,6 +97,7 @@ type TestRuntimeOptions = {
 export type TestAppOptions = TestRuntimeOptions & { pool: Pool };
 
 export function testApp(options: TestAppOptions): ReturnType<typeof createApp> {
+  configureTestReceiptKeys(options.pool);
   const defaults = runtimeDefaults({
     auth: options.auth ?? testAuth,
     ...(options.clock === undefined ? {} : { clock: options.clock }),
@@ -110,7 +120,7 @@ export function testApp(options: TestAppOptions): ReturnType<typeof createApp> {
     ...(options.realmRoleReader === undefined ? {} : { realmRoleReader: options.realmRoleReader }),
   });
   return createApp({
-    requestDeadlineMs: 30_000,
+    requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
     pool: options.pool,
     tokens: defaults.tokens,
     writeRate: defaults.writeRate,
@@ -123,10 +133,12 @@ export function testApp(options: TestAppOptions): ReturnType<typeof createApp> {
 
 export type TestKernelOptions = TestRuntimeOptions & {
   pool: Pool;
+  viewerActionResources?: KernelDependencies['viewerActionResources'];
+  requestDeadlineMs?: number;
   workClient?: WorkClient;
   content?: ContentRuntime & Pick<ContentBoardDependencies, 'cursorNow'>;
   commerce?: CommerceDependencies;
-  search?: SearchService;
+  search?: KernelDependencies['search'];
   reports?: { anonymousVerifier?: NonNullable<ContentRuntime['anonymousVerifier']> };
 };
 
@@ -156,9 +168,10 @@ export function testKernel(options: TestKernelOptions): TestKernel {
     ...(options.realmRoleReader === undefined ? {} : { realmRoleReader: options.realmRoleReader }),
   });
   const kernel = createKernel({
-    requestDeadlineMs: 30_000,
+    requestDeadlineMs: options.requestDeadlineMs ?? TEST_REQUEST_DEADLINE_MS,
     pool: options.pool,
     routeKey: testRouteKey(),
+    receiptKeys: defaults.receiptKeys,
     tokens: defaults.tokens,
     clock: defaults.clock,
     writeRate: defaults.writeRate,
@@ -169,6 +182,7 @@ export function testKernel(options: TestKernelOptions): TestKernel {
     ...(options.commerce === undefined ? {} : { commerce: options.commerce }),
     ...(options.search === undefined ? {} : { search: options.search }),
     ...(options.reports === undefined ? {} : { reports: options.reports }),
+    ...(options.viewerActionResources === undefined ? {} : { viewerActionResources: options.viewerActionResources }),
     access: accessComposition.resolveAccess,
   });
   const composed = kernel as TestKernel;
@@ -185,7 +199,7 @@ let mountedActions: ActionCatalogue | undefined;
 function productionActions(): ActionCatalogue {
   mountedActions ??= actionCatalogue(
     testKernel({
-      pool: { options: { connectionString: 'postgres://kernel.invalid/test-catalogue' } } as Pool,
+      pool: new Pool({ connectionString: 'postgres://kernel.invalid/test-catalogue' }),
     }),
   );
   return mountedActions;

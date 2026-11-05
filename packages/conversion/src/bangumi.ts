@@ -1,3 +1,4 @@
+import { types as utilTypes } from 'node:util';
 import {
   checkBatchWrite,
   type BatchCommand,
@@ -7,8 +8,23 @@ import {
 } from '@rezics/definitions/bulk';
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { ConversionError, type ConversionInput, type ConvertedRecord } from './index.ts';
+import { bangumiEditionFactsWithheldOnWork, parseBangumiBookInfobox } from './bangumi-book-profile.ts';
+import { bangumiPublicationTime, isAdmittedBangumiType, selectBangumiProfile } from './bangumi-subject-profile.ts';
+import { extractBangumiGameNames } from './bangumi-game-names.ts';
+import { bangumiDiagnosticLimit, extractBangumiTVAnimeEvidence } from './bangumi-subject-names.ts';
+import { bangumiGamePublication } from './bangumi-game-publication.ts';
+import { bangumiGamePlayerCount, scanBangumiGameInfobox } from './bangumi-game-player-count.ts';
+import { bangumiGameSourceGenreKey, convertBangumiGameSourceGenres } from './bangumi-game-source-genres.ts';
+import {
+  projectBangumiGameWebDestinations,
+  type BangumiGameDestinationEvidence,
+} from './bangumi-game-web-destinations.ts';
+import { bangumiTelevisionRun } from './bangumi-television-run.ts';
+import { bangumiGameEnvironment } from './bangumi-game-environment.ts';
 import {
   checkCoverIntent,
+  bangumiPublicTagScheme,
+  reviewedReferenceKey,
   commandKey,
   safeSourceUrl,
   sourceDigest,
@@ -17,42 +33,40 @@ import {
   type ConversionContext,
 } from './support.ts';
 
-export const converter_revision = 'bangumi@2';
+export const converter_revision = 'bangumi@16';
 
 // Only these source fields are visited. Unknown/private subtrees are never traversed.
 // Projection bytes <=64 KiB; tags <=64 x 200 characters; titles <=500 characters;
 // summary <=32 KiB INCLUDING the Text snapshot; infobox <=64 KiB. No truncation.
-// Eleven projected top-level fields; at most five commands, one cover intent,
-// and one citation envelope per statement with at most two URL parts.
-const types: Readonly<Record<number, string>> = {
-  1: 'schema:Book',
-  2: 'schema:TVSeries',
-  3: 'schema:MusicAlbum',
-  4: 'schema:VideoGame',
-  6: 'schema:TVSeries',
-};
+// Thirteen projected top-level fields; at most 127 commands, 24 distinct Game
+// names, 16 Game destinations, one cover intent, and one citation envelope per statement with at most two URL parts.
+type IgnoredRecord = { id: number; type: 3 | 6 };
 type NormalizedRecord = {
   id: number;
-  type: number;
+  type: 1 | 2 | 3 | 4 | 6;
   name: string;
   name_cn?: string;
   summary?: string;
   images?: { large: string };
   tags?: { name: string }[];
+  meta_tags?: string[];
   platform?: string;
+  series?: boolean;
   infobox?: string;
   nsfw?: boolean;
   date?: string;
 };
 type DeferredCover = Omit<MediaImportRequest, 'containerId'>;
 export type BangumiConversion = ConvertedRecord<BatchCommand> & {
+  outcome: 'converted' | 'ignored';
   record_revision: string;
   digest: string;
   /** Sanitized source payload, suitable for a later pure target-binding call. */
-  normalizedRecord: NormalizedRecord;
+  normalizedRecord: NormalizedRecord | IgnoredRecord;
   /** Deferred assets have no container; only mediaImportIntents are executable. */
   coverAssets: DeferredCover[];
   mediaImportIntents: MediaImportRequest[];
+  gameWebDestinationEvidence?: readonly BangumiGameDestinationEvidence[];
   sourceMetadata: {
     recordUrl: string;
     summary: { language: string; takedownEligible: true };
@@ -64,7 +78,7 @@ function invalid(pointer: string, code = 'invalid_record'): never {
   throw new ConversionError(code, pointer);
 }
 function object(value: unknown, pointer: string): object {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) invalid(pointer);
+  if (value === null || typeof value !== 'object' || utilTypes.isProxy(value) || Array.isArray(value)) invalid(pointer);
   const proto = Object.getPrototypeOf(value);
   if (proto !== Object.prototype && proto !== null) invalid(pointer);
   return value;
@@ -81,14 +95,24 @@ function string(value: unknown, pointer: string, max: number, empty = false): st
     invalid(pointer);
   return value;
 }
-function normalize(input: ConversionInput): NormalizedRecord {
+/** Archive dumps store platform ids; the public subject document stores type_cn/type/alias. */
+function platformCode(value: unknown, pointer: string): string {
+  if (typeof value === 'number') {
+    if (!Number.isSafeInteger(value) || value < 0) invalid(pointer);
+    return String(value);
+  }
+  return string(value, pointer, 500, true);
+}
+function normalize(input: ConversionInput): NormalizedRecord | IgnoredRecord {
   const raw = object(input.record, '');
   const get = (key: string) => own(raw, key, `/${key}`);
   const id = get('id');
   if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0 || String(id) !== input.external_id)
     invalid('/id', 'invalid_identifier');
   const type = get('type');
-  if (typeof type !== 'number' || !Object.hasOwn(types, type)) invalid('/type', 'unsupported_type');
+  if (typeof type !== 'number' || !isAdmittedBangumiType(type)) invalid('/type', 'unsupported_type');
+  // Prior ignored 3/6 projections stored only identity. Missing name keeps that seam.
+  if ((type === 3 || type === 6) && Object.getOwnPropertyDescriptor(raw, 'name') === undefined) return { id, type };
   const record: NormalizedRecord = { id, type, name: string(get('name'), '/name', 500) };
   const chinese = get('name_cn');
   if (chinese !== undefined) record.name_cn = string(chinese, '/name_cn', 500, true);
@@ -107,7 +131,8 @@ function normalize(input: ConversionInput): NormalizedRecord {
   }
   const tags = get('tags');
   if (tags !== undefined) {
-    if (!Array.isArray(tags) || Object.getPrototypeOf(tags) !== Array.prototype) invalid('/tags');
+    if (utilTypes.isProxy(tags) || !Array.isArray(tags) || Object.getPrototypeOf(tags) !== Array.prototype)
+      invalid('/tags');
     const length: unknown = Object.getOwnPropertyDescriptor(tags, 'length')?.value;
     if (typeof length !== 'number' || !Number.isSafeInteger(length) || length > 64)
       invalid('/tags', 'invalid_record_tag_limit');
@@ -117,7 +142,25 @@ function normalize(input: ConversionInput): NormalizedRecord {
       record.tags.push({ name: string(own(tag, 'name', `/tags/${i}/name`), `/tags/${i}/name`, 200) });
     }
   }
-  for (const key of ['platform', 'infobox', 'date'] as const) {
+  const metaTags = get('meta_tags');
+  if (metaTags !== undefined) {
+    if (utilTypes.isProxy(metaTags) || !Array.isArray(metaTags) || Object.getPrototypeOf(metaTags) !== Array.prototype)
+      invalid('/meta_tags');
+    const length: unknown = Object.getOwnPropertyDescriptor(metaTags, 'length')?.value;
+    if (typeof length !== 'number' || !Number.isSafeInteger(length) || length > 64)
+      invalid('/meta_tags', 'invalid_record_tag_limit');
+    record.meta_tags = [];
+    for (let i = 0; i < length; i++)
+      record.meta_tags.push(string(own(metaTags, String(i), `/meta_tags/${i}`), `/meta_tags/${i}`, 200));
+  }
+  const platform = get('platform');
+  if (platform !== undefined) record.platform = platformCode(platform, '/platform');
+  const series = get('series');
+  if (series !== undefined) {
+    if (typeof series !== 'boolean') invalid('/series');
+    record.series = series;
+  }
+  for (const key of ['infobox', 'date'] as const) {
     const value = get(key);
     if (value !== undefined) record[key] = string(value, `/${key}`, key === 'infobox' ? 65_536 : 500, true);
   }
@@ -128,6 +171,58 @@ function normalize(input: ConversionInput): NormalizedRecord {
   }
   if (Buffer.byteLength(JSON.stringify(record), 'utf8') > 65_536) invalid('', 'invalid_record_byte_limit');
   return record;
+}
+
+function citedPublicationDate(record: NormalizedRecord): boolean {
+  return (
+    (record.type === 1 || record.type === 3 || record.type === 6) &&
+    !!record.date?.trim() &&
+    !!bangumiPublicationTime(record.date.trim())
+  );
+}
+
+function retainedFieldDiagnostics(
+  record: NormalizedRecord,
+  nameDiagnostics: readonly { pointer: string; code: string }[],
+  handledInfobox = false,
+): { pointer: string; code: string }[] {
+  const citedDate = citedPublicationDate(record);
+  const parsed = record.type === 1 ? parseBangumiBookInfobox(record.infobox) : undefined;
+  const retained: { pointer: string; code: string }[] = (
+    ['tags', 'platform', 'series', 'infobox', 'nsfw', 'date'] as const
+  )
+    .filter((field) => record[field] !== undefined)
+    .filter((field) => field !== 'date' || !citedDate)
+    .filter((field) => field !== 'infobox' || (!handledInfobox && record.type !== 1))
+    .map((field) => ({
+      pointer: `/${field}`,
+      code:
+        field === 'date'
+          ? 'unsupported_date_mapping'
+          : field === 'platform' && (record.type === 1 || record.type === 3 || record.type === 6)
+            ? 'source_platform_selects_profile'
+            : field === 'series'
+              ? 'source_series_selects_profile'
+              : field === 'infobox'
+                ? 'unsupported_infobox_mapping'
+                : `catalogue_has_no_${field}_property`,
+    }));
+  if (parsed) {
+    retained.push(
+      ...parsed.omitted.map((item) => ({ pointer: `/infobox/${item.key}`, code: item.reason })),
+      ...bangumiEditionFactsWithheldOnWork(parsed),
+    );
+  }
+  return [...nameDiagnostics, ...retained];
+}
+
+function boundedDiagnostics(diagnostics: readonly { pointer: string; code: string }[]) {
+  return diagnostics.length <= bangumiDiagnosticLimit
+    ? diagnostics
+    : [
+        ...diagnostics.slice(0, bangumiDiagnosticLimit - 1),
+        { pointer: '/record', code: 'additional_conversion_omissions' },
+      ];
 }
 
 /** Pure conversion: one bootstrap, or candidates bound to an actual resolved subject. */
@@ -158,6 +253,46 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
   };
   const envelope = (group: FieldGroup) => sourceEnvelope(metadata, group);
   const recordUrl = `https://bgm.tv/subject/${input.external_id}`;
+  const sourceMetadata: BangumiConversion['sourceMetadata'] = {
+    recordUrl,
+    summary: { language: 'und', takedownEligible: true },
+    cover: { role: 'cover', creditLine: '(c) rights holder via Bangumi', takedownEligible: true },
+  };
+  if (!('name' in record)) {
+    // No command will validate the envelope on this path; apply the same bounds.
+    envelope('facts');
+    return {
+      ...metadata,
+      source: 'bangumi',
+      outcome: 'ignored',
+      normalizedRecord: record,
+      proposals: [],
+      diagnostics: [{ pointer: '/type', code: 'ignored_identity_only_projection' }],
+      coverAssets: [],
+      mediaImportIntents: [],
+      sourceMetadata,
+    };
+  }
+  const profile = selectBangumiProfile(record);
+  if (profile.outcome === 'unknown_live_action_platform') {
+    envelope('facts');
+    return {
+      ...metadata,
+      source: 'bangumi',
+      outcome: 'ignored',
+      normalizedRecord: record,
+      proposals: [],
+      diagnostics: [
+        {
+          pointer: '/platform',
+          code: 'unknown_live_action_platform',
+        },
+      ],
+      coverAssets: [],
+      mediaImportIntents: [],
+      sourceMetadata,
+    };
+  }
   const references = (urls: string[] = [recordUrl]): BatchReference[] => [
     {
       parts: urls.map((url) => ({ property: { id: 'schema:url' }, value: { type: 'value', content: url } })),
@@ -179,11 +314,57 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     value: { type: 'value', content },
     references: references(),
   });
-  // Bangumi does not declare the original title/summary language. Preserve that
-  // uncertainty rather than mislabelling all works Japanese. name_cn is Chinese.
-  const titles = [fact('schema:name', { language: 'und', text: record.name })];
-  if (record.name_cn?.trim()) titles.push(fact('schema:name', { language: 'zh', text: record.name_cn }));
-  const facts = [fact('wdt:P5732', input.external_id), ...titles];
+  const bookTitleProfile = record.type === 1 && profile.type === 'schema:Book';
+  const gameNames = record.type === 4 ? extractBangumiGameNames(record) : undefined;
+  const extractedFields = gameNames ? undefined : extractBangumiTVAnimeEvidence(record, profile.type);
+  const extractedNames = gameNames ?? extractedFields!;
+  const television = extractedFields?.televisionRun ?? bangumiTelevisionRun(record);
+  const nameFields = new Map<BatchStatement, string>();
+  const websiteFields = new Map<BatchStatement, string>();
+  const facts = [fact('wdt:P5732', input.external_id)];
+  for (const name of extractedNames.names) {
+    const statement = fact(name.property, { language: name.language, text: name.text });
+    if (bookTitleProfile && name.pointer.startsWith('/infobox/'))
+      nameFields.set(statement, `name:${name.pointer}:${name.property}:${name.language}:${name.text}`);
+    facts.push(statement);
+  }
+  for (const website of extractedFields?.officialWebsites ?? []) {
+    const statement = fact('schema:url', website.url);
+    websiteFields.set(statement, `official-website:${website.url}`);
+    facts.push(statement);
+  }
+  facts.push(...(extractedFields?.workEvidence ?? []).map((item) => fact(item.property, item.value)));
+  const gameWebDestinations = record.type === 4 ? projectBangumiGameWebDestinations(record.infobox) : undefined;
+  const gameDestinationKeys = new Map<number, string>();
+  for (const destination of gameWebDestinations?.destinations ?? []) {
+    gameDestinationKeys.set(facts.length, `game-destination:${destination.field}:${destination.pointer}`);
+    facts.push({
+      ...fact(destination.property, destination.url),
+      references: references([recordUrl, `${recordUrl}#${destination.pointer}`]),
+    });
+  }
+  if (record.meta_tags?.includes('后宫')) {
+    const reference = reviewedReferenceKey(bangumiPublicTagScheme, '后宫');
+    const dictionary = context.resolvedReferences;
+    if (dictionary && (typeof dictionary !== 'object' || utilTypes.isProxy(dictionary)))
+      invalid('', 'invalid_reference_context');
+    const descriptor = dictionary ? Object.getOwnPropertyDescriptor(dictionary, reference) : undefined;
+    if (descriptor && (!('value' in descriptor) || !descriptor.enumerable)) invalid('', 'invalid_reference_context');
+    const concept: unknown = descriptor?.value;
+    if (concept !== undefined) {
+      if (
+        typeof concept !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(concept)
+      )
+        invalid('', 'invalid_reference_context');
+      facts.push({
+        ...fact('schema:keywords', concept),
+        qualifiers: [
+          { property: { id: 'rezics:spoilerLevel' }, value: { type: 'value', content: { amount: '0', unit: '1' } } },
+        ],
+      });
+    }
+  }
   let document;
   if (record.summary) {
     try {
@@ -191,6 +372,18 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
     } catch {
       invalid('/summary', 'invalid_record_summary_document_limit');
     }
+  }
+  const gameInfobox = scanBangumiGameInfobox(record);
+  const playerCount = bangumiGamePlayerCount(record, gameInfobox, { handledFields: [bangumiGameSourceGenreKey] });
+  const gamePublication = bangumiGamePublication(record, gameInfobox);
+  const gameSourceGenres = convertBangumiGameSourceGenres(record, metadata, recordUrl, context, gameInfobox);
+  let environment;
+  try {
+    environment = bangumiGameEnvironment(record, context);
+  } catch (error) {
+    if (error instanceof TypeError && error.message === 'invalid_reference_context')
+      invalid('', 'invalid_reference_context');
+    throw error;
   }
   const proposals: BatchCommand[] = [];
   const propose = (
@@ -211,10 +404,69 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
       op: 'create',
       key: key('bootstrap', 'facts'),
       source: envelope('facts'),
-      subject: { type: types[record.type]!, labels },
+      subject: { type: profile.type, labels },
     });
   } else {
-    for (const [index, statement] of facts.entries()) proposals.push(propose(statement, 'facts', `fact:${index}`));
+    for (const [index, statement] of facts.entries()) {
+      const property = statement.property.id;
+      const content = statement.value.type === 'value' ? statement.value.content : undefined;
+      const field =
+        nameFields.get(statement) ??
+        websiteFields.get(statement) ??
+        gameDestinationKeys.get(index) ??
+        ((property === 'schema:name' || property === 'schema:alternateName') &&
+        content &&
+        typeof content === 'object' &&
+        'language' in content &&
+        'text' in content
+          ? `name:${property}:${String(content.language)}:${String(content.text)}`
+          : `fact:${index}`);
+      proposals.push(propose(statement, 'facts', field));
+    }
+    if (record.type === 1 || record.type === 3 || record.type === 6) {
+      const published = record.date?.trim() ? bangumiPublicationTime(record.date.trim()) : undefined;
+      if (published) proposals.push(propose(fact('schema:datePublished', published), 'facts', 'date'));
+    }
+    for (const item of television.facts)
+      proposals.push(propose(fact(item.property, item.content), 'facts', item.field));
+    for (const item of playerCount.facts) {
+      const statement: BatchStatement = item.qualifier
+        ? { ...fact(item.property, item.content), qualifiers: [item.qualifier] }
+        : fact(item.property, item.content);
+      proposals.push(propose(statement, 'facts', item.field));
+    }
+    for (const item of environment.facts) {
+      let cited = recordUrl;
+      try {
+        const parsed = new URL(recordUrl);
+        parsed.hash = item.citationPath;
+        cited = parsed.href;
+      } catch {
+        cited = recordUrl;
+      }
+      proposals.push(
+        propose(
+          {
+            property: { id: item.property },
+            value: { type: 'value', content: item.content },
+            ...(item.qualifiers
+              ? {
+                  qualifiers: item.qualifiers.map((qualifier) => ({
+                    property: { id: qualifier.property },
+                    value: { type: 'value' as const, content: qualifier.content },
+                  })),
+                }
+              : {}),
+            references: references([cited]),
+          },
+          'facts',
+          item.field,
+        ),
+      );
+    }
+    for (const item of gamePublication.facts)
+      proposals.push(propose(fact(item.property, item.content), 'facts', item.field));
+    proposals.push(...gameSourceGenres.proposals);
     if (document) {
       proposals.push({
         ...propose(fact('schema:abstract', { language: 'und', document }), 'summary', 'summary'),
@@ -265,28 +517,34 @@ function convert(input: ConversionInput, context: ConversionContext, revision: s
   return {
     ...metadata,
     source: 'bangumi',
+    outcome: 'converted',
     proposals,
     digest,
     normalizedRecord: record,
     // These source-only fields have no declared mapping in this converter. Their
     // values are retained only in normalizedRecord, never invented catalogue slots.
-    diagnostics: (['tags', 'platform', 'infobox', 'nsfw', 'date'] as const)
-      .filter((field) => record[field] !== undefined)
-      .map((field) => ({
-        pointer: `/${field}`,
-        code:
-          field === 'date'
-            ? 'unsupported_date_mapping'
-            : field === 'infobox'
-              ? 'unsupported_infobox_mapping'
-              : `catalogue_has_no_${field}_property`,
-      })),
+    diagnostics: [
+      ...boundedDiagnostics([
+        ...retainedFieldDiagnostics(
+          record,
+          extractedNames.diagnostics,
+          television.handledInfobox ||
+            playerCount.handledInfobox ||
+            environment.handledInfobox ||
+            gameWebDestinations?.handledInfobox === true ||
+            bookTitleProfile,
+        ),
+        ...television.diagnostics,
+        ...playerCount.diagnostics,
+        ...environment.diagnostics,
+        ...gamePublication.diagnostics,
+        ...gameSourceGenres.diagnostics,
+        ...(gameWebDestinations?.diagnostics ?? []),
+      ]),
+    ],
     coverAssets,
     mediaImportIntents,
-    sourceMetadata: {
-      recordUrl,
-      summary: { language: 'und', takedownEligible: true },
-      cover: { role: 'cover', creditLine: '(c) rights holder via Bangumi', takedownEligible: true },
-    },
+    ...(gameWebDestinations?.evidence.length ? { gameWebDestinationEvidence: gameWebDestinations.evidence } : {}),
+    sourceMetadata,
   };
 }

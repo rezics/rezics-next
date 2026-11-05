@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import type { AuthoritativeTime } from '../command/command.ts';
 import type { AccessClient } from '../request/access.ts';
@@ -11,8 +12,12 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import parent from './read-media-parent.sql';
 import board from './read-media-parent-board.sql';
 
-export const parentStatement: string = parent.sql;
-export const boardStatement: string = board.sql;
+export function parentStatement(): string {
+  return memoizedValue(parentStatement, () => parent.sql);
+}
+export function boardStatement(): string {
+  return memoizedValue(boardStatement, () => board.sql);
+}
 
 export type MediaParent = {
   kind: 'post' | 'thread' | 'board';
@@ -21,6 +26,7 @@ export type MediaParent = {
   thread_id: string | null;
   board_id: string | null;
   realm_id: string | null;
+  purpose: string | null;
   visibility: string;
   security_revision: string;
   availability: string;
@@ -38,13 +44,11 @@ export async function prepareRealmParticipation(
 ): Promise<RealmParticipationProof> {
   if (realmId === null || !check) return { realmId, allowed: true };
   return within(deadline, async () => {
-    const client = await pool.connect();
-    try {
-      const allowed = await check(deadlineClient(client, deadline), { realmId, actor }, time);
-      return { realmId, allowed };
-    } finally {
-      client.release();
-    }
+    // The Realm check prepares Access evidence through independent reads on
+    // this same pool. Keep the query port lazy so preparation never holds an
+    // anchor connection while those reads acquire theirs.
+    const allowed = await check(deadlineClient(pool, deadline), { realmId, actor }, time);
+    return { realmId, allowed };
   });
 }
 
@@ -65,6 +69,7 @@ function existing(
     thread_id: string | null;
     board_id: string | null;
     realm_id: string | null;
+    purpose: string | null;
     visibility: string;
     security_revision: string;
     availability: string;
@@ -90,6 +95,7 @@ function existing(
     thread_id: row.thread_id,
     board_id: row.board_id,
     realm_id: row.realm_id,
+    purpose: row.purpose,
     visibility: row.visibility,
     security_revision: row.security_revision,
     availability: row.availability,
@@ -128,7 +134,11 @@ export async function mediaParentSnapshot<T>(
 
 /** At most 33 posts and one thread, all on the container's exact route. The
  * board ID is a reference only: even a co-located board is read independently. */
-export async function mediaParentChain(client: AccessClient, containerId: string): Promise<MediaParent[]> {
+export async function mediaParentChain(
+  client: AccessClient,
+  containerId: string,
+  readParent = (input: { route: number; id: string; kind: string }) => parent.run(client, input),
+): Promise<MediaParent[]> {
   const result: MediaParent[] = [];
   const seen = new Set<string>();
   const r = route(containerId);
@@ -139,7 +149,7 @@ export async function mediaParentChain(client: AccessClient, containerId: string
   while (result.length < 34) {
     if (seen.has(id) || route(id) !== r) throw new GrantDeniedError();
     seen.add(id);
-    const rows = await parent.run(client, { route: r, id, kind });
+    const rows = await readParent({ route: r, id, kind });
     const row = existing(rows, id);
     result.push(row);
     if (row.kind === 'thread') {

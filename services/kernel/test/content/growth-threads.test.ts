@@ -8,8 +8,10 @@ import { isErasedPlaceholder } from '../../src/content/model.ts';
 import { readBoard, readPost, readThread, listPostRevisions, listThreadPosts } from '../../src/content/reads.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
 import { standingFixture } from '../access/standing-fixture.ts';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const scales = [1, 4, 16] as const;
 const ordinalsPerScale = 500;
@@ -29,7 +31,9 @@ const anonymous = { kind: 'anonymous' } as const;
 
 type Fixture = Awaited<ReturnType<typeof standingFixture>>;
 type Anchor = { threadId: string; postId: string; revisionId: string; route: number };
-type GrowthMode = 'threads' | 'posts' | 'revisions';
+type GrowthMode = 'threads' | 'posts' | 'revisions' | 'reviews';
+
+const checkObservations: { name: string; statements: string[] }[] = [];
 
 let db: GrowthDatabase;
 let fixture: Fixture;
@@ -128,7 +132,7 @@ async function observedActor(pool: Pool): Promise<AccountActor> {
   }
 }
 
-async function resetCase(): Promise<void> {
+async function resetCase(purpose: 'discussion' | 'reviews' = 'discussion'): Promise<void> {
   await db.admin.query(
     `TRUNCATE content.board, content.thread, content.post, content.revision,
       core.receipt, core.outbox, editorial.write_basis, access.resource_initialization,
@@ -139,9 +143,9 @@ async function resetCase(): Promise<void> {
   board = { route: homePartition * 16 + 3, id: newId(homePartition * 16 + 3) };
   await db.admin.query(
     `INSERT INTO content.board
-      (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id, created_at)
-     VALUES ($1, $2, $3, 'Growth board', 'published', 1, $4, $5)`,
-    [board.route, board.id, newId(board.route), randomUUID(), baseTime],
+      (route, board_id, subject_id, title, visibility, security_revision, recorded_transaction_id, created_at, purpose)
+     VALUES ($1, $2, $3, 'Growth board', 'published', 1, $4, $5, $6)`,
+    [board.route, board.id, newId(board.route), randomUUID(), baseTime, purpose],
   );
   await fixture.grant(actor.accountId, 'thread:create', board);
 }
@@ -184,10 +188,12 @@ function growthPopulation(name: string, mode: GrowthMode, anchor: Anchor | null,
     name,
     hotPartition: homePartition,
     hotShare: 1,
-    rows: ({ ordinal, route }) => {
+    rows: ({ ordinal, route: placedRoute }) => {
+      const route = mode === 'reviews' ? routeOf(actor.accountId)! : placedRoute;
       const threadId = newId(route);
       const postId = newId(route);
       const revisionId = newId(route);
+      const reviewSubjectId = mode === 'reviews' ? newId(route) : null;
       const transactionId = randomUUID();
       const aclResourceId = newId(route);
       const at = baseTime;
@@ -200,8 +206,9 @@ function growthPopulation(name: string, mode: GrowthMode, anchor: Anchor | null,
         body_sha256: bodyHash,
         search_text: 'A fixed growth-check body',
         licence: 'MIT',
-        subject_ids: [],
+        subject_ids: reviewSubjectId ? [reviewSubjectId] : [],
         board_id: board.id,
+        vote_citation: null,
         availability: 'available',
         recorded_transaction_id: transactionId,
         recorded_at: at,
@@ -228,6 +235,9 @@ function growthPopulation(name: string, mode: GrowthMode, anchor: Anchor | null,
             thread_id: threadId,
             author_account_id: actor.accountId,
             board_id: board.id,
+            kind: mode === 'reviews' ? 'review' : 'discussion',
+            review_subject_id: reviewSubjectId,
+            review_live: true,
             title: 'Growth neighbour thread',
             visibility: 'published',
             security_revision: 1,
@@ -359,7 +369,13 @@ function growthPopulation(name: string, mode: GrowthMode, anchor: Anchor | null,
             id: randomUUID(),
             type: 'com.rezics.content.thread.created.v1',
             subject: postId,
-            data: { ...standardValue, actorId: actor.accountId },
+            data: {
+              ...standardValue,
+              actorId: actor.accountId,
+              ...SUBJECT_THREAD_EVENT_FIELDS,
+              kind: mode === 'reviews' ? 'review' : 'discussion',
+              subjectIds: reviewSubjectId ? [reviewSubjectId] : [],
+            },
           },
         ],
         'editorial.write_basis': [
@@ -469,7 +485,7 @@ function growthPopulation(name: string, mode: GrowthMode, anchor: Anchor | null,
             id: randomUUID(),
             type: 'com.rezics.content.post.created.v1',
             subject: extraPostId,
-            data: { ...value, actorId: actor.accountId },
+            data: { ...value, actorId: actor.accountId, ...SUBJECT_THREAD_EVENT_FIELDS },
           },
         ];
         resultRows['editorial.write_basis'] = [
@@ -530,8 +546,8 @@ function growthPopulation(name: string, mode: GrowthMode, anchor: Anchor | null,
             epoch: 1,
             id: randomUUID(),
             type: 'com.rezics.content.revision.created.v1',
-            subject: extraRevisionId,
-            data: { ...value, actorId: actor.accountId },
+            subject: anchor.postId,
+            data: { ...value, actorId: actor.accountId, ...SUBJECT_THREAD_EVENT_FIELDS },
           },
         ];
         resultRows['editorial.write_basis'] = [
@@ -552,7 +568,7 @@ function growthPopulation(name: string, mode: GrowthMode, anchor: Anchor | null,
       return resultRows;
     },
     finish: async (admin, range) => {
-      const maxPosition = positionBase + (range.to - 1) * 100 + (mode === 'threads' ? 0 : 1);
+      const maxPosition = positionBase + (range.to - 1) * 100 + (mode === 'posts' || mode === 'revisions' ? 1 : 0);
       await admin.query('UPDATE core.partition SET position = GREATEST(position, $2) WHERE partition_no = $1', [
         homePartition,
         maxPosition,
@@ -607,6 +623,26 @@ async function assertAnchorRelations(growthDb: GrowthDatabase): Promise<void> {
   }
 }
 
+// Records the text of every statement sent through a pool, including those of the clients it hands out.
+function recording<T extends object>(target: T, statements: string[]): T {
+  const text = (query: unknown) =>
+    statements.push(typeof query === 'string' ? query : String((query as { text?: unknown }).text));
+  return new Proxy(target, {
+    get(object, key) {
+      const value = Reflect.get(object, key, object);
+      if (typeof value !== 'function') return value;
+      if (key === 'query')
+        return (...args: unknown[]) => {
+          text(args[0]);
+          return value.apply(object, args);
+        };
+      if (key === 'connect')
+        return async (...args: unknown[]) => recording(await value.apply(object, args), statements);
+      return value.bind(object);
+    },
+  });
+}
+
 async function runCheck(
   name: string,
   mode: GrowthMode,
@@ -619,6 +655,7 @@ async function runCheck(
   );
   const positionBase = Number(BigInt(nextPosition.rows[0]!.position) + 1_000_000n);
   const population = growthPopulation(`growth-content-${name}-${randomUUID()}`, mode, anchor, positionBase);
+  const statements: string[] = [];
   const report = await checkGrowth(db, {
     name,
     bounds,
@@ -626,15 +663,20 @@ async function runCheck(
     repetitions: 3,
     warmups: 1,
     grow: async (growthDb, scale, previous) => {
-      await seed({ pool: growthDb.pool, admin: growthDb.admin }, population, {
+      const recorded = {
+        ...growthDb,
+        pool: recording(growthDb.pool, statements),
+        admin: recording(growthDb.admin, statements),
+      };
+      await seed({ pool: recorded.pool, admin: recorded.admin }, population, {
         from: previous * ordinalsPerScale,
         to: scale * ordinalsPerScale,
       });
-      if (previous === 0) await assertAnchorRelations(growthDb);
-      await growthDb.admin.query('CHECKPOINT');
+      if (previous === 0) await assertAnchorRelations(recorded);
     },
     operation,
   });
+  checkObservations.push({ name, statements });
   expect(report.samples.map(({ scale }) => scale)).toEqual([...scales]);
   for (const sample of report.samples) {
     for (const [relation, cost] of Object.entries(sample.cost.relations ?? {})) {
@@ -642,6 +684,85 @@ async function runCheck(
     }
   }
 }
+
+test('Review creation stays within its bound as the reviews board grows', async () => {
+  await resetCase('reviews');
+  const reviewScales = [256, 1024, 4096] as const;
+  const reviewPopulation = growthPopulation(`growth-content-review-${randomUUID()}`, 'reviews', null, 1_000_000);
+  const inputs = Array.from({ length: 12 }, () => ({
+    subjectId: newId(board.route),
+    key: `review-${Bun.randomUUIDv7()}`,
+  }));
+  const warmupInputs = reviewScales.map(() => ({
+    subjectId: newId(board.route),
+    key: `review-warmup-${Bun.randomUUIDv7()}`,
+  }));
+  const voteRoute = routeOf(actor.accountId)!;
+  await db.admin.query(
+    `INSERT INTO rating.vote (route, voter_id, question_id, target_id, units, revision, changed_at, transaction_id)
+     SELECT $1, $2, $3, target_id, 5, 1, $4, $5
+     FROM unnest($6::uuid[]) AS target_id`,
+    [
+      voteRoute,
+      actor.accountId,
+      STANDARD_QUESTION_ID,
+      baseTime,
+      newId(voteRoute),
+      [...inputs, ...warmupInputs].map(({ subjectId }) => subjectId),
+    ],
+  );
+  const statements: string[] = [];
+  const createReview = (growthDb: GrowthDatabase, input: (typeof inputs)[number]) =>
+    createThread(
+      commandDependencies(growthDb.pool),
+      actor,
+      {
+        kind: 'review',
+        title: 'Fixed growth review',
+        body,
+        licence: 'MIT',
+        subjectIds: [input.subjectId],
+        boardId: board.id,
+        visibility: 'published',
+        voteCitation: { questionId: STANDARD_QUESTION_ID, units: 5, revision: 1 },
+      },
+      requestContext(input.key),
+    );
+  const report = await checkGrowth(db, {
+    name: 'Review creation with vote citation',
+    bounds,
+    scales: reviewScales,
+    repetitions: 3,
+    warmups: 1,
+    grow: async (growthDb, scale, previous) => {
+      const recorded = {
+        ...growthDb,
+        pool: recording(growthDb.pool, statements),
+        admin: recording(growthDb.admin, statements),
+      };
+      await seed({ pool: recorded.pool, admin: recorded.admin }, reviewPopulation, {
+        from: previous,
+        to: scale,
+      });
+      const seeded = await recorded.admin.query<{ total: number }>(
+        `SELECT count(*)::integer AS total FROM content.thread
+         WHERE board_id = $1 AND kind = 'review' AND review_live`,
+        [board.id],
+      );
+      const completedScales = reviewScales.findIndex((candidate) => candidate === scale);
+      expect(seeded.rows[0]!.total).toBe(scale + completedScales * 4);
+    },
+    warmup: async (growthDb, scale) =>
+      createReview(growthDb, warmupInputs[reviewScales.findIndex((candidate) => candidate === scale)]!),
+    operation: async (growthDb, _scale, repetition) => createReview(growthDb, inputs[repetition]!),
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([...reviewScales]);
+  for (const sample of report.samples) {
+    for (const [relation, cost] of Object.entries(sample.cost.relations ?? {})) {
+      if (relation.startsWith('content.')) expect(cost.sequentialScans ?? 0).toBe(0);
+    }
+  }
+}, 180_000);
 
 test('Thread creation with first post stays within its bound as T grows', async () => {
   await resetCase();
@@ -802,3 +923,14 @@ test('Public board read stays within its bound as T grows', async () => {
     return result;
   });
 }, 90_000);
+
+test('growth-threads grows issue no CHECKPOINT statement', () => {
+  expect(checkObservations).toHaveLength(9);
+  for (const { name, statements } of checkObservations) {
+    expect(statements.length, `${name} statements recorded`).toBeGreaterThan(0);
+    expect(
+      statements.filter((statement) => /^\s*checkpoint\b/i.test(statement)),
+      `${name} CHECKPOINT statements`,
+    ).toEqual([]);
+  }
+});

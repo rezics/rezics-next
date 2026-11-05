@@ -3,24 +3,34 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createMembershipWorkPorts, registerAccounts } from '../../src/access/membership-work.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { LIFECYCLE_ACTIONS, type LifecycleRequest } from '../../src/access/lifecycle.ts';
 import { routeOf } from '../../src/route/route.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { composeWork, type WorkModule } from '../../src/work/registry.ts';
+import { WORK_QUEUES } from '../../src/work/queues.ts';
+import type { Access } from '../../src/request/access.ts';
 
-export async function authenticated(pool: ReturnType<typeof createPool>, id: string): Promise<LifecycleRequest> {
+export async function authenticated(
+  pool: ReturnType<typeof createPool>,
+  id: string,
+  access?: Access,
+  scopes: readonly string[] = [...LIFECYCLE_ACTIONS.keys()],
+): Promise<LifecycleRequest> {
+  const account = await withConnection(pool, (connection) => readAccount(connection, routeOf(id)!, id));
+  const deadline = Date.now() + 30_000;
+  const claims = {
+    kind: 'account' as const,
+    accountId: id,
+    clientId: 'fixture',
+    scopes,
+    requestedBy: null,
+    authnEpoch: 1,
+  };
   return {
-    actor: {
-      kind: 'account',
-      accountId: id,
-      clientId: 'fixture',
-      scopes: [...LIFECYCLE_ACTIONS.keys()],
-      requestedBy: null,
-      authnEpoch: 1,
-    },
-    account: await withConnection(pool, (connection) => readAccount(connection, routeOf(id)!, id)),
-    deadline: Date.now() + 30_000,
+    actor: access ? await authenticateAccount(access, { pool, deadline }, claims) : claims,
+    account,
+    deadline,
   };
 }
 
@@ -28,8 +38,29 @@ if (import.meta.main) {
   const pool = createPool(process.env.DATABASE_URL!);
   pool.options.max = 1;
   const client = await createWorkClient(process.env.DATABASE_URL!);
+  let control = {
+    id: 0,
+    actor: process.env.MEMBERSHIP_ACTOR ?? '',
+    stop: process.env.MEMBERSHIP_STOP ?? '',
+    fail: process.env.MEMBERSHIP_FAIL === 'yes',
+  };
+  if (process.env.MEMBERSHIP_CONTROL === 'yes') {
+    let pending = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk: string) => {
+      pending += chunk;
+      let newline = pending.indexOf('\n');
+      while (newline >= 0) {
+        const line = pending.slice(0, newline);
+        pending = pending.slice(newline + 1);
+        control = JSON.parse(line) as typeof control;
+        console.log(`configured:${control.id}`);
+        newline = pending.indexOf('\n');
+      }
+    });
+  }
   const actions = new Map(LIFECYCLE_ACTIONS);
-  const access = createAccess({ actions, accountEvidence: (_actor, context) => context.account });
+  const access = admittedAccess({ actions });
   const module: WorkModule = {
     name: 'accounts',
     register(context) {
@@ -38,8 +69,11 @@ if (import.meta.main) {
         access,
         async authorize(reference) {
           if (reference !== 'authenticated-fixture') throw new Error('No approval');
-          const id = process.env.MEMBERSHIP_ACTOR!;
-          return authenticated(pool, id);
+          const request = await authenticated(pool, control.actor);
+          return {
+            ...request,
+            actor: await authenticateAccount(access, { pool, deadline: Date.now() + 10_000 }, request.actor),
+          };
         },
       });
       const wrapped = { ...ports };
@@ -47,11 +81,11 @@ if (import.meta.main) {
         const original = ports[phase];
         // Stop after the native commit, before DBOS journals the step result.
         const wrap = async (...args: Parameters<typeof original>) => {
-          if (process.env.MEMBERSHIP_STOP === `before-${phase}`) {
-            console.log(`boundary:before-${phase}`);
+          if (control.stop === `before-${phase}`) {
+            console.log(`boundary:before-${phase}:${control.id}`);
             process.kill(process.pid, 'SIGSTOP');
           }
-          if (phase === 'publish' && process.env.MEMBERSHIP_FAIL === 'yes') throw new Error('Publication unavailable');
+          if (phase === 'publish' && control.fail) throw new Error('Publication unavailable');
           const result = await (original as Function)(...args);
           const accountId =
             phase === 'reserve'
@@ -63,8 +97,8 @@ if (import.meta.main) {
           );
           assert.deepEqual(missing.rows, []);
 
-          if (process.env.MEMBERSHIP_STOP === phase) {
-            console.log(`boundary:${phase}`);
+          if (control.stop === phase) {
+            console.log(`boundary:${phase}:${control.id}`);
             process.kill(process.pid, 'SIGSTOP');
           }
           return result;
@@ -82,14 +116,14 @@ if (import.meta.main) {
   };
   if (process.env.MEMBERSHIP_REGISTRY === 'yes') {
     await assert.rejects(composeWork([module, module], options), /Duplicate work module: accounts/);
-    let registrations = 0;
+    const registrations: string[] = [];
     const original = client.registerQueue.bind(client);
     client.registerQueue = async (...args) => {
-      registrations++;
+      registrations.push(args[0]);
       return original(...args);
     };
     const runtime = await composeWork([module], options);
-    assert.equal(registrations, 6);
+    assert.deepEqual(registrations.sort(), Object.keys(WORK_QUEUES).sort());
     assert.equal(DBOS.isInitialized(), false);
     const launch = runtime.launch();
     assert.equal(runtime.launch(), launch);

@@ -5,6 +5,17 @@ import vndb from '../../../specs/fixtures/imports/vndb/record.json';
 import wikidata from '../../../specs/fixtures/imports/wikidata/entity.json';
 import { createSourceRegistration } from '../src/source-registry';
 
+test('Wikidata registration consumes the current exported recipe converter revision', () => {
+  const registration = createSourceRegistration('wikidata');
+  expect(registration.converter_revision).toBe('wikidata-5');
+  const output = registration.convert(
+    { external_id: wikidata.id, record_revision: String(wikidata.lastrevid), record: wikidata },
+    { source: registration.source },
+  );
+  expect(output.proposals).toHaveLength(1);
+  expect(output.proposals.every((command) => command.source.converter_revision === 'wikidata-5')).toBe(true);
+});
+
 const fixtures = [
   { kind: 'bangumi' as const, id: String(bangumi.id), revision: '7', record: bangumi },
   { kind: 'vndb' as const, id: vndb.vn.id, revision: String(vndb.entry_meta.revision), record: vndb },

@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { signInPage } from './security-page-fixture';
+import { nativeSignInProof } from './sign-in-fixture';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHmac, randomBytes } from 'node:crypto';
 import { createServer } from 'node:net';
@@ -20,7 +22,7 @@ const authorizationQuery =
 
 type Call = { method: string; url: string; cookie: string; contentType: string; body: string };
 const calls: Call[] = [];
-let signInStatus: 200 | 401 | 429 | 503 = 200;
+let signInStatus: 200 | 401 | 403 | 429 | 503 = 200;
 const retryAfter = 37;
 
 // Copied from session.test.ts's fake OpenID provider, reduced to Auth's browser HTTP contract.
@@ -39,6 +41,8 @@ const fake = Bun.serve({
     };
     calls.push(call);
     const headers = new Headers({ 'cache-control': 'no-store' });
+    if (url.pathname === '/signin/page' && request.method === 'POST')
+      return Response.json(signInPage(JSON.parse(call.body).query, url.origin, { kind: 'signed-out' }), { headers });
     if (url.pathname === '/authorize' && request.method === 'GET') {
       if (call.cookie.split(';').some((cookie) => cookie.trim() === `auth_session=${session}`))
         return new Response('Authorization resumed with the session', { headers });
@@ -51,13 +55,13 @@ const fake = Bun.serve({
     if (url.pathname === '/signin' && request.method === 'POST') {
       if (signInStatus === 200) {
         headers.append('set-cookie', `auth_session=${session}; Path=/; HttpOnly; SameSite=Lax`);
-        return Response.json({}, { headers });
+        return Response.json(nativeSignInProof(JSON.parse(call.body)), { headers });
       }
       if (signInStatus === 429) headers.set('retry-after', String(retryAfter));
       return Response.json(
-        {
-          error: signInStatus === 401 ? 'authentication_denied' : signInStatus === 429 ? 'rate_limited' : 'unavailable',
-        },
+        signInStatus === 403
+          ? { error: 'account_suspended', code: 'ACCOUNT_SUSPENDED' }
+          : { error: signInStatus === 503 ? 'unavailable' : 'authentication_denied' },
         { status: signInStatus, headers },
       );
     }
@@ -133,8 +137,24 @@ async function open(path = '/login', options: BrowserContextOptions = {}) {
   const urls: string[] = [];
   page.on('request', (request) => urls.push(request.url()));
   try {
-    const response = await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+    const response = await page.goto(`${origin}${path}`, { waitUntil: 'domcontentloaded' });
     expect(response?.status(), 'the documented dev server serves the page').toBe(200);
+    await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+    try {
+      await page.locator('input[name="email"]').waitFor({ state: 'visible' });
+    } catch (cause) {
+      throw new Error(
+        `Sign-in form unavailable: ${JSON.stringify({
+          locale: await page.locator('html').getAttribute('lang'),
+          hydrated: await page.locator('html').getAttribute('data-hydrated'),
+          alerts: await page.getByRole('alert').allTextContents(),
+          status: await page.getByRole('status').allTextContents(),
+          browserRoutes: urls.map((value) => new URL(value).pathname),
+          issuerRoutes: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
+        })}`,
+        { cause },
+      );
+    }
     return { page, origin, urls };
   } catch (error) {
     await context.close();
@@ -159,10 +179,9 @@ afterAll(async () => {
 async function form(page: Page) {
   const address = page.getByLabel(/email/i);
   const secret = page.locator('input[name="password"]');
-  // Assert the missing behaviour before the hydration wait, so the current heading-only page fails as a specification.
+  // Native sign-in advice has loaded before asserting the labelled form.
   expect(await address.count(), 'the login page has a labelled email field').toBe(1);
   expect(await secret.count(), 'the login page has a labelled password field').toBe(1);
-  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
   return { address, secret, submit: page.getByRole('button', { name: 'Sign in', exact: true }) };
 }
 
@@ -189,7 +208,20 @@ async function submit(page: Page) {
   await controls.address.fill(email);
   await controls.secret.fill(password);
   await Promise.all([
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/signin'),
+    page
+      .waitForResponse((response) => new URL(response.url()).pathname === '/signin')
+      .catch(async (cause) => {
+        throw new Error(
+          `Sign-in response missing: ${JSON.stringify({
+            url: page.url(),
+            alerts: await page.getByRole('alert').allTextContents(),
+            status: await page.getByRole('status').allTextContents(),
+            browserUrl: page.url(),
+            issuerRoutes: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
+          })}`,
+          { cause },
+        );
+      }),
     controls.submit.click(),
   ]);
   return controls;
@@ -208,7 +240,19 @@ test(
       expect(login.searchParams.get('sig')).toBeTruthy();
       const before = signIns().length;
       await submit(page);
-      await page.waitForURL(`${origin}/authorize?${authorizationQuery}`);
+      const resumed = `${origin}/authorize?${authorizationQuery}`;
+      try {
+        await page.waitForURL(resumed);
+      } catch {
+        throw new Error(
+          JSON.stringify({
+            url: page.url(),
+            alerts: await page.getByRole('alert').allTextContents(),
+            status: await page.getByRole('status').allTextContents(),
+            requests: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
+          }),
+        );
+      }
       await page.waitForLoadState('networkidle');
       expect(signIns().length).toBe(before + 1);
       submitted(signIns().at(-1));
@@ -255,9 +299,9 @@ test(
 );
 
 test(
-  'a refused sign-in keeps the email, clears the password and says why',
+  'a refused, suspended, throttled or unavailable sign-in keeps the email and clears the password',
   async () => {
-    for (const status of [401, 429, 503] as const) {
+    for (const status of [401, 403, 429, 503] as const) {
       signInStatus = status;
       calls.length = 0;
       const { page, urls } = await open();
@@ -286,30 +330,55 @@ test(
         }
         await submit(page);
         const alert = page.getByRole('alert');
-        await alert.waitFor({ state: 'visible' });
-        // Browser updates are asynchronous after the network response; wait for the resulting focus and clearing.
-        await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'alert');
-        expect(await alert.evaluate((element) => element === document.activeElement)).toBe(true);
-        expect(await address.inputValue()).toBe(email);
-        expect(await secret.inputValue()).toBe('');
         expect(page.url()).toBe(login);
         expect(signIns().length).toBe(1);
         submitted(signIns()[0]);
-        const message = (await alert.innerText()).trim();
-        if (status === 401) {
-          expect(message).toMatch(/email\s+or\s+password/i);
-          expect(message).toMatch(/incorrect|wrong|invalid/i);
-          expect(message).not.toMatch(
-            /^(?:the |your )?(?:email|password)\s+(?:is\s+)?(?:incorrect|wrong|invalid|unknown|not found)/i,
-          );
-          expect(message).not.toMatch(/not registered|does not exist|unknown (?:email|account)/i);
-        } else if (status === 429) {
-          expect(message).toMatch(/wait|try again|too many/i);
-          expect(message).toMatch(new RegExp(`\\b${retryAfter}\\b`));
-          expect(message).toMatch(/seconds?/i);
+        if (status === 503) {
+          const choice = page.locator('section[aria-label="Sign in"]');
+          const uncertain = choice.getByRole('status').filter({ hasText: /sign-in outcome could not be confirmed/i });
+          await uncertain.waitFor({ state: 'visible' });
+          await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'status');
+          expect(await uncertain.evaluate((element) => element === document.activeElement)).toBe(true);
+          expect(await alert.count()).toBe(0);
+          expect(await page.getByLabel(/^password$/i).count()).toBe(0);
+          const review = choice.getByRole('button', { name: 'Review current session', exact: true });
+          await review.waitFor({ state: 'visible' });
+          await Promise.all([
+            page.waitForResponse(
+              (response) =>
+                new URL(response.url()).pathname === '/signin/page' && response.request().method() === 'POST',
+            ),
+            review.click(),
+          ]);
+          await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor({ state: 'visible' });
+          await choice
+            .getByText('The sign-in outcome could not be confirmed.', { exact: false })
+            .waitFor({ state: 'visible' });
+          expect(await page.getByLabel(/^email$/i).inputValue()).toBe('');
+          expect(await page.getByLabel(/^password$/i).inputValue()).toBe('');
+          expect(await alert.count()).toBe(0);
+          expect(signIns()).toHaveLength(1);
+          expect(calls.filter((call) => new URL(call.url, fake.url).pathname === '/signin/page')).toHaveLength(2);
         } else {
-          expect(message).toMatch(/sign[ -]?in/i);
-          expect(message).toMatch(/unavailable|not available/i);
+          await alert.waitFor({ state: 'visible' });
+          // Browser updates are asynchronous after the network response; wait for the resulting focus and clearing.
+          await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'alert');
+          expect(await alert.evaluate((element) => element === document.activeElement)).toBe(true);
+          expect(await address.inputValue()).toBe(email);
+          expect(await secret.inputValue()).toBe('');
+          const message = (await alert.innerText()).trim();
+          if (status === 401 || status === 403) {
+            expect(message).toMatch(/email\s+or\s+password/i);
+            expect(message).toMatch(/incorrect|wrong|invalid/i);
+            expect(message).not.toMatch(
+              /^(?:the |your )?(?:email|password)\s+(?:is\s+)?(?:incorrect|wrong|invalid|unknown|not found)/i,
+            );
+            expect(message).not.toMatch(/not registered|does not exist|unknown (?:email|account)/i);
+          } else {
+            expect(message).toMatch(/wait|try again|too many/i);
+            expect(message).toMatch(new RegExp(`\\b${retryAfter}\\b`));
+            expect(message).toMatch(/seconds?/i);
+          }
         }
         expect(authorizations()).toEqual([]);
         privatePassword(page, urls);
@@ -391,7 +460,7 @@ test(
         expect(await address.count(), `${own.locale}: the email field has a localized label`).toBe(1);
         expect(await secret.count(), `${own.locale}: the password field has a localized label`).toBe(1);
         expect(await address.getAttribute('type')).toBe('email');
-        expect(await address.getAttribute('autocomplete')).toBe('username');
+        expect(await address.getAttribute('autocomplete')).toBe('username webauthn');
         expect(await secret.getAttribute('type')).toBe('password');
         expect(await secret.getAttribute('autocomplete')).toBe('current-password');
         await visibleLabel(address, own.email);

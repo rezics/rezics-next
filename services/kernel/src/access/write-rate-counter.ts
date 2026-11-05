@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { defineQuery } from 'reylo';
 import type { AccessClient } from '../request/access.ts';
 import statement from './write-rate-counter.sql';
@@ -5,17 +6,21 @@ import statement from './write-rate-counter.sql';
 // Keep Reylo's SQL-derived types and execution, without its periodic catalog
 // freshness query. Schema compatibility is checked at build/deploy; every spend,
 // including the first one on a new connection, must execute only the upsert.
-const spend = defineQuery<
-  (typeof statement)['~reylo']['input'],
-  (typeof statement)['~reylo']['element'],
-  typeof statement.cardinality,
-  'postgres'
->({
-  dialect: statement.dialect,
-  sql: statement.raw,
-  params: statement.params,
-  cardinality: statement.cardinality,
-});
+function spend() {
+  return memoizedValue(spend, () =>
+    defineQuery<
+      (typeof statement)['~reylo']['input'],
+      (typeof statement)['~reylo']['element'],
+      typeof statement.cardinality,
+      'postgres'
+    >({
+      dialect: statement.dialect,
+      sql: statement.raw,
+      params: statement.params,
+      cardinality: statement.cardinality,
+    }),
+  );
+}
 
 /** Internal storage primitive. The trusted stage supplies the verified acting
  * account's canonical route or the anonymous digest's tuple-home route, plus
@@ -25,6 +30,7 @@ export async function spendWriteRateCounter(
   input: {
     route: number;
     identityDigest: string;
+    accountId?: string | null;
     family: string;
     units: number;
     budget: { maximum: number; seconds: number };
@@ -50,9 +56,10 @@ export async function spendWriteRateCounter(
     budget.seconds > 172800
   )
     throw new RangeError('Invalid write rate counter input');
-  const row = await spend.run(client, {
+  const [row] = await spend().run(client, {
     route,
     identity_digest: identityDigest,
+    account_id: input.accountId ?? '',
     family,
     admitted_units: units <= budget.maximum ? units : 0,
     maximum: budget.maximum,

@@ -1,4 +1,5 @@
 import type { KernelClient } from '@rezics/client';
+import type { CoverSummary } from '@rezics/ui/cover';
 import { notFound } from '@tanstack/react-router';
 import { isPlatformClosedProblem, PlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
@@ -7,12 +8,41 @@ import { readSessionIdentity, type SessionIdentity } from '../session/state';
 /** One rendered library list page. The kernel allows at most 100. */
 export const LIBRARY_PAGE_LIMIT = 100;
 
-export type LibrarySubject = { id: string; type: string; label: string };
+/**
+ * `typeLabel` is the type's name in the reader's language, once the page's server function has set it. `types` is the
+ * subject's type chain for its cover frame, and `cover` is the cover summary the kernel embedded, or null.
+ */
+export type LibrarySubject = {
+  id: string;
+  type: string;
+  types: string[];
+  label: LibraryTitleLabel;
+  labelLanguage?: string;
+  cover: CoverSummary | null;
+  typeLabel?: string;
+};
+export type LibraryLabel = string | { value: string; language: string } | null;
+export type LibraryTitleLabel = string | { value: string; language: string };
+
+/** Preserve the kernel-selected language for subject summaries and collection/space targets. */
+export function libraryLabel(label: LibraryLabel | undefined, fallback: string): LibraryTitleLabel {
+  return typeof label === 'string' ? label : (label ?? fallback);
+}
 export type LibraryAccount = { handle: string | null; displayName: string | null };
 export type CollectionVisibility = 'private' | 'public' | 'unlisted';
 
+type NativeMembers = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['collections']>['members']['get']>>['data']
+>;
+type NativeMemberPage = Extract<NativeMembers, { members: unknown[] }>;
+/** Preserve the installed producer declaration; browser admission supplies its own unavailable outcome. */
+export type CollectionViewerFacts = NonNullable<NativeMemberPage['viewerFacts']>;
+
 export type CollectionMember = {
+  facts?: Extract<Extract<NativeMembers, { members: unknown[] }>['members'][number], { id: string }>['facts'];
   id: string;
+  /** Original admitted subject identity used by the native private row projection. */
+  subjectId?: string;
   note: string | null;
   addedAt: string;
   subject: LibrarySubject | null;
@@ -27,15 +57,23 @@ export type CollectionPageData = {
   curator: LibraryAccount | null;
   visibility: CollectionVisibility | null;
   members: CollectionMember[];
+  /** Caller-private native facts, kept separate from curator-owned occurrence details. */
+  viewerFacts?: CollectionViewerFacts;
   next: string | null;
 };
 
 type LibraryResult<T> = { data?: T | null; error?: unknown; status?: number };
 type RawAccount = { id?: string; handle: string | null; displayName: string | null };
-type RawSubject = { id: string; type: string; label: string };
+type RawSubject = {
+  id: string;
+  type: string;
+  types?: readonly string[];
+  label: LibraryLabel;
+  cover?: unknown;
+};
 type RawCollection = {
   id: string;
-  curatorAccountId: string;
+  curatorAccountId: string | null;
   title: string;
   description: string | null;
   visibility: CollectionVisibility;
@@ -48,14 +86,23 @@ type RawMember = {
   subjectId?: string;
   note: string | null;
   addedAt: string;
+  facts?: CollectionMember['facts'];
   subject?: RawSubject | null;
 };
-type RawMemberPage = { members: RawMember[]; next: string | null };
+type RawMemberPage = { members: RawMember[]; next: string | null; viewerFacts?: CollectionViewerFacts };
 
 export class StaleCursorError extends Error {
   constructor() {
     super('stale_cursor');
     this.name = 'StaleCursorError';
+  }
+}
+
+/** An ordinary denied read, distinct from a platform-closed gate and transport failures. */
+export class LibraryReadForbiddenError extends Error {
+  constructor() {
+    super('Kernel library read failed');
+    this.name = 'LibraryReadForbiddenError';
   }
 }
 
@@ -94,6 +141,7 @@ export function readLibraryResult<T>(result: LibraryResult<T>): T {
   if (isPlatformClosedProblem(status, body)) throw new PlatformClosedError(status ?? 403, body);
   if (status === 404) throw notFound();
   if (status === 409 && isRecord(body) && body.code === 'stale_cursor') throw new StaleCursorError();
+  if (status === 403) throw new LibraryReadForbiddenError();
   if (result.error || status === undefined || status >= 400 || result.data == null) {
     throw new Error('Kernel library read failed');
   }
@@ -105,19 +153,36 @@ function accountOf(account: RawAccount | null | undefined): LibraryAccount | nul
   return { handle: account.handle, displayName: account.displayName };
 }
 
-function subjectOf(subject: RawSubject | null | undefined): LibrarySubject | null {
+/** Maps an embedded subject, with the label the viewer sees or the id when there is none. */
+export function subjectOf(subject: RawSubject | null | undefined): LibrarySubject | null {
   if (!subject) return null;
-  return { id: subject.id, type: subject.type, label: subject.label };
+  return {
+    id: subject.id,
+    type: subject.type,
+    types: subject.types?.length ? [...subject.types] : [subject.type],
+    label: libraryLabel(subject.label, subject.id),
+    ...(typeof subject.label === 'object' && subject.label !== null ? { labelLanguage: subject.label.language } : {}),
+    cover: (subject.cover ?? null) as CoverSummary | null,
+  };
 }
 
 async function readCollection(client: KernelClient, id: string): Promise<RawCollection> {
   const result = await client.collections({ collectionId: id }).get({ query: libraryFullQuery() });
-  return readLibraryResult(result).collection;
+  const { collection } = readLibraryResult(result);
+  // Dynamic membership uses collection-load's dedicated reader and has no curated count or timestamp.
+  if (!('memberCount' in collection)) throw new Error('Dynamic collection requires dynamic membership reads');
+  return collection;
 }
 
 async function readMembers(client: KernelClient, id: string, cursor?: string): Promise<RawMemberPage> {
   const result = await client.collections({ collectionId: id }).members.get({ query: libraryListQuery(cursor) });
-  return readLibraryResult(result);
+  const page = readLibraryResult(result);
+  if (!('members' in page)) throw new Error('Collection members are preparing');
+  const members = page.members.map((member) => {
+    if (!('id' in member)) throw new Error('Dynamic collection requires dynamic membership reads');
+    return member;
+  });
+  return { ...page, members };
 }
 
 function present(identity: SessionIdentity, collection: RawCollection, members: RawMemberPage): CollectionPageData {
@@ -132,10 +197,13 @@ function present(identity: SessionIdentity, collection: RawCollection, members: 
     visibility: owner ? collection.visibility : null,
     members: members.members.map((member) => ({
       id: member.id,
+      ...(member.subjectId ? { subjectId: member.subjectId } : {}),
       note: member.note,
       addedAt: member.addedAt,
       subject: subjectOf(member.subject),
+      ...(member.subject && member.facts !== undefined ? { facts: member.facts } : {}),
     })),
+    ...(members.viewerFacts ? { viewerFacts: members.viewerFacts } : {}),
     next: members.next,
   };
 }

@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
@@ -142,7 +143,7 @@ beforeAll(async () => {
     await db.admin.query(
       `INSERT INTO access.account(route, account_id, kind, state, transaction_id)
       VALUES ($1,$2,'actor',$3,$2)`,
-      [routeOf(id), id, persona === 'suspended' ? 'suspended' : 'active'],
+      [routeOf(id), id, 'active'],
     );
     tokens.set(
       persona,
@@ -162,6 +163,7 @@ beforeAll(async () => {
         .sign(signing.privateKey),
     );
   }
+  await suspendAccount(db.admin, accounts.suspended);
   await db.admin.query(
     `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
      VALUES ('personal_library', tstzrange('2020-01-01T00:00:00Z', NULL, '[)'), $1)`,
@@ -177,6 +179,9 @@ test('personal routes mount once and declare their gate in OpenAPI', () => {
   const expected = {
     '/v1/libraryEntries': ['get'],
     '/v1/libraryEntries/{subjectId}': ['get', 'put', 'delete'],
+    '/v1/libraryEntries/{subjectId}/state-history': ['get'],
+    '/v1/libraryEntries/{subjectId}/state-history/{changeRevision}': ['get'],
+    '/v1/libraryEntries/{subjectId}/state-history/{changeRevision}:restore': ['post'],
     '/v1/copies': ['post', 'get'],
     '/v1/copies/{copyId}': ['get', 'patch', 'delete'],
     '/v1/follows': ['get'],
@@ -186,10 +191,19 @@ test('personal routes mount once and declare their gate in OpenAPI', () => {
     for (const method of methods) {
       expect(document.paths[path]?.[method]?.['x-exposure']).toBe('gate:personal_library');
       const native = path.replace(/\{(\w+)\}/g, ':$1');
-      expect(app.routes.filter((route) => route.path === native && route.method.toLowerCase() === method)).toHaveLength(
-        1,
-      );
+      const route = path.endsWith(':restore') ? native.replace(/:restore$/, '/$restore') : native;
+      expect(
+        app.routes.filter((candidate) => candidate.path === route && candidate.method.toLowerCase() === method),
+      ).toHaveLength(1);
     }
+  const followingParameters = document.paths['/v1/follows']?.get?.parameters ?? [];
+  expect(followingParameters).toContainEqual(
+    expect.objectContaining({
+      name: 'targetType',
+      in: 'query',
+      schema: expect.objectContaining({ enum: ['subject', 'collection', 'space'] }),
+    }),
+  );
 });
 
 test('entry states revisions deletion and signed pages use the frozen HTTP views', async () => {
@@ -232,6 +246,158 @@ test('entry states revisions deletion and signed pages use the frozen HTTP views
   expect((await request('DELETE', `/v1/libraryEntries/${id}?revision=${current.revision}`)).status).toBe(204);
   await problem(await request('GET', `/v1/libraryEntries/${id}`), 404, 'not_found');
 });
+
+test('entry state history is private, bounded by change and restores only the reviewed live incarnation', async () => {
+  const id = await subject();
+  let current = await entry(id);
+  current = await entry(id, 'planned', current.revision);
+  current = await entry(id, 'in_progress', current.revision);
+  current = await entry(id, 'completed', current.revision);
+
+  const first = await json(await request('GET', `/v1/libraryEntries/${id}/state-history?limit=2`));
+  expect(first).toMatchObject({
+    currentRevision: current.revision,
+    coverage: 'complete',
+    changes: [{ revision: 4 }, { revision: 3 }],
+  });
+  expect(first.next).toEqual(expect.any(String));
+  const last = await json(
+    await request('GET', `/v1/libraryEntries/${id}/state-history?limit=2&cursor=${encodeURIComponent(first.next)}`),
+  );
+  expect(last).toMatchObject({ coverage: 'complete', changes: [{ revision: 1, beforeState: null }] });
+  expect(last.next).toBeNull();
+  await problem(await request('GET', `/v1/libraryEntries/${id}/state-history`, undefined, 'other'), 404, 'not_found');
+
+  const review = await json(await request('GET', `/v1/libraryEntries/${id}/state-history/3`));
+  expect(review).toMatchObject({
+    change: { revision: 3, beforeState: 'planned', afterState: 'in_progress' },
+    current: { revision: current.revision, state: 'completed' },
+    availability: 'available',
+  });
+  const restoreKey = randomUUID();
+  const restorePath = `/v1/libraryEntries/${id}/state-history/3:restore`;
+  const restoreBody = { incarnationId: first.incarnationId, currentRevision: current.revision };
+  const restored = await json(await request('POST', restorePath, restoreBody, 'owner', restoreKey));
+  expect(restored.libraryEntry).toMatchObject({ state: 'planned', revision: current.revision + 1 });
+  expect(await json(await request('POST', restorePath, restoreBody, 'owner', restoreKey))).toEqual(restored);
+  expect(
+    (
+      await db.admin.query(
+        `SELECT revision,command_kind FROM library.entry_state_change WHERE route=$1 AND account_id=$2 AND subject_id=$3 ORDER BY revision`,
+        [routeOf(accounts.owner), accounts.owner, id],
+      )
+    ).rows,
+  ).toHaveLength(4);
+
+  const otherId = await subject();
+  const otherEntry = await entry(otherId, 'paused');
+  const staleReview = await json(await request('GET', `/v1/libraryEntries/${id}/state-history/4`));
+  const changed = await entry(id, 'paused', restored.libraryEntry.revision);
+  await problem(
+    await request('POST', `/v1/libraryEntries/${id}/state-history/4:restore`, {
+      incarnationId: first.incarnationId,
+      currentRevision: staleReview.current.revision,
+    }),
+    409,
+    'library_entry_state_restore_stale',
+  );
+  expect((await json(await request('GET', `/v1/libraryEntries/${otherId}`))).libraryEntry).toEqual(otherEntry);
+
+  expect(
+    (
+      await request(
+        'DELETE',
+        `/v1/libraryEntries/${id}?revision=${changed.libraryEntry.revision}&incarnationId=${first.incarnationId}`,
+      )
+    ).status,
+  ).toBe(204);
+  await problem(await request('GET', `/v1/libraryEntries/${id}/state-history`), 404, 'not_found');
+  const recreated = await entry(id, 'planned');
+  const recreatedHistory = await json(await request('GET', `/v1/libraryEntries/${id}/state-history`));
+  expect(recreatedHistory.incarnationId).not.toBe(first.incarnationId);
+  await problem(
+    await request('POST', `/v1/libraryEntries/${id}/state-history/4:restore`, {
+      incarnationId: first.incarnationId,
+      currentRevision: recreated.revision,
+    }),
+    409,
+    'library_entry_state_restore_stale',
+  );
+});
+
+test('history exposes unknown legacy coverage and refuses a former state outside the current profile', async () => {
+  const legacyId = await subject();
+  const legacyEntry = await entry(legacyId);
+  const legacyPage = await json(await request('GET', `/v1/libraryEntries/${legacyId}/state-history`));
+  await db.admin.query(`DELETE FROM library.entry_state_change WHERE route=$1 AND account_id=$2 AND subject_id=$3`, [
+    routeOf(accounts.owner),
+    accounts.owner,
+    legacyId,
+  ]);
+  expect(await json(await request('GET', `/v1/libraryEntries/${legacyId}/state-history`))).toMatchObject({
+    incarnationId: legacyPage.incarnationId,
+    currentRevision: legacyEntry.revision,
+    changes: [],
+    coverage: 'unknown',
+    next: null,
+  });
+
+  const subjectId = await subject();
+  const current = await entry(subjectId);
+  const history = await json(await request('GET', `/v1/libraryEntries/${subjectId}/state-history`));
+  const oldRevision = current.revision + 1;
+  await db.admin.query(
+    `INSERT INTO library.entry_state_change
+      (route,account_id,subject_id,incarnation_id,prior_revision,revision,before_state,after_state,
+       command_id,command_kind,changed_at,coverage_complete)
+     VALUES($1,$2,$3,$4,$5,$6,'retired.meaning','planned',$7,'library.entry.put',$8,false)`,
+    [
+      routeOf(accounts.owner),
+      accounts.owner,
+      subjectId,
+      history.incarnationId,
+      current.revision,
+      oldRevision,
+      randomUUID(),
+      new Date().toISOString(),
+    ],
+  );
+  expect(
+    await json(await request('GET', `/v1/libraryEntries/${subjectId}/state-history/${oldRevision}`)),
+  ).toMatchObject({
+    change: { beforeState: 'retired.meaning' },
+    availability: 'state_unavailable',
+  });
+  await problem(
+    await request('POST', `/v1/libraryEntries/${subjectId}/state-history/${oldRevision}:restore`, {
+      incarnationId: history.incarnationId,
+      currentRevision: current.revision,
+    }),
+    409,
+    'library_entry_state_restore_unavailable',
+  );
+});
+
+test('state history prunes at the retained cap and keeps continuation coverage truthful', async () => {
+  const subjectId = await subject();
+  let current = await entry(subjectId);
+  const states = ['in_progress', 'completed', 'paused', 'dropped', 'planned'];
+  for (let index = 0; index < 65; index++)
+    current = await entry(subjectId, states[index % states.length]!, current.revision);
+  const first = await json(await request('GET', `/v1/libraryEntries/${subjectId}/state-history?limit=50`));
+  expect(first.changes).toHaveLength(50);
+  expect(first.coverage).toBe('partial');
+  const second = await json(
+    await request(
+      'GET',
+      `/v1/libraryEntries/${subjectId}/state-history?limit=50&cursor=${encodeURIComponent(first.next)}`,
+    ),
+  );
+  expect(second.changes).toHaveLength(14);
+  expect(second.coverage).toBe('partial');
+  expect(second.next).toBeNull();
+  expect(second.currentRevision).toBe(current.revision);
+}, 120_000);
 
 test('copies remain independent and conceal missing and foreign rows before revision conflicts', async () => {
   const id = await subject();
@@ -531,3 +697,136 @@ test('following pages keep their order and bind cursors to the account', async (
   expect(rows).toEqual(all.follows);
   expect(rows.every((row) => row.state === 'following')).toBe(true);
 });
+
+test('following kind pages seek the selected population and bind cursors to kind and reader', async () => {
+  const route = routeOf(accounts.owner)!;
+  const collectionIds: string[] = [];
+  for (const title of ['First followed Collection', 'Second followed Collection']) {
+    const collection = await collections.insertCollection(
+      db.admin,
+      route,
+      {
+        id: newId(route),
+        curatorAccountId: accounts.owner,
+        title,
+        description: null,
+        visibility: 'public',
+      },
+      { time: clock().toISOString(), transactionId: newId(route) },
+    );
+    collectionIds.push(collection.id);
+    await json(await request('PUT', `/v1/follows/${collection.id}`));
+    if (collectionIds.length === 1)
+      for (let index = 0; index < 12; index++) await json(await request('PUT', `/v1/follows/${await subject()}`));
+  }
+
+  await db.admin.query(
+    `INSERT INTO access.resource_grant(route, resource_id, subject_id, action, valid, transaction_id)
+     VALUES (0, $1, $2, 'space:create', '(,)', $3)`,
+    [GLOBAL_CONTEXT, accounts.owner, randomUUID()],
+  );
+  const space = (await json(await request('POST', '/v1/spaces', { title: 'Following kind space' }), 201)).space;
+  await json(await request('PUT', `/v1/follows/${space.spaceId}`));
+  for (let index = 0; index < 25; index++) await json(await request('PUT', `/v1/follows/${await subject()}`));
+
+  await db.admin.query(
+    `UPDATE library.follow SET updated_at = '2000-01-01T00:00:00Z'
+     WHERE route = $1 AND account_id = $2 AND target_type = 'collection' AND target_id = ANY($3::uuid[])`,
+    [route, accounts.owner, collectionIds],
+  );
+  const all = await json(await request('GET', '/v1/follows?limit=20'));
+  expect(all.follows).toHaveLength(20);
+  expect(all.follows.every((follow: { targetType: string }) => follow.targetType === 'subject')).toBe(true);
+  expect(all.follows.some((follow: { targetId: string }) => collectionIds.includes(follow.targetId))).toBe(false);
+  expect(all.follows.some((follow: { targetId: string }) => follow.targetId === space.spaceId)).toBe(false);
+
+  const expectedCollectionIds = [...collectionIds].sort();
+  const first = await json(await request('GET', '/v1/follows?targetType=collection&limit=1'));
+  expect(first.follows[0]).toMatchObject({ targetId: expectedCollectionIds[0], targetType: 'collection' });
+  expect(first.next).toEqual(expect.any(String));
+  const wrongKind = await capture(db, () =>
+    request('GET', `/v1/follows?targetType=subject&limit=1&cursor=${encodeURIComponent(first.next)}`),
+  );
+  await problem(wrongKind.value, 400, 'invalid_cursor');
+  expect(
+    wrongKind.capture.statements.some((statement) => /FROM (?:library\.follow|core\.partition)\b/i.test(statement)),
+  ).toBe(false);
+  await problem(
+    await request('GET', `/v1/follows?limit=1&cursor=${encodeURIComponent(first.next)}`),
+    400,
+    'invalid_cursor',
+  );
+  await problem(
+    await request(
+      'GET',
+      `/v1/follows?targetType=collection&limit=1&cursor=${encodeURIComponent(first.next)}`,
+      undefined,
+      'other',
+    ),
+    400,
+    'invalid_cursor',
+  );
+  await problem(await request('GET', '/v1/follows?targetType=collection&cursor=malformed'), 400, 'invalid_cursor');
+  await problem(await request('GET', '/v1/follows?targetType=realm'), 400, 'invalid_request');
+
+  await json(await request('DELETE', `/v1/follows/${expectedCollectionIds[1]}`));
+  const afterUnfollow = await json(
+    await request('GET', `/v1/follows?targetType=collection&limit=1&cursor=${encodeURIComponent(first.next)}`),
+  );
+  expect(afterUnfollow).toEqual({ follows: [], next: null });
+  await json(await request('PUT', `/v1/follows/${expectedCollectionIds[1]}`));
+  const afterRefollow = await json(
+    await request('GET', `/v1/follows?targetType=collection&limit=1&cursor=${encodeURIComponent(first.next)}`),
+  );
+  expect(afterRefollow).toEqual({ follows: [], next: null });
+
+  const spacePage = await json(await request('GET', '/v1/follows?targetType=space'));
+  expect(spacePage.follows).toContainEqual(expect.objectContaining({ targetId: space.spaceId, targetType: 'space' }));
+  await json(await request('DELETE', `/v1/follows/${space.spaceId}`));
+  expect(await json(await request('GET', '/v1/follows?targetType=space'))).toEqual({ follows: [], next: null });
+});
+
+test('a kind page of 100 probes one more row from that kind', async () => {
+  const route = routeOf(accounts.owner)!;
+  const prefix = randomUUID().slice(0, 8);
+  await db.admin.query(
+    `INSERT INTO library.follow
+       (route, account_id, target_id, target_type, state, reason, created_at, updated_at, transaction_id)
+     SELECT $1, $2,
+            ($3::text || '-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n), 8, '0'))::uuid,
+            'collection', 'following', 'explicit', '2099-01-01T00:00:00Z', '2099-01-01T00:00:00Z',
+            ($3::text || '-0000-7000-8000-' || lpad(to_hex($1::int), 4, '0') || lpad(to_hex(n), 8, '0'))::uuid
+     FROM generate_series(1, 101) AS n`,
+    [route, accounts.owner, prefix],
+  );
+  try {
+    const first = await json(await request('GET', '/v1/follows?targetType=collection&limit=100'));
+    expect(first.follows).toHaveLength(100);
+    expect(first.follows.every((follow: { targetId: string }) => follow.targetId.startsWith(`${prefix}-`))).toBe(true);
+    expect(first.next).toEqual(expect.any(String));
+    const last = await json(
+      await request('GET', `/v1/follows?targetType=collection&limit=100&cursor=${encodeURIComponent(first.next)}`),
+    );
+    expect(
+      last.follows.filter((follow: { targetId: string }) => follow.targetId.startsWith(`${prefix}-`)),
+    ).toHaveLength(1);
+    expect(last.next).toBeNull();
+    // Remove the one remaining candidate after issuing the frontier. Reusing
+    // that same sealed deep cursor yields an authentic empty terminal page.
+    await db.admin.query('DELETE FROM library.follow WHERE route=$1 AND account_id=$2 AND target_id=$3', [
+      route,
+      accounts.owner,
+      last.follows[0].targetId,
+    ]);
+    const empty = await json(
+      await request('GET', `/v1/follows?targetType=collection&limit=100&cursor=${encodeURIComponent(first.next)}`),
+    );
+    expect(empty.follows).toEqual(last.follows.slice(1));
+    expect(empty.next).toBeNull();
+  } finally {
+    await db.admin.query(
+      'DELETE FROM library.follow WHERE route = $1 AND account_id = $2 AND target_id::text LIKE $3',
+      [route, accounts.owner, `${prefix}-%`],
+    );
+  }
+}, 120_000);

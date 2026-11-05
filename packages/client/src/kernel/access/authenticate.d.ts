@@ -1,3 +1,5 @@
+import { type IdentityExpiry } from './identity-expiry.ts';
+import { type KernelClock } from '../clock.ts';
 import { type FetchImplementation } from 'jose';
 import { type AccessClient, type AccessContext, type AccountActor } from '../request/access.ts';
 import { type DurableIdentity } from './durable-identity.ts';
@@ -11,12 +13,14 @@ export type AuthenticationConfig = {
     /** Public JWKS transport only. No credential, token or private key is passed. */
     fetch?: FetchImplementation;
 };
-type Identity = {
+type Identity = IdentityExpiry & {
     account: Account;
     pool: AccessContext['pool'];
     deadline: number;
-    expires: number;
     observedAt: number;
+    requestContext?: AccessContext;
+    requestWork?: AccessContext['work'];
+    requestTime?: AuthoritativeTime;
     durableTime?: AuthoritativeTime;
     durableAction?: string;
 };
@@ -25,8 +29,14 @@ export declare function within<T>(deadline: number, work: () => Promise<T>): Pro
 /** Preserve pg's decoding capabilities when wrapping reylo's query transport. */
 export declare function deadlineClient(client: AccessClient, deadline: number): AccessClient;
 /** Each factory owns its key cache and its opaque, immutable request identities. */
-export declare function createAuthenticator(configuration?: AuthenticationConfig): {
-    authenticate: (token: string, context: AccessContext) => Promise<AccountActor>;
+export declare function createAuthenticator(configuration?: AuthenticationConfig, clock?: KernelClock): {
+    authenticate: (token: string, context: {
+        pool: import("pg").Pool;
+        deadline: number;
+    }) => Promise<AccountActor>;
+    /** Refresh only an identity already verified by THIS authenticator/pool.
+     * No cryptography or key-fetch callback is treated as zero work. */
+    refresh(actor: AccountActor, context: AccessContext): Promise<boolean>;
     approvalScope: Readonly<{}>;
     durableScope: Readonly<{}>;
     /** Private operation proof, not a row/Actor registration API. */
@@ -36,4 +46,6 @@ export declare function createAuthenticator(configuration?: AuthenticationConfig
     restoreApproval(proof: ApprovedIdentity, context: AccessContext): Promise<AccountActor>;
     identity(actor: AccountActor): Identity | undefined;
 };
+/** Native read time minted from this exact admitted SQL observation. Caller releases it. */
+export declare function readNativeAccessTime(context: AccessContext, clock?: KernelClock, instant?: string): Promise<AuthoritativeTime>;
 export {};

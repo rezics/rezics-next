@@ -1,35 +1,249 @@
 import { spawnSync } from 'node:child_process';
+import { Client } from 'pg';
+import { hostname } from 'node:os';
 import {
-  accessSync,
-  constants,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   realpathSync,
+  readFileSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname, extname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { withStackSlot } from '../../../scripts/stack-lease.ts';
 import { migrate, moduleExtensionFiles, POSTGRES_IMAGE, schemaDumps, validateMigrationVersions } from './database.ts';
-import { buildSearchImage, cgroupArgs, waitForSearch } from './search.ts';
+import {
+  capture as captureIn,
+  rerunGrowthFailures,
+  runLaneSuite,
+  runTestFiles as runTestFilesIn,
+  scheduleFiles as scheduleFilesIn,
+  testCommand,
+  type CheckRunTiming,
+  type FileOutcome,
+  type FileRunner,
+  type FileTiming,
+} from '../../../scripts/test-lanes.ts';
+import { readLatest, timingsDirectory } from './check-timings.ts';
+import { runOnCheckHost } from '../../../scripts/stack-run.ts';
+import { affectedTests } from './affected.ts';
+import { buildSearchImage, cgroupArgs, subjectAutoCreateIndexSetting, waitForSearch } from './search.ts';
+import { withCommandPhase } from './command-phases.ts';
+import { prepareReyloAnalysisCache } from './reylo-cache.ts';
+import {
+  captureArtifactReturns,
+  registerArtifactDeclarations,
+  writeArtifactCatalog,
+} from '../../../scripts/check-artifacts.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pid = String(process.pid);
 let container = '';
 let searchContainer = '';
 let reyloDirectory = '';
+let analysisDispose: (() => void) | undefined;
+let failedFileOutputs: string[] = [];
+const POSTGRES_MAX_CONNECTIONS = 500;
+const POSTGRES_CONNECTION_SAMPLE_MS = 250;
+const POSTGRES_ACTIVITY_QUERY = 'SELECT datname, count(*) FROM pg_stat_activity GROUP BY datname';
 
 // Cloned from the migrated template once and never used as a template; Reylo reads every analysis from it.
 const ANALYSIS_DATABASE = 'kernel_analysis';
+const SCHEMA_DIAGNOSTICS = 'services/kernel/.temp/schema-diagnostics';
+
+/** A bounded changed range, with pg_dump's object headings even when the change is deep inside a table. */
+function schemaDifference(path: string, expected: string | null, actual: string): string {
+  const before = expected === null ? [] : expected.split('\n');
+  const after = actual.split('\n');
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  let endBefore = before.length;
+  let endAfter = after.length;
+  while (endBefore > start && endAfter > start && before[endBefore - 1] === after[endAfter - 1]) {
+    endBefore--;
+    endAfter--;
+  }
+  const clip = (line: string) => (line.length > 160 ? `${line.slice(0, 160)} [line truncated]` : line);
+  const object = (lines: string[]) => {
+    for (let index = Math.min(start, lines.length - 1); index >= 0; index--) {
+      if (lines[index]!.startsWith('-- Name: ')) return clip(lines[index]!);
+    }
+    return 'no preceding pg_dump object heading';
+  };
+  const preview = (lines: string[], prefix: string): string[] => {
+    const rendered = (part: string[]) => part.map((line) => `${prefix}${clip(line)}`);
+    return lines.length <= 32
+      ? rendered(lines)
+      : [...rendered(lines.slice(0, 16)), `... ${lines.length - 32} lines omitted ...`, ...rendered(lines.slice(-16))];
+  };
+  const contextStart = Math.max(0, start - 3);
+  const contextEnd = Math.min(3, before.length - endBefore, after.length - endAfter);
+  return [
+    `--- ${path} (expected${expected === null ? ', MISSING' : ''})`,
+    `+++ ${path} (actual)`,
+    `Expected object: ${object(before)}`,
+    `Actual object: ${object(after)}`,
+    `@@ -${contextStart + 1},${endBefore + contextEnd - contextStart} +${contextStart + 1},${endAfter + contextEnd - contextStart} @@`,
+    ...preview(before.slice(contextStart, start), ' '),
+    ...preview(before.slice(start, endBefore), '-'),
+    ...preview(after.slice(start, endAfter), '+'),
+    ...preview(after.slice(endAfter, endAfter + contextEnd), ' '),
+    'Diff preview is bounded to 32 changed lines per side and 160 characters per line; full dumps are retained.',
+    '',
+  ].join('\n');
+}
+
+/** Compare the generator's already-normalized output verbatim, before any compiler or journey runs. */
+export async function assertSchemaConsistency(
+  dumps: Readonly<Record<string, string>>,
+  moduleDirectory = directory,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
+  for (const [path, actual] of Object.entries(dumps)) {
+    if (path.length > 300 || !/^db\/(?:[a-z][a-z0-9_]*\/)?schema\.sql$/.test(path)) {
+      fail('Invalid schema dump path; expected db/schema.sql or db/<module>/schema.sql');
+    }
+    const file = Bun.file(resolve(moduleDirectory, path));
+    const expected = (await file.exists()) ? await file.text() : null;
+    if (expected !== null && expected === actual) continue;
+
+    const source = 'Checked source commit/tree: UNKNOWN (no retained source provenance at this boundary).';
+    let message = `${expected === null ? 'Missing expected schema file:' : 'Schema dump differs from'} ${path}.\n${source}`;
+    try {
+      const root = resolve(moduleDirectory, '../..');
+      let parent = resolve(moduleDirectory);
+      for (const component of ['.temp', 'schema-diagnostics']) {
+        parent = resolve(parent, component);
+        try {
+          mkdirSync(parent);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        }
+        const stats = lstatSync(parent);
+        if (stats.isSymbolicLink() || !stats.isDirectory()) throw new Error('Unsafe schema diagnostic directory');
+      }
+      const artifacts = mkdtempSync(resolve(parent, 'schema-'));
+      const returned = [relative(root, artifacts).split(sep).join('/')];
+      const stage = env.REZICS_CHECK_ARTIFACTS_DIR;
+      const physicalRunId = env.REZICS_CHECK_ARTIFACTS_PHYSICAL_RUN_ID;
+      let handoff = false;
+      if (stage !== undefined && physicalRunId !== undefined) {
+        try {
+          await registerArtifactDeclarations(root, stage, physicalRunId, returned);
+          handoff = true;
+        } catch {
+          message += '\nArtifact handoff unavailable; local diagnostic files remain available.';
+        }
+      }
+      const expectedPath = resolve(artifacts, expected === null ? 'expected.missing.txt' : 'expected.sql');
+      const actualPath = resolve(artifacts, 'actual.sql');
+      const diffPath = resolve(artifacts, 'difference.diff');
+      const diff = schemaDifference(path, expected, actual);
+      writeFileSync(expectedPath, expected ?? `Missing expected schema file: ${path}\n`, { flag: 'wx' });
+      writeFileSync(actualPath, actual, { flag: 'wx' });
+      writeFileSync(diffPath, `${source}\n${diff}`, { flag: 'wx' });
+      message += `\nExpected: ${expectedPath}\nActual: ${actualPath}\nDiff: ${diffPath}\nWorkspace artifact directory: ${returned[0]}\n${diff}`;
+      try {
+        if (handoff) await captureArtifactReturns(root, stage!, physicalRunId!, returned);
+        if (env.REZICS_CHECK_ID) writeArtifactCatalog(root, env.REZICS_CHECK_ID, returned);
+      } catch {
+        message += '\nArtifact return unavailable; local diagnostic files remain available.';
+      }
+    } catch {
+      message += '\nSchema diagnostics could not be retained; schema consistency still failed.';
+    }
+    fail(message);
+  }
+}
+
+function reyloQueriesFor(config: string): string {
+  return resolve(dirname(resolve(config)), '.reylo', 'queries');
+}
+
+function reyloEntryCount(config: string): number {
+  try {
+    return readdirSync(reyloQueriesFor(config)).filter((file) => file.endsWith('.json')).length;
+  } catch {
+    return 0;
+  }
+}
+
+function seconds(started: number): number {
+  return Math.round(((performance.now() - started) / 1000) * 1000) / 1000;
+}
 
 type CheckPlan = { files: string[] | null; tests: string[] };
 
+function resolveTypeScriptImport(fromFile: string, specifier: string, moduleDirectory: string): string | null {
+  if (!specifier.startsWith('.')) return null;
+  const base = resolve(dirname(fromFile), specifier);
+  const extension = extname(base);
+  const candidates =
+    extension === '.ts'
+      ? [base]
+      : extension
+        ? [`${base.slice(0, -extension.length)}.ts`]
+        : [`${base}.ts`, resolve(base, 'index.ts')];
+  return candidates.find((candidate) => pathIsWithin(moduleDirectory, candidate) && existsSync(candidate)) ?? null;
+}
+
+/** Whether a check plan's static relative-import closure reads the search URL. */
+export function planNeedsSearch(plan: CheckPlan, moduleDirectory: string): boolean {
+  if (plan.files === null) return true;
+  const root = resolve(moduleDirectory);
+  const visited = new Set<string>();
+  const pending = plan.tests.map((file) => resolve(root, file));
+  const transpiler = new Bun.Transpiler({ loader: 'ts' });
+  while (pending.length) {
+    const file = pending.pop()!;
+    if (visited.has(file) || !pathIsWithin(root, file) || !existsSync(file)) continue;
+    visited.add(file);
+    let source: string;
+    let imports: ReturnType<typeof transpiler.scanImports>;
+    try {
+      source = readFileSync(file, 'utf8');
+      if (source.includes('OPENSEARCH_URL')) return true;
+      // Bun's import scanner treats a shebang as invalid syntax, even though the runtime accepts it.
+      const scanSource = source.startsWith('#!') ? source.replace(/^#![^\r\n]*(?:\r?\n|$)/, '') : source;
+      imports = transpiler.scanImports(scanSource);
+    } catch {
+      // An incomplete static plan must pay for search rather than fail or omit a needed service.
+      return true;
+    }
+    for (const imported of imports) {
+      const dependency = resolveTypeScriptImport(file, imported.path, root);
+      if (dependency && !visited.has(dependency)) pending.push(dependency);
+    }
+  }
+  return false;
+}
+
+/** Keep search startup behind all configured quality checks. */
+export async function runChecksThenStartSearch<T>(
+  needsSearch: boolean,
+  checks: () => void | Promise<void>,
+  startSearch: () => T | Promise<T>,
+): Promise<T | null> {
+  await checks();
+  return needsSearch ? await startSearch() : null;
+}
+
 function moduleTests(moduleDirectory: string): string[] {
   return Array.from(new Bun.Glob('test/**/*.test.ts').scanSync({ cwd: moduleDirectory })).sort();
+}
+
+function affectedMaximum(env: NodeJS.ProcessEnv): number {
+  const value = env.KERNEL_CHECK_AFFECTED_MAX;
+  if (value === undefined) return 60;
+  const maximum = Number(value);
+  if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(maximum)) {
+    throw new Error('KERNEL_CHECK_AFFECTED_MAX must be a positive integer');
+  }
+  return maximum;
 }
 
 function pathIsWithin(parent: string, candidate: string): boolean {
@@ -49,6 +263,7 @@ export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
     rootRealPath = null;
   }
   const files = new Set<string>();
+  const testFiles = new Set(allTests);
   for (const argument of args) {
     const normalized = resolve(root, argument.startsWith('./') ? argument.slice(2) : argument);
     if (!rootRealPath || !pathIsWithin(root, normalized)) {
@@ -56,19 +271,121 @@ export function checkPlan(args: string[], moduleDirectory: string): CheckPlan {
     }
 
     try {
-      if (!statSync(normalized).isFile() || !pathIsWithin(rootRealPath, realpathSync(normalized))) {
+      const stats = statSync(normalized);
+      if (!pathIsWithin(rootRealPath, realpathSync(normalized))) throw new Error();
+      if (stats.isDirectory()) {
+        let selectsTest = false;
+        for (const file of new Bun.Glob('**/*.test.ts').scanSync({ cwd: normalized })) {
+          const candidate = resolve(normalized, file);
+          if (!pathIsWithin(rootRealPath, realpathSync(candidate))) throw new Error();
+          const selected = relative(root, candidate).split(sep).join('/');
+          files.add(selected);
+          if (testFiles.has(selected)) selectsTest = true;
+        }
+        if (!selectsTest) throw new Error();
+      } else if (stats.isFile()) {
+        files.add(relative(root, normalized).split(sep).join('/'));
+      } else {
         throw new Error();
       }
     } catch {
       throw new Error(`Check path must name an existing file inside ${moduleDirectory}: ${argument}`);
     }
-
-    files.add(relative(root, normalized).split(sep).join('/'));
   }
 
   const sortedFiles = Array.from(files).sort();
-  const testFiles = new Set(allTests);
   return { files: sortedFiles, tests: sortedFiles.filter((file) => testFiles.has(file)) };
+}
+
+/** Repository-relative paths changed since `revision`: committed, staged, unstaged and untracked. */
+export function gitChangedPaths(revision: string, repository: string = resolve(directory, '../..')): string[] {
+  const git = (args: string[]): string => {
+    const result = spawnSync('git', ['-C', repository, ...args], { encoding: 'utf8' });
+    if (result.error) throw result.error;
+    if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed:\n${result.stdout}${result.stderr}`);
+    return result.stdout;
+  };
+  const changed = new Set(git(['diff', '--name-only', '--no-relative', '-z', `${revision}...HEAD`]).split('\0'));
+  // A rename lists its new path, then its old path as a separate field.
+  const status = git(['status', '--porcelain', '-z', '--untracked-files=all']).split('\0');
+  for (let index = 0; index < status.length; index += 1) {
+    const entry = status[index]!;
+    if (entry.length < 4) continue;
+    changed.add(entry.slice(3));
+    if (/[RC]/.test(entry.slice(0, 2))) changed.add(status[(index += 1)] ?? '');
+  }
+  changed.delete('');
+  return Array.from(changed).sort();
+}
+
+/** The revision affected mode compares against: the flag wins over the environment; the flag and its value leave `args`. */
+function affectedRevision(args: string[], env: NodeJS.ProcessEnv): { revision: string | null; files: string[] } {
+  const files: string[] = [];
+  let revision: string | null = null;
+  for (let index = 0; index < args.length; index += 1) {
+    const argument = args[index]!;
+    if (argument === '--affected') {
+      revision = args[(index += 1)] ?? '';
+      if (revision === '' || revision.startsWith('--')) throw new Error('--affected needs a revision');
+    } else if (argument.startsWith('--affected=')) {
+      revision = argument.slice('--affected='.length);
+      if (revision === '') throw new Error('--affected needs a revision');
+    } else {
+      files.push(argument);
+    }
+  }
+  return { revision: revision ?? (env.KERNEL_CHECK_AFFECTED || null), files };
+}
+
+/**
+ * Plan a run from its arguments. With affected mode on and no file arguments, the changed paths choose the test files:
+ * a list behaves as if those files were named, `all` as a run with no arguments, and an empty list as a run with
+ * arguments that names no test file. The announcement is the line to print first, or null outside affected mode.
+ */
+export function planCheck(
+  args: string[],
+  moduleDirectory: string,
+  options: { env?: NodeJS.ProcessEnv; changed?: (revision: string) => string[] } = {},
+): { plan: CheckPlan; announcement: string | null } {
+  const { revision, files } = affectedRevision(args, options.env ?? process.env);
+  if (files.length > 0 || revision === null) return { plan: checkPlan(files, moduleDirectory), announcement: null };
+
+  const root = resolve(moduleDirectory);
+  const total = moduleTests(root).length;
+  const env = options.env ?? process.env;
+  const cap = affectedMaximum(env);
+  const changed = (options.changed ?? gitChangedPaths)(revision);
+  const selection = affectedTests(resolve(root, '../..'), root, changed);
+  if (selection.kind === 'all') {
+    return {
+      plan: { files: [], tests: [] },
+      announcement: `Affected mode: unverified, 0 of ${total} test files selected (${selection.reason})`,
+    };
+  }
+  let latest: Record<string, FileTiming> = {};
+  try {
+    latest = readLatest(timingsDirectory(moduleDirectory, env));
+  } catch {
+    // A synthetic module tree or missing Git metadata has no shared timing directory; unknown times rank last.
+  }
+  const wall = (file: string): number => {
+    const value = latest[file]?.wall;
+    return typeof value === 'number' && Number.isFinite(value) ? value : Infinity;
+  };
+  const ranked = selection.tests.sort((a, b) => {
+    const distanceA = a.distance ?? Infinity;
+    const distanceB = b.distance ?? Infinity;
+    if (distanceA !== distanceB) return distanceA < distanceB ? -1 : 1;
+    const wallA = wall(a.file);
+    const wallB = wall(b.file);
+    if (wallA !== wallB) return wallA < wallB ? -1 : 1;
+    return a.file < b.file ? -1 : a.file > b.file ? 1 : 0;
+  });
+  const selected = ranked.slice(0, cap).map(({ file }) => file);
+  return {
+    plan: selected.length > 0 ? checkPlan(selected, moduleDirectory) : { files: [], tests: [] },
+    announcement: `Affected mode: tests, ${selected.length} of ${total} test files selected (${ranked.length} reachable, cap ${cap})`,
+  };
 }
 
 function diagnosticPath(line: string): string | null | undefined {
@@ -104,6 +421,21 @@ export function ownDiagnostics(output: string, files: string[]): string[] {
   return diagnostics;
 }
 
+/** Include changed kernel sources in file-mode diagnostics, even when the caller named only test files. */
+export function diagnosticFiles(
+  files: string[],
+  moduleDirectory: string,
+  revision: string | null,
+  changed: (revision: string) => string[] = gitChangedPaths,
+): string[] {
+  if (!revision) return files;
+  const repository = resolve(moduleDirectory, '../..');
+  const prefix = `${relative(repository, resolve(moduleDirectory)).split(sep).join('/')}/`;
+  const all = new Set(files);
+  for (const file of changed(revision)) if (file.startsWith(prefix)) all.add(file.slice(prefix.length));
+  return Array.from(all).sort();
+}
+
 /**
  * Writes the Reylo project file that points every analysis at `analysisUrl`, in `directory`, which then holds `.reylo/`.
  * Reylo keys its entries by database name, so analysing in each file's own copy re-describes every statement there.
@@ -114,238 +446,57 @@ export function writeReyloProject(directory: string, analysisUrl: string): strin
   return file;
 }
 
+/** Bind both full and selected compiler spawns to the check's explicit Reylo project. */
+export function invokeTypecheck<T>(
+  program: string,
+  files: string[] | null,
+  baseEnvironment: NodeJS.ProcessEnv,
+  reyloConfig: string,
+  invoke: (program: string, args: string[], environment: NodeJS.ProcessEnv) => T,
+): T {
+  const args =
+    files === null
+      ? ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json']
+      : ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'];
+  const environment = { ...baseEnvironment, REYLO_CONFIG: reyloConfig };
+  return invoke(program, args, environment);
+}
+
 /** The environment of every process one test file starts: its own database copy, the shared search node and Reylo's analysis database. */
 export function fileEnvironment(
   base: NodeJS.ProcessEnv,
-  file: { url: string; database: string; searchUrl: string; reyloConfig: string },
+  file: { url: string; database: string; searchUrl?: string; reyloConfig: string },
 ): NodeJS.ProcessEnv {
+  const environment = { ...base };
+  delete environment.OPENSEARCH_URL;
   return {
-    ...base,
+    ...environment,
     DATABASE_URL: file.url.replace(/\/rezics(?=\?)/, `/${file.database}`),
-    OPENSEARCH_URL: file.searchUrl,
+    ...(file.searchUrl ? { OPENSEARCH_URL: file.searchUrl } : {}),
     REYLO_CONFIG: file.reyloConfig,
     KERNEL_POOL_ACQUIRE_TIMEOUT_MS: '2000',
   };
 }
 
-export type FileOutcome<T> = { file: string; database: string; output?: T; error?: Error };
-export type FileRunner<T> = {
-  create: (file: string, database: string) => void | Promise<void>;
-  run: (file: string, database: string, env?: Record<string, string>) => T | Promise<T>;
-  drop: (file: string, database: string) => void | Promise<void>;
-  onComplete?: (outcome: FileOutcome<T>) => void;
-};
+export { rerunGrowthFailures, testCommand };
+
+/** Run the planned test files longest first, each on its own database. */
+export function runTestFiles<T>(
+  files: string[],
+  latest: Record<string, FileTiming>,
+  concurrency: number,
+  runner: FileRunner<T>,
+): Promise<FileOutcome<T>[]> {
+  return runTestFilesIn('kernel', files, latest, concurrency, runner);
+}
 
 /** Run independent files through a fixed-size worker pool, cleaning up each created database. */
-export async function scheduleFiles<T>(
+export function scheduleFiles<T>(
   files: string[],
   concurrency: number,
   runner: FileRunner<T>,
 ): Promise<FileOutcome<T>[]> {
-  if (!Number.isInteger(concurrency) || concurrency < 1) throw new Error('Concurrency must be a positive integer');
-  const outcomes = new Array<FileOutcome<T>>(files.length);
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (true) {
-      const index = next++;
-      if (index >= files.length) return;
-      const file = files[index]!;
-      const database = `kernel_test_${index + 1}`;
-      let created = false;
-      let output: T | undefined;
-      let error: Error | undefined;
-      try {
-        await runner.create(file, database);
-        created = true;
-        output = await runner.run(file, database);
-      } catch (cause) {
-        error = cause instanceof Error ? cause : new Error(String(cause));
-      } finally {
-        if (created) {
-          try {
-            await runner.drop(file, database);
-          } catch (cause) {
-            const dropError = cause instanceof Error ? cause : new Error(String(cause));
-            error = error ? new Error(`${error.message}\nDatabase cleanup failed: ${dropError.message}`) : dropError;
-          }
-        }
-      }
-      const outcome: FileOutcome<T> = {
-        file,
-        database,
-        ...(output === undefined ? {} : { output }),
-        ...(error ? { error } : {}),
-      };
-      outcomes[index] = outcome;
-      runner.onComplete?.(outcome);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, () => worker()));
-  return outcomes;
-}
-
-type GrowthFailure = { title: string; message: string; kind: 'growth' | 'load' | 'cascade' };
-
-const loadFailurePatterns = [
-  /(?:AccessUnavailableError:\s*)?Access unavailable: (?:overloaded|deadline)\b/i,
-  /(?:CommandUnavailableError:\s*)?Command unavailable for partition \d+: (?:overloaded|deadline)\b/i,
-  /sorry, too many clients already/i,
-  /too many connections for database/i,
-  /remaining connection slots are reserved/i,
-  /the database system is (?:starting up|shutting down)/i,
-  /could not extend file/i,
-  /No space left on device/i,
-  /\bcode\s*:\s*["']?(?:53300|53100|57P03)\b/i,
-  /["']?code["']?\s*:\s*["']?(?:overloaded|deadline_exceeded|transaction_retry_exhausted)\b/i,
-  /deadline_exceeded/i,
-  /transaction_retry_exhausted/i,
-  /\bHTTP\s+503\b|\(503\)/i,
-  /this test timed out after \d+ms/i,
-  /(?:hook.{0,40}(?:timed out|timeout)|(?:timed out|timeout).{0,40}hook)/i,
-];
-
-function isLoadFailureMessage(line: string): boolean {
-  return loadFailurePatterns.some((pattern) => pattern.test(line));
-}
-
-/** Bun's message text plus Received assertion values; excerpts, frames and Expected values are excluded. */
-function errorMessageLines(block: string[]): string[] {
-  const messages: string[] = [];
-  let inMessage = false;
-  for (const line of block) {
-    if (/^\s*\d+\s+\|/.test(line)) continue;
-    if (/^\s*at\b/.test(line)) break;
-    let message = line.trim().replace(/^\^\s*/, '');
-    if (!message || /^\((?:pass|fail)\)/.test(message)) continue;
-    if (/^Expected:/.test(message)) continue;
-    if (/^Received:/.test(message)) {
-      messages.push(message);
-      continue;
-    }
-
-    const errorHeader = /^(?:error|[\w$]+(?:Error|Exception)):/i.test(message);
-    if (errorHeader || isLoadFailureMessage(message)) inMessage = true;
-    if (inMessage) messages.push(message);
-  }
-  return messages;
-}
-
-/**
- * Failure details for a file that has at least one growth-bound or recognized load failure, else null. Other test
- * failures and unhandled errors are retained as cascades. Bun prints a failure's message before `(fail)`, except that
- * a timeout can be printed immediately after it.
- */
-export function growthFailures(output: string): GrowthFailure[] | null {
-  const blocks: { title: string; lines: string[] }[] = [];
-  let block: string[] = [];
-  let previousFailure: { title: string; lines: string[] } | undefined;
-  const lines = output.split(/\r\n?|\n/);
-  for (let index = 0; index < lines.length; index++) {
-    const line = lines[index]!;
-    if (/^# Unhandled\b/.test(line)) {
-      block = [];
-      const unhandled = { title: 'unhandled error', lines: [line.replace(/^# Unhandled\s*/, '')] };
-      while (index + 1 < lines.length && !/^\s*\d+ (?:pass|fail|skip|todo)\b/.test(lines[index + 1]!)) {
-        const next = lines[index + 1]!;
-        if (/^\(pass\) |^\(fail\) /.test(next) || /^# Unhandled\b/.test(next)) break;
-        unhandled.lines.push(next);
-        index++;
-      }
-      blocks.push(unhandled);
-      previousFailure = undefined;
-      continue;
-    }
-    const failure = line.match(/^\(fail\) (.*?)(?: \[[\d.]+m?s\])?$/);
-    if (failure) {
-      previousFailure = { title: failure[1]!, lines: block };
-      blocks.push(previousFailure);
-      block = [];
-    } else if (/^\(pass\) /.test(line)) {
-      // Passing tests have no failure block; their output must not qualify the next failure.
-      block = [];
-      previousFailure = undefined;
-    } else if (previousFailure && /^\s*\^\s*this test timed out after \d+ms\./i.test(line)) {
-      // Bun reports this timeout after `(fail)`; keep it with that test and out of the next block.
-      previousFailure.lines.push(line);
-    } else if (!/^\s*\d+ (?:pass|fail|skip|todo)\b/.test(line) && !line.startsWith('Ran ')) {
-      block.push(line);
-      if (line.trim() !== '') previousFailure = undefined;
-    }
-  }
-
-  const failures = blocks.map(({ title, lines: failureLines }) => {
-    const messages = errorMessageLines(failureLines);
-    const growth = messages.find((candidate) => candidate.startsWith('GrowthBoundError:'));
-    const load = messages.find(isLoadFailureMessage);
-    const kind = growth ? 'growth' : load ? 'load' : 'cascade';
-    const message = growth
-      ? growth.slice('GrowthBoundError:'.length).trim()
-      : (load ?? messages[0] ?? 'unhandled error');
-    return { title, message, kind } satisfies GrowthFailure;
-  });
-  return failures.some((failure) => failure.kind !== 'cascade') ? failures : null;
-}
-
-/**
- * Reruns, once each and one at a time under a stack slot, files with at least one growth-bound or known load failure.
- * The alone run decides whether the file still fails; other failures in the original run are reported as cascades when
- * the file passes alone. Returns every ineligible outcome and each eligible file that failed again.
- */
-export async function rerunGrowthFailures(
-  outcomes: FileOutcome<string>[],
-  runner: FileRunner<string>,
-  lease: <R>(label: string, run: (env: Record<string, string>) => Promise<R>) => Promise<R>,
-  write: (text: string) => void = (text) => void process.stderr.write(text),
-): Promise<{ failed: FileOutcome<string>[] }> {
-  const failed: FileOutcome<string>[] = [];
-  const loadSensitive: string[] = [];
-  const loadSensitiveGrowth: string[] = [];
-  let rerunFiles = 0;
-  let passedAlone = 0;
-  let aloneMilliseconds = 0;
-  for (const outcome of outcomes) {
-    if (!outcome.error) continue;
-    const failures = outcome.error.message.includes('Database cleanup failed:')
-      ? null
-      : growthFailures(outcome.error.message);
-    if (!failures) {
-      failed.push(outcome);
-      continue;
-    }
-    rerunFiles++;
-    const startedAt = performance.now();
-    const [again] = await lease('kernel growth rerun', (env) =>
-      scheduleFiles([outcome.file], 1, { ...runner, run: (file, database) => runner.run(file, database, env) }),
-    );
-    aloneMilliseconds += performance.now() - startedAt;
-    if (again?.error) {
-      write(`${outcome.error.message}\n${outcome.file}: failed again alone:\n${again.error.message}\n`);
-      failed.push(outcome);
-      continue;
-    }
-    passedAlone++;
-    for (const failure of failures) {
-      const message = failure.message.split('\n')[0]!;
-      if (failure.kind === 'growth') {
-        loadSensitiveGrowth.push(`load-sensitive growth check: ${outcome.file} :: ${failure.title} :: ${message}`);
-      } else {
-        const cascade = failure.kind === 'cascade' ? ' (cascade)' : '';
-        loadSensitive.push(`load-sensitive test: ${outcome.file} :: ${failure.title}${cascade} :: ${message}`);
-      }
-    }
-  }
-  if (loadSensitive.length > 0) {
-    write(`Load-sensitive tests (passed alone): ${loadSensitive.length}\n${loadSensitive.join('\n')}\n`);
-  }
-  if (loadSensitiveGrowth.length > 0) {
-    write(
-      `Load-sensitive growth checks (passed alone): ${loadSensitiveGrowth.length}\n${loadSensitiveGrowth.join('\n')}\n`,
-    );
-  }
-  write(
-    `Load reruns: ${rerunFiles} files, ${(aloneMilliseconds / 1000).toFixed(2)} s alone (${passedAlone} passed alone)\n`,
-  );
-  return { failed };
+  return scheduleFilesIn('kernel_test', files, concurrency, runner);
 }
 
 function hasDiagnosticLine(output: string): boolean {
@@ -391,19 +542,12 @@ export function run(program: string, args: string[], env: NodeJS.ProcessEnv = pr
   return result.stdout.trim();
 }
 
-// Asynchronous, so the file pool's lanes overlap; a synchronous spawn blocks the event loop and runs them one at a time.
-export async function capture(
+export function capture(
   program: string,
   args: string[],
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<{ status: number; output: string }> {
-  const child = Bun.spawn([program, ...args], { cwd: directory, env, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
-  const [status, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
-  return { status, output: `${stdout}${stderr}` };
+  return captureIn(program, args, env, directory);
 }
 
 async function psql(sql: string): Promise<void> {
@@ -429,6 +573,186 @@ export function docker(args: string[]): string {
 
 type DockerCommand = (args: string[]) => string;
 
+const POSTGRES_LOG_TAIL_LINES = 300;
+const POSTGRES_ERROR_SEVERITIES = ['ERROR', 'FATAL', 'PANIC'] as const;
+type PostgresErrorSeverity = (typeof POSTGRES_ERROR_SEVERITIES)[number];
+
+type PostgresErrorCount = { count: number; firstMessage: string };
+
+/** Summarize server error records from a bounded tail of PostgreSQL's prefixed log output. */
+export function formatPostgresErrors(output: string): string | null {
+  const grouped = new Map<string, Map<PostgresErrorSeverity, PostgresErrorCount>>();
+  const lines = output.split(/\r\n?|\n/).slice(-POSTGRES_LOG_TAIL_LINES);
+
+  for (const line of lines) {
+    const match = line.match(/\[([0-9A-Z]{5})\]\s+(ERROR|FATAL|PANIC):\s*(.*)$/);
+    if (!match) continue;
+
+    const sqlstate = match[1]!;
+    const severity = match[2] as PostgresErrorSeverity;
+    const message = match[3]!.trim();
+    const severities = grouped.get(sqlstate) ?? new Map<PostgresErrorSeverity, PostgresErrorCount>();
+    const previous = severities.get(severity);
+    if (previous) previous.count += 1;
+    else severities.set(severity, { count: 1, firstMessage: message });
+    grouped.set(sqlstate, severities);
+  }
+
+  if (grouped.size === 0) return null;
+
+  const summary = [`PostgreSQL server errors from the last ${POSTGRES_LOG_TAIL_LINES} log lines, grouped by SQLSTATE:`];
+  for (const sqlstate of [...grouped.keys()].sort()) {
+    for (const severity of POSTGRES_ERROR_SEVERITIES) {
+      const entry = grouped.get(sqlstate)!.get(severity);
+      if (entry) summary.push(`  ${sqlstate} ${severity}: ${entry.count}; first: ${entry.firstMessage}`);
+    }
+  }
+  return summary.join('\n');
+}
+
+/** Read and summarize PostgreSQL's recent error records; this runs only after a failed check. */
+export function reportPostgresErrors(
+  containerId: string,
+  dockerCommand: DockerCommand = docker,
+  write: (message: string) => void = (message) => process.stderr.write(message),
+): boolean {
+  if (!containerId) return false;
+
+  let logs: string;
+  try {
+    logs = dockerCommand(['logs', '--tail', String(POSTGRES_LOG_TAIL_LINES), containerId]);
+  } catch {
+    return false;
+  }
+
+  const summary = formatPostgresErrors(logs);
+  if (summary) write(`${summary}\n`);
+  return summary?.split(/\r\n?|\n/).some((line) => /^\s+53100\s/.test(line)) ?? false;
+}
+
+type DatabaseDiskUsage = { free: string; size: string };
+
+function parseDatabaseDiskUsage(output: string): DatabaseDiskUsage | null {
+  const row = output
+    .trim()
+    .split(/\r\n?|\n/)
+    .map((line) => line.trim().split(/\s+/))
+    .find((columns) => columns.at(-1) === '/var/lib/postgresql');
+  if (!row || row.length < 6) return null;
+  const size = row[1];
+  const free = row[3];
+  if (!size || !free || !/^\d+$/.test(size) || !/^\d+$/.test(free)) return null;
+  return { free, size };
+}
+
+/** Report an environment failure only for database storage exhaustion, returning its retryable exit code. */
+export function reportCheckFailure(
+  containerId: string,
+  failedOutputs: readonly string[],
+  dockerCommand: DockerCommand = docker,
+  write: (message: string) => void = (message) => process.stderr.write(message),
+  host = hostname(),
+): 1 | 75 {
+  const serverStorageFull = reportPostgresErrors(containerId, dockerCommand, write);
+  const fileStorageFull = failedOutputs.some((output) => output.includes('No space left on device'));
+  if (!serverStorageFull && !fileStorageFull) return 1;
+
+  let { free, size } = { free: 'unknown', size: 'unknown' };
+  if (containerId) {
+    try {
+      const output = dockerCommand(['exec', containerId, 'df', '-B1', '/var/lib/postgresql']);
+      const diskUsage = parseDatabaseDiskUsage(output);
+      if (diskUsage) ({ free, size } = diskUsage);
+    } catch {
+      // Disk usage is diagnostic only; a failed df still reports the storage failure.
+    }
+  }
+  write(
+    `kernel check: environment failure: database storage full (SQLSTATE 53100) on ${host}; ${free} of ${size} bytes free\n`,
+  );
+  return 75;
+}
+
+export type PostgresActivityRow = { datname: string | null; count: string | number };
+
+export type PostgresConnectionSampler = {
+  start: () => void;
+  sample: () => Promise<void>;
+  stop: () => Promise<void>;
+  peakFor: (database: string) => number;
+  peakTotal: () => number;
+};
+
+/** Sample total and per-database connection peaks without allowing sampling errors to affect a test file. */
+export function createPostgresConnectionSampler(
+  query: (sql: string) => Promise<PostgresActivityRow[]>,
+  intervalMs = POSTGRES_CONNECTION_SAMPLE_MS,
+): PostgresConnectionSampler {
+  const databasePeaks = new Map<string, number>();
+  let totalPeak = 0;
+  let interval: ReturnType<typeof setInterval> | undefined;
+  let sampling: Promise<void> | undefined;
+  let running = false;
+
+  const sample = async (): Promise<void> => {
+    if (sampling) return sampling;
+    sampling = (async () => {
+      try {
+        const rows = await query(POSTGRES_ACTIVITY_QUERY);
+        let total = 0;
+        for (const row of rows) {
+          const count = Number(row.count);
+          if (!Number.isFinite(count) || count < 0) continue;
+          total += count;
+          if (row.datname) databasePeaks.set(row.datname, Math.max(databasePeaks.get(row.datname) ?? 0, count));
+        }
+        totalPeak = Math.max(totalPeak, total);
+      } catch {
+        // The sampler is diagnostic only; an unavailable sample must not affect the file being checked.
+      }
+    })().finally(() => {
+      sampling = undefined;
+    });
+    return sampling;
+  };
+
+  return {
+    start: () => {
+      if (running) return;
+      running = true;
+      void sample();
+      interval = setInterval(() => {
+        if (running) void sample();
+      }, intervalMs);
+    },
+    sample,
+    stop: async () => {
+      running = false;
+      if (interval) clearInterval(interval);
+      interval = undefined;
+      await sampling;
+    },
+    peakFor: (database) => databasePeaks.get(database) ?? 0,
+    peakTotal: () => totalPeak,
+  };
+}
+
+export function formatFileConnectionResult(file: string, result: 'PASS' | 'FAIL', peak: number): string {
+  return `${file}: ${result}; peak database connections ${peak}`;
+}
+
+export function formatConnectionRunSummary(
+  peakTotal: number,
+  filePeaks: ReadonlyMap<string, number>,
+  maxConnections = POSTGRES_MAX_CONNECTIONS,
+): string {
+  const highest = [...filePeaks.entries()]
+    .sort(([fileA, peakA], [fileB, peakB]) => peakB - peakA || fileA.localeCompare(fileB))
+    .slice(0, 3)
+    .map(([file, peak]) => `${file}=${peak}`);
+  return `PostgreSQL connections: peak ${peakTotal}/${maxConnections} max_connections; highest file peaks: ${highest.join(', ') || 'none'}`;
+}
+
 export function startPostgresContainer(dockerCommand: DockerCommand = docker): string {
   return dockerCommand([
     'run',
@@ -438,10 +762,9 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
     `rezics.kernel.check.pid=${pid}`,
     '-p',
     '127.0.0.1::5432',
-    // Six concurrent test databases, growth seeds at three scales and up to max_wal_size of WAL outgrew 1g, and every
-    // later file then failed to create its database. tmpfs only takes memory for what is written.
-    '--tmpfs',
-    '/var/lib/postgresql:rw,size=8g',
+    // Keep PostgreSQL data on disk instead of consuming memory that the check slot admission does not reserve.
+    '--mount',
+    `type=volume,destination=/var/lib/postgresql,volume-label=rezics.kernel.check.pid=${pid}`,
     '-e',
     'POSTGRES_USER=rezics',
     '-e',
@@ -459,13 +782,15 @@ export function startPostgresContainer(dockerCommand: DockerCommand = docker): s
     'max_wal_size=256MB',
     // Each concurrent file opens several pools of up to ten connections; the default 100 runs out.
     '-c',
-    'max_connections=500',
+    `max_connections=${POSTGRES_MAX_CONNECTIONS}`,
+    '-c',
+    'log_line_prefix=%m [%p] [%e] ',
   ]);
 }
 
-export function cleanupStale(kind: 'check' | 'derived' = 'check'): void {
+export function cleanupStale(kind: 'check' | 'derived' = 'check', dockerCommand: DockerCommand = docker): void {
   // One listing carries each owner, so a concurrent run that exits meanwhile cannot fail an inspect.
-  const rows = docker([
+  const rows = dockerCommand([
     'ps',
     '-a',
     '--filter',
@@ -481,7 +806,11 @@ export function cleanupStale(kind: 'check' | 'derived' = 'check'): void {
       process.kill(Number(owner), 0);
     } catch {
       // Removing a container that is already gone is the outcome we want.
-      spawnSync('docker', ['rm', '-f', id!], { cwd: directory, encoding: 'utf8' });
+      try {
+        dockerCommand(['rm', '-f', '-v', id!]);
+      } catch {
+        // A concurrent cleanup may already have removed it.
+      }
     }
   }
 }
@@ -493,198 +822,329 @@ export function cleanup(
   for (const id of containers) {
     if (!id) continue;
     try {
-      dockerCommand(['rm', '-f', id]);
+      dockerCommand(['rm', '-f', '-v', id]);
     } catch (error) {
       console.error(error);
     }
   }
   if (reyloDirectory) rmSync(reyloDirectory, { recursive: true, force: true });
-}
-
-function logPostgresIfStopped(containerId: string): void {
-  if (!containerId) return;
-
-  try {
-    if (docker(['inspect', '--format', '{{.State.Running}}', containerId]) === 'true') return;
-  } catch {
-    // Try to fetch logs even if inspect cannot find the container.
-  }
-
-  try {
-    const logs = docker(['logs', '--tail', '50', containerId]);
-    if (logs) process.stderr.write(`${logs}\n`);
-  } catch (error) {
-    console.error(error);
-  }
+  analysisDispose?.();
 }
 
 function fail(message: string): never {
   throw new Error(message);
 }
 
-let remoteRun: ReturnType<typeof Bun.spawn> | undefined;
+let placing = false;
 
-/** The hosts file when this check should run on a development host: named, readable and not already on one. */
-function remoteHostsFile(): string | null {
-  const file = process.env.KERNEL_CHECK_REMOTE;
-  if (!file || process.env.KERNEL_CHECK_ON_REMOTE) return null;
-  try {
-    accessSync(file, constants.R_OK);
-    return file;
-  } catch {
-    process.stderr.write(`KERNEL_CHECK_REMOTE ${file} is not readable; running the check locally\n`);
-    return null;
+/**
+ * Hands the planned files to the shared placement decision. The plan was computed here, where Git history is; the host
+ * runs exactly those files. An affected selection of no tests stays here: an empty file list would be read as the
+ * whole suite. Returns the remote exit code, or null when the check runs in this process.
+ */
+export async function placeKernelCheck(
+  plan: CheckPlan,
+  env: NodeJS.ProcessEnv = process.env,
+  locations: { root: string; cwd: string; moduleDirectory?: string } = {
+    root: resolve(directory, '../..'),
+    cwd: directory,
+  },
+): Promise<number | null> {
+  if (plan.files?.length === 0) return null;
+  let estimateMs: number | undefined;
+  if (plan.files !== null) {
+    try {
+      const latest = readLatest(timingsDirectory(locations.moduleDirectory ?? directory, env));
+      const timings = plan.files.map((file) => latest[file]);
+      if (timings.every((timing) => timing !== undefined && Number.isFinite(timing.wall) && timing.wall >= 0)) {
+        const estimate = Math.ceil(timings.reduce((total, timing) => total + timing!.wall, 0) * 1000);
+        if (Number.isSafeInteger(estimate)) estimateMs = estimate;
+      }
+    } catch {
+      // A synthetic module tree or check host without Git metadata has no shared timing directory.
+    }
   }
-}
-
-/** The plan was computed here, where Git history is; the host runs exactly its files. */
-async function runRemotely(plan: CheckPlan): Promise<void> {
-  const root = resolve(directory, '../..');
-  const forwarded = process.env.KERNEL_CHECK_CONCURRENCY
-    ? ['env', `KERNEL_CHECK_CONCURRENCY=${process.env.KERNEL_CHECK_CONCURRENCY}`]
-    : [];
-  remoteRun = Bun.spawn(
-    [
-      process.execPath,
-      resolve(root, 'scripts/remote-check.ts'),
-      '--cwd',
-      relative(root, directory),
-      root,
-      '--',
-      ...forwarded,
-      'bun',
-      'scripts/check.ts',
-      ...(plan.files ?? []),
-    ],
-    { cwd: root, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' },
+  const forwardedEnv: string[] = [];
+  const skipCleanup = env.KERNEL_CHECK_SKIP_STALE_CLEANUP === '1';
+  if (skipCleanup) forwardedEnv.push('KERNEL_CHECK_SKIP_STALE_CLEANUP=1');
+  if (env.KERNEL_CHECK_CONCURRENCY) {
+    if (skipCleanup) forwardedEnv.push('env');
+    forwardedEnv.push(`KERNEL_CHECK_CONCURRENCY=${env.KERNEL_CHECK_CONCURRENCY}`);
+  }
+  return runOnCheckHost(
+    {
+      label: 'kernel check',
+      root: locations.root,
+      cwd: locations.cwd,
+      returns: [SCHEMA_DIAGNOSTICS],
+      command: [
+        ...(forwardedEnv.length ? ['env', ...forwardedEnv] : []),
+        'bun',
+        'scripts/check.ts',
+        ...(plan.files ?? []),
+      ],
+      ...(estimateMs === undefined ? {} : { estimateMs }),
+    },
+    env,
   );
-  process.exitCode = await remoteRun.exited;
 }
 
 async function main(): Promise<void> {
+  const { plan, announcement } = planCheck(process.argv.slice(2), directory);
+  if (announcement) console.log(announcement);
+  if (announcement?.startsWith('Affected mode: unverified,')) return;
   const migrationFiles = Array.from(new Bun.Glob('db/**/migrations/*.sql').scanSync({ cwd: directory }));
   validateMigrationVersions(migrationFiles, new Date());
 
-  const plan = checkPlan(process.argv.slice(2), directory);
-  if (remoteHostsFile()) return await runRemotely(plan);
+  placing = true;
+  let placed: number | null;
+  try {
+    placed = await placeKernelCheck(plan);
+  } finally {
+    placing = false;
+  }
+  if (placed !== null) {
+    process.exitCode = placed;
+    return;
+  }
+  const runStarted = performance.now();
+  let compilerSeconds = 0;
+  let qualitySeconds = 0;
   const extensionFiles = moduleExtensionFiles();
   if (extensionFiles.length) fail(`Module migrations must not create extensions:\n${extensionFiles.join('\n')}`);
 
-  cleanupStale();
-  const searchImage = buildSearchImage();
-  container = startPostgresContainer();
-  searchContainer = docker([
-    'run',
-    '-d',
-    ...cgroupArgs(),
-    '--label',
-    `rezics.kernel.check.pid=${pid}`,
-    '-p',
-    '127.0.0.1::9200',
-    '--tmpfs',
-    '/usr/share/opensearch/data:rw,size=1g,uid=1000,gid=1000,mode=0755',
-    '-e',
-    'discovery.type=single-node',
-    '-e',
-    'DISABLE_SECURITY_PLUGIN=true',
-    '-e',
-    'DISABLE_INSTALL_DEMO_CONFIG=true',
-    '-e',
-    'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
-    searchImage,
-  ]);
-  const searchPortOutput = docker(['port', searchContainer, '9200/tcp']);
-  const searchPortMatch = searchPortOutput.match(/127\.0\.0\.1:(\d+)/);
-  if (!searchPortMatch?.[1]) fail(`Could not determine the test search port: ${searchPortOutput}`);
-  const searchUrl = `http://127.0.0.1:${searchPortMatch[1]}`;
+  // Remote hosts are shared: only this run's explicit cleanup may remove their containers.
+  if (process.env.KERNEL_CHECK_SKIP_STALE_CLEANUP !== '1' && !process.env.KERNEL_CHECK_ON_REMOTE) cleanupStale();
+  let url = '';
+  let env: NodeJS.ProcessEnv = process.env;
+  await withCommandPhase('database-image', () => {
+    container = startPostgresContainer();
+    const portOutput = docker(['port', container, '5432/tcp']);
+    const match = portOutput.match(/127\.0\.0\.1:(\d+)/);
+    if (!match?.[1]) fail(`Could not determine the test database port: ${portOutput}`);
+    url = `postgres://rezics:rezics@127.0.0.1:${match[1]}/rezics?sslmode=disable`;
+    process.env.KERNEL_DATABASE_CONTAINER = container;
+    env = { ...process.env, DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: container };
+  });
 
-  const portOutput = docker(['port', container, '5432/tcp']);
-  const match = portOutput.match(/127\.0\.0\.1:(\d+)/);
-  if (!match?.[1]) fail(`Could not determine the test database port: ${portOutput}`);
-  const url = `postgres://rezics:rezics@127.0.0.1:${match[1]}/rezics?sslmode=disable`;
-  process.env.KERNEL_DATABASE_CONTAINER = container;
-  const env = { ...process.env, DATABASE_URL: url, KERNEL_DATABASE_CONTAINER: container };
+  await withCommandPhase('migrations', () => {
+    migrate(url);
+  });
+  let dumps: Record<string, string> = {};
+  await withCommandPhase('sql-schema', async () => {
+    dumps = schemaDumps(url);
+    await assertSchemaConsistency(dumps);
+  });
 
-  migrate(url);
-  for (const [path, dump] of Object.entries(schemaDumps(url))) {
-    const file = Bun.file(resolve(directory, path));
-    if (!(await file.exists()) || (await file.text()) !== dump) {
-      fail(`Schema dump differs from ${path}; run \`bun run db dump\``);
-    }
+  // The host's warm analysis, shared with typecheck: an unchanged SQL file is not analysed, and the compiler and the tests
+  // read every entry offline. A failed generation keeps this run's own analysis, so TypeScript reports the SQL errors.
+  const analysisStarted = performance.now();
+  const analysis = await withCommandPhase('sql-analysis', () =>
+    prepareReyloAnalysisCache(env, { schemaDumps: () => dumps }),
+  );
+  analysisDispose = analysis.dispose;
+  let reyloConfig: string;
+  if (analysis.available) {
+    reyloConfig = analysis.environment.REYLO_CONFIG!;
+    process.stdout.write(
+      `Kernel SQL analysis cache: analyzed ${analysis.analyzedFiles} of ${analysis.totalFiles} files, ${analysis.writtenEntries} statement entries written in ${seconds(analysisStarted)}s.\n`,
+    );
+  } else {
+    // The copies share the template's schema and object ids, so one analysis holds for all of them.
+    await psql(`CREATE DATABASE ${ANALYSIS_DATABASE} TEMPLATE rezics`);
+    const temporaryRoot = resolve(directory, '.temp');
+    mkdirSync(temporaryRoot, { recursive: true });
+    reyloDirectory = mkdtempSync(resolve(temporaryRoot, 'reylo-'));
+    reyloConfig = writeReyloProject(reyloDirectory, url.replace(/\/rezics(?=\?)/, `/${ANALYSIS_DATABASE}`));
+    process.stdout.write(`Kernel SQL analysis cache unavailable; analysing every statement in this run.\n`);
   }
-
-  // The copies share the template's schema and object ids, so one analysis holds for all of them.
-  await psql(`CREATE DATABASE ${ANALYSIS_DATABASE} TEMPLATE rezics`);
-  const temporaryRoot = resolve(directory, '.temp');
-  mkdirSync(temporaryRoot, { recursive: true });
-  reyloDirectory = mkdtempSync(resolve(temporaryRoot, 'reylo-'));
-  const reyloConfig = writeReyloProject(reyloDirectory, url.replace(/\/rezics(?=\?)/, `/${ANALYSIS_DATABASE}`));
+  const analysisEnvironment = { ...env, REYLO_CONFIG: reyloConfig };
+  const compilerConfig = reyloConfig;
+  const compilerEntriesBefore = reyloEntryCount(compilerConfig);
 
   const tsc = resolve(directory, '../../node_modules/.bin/tsc');
-  const oxlint = resolve(directory, '../../node_modules/.bin/oxlint');
   const oxfmt = resolve(directory, '../../node_modules/.bin/oxfmt');
-  if (plan.files === null) {
-    run(tsc, ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json'], env);
-    run(oxlint, ['--config', '../../.oxlintrc.json', '.'], env);
-    run(oxfmt, ['--check', '.'], env);
-  } else {
-    const typecheck = await capture(
-      tsc,
-      ['--noEmit', '--runExternalCode', '-p', 'tsconfig.json', '--pretty', 'false'],
-      env,
-    );
-    const diagnostics = ownDiagnostics(typecheck.output, plan.files);
-    if (diagnostics.length) fail(diagnostics.join('\n'));
-    if (typecheck.status !== 0 && !hasDiagnosticLine(typecheck.output)) {
-      fail(`tsc exited with status ${typecheck.status} without diagnostics:\n${typecheck.output}`);
-    }
+  let searchUrl: string | undefined;
+  await runChecksThenStartSearch(
+    planNeedsSearch(plan, directory),
+    async () => {
+      if (plan.files === null) {
+        let phaseStarted = performance.now();
+        await withCommandPhase('compiler', () => {
+          invokeTypecheck(tsc, null, analysisEnvironment, reyloConfig, run);
+        });
+        compilerSeconds += seconds(phaseStarted);
+        phaseStarted = performance.now();
+        run(process.execPath, ['lint', '--no-script', '--config', '../../.oxlintrc.json', '.'], analysisEnvironment);
+        run(oxfmt, ['--check', '.'], analysisEnvironment);
+        qualitySeconds += seconds(phaseStarted);
+      } else {
+        const compilerStarted = performance.now();
+        const typecheck = await withCommandPhase('compiler', () =>
+          invokeTypecheck(tsc, plan.files, analysisEnvironment, reyloConfig, capture),
+        );
+        compilerSeconds += seconds(compilerStarted);
+        const diagnostics = ownDiagnostics(
+          typecheck.output,
+          diagnosticFiles(plan.files, directory, process.env.KERNEL_CHECK_AFFECTED || null),
+        );
+        if (diagnostics.length) fail(diagnostics.join('\n'));
+        if (typecheck.status !== 0 && !hasDiagnosticLine(typecheck.output)) {
+          fail(`tsc exited with status ${typecheck.status} without diagnostics:\n${typecheck.output}`);
+        }
 
-    const lintFiles = plan.files.filter((file) => file.endsWith('.ts'));
-    if (lintFiles.length) run(oxlint, ['--config', '../../.oxlintrc.json', ...lintFiles], env);
+        const qualityStarted = performance.now();
+        const lintFiles = plan.files.filter((file) => file.endsWith('.ts'));
+        if (lintFiles.length)
+          run(
+            process.execPath,
+            ['lint', '--no-script', '--config', '../../.oxlintrc.json', ...lintFiles],
+            analysisEnvironment,
+          );
 
-    const formatFiles = formattedFiles(plan.files);
-    if (formatFiles.length) run(oxfmt, ['--check', ...formatFiles], env);
-  }
+        const formatFiles = formattedFiles(plan.files);
+        if (formatFiles.length)
+          run(oxfmt, ['--check', '--no-error-on-unmatched-pattern', ...formatFiles], analysisEnvironment);
+        qualitySeconds += seconds(qualityStarted);
+      }
+    },
+    async () =>
+      withCommandPhase('database-image', async () => {
+        const searchImage = buildSearchImage();
+        searchContainer = docker([
+          'run',
+          '-d',
+          ...cgroupArgs(),
+          '--label',
+          `rezics.kernel.check.pid=${pid}`,
+          '-p',
+          '127.0.0.1::9200',
+          '--tmpfs',
+          '/usr/share/opensearch/data:rw,size=1g,uid=1000,gid=1000,mode=0755',
+          '-e',
+          'discovery.type=single-node',
+          '-e',
+          subjectAutoCreateIndexSetting,
+          '-e',
+          'DISABLE_SECURITY_PLUGIN=true',
+          '-e',
+          'DISABLE_INSTALL_DEMO_CONFIG=true',
+          '-e',
+          'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
+          searchImage,
+        ]);
+        const searchPortOutput = docker(['port', searchContainer, '9200/tcp']);
+        const searchPortMatch = searchPortOutput.match(/127\.0\.0\.1:(\d+)/);
+        if (!searchPortMatch?.[1]) fail(`Could not determine the test search port: ${searchPortOutput}`);
+        const searchUrl = `http://127.0.0.1:${searchPortMatch[1]}`;
+        await waitForSearch(searchUrl, searchContainer);
+        return searchUrl;
+      }),
+  ).then((url) => {
+    searchUrl = url ?? undefined;
+  });
 
   const testFiles = plan.tests;
-  await waitForSearch(searchUrl, searchContainer);
-  const concurrency = Number(process.env.KERNEL_CHECK_CONCURRENCY ?? 6);
-  if (!Number.isInteger(concurrency) || concurrency < 1) fail('KERNEL_CHECK_CONCURRENCY must be a positive integer');
-  const runner: FileRunner<string> = {
-    // Each file gets a fresh copy so its result cannot depend on writes from another file.
-    create: (_file, database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
-    run: async (file, database, slotEnvironment) => {
-      // Kernel tests start containers and compilers; under a loaded host Bun's 5 s per-test default fails them at random.
-      const result = await capture('bun', ['test', '--timeout', '60000', `./${file}`], {
-        ...fileEnvironment(env, { url, database, searchUrl, reyloConfig }),
-        ...slotEnvironment,
-      });
-      if (result.status !== 0) throw new Error(`bun test ./${file} failed:\n${result.output}`);
-      return result.output;
-    },
-    drop: (_file, database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
-    onComplete: (outcome) => {
-      if (outcome.output) process.stdout.write(outcome.output.endsWith('\n') ? outcome.output : `${outcome.output}\n`);
-      if (outcome.error) process.stderr.write(`${outcome.file}: ${outcome.error.message}\n`);
-    },
-  };
-  const outcomes = await scheduleFiles(testFiles, concurrency, runner);
-  const { failed } = await rerunGrowthFailures(outcomes, runner, withStackSlot);
-  const queries = resolve(reyloDirectory, '.reylo/queries');
-  process.stderr.write(`Reylo analyses written: ${existsSync(queries) ? readdirSync(queries).length : 0}\n`);
-  const failedFiles = failed.map((outcome) => outcome.file);
+  const samplerClient = new Client({
+    connectionString: url.replace(/\/rezics(?=\?)/, '/postgres'),
+    application_name: 'kernel-check-connection-sampler',
+    connectionTimeoutMillis: 1000,
+    query_timeout: 1000,
+    statement_timeout: 1000,
+  });
+  let samplerConnected = false;
+  try {
+    await samplerClient.connect();
+    samplerConnected = true;
+  } catch (error) {
+    process.stderr.write(
+      `PostgreSQL connection sampling is unavailable: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+  }
+  const sampler = createPostgresConnectionSampler(async (sql) => {
+    if (!samplerConnected) return [];
+    const result = await samplerClient.query(sql);
+    return result.rows as PostgresActivityRow[];
+  });
+  const filePeaks = new Map<string, number>();
+  sampler.start();
+  let failedFiles: string[] = [];
+  const outputByFile = new Map<string, string>();
+  const testStarted = performance.now();
+  try {
+    const result = await runLaneSuite({
+      service: 'kernel',
+      directory,
+      files: testFiles,
+      partial: plan.files !== null,
+      runTiming: (): CheckRunTiming => {
+        const testSeconds = seconds(testStarted);
+        const totalSeconds = seconds(runStarted);
+        return {
+          compilerSeconds,
+          qualitySeconds,
+          testSeconds,
+          totalSeconds,
+          otherSeconds: Math.max(
+            0,
+            Math.round((totalSeconds - compilerSeconds - qualitySeconds - testSeconds) * 1000) / 1000,
+          ),
+          analysisEntries: {
+            compilerBefore: compilerEntriesBefore,
+            compilerAfter: reyloEntryCount(compilerConfig),
+            sharedAfter: reyloEntryCount(reyloConfig),
+          },
+        };
+      },
+      onRunTiming: (timing) => {
+        process.stdout.write(
+          `Kernel check phases: compiler=${timing.compilerSeconds}s quality=${timing.qualitySeconds}s tests=${timing.testSeconds}s other=${timing.otherSeconds}s total=${timing.totalSeconds}s\n`,
+        );
+        process.stdout.write(
+          `Reylo analysis entries: compiler=${timing.analysisEntries.compilerBefore}->${timing.analysisEntries.compilerAfter}; shared-test-project=${timing.analysisEntries.sharedAfter}\n`,
+        );
+      },
+      createDatabase: (database) => psql(`CREATE DATABASE ${database} TEMPLATE rezics`),
+      dropDatabase: (database) => psql(`DROP DATABASE IF EXISTS ${database} WITH (FORCE)`),
+      environment: (database) =>
+        fileEnvironment(analysisEnvironment, { url, database, ...(searchUrl ? { searchUrl } : {}), reyloConfig }),
+      onFileComplete: (outcome, timing) => {
+        if (outcome.error) outputByFile.set(outcome.file, outcome.error.message);
+        else outputByFile.delete(outcome.file);
+        const peak = sampler.peakFor(outcome.database);
+        timing.peakConnections = peak;
+        filePeaks.set(outcome.file, peak);
+        const testCases = timing.tests.reduce((total, test) => total + test.time, 0);
+        process.stdout.write(
+          `Kernel file phases: ${outcome.file} clone=${timing.create}s module-load=${timing.moduleLoad === undefined ? 'unmeasured' : `${timing.moduleLoad}s`} outside-tests=${timing.outsideTests}s test-cases=${Math.round(testCases * 1000) / 1000}s process=${timing.wall}s drop=${timing.drop}s fixture-phases=${timing.fixturePhases === undefined ? 'unmeasured' : JSON.stringify(timing.fixturePhases)}\n`,
+        );
+        process.stdout.write(`${formatFileConnectionResult(outcome.file, outcome.error ? 'FAIL' : 'PASS', peak)}\n`);
+      },
+    });
+    failedFiles = result.failed;
+    failedFileOutputs = failedFiles.flatMap((file) => {
+      const output = outputByFile.get(file);
+      return output === undefined ? [] : [output];
+    });
+  } finally {
+    await sampler.stop();
+    if (samplerConnected) await samplerClient.end().catch(() => undefined);
+    process.stdout.write(`${formatConnectionRunSummary(sampler.peakTotal(), filePeaks)}\n`);
+  }
+  process.stderr.write(`Reylo analyses written: ${reyloEntryCount(reyloConfig)}\n`);
   if (failedFiles.length) fail(`Kernel tests failed for ${failedFiles.length} file(s):\n${failedFiles.join('\n')}`);
 }
 
 if (import.meta.main) {
-  // A run handed to a host must clean up there; the hand-off removes its run directory and releases its slot on a signal.
+  // While the shared placement has the run, it forwards the signal and releases the host slot. A local run removes
+  // the containers this process started.
   process.on('SIGINT', () => {
-    if (remoteRun) return void remoteRun.kill('SIGINT');
+    if (placing) return;
     cleanup();
     process.exit(130);
   });
   process.on('SIGTERM', () => {
-    if (remoteRun) return void remoteRun.kill('SIGTERM');
+    if (placing) return;
     cleanup();
     process.exit(143);
   });
@@ -692,10 +1152,9 @@ if (import.meta.main) {
   try {
     await main();
   } catch (error) {
-    logPostgresIfStopped(container);
+    process.exitCode = reportCheckFailure(container, failedFileOutputs);
     console.error(error);
-    process.exitCode = 1;
   } finally {
-    cleanup();
+    await withCommandPhase('cleanup', () => cleanup());
   }
 }

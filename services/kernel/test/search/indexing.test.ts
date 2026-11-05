@@ -156,9 +156,10 @@ test('a batch indexes each named subject once from one snapshot at the partition
   const snapshot = await fake.read(101, [a.id]);
   const stored = await search.request<{ _version: number; _source: unknown }>('GET', `/${index}/_doc/${a.id}`);
   expect(stored.body._version).toBe(Number(snapshot.position));
-  expect(stored.body._source).toEqual(
-    (documentActions(snapshot, [a.id], new Map())[0] as { document: unknown }).document,
-  );
+  expect(stored.body._source).toEqual({
+    ...(documentActions(snapshot, [a.id], new Map())[0] as { document: Record<string, unknown> }).document,
+    name_sort: 'book 1',
+  });
   expect(await checkpoint('search_one', 101)).toBe('3');
   expect(await relay.run(101)).toMatchObject({ status: 'read', envelopes: 0 });
   expect(reads.reads).toHaveLength(1);
@@ -297,7 +298,7 @@ test('the runner creates the first generation, feeds every generation and follow
   try {
     expect(await subjectGenerations(search, prefix)).toEqual({ generations: [1], active: 1 });
     expect(subjectConsumer('rezics-', 1)).toBe('search_rezics_subjects_g1');
-    expect(() => subjectConsumer(`${'a'.repeat(48)}`, 1)).toThrow(RangeError);
+    expect(subjectConsumer(`${'a'.repeat(48)}`, 1)).toBe('search_h2d274556d1f056b8540af32fd12554d7s_g1');
     const a = book(110, 1);
     fake.put(a);
     await append(110, a.id);

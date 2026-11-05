@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { PageStory, pagePaths, pageReady } from './page';
 
-const meta = { title: 'Pages/Missing Subject', parameters: { layout: 'fullscreen' } } satisfies Meta;
+const meta = { title: 'Pages/Subjects/Missing Subject', parameters: { layout: 'fullscreen' } } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const SignedIn: Story = {

@@ -57,10 +57,13 @@ export interface NativeMediaObservation {
 export interface MediaBoundary {
   /** Production MediaStorage interface (also implemented by R2Storage), faked here ONLY. */
   configuration: Pick<MediaImportJobDependencies, 'storage' | 'fetchConfig'>;
-  /** Serve this exact native HTTPS URL. Stream overflow omits Content-Length;
-   * timeout stalls the response. Neither mode changes production limits.
+  /** Serve this exact native HTTPS URL. Optional encoded bytes are copied and
+   * bounded to the production 20 MiB source cap, including their backing buffer;
+   * shared/resizable backing and combination with a fault are rejected.
+   * Stream overflow omits Content-Length; timeout stalls the response.
+   * Neither mode changes production limits.
    */
-  source(url: string, fault?: SourceFault): Promise<SourceFixture>;
+  source(url: string, fault?: SourceFault, encodedBytes?: Uint8Array): Promise<SourceFixture>;
   /** Fail one real object-store operation; never fabricate a content job result. */
   failNextPut(): void;
   /** Test facade over real registered dispatch; not a new production queue API.
@@ -95,6 +98,8 @@ export interface MediaBoundary {
   start(): Promise<void>;
   /** Actual shared growth capture of one registered import transition. */
   measureTransition(mediaId: string): Promise<import('../support/growth-cost.ts').Capture>;
+  /** Seed completed DBOS history rows with the production workflow persistence shape. */
+  seedWorkflowHistory(count: number): Promise<number>;
   close(): Promise<void>;
 }
 
@@ -111,11 +116,11 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
   let failPut = false;
   let putFailure = 0;
   let worker: Awaited<ReturnType<(typeof import('./media-boundary-driver.ts'))['launchBoundaryProcess']>> | undefined;
-  let workerTrace: MediaTrace = { anchors: {}, fences: [] };
+  const workerTraces = new Map<string, MediaTrace>();
   let ending: Promise<void> | undefined;
   let starting: Promise<void> | undefined;
   let callStart = 0;
-  let requestStart = 0;
+  const sourceRequestsByDrain = new Map<string, number>();
   const endpoint = 'https://00000000000000000000000000000000.r2.cloudflarestorage.com';
   const transport = globalThis.fetch;
   const server = Bun.serve({
@@ -126,7 +131,10 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
       const incoming = new URL(request.url);
       const target = new URL(incoming.searchParams.get('url')!);
       if (incoming.pathname === '/source') {
-        if (requests.length - requestStart >= 64) return new Response(null, { status: 429 });
+        const drain = incoming.searchParams.get('drain')!;
+        const count = sourceRequestsByDrain.get(drain) ?? 0;
+        if (count >= 64) return new Response(null, { status: 429 });
+        sourceRequestsByDrain.set(drain, count + 1);
         const source =
           sources.get(target.href) ??
           [...sources.entries()].find(([url]) => {
@@ -216,33 +224,50 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
     maxObjectBytes: 20 * 1024 * 1024,
     fetch: externalFetch,
   });
-  const traces = (id: string) => [native.trace(id), workerTrace];
+  const traces = (id: string) => [native.trace(id), workerTraces.get(id) ?? { anchors: {}, fences: [] }];
   async function syncTrace(mediaId: string) {
-    if (worker) workerTrace = await worker.call<MediaTrace>('trace', { mediaId });
+    if (worker) workerTraces.set(mediaId, await worker.call<MediaTrace>('trace', { mediaId }));
   }
   const boundary: MediaBoundary = {
     configuration: { storage, fetchConfig: options.fetchConfig },
-    async source(url, fault) {
+    async source(url, fault, encodedBytes) {
       const parsed = new URL(url);
       if (parsed.protocol !== 'https:' || !options.fetchConfig.allowedHosts.includes(parsed.hostname))
         throw new Error('Fixture requires an actual configured source URL');
+      if (encodedBytes !== undefined) {
+        if (fault !== undefined) throw new TypeError('Supplied source bytes cannot be combined with a source fault');
+        if (
+          !(encodedBytes instanceof Uint8Array) ||
+          !(encodedBytes.buffer instanceof ArrayBuffer) ||
+          encodedBytes.buffer.resizable
+        )
+          throw new TypeError('Supplied source bytes require a fixed, non-shared backing buffer');
+        if (
+          encodedBytes.byteLength === 0 ||
+          encodedBytes.byteLength > 20 * 1024 * 1024 ||
+          encodedBytes.buffer.byteLength > 20 * 1024 * 1024
+        )
+          throw new RangeError('Supplied source bytes and backing must fit the production source byte cap');
+      }
       const bytes =
-        fault === 'stream-over-20-mib'
-          ? new Uint8Array(20 * 1024 * 1024 + 1)
-          : fault === 'corrupt-image'
-            ? new TextEncoder().encode('corrupt encoded image')
-            : new Uint8Array(
-                await sharp({
-                  create: {
-                    width: fault === 'over-40-megapixels' ? 6400 : 48,
-                    height: fault === 'over-40-megapixels' ? 6400 : 32,
-                    channels: 3,
-                    background: { r: 19, g: 81, b: 143 },
-                  },
-                })
-                  .png()
-                  .toBuffer(),
-              );
+        encodedBytes !== undefined
+          ? new Uint8Array(encodedBytes)
+          : fault === 'stream-over-20-mib'
+            ? new Uint8Array(20 * 1024 * 1024 + 1)
+            : fault === 'corrupt-image'
+              ? new TextEncoder().encode('corrupt encoded image')
+              : new Uint8Array(
+                  await sharp({
+                    create: {
+                      width: fault === 'over-40-megapixels' ? 6400 : 48,
+                      height: fault === 'over-40-megapixels' ? 6400 : 32,
+                      channels: 3,
+                      background: { r: 19, g: 81, b: 143 },
+                    },
+                  })
+                    .png()
+                    .toBuffer(),
+                );
       peak = Math.max(peak, bytes.byteLength);
       sources.set(url, { bytes, ...(fault === undefined ? {} : { fault }) });
       return { url, bytes: bytes.slice() };
@@ -274,40 +299,42 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
       input.signal.throwIfAborted();
       if (input.maxJobs !== 16 || input.mediaIds.length > 16) throw new Error('Unbounded media drain');
       await boundary.start();
-      requestStart = requests.length;
-      await worker!.call('beginDrain', { maxJobs: input.maxJobs });
+      await worker!.call('beginDrain', { mediaIds: input.mediaIds, maxJobs: input.maxJobs });
       const failures = putFailure;
-      for (const id of input.mediaIds) {
-        await syncTrace(id);
-        const envelope = await mediaEnvelope(
-          options.content.pool,
-          id,
-          traces(id),
-          'com.rezics.content.media.import-requested.v1',
-        );
-        const running = worker!.call('dispatch', { envelope, mediaId: id, redeliver: input.redeliver });
-        // A failed external operation is reported immediately; DBOS owns its retry.
-        // The next bounded drain observes that same durable identity to completion.
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const failure = new Promise<never>((_, reject) => {
-          const check = () => {
-            if (putFailure !== failures) reject(new Error('Actual object provider PUT failed'));
-            else if (input.signal.aborted) reject(input.signal.reason);
-            else timer = setTimeout(check, 5);
-          };
-          timer = setTimeout(check, 5);
-        });
-        try {
-          await Promise.race([running, failure]);
-        } finally {
-          clearTimeout(timer);
+      // Dispatch every pending ID before awaiting completion, including IDs
+      // from other drain calls using the same native worker concurrently.
+      const running = Promise.all(
+        input.mediaIds.map(async (id) => {
           await syncTrace(id);
-        }
+          const envelope = await mediaEnvelope(
+            options.content.pool,
+            id,
+            traces(id),
+            'com.rezics.content.media.import-requested.v1',
+          );
+          await worker!.call('dispatch', { envelope, mediaId: id, redeliver: input.redeliver });
+        }),
+      );
+      // A failed external operation is reported immediately; DBOS owns its retry.
+      // The next bounded drain observes that same durable identity to completion.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const failure = new Promise<never>((_, reject) => {
+        const check = () => {
+          if (putFailure !== failures) reject(new Error('Actual object provider PUT failed'));
+          else if (input.signal.aborted) reject(input.signal.reason);
+          else timer = setTimeout(check, 5);
+        };
+        timer = setTimeout(check, 5);
+      });
+      try {
+        await Promise.race([running, failure]);
+      } finally {
+        clearTimeout(timer);
+        await Promise.all(input.mediaIds.map(syncTrace));
       }
     },
     async measureTransition(id) {
       await boundary.start();
-      requestStart = requests.length;
       await syncTrace(id);
       const envelope = await mediaEnvelope(
         options.content.pool,
@@ -320,6 +347,11 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
       } finally {
         await syncTrace(id);
       }
+    },
+    async seedWorkflowHistory(count) {
+      if (!Number.isSafeInteger(count) || count < 1) throw new RangeError('Workflow history count must be positive');
+      await boundary.start();
+      return worker!.call('seedHistory', { count }) as Promise<number>;
     },
     async observe(id) {
       await syncTrace(id);
@@ -361,10 +393,11 @@ export async function createMediaBoundary(options: MediaBoundaryOptions): Promis
         callStart = capture.calls.length;
         await worker.call('reset');
       }
+      workerTraces.clear();
       objects.clear();
       sources.clear();
       requests.length = 0;
-      requestStart = 0;
+      sourceRequestsByDrain.clear();
       internet.length = 0;
       peak = 0;
       failPut = false;

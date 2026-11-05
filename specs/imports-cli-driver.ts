@@ -2,7 +2,6 @@ import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { BatchCommand } from '@rezics/definitions/bulk';
 import type { Entry } from './imports-vndb-tables-driver.ts';
-import type { GrowthSample } from '../services/kernel/test/support/growth-bound.ts';
 
 /**
  * TEST ONLY: IMPORT_CLI_DRIVER exports createImportCliDriver({directory, fetch, clock}).
@@ -40,7 +39,7 @@ import type { GrowthSample } from '../services/kernel/test/support/growth-bound.
  * and must never be called by the CLI. baseline is an opaque committed-generation
  * fingerprint; pendingKeys are original durable journal command keys.
  *
- * Cost evidence covers ALL actual forwarded SQLite executions and returned rows,
+ * Counted evidence covers ALL actual forwarded SQLite executions and returned rows,
  * including consumed iterators, transactions and reopened handles. The binding MUST
  * use createSqliteProbe from services/importer/tests/support/sqlite-growth on
  * synchronous real store operations and aggregate its actual samples, calling
@@ -48,9 +47,10 @@ import type { GrowthSample } from '../services/kernel/test/support/growth-bound.
  * EVERY distinct executed statement; reject growing SCAN, TEMP B-TREE, AUTOMATIC
  * indexes; require declared-index/INTEGER PRIMARY KEY SEARCH prefixes. Explicitly
  * classify exact INSERT/control; SELECT/UPDATE/DELETE cannot be exempt by name.
- * blocks:0 means unavailable SQLite buffer measurement, never zero physical IO.
- * seed grows hot failed-run history and unrelated live keys/history with ONE seed
- * at 1,8,64, leaving the measured source baseline empty; it uses real
+ * Named counts report SQLite statements and returned rows, never examined rows or
+ * buffer/physical IO. Missing capture is valid only for observed no-I/O preflight.
+ * seed grows failed runs under a separate hot-history source and unrelated live
+ * keys/history with ONE seed at 1,8,64, leaving the measured source baseline empty; it uses real
  * stores and the same fixture API, outside measured invoke. No fabricated costs.
  * Real HTTP/Auth/PostgreSQL growth is separately proved by imports-api.test.ts;
  * core indexed store/concurrency proof is imports-run-store.test.ts. This suite
@@ -78,7 +78,7 @@ export interface Execution {
   requests: { url: string; authorization: string | null; bytes: number }[];
   openHandles: number;
   input: { bytes: number; passes: number; records: number; peakBufferedBytes: number; maxPageRecords: number };
-  cost: GrowthSample['cost'];
+  counts: { 'sqlite statements': number; 'sqlite returned rows': number };
 }
 export interface CliDriver {
   invoke(argv: string[], boundaries?: Invocation): Promise<Execution>;

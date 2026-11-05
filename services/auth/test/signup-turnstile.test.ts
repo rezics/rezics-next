@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { Pool } from 'pg';
@@ -66,15 +67,19 @@ const ports: AccountWorkflowPorts = {
   registrationTarget(key) {
     registrationCalls += 1;
     registrationOrder.push('registration-target');
-    return `signup-account-${key}`;
+    return key === 'invalid-echo'
+      ? 'x'.repeat(129)
+      : key === 'maximal-echo'
+        ? '\u0001'.repeat(128)
+        : `signup-account-${key}`;
   },
   async reserveHandle(input) {
     registrationCalls += 1;
     registrationOrder.push('reserve-handle');
     if (takenHandles.has(input.handle)) {
       const error = new Error('handle unavailable');
-      error.name = 'LifecycleDeniedError';
-      throw error;
+      // Native workflow ports expose the translated refusal status to Auth.
+      throw Object.assign(error, { status: 403 });
     }
     return {
       value: {
@@ -203,10 +208,13 @@ beforeAll(async () => {
       activeKid: 'signup-turnstile-signer',
       privateKeys: [{ ...(await exportJWK(signing.privateKey)), kid: 'signup-turnstile-signer', alg: 'ES256' }],
     },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       readAccount: async (id) => accounts.get(id) ?? null,
       authorizeProvisioning: async (id) => ({ accountId: id }),
-    },
+    }),
   });
   options = {
     database: pool,
@@ -348,7 +356,31 @@ test('a retry with the same key and a new token returns the same account', async
   expect(await retry.json()).toEqual({ accountId: `signup-account-${key}` });
   expect(verificationForms.map((form) => form.response)).toEqual([`token-${key}`, 'fresh-retry-token']);
   expect(verificationForms[0]!.idempotency_key).not.toBe(verificationForms[1]!.idempotency_key);
-  expect((await pool.query('SELECT id FROM "user" WHERE id=$1', [`signup-account-${key}`])).rows).toHaveLength(1);
+  const accountId = `signup-account-${key}`;
+  expect((await pool.query('SELECT id FROM "user" WHERE id=$1', [accountId])).rows).toHaveLength(1);
+
+  const changedHandle = await signup({
+    ...original,
+    handle: `other-${original.handle}`,
+    turnstile_token: 'changed-handle-token',
+  });
+  expect(changedHandle.status).toBe(409);
+  expect(await changedHandle.json()).toEqual({ error: 'registration_denied' });
+
+  const changedCredentials = await signup({
+    ...original,
+    email: `changed-${original.email}`,
+    password: `${password}-changed`,
+    turnstile_token: 'changed-credentials-token',
+  });
+  expect(changedCredentials.status).toBe(409);
+  expect(await changedCredentials.json()).toEqual({ error: 'registration_denied' });
+  expect((await pool.query('SELECT id,email FROM "user" WHERE id=$1', [accountId])).rows).toEqual([
+    { id: accountId, email: original.email },
+  ]);
+  expect((await pool.query('SELECT id FROM "user" WHERE email=$1', [`changed-${original.email}`])).rows).toHaveLength(
+    0,
+  );
 });
 
 test('signup answers 503 when Turnstile configuration is absent', async () => {
@@ -364,4 +396,62 @@ test('signup answers 503 when Turnstile configuration is absent', async () => {
   } finally {
     if (configured) options.turnstile = configured;
   }
+});
+
+test('a taken handle refuses without account effects and a corrected new request can succeed', async () => {
+  resetSiteverify();
+  const key = 'taken-handle-without-effects';
+  const input = body(key);
+  takenHandles.add(input.handle);
+  try {
+    const startedAt = Date.now();
+    const response = await signup(input);
+    expect(Date.now() - startedAt).toBeLessThan(5000);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: 'handle_unavailable' });
+    expect(siteverifyCalls).toBe(1);
+    expect(registrationOrder).toEqual(['registration-target', 'reserve-handle']);
+    const accountId = `signup-account-${key}`;
+    expect(accounts.has(accountId)).toBe(false);
+    expect((await pool.query('SELECT id FROM "user" WHERE id=$1', [accountId])).rows).toHaveLength(0);
+    expect((await pool.query('SELECT id FROM session WHERE "userId"=$1', [accountId])).rows).toHaveLength(0);
+    const staged = (
+      await pool.query('SELECT ciphertext,expired_at,completed_at FROM auth_registration_stage WHERE request_key=$1', [
+        key,
+      ])
+    ).rows;
+    expect(staged).toHaveLength(1);
+    expect(staged[0]).toMatchObject({ ciphertext: null, completed_at: null });
+    expect(staged[0].expired_at).not.toBeNull();
+
+    const correctedKey = `${key}-corrected`;
+    const corrected = await signup(body(correctedKey, { handle: `${input.handle}-corrected`, email: input.email }));
+    expect(corrected.status).toBe(201);
+    expect(await corrected.json()).toEqual({ accountId: `signup-account-${correctedKey}` });
+    expect(accounts.has(accountId)).toBe(false);
+    expect(accounts.get(`signup-account-${correctedKey}`)?.state).toBe('active');
+    expect(await stageCount(key)).toBe(1);
+    expect(await stageCount(correctedKey)).toBe(1);
+  } finally {
+    takenHandles.delete(input.handle);
+  }
+});
+
+test('native registration projects maximal escaped IDs without a session', async () => {
+  resetSiteverify();
+  const response = await signup(body('maximal-echo'));
+  expect(response.status).toBe(201);
+  expect(response.headers.get('set-cookie')).toBeNull();
+  const text = await response.text();
+  expect(new TextEncoder().encode(text).byteLength).toBe(784);
+  expect(JSON.parse(text)).toEqual({ accountId: '\u0001'.repeat(128) });
+}, 30000);
+
+test('an unsupported producer ID is rejected before registration effects', async () => {
+  resetSiteverify();
+  const response = await signup(body('invalid-echo'));
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: 'registration_denied' });
+  expect(await stageCount('invalid-echo')).toBe(0);
+  expect(registrationOrder).toEqual(['registration-target']);
 });

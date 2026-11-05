@@ -8,6 +8,8 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { reserveMedia } from '../../src/content/media.ts';
 import { parentStatement, boardStatement } from '../../src/content/media-parent.ts';
+import { createRealmParticipationCheck } from '../../src/community/participation.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import reserveStatement from '../../src/content/reserve-media.sql';
 import initialize from '../../src/access/resource-initialization.sql';
 import permission from '../../src/access/permission-check.sql';
@@ -49,22 +51,54 @@ async function grant(resource: string, action: string) {
     [routeOf(resource), resource, actor.accountId, action],
   );
 }
-async function fixture(visibility = 'published') {
+async function fixture(visibility = 'published', threadBoardId?: string, realmId: string | null = null) {
   const board = newId(boardRoute),
     thread = newId(containerRoute);
   await db.admin.query(
-    `INSERT INTO content.board(route,board_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
-    VALUES ($1,$2,$3,'Images',$4,1,$3)`,
-    [boardRoute, board, actor.accountId, visibility],
+    `INSERT INTO content.board(route,board_id,realm_id,subject_id,title,visibility,security_revision,recorded_transaction_id)
+    VALUES ($1,$2,$3,$4,'Images',$5,1,$4)`,
+    [boardRoute, board, realmId, actor.accountId, visibility],
   );
   await db.admin.query(
     `INSERT INTO content.thread(route,thread_id,author_account_id,board_id,title,visibility,security_revision,recorded_transaction_id)
     VALUES ($1,$2,$3,$4,'Images','published',1,$3)`,
-    [containerRoute, thread, actor.accountId, board],
+    [containerRoute, thread, actor.accountId, threadBoardId ?? board],
   );
   await grant(thread, 'media:create');
   return { board, thread };
 }
+
+async function realm(visibility: 'public' | 'protected') {
+  const realmId = newId(boardRoute);
+  const spaceId = newId(boardRoute);
+  const spaceRevisionId = newId(boardRoute);
+  const realmRevisionId = newId(boardRoute);
+  const time = (await db.admin.query<{ at: string }>('SELECT clock_timestamp()::text AS at')).rows[0];
+  if (!time) throw new Error('Could not read fixture database time');
+  const at = time.at;
+  await db.admin.query(
+    `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
+     VALUES ($1,$2,'active',$3,$4,$5)`,
+    [boardRoute, spaceId, spaceRevisionId, at, actor.accountId],
+  );
+  await db.admin.query(
+    `INSERT INTO community.space_revision(route,space_id,revision_id,predecessor,address,title,summary,created_at,author)
+     VALUES ($1,$2,$3,NULL,NULL,'Media parent host','Media parent host',$4,$5)`,
+    [boardRoute, spaceId, spaceRevisionId, at, actor.accountId],
+  );
+  await db.admin.query(
+    `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator,votes)
+     VALUES ($1,$2,$3,'active',$4,$5,$6,$7,$8,'{"upvote":1,"downvote":-1}'::jsonb)`,
+    [boardRoute, realmId, spaceId, visibility, GLOBAL_CONTEXT, realmRevisionId, at, actor.accountId],
+  );
+  await db.admin.query(
+    `INSERT INTO community.realm_revision(route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author,votes)
+     VALUES ($1,$2,$3,NULL,'Media parent Realm','Media parent Realm',$4,$5,$6,$7,'{"upvote":1,"downvote":-1}'::jsonb)`,
+    [boardRoute, realmId, realmRevisionId, visibility, GLOBAL_CONTEXT, at, actor.accountId],
+  );
+  return realmId;
+}
+
 beforeAll(async () => {
   db = await openGrowthDatabase();
   db.pool.options.max = 1;
@@ -82,6 +116,8 @@ beforeAll(async () => {
         'media:read',
         'media:complete',
         'media:erase',
+        'realm:read',
+        'realm:participate',
         'post:create',
         'post:revise',
         'post:erase',
@@ -100,7 +136,7 @@ beforeAll(async () => {
 afterAll(() => db?.close());
 
 function nativeBoardTrace(records: readonly SqlExecution[], board: string) {
-  const probes = records.filter((r) => r.statement === boardStatement && r.parameters.includes(board));
+  const probes = records.filter((r) => r.statement === boardStatement() && r.parameters.includes(board));
   expect(probes.length).toBeGreaterThan(0);
   for (const probe of probes) {
     const index = records.indexOf(probe);
@@ -114,7 +150,7 @@ function nativeBoardTrace(records: readonly SqlExecution[], board: string) {
     ]);
     expect(
       transaction
-        .filter((r) => [parentStatement, boardStatement].includes(r.statement))
+        .filter((r) => [parentStatement(), boardStatement()].includes(r.statement))
         .every((r) => r.parameters.includes(boardRoute)),
     ).toBe(true);
     expect(records.slice(index + 1).find((r) => /^(?:COMMIT|ROLLBACK|BEGIN)/.test(r.statement))?.statement).toBe(
@@ -146,7 +182,7 @@ test('media reserve reads a remote board on its own native anchor and releases b
     for (const checkout of checkouts) {
       const records = trace.records.slice(checkout.start, checkout.end);
       const partitions = records.flatMap((r) => {
-        if ([parentStatement, boardStatement].includes(r.statement)) return [partitionOf(Number(r.parameters[0]))];
+        if ([parentStatement(), boardStatement()].includes(r.statement)) return [partitionOf(Number(r.parameters[0]))];
         if (r.statement === permission.sql)
           return [partitionOf(Number(r.parameters[permission.params.indexOf('route')]))];
         if (r.statement === anchor.sql) return [Number(r.parameters[0])];
@@ -158,7 +194,9 @@ test('media reserve reads a remote board on its own native anchor and releases b
     expect(result.partition).toBe(partitionOf(containerRoute));
     nativeBoardTrace(trace.records, board);
     expect(
-      trace.records.filter((r) => r.statement === parentStatement).every((r) => !r.statement.includes('content.board')),
+      trace.records
+        .filter((r) => r.statement === parentStatement())
+        .every((r) => !r.statement.includes('content.board')),
     ).toBe(true);
   } finally {
     db.pool.removeListener('acquire', acquire);
@@ -182,6 +220,56 @@ async function denied(work: () => Promise<unknown>) {
   await expect(work()).rejects.toThrow();
   expect(await effects()).toEqual(before);
 }
+
+test('media reservation prepares native Realm participation on a max-one pool without holding its anchor', async () => {
+  const publicRealm = await realm('public');
+  const allowed = await fixture('published', undefined, publicRealm);
+  const protectedRealm = await realm('protected');
+  const deniedParent = await fixture('published', undefined, protectedRealm);
+  const realmActor: AccountActor = { ...actor, scopes: [...actor.scopes, 'realm:read', 'realm:participate'] };
+  const realmParticipation = createRealmParticipationCheck({ pool: db.pool, access });
+  await grant(protectedRealm, 'realm:participate');
+
+  let active = 0;
+  let peak = 0;
+  const acquire = () => {
+    active++;
+    peak = Math.max(peak, active);
+  };
+  const release = () => {
+    active--;
+  };
+  const trace = observeSql(db.pool);
+  db.pool.on('acquire', acquire);
+  db.pool.on('release', release);
+  try {
+    const reservation = await reserveMedia(
+      { ...dependencies(), realmParticipation },
+      realmActor,
+      input(allowed.thread),
+      request(),
+    );
+    expect(reservation.value.mediaId).toBeString();
+    expect(reservation.partition).toBe(partitionOf(containerRoute));
+    expect(
+      (await db.admin.query('SELECT container_id FROM content.media WHERE media_id=$1', [reservation.value.mediaId]))
+        .rows,
+    ).toEqual([{ container_id: allowed.thread }]);
+    await denied(() =>
+      reserveMedia({ ...dependencies(), realmParticipation }, realmActor, input(deniedParent.thread), request()),
+    );
+
+    expect(trace.records.some((record) => /community\.realm/.test(record.statement))).toBe(true);
+    expect(active).toBe(0);
+    expect(peak).toBe(1);
+    expect(db.pool.waitingCount).toBe(0);
+  } finally {
+    db.pool.removeListener('acquire', acquire);
+    db.pool.removeListener('release', release);
+    await trace.close();
+  }
+});
+
 async function revoke(resource: string, action: string) {
   await db.admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND action=$3', [
     routeOf(resource),
@@ -385,7 +473,7 @@ test('parent validation observes current security revisions and private authorit
       await grant(f.thread, 'thread:read');
     }
     const trace = observeSql(db.pool);
-    const barrier = trace.hold({ statement: parentStatement, occurrence: 2 }, 'before');
+    const barrier = trace.hold({ statement: parentStatement(), occurrence: 2 }, 'before');
     const before = await effects();
     const outcome = reserveMedia(dependencies(), actor, input(f.thread), request()).then(
       () => null,
@@ -419,7 +507,7 @@ test('serialization retries resolve native references again and preserve one med
       boundary: 'after',
       error: Object.assign(new Error('retry'), { code: '40001' }),
     });
-    const barrier = trace.hold({ statement: parentStatement, occurrence: 3 }, 'before');
+    const barrier = trace.hold({ statement: parentStatement(), occurrence: 3 }, 'before');
     const before = await effects();
     const outcome = reserveMedia(dependencies(), actor, input(f.thread), request()).then(
       (value) => ({ value }),
@@ -441,7 +529,7 @@ test('serialization retries resolve native references again and preserve one med
         nativeBoardTrace(trace.records, f.board);
         expect(
           trace.records.filter(
-            (r) => [parentStatement, boardStatement].includes(r.statement) && r.parameters.includes(f.board),
+            (r) => [parentStatement(), boardStatement()].includes(r.statement) && r.parameters.includes(f.board),
           ),
         ).toHaveLength(2);
       }
@@ -459,17 +547,8 @@ test('deadline, missing references, route mismatch and reply depth cap deny with
   await denied(() => reserveMedia(dependencies(), actor, input(newId(containerRoute)), request()));
   await expect(post(f, newId(containerRoute + 1))).rejects.toMatchObject({ code: '23514' });
   const wrongRoute = newId(containerRoute + 1);
-  await db.admin.query('UPDATE content.thread SET board_id=$3 WHERE route=$1 AND thread_id=$2', [
-    containerRoute,
-    f.thread,
-    wrongRoute,
-  ]);
-  await denied(() => reserveMedia(dependencies(), actor, input(f.thread), request()));
-  await db.admin.query('UPDATE content.thread SET board_id=$3 WHERE route=$1 AND thread_id=$2', [
-    containerRoute,
-    f.thread,
-    f.board,
-  ]);
+  const mismatched = await fixture('published', wrongRoute);
+  await denied(() => reserveMedia(dependencies(), actor, input(mismatched.thread), request()));
   let target: string | null = null;
   for (let depth = 0; depth < 33; depth++) target = await post(f, target);
   await grant(target!, 'media:create');
@@ -722,7 +801,7 @@ test('deadline during an anchored board read denies and releases its sole client
   const f = await fixture(),
     context = { ...request(), deadline: Date.now() + 1000 };
   const trace = observeSql(db.pool),
-    barrier = trace.hold({ statement: boardStatement }, 'before');
+    barrier = trace.hold({ statement: boardStatement() }, 'before');
   const before = await effects();
   const outcome = reserveMedia(dependencies(), actor, input(f.thread), context).then(
     () => null,

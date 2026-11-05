@@ -1,4 +1,5 @@
 SELECT membership_inverse_complete AS "membershipInverseComplete", account_id AS "accountId", kind, state, handle,
+       display_name AS "displayName",
        operator_account_id AS "operatorAccountId", operator_reservation_id AS "operatorReservationId",
        authn_fenced AS fenced,
        registration_id AS "registrationId", registration_expires_at::text AS "expiresAt",

@@ -1,3 +1,6 @@
 types:
-  schema:ComicSeries: 日本の連載漫画
+  schema:ComicSeries: '漫画'
   schema:PublicationVolume: 巻
+typeDescriptions:
+  schema:ComicSeries: '刊行された各巻から独立した漫画の作品シリーズ。日本で制作された作品に限定しません。'
+  schema:PublicationVolume: '漫画作品の、独立して参照できる刊行巻。所属シリーズを関連付け、巻番号を位置で記録します。'

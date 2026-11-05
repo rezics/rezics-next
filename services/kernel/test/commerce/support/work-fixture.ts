@@ -1,5 +1,8 @@
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import type { Pool } from 'pg';
 import { createAccess } from '../../../src/access/index.ts';
+import { checkout as httpCheckout } from '../../../src/commerce/checkout.ts';
+import { StripeRejectedError, StripeUnavailableError, type StripePort } from '../../../src/commerce/model.ts';
 import { createCommerceCommands } from '../../../src/commerce/commands.ts';
 import { createCommerceWork as createEnqueue } from '../../../src/commerce/enqueue.ts';
 import { createStripePort } from '../../../src/commerce/stripe.ts';
@@ -21,13 +24,14 @@ export async function until<T>(read: () => Promise<T>, accept: (value: T) => boo
   }
 }
 
-export async function workFixture() {
+export async function workFixture(options: { readonly pool?: Pool } = {}) {
   const databaseUrl = process.env.DATABASE_URL!;
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-  const pool = createPool(databaseUrl);
+  const ownsPool = options.pool === undefined;
+  const pool = options.pool ?? createPool(databaseUrl);
   const client = await createWorkClient(databaseUrl);
   const transport = startWorkStripe();
-  const stripe = createStripePort({
+  const providerStripe = createStripePort({
     apiKey: 'sk_test_work',
     managedPayments: false,
     host: '127.0.0.1',
@@ -57,6 +61,23 @@ export async function workFixture() {
     },
   });
   const commands = createCommerceCommands({ pool, access });
+  // Direct fixture setup must admit the same native creation intent as HTTP/work.
+  // The provider fixture and its idempotency/error behavior remain unchanged.
+  const stripe: StripePort = {
+    ...providerStripe,
+    async createCheckoutSession(request, providerKey) {
+      if (routeOf(request.orderId) === null || providerKey !== `order:${request.orderId}`)
+        return providerStripe.createCheckoutSession(request, providerKey);
+      const admission = await commands.beginCheckoutCreation(request.orderId, {
+        successUrl: request.successUrl,
+        cancelUrl: request.cancelUrl,
+        managedPayments: providerStripe.managedPayments ?? false,
+      });
+      if (admission.kind === 'failed') throw new StripeRejectedError('Checkout creation expired');
+      if (admission.kind !== 'ready') throw new StripeUnavailableError('Checkout creation unavailable');
+      return providerStripe.createCheckoutSession(admission.attempt.request, admission.attempt.providerKey);
+    },
+  };
   const seller = newId(0x2200),
     buyer = newId(0x3300);
   for (const accountId of [seller, buyer])
@@ -106,9 +127,15 @@ export async function workFixture() {
     await child.exited;
     child = undefined;
   }
-  async function start(offset = 0) {
+  async function start(offset = 0, checkout: { successUrl?: string; cancelUrl?: string } = {}) {
     child = Bun.spawn([process.execPath, `${import.meta.dir}/work-runtime.ts`], {
-      env: { ...process.env, WORK_STRIPE_PORT: String(transport.port), WORK_CLOCK_OFFSET: String(offset) },
+      env: {
+        ...process.env,
+        WORK_STRIPE_PORT: String(transport.port),
+        WORK_CLOCK_OFFSET: String(offset),
+        WORK_SUCCESS_URL: checkout.successUrl ?? 'https://example.test/success',
+        WORK_CANCEL_URL: checkout.cancelUrl ?? 'https://example.test/cancel',
+      },
       stdout: 'pipe',
       stderr: 'pipe',
     });
@@ -133,12 +160,47 @@ export async function workFixture() {
     client,
     commands,
     stripe,
+    providerStripe,
     transport,
     buyer,
     start,
     stop,
+    async checkoutRequest(
+      requestKey: string,
+      options: {
+        successUrl?: string;
+        cancelUrl?: string;
+        stripe?: StripePort;
+        clockOffset?: number;
+      } = {},
+    ) {
+      const buyerActor = await actor(buyer);
+      const realNow = Date.now;
+      const clockOffset = options.clockOffset ?? 0;
+      if (clockOffset) Date.now = () => realNow() + clockOffset;
+      try {
+        return await httpCheckout(
+          {
+            pool,
+            commands,
+            stripe: options.stripe ?? providerStripe,
+            successUrl: options.successUrl ?? 'https://example.test/success',
+            cancelUrl: options.cancelUrl ?? 'https://example.test/cancel',
+          },
+          buyerActor,
+          offer.id,
+          offer.revision,
+          requestKey,
+        );
+      } finally {
+        Date.now = realNow;
+      }
+    },
+    async orderForRequest(requestKey: string) {
+      return (await commands.createOrder(await actor(buyer), offer.id, offer.revision, requestKey)).value;
+    },
     async order() {
-      return (await commands.createOrder(await actor(buyer), offer.id, Bun.randomUUIDv7())).value;
+      return (await commands.createOrder(await actor(buyer), offer.id, offer.revision, Bun.randomUUIDv7())).value;
     },
     request(order: Order) {
       return {
@@ -233,7 +295,7 @@ export async function workFixture() {
       await stop();
       transport.stop();
       await client.close();
-      await pool.end();
+      if (ownsPool) await pool.end();
     },
   };
 }

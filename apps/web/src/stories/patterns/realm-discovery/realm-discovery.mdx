@@ -1,0 +1,47 @@
+import { Meta, Canvas } from '@storybook/addon-docs/blocks';
+import * as Discovery from './realm-discovery.stories';
+
+<Meta of={Discovery} name="Realm discovery" />
+
+# Realm discovery
+
+`community/realm-discovery` is the single shared module for `RealmDiscoverySection`, its public types and
+`loadRealmDiscovery`. Search and Web own placement in their existing page and phone empty-query RecentPanel.
+This Pattern adds no shell or production caller. Use these same story IDs with locale/theme and viewport globals.
+
+Popular uses public discussion starts in the previous 30 complete UTC days; Trending uses the previous complete
+UTC day. These are server windows, not client freshness estimates or membership popularity. No counts, scores,
+account identities or Explore fallback appear. Each row links to the localized native Realm route, never a guessed
+Space address. An empty authored description stays empty.
+
+The component never loads data. Its caller replaces state on sort, page, retry or privacy failure and deduplicates
+Realm IDs when accumulating pages. The shared adapter makes one generated native GET for each valid invocation;
+it does no refill, row lookup or permission inference. The native source checks current and final anonymous Realm,
+Space, publication and generation authority. A rejected or unavailable read has no rows; platform closure is distinct
+from both empty and unavailable. Empty-with-next is a continuable page, not completion.
+
+Ready Realm results use shared `ContentItem` rows. Each title is a level-three heading and the primary link name;
+descriptions remain optional one-line previews, while avatar media and its attribution use only supplied presentation
+values.
+
+All examples use explicit presentation-contract responses through that adapter. The identity/title/description come
+from the existing recorded Realm. The examples do not assert that it qualified in any native ranking window.
+Image uses an explicitly selected, same-Realm image summary with an existing Storybook derivative asset. Installed
+native discovery supplies the selected same-Realm summary or null; these fixtures do not prove that native path.
+Only supplied AVIF/WebP derivatives use the guarded site media route. Initials also cover an authored empty description; failed
+images use the shared media fallback. No account avatar or external image is substituted.
+
+Sparse plays the returned continuation through the adapter, reaches the supplied row and removes the terminal
+continue control. Unavailable plays a manual retry through the same adapter. Closed offers no retry or rows.
+These plays and local typing do not establish native source correctness or Web visual approval. Actual Search/Web
+page IDs and their placement review remain with those owners; this Pattern is not a replacement page preview.
+
+<Canvas of={Discovery.Available} />
+<Canvas of={Discovery.ComposedRows} />
+<Canvas of={Discovery.Image} />
+<Canvas of={Discovery.Initials} />
+<Canvas of={Discovery.Sparse} />
+<Canvas of={Discovery.Empty} />
+<Canvas of={Discovery.Loading} />
+<Canvas of={Discovery.Unavailable} />
+<Canvas of={Discovery.Closed} />

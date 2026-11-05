@@ -1,0 +1,153 @@
+import { createHash } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { expect, test } from 'bun:test';
+import { emptyCrossMediaPlan } from '../src/cross-media-seed.ts';
+import { acquireBangumiPersonCareerSources, bangumiPersonCareerAdmission } from '../src/showcase-bangumi-careers.ts';
+import { ShowcaseJournal } from '../src/showcase-publication.ts';
+
+test('selected PersonDetail requests preserve archive careers, fill missing fields and replay exact receipts', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-bangumi-person-careers-'));
+  const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+  try {
+    const plan = emptyCrossMediaPlan();
+    plan.entities.bangumi.push(
+      {
+        source: 'bangumi',
+        key: 'person:8101',
+        revision: 'archive-v1',
+        payload: { id: 8101, type: 1, name: '星見', summary: 'Biography retained.' },
+      },
+      {
+        source: 'bangumi',
+        key: 'person:8102',
+        revision: null,
+        payload: { id: 8102, type: 1, name: 'Archive role', name_cn: 'Archive Chinese', career: [] },
+      },
+      {
+        source: 'bangumi',
+        key: 'person:8103',
+        revision: null,
+        payload: { id: 8103, type: 2, name: 'Organization' },
+      },
+      {
+        source: 'bangumi',
+        key: 'person:8104',
+        revision: null,
+        payload: { id: 8104, type: 1, name: 'Unselected' },
+      },
+      {
+        source: 'bangumi',
+        key: 'person:8105',
+        revision: null,
+        payload: { id: 8105, type: 1, name: 'Malformed API role' },
+      },
+    );
+    for (const id of [8101, 8102, 8103, 8105])
+      plan.members.push({ source: 'bangumi', key: `person:${id}`, kind: 'person', membership: 'referenced' });
+
+    const requests: string[] = [];
+    const bodies = new Map([
+      [8101, JSON.stringify({ id: 8101, type: 1, career: ['producer', 'writer'] })],
+      [8102, JSON.stringify({ id: 8102, type: 1, career: ['actor'], birth_year: 1970, birth_mon: 2, birth_day: 3 })],
+      [8105, JSON.stringify({ id: 9999, type: 1, career: ['actor'] })],
+    ]);
+    const fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      const id = Number(url.slice(url.lastIndexOf('/') + 1));
+      return new Response(bodies.get(id), { headers: { etag: `"person-${id}-v1"` } });
+    }) as typeof globalThis.fetch;
+    const selected = await acquireBangumiPersonCareerSources(plan, {
+      journal,
+      fetch,
+      sleep: async () => {},
+    });
+
+    expect(requests).toEqual([
+      'https://api.bgm.tv/v0/persons/8101',
+      'https://api.bgm.tv/v0/persons/8102',
+      'https://api.bgm.tv/v0/persons/8105',
+    ]);
+    const person = selected.entities.bangumi.find(({ key }) => key === 'person:8101')!;
+    expect(person.payload).toMatchObject({
+      id: 8101,
+      type: 1,
+      name: '星見',
+      summary: 'Biography retained.',
+      career: ['producer', 'writer'],
+    });
+    expect(selected.entities.bangumi.find(({ key }) => key === 'person:8102')?.payload).toMatchObject({
+      career: [],
+      birth_year: 1970,
+      birth_mon: 2,
+      birth_day: 3,
+    });
+    expect(selected.entities.bangumi.find(({ key }) => key === 'person:8103')?.payload).not.toHaveProperty('career');
+    expect(selected.entities.bangumi.find(({ key }) => key === 'person:8105')?.payload).not.toHaveProperty('career');
+    expect(selected.gaps).toContainEqual(
+      expect.objectContaining({ externalId: 'person:8105', property: 'wdt:P106', fields: ['person.career'] }),
+    );
+    expect(selected.gaps).toContainEqual(
+      expect.objectContaining({ externalId: 'person:8105', property: 'schema:name', fields: ['person.name_cn'] }),
+    );
+    const source = selected.personCareerSources?.[0];
+    expect(source).toMatchObject({
+      sourceAlias: 'bangumi_cross_media',
+      externalId: 'person:8101',
+      sourceRevision: 'archive-v1',
+      endpoint: 'https://api.bgm.tv/v0/persons/8101',
+      sourceStatus: 'available',
+      careers: ['producer', 'writer'],
+      etag: '"person-8101-v1"',
+      responseDigest: createHash('sha256').update(bodies.get(8101)!).digest('hex'),
+    });
+    const request = bangumiPersonCareerAdmission(
+      'bangumi_cross_media',
+      {
+        releaseDigest: '',
+        schemes: [],
+        concepts: [],
+      },
+      selected.personCareerSources,
+    ).request({
+      owner: { source: 'bangumi_cross_media', external_id: 'person:8101' },
+      subject: '00000000-0000-4000-8000-000000000001',
+      conversion: { normalized: person.payload, converter_revision: 'cross-media-entities@15+bangumi@16' },
+    });
+    expect(request?.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          origin: expect.objectContaining({ revision: null, digest: source!.responseDigest, url: source!.endpoint }),
+        }),
+      ]),
+    );
+
+    journal.close();
+    const reopened = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+    try {
+      const replay = await acquireBangumiPersonCareerSources(plan, {
+        journal: reopened,
+        fetch: (async (input: RequestInfo | URL) => {
+          if (String(input).endsWith('/8101') || String(input).endsWith('/8102'))
+            throw new Error('sealed career source unexpectedly fetched again');
+          return new Response(bodies.get(Number(String(input).slice(String(input).lastIndexOf('/') + 1))));
+        }) as typeof globalThis.fetch,
+        sleep: async () => {},
+      });
+      expect(replay.entities.bangumi.find(({ key }) => key === 'person:8101')?.payload).toHaveProperty('career', [
+        'producer',
+        'writer',
+      ]);
+      expect(replay.personCareerSources).toEqual(selected.personCareerSources);
+    } finally {
+      reopened.close();
+    }
+  } finally {
+    try {
+      journal.close();
+    } catch {}
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);

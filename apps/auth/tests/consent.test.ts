@@ -37,30 +37,48 @@ const fake = Bun.serve({
       .split(';')
       .some((cookie) => cookie.trim() === `auth_session=${session}`);
     if (url.pathname.startsWith('/consent/') && request.method === 'GET') {
-      if (!signedIn) return Response.json({ code: 'authentication_denied' }, { status: 401, headers });
+      if (!signedIn) return Response.json({ error: 'authentication_denied' }, { status: 401, headers });
       const id = decodeURIComponent(url.pathname.slice('/consent/'.length));
       if (id !== clientId && id !== 'unnamed') return Response.json({ code: 'not_found' }, { status: 404, headers });
       if (readStatus === 200)
         return Response.json(
-          { client_id: id, display_name: id === 'unnamed' ? null : displayName, scopes: registered, granted },
+          {
+            client_id: id,
+            display_name: id === 'unnamed' ? null : displayName,
+            scopes: registered,
+            requested: [...new Set((url.searchParams.get('scope') ?? '').split(' ').filter(Boolean))],
+            granted,
+            pending_reduction: false,
+            acting_account: { account_id: 'person-1', email: 'person@example.test' },
+            decisions: { allow: true, decline: true, switch_account: true },
+          },
           { headers },
         );
       headers.set('retry-after', '37');
-      return Response.json({ code: responseCode, message: 'HOSTILE AUTH BODY' }, { status: readStatus, headers });
+      return Response.json({ code: responseCode }, { status: readStatus, headers });
     }
     if (url.pathname === '/consent' && request.method === 'POST') {
-      if (!signedIn) return Response.json({ code: 'authentication_denied' }, { status: 401, headers });
+      if (!signedIn) return Response.json({ error: 'authentication_denied' }, { status: 401, headers });
       const body = JSON.parse(call.body);
       if (
-        Object.keys(body).sort().join(',') !== 'client_id,scope' ||
+        Object.keys(body).sort().join(',') !==
+          'client_id,reviewed_account_id,reviewed_requested,reviewed_scopes,scope' ||
         !Array.isArray(body.scope) ||
         body.scope.some((scope: string) => !registered.includes(scope))
       )
-        return Response.json({ code: 'invalid_request' }, { status: 400, headers });
+        return Response.json({ error: 'authentication_denied' }, { status: 400, headers });
       if (writeStatus === 200)
-        return Response.json({ success: true, redirect_uri: 'https://evil.example/' }, { headers });
+        return Response.json(
+          {
+            client_id: body.client_id,
+            scope: body.scope,
+            account_id: body.reviewed_account_id,
+            requested: body.reviewed_requested,
+          },
+          { headers },
+        );
       headers.set('retry-after', '37');
-      return Response.json({ code: responseCode, message: 'HOSTILE AUTH BODY' }, { status: writeStatus, headers });
+      return Response.json({ error: 'authentication_denied' }, { status: writeStatus, headers });
     }
     return new Response('Not Found', { status: 404, headers });
   },
@@ -195,6 +213,7 @@ test(
     try {
       await ready(page);
       expect(await page.getByText(displayName, { exact: true }).count()).toBe(1);
+      expect(await page.getByText('You’re signed in as person@example.test.', { exact: true }).count()).toBe(1);
       expect(await page.locator('main img').count()).toBe(0);
       for (const scope of requested) {
         const row = page.getByRole('listitem').filter({ hasText: scope });
@@ -204,13 +223,23 @@ test(
       expect(await page.getByText('Identify you', { exact: true }).count()).toBe(1);
       expect(await page.getByText('Keep access when you are away', { exact: true }).count()).toBe(1);
       expect(reads()).toHaveLength(1);
-      expect(reads()[0]!.url).toBe(`/consent/${encodeURIComponent(clientId)}`);
+      expect(reads()[0]!.url).toBe(
+        `/consent/${encodeURIComponent(clientId)}?${new URLSearchParams({
+          scope: requested.concat('openid').join(' '),
+        })}`,
+      );
       expect(reads()[0]!.headers.cookie).toContain(`auth_session=${session}`);
       expect(urls.filter((url) => new URL(url).pathname.startsWith('/consent/'))).toHaveLength(1);
       await approve(page);
       expect(writes()).toHaveLength(1);
       const write = writes()[0]!;
-      expect(JSON.parse(write.body)).toEqual({ client_id: clientId, scope: [...new Set([...granted, ...requested])] });
+      expect(JSON.parse(write.body)).toEqual({
+        client_id: clientId,
+        scope: [...new Set([...granted, ...requested])],
+        reviewed_account_id: 'person-1',
+        reviewed_scopes: granted,
+        reviewed_requested: requested,
+      });
       expect(write.headers['content-type']).toBe('application/json');
       expect(write.headers.origin).toBe(origin);
       expect(write.headers.cookie).toContain(`auth_session=${session}`);
@@ -237,7 +266,13 @@ test(
       expect(await row.innerText()).toContain('Not available');
       expect(await row.getByRole('checkbox').count()).toBe(0);
       await approve(page);
-      expect(JSON.parse(writes()[0]!.body)).toEqual({ client_id: 'unnamed', scope: [...granted, 'offline_access'] });
+      expect(JSON.parse(writes()[0]!.body)).toEqual({
+        client_id: 'unnamed',
+        scope: [...granted, 'offline_access'],
+        reviewed_account_id: 'person-1',
+        reviewed_scopes: granted,
+        reviewed_requested: ['offline_access', unavailable],
+      });
       expect(await page.locator('main script').count()).toBe(0);
     } finally {
       await page.context().close();
@@ -254,7 +289,11 @@ test(
     try {
       await ready(page);
       await page.getByRole('button', { name: 'Decline', exact: true }).click();
-      await page.getByRole('status').filter({ hasText: 'The client got no new access.' }).waitFor();
+      await page
+        .getByRole('region', { name: 'Latest review outcome' })
+        .getByRole('status')
+        .filter({ hasText: 'Review declined. This choice sends no approval.' })
+        .waitFor();
       expect(writes()).toHaveLength(0);
       expect(reads()).toHaveLength(1);
       expect(new URL(page.url()).origin).toBe(origin);
@@ -273,7 +312,12 @@ test(
     const { page } = await open(requestPath(), false);
     try {
       await page.getByRole('link', { name: 'Sign in', exact: true }).waitFor();
-      expect(await page.getByRole('link', { name: 'Sign in', exact: true }).getAttribute('href')).toBe('/login');
+      const login = new URL(
+        await page.getByRole('link', { name: 'Sign in', exact: true }).getAttribute('href')!,
+        'https://auth.test',
+      );
+      expect(login.pathname).toBe('/login');
+      expect(login.searchParams.get('return_to')).toBe(requestPath().replace(/&return_to=.*$/, ''));
       expect(await page.getByRole('button', { name: 'Approve', exact: true }).count()).toBe(0);
     } finally {
       await page.context().close();

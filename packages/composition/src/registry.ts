@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import Type, { type TSchema } from 'typebox';
+import type { FilterDocument } from '@rezics/filter';
+import { publicFilterProp, typeListFilter } from './filter.ts';
 
 import {
   CURIE_PATTERN,
@@ -11,14 +13,32 @@ import {
   curie,
   href,
   localizedText,
+  plainText,
+  subjectId,
   safetyKind,
 } from './strings.ts';
 
+export const PAGE_GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
+export type SelectedContext = {
+  id: string;
+  population: { kind: 'global' } | { kind: 'realm'; id: string; title: string };
+};
+export type PageContinuation = { node: string; cursor: string };
+
 export interface PageContext {
   subject: string | null;
+  context?: SelectedContext;
+  continuation?: PageContinuation;
+  /** The account the page is for, resolved before planning. */
+  account?: { id: string; handle: string } | null;
 }
 
-export type PageFilter = { statement: { property: string; in: [string] } } | { type: { in: string[] } };
+export type MemberSource =
+  | { kind: 'collection'; id: string }
+  | { kind: 'everything' }
+  | { kind: 'state'; profileId: string; stateSetId: string; stateId: string };
+
+export type PageFilter = FilterDocument;
 
 type InferredStatementRead = {
   kind: 'search';
@@ -30,9 +50,45 @@ type InferredStatementRead = {
 };
 
 export type PageRead =
-  | { kind: 'subject'; id: string }
+  | { kind: 'members'; source: MemberSource; filter?: string; sort: 'id'; limit: number; cursor?: string }
+  | { kind: 'subject'; id: string; context?: string }
+  | {
+      kind: 'links';
+      id: string;
+      context?: string;
+      property: string;
+      filter?: string;
+      type?: string;
+      limit: number;
+      cursor?: string;
+    }
+  | {
+      kind: 'relations';
+      id: string;
+      context?: string;
+      property: string;
+      filter?: string;
+      type?: string;
+      limit: number;
+      cursor?: string;
+    }
+  | {
+      kind: 'subjectThreads';
+      id: string;
+      place: string;
+      threadKind: 'discussion' | 'review';
+      limit: number;
+      cursor?: string;
+    }
+  | { kind: 'collections'; id: string; limit: number }
+  | { kind: 'reactions'; id: string }
+  | { kind: 'account'; handle: string }
+  | { kind: 'accountThreads'; id: string; threadKind: 'discussion' | 'review'; limit: number }
+  | { kind: 'accountPosts'; id: string; limit: number }
+  | { kind: 'accountCollections'; id: string; limit: number }
   | {
       kind: 'search';
+      cursor?: string;
       body: {
         filter: PageFilter;
         sort: 'name' | 'collections';
@@ -55,7 +111,7 @@ export const APPEARANCE = {
   headingScale: ['md', 'lg'],
 } as const;
 
-export const SLOT_NAMES = ['header', 'hero', 'entity', 'aside', 'footer', 'actions'] as const;
+export const SLOT_NAMES = ['header', 'hero', 'entity', 'aside', 'footer', 'actions', 'personal'] as const;
 
 export interface CompositionNode {
   type: string;
@@ -89,6 +145,7 @@ export interface CompositionRegistry {
 export interface SchemaNode {
   '~kind'?: string;
   type?: string;
+  format?: string;
   properties?: Record<string, SchemaNode>;
   required?: readonly string[];
   additionalProperties?: unknown;
@@ -157,11 +214,19 @@ function isSafeString(schema: SchemaNode): boolean {
   if (kind === 'plainText') return isPlainText(schema);
   if (kind === 'href') return schema.pattern === HREF_PATTERN && schema.maxLength === 2_048;
   if (kind === 'curie') return schema.pattern === CURIE_PATTERN && schema.maxLength === 128;
+  if (kind === 'subjectId')
+    return (
+      schema.pattern === '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?![\\s\\S])' &&
+      schema.format === 'uuid' &&
+      schema.minLength === 36 &&
+      schema.maxLength === 36
+    );
   return false;
 }
 
 /** Every string this schema can accept is a safety string or a literal. `label` is `<Type>.<prop>`. */
 function assertAdmitted(schema: SchemaNode, label: string): void {
+  if (schema === publicFilterProp) return;
   if (safetyKind(schema) === 'localizedText') {
     if (!isLocalizedText(schema)) refuse(label);
     return;
@@ -266,7 +331,54 @@ const appearance = Type.Object(
 );
 
 const readSubject: ComponentRead = (_props, page) =>
-  page.subject === null ? null : { kind: 'subject', id: page.subject };
+  page.subject === null
+    ? null
+    : { kind: 'subject', id: page.subject, ...(page.context ? { context: page.context.id } : {}) };
+
+/**
+ * The inverse links of the page subject for one property. Appearances and credits share it with `RelationGroups`; a
+ * component with `direction: 'forward'` uses the separate native outbound relation stream.
+ */
+const linkProps = {
+  property: curie(),
+  filter: Type.Optional(subjectId()),
+  type: Type.Optional(curie()),
+  limit: Type.Integer({ minimum: 1, maximum: 24 }),
+  paged: Type.Optional(Type.Boolean()),
+} as const;
+
+const readLinks: ComponentRead = (props, page) =>
+  page.subject === null
+    ? null
+    : {
+        kind: 'links',
+        id: page.subject,
+        ...(page.context ? { context: page.context.id } : {}),
+        property: props.property as string,
+        ...(props.filter === undefined ? {} : { filter: props.filter as string }),
+        ...(props.type === undefined ? {} : { type: props.type as string }),
+        limit: props.paged === true ? Math.min(12, props.limit as number) : (props.limit as number),
+      };
+
+const readDirected: ComponentRead = (props, page) => {
+  const read = readLinks(props, page);
+  return props.direction === 'forward' && read?.kind === 'links' ? { ...read, kind: 'relations' } : read;
+};
+
+/** The native Content place follows the guarded page population, independently of the factual Context ID. */
+const readSubjectThreads =
+  (threadKind: 'discussion' | 'review'): ComponentRead =>
+  (_props, page) =>
+    page.subject === null
+      ? null
+      : {
+          kind: 'subjectThreads',
+          id: page.subject,
+          place: page.context?.population.kind === 'realm' ? page.context.population.id : PAGE_GLOBAL_CONTEXT,
+          threadKind,
+          // Preserve the selected-Realm window; Global previews use the adopted six-entry window.
+          limit: page.context?.population.kind === 'realm' ? 5 : 6,
+        };
 
 export const platformRegistry = defineRegistry({
   root: Type.Object({ appearance: Type.Optional(appearance) }, closed),
@@ -283,7 +395,7 @@ export const platformRegistry = defineRegistry({
     },
     {
       type: 'Heading',
-      props: Type.Object({ text: localizedText({ maxLength: 200 }), level: enumeration([2, 3, 4]) }, closed),
+      props: Type.Object({ text: localizedText({ maxLength: 200 }), level: enumeration([1, 2, 3, 4]) }, closed),
     },
     {
       type: 'Text',
@@ -316,6 +428,7 @@ export const platformRegistry = defineRegistry({
           title: localizedText({ maxLength: 120 }),
           property: curie(),
           limit: Type.Integer({ minimum: 1, maximum: 24 }),
+          paged: Type.Optional(Type.Boolean()),
         },
         closed,
       ),
@@ -323,13 +436,125 @@ export const platformRegistry = defineRegistry({
         page.subject === null
           ? null
           : {
-              kind: 'search',
-              body: {
-                filter: { statement: { property: props.property as string, in: [page.subject] } },
-                sort: 'name',
-                limit: props.limit as number,
-              },
+              kind: 'links',
+              id: page.subject,
+              ...(page.context ? { context: page.context.id } : {}),
+              property: props.property as string,
+              limit: props.paged === true ? Math.min(12, props.limit as number) : (props.limit as number),
             },
+    },
+    {
+      type: 'RelationGroups',
+      props: Type.Object({ title: Type.Optional(localizedText({ maxLength: 120 })), ...linkProps }, closed),
+      read: readLinks,
+    },
+    {
+      type: 'OutgoingRelations',
+      props: Type.Object({ title: Type.Optional(localizedText({ maxLength: 120 })), ...linkProps }, closed),
+      read: (props, page) => {
+        const read = readLinks(props, page);
+        return read?.kind === 'links' ? { ...read, kind: 'relations' } : read;
+      },
+    },
+    {
+      type: 'Cover',
+      props: Type.Object({}, closed),
+      read: readSubject,
+    },
+    {
+      type: 'Summary',
+      props: Type.Object({}, closed),
+      read: readSubject,
+    },
+    {
+      type: 'Appearances',
+      props: Type.Object({ direction: Type.Optional(enumeration(['forward', 'inverse'])), ...linkProps }, closed),
+      read: readDirected,
+    },
+    {
+      type: 'Credits',
+      props: Type.Object({ direction: Type.Optional(enumeration(['forward', 'inverse'])), ...linkProps }, closed),
+      read: readDirected,
+    },
+    {
+      type: 'RatingSummary',
+      props: Type.Object({}, closed),
+    },
+    {
+      type: 'ThreadList',
+      props: Type.Object({ paged: Type.Optional(Type.Boolean()) }, closed),
+      read: readSubjectThreads('discussion'),
+    },
+    {
+      type: 'ReviewList',
+      props: Type.Object({ paged: Type.Optional(Type.Boolean()) }, closed),
+      read: readSubjectThreads('review'),
+    },
+    {
+      type: 'Sources',
+      props: Type.Object({}, closed),
+      read: readSubject,
+    },
+    {
+      type: 'CollectionList',
+      props: Type.Object(
+        {
+          title: localizedText({ maxLength: 120 }),
+          limit: Type.Integer({ minimum: 1, maximum: 6 }),
+          paged: Type.Optional(Type.Boolean()),
+        },
+        closed,
+      ),
+      read: (_props, page) =>
+        page.subject === null ? null : { kind: 'collections', id: page.subject, limit: _props.limit as number },
+    },
+    {
+      type: 'ReactionSummary',
+      props: Type.Object({}, closed),
+      read: (_props, page) => (page.subject === null ? null : { kind: 'reactions', id: page.subject }),
+    },
+    {
+      type: 'AccountIdentity',
+      props: Type.Object({}, closed),
+      read: (_props, page) => (page.account == null ? null : { kind: 'account', handle: page.account.handle }),
+    },
+    {
+      type: 'AccountThreads',
+      props: Type.Object(
+        {
+          threadKind: enumeration(['discussion', 'review']),
+          limit: Type.Integer({ minimum: 1, maximum: 20 }),
+          paged: Type.Optional(Type.Boolean()),
+        },
+        closed,
+      ),
+      read: (props, page) =>
+        page.account == null
+          ? null
+          : {
+              kind: 'accountThreads',
+              id: page.account.id,
+              threadKind: props.threadKind as 'discussion' | 'review',
+              limit: props.paged === true ? Math.min(12, props.limit as number) : (props.limit as number),
+            },
+    },
+    {
+      type: 'AccountPosts',
+      props: Type.Object(
+        { limit: Type.Integer({ minimum: 1, maximum: 20 }), paged: Type.Optional(Type.Boolean()) },
+        closed,
+      ),
+      read: (props, page) =>
+        page.account == null ? null : { kind: 'accountPosts', id: page.account.id, limit: props.limit as number },
+    },
+    {
+      type: 'AccountCollections',
+      props: Type.Object(
+        { limit: Type.Integer({ minimum: 1, maximum: 24 }), paged: Type.Optional(Type.Boolean()) },
+        closed,
+      ),
+      read: (props, page) =>
+        page.account == null ? null : { kind: 'accountCollections', id: page.account.id, limit: props.limit as number },
     },
     {
       type: 'SearchBox',
@@ -348,11 +573,46 @@ export const platformRegistry = defineRegistry({
       ),
     },
     {
+      type: 'Members',
+      props: Type.Object(
+        {
+          title: localizedText({ maxLength: 120 }),
+          source: Type.Union([
+            Type.Object({ kind: Type.Literal('everything') }, closed),
+            Type.Object({ kind: Type.Literal('collection'), id: subjectId() }, closed),
+            Type.Object(
+              {
+                kind: Type.Literal('state'),
+                profileId: plainText({ maxLength: 64 }),
+                stateSetId: plainText({ maxLength: 64 }),
+                stateId: plainText({ maxLength: 64 }),
+              },
+              closed,
+            ),
+          ]),
+          // The ordinary common-members GET filter wire; its owner admits grammar and meaning.
+          filter: Type.Optional(plainText({ maxLength: 8192 })),
+          limit: Type.Integer({ minimum: 1, maximum: 24 }),
+          paged: Type.Optional(Type.Boolean()),
+        },
+        closed,
+      ),
+      read: (props) => ({
+        kind: 'members',
+        source: props.source as MemberSource,
+        ...(props.filter === undefined ? {} : { filter: props.filter as string }),
+        sort: 'id',
+        limit: props.paged === true ? Math.min(12, props.limit as number) : (props.limit as number),
+      }),
+    },
+    {
       type: 'TypeList',
       props: Type.Object(
         {
           title: localizedText({ maxLength: 120 }),
           types: Type.Array(curie(), { minItems: 1, maxItems: 8, uniqueItems: true }),
+          filter: publicFilterProp,
+          paged: Type.Optional(Type.Boolean()),
           sort: enumeration(['name', 'collections']),
           limit: Type.Integer({ minimum: 1, maximum: 24 }),
         },
@@ -361,9 +621,9 @@ export const platformRegistry = defineRegistry({
       read: (props) => ({
         kind: 'search',
         body: {
-          filter: { type: { in: props.types as string[] } },
+          filter: typeListFilter(props.types as string[], props.filter),
           sort: props.sort as 'name' | 'collections',
-          limit: props.limit as number,
+          limit: props.paged === true ? Math.min(12, props.limit as number) : (props.limit as number),
         },
       }),
     },

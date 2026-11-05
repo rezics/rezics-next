@@ -1,17 +1,36 @@
 import type { KernelClient } from '@rezics/client';
-import type { CompositionDocument, PresentationProfile } from '@rezics/composition';
+import {
+  profileDigest,
+  templateViews,
+  VIEWS,
+  isView,
+  type CompositionDocument,
+  type GenericTemplate,
+  type PresentationProfile,
+  type TemplateBody,
+  type View,
+  type ViewDocuments,
+} from '@rezics/composition';
+import { admittedActivationResult, admittedPublishDigest } from './curation-publication-response';
 
 export type Template = { scope: 'generic'; key: null } | { scope: 'base' | 'type' | 'route'; key: string };
-export type CurationFailure =
-  | { ok: false; reason: 'stale' | 'forbidden' | 'unavailable' }
-  | { ok: false; reason: 'invalid'; errors: { pointer: string; code: string }[] }
-  | { ok: false; reason: 'rate-limited'; retryAfter?: number };
+/** The failed stage remains visible even when the server returned a typed rejection. */
+export type CurationFailure = { ok: false; phase?: 'publish' | 'activate' } & (
+  | { reason: 'stale' }
+  | { reason: 'missing-profile' }
+  | { reason: 'forbidden'; admissionChanged?: boolean }
+  | { reason: 'unavailable'; outcome?: 'unknown' }
+  | { reason: 'invalid'; errors: { pointer: string; code: string }[] }
+  | { reason: 'rate-limited'; retryAfter?: number }
+);
 export type PublishInput = {
   profile: PresentationProfile;
   expectedHead: number;
   keys: { publish: string; activate: string };
 };
 export type PublishResult = { ok: true; digest: string; head: number } | CurationFailure;
+export type PublishReceipt = { ok: true; digest: string } | CurationFailure;
+export type ActivationInput = { digest: string; expectedHead: number; key: string };
 
 export function profileTemplates(profile: PresentationProfile): Template[] {
   return [
@@ -29,30 +48,189 @@ function replace<T>(list: T[], keyOf: (entry: T) => string, key: string, entry: 
   return next;
 }
 
-export function withTemplate(
-  profile: PresentationProfile,
-  template: Template,
-  document: CompositionDocument,
-): PresentationProfile {
+function templateBody(profile: PresentationProfile, template: Template): TemplateBody | GenericTemplate | undefined {
   switch (template.scope) {
     case 'generic':
-      return { ...profile, generic: document };
+      return profile.generic;
+    case 'base':
+      return profile.bases.find((item) => item.base === template.key);
+    case 'type':
+      return profile.types.find((item) => item.type === template.key);
+    case 'route':
+      return profile.routes.find((item) => item.route === template.key);
+  }
+}
+
+/** Only locally defined documents are editable; missing views retain native fallback resolution. */
+export function templateViewNames(profile: PresentationProfile, template: Template): View[] {
+  const body = templateBody(profile, template);
+  const views = body && templateViews(body);
+  return VIEWS.filter((view) => views?.[view] !== undefined);
+}
+
+export function viewOf(profile: PresentationProfile, template: Template, view: View): CompositionDocument | undefined {
+  const body = templateBody(profile, template);
+  return body && templateViews(body)[view];
+}
+
+export function overviewOf(profile: PresentationProfile, template: Template): CompositionDocument | undefined {
+  return viewOf(profile, template, 'overview');
+}
+
+/** Keep the shorthand for overview-only templates and every sibling document of a multi-view template. */
+function bodyWith(existing: TemplateBody | undefined, document: CompositionDocument, view: View): TemplateBody {
+  if (existing?.views) return { views: { ...existing.views, [view]: document } };
+  if (view === 'overview') return { document };
+  if (!existing?.document) throw new TypeError('A template requires an overview');
+  return { views: { overview: existing.document, [view]: document } };
+}
+
+export function withView(
+  profile: PresentationProfile,
+  template: Template,
+  view: View,
+  document: CompositionDocument,
+): PresentationProfile {
+  if (!isView(view) || (template.scope === 'route' && view !== 'overview'))
+    throw new TypeError('Unsupported template view');
+  switch (template.scope) {
+    case 'generic':
+      return {
+        ...profile,
+        generic:
+          'views' in profile.generic
+            ? { views: { ...profile.generic.views, [view]: document } }
+            : view === 'overview'
+              ? document
+              : { views: { overview: profile.generic, [view]: document } },
+      };
     case 'base':
       return {
         ...profile,
-        bases: replace(profile.bases, (entry) => entry.base, template.key, { base: template.key, document }),
+        bases: replace(profile.bases, (entry) => entry.base, template.key, {
+          base: template.key,
+          ...bodyWith(
+            profile.bases.find((entry) => entry.base === template.key),
+            document,
+            view,
+          ),
+        }),
       };
     case 'type':
       return {
         ...profile,
-        types: replace(profile.types, (entry) => entry.type, template.key, { type: template.key, document }),
+        types: replace(profile.types, (entry) => entry.type, template.key, {
+          type: template.key,
+          ...bodyWith(
+            profile.types.find((entry) => entry.type === template.key),
+            document,
+            view,
+          ),
+        }),
       };
     case 'route':
       return {
         ...profile,
-        routes: replace(profile.routes, (entry) => entry.route, template.key, { route: template.key, document }),
+        routes: replace(profile.routes, (entry) => entry.route, template.key, {
+          route: template.key,
+          ...bodyWith(
+            profile.routes.find((entry) => entry.route === template.key),
+            document,
+            view,
+          ),
+        }),
       };
   }
+}
+
+export type CompanionViewSource = 'overview' | 'empty';
+
+/** Add one supported local view from an explicit source without aliasing the overview document. */
+export function addCompanionView(
+  profile: PresentationProfile,
+  template: Template,
+  view: View,
+  source: CompanionViewSource,
+): PresentationProfile {
+  if (template.scope === 'route' || !isView(view) || view === 'overview' || viewOf(profile, template, view))
+    throw new TypeError('Unsupported companion view');
+  const document =
+    source === 'overview'
+      ? overviewOf(profile, template)
+      : source === 'empty'
+        ? { root: { props: {} }, content: [] }
+        : undefined;
+  if (!document) throw new TypeError('A companion view requires an explicit local overview or empty document');
+  return withView(profile, template, view, structuredClone(document));
+}
+
+/** Remove only the selected local override; overview shorthand and every sibling remain intact. */
+export function resetCompanionView(profile: PresentationProfile, template: Template, view: View): PresentationProfile {
+  if (template.scope === 'route' || !isView(view) || view === 'overview')
+    throw new TypeError('Unsupported companion view');
+
+  function resetBody(body: TemplateBody): TemplateBody {
+    if (!body.views || body.views[view] === undefined) return body;
+    const views: Partial<ViewDocuments> = { ...body.views };
+    delete views[view];
+    const overview = views.overview;
+    if (!overview) throw new TypeError('A template requires an overview');
+    return Object.keys(views).length === 1 ? { document: overview } : { views: views as ViewDocuments };
+  }
+
+  switch (template.scope) {
+    case 'generic': {
+      if (!('views' in profile.generic) || profile.generic.views[view] === undefined) return profile;
+      const views: Partial<ViewDocuments> = { ...profile.generic.views };
+      delete views[view];
+      const overview = views.overview;
+      if (!overview) throw new TypeError('A template requires an overview');
+      return {
+        ...profile,
+        generic: Object.keys(views).length === 1 ? overview : { views: views as ViewDocuments },
+      };
+    }
+    case 'base': {
+      const entry = profile.bases.find((item) => item.base === template.key);
+      if (!entry?.views || entry.views[view] === undefined) return profile;
+      return {
+        ...profile,
+        bases: replace(profile.bases, (item) => item.base, template.key, {
+          base: template.key,
+          ...resetBody(entry),
+        }),
+      };
+    }
+    case 'type': {
+      const entry = profile.types.find((item) => item.type === template.key);
+      if (!entry?.views || entry.views[view] === undefined) return profile;
+      return {
+        ...profile,
+        types: replace(profile.types, (item) => item.type, template.key, {
+          type: template.key,
+          ...resetBody(entry),
+        }),
+      };
+    }
+  }
+}
+
+export function withTemplate(profile: PresentationProfile, template: Template, document: CompositionDocument) {
+  return withView(profile, template, 'overview', document);
+}
+
+/** Native validation uses array positions, never a label or a template key in place of a JSON pointer. */
+export function viewPointer(profile: PresentationProfile, template: Template, view: View): string {
+  const body = templateBody(profile, template);
+  const root =
+    template.scope === 'generic'
+      ? '/generic'
+      : template.scope === 'base'
+        ? `/bases/${profile.bases.findIndex((entry) => entry.base === template.key)}`
+        : template.scope === 'type'
+          ? `/types/${profile.types.findIndex((entry) => entry.type === template.key)}`
+          : `/routes/${profile.routes.findIndex((entry) => entry.route === template.key)}`;
+  return body && 'views' in body ? `${root}/views/${view}` : template.scope === 'generic' ? root : `${root}/document`;
 }
 
 export function curationFailure(status: number, body: unknown, headers?: HeadersInit): CurationFailure {
@@ -89,22 +267,78 @@ export async function publishProfile(
   client: KernelClient,
   { profile, expectedHead, authorization, keys }: PublishInput & { authorization: string },
 ): Promise<PublishResult> {
+  const digest = profileDigest(profile);
+  let phase: 'publish' | 'activate' = 'publish';
+  const unknown = (): PublishResult => ({ ok: false, reason: 'unavailable', outcome: 'unknown', phase });
   try {
     const published = await client.presentation.profiles.post(
       { profile },
       { headers: { authorization, 'idempotency-key': keys.publish } as { 'idempotency-key': string } },
     );
-    if (published.status >= 400) return curationFailure(published.status, published.error?.value, published.headers);
-    if (!published.data) return { ok: false, reason: 'unavailable' };
+    // Eden represents a lost connection as an error without an HTTP response.
+    if (published.error && !published.response) return unknown();
+    if (published.status >= 400)
+      return { ...curationFailure(published.status, published.error?.value, published.headers), phase };
+    if (!admittedPublishDigest(published.data, digest)) return unknown();
+    phase = 'activate';
     const activated = await client.presentation
-      .profiles({ digest: published.data.digest })
+      .profiles({ digest })
       .$activate.post(
         { expected_head: expectedHead },
         { headers: { authorization, 'idempotency-key': keys.activate } as { 'idempotency-key': string } },
       );
-    if (activated.status >= 400) return curationFailure(activated.status, activated.error?.value, activated.headers);
-    return activated.data ? { ok: true, ...activated.data } : { ok: false, reason: 'unavailable' };
+    if (activated.error && !activated.response) return unknown();
+    if (activated.status >= 400)
+      return { ...curationFailure(activated.status, activated.error?.value, activated.headers), phase };
+    const admitted = admittedActivationResult(activated.data, digest);
+    return admitted ? { ok: true, digest: admitted.digest, head: admitted.head } : unknown();
   } catch {
-    return { ok: false, reason: 'unavailable' };
+    return unknown();
+  }
+}
+
+/** The immutable profile receipt is a separate command from changing the active head. */
+export async function publishProfileOnly(
+  client: KernelClient,
+  { profile, keys, authorization }: PublishInput & { authorization: string },
+): Promise<PublishReceipt> {
+  const digest = profileDigest(profile);
+  try {
+    const result = await client.presentation.profiles.post(
+      { profile },
+      { headers: { authorization, 'idempotency-key': keys.publish } as { 'idempotency-key': string } },
+    );
+    if (result.error && !result.response)
+      return { ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'publish' };
+    if (result.status >= 400)
+      return { ...curationFailure(result.status, result.error?.value, result.headers), phase: 'publish' };
+    return admittedPublishDigest(result.data, digest)
+      ? { ok: true, digest }
+      : { ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'publish' };
+  } catch {
+    return { ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'publish' };
+  }
+}
+
+/** Retry the original activation receipt without resubmitting an already published profile. */
+export async function activatePublishedProfile(
+  client: KernelClient,
+  { digest, expectedHead, key, authorization }: ActivationInput & { authorization: string },
+): Promise<PublishResult> {
+  const unknown = (): PublishResult => ({ ok: false, reason: 'unavailable', outcome: 'unknown', phase: 'activate' });
+  try {
+    const result = await client.presentation
+      .profiles({ digest })
+      .$activate.post(
+        { expected_head: expectedHead },
+        { headers: { authorization, 'idempotency-key': key } as { 'idempotency-key': string } },
+      );
+    if (result.error && !result.response) return unknown();
+    if (result.status >= 400)
+      return { ...curationFailure(result.status, result.error?.value, result.headers), phase: 'activate' };
+    const admitted = admittedActivationResult(result.data, digest);
+    return admitted ? { ok: true, digest: admitted.digest, head: admitted.head } : unknown();
+  } catch {
+    return unknown();
   }
 }

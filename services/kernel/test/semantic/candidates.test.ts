@@ -6,8 +6,9 @@ import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { createRealAccess } from './real-access.ts';
-import { newId, routeOf } from '../../src/route/route.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import type { KeyRing } from '../../src/tokens/seal.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -42,6 +43,19 @@ const kernel = createKernel({
   routeKey: new Uint8Array(32).fill(4),
   writeRate: realAccess.writeRate,
 });
+const projection = linkProjection(pool);
+async function catchUpLinks(id: string): Promise<void> {
+  const partition = partitionOf(routeOf(id)!);
+  for (let step = 0; step < 200; step++) {
+    const result = await projection.run(partition);
+    if (result.status === 'busy') {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      continue;
+    }
+    if (result.envelopes === 0) return;
+  }
+  throw new Error('Semantic link projection did not catch up');
+}
 
 async function call(method: string, path: string, options: { token?: string; key?: string; body?: unknown } = {}) {
   const headers: Record<string, string> = {};
@@ -63,9 +77,22 @@ async function call(method: string, path: string, options: { token?: string; key
   return { response, body: (await response.json()) as Record<string, any> };
 }
 const key = () => `"${randomUUID()}"`;
+const relationTargets = new Map<string, Set<string>>();
+const relationKey = (subject: string, property: string) => `${subject}\0${property}`;
+const relationGroups = new Set(['order', 'derivation', 'world', 'membership', 'association', 'credit', 'appearance']);
+function rememberTarget(subject: string, property: string, target: unknown): void {
+  if (typeof target !== 'string') return;
+  const targets = relationTargets.get(relationKey(subject, property)) ?? new Set<string>();
+  targets.add(target);
+  relationTargets.set(relationKey(subject, property), targets);
+}
 const GREGORIAN = 'http://www.wikidata.org/entity/Q1985727';
 const value = (content: unknown) => ({ type: 'value', content });
-const statement = (property: string, content: unknown, extra: Record<string, unknown> = {}) => ({
+const statement = (
+  property: string,
+  content: unknown,
+  extra: Record<string, unknown> = {},
+): { property: { id: string }; value: ReturnType<typeof value>; [key: string]: unknown } => ({
   property: { id: property },
   value: value(content),
   ...extra,
@@ -77,17 +104,36 @@ const date = (time: string) => ({ time, precision: 11, calendarmodel: GREGORIAN 
 async function created(body: unknown): Promise<Record<string, any>> {
   const answer = await call('POST', '/v1/subjects', { token: 'editor', key: key(), body });
   expect(answer.response.status).toBe(201);
-  return answer.body.subject;
+  const subject = answer.body.subject as Record<string, any>;
+  for (const [property, statements] of Object.entries(subject.statements as Record<string, any[]>))
+    for (const entry of statements)
+      if (entry.value?.type === 'value') rememberTarget(subject.id, property, entry.value.content);
+  return subject;
 }
 const person = (name: string) => created({ type: 'schema:Person', labels: { en: name } });
-const propose = (id: string, input: unknown, options: { token?: string | null; key?: string } = {}) =>
-  call('POST', `/v1/subjects/${id}/candidates`, {
+const propose = async (id: string, input: unknown, options: { token?: string | null; key?: string } = {}) => {
+  const answer = await call('POST', `/v1/subjects/${id}/candidates`, {
     ...(options.token === null ? {} : { token: options.token ?? 'editor' }),
     key: options.key ?? key(),
     body: { statement: input },
   });
+  const parsed = input as { property?: { id?: string }; value?: { type?: string; content?: unknown } };
+  if (parsed.property?.id && parsed.value?.type === 'value')
+    rememberTarget(id, parsed.property.id, parsed.value.content);
+  return answer;
+};
 async function listed(id: string, property: string, query = '') {
-  const answer = await call('GET', `/v1/subjects/${id}/candidates?property=${encodeURIComponent(property)}${query}`);
+  const knownTargets = relationTargets.get(relationKey(id, property));
+  const target =
+    relationGroups.has(bundledRelease.properties[property]?.relation?.group ?? '') &&
+    !/[?&](?:target|sameAs)=/.test(query) &&
+    knownTargets?.size === 1
+      ? `&target=${[...knownTargets][0]}`
+      : '';
+  const answer = await call(
+    'GET',
+    `/v1/subjects/${id}/candidates?property=${encodeURIComponent(property)}${target}${query}`,
+  );
   expect(answer.response.status).toBe(200);
   return answer.body;
 }
@@ -108,18 +154,20 @@ async function expansions(id: string, property: string): Promise<number> {
 
 test('a proposal is a pending candidate with its references and leaves the adopted statements unchanged', async () => {
   const soseki = await person('Natsume Sōseki');
-  const collective = await created({ type: 'schema:Organization', labels: { en: 'Kokoro editorial collective' } });
   const book = await created({
     type: 'schema:Book',
     labels: { en: 'Kokoro' },
     statements: { 'schema:author': [cited('schema:author', soseki.id, { rank: 'preferred' })] },
   });
   const original = book.statements['schema:author'][0];
-  const input = cited('schema:author', collective.id);
+  const input = statement('schema:author', soseki.id, {
+    references: [{ parts: [statement('schema:url', 'https://example.org/independent-review')] }],
+  });
   const proposed = await propose(book.id, input);
   expect(proposed.response.status).toBe(201);
   expect(proposed.body).toEqual({ candidate: expect.any(String), revision: 2 });
   expect(routeOf(proposed.body.candidate)).toBe(routeOf(book.id));
+  await catchUpLinks(book.id);
   const read = await call('GET', `/v1/subjects/${book.id}`);
   expect(read.response.headers.get('etag')).toBe('"2"');
   expect(read.body.subject.revision).toBe(2);
@@ -145,6 +193,17 @@ test('a proposal is a pending candidate with its references and leaves the adopt
           id: proposed.body.candidate,
           rank: 'normal',
           value: input.value,
+          references: [
+            {
+              hash: '70e68e8bf255605036ec89892e8cd8b3ca67a11c23db27a90fc2354e2f99c218',
+              parts: [
+                {
+                  property: { id: 'schema:url', data_type: 'url' },
+                  value: { type: 'value', content: 'https://example.org/independent-review' },
+                },
+              ],
+            },
+          ],
           rezics: { release: bundledDigest, revision: 2 },
         },
         release: bundledDigest,
@@ -165,14 +224,15 @@ test('a proposal is a pending candidate with its references and leaves the adopt
 
 test('proposal keys replay without a new revision and conflict on a different statement', async () => {
   const soseki = await person('Natsume Sōseki');
-  const kinnosuke = await person('Natsume Kinnosuke');
   const book = await created({
     type: 'schema:Book',
     labels: { en: 'Botchan' },
     statements: { 'schema:author': [cited('schema:author', soseki.id)] },
   });
   const token = key();
-  const input = cited('schema:author', kinnosuke.id);
+  const input = statement('schema:author', soseki.id, {
+    references: [{ parts: [statement('schema:url', 'https://example.org/second-edition')] }],
+  });
   const first = await propose(book.id, input, { key: token });
   expect(first.response.status).toBe(201);
   const replay = await propose(book.id, input, { key: token });
@@ -251,9 +311,7 @@ test('an invalid, unauthorized or misdirected proposal is refused and writes not
 });
 
 test('a slot expands once when first proposed and expansion changes neither the view nor the heads', async () => {
-  const [a, b, c, d] = await Promise.all(
-    ['Mori Ōgai', 'Natsume Sōseki', 'Masaoka Shiki', 'Takahama Kyoshi'].map(person),
-  );
+  const [a, b] = await Promise.all(['Mori Ōgai', 'Natsume Sōseki'].map(person));
   const book = await created({
     type: 'schema:Book',
     labels: { en: 'Sanshirō' },
@@ -263,25 +321,36 @@ test('a slot expands once when first proposed and expansion changes neither the 
     },
   });
   const authors = book.statements['schema:author'];
-  const compact = await listed(book.id, 'schema:author');
+  const targetQuery = `&target=${a!.id}`;
+  const compact = await listed(book.id, 'schema:author', targetQuery);
   expect(compact.candidates.map((x: any) => [x.id, x.decision, x.head, x.rank])).toEqual([
     [authors[0].id, 'accepted', 1, 'preferred'],
-    [authors[1].id, 'accepted', 1, 'normal'],
   ]);
   expect(compact.adoption).toEqual({ mode: 'replace', head: 1 });
+  const otherTarget = await listed(book.id, 'schema:author', `&target=${b!.id}`);
+  expect(otherTarget.candidates.map((x: any) => [x.id, x.decision, x.head, x.rank])).toEqual([
+    [authors[1].id, 'accepted', 1, 'normal'],
+  ]);
   const dates = await listed(book.id, 'schema:datePublished');
+  await catchUpLinks(book.id);
   const view = (await call('GET', `/v1/subjects/${book.id}`)).body;
   expect(await expansions(book.id, 'schema:author')).toBe(0);
-  const first = await propose(book.id, cited('schema:author', c!.id));
-  const second = await propose(book.id, cited('schema:author', d!.id));
+  const first = await propose(
+    book.id,
+    statement('schema:author', a!.id, { references: [{ parts: [statement('schema:url', 'https://example.org/c')] }] }),
+  );
+  const second = await propose(
+    book.id,
+    statement('schema:author', a!.id, { references: [{ parts: [statement('schema:url', 'https://example.org/d')] }] }),
+  );
   const language = await propose(book.id, cited('schema:inLanguage', 'ja'));
   expect([first.body.revision, second.body.revision, language.body.revision]).toEqual([2, 3, 4]);
   expect(await expansions(book.id, 'schema:author')).toBe(1);
   expect(await expansions(book.id, 'schema:inLanguage')).toBe(1);
   expect(await expansions(book.id, 'schema:datePublished')).toBe(0);
-  const expanded = await listed(book.id, 'schema:author');
-  expect(expanded.candidates.slice(0, 2)).toEqual(compact.candidates);
-  expect(expanded.candidates.slice(2).map((x: any) => [x.id, x.revision, x.decision, x.head, x.rank])).toEqual([
+  const expanded = await listed(book.id, 'schema:author', targetQuery);
+  expect(expanded.candidates.slice(0, 1)).toEqual(compact.candidates);
+  expect(expanded.candidates.slice(1).map((x: any) => [x.id, x.revision, x.decision, x.head, x.rank])).toEqual([
     [first.body.candidate, 2, null, null, null],
     [second.body.candidate, 3, null, null, null],
   ]);
@@ -290,19 +359,29 @@ test('a slot expands once when first proposed and expansion changes neither the 
   const languages = await listed(book.id, 'schema:inLanguage');
   expect(languages.adoption).toBeNull();
   expect(languages.candidates.map((x: any) => [x.id, x.decision])).toEqual([[language.body.candidate, null]]);
+  await catchUpLinks(book.id);
   const after = (await call('GET', `/v1/subjects/${book.id}`)).body;
   expect(after.subject.statements).toEqual(view.subject.statements);
   expect(after.related).toEqual(view.related);
 });
 
 test('concurrent first proposals on one slot both land and expand it once', async () => {
-  const [a, b, c] = await Promise.all(['Higuchi Ichiyō', 'Kōda Rohan', 'Ozaki Kōyō'].map(person));
+  const [a] = await Promise.all(['Higuchi Ichiyō'].map(person));
   const book = await created({
     type: 'schema:Book',
     labels: { en: 'Takekurabe' },
     statements: { 'schema:author': [statement('schema:author', a!.id)] },
   });
-  const results = await Promise.all([b, c].map((x) => propose(book.id, cited('schema:author', x!.id))));
+  const results = await Promise.all(
+    ['b', 'c'].map((suffix) =>
+      propose(
+        book.id,
+        statement('schema:author', a!.id, {
+          references: [{ parts: [statement('schema:url', `https://example.org/${suffix}`)] }],
+        }),
+      ),
+    ),
+  );
   expect(results.map((r) => r.response.status)).toEqual([201, 201]);
   expect(results.map((r) => r.body.revision).sort()).toEqual([2, 3]);
   expect(await expansions(book.id, 'schema:author')).toBe(1);
@@ -316,7 +395,17 @@ test('revisions and candidates page in order and every command is one revision o
     labels: { en: 'Kōya Hijiri' },
     statements: { 'schema:author': [statement('schema:author', a!.id)] },
   });
-  for (const x of [b, c]) expect((await propose(book.id, cited('schema:author', x!.id))).response.status).toBe(201);
+  for (const x of [b, c])
+    expect(
+      (
+        await propose(
+          book.id,
+          statement('schema:author', a!.id, {
+            references: [{ parts: [statement('schema:url', `https://example.org/${x!.id}`)] }],
+          }),
+        )
+      ).response.status,
+    ).toBe(201);
   const rows = await revisions(book.id);
   expect(rows.map((row) => [row.revision, row.kind, row.release, row.route])).toEqual([
     [1, 'create', bundledDigest, routeOf(book.id)],
@@ -361,6 +450,12 @@ test('revisions and candidates page in order and every command is one revision o
 
 test('the kernel contract documents proposals, candidates and revisions', () => {
   const paths = openApiDocument(kernel).paths;
+  expect(paths['/v1/subjects/{id}/candidates']!.post).toMatchObject({
+    operationId: 'subject.propose',
+    'x-resource-types': ['semantic.revision'],
+    'x-authority-resource-types': ['semantic.context'],
+    'x-authority-resource-id': '00000000-0000-8000-8000-000000000000',
+  });
   const operations = [
     [
       paths['/v1/subjects/{id}/candidates']!.post!,

@@ -1,0 +1,600 @@
+import { expect, mock, test } from 'bun:test';
+import { createRequire } from 'node:module';
+import { act, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { AddonRead, AddonTransport } from '../src/features/catalogue/addon-profile';
+import type { CreateResult, CreateSubjectCommand } from '../src/features/catalogue/create-subject';
+import type { GameItem } from '../src/features/catalogue/game-profile';
+import { allowedCreateAuthority, type CreateAuthority } from '../src/features/catalogue/identity-intake';
+import * as start from '../.storybook/react-start';
+
+mock.module('@tanstack/react-start', () => start);
+mock.module('@tanstack/react-start/server', () => start);
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
+test('add-on creator reviews the exact item, repairs nested diagnostics, and retries known readback without a second create', async () => {
+  const require = createRequire(import.meta.url);
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window({ url: 'https://site.invalid/en/catalogue/addon' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLInputElement: window.HTMLInputElement,
+    HTMLTextAreaElement: window.HTMLTextAreaElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const { AddonProfileCreate } = await import('../src/features/catalogue/addon-profile-create');
+  const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
+  const { addonBase, addonType } = await import('../src/features/catalogue/addon-profile');
+  const { addonProfileFixture, addonWorkId, addonCreatedId } =
+    await import('../src/kernel/fake/catalogue-addon-profile');
+  const { m } = await import('../src/paraglide/messages.js');
+  const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
+  const testing = createRequire(require.resolve('storybook/test'));
+  const { within, waitFor } = await import(testing.resolve('@testing-library/dom'));
+  const { default: userEvent } = await import(testing.resolve('@testing-library/user-event'));
+  const user = userEvent.setup({ document: window.document, delay: null });
+  const previousLocale = getLocale();
+  setLocale('en', { reload: false });
+  const host = window.document.createElement('main') as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  let client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  let generation = 0;
+  const created: Extract<CreateResult, { ok: true }>[] = [];
+  async function render(node: ReactNode, fresh = true, retired = false, reader = 'original-reader') {
+    if (fresh) {
+      await act(async () => root.render(null));
+      client.clear();
+      client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      generation++;
+    }
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <CandidateReaderBoundary
+            address={`addon-review:${generation}`}
+            observed={
+              retired
+                ? { state: 'signed-out', csrfToken: null }
+                : {
+                    state: 'signed-in',
+                    subject: reader,
+                    csrfToken: reader === 'original-reader' ? 'original-csrf' : 'csrf-bob',
+                  }
+            }
+          >
+            {node}
+          </CandidateReaderBoundary>
+        </QueryClientProvider>,
+      ),
+    );
+  }
+  const canvas = () => within(host);
+  const group = () => host.querySelector<HTMLElement>('[data-slot="addon-initial-facts"]')!;
+  async function input(element: HTMLElement, value: string) {
+    await act(async () => {
+      const prototype =
+        element.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, value);
+      element.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+  }
+  function fact(index: number) {
+    return group().querySelectorAll<HTMLElement>('[data-slot="game-initial-fact"]')[index]!;
+  }
+  async function add(property: string) {
+    await act(async () =>
+      user.selectOptions(within(group()).getByRole('combobox', { name: m.character_add_fact() }), property),
+    );
+    await act(async () => user.click(within(group()).getAllByRole('button', { name: m.correction_add() })[0]!));
+    return fact(group().querySelectorAll('[data-slot="game-initial-fact"]').length - 1);
+  }
+  async function cite(row: HTMLElement, href: string) {
+    await act(async () => user.click(within(row).getByRole('button', { name: m.correction_add_reference() })));
+    const part = within(row).getByRole('combobox', { name: m.correction_add_part() });
+    await act(async () => user.selectOptions(part, 'schema:url'));
+    await act(async () =>
+      user.click(
+        within(part.closest('[data-slot="field"]')!.parentElement!).getByRole('button', { name: m.correction_add() }),
+      ),
+    );
+    const urls = within(row).getAllByRole('textbox', { name: m.correction_url() });
+    await input(urls.at(-1)!, href);
+  }
+  async function confirm() {
+    await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
+    expect(host.querySelector('[data-addon-create-review]')).not.toBeNull();
+    await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
+  }
+  function creator(
+    read: Extract<AddonRead, { ok: true }>,
+    transport: AddonTransport,
+    eligibility: () => Promise<CreateAuthority> = async () => allowedCreateAuthority,
+    session: 'signed-in' | 'signed-out' = 'signed-in',
+  ) {
+    return (
+      <AddonProfileCreate
+        read={read}
+        locale="en"
+        session={session}
+        transport={{ ...transport, eligibility }}
+        search={addonProfileFixture().props.search}
+        onCreated={(result) => created.push(result)}
+      />
+    );
+  }
+  try {
+    const fixture = addonProfileFixture();
+    const read = await fixture.transport.load({ work: addonWorkId });
+    if (!read.ok) throw new Error('Expected add-on read');
+    const commands: CreateSubjectCommand[] = [];
+    const transport: AddonTransport = {
+      ...fixture.transport,
+      create: async (command) => {
+        commands.push(structuredClone(command));
+        if (commands.length === 1)
+          return {
+            ok: false,
+            reason: 'invalid',
+            errors: [
+              { pointer: '/statements/schema:url/0/references/0/parts/0/value/content', code: 'invalid_format' },
+            ],
+          };
+        return fixture.transport.create(command);
+      },
+    };
+    await render(creator(read, transport));
+    await waitFor(() => expect(host.querySelector('input[id="create-label-0"]')).not.toBeNull());
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
+    await input(host.querySelector('input[id="create-label-0"]')!, 'Reviewed expansion');
+    await input(host.querySelector('input[id="create-language-0"]')!, 'en');
+    await input(host.querySelector('textarea[id="create-aliases-0"]')!, 'Northern lights alternate');
+    await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_add_language() })));
+    await input(host.querySelector('input[id="create-language-1"]')!, 'ja');
+    await input(host.querySelector('input[id="create-label-1"]')!, '北の光');
+    const urlRow = await add('schema:url');
+    const sameRow = await add('schema:sameAs');
+    await input(within(urlRow).getAllByRole('textbox', { name: m.correction_url() })[0]!, 'https://example.org/addon');
+    await cite(urlRow, 'https://example.org/addon-source');
+    await input(within(sameRow).getAllByRole('textbox', { name: m.correction_url() })[0]!, 'https://example.org/also');
+    await cite(sameRow, 'https://example.org/also-source');
+    await act(async () =>
+      user.click(
+        within(urlRow).getByRole('button', { name: `${m.facts_reuse_reference()} · ${m.correction_references()} 1` }),
+      ),
+    );
+    const panel = host.querySelector('[data-fact-reuse]')!;
+    expect(group().textContent).toContain(m.addon_create_review_reuse_base());
+    expect(panel.textContent).not.toContain(addonWorkId);
+    await act(async () => user.click(within(panel).getByRole('checkbox')));
+    await act(async () => user.click(within(panel).getByRole('button', { name: m.facts_reuse_apply() })));
+    await waitFor(() => expect(panel.textContent).toContain(m.facts_reuse_applied({ count: 1 })));
+    await waitFor(() =>
+      expect(
+        within(fact(1))
+          .getAllByRole('textbox', { name: m.correction_url() })
+          .map((control) => (control as HTMLInputElement).value),
+      ).toContain('https://example.org/addon-source'),
+    );
+    expect(within(fact(1)).getAllByRole('group', { name: /Citations/ }).length).toBeGreaterThan(1);
+    await input(
+      within(urlRow).getAllByRole('textbox', { name: m.correction_url() })[1]!,
+      'https://example.org/addon-stale',
+    );
+    expect(panel.textContent).toContain(m.facts_reuse_stale());
+    await act(async () => user.click(within(panel).getByRole('button', { name: m.candidate_cancel() })));
+    await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
+    expect(commands).toHaveLength(0);
+    const review = host.querySelector('[data-addon-create-review]')!;
+    expect(review.textContent).toContain('Reviewed expansion');
+    expect(review.textContent).toContain('北の光');
+    expect(review.textContent).toContain('Northern lights alternate');
+    expect(review.textContent).toContain(m.addon_create_review_base_omitted());
+    expect(review.textContent).toContain(addonWorkId);
+    expect(review.textContent).toContain(m.candidate_rank_normal());
+    expect(review.textContent).not.toContain(m.candidate_rank_preferred());
+    expect(JSON.stringify(commands)).not.toContain(addonWorkId);
+    await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_submit() })));
+    const link = await waitFor(() =>
+      canvas().getByRole('link', { name: new RegExp(read.release.properties['schema:url']?.labels?.en ?? 'URL', 'i') }),
+    );
+    const urlControl = within(fact(0)).getAllByRole('textbox', { name: m.correction_url() })[1] as HTMLInputElement;
+    expect(decodeURIComponent(link.getAttribute('href')!.slice(1))).toBe(urlControl.id);
+    expect(decodeURIComponent(link.getAttribute('href')!.slice(1))).not.toBe(group().id);
+    const sameId = (within(fact(1)).getAllByRole('textbox', { name: m.correction_url() })[0] as HTMLInputElement).id;
+    const withdrawn = fact(0);
+    await act(async () => user.click(within(withdrawn).getByRole('button', { name: m.recipe_remove_field() })));
+    await act(async () => user.click(within(withdrawn).getByRole('button', { name: m.recipe_remove_field() })));
+    expect(withdrawn.isConnected).toBe(false);
+    const repaired = decodeURIComponent(link.getAttribute('href')!.slice(1));
+    expect(sameId).not.toBe(repaired);
+    expect(window.document.getElementById(repaired)).toBeNull();
+    await confirm();
+    await waitFor(() => expect(commands).toHaveLength(2));
+    const item = commands[1]!.item as GameItem;
+    expect(item.type).toBe(addonType);
+    expect(item.labels).toEqual({ en: 'Reviewed expansion', ja: '北の光' });
+    expect(item.aliases.en).toEqual(['Northern lights alternate']);
+    expect(item.statements[addonBase]).toBeUndefined();
+    expect(item.statements['schema:sameAs']![0]!.rank).toBe('normal');
+    expect(item.statements['schema:sameAs']![0]!.references.length).toBeGreaterThanOrEqual(2);
+    expect(commands[1]!.key).not.toBe(commands[0]!.key);
+
+    const uncertain = addonProfileFixture('uncertain');
+    const uncertainRead = await uncertain.transport.load({});
+    if (!uncertainRead.ok) throw new Error('Expected uncertain read');
+    const retries: CreateSubjectCommand[] = [];
+    await render(
+      creator(uncertainRead, {
+        ...uncertain.transport,
+        create: async (command) => {
+          retries.push(structuredClone(command));
+          return uncertain.transport.create(command);
+        },
+      }),
+    );
+    await waitFor(() => expect(host.querySelector('input[id="create-label-0"]')).not.toBeNull());
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
+    await input(host.querySelector('input[id="create-label-0"]')!, 'Uncertain expansion');
+    await confirm();
+    await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_uncertain()));
+    await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_retry() })));
+    await waitFor(() => expect(canvas().getByRole('link', { name: m.catalogue_create_open() })).toBeDefined());
+    expect(retries).toHaveLength(2);
+    expect(retries[1]).toEqual(retries[0]);
+
+    const unread = addonProfileFixture('reader-unavailable');
+    const unreadRead = await unread.transport.load({});
+    if (!unreadRead.ok) throw new Error('Expected unread read');
+    const writes: string[] = [];
+    await render(
+      creator(unreadRead, {
+        ...unread.transport,
+        create: async (command) => {
+          writes.push('POST');
+          return unread.transport.create(command);
+        },
+        read: async (id) => {
+          writes.push(`GET ${id}`);
+          return unread.transport.read(id);
+        },
+      }),
+    );
+    await waitFor(() => expect(host.querySelector('input[id="create-label-0"]')).not.toBeNull());
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
+    await input(host.querySelector('input[id="create-label-0"]')!, 'Unread expansion');
+    await confirm();
+    await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_reader_unavailable()));
+    const before = writes.length;
+    await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_retry() })));
+    await waitFor(() => expect(writes.length).toBeGreaterThan(before));
+    expect(writes.filter((entry) => entry === 'POST')).toHaveLength(1);
+    expect(writes.at(-1)).toBe(`GET ${addonCreatedId}`);
+
+    const retiring = addonProfileFixture();
+    const retiringRead = await retiring.transport.load({});
+    if (!retiringRead.ok) throw new Error('Expected retirement read');
+    let finish!: (result: CreateResult) => void;
+    const pending = new Promise<CreateResult>((resolve) => {
+      finish = resolve;
+    });
+    const beforeCreated = created.length;
+    await render(creator(retiringRead, { ...retiring.transport, create: () => pending }));
+    await waitFor(() => expect(host.querySelector('input[id="create-label-0"]')).not.toBeNull());
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
+    await input(host.querySelector('input[id="create-label-0"]')!, 'Retired expansion');
+    await confirm();
+    await render(null, false, true);
+    await act(async () =>
+      finish({ ok: true, id: addonCreatedId, reader: { state: 'ready', href: '/en/subjects/retired' } }),
+    );
+    expect(created).toHaveLength(beforeCreated);
+    expect(host.innerHTML).not.toContain(addonCreatedId);
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    setLocale(previousLocale, { reload: false });
+    await window.happyDOM.abort();
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+}, 30_000);
+
+test('add-on creation uses current parent eligibility and keeps a suggested work independent of the sealed item', async () => {
+  const require = createRequire(import.meta.url);
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window({ url: 'https://site.invalid/en/catalogue/addon' });
+  const globals = {
+    window,
+    document: window.document,
+    navigator: window.navigator,
+    HTMLElement: window.HTMLElement,
+    HTMLInputElement: window.HTMLInputElement,
+    HTMLTextAreaElement: window.HTMLTextAreaElement,
+    Element: window.Element,
+    Node: window.Node,
+    Document: window.Document,
+    DocumentFragment: window.DocumentFragment,
+    MutationObserver: window.MutationObserver,
+    ResizeObserver: window.ResizeObserver,
+    getComputedStyle: window.getComputedStyle.bind(window),
+    requestAnimationFrame: window.requestAnimationFrame.bind(window),
+    cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+    IS_REACT_ACT_ENVIRONMENT: true,
+  };
+  const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const [key, value] of Object.entries(globals))
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
+  const { AddonProfileCreate } = await import('../src/features/catalogue/addon-profile-create');
+  const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
+  const { addonBase } = await import('../src/features/catalogue/addon-profile');
+  const { addonProfileFixture, addonWorkId, addonCreatedId } =
+    await import('../src/kernel/fake/catalogue-addon-profile');
+  const { m } = await import('../src/paraglide/messages.js');
+  const { getLocale, setLocale } = await import('../src/paraglide/runtime.js');
+  const testing = createRequire(require.resolve('storybook/test'));
+  const { within, waitFor } = await import(testing.resolve('@testing-library/dom'));
+  const { default: userEvent } = await import(testing.resolve('@testing-library/user-event'));
+  const user = userEvent.setup({ document: window.document, delay: null });
+  const previousLocale = getLocale();
+  setLocale('en', { reload: false });
+  const host = window.document.createElement('main') as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  let client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  let generation = 0;
+  const created: Extract<CreateResult, { ok: true }>[] = [];
+  const commands: CreateSubjectCommand[] = [];
+  let observe: () => Promise<CreateAuthority> = async () => ({ state: 'refused', reason: 'permission' });
+  async function render(
+    node: ReactNode,
+    fresh = true,
+    observed: { state: 'signed-in' | 'signed-out'; subject: string | null; csrfToken: string | null } = {
+      state: 'signed-in',
+      subject: 'original-reader',
+      csrfToken: 'original-csrf',
+    },
+  ) {
+    if (fresh) {
+      await act(async () => root.render(null));
+      client.clear();
+      client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      generation++;
+    }
+    await act(async () =>
+      root.render(
+        <QueryClientProvider client={client}>
+          <CandidateReaderBoundary address={`addon-eligibility:${generation}`} observed={observed}>
+            {node}
+          </CandidateReaderBoundary>
+        </QueryClientProvider>,
+      ),
+    );
+  }
+  const canvas = () => within(host);
+  const submit = () => canvas().getByRole('button', { name: m.catalogue_create_submit() }) as HTMLButtonElement;
+  async function input(element: HTMLElement, value: string) {
+    await act(async () => {
+      const prototype =
+        element.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(element, value);
+      element.dispatchEvent(new window.Event('input', { bubbles: true }));
+    });
+  }
+  function creator(
+    read: Extract<AddonRead, { ok: true }>,
+    transport: AddonTransport,
+    session: 'signed-in' | 'signed-out' = 'signed-in',
+  ) {
+    return (
+      <AddonProfileCreate
+        read={read}
+        locale="en"
+        session={session}
+        transport={{
+          ...transport,
+          eligibility: () => observe(),
+          create: async (command) => {
+            commands.push(structuredClone(command));
+            return transport.create(command);
+          },
+        }}
+        search={addonProfileFixture().props.search}
+        onCreated={(result) => created.push(result)}
+      />
+    );
+  }
+  try {
+    const fixture = addonProfileFixture();
+    const read = await fixture.transport.load({ work: addonWorkId });
+    if (!read.ok) throw new Error('Expected add-on read');
+    await render(creator(read, fixture.transport));
+    await waitFor(() =>
+      expect(canvas().getByRole('alert').textContent).toContain(m.identity_intake_authority_refused_permission()),
+    );
+    expect(host.textContent).toContain(addonWorkId);
+    expect(host.querySelector('input[id="create-label-0"]')).not.toBeNull();
+    expect(submit().disabled).toBe(true);
+    expect(commands).toHaveLength(0);
+
+    observe = async () => ({ state: 'unknown', reason: 'unavailable' });
+    await act(async () => user.click(canvas().getByRole('button', { name: m.identity_intake_authority_retry() })));
+    await waitFor(() =>
+      expect(canvas().getByRole('alert').textContent).toContain(m.identity_intake_authority_unknown()),
+    );
+    expect(host.textContent).toContain(addonWorkId);
+    expect(submit().disabled).toBe(true);
+
+    await render(creator(read, fixture.transport, 'signed-out'));
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_guest()));
+    expect(host.textContent).toContain(addonWorkId);
+    expect(submit().disabled).toBe(true);
+    expect(commands).toHaveLength(0);
+
+    observe = async () => allowedCreateAuthority;
+    await render(creator(read, fixture.transport));
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
+    await input(host.querySelector('input[id="create-label-0"]')!, 'Eligible expansion');
+    await act(async () => user.click(submit()));
+    await waitFor(() => expect(host.querySelector('[data-addon-create-review]')).not.toBeNull());
+    expect(host.querySelector('[data-addon-create-review]')!.textContent).toContain(
+      m.addon_create_review_base_omitted(),
+    );
+    observe = async () => ({ state: 'refused', reason: 'permission' });
+    await act(async () => user.click(submit()));
+    await waitFor(() =>
+      expect(canvas().getByRole('alert').textContent).toContain(m.identity_intake_authority_refused_permission()),
+    );
+    expect(submit().disabled).toBe(true);
+    expect(commands).toHaveLength(0);
+
+    let pending: ((value: CreateAuthority) => void) | undefined;
+    let calls = 0;
+    observe = () => {
+      calls += 1;
+      if (calls === 1) return new Promise<CreateAuthority>((resolve) => (pending = resolve));
+      return Promise.resolve({ state: 'refused', reason: 'permission' });
+    };
+    await render(creator(read, fixture.transport));
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_reading()));
+    await render(creator(read, fixture.transport), false, {
+      state: 'signed-in',
+      subject: 'bob',
+      csrfToken: 'csrf-bob',
+    });
+    await waitFor(() =>
+      expect(canvas().getByRole('alert').textContent).toContain(m.identity_intake_authority_refused_permission()),
+    );
+    pending?.(allowedCreateAuthority);
+    await act(async () => undefined);
+    expect(canvas().getByRole('alert').textContent).toContain(m.identity_intake_authority_refused_permission());
+    expect(submit().disabled).toBe(true);
+    expect(commands).toHaveLength(0);
+
+    observe = async () => allowedCreateAuthority;
+    const uncertain = addonProfileFixture('uncertain');
+    const uncertainRead = await uncertain.transport.load({});
+    if (!uncertainRead.ok) throw new Error('Expected uncertain read');
+    const retries: CreateSubjectCommand[] = [];
+    await render(
+      creator(uncertainRead, {
+        ...uncertain.transport,
+        create: async (command) => {
+          retries.push(structuredClone(command));
+          return uncertain.transport.create(command);
+        },
+      }),
+    );
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
+    await input(host.querySelector('input[id="create-label-0"]')!, 'Uncertain eligible');
+    await act(async () => user.click(submit()));
+    await waitFor(() => expect(host.querySelector('[data-addon-create-review]')).not.toBeNull());
+    await act(async () => user.click(submit()));
+    await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_uncertain()));
+    observe = async () => ({ state: 'refused', reason: 'permission' });
+    await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_retry() })));
+    await waitFor(() => expect(retries).toHaveLength(2));
+    expect(retries[1]).toEqual(retries[0]);
+    expect(retries[0]!.item.statements?.[addonBase]).toBeUndefined();
+
+    observe = async () => allowedCreateAuthority;
+    const include = addonProfileFixture();
+    const includeRead = await include.transport.load({ work: addonWorkId });
+    if (!includeRead.ok) throw new Error('Expected include read');
+    await render(creator(includeRead, include.transport));
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
+    await input(host.querySelector('input[id="create-label-0"]')!, 'Included expansion');
+    const picker = canvas().getByRole('combobox', { name: m.addon_base() });
+    await act(async () => user.click(picker));
+    await act(async () => user.type(picker, 'Harbor'));
+    await waitFor(() => {
+      const listed = window.document.querySelector('[role="listbox"]');
+      expect(listed).not.toBeNull();
+      expect(
+        within(listed as HTMLElement)
+          .queryAllByRole('option')
+          .some((option) => {
+            const text = option.textContent ?? '';
+            return text.includes('Harbor') && !text.includes('Studio') && !text.includes('Northern');
+          }),
+      ).toBe(true);
+    });
+    const harbor = within(window.document.querySelector('[role="listbox"]') as HTMLElement)
+      .getAllByRole('option')
+      .find((option) => {
+        const text = option.textContent ?? '';
+        return text.includes('Harbor') && !text.includes('Studio') && !text.includes('Northern');
+      });
+    await act(async () => user.click(harbor!));
+    await waitFor(() => expect(host.textContent).toContain(m.addon_base_draft_note()));
+    await act(async () => user.click(submit()));
+    await waitFor(() => expect(host.querySelector('[data-addon-create-review]')).not.toBeNull());
+    expect(host.querySelector('[data-addon-create-review]')!.textContent).toContain(
+      m.addon_create_review_base_included(),
+    );
+    await act(async () => user.click(submit()));
+    await waitFor(() => expect(commands.length).toBeGreaterThan(0));
+    const included = commands.at(-1)!;
+    expect(included.item.statements?.[addonBase]?.[0]?.value).toEqual({ type: 'value', content: addonWorkId });
+    expect(JSON.stringify(included.item)).not.toContain('Harbor Studio');
+
+    const unread = addonProfileFixture('reader-unavailable');
+    const unreadRead = await unread.transport.load({});
+    if (!unreadRead.ok) throw new Error('Expected unread read');
+    const writes: string[] = [];
+    observe = async () => allowedCreateAuthority;
+    await render(
+      creator(unreadRead, {
+        ...unread.transport,
+        create: async (command) => {
+          writes.push('POST');
+          return unread.transport.create(command);
+        },
+        read: async (id) => {
+          writes.push(`GET ${id}`);
+          return unread.transport.read(id);
+        },
+      }),
+    );
+    await waitFor(() => expect(host.textContent).toContain(m.identity_intake_authority_allowed()));
+    await input(host.querySelector('input[id="create-label-0"]')!, 'Ack expansion');
+    await act(async () => user.click(submit()));
+    await waitFor(() => expect(host.querySelector('[data-addon-create-review]')).not.toBeNull());
+    await act(async () => user.click(submit()));
+    await waitFor(() => expect(host.textContent).toContain(m.catalogue_create_reader_unavailable()));
+    expect(host.textContent).toContain(addonCreatedId);
+    const before = writes.length;
+    await act(async () => user.click(canvas().getByRole('button', { name: m.catalogue_create_retry() })));
+    await waitFor(() => expect(writes.length).toBeGreaterThan(before));
+    expect(writes.filter((entry) => entry === 'POST')).toHaveLength(1);
+    expect(writes.at(-1)).toBe(`GET ${addonCreatedId}`);
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    setLocale(previousLocale, { reload: false });
+    await window.happyDOM.abort();
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+}, 30_000);

@@ -42,6 +42,19 @@ export function createWriteRateStage(limiter: WriteRateLimiter, options: WriteRa
         : input.routes && mountedRouteCatalogue(input.routes).find(request, input.route);
     const detail = mounted?.hooks?.detail as Record<string, unknown> | undefined;
     const declaration = detail?.['x-rate-limit'] as RateLimitDeclaration | undefined;
+    // Some private read routes share their authorization action with a write route; trust the mounted verb here.
+    const mountedMethod = mounted?.method.toUpperCase();
+    if (['GET', 'HEAD', 'OPTIONS'].includes(mountedMethod ?? '') && declaration === undefined) {
+      if (detail?.['x-action'] !== undefined) {
+        try {
+          actionLabelOfMountedRoute(mounted);
+        } catch (error) {
+          throwAccessUnavailable(error, context.deadline);
+          throw unavailable();
+        }
+      }
+      return;
+    }
     if (declaration === undefined) {
       const action = detail?.['x-action'];
       // Validated mounted read/list verbs also cover read-only custom methods.

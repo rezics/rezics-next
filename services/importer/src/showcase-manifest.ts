@@ -1,0 +1,1253 @@
+import { createHash } from 'node:crypto';
+import { showcaseFranchiseAssertions } from './showcase-franchise.ts';
+import type { GraphEdgeEvidence } from './cross-media-bindings.ts';
+import { sameStatementProvenance } from './statement-provenance.ts';
+import type { BatchCommand, BatchStatement } from '@rezics/definitions/bulk';
+import type { SourceRecord } from '@rezics/conversion';
+import { bangumiRecordUrl, crossMediaCoverDigest, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
+import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
+import { vndbTagsRatingMetric, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
+import {
+  sourceDigest,
+  vndbPublicTagTaxonomy,
+  type VndbPublicTagCategory,
+} from '../../../packages/conversion/src/support.ts';
+import { showcaseTagParentCommand } from './showcase-cross-provider-tags.ts';
+import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
+import type { CrossMediaGap, CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
+import { bangumiAppearanceSource, graphEdgeCommandKey, graphEdgeSource } from './cross-media-bindings.ts';
+import { BANGUMI_MEDIA_BATCH_LIMIT, validAvailableCover, type CrossMediaMediaOutcome } from './showcase-media.ts';
+import type { VndbTagRatingObservation } from './showcase-vndb-tag-ratings.ts';
+import { vndbStaffCreditConverterRevision } from './vndb-staff-credits.ts';
+
+export const showcaseLimits = Object.freeze({
+  records: 768,
+  media: BANGUMI_MEDIA_BATCH_LIMIT,
+  candidates: 8192,
+  vocabulary: 512,
+  candidatesPerRecord: 128,
+  reviewPage: 100,
+  omissions: 320,
+});
+const nativeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+export type ShowcaseKind =
+  | 'work'
+  | 'person'
+  | 'character'
+  | 'release'
+  | 'episode'
+  | 'source-vocabulary'
+  | 'organization';
+
+export type ShowcaseAcknowledgement = Readonly<{
+  command: BatchCommand;
+  subjectId?: string;
+  candidateId?: string;
+  commandDigest: string;
+}>;
+
+export type ShowcaseAssertion = Readonly<{
+  commandKey: string;
+  candidateId: string;
+  candidateDigest: string;
+  /** Selected work owning an exact source-row assertion whose envelope has its own row key. */
+  ownerKey?: string;
+  /** Exact selected source-parent row attached to a Concept assertion. */
+  tagParentPath?: string;
+  property: string;
+  source: BatchCommand['source'];
+  statement: BatchStatement;
+  rights?: Extract<BatchCommand, { op: 'propose' }>['rights'];
+  citations: readonly string[];
+  graphTarget?: Readonly<{
+    provider: 'bangumi' | 'vndb';
+    sourceKey: string;
+    subjectId: string;
+    nativeType: string;
+    /** Work-row publication checks the current facts fence at both source endpoints. */
+    factsFence?: true;
+  }>;
+}>;
+
+export type ShowcaseRecord = Readonly<{
+  provider: 'bangumi' | 'vndb';
+  sourceAlias: string;
+  sourceKey: string;
+  sourceUri: string | null;
+  sourceRevision: string;
+  rawDigest: string;
+  semanticDigest: string;
+  converterRevision: string;
+  kind: ShowcaseKind;
+  subjectId: string | null;
+  nativeType: string | null;
+  readerRoute: string | null;
+  assertions: readonly ShowcaseAssertion[];
+}>;
+
+export type ShowcaseVocabularyRecord = Readonly<{
+  provider: 'bangumi' | 'vndb';
+  sourceAlias: string;
+  sourceKey: string;
+  sourceUri: string | null;
+  subjectId: string;
+  nativeType: 'skos:ConceptScheme' | 'skos:Concept';
+  schemeId: string | null;
+  schemeUri?: string;
+  provenance?: 'reviewed-catalogue' | 'source-parent-binding';
+  assertions: readonly ShowcaseAssertion[];
+}>;
+
+/** Exact, bounded source vocabulary requirements supplied by a provider adapter. */
+export type ShowcaseVocabularyRequirement = Readonly<{
+  provider: 'bangumi' | 'vndb';
+  ownerKey: string;
+  sourceKey: string;
+  source: BatchCommand['source'];
+  sourceUri: string;
+  nativeType: 'skos:ConceptScheme' | 'skos:Concept';
+  schemeId?: string;
+}>;
+
+/** Exact selected COPY association and the current native vocabulary identity it resolves through. */
+export type ShowcaseTagAssociation = Readonly<{
+  workId: string;
+  sourceKey: string;
+  tagId: string;
+  category: VndbPublicTagCategory;
+  spoiler: number;
+  conceptId: string | null;
+  schemeId: string | null;
+  conceptUri: string;
+  schemeUri: string;
+  releaseDigest: string;
+}>;
+
+/** Exact selected COPY associations withheld by required source-parent admission. */
+export type ShowcaseTagAssociationWithdrawal = Readonly<{
+  workId: string;
+  sourceKey: string;
+  tagId: string;
+}>;
+
+/** Source parent evidence joined to exact current Concept and category Scheme identities, before hierarchy admission. */
+export type ShowcaseTagParentBinding = Readonly<{
+  child: string;
+  parent: string;
+  main: boolean;
+  category: VndbPublicTagCategory;
+  path: string;
+  childId: string;
+  parentId: string;
+  schemeId: string;
+  childUri: string;
+  parentUri: string;
+  schemeUri: string;
+  releaseDigest: string;
+}>;
+
+/** A complete selected dictionary row set that permits retiring stale source parent assertions. */
+export type ShowcaseTagParentRefresh = Readonly<{
+  category: VndbPublicTagCategory;
+  tagId: string;
+  childId: string;
+  schemeId: string;
+  childUri: string;
+  schemeUri: string;
+  releaseDigest: string;
+}>;
+
+export type ShowcaseTagParentPublication = Readonly<{
+  path: string;
+  childId: string;
+  parentId: string;
+  schemeId: string;
+  status: 'proposed' | 'public' | 'withheld';
+  candidateId?: string;
+  rights?: ShowcaseAssertion['rights'];
+  reason?: string;
+}>;
+
+export function showcaseVocabularyExternalId(sourceKey: string): string {
+  if (!/^[a-z][a-z0-9_.:-]{0,127}$/u.test(sourceKey)) throw new TypeError('Invalid showcase vocabulary source key');
+  return `vocabulary:${sourceKey}`;
+}
+
+export type ShowcaseOmission = Readonly<{
+  provider: 'bangumi' | 'vndb';
+  sourceKey: string;
+  code:
+    | 'source-read-missing'
+    | 'candidate-ack-missing'
+    | 'candidate-limit'
+    | 'vocabulary-binding-missing'
+    | 'source-claim-withheld'
+    | 'cover-source-absent'
+    | 'cover-source-unavailable'
+    | 'cover-source-invalid'
+    | 'cover-pending'
+    | 'cover-rejected'
+    | 'cover-refused'
+    | 'cover-unknown'
+    | 'cover-fenced'
+    | 'cover-candidate-missing'
+    | 'cover-not-public'
+    | 'graph-endpoint-unavailable'
+    | 'graph-endpoint-mismatch';
+}>;
+
+export type ShowcaseMediaRecord = Readonly<{
+  sourceAlias: string;
+  sourceKey: string;
+  sourceUri: string;
+  sourceRevision: string;
+  archiveDigest: string;
+  responseDigest?: string;
+  etag?: string;
+  sourceUrl?: string;
+  status: CrossMediaMediaOutcome['status'];
+  mediaState?: CrossMediaMediaOutcome['mediaState'];
+  containerId: string | null;
+  mediaId?: string;
+  credit?: CrossMediaMediaOutcome['credit'];
+  provenance?: CrossMediaMediaOutcome['provenance'];
+  candidateId?: string;
+  candidateDigest?: string;
+  readHandoff?: { subjectId: string; readerRoute: string; property: 'schema:image'; value: string };
+  gap?: string;
+}>;
+
+export type ShowcaseManifest = Readonly<{
+  version: 1;
+  digest: string;
+  records: readonly ShowcaseRecord[];
+  vocabulary: readonly ShowcaseVocabularyRecord[];
+  media: readonly ShowcaseMediaRecord[];
+  tagAssociations?: readonly ShowcaseTagAssociation[];
+  tagAssociationWithdrawals?: readonly ShowcaseTagAssociationWithdrawal[];
+  tagAssociationRefreshes?: readonly string[];
+  tagParentEvidence?: readonly ShowcaseTagParentBinding[];
+  tagParentGaps?: readonly CrossMediaGap[];
+  tagParentRefreshes?: readonly ShowcaseTagParentRefresh[];
+  tagParentPublications?: readonly ShowcaseTagParentPublication[];
+  tagWeightObservations: readonly VndbTagRatingObservation[];
+  tagWeightRefreshes: readonly string[];
+  omissions: readonly ShowcaseOmission[];
+}>;
+
+export function showcaseDigest(value: unknown): string {
+  return createHash('sha256').update(sourceDigest(value)).digest('hex');
+}
+
+export function showcasePlanDigest(plan: CrossMediaPlan): string {
+  const records = (rows: readonly SourceRecord[]) =>
+    rows.map((row) => ({
+      source: row.source,
+      key: row.key,
+      revision: row.revision,
+      digest: sourceDigest(row.payload),
+    }));
+  return showcaseDigest({
+    records: { bangumi: records(plan.records.bangumi), vndb: records(plan.records.vndb) },
+    entities: { bangumi: records(plan.entities.bangumi), vndb: records(plan.entities.vndb) },
+    edges: plan.edges,
+    credits: plan.credits,
+    memberships: plan.members,
+    characterAppearances: (plan.characterAppearances ?? []).map((appearance) => ({
+      source: bangumiAppearanceSource('bangumi_cross_media', appearance),
+      subjectId: appearance.subjectId,
+      characterId: appearance.characterId,
+      sourceIndex: appearance.sourceIndex,
+      roleCode: appearance.roleCode,
+      order: appearance.order,
+      sourceRow: appearance.sourceRow,
+    })),
+    relationSnapshotDigest: plan.relationSnapshotDigest,
+    coverSources: plan.coverSources ?? [],
+    creatorImageSources: plan.creatorImageSources ?? [],
+  });
+}
+
+function citations(statement: BatchStatement): string[] {
+  const values: string[] = [];
+  for (const reference of statement.references ?? []) {
+    for (const part of reference.parts) {
+      if (part.property.id !== 'schema:url') continue;
+      const content = part.value.type === 'value' ? part.value.content : undefined;
+      if (typeof content === 'string' && content.length <= 2048) values.push(content);
+    }
+  }
+  return [...new Set(values)].sort();
+}
+
+function graphEdgeCitationsMatch(edge: CrossMediaPlan['edges'][number], actual: readonly string[]): boolean {
+  const expected =
+    edge.source === 'vndb' && edge.table === 'releases_supersedes' && edge.property === 'rezics:releaseSupersedes'
+      ? [vndbRecordUrl(edge.holder), vndbRecordUrl(edge.target)].sort()
+      : edge.vndbRelation
+        ? [...new Set(edge.vndbRelation.evidence.map((row) => row.sourceUrl))].sort()
+        : [edge.url];
+  return actual.length === expected.length && expected.every((uri, index) => uri === actual[index]);
+}
+
+function currentSubject(reading: CrossMediaReading | undefined): { id: string; type: string } | null {
+  const subject = reading?.subject.subject as { id?: unknown; type?: unknown } | undefined;
+  return typeof subject?.id === 'string' && typeof subject.type === 'string'
+    ? { id: reading?.boundSubjectId ?? subject.id, type: subject.type }
+    : null;
+}
+
+function candidateAssertion(entry: ShowcaseAcknowledgement): ShowcaseAssertion | null {
+  const { command, candidateId } = entry;
+  if (
+    command.op !== 'propose' ||
+    !candidateId ||
+    !nativeUuid.test(candidateId) ||
+    entry.commandDigest !== showcaseDigest(command)
+  )
+    return null;
+  const property = command.statement.property.id;
+  return {
+    commandKey: command.key,
+    candidateId,
+    candidateDigest: showcaseDigest({ source: command.source, statement: command.statement }),
+    property,
+    source: command.source,
+    statement: command.statement,
+    ...(command.rights === undefined ? {} : { rights: command.rights }),
+    citations: citations(command.statement),
+  };
+}
+
+function envelopeKey(source: BatchCommand['source']): string {
+  return [
+    source.source,
+    source.external_id,
+    source.record_revision,
+    source.digest,
+    source.converter_revision,
+    source.field_group,
+  ].join('\0');
+}
+
+function selectedEnvelopes(
+  plan: CrossMediaPlan,
+  readings: readonly CrossMediaReading[],
+  aliases: Readonly<Record<'bangumi' | 'vndb', string>>,
+  requirements: readonly ShowcaseVocabularyRequirement[],
+  mediaOutcomes: readonly CrossMediaMediaOutcome[],
+  tagWeightObservations: readonly VndbTagRatingObservation[],
+): Set<string> {
+  const allowed = new Set<string>();
+  const readingIndex = new Map(readings.map((reading) => [`${reading.source}\0${reading.externalId}`, reading]));
+  for (const provider of ['bangumi', 'vndb'] as const) {
+    const registration = createSelectedFamilySourceRegistration(provider, aliases[provider]);
+    for (const row of [...plan.records[provider], ...plan.entities[provider]]) {
+      const context =
+        provider === 'bangumi'
+          ? showcaseMediaContext({ plan, outcomes: mediaOutcomes, alias: aliases[provider], externalId: row.key })
+          : undefined;
+      const subject = currentSubject(readingIndex.get(`${provider}\0${row.key}`));
+      const converted = registration.convert(
+        { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },
+        { source: aliases[provider], ...(subject ? { subjectId: subject.id } : {}), ...(context ?? {}) },
+      );
+      for (const command of converted.proposals) allowed.add(envelopeKey(command.source));
+    }
+  }
+  for (const edge of plan.edges) {
+    if (!edge.relation && !edge.producerParent) allowed.add(envelopeKey(graphEdgeSource(edge)));
+    if (edge.relation) {
+      const relation = edge.relation;
+      const digest = sourceDigest(relation.evidence);
+      const converterRevision = `${bangumiVocabularyRevision}:relation-${relation.family}@2:${relation.code}:${relation.reciprocalCode ?? 'one-sided'}`;
+      for (const externalId of [relation.sourceSubject, relation.sourceEndpoint])
+        allowed.add(
+          envelopeKey({
+            source: edge.alias,
+            external_id: externalId,
+            record_revision: 'unversioned',
+            digest,
+            converter_revision: converterRevision,
+            field_group: 'facts',
+          }),
+        );
+    }
+    if (edge.producerParent) {
+      const parent = edge.producerParent;
+      const digest = sourceDigest(parent.evidence);
+      const converterRevision = `${vndbVocabularyRevision}:${parent.mappingRevision}`;
+      for (const externalId of [parent.sourceSubject, parent.sourceEndpoint])
+        allowed.add(
+          envelopeKey({
+            source: edge.alias,
+            external_id: externalId,
+            record_revision: 'unversioned',
+            digest,
+            converter_revision: converterRevision,
+            field_group: 'facts',
+          }),
+        );
+    }
+  }
+  for (const appearance of plan.characterAppearances ?? [])
+    allowed.add(envelopeKey(bangumiAppearanceSource(aliases.bangumi, appearance)));
+  for (const source of plan.personCareerSources ?? []) {
+    if (source.sourceStatus !== 'available' || !source.responseDigest) continue;
+    allowed.add(
+      envelopeKey({
+        source: aliases.bangumi,
+        external_id: source.externalId,
+        record_revision: source.etag ?? 'unversioned',
+        digest: source.responseDigest,
+        converter_revision: crossMediaBangumiRevision,
+        field_group: 'facts',
+      }),
+    );
+  }
+  for (const requirement of requirements) allowed.add(envelopeKey(requirement.source));
+  for (const observation of tagWeightObservations) {
+    if (!/^[0-9a-f]{64}$/u.test(observation.responseDigest ?? '')) continue;
+    allowed.add(
+      envelopeKey({
+        source: aliases.vndb,
+        external_id: observation.workId,
+        record_revision: 'unversioned',
+        digest: observation.responseDigest!,
+        converter_revision: vndbVocabularyRevision,
+        field_group: 'facts',
+      }),
+    );
+  }
+  return allowed;
+}
+
+function sourceTagWeight(assertion: ShowcaseAssertion): boolean {
+  return (
+    assertion.statement.qualifiers?.some(
+      (term) =>
+        term.property.id === 'rezics:sourceTagWeightMetric' &&
+        term.value.type === 'value' &&
+        term.value.content === vndbTagsRatingMetric,
+    ) ?? false
+  );
+}
+
+function currentTagWeight(
+  record: SourceRecord,
+  alias: string,
+  assertion: ShowcaseAssertion,
+  observations: readonly VndbTagRatingObservation[],
+): boolean {
+  if (!sourceTagWeight(assertion)) return true;
+  const observation = observations.find((item) => item.workId === record.key);
+  if (
+    !observation ||
+    (observation.state !== 'available' && observation.state !== 'partial') ||
+    !observation.responseDigest ||
+    assertion.source.source !== alias ||
+    assertion.source.external_id !== record.key ||
+    assertion.source.record_revision !== 'unversioned' ||
+    assertion.source.digest !== observation.responseDigest ||
+    assertion.source.converter_revision !== vndbVocabularyRevision ||
+    assertion.source.field_group !== 'facts' ||
+    assertion.statement.property.id !== 'schema:genre' ||
+    assertion.statement.value.type !== 'value'
+  )
+    return false;
+  const referenceValue = (property: string): string | undefined => {
+    for (const reference of assertion.statement.references ?? [])
+      for (const part of reference.parts)
+        if (part.property.id === property && part.value.type === 'value' && typeof part.value.content === 'string')
+          return part.value.content;
+    return undefined;
+  };
+  const tagId = referenceValue('rezics:sourceTagId');
+  const snapshot = referenceValue('rezics:sourceSnapshot');
+  const binding = observation.bindings.find((item) => item.tagId === tagId);
+  return !!(
+    binding &&
+    assertion.statement.value.content === binding.conceptId &&
+    snapshot === `unversioned:sha256:${observation.responseDigest}`
+  );
+}
+
+/** Return media IDs only for exact available media evidence attached to this selected record. */
+export function showcaseMediaContext(input: {
+  plan: CrossMediaPlan;
+  outcomes: readonly CrossMediaMediaOutcome[];
+  alias: string;
+  externalId: string;
+  containerId?: string;
+}): { subjectId: string; mediaIds: Record<string, string> } | undefined {
+  const row = [...input.plan.records.bangumi, ...input.plan.entities.bangumi].find(
+    (candidate) => candidate.key === input.externalId,
+  );
+  const outcome = input.outcomes.find(
+    (candidate) => candidate.sourceAlias === input.alias && candidate.externalId === input.externalId,
+  );
+  const receipt = [...(input.plan.coverSources ?? []), ...(input.plan.creatorImageSources ?? [])].find(
+    (candidate) => candidate.sourceAlias === input.alias && candidate.externalId === input.externalId,
+  );
+  const sourceUrl = (row?.payload as { images?: { large?: unknown } } | undefined)?.images?.large;
+  const characterCoverDigest =
+    row?.key.startsWith('character:') && typeof sourceUrl === 'string'
+      ? crossMediaCoverDigest(
+          createSelectedFamilySourceRegistration('bangumi', input.alias).convert(
+            {
+              external_id: row.key,
+              record_revision: row.revision ?? 'unversioned',
+              record: row.payload,
+            },
+            { source: input.alias },
+          ).digest,
+          sourceUrl,
+        )
+      : undefined;
+  if (
+    !row ||
+    typeof sourceUrl !== 'string' ||
+    !outcome ||
+    !receipt ||
+    outcome.status !== 'available' ||
+    outcome.sourceStatus !== 'available' ||
+    !outcome.containerId ||
+    (input.containerId !== undefined && outcome.containerId !== input.containerId) ||
+    !validAvailableCover({
+      source: outcome,
+      recordKey: row.key,
+      sourceAlias: input.alias,
+      sourceRevision: row.revision ?? 'unversioned',
+      archiveDigest: receipt.archiveDigest,
+      containerId: outcome.containerId,
+      ...(outcome.mediaId ? { mediaId: outcome.mediaId } : {}),
+      sourceUrl,
+    }) ||
+    receipt.endpoint !== outcome.endpoint ||
+    receipt.responseDigest !== outcome.responseDigest ||
+    receipt.sourceUrl !== outcome.sourceUrl ||
+    outcome.provenance?.source !== input.alias ||
+    outcome.provenance.external_id !== row.key ||
+    outcome.provenance.record_revision !== (row.revision ?? 'unversioned') ||
+    outcome.provenance.field_group !== 'cover' ||
+    (row.key.startsWith('character:') && outcome.provenance.digest !== characterCoverDigest) ||
+    outcome.provenance.converter_revision.length === 0 ||
+    outcome.credit?.rightsHolder !== '(c) rights holder' ||
+    outcome.credit.via.name !== 'Bangumi' ||
+    outcome.credit.via.url !== bangumiRecordUrl(row.key) ||
+    outcome.credit.license !== 'LicenseRef-unknown'
+  )
+    return undefined;
+  return { subjectId: outcome.containerId, mediaIds: { [sourceUrl]: outcome.mediaId! } };
+}
+
+/** Build a finite publication intent only from selected source records and acknowledged native proposals. */
+export function buildShowcaseManifest(input: {
+  plan: CrossMediaPlan;
+  readings: readonly CrossMediaReading[];
+  acknowledgements: readonly ShowcaseAcknowledgement[];
+  aliases: Readonly<Record<'bangumi' | 'vndb', string>>;
+  mediaOutcomes?: readonly CrossMediaMediaOutcome[];
+  vndbCreditCandidateDigests?: readonly string[];
+  vocabularyRequirements?: readonly ShowcaseVocabularyRequirement[];
+  reviewedVocabulary?: readonly ShowcaseVocabularyRecord[];
+  currentBangumiGenreCandidateIds?: readonly string[];
+  bangumiGenreOwnerKeys?: readonly string[];
+  currentBangumiGameGenreCandidateIds?: readonly string[];
+  bangumiGameGenreOwnerKeys?: readonly string[];
+  tagWeightObservations?: readonly VndbTagRatingObservation[];
+  tagWeightRefreshes?: readonly string[];
+  tagAssociations?: readonly ShowcaseTagAssociation[];
+  tagAssociationWithdrawals?: readonly ShowcaseTagAssociationWithdrawal[];
+  tagAssociationRefreshes?: readonly string[];
+  tagParentEvidence?: readonly ShowcaseTagParentBinding[];
+  tagParentGaps?: readonly CrossMediaGap[];
+  tagParentAcknowledgements?: readonly ShowcaseAcknowledgement[];
+  tagParentRefreshes?: readonly ShowcaseTagParentRefresh[];
+  tagParentPublicationOutcomes?: readonly ShowcaseTagParentPublication[];
+  workRelations?: readonly GraphEdgeEvidence[];
+}): ShowcaseManifest {
+  const { plan, readings, acknowledgements, aliases } = input;
+  const selected = [...plan.records.bangumi, ...plan.entities.bangumi, ...plan.records.vndb, ...plan.entities.vndb];
+  if (selected.length > showcaseLimits.records) throw new RangeError('Selected showcase record limit exceeded');
+
+  const readingIndex = new Map(readings.map((reading) => [`${reading.source}\0${reading.externalId}`, reading]));
+  const memberIndex = new Map(plan.members.map((member) => [`${member.source}\0${member.key}`, member]));
+  const selectedKeys = new Set(selected.map((row) => `${row.source}\0${row.key}`));
+  const appearanceOwners = new Map<string, string>();
+  for (const appearance of plan.characterAppearances ?? [])
+    appearanceOwners.set(envelopeKey(bangumiAppearanceSource(aliases.bangumi, appearance)), appearance.subjectId);
+  const omissions: ShowcaseOmission[] = [];
+  const vocabularyRequirements: ShowcaseVocabularyRequirement[] = [];
+  const currentBangumiGenreCandidateIds = new Set(input.currentBangumiGenreCandidateIds ?? []);
+  const bangumiGenreOwnerKeys = new Set(input.bangumiGenreOwnerKeys ?? []);
+  const currentBangumiGameGenreCandidateIds = new Set(input.currentBangumiGameGenreCandidateIds ?? []);
+  const bangumiGameGenreOwnerKeys = new Set(input.bangumiGameGenreOwnerKeys ?? []);
+  const tagWeightObservations = input.tagWeightObservations ?? [];
+  const tagAssociations = input.tagAssociations ?? [];
+  const tagAssociationWithdrawals = input.tagAssociationWithdrawals ?? [];
+  const tagAssociationRefreshes = [...new Set(input.tagAssociationRefreshes ?? [])];
+  const tagParentEvidence = input.tagParentEvidence ?? [];
+  const tagParentGaps = input.tagParentGaps ?? [];
+  const tagParentRefreshes = input.tagParentRefreshes ?? [];
+  const parentAcknowledgements = input.tagParentAcknowledgements ?? [];
+  const vndbCreditCandidateDigests = new Set(input.vndbCreditCandidateDigests ?? []);
+  const tagWeightRefreshes = [...new Set(input.tagWeightRefreshes ?? [])].filter((id) =>
+    /^v[1-9][0-9]{0,9}$/u.test(id),
+  );
+  for (const requirement of input.vocabularyRequirements ?? []) {
+    if (vocabularyRequirements.length >= showcaseLimits.vocabulary) {
+      omissions.push({
+        provider: requirement.provider,
+        sourceKey: 'selected-family',
+        code: 'vocabulary-binding-missing',
+      });
+      continue;
+    }
+    if (
+      !selectedKeys.has(`${requirement.provider}\0${requirement.ownerKey}`) ||
+      requirement.source.source !== aliases[requirement.provider] ||
+      requirement.source.external_id !== showcaseVocabularyExternalId(requirement.sourceKey) ||
+      requirement.source.field_group !== 'facts' ||
+      !requirement.sourceUri.startsWith('https://')
+    ) {
+      omissions.push({
+        provider: requirement.provider,
+        sourceKey: 'selected-family',
+        code: 'vocabulary-binding-missing',
+      });
+      continue;
+    }
+    vocabularyRequirements.push(requirement);
+  }
+  const mediaOutcomes = input.mediaOutcomes ?? [];
+  const allowedSources = selectedEnvelopes(
+    plan,
+    readings,
+    aliases,
+    vocabularyRequirements,
+    mediaOutcomes,
+    tagWeightObservations,
+  );
+  for (const acknowledgement of acknowledgements) {
+    const assertion = candidateAssertion(acknowledgement);
+    if (
+      assertion &&
+      acknowledgement.command.source.converter_revision === vndbStaffCreditConverterRevision &&
+      vndbCreditCandidateDigests.has(assertion.candidateDigest)
+    )
+      allowedSources.add(envelopeKey(acknowledgement.command.source));
+  }
+  const selectedBySourceKey = new Map(selected.map((row) => [`${row.source}\0${row.key}`, row]));
+  const acknowledgementsByKey = new Map(acknowledgements.map((ack) => [ack.command.key, ack]));
+  const graphEnvelopeKeys = new Set<string>();
+  const eligibleGraphCommandKeys = new Set<string>();
+  const graphTargetsByCommandKey = new Map<string, NonNullable<ShowcaseAssertion['graphTarget']>>();
+  for (const edge of plan.edges) {
+    if (edge.relation || edge.producerParent) continue;
+    const provider = edge.source;
+    const source = graphEdgeSource(edge);
+    const edgeEnvelope = envelopeKey(source);
+    if (edge.alias !== aliases[provider]) continue;
+    graphEnvelopeKeys.add(edgeEnvelope);
+    const acknowledgement = acknowledgementsByKey.get(graphEdgeCommandKey(edge));
+    if (!acknowledgement || !candidateAssertion(acknowledgement)) {
+      omissions.push({ provider, sourceKey: edge.holder, code: 'candidate-ack-missing' });
+      continue;
+    }
+    if (!showcaseSourceMatches(acknowledgement.command.source, source)) {
+      omissions.push({ provider, sourceKey: edge.holder, code: 'candidate-ack-missing' });
+      continue;
+    }
+    const ownerKey = `${provider}\0${edge.holder}`;
+    const targetKey = `${provider}\0${edge.target}`;
+    const owner = selectedBySourceKey.get(ownerKey);
+    const ownerSubject = currentSubject(readingIndex.get(ownerKey));
+    const command = acknowledgement.command;
+    const value = command.op === 'propose' ? command.statement.value : undefined;
+    const reference = command.op === 'propose' ? citations(command.statement) : [];
+    const referencesMatch = graphEdgeCitationsMatch(edge, reference);
+    if (!owner || !ownerSubject) {
+      omissions.push({ provider, sourceKey: edge.holder, code: 'graph-endpoint-unavailable' });
+      continue;
+    }
+    if (edge.targetKind === 'literal') {
+      const targetProvider = provider === 'vndb' ? 'bangumi' : 'vndb';
+      const targetKey = `${targetProvider}\0${edge.target}`;
+      const target = selectedBySourceKey.get(targetKey);
+      const targetSubject = currentSubject(readingIndex.get(targetKey));
+      if (!target || !targetSubject) {
+        omissions.push({ provider, sourceKey: edge.holder, code: 'graph-endpoint-unavailable' });
+        continue;
+      }
+      if (
+        command.op !== 'propose' ||
+        command.key !== graphEdgeCommandKey(edge) ||
+        command.subject !== ownerSubject.id ||
+        command.statement.property.id !== edge.property ||
+        value?.type !== 'value' ||
+        value.content !== edge.target ||
+        !referencesMatch
+      ) {
+        omissions.push({ provider, sourceKey: edge.holder, code: 'graph-endpoint-mismatch' });
+        continue;
+      }
+      eligibleGraphCommandKeys.add(command.key);
+      continue;
+    }
+    const target = selectedBySourceKey.get(targetKey);
+    const targetSubject = currentSubject(readingIndex.get(targetKey));
+    if (!target || !targetSubject) {
+      omissions.push({ provider, sourceKey: edge.holder, code: 'graph-endpoint-unavailable' });
+      continue;
+    }
+    if (
+      command.op !== 'propose' ||
+      command.key !== graphEdgeCommandKey(edge) ||
+      command.subject !== ownerSubject.id ||
+      command.statement.property.id !== edge.property ||
+      value?.type !== 'value' ||
+      value.content !== targetSubject.id ||
+      !referencesMatch
+    ) {
+      omissions.push({ provider, sourceKey: edge.holder, code: 'graph-endpoint-mismatch' });
+      continue;
+    }
+    eligibleGraphCommandKeys.add(command.key);
+    graphTargetsByCommandKey.set(command.key, {
+      provider,
+      sourceKey: edge.target,
+      subjectId: targetSubject.id,
+      nativeType: targetSubject.type,
+      ...(edge.vndbRelation ? { factsFence: true as const } : {}),
+    });
+  }
+
+  const franchise = showcaseFranchiseAssertions({
+    plan,
+    readings,
+    acknowledgements,
+    evidence: input.workRelations ?? [],
+  });
+  omissions.push(...franchise.omissions);
+  for (const [key, target] of franchise.targets) graphTargetsByCommandKey.set(key, target);
+
+  const records: ShowcaseRecord[] = [];
+  let remainingCandidates: number = showcaseLimits.candidates;
+  for (const row of selected) {
+    const provider = row.source === 'vndb' ? 'vndb' : 'bangumi';
+    const alias = aliases[provider];
+    const reading = readingIndex.get(`${provider}\0${row.key}`);
+    const subject = currentSubject(reading);
+    const mediaContext =
+      provider === 'bangumi'
+        ? showcaseMediaContext({
+            plan,
+            outcomes: mediaOutcomes,
+            alias,
+            externalId: row.key,
+            ...(subject?.id ? { containerId: subject.id } : {}),
+          })
+        : undefined;
+    const registration = createSelectedFamilySourceRegistration(provider, alias);
+    const conversion = registration.convert(
+      { external_id: row.key, record_revision: row.revision ?? 'unversioned', record: row.payload },
+      { source: alias, ...(mediaContext ?? {}) },
+    );
+    const bootstrap = conversion.proposals.find((command) => command.op === 'create');
+    const member = memberIndex.get(`${provider}\0${row.key}`);
+    const sourceAssertions: ShowcaseAssertion[] = [];
+    let candidateOverflow = false;
+    for (const ack of acknowledgements) {
+      const source = ack.command.source;
+      const assertion = candidateAssertion(ack);
+      if (
+        source.source !== alias ||
+        (source.external_id !== row.key && appearanceOwners.get(envelopeKey(source)) !== row.key) ||
+        !allowedSources.has(envelopeKey(source)) ||
+        (source.converter_revision === vndbStaffCreditConverterRevision &&
+          (!assertion || !vndbCreditCandidateDigests.has(assertion.candidateDigest))) ||
+        (graphEnvelopeKeys.has(envelopeKey(source)) && !eligibleGraphCommandKeys.has(ack.command.key)) ||
+        (subject && ack.command.op === 'propose' && ack.command.subject !== subject.id)
+      )
+        continue;
+      if (
+        provider === 'bangumi' &&
+        bangumiGenreOwnerKeys.has(row.key) &&
+        ack.command.op === 'propose' &&
+        ack.command.statement.property.id === 'schema:keywords' &&
+        !currentBangumiGenreCandidateIds.has(ack.candidateId ?? '')
+      )
+        continue;
+      if (
+        provider === 'bangumi' &&
+        bangumiGameGenreOwnerKeys.has(row.key) &&
+        ack.command.op === 'propose' &&
+        ack.command.statement.property.id === 'schema:genre' &&
+        !currentBangumiGameGenreCandidateIds.has(ack.candidateId ?? '')
+      )
+        continue;
+      if (!assertion) continue;
+      // Work relations require the graph owner's current acknowledged result and both selected endpoints.
+      if (franchise.envelopes.has(envelopeKey(source)) && !franchise.targets.has(ack.command.key)) continue;
+      if (provider === 'vndb' && !currentTagWeight(row, alias, assertion, tagWeightObservations)) continue;
+      const ownerKey = appearanceOwners.get(envelopeKey(source));
+      const graphTarget = graphTargetsByCommandKey.get(ack.command.key);
+      const ownedAssertion = {
+        ...assertion,
+        ...(ownerKey === undefined ? {} : { ownerKey }),
+        ...(graphTarget ? { graphTarget } : {}),
+      };
+      if (sourceAssertions.length >= showcaseLimits.candidatesPerRecord || remainingCandidates === 0) {
+        candidateOverflow = true;
+        continue;
+      }
+      sourceAssertions.push(ownedAssertion);
+      remainingCandidates -= 1;
+    }
+    if (candidateOverflow) omissions.push({ provider, sourceKey: row.key, code: 'candidate-limit' });
+    const sourceMetadata = conversion.sourceMetadata as { recordUrl?: unknown } | undefined;
+    const sourceUri =
+      typeof sourceMetadata?.recordUrl === 'string'
+        ? sourceMetadata.recordUrl
+        : provider === 'vndb'
+          ? vndbRecordUrl(row.key, row.revision)
+          : null;
+    records.push({
+      provider,
+      sourceAlias: alias,
+      sourceKey: row.key,
+      sourceUri,
+      sourceRevision: row.revision ?? 'unversioned',
+      rawDigest: sourceDigest(row.payload),
+      semanticDigest: conversion.digest,
+      converterRevision: conversion.converter_revision ?? registration.converter_revision,
+      kind: member?.kind ?? (bootstrap?.op === 'create' ? kindFromType(bootstrap.subject.type) : 'work'),
+      subjectId: subject?.id ?? null,
+      nativeType: subject?.type ?? (bootstrap?.op === 'create' ? bootstrap.subject.type : null),
+      readerRoute: reading?.route ?? null,
+      assertions: sourceAssertions,
+    });
+  }
+
+  const media: ShowcaseMediaRecord[] = [];
+  for (const outcome of mediaOutcomes.slice(0, showcaseLimits.media)) {
+    const record = records.find(
+      (candidate) => candidate.sourceAlias === outcome.sourceAlias && candidate.sourceKey === outcome.externalId,
+    );
+    const cover = record?.assertions.find((assertion) => assertion.property === 'schema:image');
+    let gap: string | undefined;
+    if (outcome.status === 'absent') gap = 'cover-source-absent';
+    else if (outcome.status === 'invalid') gap = 'cover-source-invalid';
+    else if (outcome.status === 'pending') gap = 'cover-pending';
+    else if (outcome.status === 'rejected') gap = 'cover-rejected';
+    else if (outcome.status === 'refused') gap = 'cover-refused';
+    else if (outcome.status === 'unknown') gap = 'cover-unknown';
+    else if (outcome.status === 'fenced') gap = 'cover-fenced';
+    else if (outcome.status === 'unavailable') gap = outcome.code ?? 'cover-source-unavailable';
+    else if (!cover) gap = 'cover-candidate-missing';
+    if (gap) {
+      const code: ShowcaseOmission['code'] =
+        gap === 'cover-source-absent' ||
+        gap === 'cover-source-invalid' ||
+        gap === 'cover-pending' ||
+        gap === 'cover-rejected' ||
+        gap === 'cover-refused' ||
+        gap === 'cover-unknown' ||
+        gap === 'cover-fenced' ||
+        gap === 'cover-candidate-missing' ||
+        gap === 'cover-not-public'
+          ? gap
+          : 'cover-source-unavailable';
+      omissions.push({ provider: 'bangumi', sourceKey: outcome.externalId, code });
+    }
+    media.push({
+      sourceAlias: outcome.sourceAlias,
+      sourceKey: outcome.externalId,
+      sourceUri: outcome.endpoint,
+      sourceRevision: outcome.sourceRevision,
+      archiveDigest: outcome.archiveDigest,
+      ...(outcome.responseDigest ? { responseDigest: outcome.responseDigest } : {}),
+      ...(outcome.etag ? { etag: outcome.etag } : {}),
+      ...(outcome.sourceUrl ? { sourceUrl: outcome.sourceUrl } : {}),
+      status: outcome.status,
+      ...(outcome.mediaState ? { mediaState: outcome.mediaState } : {}),
+      containerId: outcome.containerId,
+      ...(outcome.mediaId ? { mediaId: outcome.mediaId } : {}),
+      ...(outcome.credit ? { credit: outcome.credit } : {}),
+      ...(outcome.provenance ? { provenance: outcome.provenance } : {}),
+      ...(cover ? { candidateId: cover.candidateId, candidateDigest: cover.candidateDigest } : {}),
+      ...(gap ? { gap } : {}),
+    });
+  }
+  if (mediaOutcomes.length > showcaseLimits.media)
+    omissions.push({ provider: 'bangumi', sourceKey: 'selected-family', code: 'cover-source-unavailable' });
+
+  const vocabulary: ShowcaseVocabularyRecord[] = [];
+  for (const requirement of vocabularyRequirements) {
+    const create = acknowledgements.find(
+      (ack) =>
+        ack.command.op === 'create' &&
+        ack.command.subject.type === requirement.nativeType &&
+        ack.subjectId &&
+        ack.commandDigest === showcaseDigest(ack.command) &&
+        showcaseSourceMatches(ack.command.source, requirement.source),
+    );
+    if (!create || create.command.op !== 'create' || !create.subjectId) {
+      omissions.push({
+        provider: requirement.provider,
+        sourceKey: 'selected-family',
+        code: 'vocabulary-binding-missing',
+      });
+      continue;
+    }
+    const assertions: ShowcaseAssertion[] = [];
+    let candidateOverflow = false;
+    for (const entry of acknowledgements) {
+      if (
+        entry.command.op !== 'propose' ||
+        entry.command.subject !== create.subjectId ||
+        !showcaseSourceMatches(entry.command.source, requirement.source)
+      )
+        continue;
+      const assertion = candidateAssertion(entry);
+      if (!assertion) continue;
+      if (assertions.length >= showcaseLimits.candidatesPerRecord || remainingCandidates === 0) {
+        candidateOverflow = true;
+        continue;
+      }
+      assertions.push(assertion);
+      remainingCandidates -= 1;
+    }
+    if (candidateOverflow)
+      omissions.push({ provider: requirement.provider, sourceKey: requirement.sourceKey, code: 'candidate-limit' });
+    const schemeValue = assertions.find((assertion) => assertion.property === 'skos:inScheme')?.statement.value;
+    const scheme = schemeValue?.type === 'value' ? schemeValue.content : undefined;
+    vocabulary.push({
+      provider: requirement.provider,
+      sourceAlias: requirement.source.source,
+      sourceKey: requirement.sourceKey,
+      sourceUri: requirement.sourceUri,
+      subjectId: create.subjectId,
+      nativeType: requirement.nativeType,
+      schemeId: requirement.schemeId ?? (typeof scheme === 'string' ? scheme : null),
+      assertions,
+    });
+  }
+
+  for (const record of input.reviewedVocabulary ?? []) {
+    if (vocabulary.length >= showcaseLimits.vocabulary) {
+      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'candidate-limit' });
+      continue;
+    }
+    const assertions: ShowcaseAssertion[] = [];
+    let incomplete = false;
+    for (const expected of record.assertions) {
+      const acknowledgement = acknowledgements.find((entry) => entry.candidateId === expected.candidateId);
+      const actual = acknowledgement ? candidateAssertion(acknowledgement) : null;
+      if (
+        !actual ||
+        actual.commandKey !== expected.commandKey ||
+        actual.candidateDigest !== expected.candidateDigest ||
+        !showcaseSourceMatches(actual.source, expected.source) ||
+        !showcaseStatementMatches(actual.statement, expected.statement)
+      ) {
+        incomplete = true;
+        break;
+      }
+      assertions.push(actual);
+    }
+    const scheme = record.nativeType === 'skos:ConceptScheme';
+    const schemeRecord = (input.reviewedVocabulary ?? []).find(
+      (candidate) => candidate.nativeType === 'skos:ConceptScheme' && candidate.subjectId === record.schemeId,
+    );
+    if (
+      incomplete ||
+      record.provenance !== 'reviewed-catalogue' ||
+      !record.sourceUri?.startsWith('https://') ||
+      !nativeUuid.test(record.subjectId) ||
+      !record.schemeUri?.startsWith('https://') ||
+      (scheme && (record.schemeId !== null || !assertions.length)) ||
+      (!scheme &&
+        (!record.schemeId ||
+          record.schemeId === record.subjectId ||
+          !schemeRecord ||
+          schemeRecord.schemeUri !== record.schemeUri))
+    ) {
+      omissions.push({ provider: record.provider, sourceKey: record.sourceKey, code: 'vocabulary-binding-missing' });
+      continue;
+    }
+    vocabulary.push({ ...record, assertions });
+  }
+
+  const sourceParentEndpoints = new Map<string, ShowcaseVocabularyRecord>();
+  const conflictingSourceParentEndpoints = new Set<string>();
+  const addSourceParentEndpoint = (record: ShowcaseVocabularyRecord) => {
+    const existing = vocabulary.find((entry) => entry.subjectId === record.subjectId);
+    if (existing) return;
+    if (conflictingSourceParentEndpoints.has(record.subjectId)) return;
+    const prior = sourceParentEndpoints.get(record.subjectId);
+    if (
+      prior &&
+      (prior.sourceUri !== record.sourceUri ||
+        prior.nativeType !== record.nativeType ||
+        prior.schemeId !== record.schemeId)
+    ) {
+      sourceParentEndpoints.delete(record.subjectId);
+      conflictingSourceParentEndpoints.add(record.subjectId);
+      return;
+    }
+    if (vocabulary.length + sourceParentEndpoints.size >= showcaseLimits.vocabulary) {
+      omissions.push({ provider: 'vndb', sourceKey: record.sourceKey, code: 'candidate-limit' });
+      return;
+    }
+    sourceParentEndpoints.set(record.subjectId, record);
+  };
+  for (const refresh of tagParentRefreshes) {
+    const taxonomy = vndbPublicTagTaxonomy(refresh.category);
+    addSourceParentEndpoint({
+      provider: 'vndb',
+      sourceAlias: aliases.vndb,
+      sourceKey: `${taxonomy}:${refresh.tagId}`,
+      sourceUri: refresh.childUri,
+      subjectId: refresh.childId,
+      nativeType: 'skos:Concept',
+      schemeId: refresh.schemeId,
+      schemeUri: refresh.schemeUri,
+      provenance: 'source-parent-binding',
+      assertions: [],
+    });
+    addSourceParentEndpoint({
+      provider: 'vndb',
+      sourceAlias: aliases.vndb,
+      sourceKey: taxonomy,
+      sourceUri: refresh.schemeUri,
+      subjectId: refresh.schemeId,
+      nativeType: 'skos:ConceptScheme',
+      schemeId: null,
+      provenance: 'source-parent-binding',
+      assertions: [],
+    });
+  }
+  for (const binding of tagParentEvidence) {
+    const taxonomy = vndbPublicTagTaxonomy(binding.category);
+    const scheme = {
+      provider: 'vndb' as const,
+      sourceAlias: aliases.vndb,
+      sourceKey: taxonomy,
+      sourceUri: binding.schemeUri,
+      subjectId: binding.schemeId,
+      nativeType: 'skos:ConceptScheme' as const,
+      schemeId: null,
+      provenance: 'source-parent-binding' as const,
+      assertions: [],
+    };
+    addSourceParentEndpoint({
+      provider: 'vndb',
+      sourceAlias: aliases.vndb,
+      sourceKey: `${taxonomy}:${binding.child}`,
+      sourceUri: binding.childUri,
+      subjectId: binding.childId,
+      nativeType: 'skos:Concept',
+      schemeId: binding.schemeId,
+      schemeUri: binding.schemeUri,
+      provenance: 'source-parent-binding',
+      assertions: [],
+    });
+    addSourceParentEndpoint({
+      provider: 'vndb',
+      sourceAlias: aliases.vndb,
+      sourceKey: `${taxonomy}:${binding.parent}`,
+      sourceUri: binding.parentUri,
+      subjectId: binding.parentId,
+      nativeType: 'skos:Concept',
+      schemeId: binding.schemeId,
+      schemeUri: binding.schemeUri,
+      provenance: 'source-parent-binding',
+      assertions: [],
+    });
+    addSourceParentEndpoint(scheme);
+  }
+  vocabulary.push(...sourceParentEndpoints.values());
+
+  const parentPublications: ShowcaseTagParentPublication[] = [];
+  const parentOutcomeByPath = new Map((input.tagParentPublicationOutcomes ?? []).map((row) => [row.path, row]));
+  for (const binding of tagParentEvidence) {
+    const expected = showcaseTagParentCommand(binding);
+    const acknowledgement = parentAcknowledgements.find((entry) => entry.command.key === expected.key);
+    const assertion = acknowledgement ? candidateAssertion(acknowledgement) : null;
+    const child = vocabulary.find(
+      (record) =>
+        record.subjectId === binding.childId &&
+        record.nativeType === 'skos:Concept' &&
+        record.schemeId === binding.schemeId,
+    );
+    const parent = vocabulary.find(
+      (record) =>
+        record.subjectId === binding.parentId &&
+        record.nativeType === 'skos:Concept' &&
+        record.schemeId === binding.schemeId,
+    );
+    const scheme = vocabulary.find(
+      (record) => record.subjectId === binding.schemeId && record.nativeType === 'skos:ConceptScheme',
+    );
+    const exact = !!(
+      acknowledgement &&
+      assertion &&
+      acknowledgement.commandDigest === showcaseDigest(expected) &&
+      showcaseDigest(acknowledgement.command) === showcaseDigest(expected) &&
+      acknowledgement.command.op === 'propose' &&
+      acknowledgement.command.subject === binding.childId &&
+      assertion.property === 'skos:broader' &&
+      assertion.statement.value.type === 'value' &&
+      assertion.statement.value.content === binding.parentId &&
+      child &&
+      parent &&
+      scheme?.sourceUri === binding.schemeUri &&
+      child.sourceUri === binding.childUri &&
+      parent.sourceUri === binding.parentUri &&
+      assertion.commandKey === expected.key
+    );
+    const suppliedOutcome = parentOutcomeByPath.get(binding.path);
+    if (
+      suppliedOutcome &&
+      (suppliedOutcome.childId !== binding.childId ||
+        suppliedOutcome.parentId !== binding.parentId ||
+        suppliedOutcome.schemeId !== binding.schemeId ||
+        (exact && suppliedOutcome.candidateId !== assertion!.candidateId))
+    )
+      throw new TypeError('VNDB tag parent publication outcome changed its exact binding');
+    let status: ShowcaseTagParentPublication;
+    if (!exact || !acknowledgement || !assertion || !child) {
+      status = suppliedOutcome ?? {
+        path: binding.path,
+        childId: binding.childId,
+        parentId: binding.parentId,
+        schemeId: binding.schemeId,
+        status: 'withheld',
+        reason: 'parent proposal was not acknowledged exactly',
+      };
+      omissions.push({ provider: 'vndb', sourceKey: binding.path, code: 'source-claim-withheld' });
+    } else {
+      if (child.assertions.length >= showcaseLimits.candidatesPerRecord || remainingCandidates === 0) {
+        status = {
+          path: binding.path,
+          childId: binding.childId,
+          parentId: binding.parentId,
+          schemeId: binding.schemeId,
+          status: 'withheld',
+          candidateId: assertion.candidateId,
+          reason: 'candidate limit exceeded',
+        };
+        omissions.push({ provider: 'vndb', sourceKey: binding.path, code: 'candidate-limit' });
+      } else {
+        const parentAssertion = {
+          ...assertion,
+          ownerKey: child.sourceKey,
+          tagParentPath: binding.path,
+        };
+        const index = vocabulary.indexOf(child);
+        vocabulary[index] = { ...child, assertions: [...child.assertions, parentAssertion] };
+        remainingCandidates -= 1;
+        status = {
+          path: binding.path,
+          childId: binding.childId,
+          parentId: binding.parentId,
+          schemeId: binding.schemeId,
+          status: 'proposed',
+          candidateId: assertion.candidateId,
+          ...(assertion.rights ? { rights: assertion.rights } : {}),
+        };
+      }
+    }
+    if (suppliedOutcome) {
+      if (suppliedOutcome.status === 'public' && status.status === 'withheld')
+        throw new TypeError('VNDB tag parent cannot be public without an exact accepted proposal');
+      status = { ...status, ...suppliedOutcome };
+    }
+    parentPublications.push(status);
+  }
+
+  for (const row of records) {
+    if (!row.subjectId)
+      omissions.push({ provider: row.provider, sourceKey: row.sourceKey, code: 'source-read-missing' });
+    if (!row.assertions.length)
+      omissions.push({ provider: row.provider, sourceKey: row.sourceKey, code: 'candidate-ack-missing' });
+  }
+  if (omissions.length > showcaseLimits.omissions) omissions.length = showcaseLimits.omissions;
+
+  const digest = showcaseDigest({
+    plan: showcasePlanDigest(plan),
+    records: records.map((record) => ({
+      provider: record.provider,
+      sourceKey: record.sourceKey,
+      semanticDigest: record.semanticDigest,
+      subjectId: record.subjectId,
+      assertions: record.assertions.map(({ candidateId, candidateDigest }) => ({ candidateId, candidateDigest })),
+    })),
+    vocabulary: vocabulary.map((record) => ({
+      provider: record.provider,
+      sourceAlias: record.sourceAlias,
+      sourceKey: record.sourceKey,
+      sourceUri: record.sourceUri,
+      subjectId: record.subjectId,
+      nativeType: record.nativeType,
+      schemeId: record.schemeId,
+      schemeUri: record.schemeUri ?? null,
+      provenance: record.provenance ?? null,
+      assertions: record.assertions.map(({ candidateId, candidateDigest, rights }) => ({
+        candidateId,
+        candidateDigest,
+        ...(rights ? { rights } : {}),
+      })),
+    })),
+    media,
+    tagAssociations,
+    tagAssociationWithdrawals,
+    tagAssociationRefreshes,
+    tagParentEvidence,
+    tagParentGaps,
+    tagParentRefreshes,
+    tagParentPublications: parentPublications,
+    tagWeightObservations,
+    tagWeightRefreshes,
+  });
+  return {
+    version: 1,
+    digest,
+    records,
+    vocabulary,
+    media,
+    tagAssociations,
+    tagAssociationWithdrawals,
+    tagAssociationRefreshes,
+    tagParentEvidence,
+    tagParentGaps,
+    tagParentRefreshes,
+    tagParentPublications: parentPublications,
+    tagWeightObservations,
+    tagWeightRefreshes,
+    omissions,
+  };
+}
+
+function kindFromType(type: string): ShowcaseKind {
+  if (type === 'schema:Person') return 'person';
+  if (type === 'schema:Organization') return 'organization';
+  if (type === 'schema:Episode') return 'episode';
+  if (type === 'wd:Q95074') return 'character';
+  if (type === 'wd:Q20631656') return 'release';
+  return 'work';
+}
+
+export function showcaseSourceMatches(
+  actual: BatchCommand['source'] | null,
+  expected: BatchCommand['source'],
+): boolean {
+  return !!actual && showcaseDigest(actual) === showcaseDigest(expected);
+}
+
+export function showcaseStatementMatches(actual: BatchStatement | null, expected: BatchStatement): boolean {
+  return sameStatementProvenance(actual, expected);
+}

@@ -1,7 +1,7 @@
 import { checkDocument, serializeDocument } from '@rezics/document';
 import spdxLicenseIds from 'spdx-license-ids';
 import { Type, type Static } from 'typebox';
-import { valueSchema, type Release } from './index.ts';
+import { valueSchema, type Release } from './portable.ts';
 import { checkSubjectInput, checkSubjectStructure, checkStatementInput, type Violation } from './validate.ts';
 export type { Violation } from './validate.ts';
 
@@ -334,8 +334,7 @@ export function checkBatchWrite(input: unknown, release?: Release): { pointer: s
       // The portable schema describes the envelope; document owns snapshot validation.
       const documentPath = `${path}/content/document`;
       for (let j = errors.length - 1; j >= 0; j--) if (errors[j]!.pointer === documentPath) errors.splice(j, 1);
-      if (!record(document) || document.profile !== 'text' || !checkDocument(document))
-        errors.push({ pointer: documentPath, code: 'invalid_format' });
+      if (!record(document) || !checkDocument(document)) errors.push({ pointer: documentPath, code: 'invalid_format' });
       else if (Buffer.byteLength(serializeDocument(document), 'utf8') > 32_768)
         errors.push({ pointer: documentPath, code: 'out_of_range' });
     }

@@ -1,6 +1,14 @@
 types:
-  wd:Q7725310: 'Mehrteiler'
+  wd:Q7725310: 'Reihe'
   schema:BookSeries: 'Buchreihe'
 properties:
   wdt:P2635: 'Anzahl der Teile dieses Werks'
   wdt:P1433: 'veröffentlicht in'
+inverseProperties:
+  wdt:P1433: 'Enthaltene Werke'
+typeDescriptions:
+  wd:Q7725310: 'Eine benannte Werkreihe, auch mit Sachwerken oder verschiedenen Medien; eine persönlich kuratierte Liste ist dagegen eine Collection.'
+  schema:BookSeries: 'Eine Buchreihe; jedes Mitglied verweist mit der Serienzugehörigkeit auf sie und kann seine Position angeben.'
+propertyDescriptions:
+  wdt:P2635: 'Angegebene Teilezahl als nichtnegative ganzzahlige Menge in Bänden (wd:Q1238720) oder Kapiteln (wd:Q1980247).'
+  wdt:P1433: 'Das größere Werk, in dem diese Reihe veröffentlicht wurde, etwa eine Zeitschrift.'

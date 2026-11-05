@@ -1,15 +1,113 @@
 types:
   schema:VideoGame: jeu vidéo
-  wd:Q20631656: publication de logiciels
-  wd:Q209163: extension de jeu vidéo
+  wd:Q20631656: 'version'
+  wd:Q209163: 'extension'
 properties:
   schema:gamePlatform: plateforme de jeu
   schema:gtin: GTIN
   wdt:P2899: âge minimal
   wdt:P31: nature de l’élément
   wdt:P155: précédé par
+  rezics:releaseSupersedes: remplace
   wdt:P437: format de distribution
   wdt:P408: moteur logiciel
   schema:numberOfPlayers: nombre de joueurs
   schema:minValue: valeur minimale
   wdt:P8646: extension de
+inverseProperties:
+  schema:gamePlatform: 'Jeux sur cette plateforme'
+  wdt:P31: 'Sorties de ce type'
+  wdt:P437: 'Sorties dans ce format'
+  wdt:P155: 'Suite'
+  rezics:releaseSupersedes: 'Remplacé par'
+  wdt:P408: 'Jeux utilisant ce moteur'
+  wdt:P8646: 'Extensions'
+typeDescriptions:
+  schema:VideoGame: 'Un jeu vidéo en tant qu’œuvre avec ses plateformes agrégées ; distinct d’une édition logicielle donnée ou d’un exemplaire personnel.'
+  wd:Q20631656: 'Une édition logicielle identifiée séparément représentant une ou plusieurs œuvres ; les listes de langues et de plateformes ne créent pas seules de nouvelles éditions.'
+  wd:Q209163: 'Une œuvre additionnelle de jeu identifiable, y compris extension ou DLC ; un correctif, fichier téléchargé ou élément intégré ne suffit pas à constituer une œuvre.'
+libraryProfiles:
+  game.playing:
+    states:
+      planned: 'Prévu'
+      in_progress: 'En cours'
+      completed: 'Terminé'
+      paused: 'En pause'
+      dropped: 'Abandonné'
+    units:
+      scalar_amount:
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+            many: 'minutes'
+    copyKinds:
+      physical: 'Physique'
+      digital: 'Numérique'
+    copyStatuses:
+      physical:
+        owned: 'Possédé'
+        disposed: 'Cédé'
+      digital:
+        owned: 'Possédé'
+  game.release:
+    states:
+      planned: 'Prévu'
+      in_progress: 'En cours'
+      completed: 'Terminé'
+      paused: 'En pause'
+      dropped: 'Abandonné'
+    units:
+      scalar_amount:
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+            many: 'minutes'
+    copyKinds:
+      physical: 'Physique'
+      digital: 'Numérique'
+    copyStatuses:
+      physical:
+        owned: 'Possédé'
+        disposed: 'Cédé'
+      digital:
+        owned: 'Possédé'
+  game.addon:
+    states:
+      planned: 'Prévu'
+      in_progress: 'En cours'
+      completed: 'Terminé'
+      paused: 'En pause'
+      dropped: 'Abandonné'
+    units:
+      scalar_amount:
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+            many: 'minutes'
+    copyKinds:
+      physical: 'Physique'
+      digital: 'Numérique'
+    copyStatuses:
+      physical:
+        owned: 'Possédé'
+        disposed: 'Cédé'
+      digital:
+        owned: 'Possédé'
+propertyDescriptions:
+  schema:gamePlatform: 'Un concept de plateforme sur laquelle fonctionne le jeu ou l’édition ; un qualificatif de langue peut conserver l’association plateforme-langue.'
+  schema:gtin: 'Le Global Trade Item Number de l’édition, avec 8, 12, 13 ou 14 chiffres sans séparateurs.'
+  wdt:P2899: 'L’âge minimal associé à la classification de l’édition, en quantité entière non négative d’années (wd:Q577).'
+  wdt:P31: 'Un concept de catégorie d’édition, comme complète, partielle ou d’essai ; pas le type de catalogue du sujet.'
+  wdt:P155: 'L’œuvre ou l’édition précédente à laquelle celle-ci fait suite.'
+  rezics:releaseSupersedes: 'L’édition logicielle exacte que cette édition remplace, indépendamment de l’ordre chronologique.'
+  wdt:P437: 'Un concept précisant le format de distribution ou le support physique de l’édition, par exemple un disque optique.'
+  wdt:P408: 'Un concept nommant le moteur logiciel utilisé par le jeu.'
+  schema:numberOfPlayers: 'Nombre maximal de joueurs, entier sans unité ; pour un intervalle déclaré, employer la borne supérieure et qualifier séparément la borne inférieure.'
+  schema:minValue: 'Borne inférieure d’un intervalle déclaré de joueurs, qualificatif entier sans unité du nombre de joueurs ; ne pas la déduire d’un nombre isolé.'
+  wdt:P8646: 'Le jeu de base qu’étend cette œuvre additionnelle identifiée ; pas l’œuvre représentée par une édition logicielle.'

@@ -6,6 +6,7 @@ import { Value } from 'typebox/value';
 import {
   authoritativeTimeValue,
   currentCommand,
+  mintReadTime,
   principalCommandIdentity,
   runCommand,
   type AuthoritativeTime,
@@ -14,12 +15,20 @@ import {
   type CommandTransaction,
 } from '../command/command.ts';
 import { initializeResourceGrants, parentCreationAuthorization } from '../access/index.ts';
+import { commandAccessContext } from '../access/command-admission.ts';
+import { readAccount as readAccountHome } from '../access/account-data.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { accessCheck, accessCommandAuthorization, type AccessCheck } from '../request/access.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
+import { deadlineClient, within } from '../access/authenticate.ts';
+import { withConnection, discardConnection } from '../database/pool.ts';
+import { ProblemError } from '../http/problem.ts';
+import { accessCheck, accessCommandAuthorization, AuthenticationError, type AccessCheck } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { readPartition } from '../partition/partition.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import readThreadTarget from './read-new-thread-target.sql';
+import readAccount from '../access/account-read.sql';
+import readRealmHead from '../community/realm-read.sql';
 import reserveStatement from './reserve-media.sql';
 import completeStatement from './complete-media.sql';
 import readStatement from './read-media.sql';
@@ -40,7 +49,7 @@ import type { MediaId, PostId, ReadContext, RequestContext, RevisionId, ThreadId
 import { downloadMedia, type DownloadContext } from './media-download.ts';
 import type { RealmParticipationCheck } from '../community/participation.ts';
 
-export type MediaPurpose = 'post-image' | 'cover';
+export type MediaPurpose = 'post-image' | 'cover' | 'avatar' | 'realm-icon' | 'realm-banner';
 export type MediaState = 'reserved' | 'uploaded' | 'available' | 'rejected';
 export type MediaVariant = Readonly<{
   format: 'webp' | 'avif';
@@ -70,10 +79,15 @@ type MediaMetadataBase = Readonly<{
   decision: string | null;
   variants: readonly MediaVariant[];
 }>;
-/** Browser reservations describe post images with measured-size inputs. Imported covers
+/** Browser reservations describe post images and avatars with measured-size inputs. Imported covers
  * remain unmeasured until the trusted fetch and processing path observes the bytes. */
 export type MediaMetadata =
-  | (MediaMetadataBase & Readonly<{ purpose: 'post-image'; mediaType: string; byteCount: number }>)
+  | (MediaMetadataBase &
+      Readonly<{
+        purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
+        mediaType: string;
+        byteCount: number;
+      }>)
   | (MediaMetadataBase &
       Readonly<{
         purpose: 'cover';
@@ -83,7 +97,7 @@ export type MediaMetadata =
         source: ImportedSource;
       }>);
 type MediaReservationFields = Readonly<{
-  purpose: 'post-image';
+  purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
   mediaType: string;
   byteCount: number;
   sha256?: string;
@@ -91,7 +105,11 @@ type MediaReservationFields = Readonly<{
 export type MediaReservationInput = MediaReservationFields &
   (
     | Readonly<{ containerId: ThreadId | PostId; newThread?: never }>
-    | Readonly<{ newThread: Readonly<{ boardId: string; idempotencyKey: string }>; containerId?: never }>
+    | Readonly<{
+        purpose: 'post-image';
+        newThread: Readonly<{ boardId: string; idempotencyKey: string }>;
+        containerId?: never;
+      }>
   );
 export type NewThreadMediaTarget = Readonly<{ thread: Resource; boardId: string }>;
 export type MediaCompletionInput = Readonly<{
@@ -160,6 +178,21 @@ export class MediaUnavailableError extends Error {
   }
 }
 const imageTypes = new Set(['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp']);
+export const AVATAR_UPLOAD_MEDIA_TYPES = ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'] as [
+  'image/avif',
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+];
+export const AVATAR_UPLOAD_MAX_BYTES = 20_971_520;
+export type AvatarUploadAdvice = {
+  viewerState: 'signed_in';
+  viewer: { accountId: string };
+  target: { containerId: string; purpose: 'avatar' };
+  constraints: { mediaTypes: typeof AVATAR_UPLOAD_MEDIA_TYPES; maxByteCount: 20_971_520 };
+  allowedActions: ['upload'] | [];
+};
 const digestPattern = /^[0-9a-f]{64}(?![\s\S])/;
 function account(actor: Actor) {
   if (actor.kind !== 'account') throw new GrantDeniedError();
@@ -222,7 +255,12 @@ export async function reserveMedia(
   if (!containerId) throw new TypeError('Missing media container');
   const r = route(containerId);
   if (newThreadTarget && newThreadTarget.thread.route !== r) throw new TypeError('Invalid media target route');
-  if (input.purpose !== 'post-image' || !imageTypes.has(input.mediaType))
+  const avatar = input.purpose === 'avatar';
+  const realm = input.purpose === 'realm-icon' || input.purpose === 'realm-banner';
+  if (realm && newThreadTarget) throw new GrantDeniedError();
+  if (avatar && (containerId !== owner.accountId || owner.clientId !== 'rezics-website' || newThreadTarget))
+    throw new GrantDeniedError();
+  if ((input.purpose !== 'post-image' && !avatar && !realm) || !imageTypes.has(input.mediaType))
     throw new TypeError('Invalid media purpose or type');
   length(input.byteCount);
   if (input.sha256 !== undefined) digest(input.sha256);
@@ -254,10 +292,18 @@ export async function reserveMedia(
   const base = parentCreationAuthorization({
     access: dependencies.access,
     actor,
-    action: 'media:create',
+    action: realm ? 'realm:manage' : 'media:create',
     parent: {
       resource: board ?? { route: r, id: containerId },
       async validate(client, time) {
+        if (realm)
+          return (
+            (await readRealmHead.run(client, { route: r, id: containerId, at: authoritativeTimeValue(time) })) !== null
+          );
+        if (avatar) {
+          const current = await readAccount.run(client, { route: r, account_id: containerId });
+          return current !== null && current.state === 'active';
+        }
         if (board) {
           const partition = await readPartition(client, partitionOf(board.route));
           if (!partition || partition.writeState === 'moved') return false;
@@ -315,6 +361,7 @@ export async function reserveMedia(
   const authorization: CommandAuthorization = {
     ...base,
     async prepare(attempt) {
+      if (avatar || realm) return base.prepare!(attempt);
       if (board) {
         boardRead = await accessCheck(dependencies.access, actor, 'board:read', board, {
           pool: dependencies.pool,
@@ -434,6 +481,73 @@ export async function reserveMedia(
     },
   );
 }
+
+/** Observe current self-avatar upload admission. This is not a creation grant or receipt. */
+export async function readAvatarUploadAdvice(
+  dependencies: MediaDependencies,
+  actor: Actor,
+  deadline: number,
+): Promise<AvatarUploadAdvice> {
+  if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+  const r = routeOf(actor.accountId);
+  if (r === null) throw new ProblemError('not_found');
+  const parent = { route: r, id: actor.accountId };
+  let check: AccessCheck;
+  try {
+    // Prepare Access account/client/scope/epoch/requested-by evidence before the owner checkout.
+    check = await accessCheck(dependencies.access, actor, 'media:create', parent, {
+      pool: dependencies.pool,
+      deadline,
+    });
+  } catch (error) {
+    if (error instanceof AccessUnavailableError) throw new ProblemError('dependency_unavailable');
+    throw error;
+  }
+  const observation: Omit<AvatarUploadAdvice, 'allowedActions'> = {
+    viewerState: 'signed_in' as const,
+    viewer: { accountId: actor.accountId },
+    target: { containerId: actor.accountId, purpose: 'avatar' as const },
+    constraints: { mediaTypes: AVATAR_UPLOAD_MEDIA_TYPES, maxByteCount: AVATAR_UPLOAD_MAX_BYTES },
+  };
+  try {
+    return await within(deadline, () =>
+      withConnection(dependencies.pool, async (client) => {
+        const bounded = deadlineClient(client, deadline);
+        try {
+          await bounded.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+          const home = await readPartition(bounded, partitionOf(r));
+          if (!home || home.writeState === 'moved') throw new ProblemError('partition_unavailable');
+          const time = await mintReadTime(bounded, dependencies.clock);
+          const current = await readAccountHome(bounded, r, actor.accountId);
+          if (
+            !current ||
+            current.fenced ||
+            !Number.isSafeInteger(actor.authnEpoch) ||
+            actor.authnEpoch < 1 ||
+            BigInt(actor.authnEpoch) < current.minimumAuthnEpoch
+          )
+            throw new ProblemError('not_found');
+          const allowed =
+            actor.clientId === 'rezics-website' && current.state === 'active' && (await check(bounded, time));
+          await bounded.query('COMMIT');
+          const allowedActions: AvatarUploadAdvice['allowedActions'] = allowed ? ['upload'] : [];
+          return { ...observation, allowedActions };
+        } catch (error) {
+          try {
+            await bounded.query('ROLLBACK');
+          } catch (rollbackError) {
+            discardConnection(client, rollbackError as Error);
+          }
+          throw error;
+        }
+      }),
+    );
+  } catch (error) {
+    if (error instanceof AccessUnavailableError) throw new ProblemError('dependency_unavailable');
+    throw error;
+  }
+}
+
 export async function completeMedia(
   dependencies: MediaDependencies,
   actor: Actor,
@@ -462,14 +576,34 @@ export async function completeMedia(
     { pool: dependencies.pool, deadline: context.deadline },
     () => new GrantDeniedError(),
   );
+  let realmManagement: AccessCheck | null = null;
   const authorization: CommandAuthorization = {
     ...base,
+    async prepare(attempt) {
+      const evidence = await base.prepare?.(attempt);
+      const initial = await read(dependencies.pool, mediaId);
+      realmManagement =
+        initial?.purpose === 'realm-icon' || initial?.purpose === 'realm-banner'
+          ? await accessCheck(
+              dependencies.access,
+              actor,
+              'realm:manage',
+              { route: r, id: body.containerId },
+              commandAccessContext({ pool: dependencies.pool, deadline: context.deadline }, attempt),
+            )
+          : null;
+      return evidence;
+    },
     async authorize(tx, attempt, evidence) {
       const mode = await base.authorize(tx, attempt, evidence);
       const row = await read(tx, mediaId);
       if (
         !row ||
-        row.purpose !== 'post-image' ||
+        (row.purpose !== 'post-image' &&
+          row.purpose !== 'avatar' &&
+          row.purpose !== 'realm-icon' &&
+          row.purpose !== 'realm-banner') ||
+        (row.purpose === 'avatar' && row.container_id !== owner.accountId) ||
         row.uploader_id !== owner.accountId ||
         row.container_id !== body.containerId ||
         row.reservation_request_id !== body.reservationRequestId ||
@@ -480,6 +614,14 @@ export async function completeMedia(
         row.collection_pending
       )
         throw new GrantDeniedError();
+      if (row.purpose === 'realm-icon' || row.purpose === 'realm-banner') {
+        const current = await readRealmHead.run(tx, {
+          route: r,
+          id: body.containerId,
+          at: authoritativeTimeValue(attempt.time),
+        });
+        if (!current || !realmManagement || !(await realmManagement(tx, attempt.time))) throw new GrantDeniedError();
+      }
       return mode;
     },
   };
@@ -566,7 +708,14 @@ export async function readReservation(
     decision: row.decision,
     variants,
   };
-  if (row.purpose === 'post-image' && row.media_type !== null && row.byte_count !== null)
+  if (
+    (row.purpose === 'post-image' ||
+      row.purpose === 'avatar' ||
+      row.purpose === 'realm-icon' ||
+      row.purpose === 'realm-banner') &&
+    row.media_type !== null &&
+    row.byte_count !== null
+  )
     return { ...metadata, purpose: row.purpose, mediaType: row.media_type, byteCount: Number(row.byte_count) };
   if (row.purpose !== 'cover') return null;
   const source = {
@@ -626,7 +775,6 @@ export async function claimMedia(transaction: CommandTransaction, input: ClaimMe
     command.basis.clientId !== owner.clientId ||
     command.basis.requestedBy !== owner.requestedBy ||
     command.authorization?.mode !== 'execute' ||
-    (command.authorization.action !== 'thread:create' && command.authorization.resource.route !== r) ||
     input.mediaIds.length > 32
   )
     throw new GrantDeniedError();
@@ -636,15 +784,18 @@ export async function claimMedia(transaction: CommandTransaction, input: ClaimMe
       input.revisionId !== undefined ||
       input.reference.subjectId !== input.containerId ||
       routeOf(input.reference.subjectId) !== r ||
-      routeOf(input.reference.candidateId) !== r ||
-      command.authorization.resource.id !== input.containerId
+      routeOf(input.reference.candidateId) !== r
     )
       throw new GrantDeniedError();
+    // The cover port admits subject authority or the documented Global Context
+    // statement:propose/subject:create authority. The latter can live on another
+    // route; media, container and candidate still share this command's route.
     await claimCoverMedia(transaction, input);
     return;
   }
   if (
     input.reference !== undefined ||
+    (command.authorization.action !== 'thread:create' && command.authorization.resource.route !== r) ||
     (command.authorization.action !== 'thread:create' &&
       command.authorization.action !== 'post:create' &&
       command.authorization.action !== 'post:revise') ||

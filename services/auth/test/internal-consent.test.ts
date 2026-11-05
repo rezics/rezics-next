@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT, type JWTPayload } from 'jose';
+import { kindConsentOperationBound } from '@rezics/auth-contract';
+import type { KindConsentEnrollmentInput, KindConsentParticipant } from '@rezics/auth-contract';
 import { testDatabase } from '../scripts/database.ts';
 import { createInternalConsentHandler } from '../src/internal-consent.ts';
 import { createAuthConsentReader } from '../../kernel/src/access/auth-consent.ts';
@@ -15,6 +17,18 @@ const issuer = 'https://consent-team.cloudflareaccess.com';
 const audience = 'private-consent-audience';
 const serviceTokenId = 'e367826f93b8d71185e03fe518aff3b4.access';
 const input = { actorAccountId: 'person', clientId: 'client' };
+const enrollmentInput: KindConsentEnrollmentInput = {
+  accountId: 'person',
+  clientId: 'client',
+  requestedScopes: ['read'],
+  consumer: {
+    route: 'collection-kind',
+    ownerAccountId: 'person',
+    collectionId: 'collection',
+    preparationId: 'preparation',
+    originId: 'origin',
+  },
+};
 const config = () => ({
   database: db.pool,
   issuer,
@@ -204,4 +218,126 @@ test('database failures disclose only unavailable', async () => {
   );
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({ error: 'unavailable' });
+});
+
+test('short original deadline cancels verification and body work before native enrollment', async () => {
+  let slowJwksStarted!: () => void;
+  let slowJwksCancelled!: () => void;
+  const jwksStarted = new Promise<void>((resolve) => (slowJwksStarted = resolve));
+  const jwksCancelled = new Promise<void>((resolve) => (slowJwksCancelled = resolve));
+  const slowJwks = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch() {
+      slowJwksStarted();
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          cancel() {
+            slowJwksCancelled();
+          },
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    },
+  });
+  let nativeCalls = 0;
+  const enroll = Object.assign(
+    async (_value: KindConsentEnrollmentInput) => {
+      nativeCalls++;
+      return { status: 'unavailable' as const };
+    },
+    {
+      bound: kindConsentOperationBound,
+      actual: () => undefined,
+    },
+  );
+  const participant: KindConsentParticipant = { enroll };
+  const slowHandler = createInternalConsentHandler({
+    ...config(),
+    jwksUrl: `${slowJwks.url}cdn-cgi/access/certs`,
+    kindConsentParticipant: participant,
+  });
+  let bodyRead = false;
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull() {
+        bodyRead = true;
+        return new Promise<void>(() => {});
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const verificationDeadline = Date.now() + 100;
+  const verificationResponse = await slowHandler(
+    new Request(new URL('/internal/v1/kind-consents:enroll', server.url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'Cf-Access-Jwt-Assertion': await signed(),
+        'X-Rezics-Kind-Deadline': String(verificationDeadline),
+      },
+      body,
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' }),
+  );
+  await jwksStarted;
+  await jwksCancelled;
+  expect(verificationResponse.status).toBe(503);
+  expect(bodyRead).toBe(false);
+  expect(nativeCalls).toBe(0);
+  slowJwks.stop(true);
+
+  let bodyCancelled = false;
+  let bodyChunkSent = false;
+  let bodyReadStarted!: () => void;
+  const bodyStarted = new Promise<void>((resolve) => (bodyReadStarted = resolve));
+  const stalledBody = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        bodyReadStarted();
+        if (!bodyChunkSent) {
+          bodyChunkSent = true;
+          controller.enqueue(new TextEncoder().encode('{"input":'));
+        }
+        return new Promise<void>(() => {});
+      },
+      cancel() {
+        bodyCancelled = true;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  const bodyDeadline = Date.now() + 250;
+  const bodyResponsePromise = handler(
+    new Request(new URL('/internal/v1/kind-consents:enroll', server.url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'Cf-Access-Jwt-Assertion': await signed(),
+        'X-Rezics-Kind-Deadline': String(bodyDeadline),
+      },
+      body: stalledBody,
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' }),
+  );
+  await bodyStarted;
+  const bodyResponse = await bodyResponsePromise;
+  expect(bodyResponse.status).toBe(503);
+  expect(bodyCancelled).toBe(true);
+  expect(nativeCalls).toBe(0);
+
+  const headerDeadline = Date.now() + 2_000;
+  const mismatchedResponse = await handler(
+    new Request(new URL('/internal/v1/kind-consents:enroll', server.url), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'Cf-Access-Jwt-Assertion': await signed(),
+        'X-Rezics-Kind-Deadline': String(headerDeadline),
+      },
+      body: JSON.stringify({ input: enrollmentInput, deadline: headerDeadline - 1 }),
+    }),
+  );
+  expect(mismatchedResponse.status).toBe(403);
+  expect(nativeCalls).toBe(0);
 });

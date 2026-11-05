@@ -1,6 +1,28 @@
+import type { Source } from '@rezics/definitions/bulk';
+import { statementAudience } from './statement-disclosure.ts';
+import currentRelations from './current-relations-read.sql';
+import { fenceKey, sourceTuple, readAnchoredFences } from './fences.ts';
+import { semanticCopyRoles } from './erasure-producer.ts';
+import { privateLinks, refreshStatementReaderAuthorization } from './statement-disclosure.ts';
+import { currentRelationFacts, currentRelationKey } from './current-relations.ts';
+import { readWorkReleaseCards, workReleaseCardLimit, type WorkReleaseCards } from './work-release-cards.ts';
+import { requireAccessDeadline } from '../access/unavailable.ts';
+import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
+import { releaseDigest, type Release } from '@rezics/definitions';
+import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
+import { readItemTypes, readLabels } from './subject.ts';
+import { languageRanges } from './language.ts';
+import { holderFacts, labelOrderKey, readHolderKeys } from './link-keys.ts';
+import { factDataTypes, resolveItem, type Statement, type FactRow } from './item.ts';
+import { contextLinkChanges, linkChanges } from './link-changes.ts';
+import { slotView } from './slots.ts';
+import { contextSnapshot } from './context.ts';
+import { readSubjectSummaries, type SubjectSummary, type SummaryDependencies } from './summaries.ts';
+import { matchesTarget } from './targets.ts';
+import { withReadTransaction } from './read.ts';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { withConnection } from '../database/pool.ts';
 import { projectBatch, type Envelope } from '../events/log.ts';
 import type { Relay } from '../events/relays.ts';
 import { readPartition } from '../partition/partition.ts';
@@ -9,28 +31,75 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SessionComponent } from '../tokens/session.ts';
+import type { AccessCheck } from '../request/access.ts';
 import { SubjectNotFoundError } from './candidates.ts';
 import { moveMergePage } from './merge-moves.ts';
 import { redirectOf, SubjectRedirectError } from './merges.ts';
-import { LINKS_MOVING, SUBJECT_MERGED, LINKS_CHANGED, LINKS_PROJECTED } from './events.ts';
+import { accountAgentsForSubjects } from './agents.ts';
+import {
+  LINK_KEYS_CHANGED,
+  LINKS_MOVING,
+  LINKS_VISIBILITY_CHANGED,
+  SUBJECT_MERGED,
+  LINKS_CHANGED,
+  LINKS_PROJECTED,
+} from './events.ts';
 import listInboundLinksByProperty from './list-inbound-links-by-property.sql';
 import listInboundLinks from './list-inbound-links.sql';
 import { PageCursorError } from './page.ts';
-import readLinkCheckpoint from './read-link-checkpoint.sql';
-import readPendingMember from './links-read-pending-member.sql';
+import { pendingMergeSources, waitForSubjectLinks } from './link-freshness.ts';
+export { waitForSubjectLinks } from './link-freshness.ts';
 import readVisibility from './read-visibility.sql';
 import upsertInboundLinks from './upsert-inbound-links.sql';
+import upsertOutboundLinks from './upsert-outbound-links.sql';
+import listOutboundLinksByProperty from './list-outbound-links-by-property.sql';
+import listOutboundKeyReemit from './list-outbound-key-reemit.sql';
+import listInboundKeyReemit from './list-inbound-key-reemit.sql';
+import readOutboundForTargetReemit from './read-outbound-for-target-reemit.sql';
+import listOutboundVisibility from './list-outbound-visibility.sql';
 
 export const LINKS_CONSUMER = 'semantic_links';
 const FRESHNESS_TARGET_SECONDS = 10;
-const FRESHNESS_WAIT_MS = 2_000;
-const FRESHNESS_POLL_MS = 100;
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-type LinkChangeRow = { property: string; statement: string; target: string; present: boolean };
+type LinkChangeRow = {
+  context_id?: string;
+  suppressed?: boolean;
+  property: string;
+  statement: string;
+  target: string | null;
+  present: boolean;
+  project_outbound?: boolean;
+  relation?: boolean;
+  slot_id?: string;
+  external?: string | null;
+  value?: 'value' | 'somevalue' | 'novalue';
+  outbound_order?: 'position' | 'date' | 'name' | null;
+  outbound_order_key?: string;
+  source_type?: string;
+  order_key?: string;
+  filter_value?: string;
+};
 type LinksChanged = { subject: string; revision: number; security_revision: number; changes: LinkChangeRow[] };
+type LinkKeysChanged = {
+  subject: string;
+  direction: 'holder' | 'target';
+  revision: number;
+  security_revision: number;
+  cursor: (string | number)[];
+};
+type LinksVisibilityChanged = {
+  subject: string;
+  revision: number;
+  security_revision: number;
+  release: string;
+  visible: boolean;
+  cursor: (string | number)[];
+};
 type StoredChange = {
+  context_id?: string;
+  suppressed?: boolean;
   route: number;
   subjectId: string;
   property: string;
@@ -40,6 +109,34 @@ type StoredChange = {
   sourceSecurityRevision: number;
   present: boolean;
   position: bigint;
+  sourceType: string;
+  orderKey: string;
+  filterValue: string;
+};
+type StoredOutboundChange = {
+  context_id?: string;
+  suppressed?: boolean;
+  route: number;
+  subjectId: string;
+  property: string;
+  statementId: string;
+  target: string | null;
+  targetOrderKey?: string;
+  targetRevision?: number;
+  targetType?: string;
+  slotId: string;
+  relation: boolean;
+  external: string | null;
+  value: 'value' | 'somevalue' | 'novalue';
+  outboundOrder: 'position' | 'date' | 'name' | null;
+  outboundOrderKey: string;
+  sourceType: string;
+  sourceOrderKey: string;
+  sourceRevision: number;
+  sourceSecurityRevision: number;
+  present: boolean;
+  position: bigint;
+  filterValue: string;
 };
 
 function olderChange(revision: number, security: number, position: bigint, current: StoredChange): boolean {
@@ -55,43 +152,6 @@ function preferredChange(change: StoredChange, current: StoredChange): boolean {
   return change.position >= current.position;
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function covers(
-  row: { epoch: number | null; position: string | number | bigint } | null,
-  component: SessionComponent,
-): boolean {
-  if (!row || row.epoch === null) return false;
-  const epoch = typeof row.epoch === 'number' ? row.epoch : Number(row.epoch);
-  const position = typeof row.position === 'bigint' ? row.position : BigInt(row.position);
-  return epoch > component.epoch || (epoch === component.epoch && position >= component.position);
-}
-
-async function linksCaughtUp(
-  pool: Pool,
-  seen: readonly SessionComponent[],
-  subject: string,
-  deadline = deadlineFor(FRESHNESS_WAIT_MS),
-): Promise<boolean> {
-  while (Date.now() < deadline) {
-    const covered = await withConnection(pool, async (client) => {
-      for (const component of seen) {
-        const row = await readLinkCheckpoint.run(client, {
-          partition_no: component.partition,
-          consumer: LINKS_CONSUMER,
-        });
-        if (!covers(row, component)) return false;
-      }
-      const pending = await readPendingMember.run(client, { route: routeOf(subject)!, subject_id: subject });
-      return pending === null;
-    });
-    if (covered) return true;
-    if (Date.now() + FRESHNESS_POLL_MS > deadline) return false;
-    await sleep(FRESHNESS_POLL_MS);
-  }
-  return false;
-}
-
 function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange[]> {
   const newest = new Map<string, StoredChange>();
   for (const envelope of envelopes) {
@@ -100,12 +160,15 @@ function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange
       const data = event.data as LinksChanged;
       const security = Number(data.security_revision);
       for (const change of data.changes) {
+        if (change.target === null) continue;
         const route = routeOf(change.target);
         if (route === null) continue;
-        const key = `${route}\0${change.target}\0${change.property}\0${data.subject}\0${change.statement}`;
+        const key = `${change.context_id ?? GLOBAL_CONTEXT}\0${route}\0${change.target}\0${change.property}\0${data.subject}\0${change.statement}\0${change.filter_value ?? NIL_UUID}`;
         const current = newest.get(key);
         if (current && olderChange(data.revision, security, envelope.position, current)) continue;
         newest.set(key, {
+          context_id: change.context_id ?? GLOBAL_CONTEXT,
+          suppressed: change.suppressed ?? false,
           route,
           subjectId: change.target,
           property: change.property,
@@ -115,6 +178,9 @@ function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange
           sourceSecurityRevision: security,
           present: change.present,
           position: envelope.position,
+          sourceType: change.source_type ?? '',
+          orderKey: change.order_key ?? '',
+          filterValue: change.filter_value ?? NIL_UUID,
         });
       }
     }
@@ -129,10 +195,95 @@ function newestChanges(envelopes: readonly Envelope[]): Map<number, StoredChange
   return grouped;
 }
 
+function newestOutboundChanges(envelopes: readonly Envelope[]): Map<number, StoredOutboundChange[]> {
+  const newest = new Map<string, StoredOutboundChange>();
+  for (const envelope of envelopes) {
+    for (const event of envelope.events) {
+      if (event.type !== LINKS_CHANGED) continue;
+      const data = event.data as LinksChanged;
+      const holder = routeOf(data.subject);
+      if (holder === null) continue;
+      const security = Number(data.security_revision);
+      for (const change of data.changes) {
+        if (!change.project_outbound || !change.slot_id) continue;
+        const key = `${change.context_id ?? GLOBAL_CONTEXT}\0${data.subject}\0${change.property}\0${change.statement}\0${change.target ?? ''}\0${change.external ?? ''}\0${change.filter_value ?? NIL_UUID}`;
+        const current = newest.get(key);
+        if (
+          current &&
+          olderChange(data.revision, security, envelope.position, {
+            route: holder,
+            subjectId: data.subject,
+            property: change.property,
+            sourceSubjectId: data.subject,
+            statementId: change.statement,
+            sourceRevision: current.sourceRevision,
+            sourceSecurityRevision: current.sourceSecurityRevision,
+            present: current.present,
+            position: current.position,
+            sourceType: current.sourceType,
+            orderKey: current.sourceOrderKey,
+            filterValue: current.filterValue,
+          })
+        )
+          continue;
+        newest.set(key, {
+          context_id: change.context_id ?? GLOBAL_CONTEXT,
+          suppressed: change.suppressed ?? false,
+          route: holder,
+          subjectId: data.subject,
+          property: change.property,
+          statementId: change.statement,
+          target: change.target,
+          slotId: change.slot_id,
+          relation: change.relation === true,
+          external: change.external ?? null,
+          value: change.value ?? (change.target === null ? 'somevalue' : 'value'),
+          outboundOrder: change.outbound_order ?? null,
+          outboundOrderKey: change.outbound_order_key ?? '',
+          sourceType: change.source_type ?? '',
+          sourceOrderKey: change.order_key ?? '',
+          sourceRevision: data.revision,
+          sourceSecurityRevision: security,
+          present: change.present,
+          position: envelope.position,
+          filterValue: change.filter_value ?? NIL_UUID,
+        });
+      }
+    }
+  }
+  const grouped = new Map<number, StoredOutboundChange[]>();
+  for (const change of newest.values()) {
+    const partition = partitionOf(change.route);
+    const list = grouped.get(partition) ?? [];
+    list.push(change);
+    grouped.set(partition, list);
+  }
+  return grouped;
+}
+
 async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> {
+  const contexts = [...new Set(changes.map((change) => change.context_id ?? GLOBAL_CONTEXT))];
+  if (contexts.length > 1) {
+    contexts.sort((left, right) =>
+      left === GLOBAL_CONTEXT ? -1 : right === GLOBAL_CONTEXT ? 1 : left.localeCompare(right),
+    );
+    for (const context of contexts)
+      await applyChanges(
+        pool,
+        changes.filter((change) => (change.context_id ?? GLOBAL_CONTEXT) === context),
+      );
+    return;
+  }
   const newest = new Map<string, StoredChange>();
   for (const change of changes) {
-    const key = JSON.stringify([change.subjectId, change.property, change.sourceSubjectId, change.statementId]);
+    const key = JSON.stringify([
+      change.subjectId,
+      change.context_id ?? GLOBAL_CONTEXT,
+      change.property,
+      change.sourceSubjectId,
+      change.statementId,
+      change.filterValue,
+    ]);
     const current = newest.get(key);
     if (!current || preferredChange(change, current)) newest.set(key, change);
   }
@@ -140,6 +291,9 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
   // A command checks each target under the same partition fence as its upserts.
   for (let offset = 0; offset < changes.length; offset += 100) {
     const page = changes.slice(offset, offset + 100);
+    const roles = await Promise.all(
+      page.map((change) => semanticCopyRoles(pool, change.sourceSubjectId, change.statementId)),
+    );
     const partition = partitionOf(page[0]!.route);
     const command = await runCommand(pool, { partition }, async (tx, { transactionId }) => {
       const forwarded: StoredChange[] = [];
@@ -157,13 +311,19 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
           changes: local
             .filter((change) => change.route === route)
             .map((change) => ({
+              erasure_roles: roles[page.indexOf(change)] ?? [],
               subject_id: change.subjectId,
+              context_id: change.context_id ?? GLOBAL_CONTEXT,
+              suppressed: change.suppressed ?? false,
               property: change.property,
               source_subject_id: change.sourceSubjectId,
               statement_id: change.statementId,
               source_revision: change.sourceRevision,
               source_security_revision: change.sourceSecurityRevision,
               present: change.present,
+              source_type: change.sourceType,
+              order_key: change.orderKey,
+              filter_value: change.filterValue,
             })),
         });
       return {
@@ -189,10 +349,486 @@ async function applyChanges(pool: Pool, changes: StoredChange[]): Promise<void> 
   }
 }
 
+async function applyOutboundChanges(pool: Pool, changes: StoredOutboundChange[]): Promise<void> {
+  const contexts = [...new Set(changes.map((change) => change.context_id ?? GLOBAL_CONTEXT))];
+  if (contexts.length > 1) {
+    contexts.sort((left, right) =>
+      left === GLOBAL_CONTEXT ? -1 : right === GLOBAL_CONTEXT ? 1 : left.localeCompare(right),
+    );
+    for (const context of contexts)
+      await applyOutboundChanges(
+        pool,
+        changes.filter((change) => (change.context_id ?? GLOBAL_CONTEXT) === context),
+      );
+    return;
+  }
+  const routes = new Map<number, StoredOutboundChange[]>();
+  for (const change of changes) {
+    const group = routes.get(change.route) ?? [];
+    group.push(change);
+    routes.set(change.route, group);
+  }
+  for (const [route, routeChanges] of routes) {
+    for (let offset = 0; offset < routeChanges.length; offset += 100) {
+      const page = routeChanges.slice(offset, offset + 100);
+      const typeTargets = page.flatMap((change) =>
+        change.target && change.targetType === undefined ? [change.target] : [],
+      );
+      const nameTargets = page.flatMap((change) =>
+        change.target && change.targetOrderKey === undefined && change.outboundOrder === 'name' ? [change.target] : [],
+      );
+      const dateTargets = [
+        ...new Set(
+          page.flatMap((change) =>
+            change.target && change.targetOrderKey === undefined && change.outboundOrder === 'date'
+              ? [change.target]
+              : [],
+          ),
+        ),
+      ];
+      const [types, labels] = await Promise.all([
+        readItemTypes(pool, [...new Set(typeTargets)]),
+        readLabels(pool, [...new Set(nameTargets)]),
+      ]);
+      const dateKeys = new Map(
+        await Promise.all(
+          dateTargets.map(async (target) => [target, (await readHolderKeys(pool, target)).date] as const),
+        ),
+      );
+      const roles = await Promise.all(
+        page.map((change) => semanticCopyRoles(pool, change.subjectId, change.statementId)),
+      );
+      await runCommand(pool, { partition: partitionOf(route) }, async (tx, { transactionId }) => {
+        await upsertOutboundLinks.run(tx, {
+          route,
+          transaction_id: transactionId,
+          changes: page.map((change) => {
+            const target = change.target;
+            const unresolved = target === null;
+            const external = change.external;
+            const targetOrder =
+              change.targetOrderKey ??
+              (unresolved
+                ? `Z${change.outboundOrderKey}\u0001${external ?? ''}`
+                : change.outboundOrder === 'name'
+                  ? labelOrderKey(labels.get(target) ?? {})
+                  : change.outboundOrder === 'position'
+                    ? change.outboundOrderKey
+                    : change.outboundOrder === 'date'
+                      ? (dateKeys.get(target) ?? '1')
+                      : target);
+            return {
+              erasure_roles: roles[page.indexOf(change)] ?? [],
+              subject_id: change.subjectId,
+              context_id: change.context_id ?? GLOBAL_CONTEXT,
+              suppressed: change.suppressed ?? false,
+              property: change.property,
+              filter_value: change.filterValue,
+              order_key: targetOrder,
+              target_subject_id: target ?? NIL_UUID,
+              statement_id: change.statementId,
+              slot_id: change.slotId,
+              relation: change.relation,
+              source_type: change.sourceType,
+              source_order_key: change.sourceOrderKey,
+              outbound_order: change.outboundOrder,
+              source_revision: change.sourceRevision,
+              source_security_revision: change.sourceSecurityRevision,
+              target_revision: change.targetRevision ?? 0,
+              target_type: change.targetType ?? (target ? (types.get(target) ?? '') : ''),
+              external,
+              value: change.value,
+              present: change.present,
+            };
+          }),
+        });
+        return {
+          value: null,
+          events: [{ type: LINKS_PROJECTED, data: { subjects: [...new Set(page.map((change) => change.subjectId))] } }],
+        };
+      });
+    }
+  }
+}
+
+function sourceOrder(order: string | null, keys: { name: string; date: string }, prior: string): string {
+  if (order === 'name') return keys.name;
+  if (order === 'date') return keys.date;
+  if (order === 'position') return prior;
+  return '';
+}
+
+type OutboundProjectionRow = {
+  context_id: string;
+  suppressed: boolean;
+  route: number;
+  subject_id: string;
+  property: string;
+  statement_id: string;
+  slot_id: string;
+  target: string | null;
+  filter_value: string;
+  order_key: string;
+  relation: boolean;
+  source_type: string;
+  source_order_key: string;
+  outbound_order: string | null;
+  source_revision: number;
+  source_security_revision: string;
+  target_revision: number;
+  target_type: string;
+  external: string | null;
+  value: string;
+};
+
+function outboundProjectionRow(row: OutboundProjectionRow): StoredOutboundChange {
+  return {
+    context_id: String(row.context_id ?? GLOBAL_CONTEXT),
+    suppressed: row.suppressed === true,
+    route: Number(row.route),
+    subjectId: String(row.subject_id),
+    property: String(row.property),
+    statementId: String(row.statement_id),
+    target: typeof row.target === 'string' ? row.target : null,
+    slotId: String(row.slot_id),
+    relation: row.relation === true,
+    external: typeof row.external === 'string' ? row.external : null,
+    value: row.value === 'novalue' || row.value === 'somevalue' ? row.value : 'value',
+    outboundOrder:
+      row.outbound_order === 'name' || row.outbound_order === 'date' || row.outbound_order === 'position'
+        ? row.outbound_order
+        : null,
+    outboundOrderKey: String(row.outbound_order === 'position' ? (row.source_order_key ?? '') : ''),
+    sourceType: String(row.source_type ?? ''),
+    sourceOrderKey: String(row.source_order_key ?? ''),
+    sourceRevision: Number(row.source_revision),
+    sourceSecurityRevision: Number(row.source_security_revision ?? 0),
+    targetRevision: Number(row.target_revision ?? 0),
+    targetType: String(row.target_type ?? ''),
+    targetOrderKey: String(row.order_key ?? ''),
+    present: true,
+    position: 0n,
+    filterValue: String(row.filter_value),
+  };
+}
+
+async function enqueueKeyContinuation(pool: Pool, data: LinkKeysChanged): Promise<void> {
+  const route = routeOf(data.subject);
+  if (route === null) return;
+  await runCommand(pool, { partition: partitionOf(route) }, async () => ({
+    value: null,
+    events: [{ type: LINK_KEYS_CHANGED, subject: data.subject, data }],
+  }));
+}
+
+async function reemitHolderKeys(pool: Pool, data: LinkKeysChanged): Promise<void> {
+  const route = routeOf(data.subject)!;
+  const [afterProperty, afterTarget, afterStatement, afterFilter] = data.cursor;
+  const rows = (await listOutboundKeyReemit.run(pool, {
+    route,
+    subject_id: data.subject,
+    after_property: typeof afterProperty === 'string' ? afterProperty : '',
+    after_target: typeof afterTarget === 'string' ? afterTarget : NIL_UUID,
+    after_statement: typeof afterStatement === 'string' ? afterStatement : NIL_UUID,
+    after_filter: typeof afterFilter === 'string' ? afterFilter : NIL_UUID,
+    after_context: typeof data.cursor[4] === 'string' ? data.cursor[4] : NIL_UUID,
+  })) as Omit<OutboundProjectionRow, 'route' | 'subject_id'>[];
+  const page = rows.slice(0, 100);
+  if (page.length === 0) return;
+  const keys = await readHolderKeys(pool, data.subject);
+  const outbound = page.map((raw) => {
+    const row = outboundProjectionRow({ ...raw, subject_id: data.subject, route });
+    row.sourceType = keys.source_type;
+    row.sourceOrderKey = sourceOrder(row.outboundOrder, keys, row.sourceOrderKey);
+    row.sourceRevision = data.revision;
+    row.sourceSecurityRevision = data.security_revision;
+    return row;
+  });
+  await applyOutboundChanges(pool, outbound);
+  await applyChanges(
+    pool,
+    outbound.flatMap((change): StoredChange[] =>
+      change.target === null
+        ? []
+        : [
+            {
+              route: routeOf(change.target)!,
+              subjectId: change.target,
+              context_id: change.context_id ?? GLOBAL_CONTEXT,
+              suppressed: change.suppressed ?? false,
+              property: change.property,
+              sourceSubjectId: data.subject,
+              statementId: change.statementId,
+              sourceRevision: data.revision,
+              sourceSecurityRevision: data.security_revision,
+              present: true,
+              position: 0n,
+              sourceType: keys.source_type,
+              orderKey: change.sourceOrderKey,
+              filterValue: change.filterValue,
+            },
+          ],
+    ),
+  );
+  if (rows.length > page.length) {
+    const last = page.at(-1)!;
+    await enqueueKeyContinuation(pool, {
+      ...data,
+      cursor: [
+        String(last.property),
+        typeof last.target === 'string' ? last.target : NIL_UUID,
+        String(last.statement_id),
+        String(last.filter_value),
+        String(last.context_id),
+      ],
+    });
+  }
+}
+
+async function reemitTargetKeys(pool: Pool, data: LinkKeysChanged): Promise<void> {
+  const route = routeOf(data.subject)!;
+  const [afterProperty, afterSource, afterStatement, afterFilter] = data.cursor;
+  const inboundRows = await listInboundKeyReemit.run(pool, {
+    route,
+    subject_id: data.subject,
+    after_property: typeof afterProperty === 'string' ? afterProperty : '',
+    after_source: typeof afterSource === 'string' ? afterSource : NIL_UUID,
+    after_statement: typeof afterStatement === 'string' ? afterStatement : NIL_UUID,
+    after_filter: typeof afterFilter === 'string' ? afterFilter : NIL_UUID,
+    after_context: typeof data.cursor[4] === 'string' ? data.cursor[4] : NIL_UUID,
+  });
+  const page = inboundRows.slice(0, 100) as {
+    property: string;
+    source: string;
+    context_id: string;
+    statement: string;
+    filter_value: string;
+  }[];
+  if (page.length === 0) return;
+  const keys = await readHolderKeys(pool, data.subject);
+  const targetType = keys.source_type;
+  const byRoute = new Map<number, typeof page>();
+  for (const row of page) {
+    const holderRoute = routeOf(row.source);
+    if (holderRoute === null) continue;
+    const group = byRoute.get(holderRoute) ?? [];
+    group.push(row);
+    byRoute.set(holderRoute, group);
+  }
+  const found = (
+    await Promise.all(
+      [...byRoute].map(([holderRoute, rows]) =>
+        readOutboundForTargetReemit.run(pool, {
+          route: holderRoute,
+          links: rows.map((row) => ({
+            subject_id: row.source,
+            context_id: row.context_id,
+            property: row.property,
+            statement_id: row.statement,
+            filter_value: row.filter_value,
+          })),
+        }),
+      ),
+    )
+  ).flat() as OutboundProjectionRow[];
+  const outbound = found.map((raw) => {
+    const row = outboundProjectionRow(raw);
+    row.targetType = targetType;
+    row.targetRevision = data.revision;
+    row.targetOrderKey =
+      row.outboundOrder === 'name'
+        ? keys.name
+        : row.outboundOrder === 'date'
+          ? keys.date
+          : row.outboundOrder === 'position'
+            ? row.outboundOrderKey
+            : data.subject;
+    return row;
+  });
+  await applyOutboundChanges(pool, outbound);
+  if (inboundRows.length > page.length) {
+    const last = page.at(-1)!;
+    await enqueueKeyContinuation(pool, {
+      ...data,
+      cursor: [last.property, last.source, last.statement, last.filter_value, last.context_id],
+    });
+  }
+}
+
+async function enqueueVisibilityContinuation(pool: Pool, data: LinksVisibilityChanged): Promise<void> {
+  const route = routeOf(data.subject);
+  if (route === null) return;
+  await runCommand(pool, { partition: partitionOf(route) }, async () => ({
+    value: null,
+    events: [{ type: LINKS_VISIBILITY_CHANGED, subject: data.subject, data }],
+  }));
+}
+
+async function applyVisibilityPage(pool: Pool, data: LinksVisibilityChanged): Promise<void> {
+  const route = routeOf(data.subject)!;
+  const [afterProperty, afterTarget, afterStatement, afterFilter] = data.cursor;
+  const rows = (await listOutboundVisibility.run(pool, {
+    route,
+    subject_id: data.subject,
+    visible: data.visible,
+    after_property: typeof afterProperty === 'string' ? afterProperty : '',
+    after_target: typeof afterTarget === 'string' ? afterTarget : NIL_UUID,
+    after_statement: typeof afterStatement === 'string' ? afterStatement : NIL_UUID,
+    after_filter: typeof afterFilter === 'string' ? afterFilter : NIL_UUID,
+    after_context: typeof data.cursor[4] === 'string' ? data.cursor[4] : NIL_UUID,
+  })) as (Omit<OutboundProjectionRow, 'route' | 'subject_id' | 'statement_id' | 'slot_id'> & {
+    statement: string;
+    slot: string;
+  })[];
+  const page = rows.slice(0, 100);
+  if (page.length === 0) return;
+  const release = await readRelease(pool, data.release);
+  if (!release) throw new Error('Subject revision release is missing');
+  const keys = await readHolderKeys(pool, data.subject);
+  let changes: StoredOutboundChange[];
+  if (!data.visible) {
+    changes = page.map((raw) => {
+      const row = outboundProjectionRow({
+        ...raw,
+        subject_id: data.subject,
+        route,
+        statement_id: raw.statement,
+        slot_id: raw.slot,
+      });
+      row.sourceRevision = data.revision;
+      row.sourceSecurityRevision = data.security_revision;
+      row.present = false;
+      return row;
+    });
+  } else {
+    const slots = new Map<string, { property: string; slot: string; context: string }>();
+    for (const row of page) {
+      const entry = { property: String(row.property), slot: String(row.slot), context: String(row.context_id) };
+      slots.set(`${entry.property}\0${entry.slot}\0${entry.context}`, entry);
+    }
+    const identity = await withConnection(pool, (client) => holderFacts(client, data.subject, release));
+    const metadata = { subject: data.subject, release, type: identity.type, identityFacts: identity.facts };
+    const links = await withConnection(pool, async (client) => {
+      const result = [];
+      for (const { property, slot, context } of slots.values()) {
+        const global = (await slotView(client, data.subject, property, GLOBAL_CONTEXT, {}, slot)).facts;
+        if (context === GLOBAL_CONTEXT) {
+          result.push(...linkChanges([], global, factDataTypes(release, global), metadata));
+        } else {
+          const selected = (await slotView(client, data.subject, property, context, {}, slot)).facts;
+          result.push(
+            ...contextLinkChanges(
+              global,
+              global,
+              selected,
+              factDataTypes(release, [...global, ...selected]),
+              metadata,
+              context,
+            ),
+          );
+        }
+      }
+      return result;
+    });
+    changes = links.map((link) => ({
+      route,
+      subjectId: data.subject,
+      context_id: link.context_id ?? GLOBAL_CONTEXT,
+      suppressed: link.suppressed ?? false,
+      property: link.property,
+      statementId: link.statement,
+      target: link.target,
+      slotId: link.slot_id ?? '',
+      relation: link.relation === true,
+      external: link.external ?? null,
+      value: link.value ?? (link.target === null ? 'somevalue' : 'value'),
+      outboundOrder: link.outbound_order ?? null,
+      outboundOrderKey: link.outbound_order_key ?? '',
+      sourceType: keys.source_type,
+      sourceOrderKey: link.order_key ?? '',
+      sourceRevision: data.revision,
+      sourceSecurityRevision: data.security_revision,
+      present: true,
+      position: 0n,
+      filterValue: link.filter_value ?? NIL_UUID,
+    }));
+  }
+  await applyOutboundChanges(pool, changes);
+  await applyChanges(
+    pool,
+    changes.flatMap((change): StoredChange[] =>
+      change.target === null
+        ? []
+        : [
+            {
+              route: routeOf(change.target)!,
+              subjectId: change.target,
+              context_id: change.context_id ?? GLOBAL_CONTEXT,
+              suppressed: change.suppressed ?? false,
+              property: change.property,
+              sourceSubjectId: data.subject,
+              statementId: change.statementId,
+              sourceRevision: data.revision,
+              sourceSecurityRevision: data.security_revision,
+              present: change.present,
+              position: 0n,
+              sourceType: change.sourceType,
+              orderKey: change.sourceOrderKey,
+              filterValue: change.filterValue,
+            },
+          ],
+    ),
+  );
+  if (rows.length > page.length) {
+    const last = page.at(-1)!;
+    await enqueueVisibilityContinuation(pool, {
+      ...data,
+      cursor: [
+        String(last.property),
+        typeof last.target === 'string' ? last.target : NIL_UUID,
+        String(last.statement),
+        String(last.filter_value),
+        String(last.context_id),
+      ],
+    });
+  }
+}
+
 async function applyLinkBatch(pool: Pool, envelopes: readonly Envelope[]): Promise<void> {
+  const outbound = newestOutboundChanges(envelopes);
+  for (const partition of [...outbound.keys()].sort((a, b) => a - b))
+    await applyOutboundChanges(pool, outbound.get(partition)!);
   const grouped = newestChanges(envelopes);
   for (const partition of [...grouped.keys()].sort((a, b) => a - b)) {
     await applyChanges(pool, grouped.get(partition)!);
+  }
+  const merges = envelopes.flatMap((envelope) =>
+    envelope.events.flatMap((event) => {
+      if (event.type !== SUBJECT_MERGED) return [];
+      const data = event.data as { id: string; survivor: string };
+      return [data];
+    }),
+  );
+  const agentLinks = await accountAgentsForSubjects(
+    pool,
+    merges.map((event) => event.survivor),
+  );
+  const verificationBySubject = new Map<string, { account: string; receipt: string }>();
+  for (const event of merges) {
+    const link = agentLinks.get(event.survivor);
+    if (link?.verified && link.receipt_id && link.agent_id === event.id)
+      verificationBySubject.set(event.survivor, { account: link.account, receipt: link.receipt_id });
+  }
+  for (const envelope of envelopes) {
+    for (const event of envelope.events) {
+      if (event.type === LINK_KEYS_CHANGED) {
+        const data = event.data as LinkKeysChanged;
+        if (data.direction === 'holder') await reemitHolderKeys(pool, data);
+        else await reemitTargetKeys(pool, data);
+      } else if (event.type === LINKS_VISIBILITY_CHANGED) {
+        await applyVisibilityPage(pool, event.data as LinksVisibilityChanged);
+      }
+    }
   }
   const moved = new Set<string>();
   for (const envelope of envelopes) {
@@ -200,11 +836,17 @@ async function applyLinkBatch(pool: Pool, envelopes: readonly Envelope[]): Promi
       if (event.type === SUBJECT_MERGED) {
         const data = event.data as { id: string; survivor: string };
         if (moved.has(data.id)) continue;
-        if (await moveMergePage(pool, data.id, data.survivor)) moved.add(data.id);
+        const verification = verificationBySubject.get(data.survivor);
+        if (await moveMergePage(pool, data.id, data.survivor, undefined, verification)) moved.add(data.id);
       } else if (event.type === LINKS_MOVING) {
-        const data = event.data as { id: string; survivor: string; cursor: string[] };
+        const data = event.data as {
+          id: string;
+          survivor: string;
+          cursor: string[];
+          verification?: { account: string; receipt: string };
+        };
         if (moved.has(data.id)) continue;
-        if (await moveMergePage(pool, data.id, data.survivor, data.cursor)) moved.add(data.id);
+        if (await moveMergePage(pool, data.id, data.survivor, data.cursor, data.verification)) moved.add(data.id);
       }
     }
   }
@@ -222,54 +864,235 @@ export function linkProjection(pool: Pool): Relay {
   };
 }
 
-export type SubjectLink = { subject: string; property: string; statement: string };
+/** Current selected statements, batched by their source home, never copied from link projections. */
+async function currentRelationStatements(
+  pool: Pool,
+  entries: readonly { subject: string; property: string; statement: string }[],
+  context: string,
+  routeKey: Uint8Array,
+  deadline: number,
+): Promise<Map<string, Statement>> {
+  const defaults = context === GLOBAL_CONTEXT ? {} : ((await contextSnapshot(pool, context))?.defaults ?? {});
+  const homes = new Map<number, (typeof entries)[number][]>();
+  for (const entry of entries) {
+    const home = partitionOf(routeOf(entry.subject)!);
+    const group = homes.get(home) ?? [];
+    group.push(entry);
+    homes.set(home, group);
+  }
+  const rows: {
+    subject: string;
+    property: string;
+    candidate: string;
+    body: unknown;
+    release: string;
+    revision: number;
+    source: Source | null;
+  }[] = [];
+  for (const [home, group] of homes) {
+    requireAccessDeadline(deadline);
+    rows.push(
+      ...((await withReadTransaction(pool, async (client) =>
+        currentRelations.run(client, {
+          partition_no: home,
+          context_id: context,
+          defaults,
+          entries: group.map((entry) => ({
+            route: routeOf(entry.subject)!,
+            id: entry.subject,
+            property: entry.property,
+            candidate: entry.statement,
+          })),
+          ...(await statementAudience(client)),
+        }),
+      )) as typeof rows),
+    );
+  }
+  const tuples = new Map<string, ReturnType<typeof sourceTuple>>();
+  for (const row of rows)
+    if (row.source && 'field_group' in row.source) {
+      const tuple = sourceTuple(routeKey, row.source);
+      tuples.set(fenceKey(tuple), tuple);
+    }
+  const tupleHomes = new Map<number, ReturnType<typeof sourceTuple>[]>();
+  for (const tuple of tuples.values()) {
+    const home = partitionOf(tuple.route);
+    const group = tupleHomes.get(home) ?? [];
+    group.push(tuple);
+    tupleHomes.set(home, group);
+  }
+  const gone = new Set<string>();
+  for (const [home, group] of tupleHomes)
+    for (let offset = 0; offset < group.length; offset += 100) {
+      requireAccessDeadline(deadline);
+      for (const fence of await readAnchoredFences(pool, home, group.slice(offset, offset + 100)))
+        if (fence.takenDown) gone.add(fenceKey(fence));
+    }
+  const releases = new Map<string, Release>();
+  const result = new Map<string, Statement>();
+  for (const row of rows) {
+    if (row.source && 'field_group' in row.source && gone.has(fenceKey(sourceTuple(routeKey, row.source)))) continue;
+    let release = releases.get(row.release);
+    if (!release) {
+      release = (await readRelease(pool, row.release)) ?? undefined;
+      if (!release) continue;
+      releases.set(row.release, release);
+    }
+    const fact: FactRow = {
+      kind: 'statement',
+      property: row.property,
+      language: null,
+      statement_id: row.candidate,
+      operation: 'assert',
+      body: row.body,
+      fact_release: row.release,
+      fact_revision: row.revision,
+    };
+    const statement = resolveItem(row.subject, [fact], '', factDataTypes(release, [fact]), {
+      revision: row.revision,
+      release: row.release,
+      context,
+    }).statements[row.property]?.[0];
+    if (statement) result.set(`${row.subject}/${row.candidate}`, statement);
+  }
+  requireAccessDeadline(deadline);
+  return result;
+}
+
+function statementItems(statement: Statement): string[] {
+  return [statement, ...statement.qualifiers, ...statement.references.flatMap((reference) => reference.parts)].flatMap(
+    (snak) =>
+      snak.property.data_type === 'wikibase-item' &&
+      snak.value.type === 'value' &&
+      typeof snak.value.content === 'string'
+        ? [snak.value.content]
+        : [],
+  );
+}
+
+function externalRelationValue(statement: Statement): string | null {
+  const value = statement.qualifiers.find(
+    (qualifier) =>
+      qualifier.property.id === 'schema:sameAs' &&
+      qualifier.value.type === 'value' &&
+      typeof qualifier.value.content === 'string' &&
+      /^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$/.test(qualifier.value.content),
+  )?.value;
+  return value?.type === 'value' && typeof value.content === 'string' ? value.content : null;
+}
+
+function localRelationTarget(statement: Statement): string | null {
+  const value = statement.value;
+  return value.type === 'value' && typeof value.content === 'string' && routeOf(value.content) !== null
+    ? value.content
+    : null;
+}
+
+/** A concealed related value is omitted together with its label; it never becomes a readable raw id. */
+export function disclosedRelationStatement(
+  statement: Statement,
+  summaries: ReadonlyMap<string, SubjectSummary | null>,
+): Statement | null {
+  const disclosed = (snak: Pick<Statement, 'property' | 'value'>) =>
+    snak.property.data_type !== 'wikibase-item' ||
+    snak.value.type !== 'value' ||
+    typeof snak.value.content !== 'string' ||
+    !!summaries.get(snak.value.content);
+  if (!disclosed(statement)) return null;
+  return {
+    ...statement,
+    qualifiers: statement.qualifiers.filter(disclosed),
+    references: statement.references.flatMap((reference) => {
+      const parts = reference.parts.filter(disclosed);
+      return parts.length ? [{ ...reference, parts }] : [];
+    }),
+  };
+}
+
+export type SubjectLink = {
+  subject: string;
+  property: string;
+  statement: string;
+  assertion?: Statement;
+  /** Exact current slot identity, without authority or a correction payload. */
+  creditSlot?: { property: string; target: string; key?: string };
+  related?: Record<string, SubjectSummary>;
+  type?: string;
+  label?: string;
+  summary?: SubjectSummary | null;
+};
 export type SubjectLinksPage = {
   links: SubjectLink[];
+  workReleaseCards?: WorkReleaseCards;
+  count?: { value: number; exact: boolean };
+  partial?: boolean;
   freshness: { consistency: 'eventual'; target_seconds: 10; caught_up: boolean };
   next: string | null;
   component: { partition: number; epoch: number; position: bigint };
 };
 
-export function waitForSubjectLinks(
-  pool: Pool,
-  seen: readonly SessionComponent[],
-  subject: string,
-  deadline: number,
-): Promise<boolean> {
-  const started = Date.now();
-  // Leave at least half of the remaining request budget for authorization and the read.
-  const waitUntil = Math.min(started + FRESHNESS_WAIT_MS, started + (deadline - started) / 2);
-  return linksCaughtUp(pool, seen, subject, waitUntil);
-}
-
 function validAfter(after: CursorKey[], property: string | null): boolean {
   if (after.length !== 3) return false;
   const [cursorProperty, source, statement] = after;
-  if (typeof cursorProperty !== 'string' || cursorProperty.length < 1) return false;
+  if (typeof cursorProperty !== 'string' || (property === null && cursorProperty.length < 1)) return false;
   if (typeof source !== 'string' || typeof statement !== 'string') return false;
   if (!UUID.test(source) || !UUID.test(statement)) return false;
-  return property === null || cursorProperty === property;
+  return true;
 }
 
 export async function listSubjectLinks(
   pool: Pool,
   ring: KeyRing,
   options: {
+    routeKey: Uint8Array;
     subject: string;
+    context?: string;
     property: string | null;
     limit: number;
+    filter?: string;
+    qualifier?: { property: string; value: string };
+    type?: string;
+    language?: string;
+    languages?: readonly string[];
+    includeLabels?: boolean;
+    authorizeSummary?: SummaryDependencies['authorize'];
+    release?: Release;
+    releasePin?: string;
     cursor?: string;
     authorize: (client: PoolClient) => Promise<boolean>;
+    prepareAuthorization?: () => Promise<AccessCheck>;
+    deadline?: number;
     seen: readonly SessionComponent[];
     caughtUp?: boolean;
   },
 ): Promise<SubjectLinksPage> {
   const route = routeOf(options.subject);
   if (route === null) throw new SubjectNotFoundError();
+  if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100)
+    throw new RangeError('Invalid links page limit');
+  if (options.qualifier && options.limit > 20) throw new RangeError('Qualified link pages accept at most 20 rows');
+  const context = options.context ?? GLOBAL_CONTEXT;
+  const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
+  if (context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
+  const defaults = contextRecord?.defaults ?? {};
+  const languages = options.languages ?? languageRanges(null, options.language);
   const binding = {
     operation: 'subject.links',
-    parameters: { subject: options.subject, property: options.property },
+    parameters: {
+      subject: options.subject,
+      ...(context === GLOBAL_CONTEXT ? {} : { context }),
+      property: options.property,
+      filter: options.filter ?? null,
+      qualifierProperty: options.qualifier?.property ?? null,
+      qualifierValue: options.qualifier?.value ?? null,
+      type: options.type ?? null,
+      language: languages.join(',') || null,
+      release: options.releasePin ?? (options.release ? releaseDigest(options.release) : null),
+    },
   };
+  const release =
+    options.type || options.filter ? (options.release ?? (await activeRelease(pool))?.release) : undefined;
+  const matches = (type: string) => !options.type || (!!release && matchesTarget(release, type, [options.type]));
   let cursor: { epoch: number; after: CursorKey[] } | null = null;
   if (options.cursor !== undefined) {
     const decoded = decodeCursor(ring, binding, options.cursor);
@@ -277,66 +1100,635 @@ export async function listSubjectLinks(
     if (!validAfter(decoded.after, options.property)) throw new PageCursorError('invalid');
     cursor = decoded;
   }
-  const caughtUp = options.caughtUp ?? (await linksCaughtUp(pool, options.seen, options.subject));
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      await client.query("SET LOCAL statement_timeout = '300ms'");
+  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  let caughtUp = options.caughtUp ?? (await waitForSubjectLinks(pool, options.seen, options.subject, deadline));
+  const readPage = async (refreshAuthorization = true) => {
+    if (refreshAuthorization) await refreshStatementReaderAuthorization();
+    const authorize =
+      refreshAuthorization && options.prepareAuthorization ? await options.prepareAuthorization() : options.authorize;
+    return withReadTransaction<{
+      page: SubjectLinksPage;
+      scannedMembers: string[];
+    }>(pool, async (client) => {
       const partition = await readPartition(client, partitionOf(route));
       const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
         visibility: string;
       } | null;
-      if (!partition || state?.visibility !== 'visible' || !(await options.authorize(client)))
-        throw new SubjectNotFoundError();
+      if (!partition || state?.visibility !== 'visible' || !(await authorize(client))) throw new SubjectNotFoundError();
       const redirect = await redirectOf(client, options.subject);
       if (redirect) throw new SubjectRedirectError(options.subject, redirect);
       if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
       const afterSource = typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID;
       const afterStatement = typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID;
-      const rows =
-        options.property === null
-          ? await listInboundLinks.run(client, {
-              route,
-              subject_id: options.subject,
-              after_property: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
-              after_source: afterSource,
-              after_statement: afterStatement,
-              page_limit: options.limit + 1,
-            })
-          : await listInboundLinksByProperty.run(client, {
-              route,
-              subject_id: options.subject,
-              property: options.property,
-              after_source: afterSource,
-              after_statement: afterStatement,
-              page_limit: options.limit + 1,
-            });
-      const links = rows.slice(0, options.limit);
-      const last = links.at(-1);
-      await client.query('COMMIT');
-      return {
-        links,
-        freshness: {
-          consistency: 'eventual',
-          target_seconds: FRESHNESS_TARGET_SECONDS,
-          caught_up: caughtUp,
-        },
-        next:
-          rows.length > options.limit && last
-            ? encodeCursor(ring, binding, {
-                epoch: partition.epoch,
-                after: [last.property, last.subject, last.statement],
-              })
-            : null,
-        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-      };
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
+      let scanCapped = false;
+      let scanAfter: CursorKey[] | undefined;
+      let rows: { subject: string; property: string; statement: string; type: string; order_key?: string }[];
+      if (options.property === null) {
+        rows = (await listInboundLinks.run(client, {
+          context_id: context,
+          route,
+          subject_id: options.subject,
+          after_property: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
+          after_source: afterSource,
+          after_statement: afterStatement,
+          page_limit: options.limit + 1,
+        })) as typeof rows;
+      } else {
+        const projected = (await listInboundLinksByProperty.run(client, {
+          context_id: context,
+          route,
+          subject_id: options.subject,
+          property: options.property,
+          filter_value: options.filter ?? NIL_UUID,
+          after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
+          after_source: afterSource,
+          after_statement: afterStatement,
+          // A qualified Character lookup may need to pass stale projection entries while filling its
+          // selected page. Its reader page is capped at 20, with one metadata row returned separately.
+          page_limit: options.qualifier ? 21 : (options.type ? 4 * options.limit : options.limit) + 1,
+          scan_limit: options.qualifier ? 20 : 0,
+        })) as {
+          subject: string | null;
+          property: string | null;
+          statement: string | null;
+          type: string | null;
+          order_key: string | null;
+          scan_capped: boolean;
+          scan_after_order: string | null;
+          scan_after_source: string | null;
+          scan_after_statement: string | null;
+          metadata_only: boolean;
+        }[];
+        const metadata = projected.find((row) => row.metadata_only)!;
+        scanCapped = metadata.scan_capped;
+        if (scanCapped)
+          scanAfter = [metadata.scan_after_order!, metadata.scan_after_source!, metadata.scan_after_statement!];
+        rows = projected.flatMap((row) =>
+          row.metadata_only
+            ? []
+            : [
+                {
+                  subject: row.subject!,
+                  property: row.property!,
+                  statement: row.statement!,
+                  type: row.type!,
+                  order_key: row.order_key!,
+                },
+              ],
+        );
       }
-      throw error;
+      const privateRows = options.qualifier
+        ? []
+        : (
+            await privateLinks(client, {
+              subject: options.subject,
+              inbound: true,
+              property: options.property,
+              crossProperty: options.property === null,
+              after: cursor?.after,
+              limit: (options.type ? 4 * options.limit : options.limit) + 1,
+            })
+          ).entries.map((row) => ({
+            subject: row.subject_id,
+            property: row.property,
+            statement: row.candidate_id,
+            type: row.source_type,
+            order_key: row.order_key,
+          }));
+      rows = [...rows, ...privateRows]
+        .sort((a, b) => {
+          const left = options.property === null ? a.property : 'order_key' in a ? String(a.order_key) : '';
+          const right = options.property === null ? b.property : 'order_key' in b ? String(b.order_key) : '';
+          return left < right
+            ? -1
+            : left > right
+              ? 1
+              : a.subject < b.subject
+                ? -1
+                : a.subject > b.subject
+                  ? 1
+                  : a.statement.localeCompare(b.statement);
+        })
+        .slice(0, options.qualifier ? 20 : (options.type ? 4 * options.limit : options.limit) + 1);
+      const scanLimit = options.qualifier ? 20 : options.type ? 4 * options.limit : options.limit;
+      const scanned = rows.slice(0, scanLimit);
+      const scannedMembers = [...new Set(scanned.map((row) => row.subject))];
+      const links: Omit<SubjectLink, 'label'>[] = [];
+      let examined = 0;
+      for (const row of rows.slice(0, scanLimit)) {
+        examined++;
+        if (matches(row.type))
+          links.push({ subject: row.subject, property: row.property, statement: row.statement, type: row.type });
+        if (!options.qualifier && links.length === options.limit) break;
+      }
+      const current = await currentRelationFacts(
+        client,
+        options.routeKey,
+        links.map((link) => {
+          const relationFilter = release?.properties[link.property]?.relation?.filter;
+          return {
+            subject: link.subject,
+            property: link.property,
+            candidate: link.statement,
+            target: options.qualifier ? null : options.subject,
+            value: 'value' as const,
+            ...(options.qualifier ? { anyResolvedTarget: true } : {}),
+            context,
+            defaults,
+            ...(options.filter === undefined ? {} : { filter: options.qualifier?.value ?? options.filter }),
+            ...(options.qualifier
+              ? { filterProperties: [options.qualifier.property] }
+              : relationFilter === undefined
+                ? {}
+                : { filterProperties: Array.isArray(relationFilter) ? relationFilter : [relationFilter] }),
+            requireRelation: true,
+          };
+        }),
+      );
+      const currentLinks = links.filter((link) =>
+        current.has(currentRelationKey({ subject: link.subject, property: link.property, candidate: link.statement })),
+      );
+      const hasCurrentOverflow = !!options.qualifier && currentLinks.length > options.limit;
+      const selectedLinks = options.qualifier ? currentLinks.slice(0, options.limit) : currentLinks;
+      const last = hasCurrentOverflow
+        ? rows.find(
+            (row) =>
+              row.subject === selectedLinks[options.limit - 1]?.subject &&
+              row.statement === selectedLinks[options.limit - 1]?.statement,
+          )
+        : rows[examined - 1];
+      return {
+        page: {
+          links: selectedLinks,
+          freshness: {
+            consistency: 'eventual',
+            target_seconds: FRESHNESS_TARGET_SECONDS,
+            caught_up: caughtUp,
+          },
+          ...(scanCapped && !hasCurrentOverflow ? { partial: true } : {}),
+          next:
+            hasCurrentOverflow && last
+              ? encodeCursor(ring, binding, {
+                  epoch: partition.epoch,
+                  after: [last.order_key!, last.subject, last.statement],
+                })
+              : scanCapped && scanAfter
+                ? encodeCursor(ring, binding, { epoch: partition.epoch, after: scanAfter })
+                : rows.length > examined && last
+                  ? encodeCursor(ring, binding, {
+                      epoch: partition.epoch,
+                      after: [
+                        options.property === null ? last.property : 'order_key' in last ? String(last.order_key) : '',
+                        last.subject,
+                        last.statement,
+                      ],
+                    })
+                  : null,
+          component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+        },
+        scannedMembers,
+      };
+    });
+  };
+  let snapshot = await readPage(options.caughtUp === undefined);
+  let pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers);
+  while (pendingMembers.length) {
+    if (Date.now() >= deadline) {
+      caughtUp = false;
+      snapshot.page.freshness.caught_up = false;
+      break;
     }
+    caughtUp = await waitForSubjectLinks(pool, options.seen, options.subject, deadline, pendingMembers);
+    // Even an unready wait can outlive evidence or a grant. Recheck current
+    // source authority before returning either a fresh or an eventual page.
+    snapshot = await readPage();
+    if (!caughtUp) {
+      snapshot.page.freshness.caught_up = false;
+      break;
+    }
+    pendingMembers = await pendingMergeSources(pool, snapshot.scannedMembers);
+  }
+  const page = snapshot.page;
+  const statements = await currentRelationStatements(pool, page.links, context, options.routeKey, deadline);
+  const includeLabels = options.includeLabels ?? options.property !== null;
+  const summaryRelease =
+    includeLabels || options.type || options.authorizeSummary
+      ? (options.release ?? (await activeRelease(pool))?.release)
+      : undefined;
+  const summaries = summaryRelease
+    ? await readSubjectSummaries(
+        {
+          client: { query: pool.query.bind(pool) },
+          pool,
+          routeKey: options.routeKey,
+          deadline,
+          release: summaryRelease,
+          authorize: options.authorizeSummary ?? (async () => false),
+        },
+        [
+          ...new Set([...page.links.map((link) => link.subject), ...[...statements.values()].flatMap(statementItems)]),
+        ].slice(0, 256),
+        { languages },
+      )
+    : new Map<string, SubjectSummary | null>();
+  requireAccessDeadline(deadline);
+  const links = page.links.flatMap((link): SubjectLink[] => {
+    const current = statements.get(`${link.subject}/${link.statement}`);
+    if (!current) return [];
+    if (
+      current.value.type !== 'value' ||
+      (options.qualifier ? typeof current.value.content !== 'string' : current.value.content !== options.subject) ||
+      (options.qualifier
+        ? !current.qualifiers.some(
+            (snak) =>
+              snak.property.id === options.qualifier!.property &&
+              snak.value.type === 'value' &&
+              snak.value.content === options.qualifier!.value,
+          )
+        : options.filter &&
+          !current.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
+    )
+      return [];
+    const summary = summaries.get(link.subject) ?? null;
+    if (options.authorizeSummary && !summary) return [];
+    const type = summary?.type ?? link.type;
+    if (options.type && !matches(type ?? '')) return [];
+    if (!includeLabels) return [{ subject: link.subject, property: link.property, statement: link.statement }];
+    const assertion = options.authorizeSummary ? disclosedRelationStatement(current, summaries) : current;
+    if (
+      !assertion ||
+      (options.qualifier
+        ? !assertion.qualifiers.some(
+            (snak) =>
+              snak.property.id === options.qualifier!.property &&
+              snak.value.type === 'value' &&
+              snak.value.content === options.qualifier!.value,
+          )
+        : options.filter &&
+          !assertion.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
+    )
+      return [];
+    const related = Object.fromEntries(
+      statementItems(assertion).flatMap((id) => {
+        const summary = summaries.get(id);
+        return summary ? [[id, summary]] : [];
+      }),
+    );
+    // A requested work-membership window needs the exact assertion even without qualifiers:
+    // release navigation binds its holder and original selection to the disclosed work target.
+    // Keep the same current-statement and related-target disclosure checks above.
+    const membership = options.property === 'schema:exampleOfWork';
+    const credit = options.property !== null && summaryRelease?.properties[link.property]?.relation?.group === 'credit';
+    const slotKey = credit ? summaryRelease?.properties[link.property]?.relation?.slotKey : undefined;
+    const rawKey = slotKey ? current.qualifiers.find((snak) => snak.property.id === slotKey) : undefined;
+    const key = slotKey ? assertion.qualifiers.find((snak) => snak.property.id === slotKey) : undefined;
+    // An omitted key may be concealed. Do not turn it into the unqualified slot.
+    const creditSlot =
+      credit && (!rawKey || (key?.value.type === 'value' && typeof key.value.content === 'string'))
+        ? {
+            property: link.property,
+            target: options.qualifier ? (current.value.content as string) : options.subject,
+            ...(key?.value.type === 'value' && typeof key.value.content === 'string' ? { key: key.value.content } : {}),
+          }
+        : undefined;
+    return [
+      {
+        ...link,
+        ...(assertion.qualifiers.length || credit || membership ? { assertion, related } : {}),
+        ...(creditSlot ? { creditSlot } : {}),
+        ...(type ? { type } : {}),
+        label: summary?.label?.value ?? '',
+        summary,
+      },
+    ];
   });
+  const workReleaseCards =
+    options.property === 'schema:exampleOfWork'
+      ? options.limit <= workReleaseCardLimit && summaryRelease
+        ? await readWorkReleaseCards({
+            pool,
+            routeKey: options.routeKey,
+            subject: options.subject,
+            context,
+            defaults,
+            links,
+            caughtUp: page.freshness.caught_up,
+            release: summaryRelease,
+            languages,
+            deadline,
+            seen: options.seen,
+            ...(options.authorizeSummary === undefined ? {} : { authorizeSummary: options.authorizeSummary }),
+          })
+        : { state: 'unavailable' as const }
+      : undefined;
+  return { ...page, links, ...(workReleaseCards ? { workReleaseCards } : {}) };
+}
+
+export type SubjectRelation = {
+  statement: Statement;
+  target: string | null;
+  external: string | null;
+  related?: Record<string, SubjectSummary>;
+  type?: string;
+  label?: string;
+  summary?: SubjectSummary | null;
+};
+export type SubjectRelationsPage = {
+  relations: SubjectRelation[];
+  count?: { value: number; exact: boolean };
+  freshness: { consistency: 'eventual'; target_seconds: 10; caught_up: boolean };
+  next: string | null;
+  component: { partition: number; epoch: number; position: bigint };
+};
+
+function validRelationAfter(after: CursorKey[]): boolean {
+  return (
+    after.length === 3 &&
+    typeof after[0] === 'string' &&
+    typeof after[1] === 'string' &&
+    typeof after[2] === 'string' &&
+    UUID.test(after[1]) &&
+    UUID.test(after[2])
+  );
+}
+
+type SubjectRelationsOptions = {
+  routeKey: Uint8Array;
+  subject: string;
+  property: string;
+  context?: string;
+  limit: number;
+  filter?: string;
+  type?: string;
+  language?: string;
+  languages?: readonly string[];
+  cursor?: string;
+  release: Release;
+  releasePin?: string;
+  authorize: (client: PoolClient) => Promise<boolean>;
+  prepareAuthorization?: () => Promise<AccessCheck>;
+  deadline?: number;
+  authorizeSummary?: SummaryDependencies['authorize'];
+  seen: readonly SessionComponent[];
+  caughtUp?: boolean;
+};
+
+/** Forward relation page over the holder-local projection, with current statements filled only for this page. */
+export async function listSubjectRelations(
+  pool: Pool,
+  ring: KeyRing,
+  options: SubjectRelationsOptions,
+): Promise<SubjectRelationsPage> {
+  const route = routeOf(options.subject);
+  if (route === null) throw new SubjectNotFoundError();
+  if (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > 100)
+    throw new RangeError('Invalid relation page limit');
+  const context = options.context ?? GLOBAL_CONTEXT;
+  const contextRecord = context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, context);
+  if (context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
+  const defaults = contextRecord?.defaults ?? {};
+  const languages = options.languages ?? languageRanges(null, options.language);
+  const binding = {
+    operation: 'subject.relations',
+    parameters: {
+      subject: options.subject,
+      property: options.property,
+      context: options.context ?? NIL_UUID,
+      filter: options.filter ?? null,
+      type: options.type ?? null,
+      language: languages.join(',') || null,
+      release: options.releasePin ?? releaseDigest(options.release),
+    },
+  };
+  let cursor: { epoch: number; after: CursorKey[] } | null = null;
+  if (options.cursor !== undefined) {
+    const decoded = decodeCursor(ring, binding, options.cursor);
+    if (!decoded.ok) throw new PageCursorError(decoded.reason);
+    if (!validRelationAfter(decoded.after)) throw new PageCursorError('invalid');
+    cursor = decoded;
+  }
+  const deadline = options.deadline ?? deadlineFor(DEFAULT_REQUEST_DEADLINE_MS);
+  const caughtUp = options.caughtUp ?? (await waitForSubjectLinks(pool, options.seen, options.subject, deadline));
+  if (options.caughtUp === undefined) await refreshStatementReaderAuthorization();
+  const authorize =
+    options.caughtUp === undefined && options.prepareAuthorization
+      ? await options.prepareAuthorization()
+      : options.authorize;
+  const page = await withReadTransaction<SubjectRelationsPage>(pool, async (client) => {
+    const partition = await readPartition(client, partitionOf(route));
+    const state = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
+      visibility: string;
+    } | null;
+    if (!partition || state?.visibility !== 'visible' || !(await authorize(client))) throw new SubjectNotFoundError();
+    const redirect = await redirectOf(client, options.subject);
+    if (redirect) throw new SubjectRedirectError(options.subject, redirect);
+    if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
+    const scanLimit = options.type ? 4 * options.limit : options.limit;
+    let rows = (await listOutboundLinksByProperty.run(client, {
+      context_id: context,
+      route,
+      subject_id: options.subject,
+      property: options.property,
+      filter_value: options.filter ?? NIL_UUID,
+      after_order: typeof cursor?.after[0] === 'string' ? cursor.after[0] : '',
+      after_target: typeof cursor?.after[1] === 'string' ? cursor.after[1] : NIL_UUID,
+      after_statement: typeof cursor?.after[2] === 'string' ? cursor.after[2] : NIL_UUID,
+      page_limit: scanLimit + 1,
+    })) as {
+      statement: string;
+      slot: string;
+      target: string | null;
+      type: string;
+      external: string | null;
+      value: 'value' | 'somevalue' | 'novalue';
+      order_key: string;
+    }[];
+    const privatePage = await privateLinks(client, {
+      subject: options.subject,
+      property: options.property,
+      after: cursor?.after,
+      limit: scanLimit + 1,
+    });
+    const privateRows = privatePage.entries.map((row) => ({
+      statement: row.candidate_id,
+      slot: row.slot_id,
+      target: row.target_id,
+      type: row.target_type,
+      external: null,
+      value: 'value' as const,
+      order_key: row.order_key,
+    }));
+    rows = [...rows, ...privateRows]
+      .sort((a, b) =>
+        a.order_key < b.order_key
+          ? -1
+          : a.order_key > b.order_key
+            ? 1
+            : (a.target ?? NIL_UUID) < (b.target ?? NIL_UUID)
+              ? -1
+              : (a.target ?? NIL_UUID) > (b.target ?? NIL_UUID)
+                ? 1
+                : a.statement.localeCompare(b.statement),
+      )
+      .slice(0, scanLimit + 1);
+    const visibleRows = rows.slice(0, scanLimit);
+    const selected: typeof visibleRows = [];
+    let examined = 0;
+    for (const row of visibleRows) {
+      examined++;
+      if (!options.type || (row.type !== '' && matchesTarget(options.release, row.type, [options.type])))
+        selected.push(row);
+      if (selected.length === options.limit) break;
+    }
+    const filterProperties = options.release.properties[options.property]?.relation?.filter;
+    const current = await currentRelationFacts(
+      client,
+      options.routeKey,
+      selected.map((row) => ({
+        subject: options.subject,
+        property: options.property,
+        candidate: row.statement,
+        target: row.target,
+        external: row.external,
+        value: row.value,
+        context,
+        defaults,
+        slot: row.slot,
+        ...(options.filter === undefined ? {} : { filter: options.filter }),
+        ...(filterProperties === undefined
+          ? {}
+          : { filterProperties: Array.isArray(filterProperties) ? filterProperties : [filterProperties] }),
+        requireRelation: true,
+      })),
+    );
+    const holder = (await readVisibility.run(client, { route, subject_id: options.subject })) as {
+      type?: string;
+    } | null;
+    const relations: SubjectRelation[] = [];
+    const releases = new Map<string, Release>();
+    for (const row of selected) {
+      const fact = current.get(
+        currentRelationKey({
+          subject: options.subject,
+          property: options.property,
+          candidate: row.statement,
+        }),
+      );
+      if (!fact) continue;
+      const digest = fact.fact_release ?? '';
+      let release = releases.get(digest);
+      if (!release) {
+        release = digest ? ((await readRelease(client, digest)) ?? undefined) : options.release;
+        if (!release) continue;
+        releases.set(digest, release);
+      }
+      const statement = resolveItem(options.subject, [fact], holder?.type ?? '', factDataTypes(release, [fact]), {
+        revision: fact.fact_revision ?? 1,
+        release: digest,
+        context,
+      }).statements[options.property]?.[0];
+      if (!statement) continue;
+      relations.push({
+        statement,
+        target: row.target,
+        external: row.external,
+        ...(row.target === null ? {} : { type: row.type }),
+      });
+    }
+    const last = visibleRows[examined - 1];
+    return {
+      relations,
+      freshness: {
+        consistency: 'eventual',
+        target_seconds: FRESHNESS_TARGET_SECONDS,
+        caught_up: caughtUp,
+      },
+      next:
+        rows.length > examined && last
+          ? encodeCursor(ring, binding, {
+              epoch: partition.epoch,
+              after: [last.order_key, last.target ?? NIL_UUID, last.statement],
+            })
+          : null,
+      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+    };
+  });
+  const statements = await currentRelationStatements(
+    pool,
+    page.relations.map((entry) => ({
+      subject: options.subject,
+      property: options.property,
+      statement: entry.statement.id,
+    })),
+    context,
+    options.routeKey,
+    deadline,
+  );
+  const currentRelations = page.relations.flatMap((entry): SubjectRelation[] => {
+    const statement = statements.get(`${options.subject}/${entry.statement.id}`);
+    if (!statement || statement.property.id !== options.property) return [];
+    if (
+      options.filter &&
+      !statement.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter)
+    )
+      return [];
+    return [
+      {
+        ...entry,
+        statement,
+        target: localRelationTarget(statement),
+        external: externalRelationValue(statement),
+      },
+    ];
+  });
+  const summaries = await readSubjectSummaries(
+    {
+      client: { query: pool.query.bind(pool) },
+      pool,
+      routeKey: options.routeKey,
+      deadline,
+      release: options.release,
+      authorize: options.authorizeSummary ?? (async () => false),
+    },
+    [
+      ...new Set([
+        ...currentRelations.flatMap((entry) => (entry.target ? [entry.target] : [])),
+        ...currentRelations.flatMap((entry) => statementItems(entry.statement)),
+      ]),
+    ].slice(0, 256),
+    { languages },
+  );
+  requireAccessDeadline(deadline);
+  const relations: SubjectRelation[] = [];
+  for (const raw of currentRelations) {
+    const statement = options.authorizeSummary ? disclosedRelationStatement(raw.statement, summaries) : raw.statement;
+    if (
+      !statement ||
+      (options.filter &&
+        !statement.qualifiers.some((snak) => snak.value.type === 'value' && snak.value.content === options.filter))
+    )
+      continue;
+    const related = Object.fromEntries(
+      statementItems(statement).flatMap((id) => {
+        const summary = summaries.get(id);
+        return summary ? [[id, summary]] : [];
+      }),
+    );
+    const entry = { ...raw, statement, ...(statement.qualifiers.length ? { related } : {}) };
+    if (!entry.target) {
+      relations.push({ ...entry, summary: null });
+      continue;
+    }
+    const summary = summaries.get(entry.target) ?? null;
+    if (options.authorizeSummary && !summary) continue;
+    const type = summary?.type ?? entry.type;
+    if (options.type && !matchesTarget(options.release, type ?? '', [options.type])) continue;
+    relations.push({
+      ...entry,
+      ...(type ? { type } : {}),
+      label: summary?.label?.value ?? '',
+      summary,
+    });
+  }
+  return { ...page, relations };
 }

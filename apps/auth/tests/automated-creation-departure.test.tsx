@@ -1,0 +1,174 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import {
+  creationFixture,
+  automatedOperatorPage,
+  approval,
+  button,
+  dom,
+  fill,
+  flush,
+  open,
+  send,
+} from './creation-page-fixture';
+creationFixture();
+const { AutomatedAccountCreatePage } = await import('../src/routes/automated.new');
+const { AUTOMATED_PROFILE, restoreAutomatedAttempt } = await import('../src/automated-account-create');
+const { createBrowserHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
+  await import('@tanstack/react-router');
+const previousScroll = Object.getOwnPropertyDescriptor(globalThis, 'scrollTo');
+beforeAll(() => Object.defineProperty(globalThis, 'scrollTo', { configurable: true, value: dom.scrollTo.bind(dom) }));
+afterAll(() => {
+  if (previousScroll) Object.defineProperty(globalThis, 'scrollTo', previousScroll);
+  else Reflect.deleteProperty(globalThis, 'scrollTo');
+});
+const human = '11111111-1111-4111-8111-111111111111';
+const operator = {
+  id: '22222222-2222-4222-8222-222222222222',
+  kind: 'organization',
+  handle: 'team',
+  displayName: null,
+};
+const session = {
+  account_id: human,
+  client_id: AUTOMATED_PROFILE.client_id,
+  scope: AUTOMATED_PROFILE.scope,
+  auth_time: Math.floor(Date.now() / 1000),
+  authn_epoch: 1,
+  amr: ['pwd'],
+};
+async function start() {
+  window.history.replaceState(null, '', '/automated/new');
+  const root = createRootRoute();
+  const route = createRoute({
+    getParentRoute: () => root,
+    path: '/automated/new',
+    component: AutomatedAccountCreatePage,
+  });
+  const away = createRoute({ getParentRoute: () => root, path: '/away', component: () => <p>Destination</p> });
+  const history = createBrowserHistory({ window: dom });
+  const router = createRouter({ history, routeTree: root.addChildren([route, away]) });
+  await router.load();
+  const page = await open(<RouterProvider router={router} />, session);
+  const click = (text: string) => flush(() => button(page.host, text)!.click());
+  const navigate = () =>
+    flush(() => {
+      void router.navigate({ to: '/away' });
+    });
+  const draft = () =>
+    flush(() => {
+      fill(page.host.querySelector('#automated-operator')!, operator.id);
+      fill(page.host.querySelector('#automated-handle')!, 'robot-one');
+    });
+  const review = async () => {
+    await draft();
+    await flush(() => send(page.host));
+    await flush(() => page.calls[0]!.resolve(automatedOperatorPage(human, operator)));
+  };
+  return { ...page, router, click, navigate, draft, review };
+}
+function unloadWarns() {
+  const event = new dom.Event('beforeunload', { cancelable: true });
+  window.dispatchEvent(event as unknown as Event);
+  return event.defaultPrevented;
+}
+test('clean visits do not warn; changed input survives Stay with focus and remains editable', async () => {
+  const page = await start();
+  expect(unloadWarns()).toBe(false);
+  await page.draft();
+  const input = page.host.querySelector<HTMLInputElement>('#automated-handle')!;
+  input.focus();
+  expect(unloadWarns()).toBe(true);
+  await page.navigate();
+  await page.click('Stay');
+  expect(document.activeElement).toBe(input);
+  expect(input.value).toBe('robot-one');
+  expect(page.host.querySelector<HTMLInputElement>('#automated-operator')!.value).toBe(operator.id);
+  await flush(() => fill(input, 'robot-two'));
+  expect(input.value).toBe('robot-two');
+  await page.navigate();
+  await page.click('Leave');
+  expect(page.host.textContent).toContain('Destination');
+  expect(unloadWarns()).toBe(false);
+});
+test('Stay preserves the exact review and confirmation; Leave discards an unsent review', async () => {
+  const page = await start();
+  await page.review();
+  const attempt = restoreAutomatedAttempt();
+  await flush(() => page.host.querySelector<HTMLInputElement>('#automated-confirm')!.click());
+  await page.navigate();
+  await page.click('Stay');
+  expect(restoreAutomatedAttempt()).toEqual(attempt);
+  expect(page.host.querySelector<HTMLInputElement>('#automated-confirm')!.checked).toBe(true);
+  await page.navigate();
+  await page.click('Leave');
+  expect(restoreAutomatedAttempt()).toBeNull();
+});
+test('Escape from the departure prompt stays on the exact review and restores keyboard focus', async () => {
+  const page = await start();
+  await page.review();
+  const checkbox = page.host.querySelector<HTMLInputElement>('#automated-confirm')!;
+  await flush(() => checkbox.focus());
+  const attempt = restoreAutomatedAttempt();
+  await page.navigate();
+  const dialog = page.host.querySelector<HTMLDialogElement>('dialog')!;
+  await flush(() => dialog.dispatchEvent(new dom.Event('cancel', { cancelable: true })));
+  expect(restoreAutomatedAttempt()).toEqual(attempt);
+  expect(page.host.querySelector<HTMLInputElement>('#automated-confirm')!.checked).toBe(false);
+  expect(document.activeElement).toBe(checkbox);
+});
+test('Leave retains an unresolved command and retires its late approval before replacement work', async () => {
+  const page = await start();
+  await page.review();
+  const fetch = globalThis.fetch;
+  let approvalSignal: AbortSignal | undefined;
+  globalThis.fetch = ((input, init) => {
+    if (String(input) === '/account-operations/approve') approvalSignal = init?.signal as AbortSignal;
+    return fetch(input, init);
+  }) as typeof fetch;
+  try {
+    await flush(() => page.host.querySelector<HTMLInputElement>('#automated-confirm')!.click());
+    await flush(() => send(page.host));
+    const attempt = restoreAutomatedAttempt();
+    await page.navigate();
+    await page.click('Leave');
+    expect(approvalSignal?.aborted).toBe(true);
+    expect(restoreAutomatedAttempt()).toEqual(attempt);
+    await flush(() => {
+      void page.router.navigate({ to: '/automated/new' });
+    });
+    expect(page.host.textContent).toContain('robot-one');
+    await flush(() => page.calls[1]!.resolve(approval()));
+    expect(restoreAutomatedAttempt()).toEqual(attempt);
+    expect(page.calls).toHaveLength(2);
+    expect(page.host.querySelector<HTMLInputElement>('#automated-confirm')!.checked).toBe(false);
+  } finally {
+    globalThis.fetch = fetch;
+  }
+});
+test('completed creation leaves normally, and caller replacement revokes a changed draft without a prompt', async () => {
+  const page = await start();
+  await page.review();
+  await flush(() => page.host.querySelector<HTMLInputElement>('#automated-confirm')!.click());
+  await flush(() => send(page.host));
+  await flush(() => page.calls[1]!.resolve(approval()));
+  await flush(() => page.calls[2]!.resolve(Response.json({ accountId: operator.id })));
+  expect(unloadWarns()).toBe(false);
+  await page.navigate();
+  expect(page.host.textContent).toContain('Destination');
+  const nativeFetch = globalThis.fetch;
+  for (const replacement of [
+    { ...session, account_id: operator.id },
+    { ...session, scope: [] },
+  ]) {
+    window.sessionStorage.clear();
+    globalThis.fetch = nativeFetch;
+    await flush(() => {
+      void page.router.navigate({ to: '/automated/new' });
+    });
+    await page.draft();
+    globalThis.fetch = (() => Promise.resolve(Response.json(replacement))) as typeof fetch;
+    await page.navigate();
+    expect(page.host.querySelector('dialog')).toBeNull();
+    expect(page.host.textContent).toContain('Destination');
+  }
+});

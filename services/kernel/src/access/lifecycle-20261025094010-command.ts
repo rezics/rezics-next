@@ -26,10 +26,12 @@ type Mutation = {
   kind: string;
   key: string;
   input: unknown;
+  additionalEvents?: () => Array<{ type: string; subject?: string; data: unknown }>;
   actor?: AccountActor;
   deadline?: number;
   authorization?: CommandAuthorization;
 };
+export type LifecycleReceipt = { key: string; digest: string };
 
 /** All idempotency digests include the anchor, actual kernel actor/client and
  * requested_by. Core's partition receipt key is explicitly prefixed by route.
@@ -38,7 +40,7 @@ type Mutation = {
 export function lifecycleExecutor(pool: Pool, clock?: () => Date) {
   return async function execute<T>(
     options: Mutation,
-    body: (tx: CommandTransaction, transactionId: string) => Promise<T>,
+    body: (tx: CommandTransaction, transactionId: string, receipt: LifecycleReceipt) => Promise<T>,
   ): Promise<CommandOutcome<T>> {
     requireAllowed(typeof options.key === 'string' && options.key.length > 0 && options.key.length <= 256);
     const actor = options.actor;
@@ -67,8 +69,17 @@ export function lifecycleExecutor(pool: Pool, clock?: () => Date) {
         },
       },
       async (tx, { transactionId }) => {
-        const value = await body(tx, transactionId);
-        return { value, events: [{ type: `com.rezics.access.${options.kind}.v1`, subject: options.id, data: value }] };
+        const value = await body(tx, transactionId, {
+          key: `${options.route}:${options.key}`,
+          digest: digest.toString('hex'),
+        });
+        return {
+          value,
+          events: [
+            { type: `com.rezics.access.${options.kind}.v1`, subject: options.id, data: value },
+            ...(options.additionalEvents?.() ?? []),
+          ],
+        };
       },
     );
     // Expose snapshots: callers cannot accidentally mutate the response retained

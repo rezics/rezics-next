@@ -1,0 +1,79 @@
+# Storybook 11 alpha eagerly extracts props for every JSX import before choosing a component.
+# Defer React docgen to selected component/subcomponent payloads; retain all imports and stories.
+# Reproducer/acceptance: apps/web/tests/storybook-local-manifest.test.ts.
+# Remove when the upstream React manifest generator avoids incidental JSX prop extraction.
+--- a/dist/_node-chunks/chunk-2ZVWQVNL.js
++++ b/dist/_node-chunks/chunk-2ZVWQVNL.js
+@@ -16439,15 +16439,11 @@
+             importOverride
+           };
+         }
+-        if (docgenEngine === "react-docgen") {
+-          let reactDocgen = getReactDocgen(path2, componentWithPackage);
++        if (docgenEngine === "react-docgen")
+           return {
+             ...componentWithPackage,
+-            path: path2,
+-            reactDocgen,
+-            importOverride: reactDocgen.type === "success" ? getImportTag(reactDocgen.data) : void 0
++            path: path2
+           };
+-        }
+         if (docgenEngine === "react-component-meta")
+           return {
+             ...componentWithPackage,
+@@ -16496,6 +16492,16 @@
+     name: declared.name,
+     component: findExactComponentMatch(allComponents, declared.componentName)
+   }));
++  if (docgenEngine === "react-docgen") {
++    // Imports are needed for examples; props are needed only for the selected API payloads.
++    let selected = new Set([component, ...subcomponents.map((sub) => sub.component)]);
++    for (let candidate of selected) {
++      if (!candidate?.path) continue;
++      let result = getReactDocgen(candidate.path, candidate);
++      candidate.reactDocgen = result;
++      candidate.importOverride = result.type === "success" ? getImportTag(result.data) : void 0;
++    }
++  }
+   return { storyPath, storyFile, csf, componentName, allComponents, component, subcomponents };
+ }
+ function extractStorySnippets(csf, componentName, filterStoryIds, references) {
+--- a/dist/preset.js
++++ b/dist/preset.js
+@@ -1579,6 +1579,7 @@
+ 
+ // src/componentManifest/generator.ts
+ import {
++  getComponentIdFromEntry as getManifestComponentId,
+   getStoryImportPathFromEntry,
+   selectComponentEntriesByComponentId
+ } from "storybook/internal/common";
+@@ -1664,6 +1665,27 @@
+       filterStoryIds: manifestEntryIds
+     })
+   ).filter((component) => component !== void 0);
++  // A canonical component can have stories in several files. Reuse its chosen API payload,
++  // but retain examples from every source file without extracting another set of props.
++  let byId = new Map(components.map((component) => [component.id, component])), seenFiles = new Set(resolvedEntries.map(({ storyFilePath }) => storyFilePath));
++  for (let entry of manifestEntries) {
++    if (entry.type !== "story") continue;
++    let storyFilePath = getStoryImportPathFromEntry(entry), component = byId.get(getManifestComponentId(entry));
++    if (!storyFilePath || seenFiles.has(storyFilePath) || !component) continue;
++    seenFiles.add(storyFilePath);
++    let storyPath = posix.join(process.cwd(), storyFilePath), resolved = await resolveStoryFileComponents({
++      storyPath,
++      title: entry.title,
++      typescriptOptions,
++      docgenEngine: "react-component-meta"
++    }), docs = buildStoryDocsFromResolved({
++      entry,
++      ...resolved,
++      storyFilePath,
++      filterStoryIds: manifestEntryIds
++    });
++    component.stories.push(...Object.values(docs.stories));
++  }
+   manager && watch && manager.startWatching();
+   let durationMs = Math.round(performance.now() - startTime);
+   return {

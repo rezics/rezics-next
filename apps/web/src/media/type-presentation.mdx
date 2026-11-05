@@ -1,0 +1,16 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as Stories from '../stories/type-presentation.stories';
+
+<Meta of={Stories} />
+
+# Type presentation
+
+The real Search rows and cover-list cards consume the same bounded current-page inputs here. Book, film and music
+members retain different geometry. The film's runtime is an explicitly supplied fixture fact selected by an optional
+effective release annotation. No fact request, member mutation or backend capability is implied by this pattern.
+
+<Canvas of={Stories.Mixed} />
+
+Review `patterns-type-presentation--mixed` at phone 390 and desktop 1280 using the same ID, `en`/`zh-Hans` locale
+globals and light/dark theme globals. The complete component behavior states live in Components/List Presentation.
+Visual review and postintegration acceptance remain pending until the controller performs them.

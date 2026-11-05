@@ -1,7 +1,9 @@
+import { enrollResourceRecordSources } from './record-purge-custody.ts';
+import { withReadTransaction } from './read.ts';
 import type { Pool } from 'pg';
 import { createResourcePublicEligibility, initializeResourceGrants, type ParentAnchor } from '../access/index.ts';
+import { readAccount } from '../access/account-data.ts';
 import { authoritativeTimeValue, runCommand, type CommandAuthorization } from '../command/command.ts';
-import { withConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccessCheck, AccountActor, Resource } from '../request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
@@ -12,12 +14,14 @@ import contextPublicEvidence from './context-public-evidence.sql';
 import readContextStatement from './read-context.sql';
 import readGlobalContext from './context-read-global.sql';
 import readCommunityContext from './context-read-community.sql';
+import readContextCreator from './context-read-creator.sql';
 import { GLOBAL_CONTEXT } from './definitions.ts';
 
 export const CREATE_CONTEXT = 'context.create';
 
 export const globalContextAnchor: ParentAnchor = Object.freeze({
-  resource: Object.freeze({ route: 0, id: GLOBAL_CONTEXT }),
+  // Literal identity so this module can finish while definitions.ts is still evaluating.
+  resource: Object.freeze({ route: 0, id: '00000000-0000-8000-8000-000000000000' }),
   async validate(client, time) {
     authoritativeTimeValue(time);
     const found = await readGlobalContext.run(client, { route: 0, context_id: GLOBAL_CONTEXT });
@@ -130,6 +134,10 @@ export async function createContext(
         defaults,
         transaction_id: transactionId,
       });
+      await enrollResourceRecordSources(tx, [{ kind: 'context', contextId: id }], {
+        kind: CREATE_CONTEXT,
+        birth: true,
+      });
       if (options.authorization)
         await initializeResourceGrants(tx, {
           resource: options.target,
@@ -156,6 +164,7 @@ type ContextRow = {
   settings_id: string | null;
   settings_release: string | null;
   defaults: Record<string, 'inherit' | 'suppress'>;
+  recorded_transaction_id: string | null;
 };
 
 export async function readContext(
@@ -166,39 +175,31 @@ export async function readContext(
   const route = routeOf(id);
   if (route === null) return null;
   const partitionNo = partitionOf(route);
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      await client.query("SET LOCAL statement_timeout = '300ms'");
-      const partition = await readPartition(client, partitionNo);
-      if (!partition) {
-        await client.query('COMMIT');
-        return null;
-      }
-      const row = (await readContextStatement.run(client, { route, context_id: id })) as ContextRow | undefined;
-      if (!row || !(await authorize(client))) {
-        await client.query('COMMIT');
-        return null;
-      }
-      await client.query('COMMIT');
-      return {
-        context: {
-          id: row.id,
-          kind: row.kind,
-          labels: row.labels,
-          settings: row.settings_id === null ? null : { id: row.settings_id, release: row.settings_release! },
-          defaults: row.defaults,
-        },
-        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-      };
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch {
-        client.release(error as Error);
-      }
-      throw error;
+  return withReadTransaction(pool, async (client) => {
+    const partition = await readPartition(client, partitionNo);
+    if (!partition) {
+      return null;
     }
+    const row = (await readContextStatement.run(client, { route, context_id: id })) as ContextRow | undefined;
+    if (!row || !(await authorize(client))) {
+      return null;
+    }
+    if (row.kind === 'community') {
+      const creator = await readContextCreator.run(client, { route, context_id: id });
+      if (!creator?.accountId) return null;
+      const account = await readAccount(client, routeOf(creator.accountId)!, creator.accountId);
+      if (!account || account.state !== 'active' || account.fenced) return null;
+    }
+    return {
+      context: {
+        id: row.id,
+        kind: row.kind,
+        labels: row.labels,
+        settings: row.settings_id === null ? null : { id: row.settings_id, release: row.settings_release! },
+        defaults: row.defaults,
+      },
+      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+    };
   });
 }
 

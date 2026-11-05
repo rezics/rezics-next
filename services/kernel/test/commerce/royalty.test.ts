@@ -306,3 +306,12 @@ test('statement periods are UTC calendar months, including offset boundaries and
   expect(statementPeriod(new Date('2024-02-29T23:59:59Z'))).toBe('2024-02');
   expect(() => statementPeriod('invalid')).toThrow();
 });
+
+test('fee detail order and mutable descriptions do not create conflicting royalty copies', () => {
+  const movement = transaction('stable', 'charge', 1200, [fee('withheld_tax', 200), fee('stripe_fee', 50)]);
+  const replay = {
+    ...movement,
+    feeDetails: [...movement.feeDetails].reverse().map((detail) => ({ ...detail, description: 'changed' })),
+  };
+  expect(royaltyLines(order, 200, [movement, replay])).toEqual(royaltyLines(order, 200, [movement]));
+});

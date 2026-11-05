@@ -1,6 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer } from 'node:net';
+import { startDevServer } from './support/dev-server.ts';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
 
@@ -13,48 +12,17 @@ async function messages(locale: string): Promise<Messages> {
   return (await Bun.file(join(app, 'messages', `${locale}.json`)).json()) as Messages;
 }
 
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
-let child: ChildProcess | undefined;
+let server: Awaited<ReturnType<typeof startDevServer>> | undefined;
 let started: Promise<string> | undefined;
 let browser: Browser | undefined;
 
-// The documented command, in its own process group so that Vite and workerd stop with it.
 function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en/ in time:\n${output}`);
-      await Bun.sleep(500);
-    }
-  })();
+  started ??= startDevServer({
+    warmUpPaths: [],
+  }).then((running) => {
+    server = running;
+    return running.origin;
+  });
   return started;
 }
 
@@ -65,10 +33,7 @@ async function context(options: BrowserContextOptions = {}) {
 
 afterAll(async () => {
   await browser?.close();
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
+  await server?.stop();
 });
 
 // A loaded machine, reproduced: the browser runs scripts four times slower, and the test stops waiting as soon as
@@ -133,6 +98,67 @@ test(
     await page.waitForURL(`${origin}/de`);
     expect(await page.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
     await page.context().close();
+  },
+  timeout,
+);
+
+test(
+  'localized Search recovers a failed entry import, settles a rejected session read and uses phone filters',
+  async () => {
+    const origin = await site();
+    const zh = await messages('zh-Hant');
+    const ja = await messages('ja');
+    const page = await (await context({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' })).newPage();
+    try {
+      // The captured ERR_NETWORK_CHANGED failed this exact module before hydration could start.
+      await page.route('**/src/client.tsx*', (route) => route.abort('internetdisconnected'), { times: 1 });
+      await page.goto(`${origin}/zh-Hant/search?q=Steins%3BGate`, { waitUntil: 'domcontentloaded' });
+      const recovery = page.getByRole('alert').filter({ hasText: zh.shell_client_unavailable! });
+      await recovery.waitFor();
+      expect(await page.locator('html[data-hydrated]').count()).toBe(0);
+      expect(await page.locator('header [aria-busy="true"]').isVisible()).toBe(false);
+      let rejected = 0;
+      await page.route('**/_server/**', async (route) => {
+        if (route.request().method() === 'GET') {
+          rejected++;
+          await route.abort('internetdisconnected');
+        } else await route.continue();
+      });
+      await recovery.getByRole('link', { name: zh.shell_client_reload! }).click();
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+      await page.getByRole('status').filter({ hasText: zh.shell_account_unavailable! }).waitFor();
+      expect(rejected).toBeGreaterThan(0);
+      await page
+        .locator(
+          '[data-search-recovery="closed"], [data-search-recovery="denied"], [data-search-recovery="unavailable"]',
+        )
+        .waitFor();
+      expect(await page.locator('[data-search-recovery="loading"]').count()).toBe(0);
+      const population = page.getByLabel(zh.search_population_label!, { exact: true });
+      const box = await population.boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+      const help = await page.locator(`[id="${await population.getAttribute('aria-describedby')}"]`).boundingBox();
+      expect(help!.y).toBeGreaterThanOrEqual(box!.y + box!.height);
+      await page.getByRole('button', { name: new RegExp(zh.search_filters!) }).click();
+      const sheet = page.getByRole('dialog');
+      await sheet.waitFor();
+      await sheet.getByRole('button', { name: zh.search_close_filters!, exact: true }).click();
+      await sheet.waitFor({ state: 'hidden' });
+      expect(await page.evaluate(() => document.activeElement?.textContent)).toContain(zh.search_filters!);
+      // A native order replacement and a locale navigation both retain the executed query.
+      await page.getByLabel(zh.search_sort_label!, { exact: true }).selectOption('rating');
+      await page.waitForURL((url) => url.searchParams.get('sort') === 'rating');
+      expect(new URL(page.url()).searchParams.get('q')).toBe('Steins;Gate');
+      const destination = new URL(page.url());
+      destination.pathname = '/ja/search';
+      await page.goto(destination.href, { waitUntil: 'domcontentloaded' });
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+      await page.getByLabel(ja.search_population_label!, { exact: true }).waitFor();
+      expect(await page.getByLabel(ja.search_sort_label!, { exact: true }).inputValue()).toBe('rating');
+      expect(new URL(page.url()).searchParams.get('q')).toBe('Steins;Gate');
+    } finally {
+      await page.context().close();
+    }
   },
   timeout,
 );

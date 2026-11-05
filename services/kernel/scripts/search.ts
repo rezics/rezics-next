@@ -3,12 +3,14 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { workerLocalContainerError } from '../../../scripts/stack-run.ts';
 
 const directory = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const imageDirectory = resolve(directory, 'db/search/opensearch');
-const container = 'rezics-search-dev';
-const volume = 'rezics-search-dev';
+const container = process.env.KERNEL_SEARCH_CONTAINER ?? 'rezics-search-dev';
+const volume = process.env.KERNEL_SEARCH_VOLUME ?? container;
 const port = Number(process.env.KERNEL_SEARCH_PORT ?? '59200');
+export const subjectAutoCreateIndexSetting = 'action.auto_create_index=-*subjects-g*,+*';
 
 function command(program: string, args: string[], cwd = directory): string {
   const result = spawnSync(program, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -71,9 +73,11 @@ export async function waitForSearch(url: string, containerName: string, timeoutM
   );
 }
 
-/** A check running on a development host keeps its containers inside that host's capped slice. */
+/** A check running on a development host keeps its containers inside its run's slice. */
 export function cgroupArgs(): string[] {
-  return process.env.KERNEL_CHECK_ON_REMOTE ? ['--cgroup-parent=rezics-check.slice'] : [];
+  return process.env.KERNEL_CHECK_ON_REMOTE
+    ? [`--cgroup-parent=${process.env.REZICS_CHECK_SLICE || 'rezics-check.slice'}`]
+    : [];
 }
 
 export function searchRunArgs(image: string): string[] {
@@ -89,6 +93,8 @@ export function searchRunArgs(image: string): string[] {
     `${volume}:/usr/share/opensearch/data`,
     '-e',
     'discovery.type=single-node',
+    '-e',
+    subjectAutoCreateIndexSetting,
     '-e',
     'DISABLE_SECURITY_PLUGIN=true',
     '-e',
@@ -117,10 +123,12 @@ function containerExists(): boolean {
 }
 
 async function up(): Promise<void> {
+  const refusal = await workerLocalContainerError(process.env, process.cwd());
+  if (refusal) throw new Error(refusal);
   const image = buildSearchImage();
   if (containerExists()) {
     const existingImage = docker(['inspect', '-f', '{{.Config.Image}}', container]);
-    if (existingImage !== image) docker(['rm', '-f', container]);
+    if (existingImage !== image) docker(['rm', '-f', '-v', container]);
   }
 
   if (containerExists()) {
@@ -135,31 +143,47 @@ async function up(): Promise<void> {
   await waitForSearch(url, container);
   const envFile = resolve(directory, '.env');
   const existingEnv = (await Bun.file(envFile).exists()) ? await Bun.file(envFile).text() : '';
-  await Bun.write(envFile, developmentEnv(existingEnv, url));
+  const generated = developmentEnv(existingEnv, url);
+  if (generated !== existingEnv) await Bun.write(envFile, generated);
 }
 
 async function rebuild(): Promise<void> {
-  const { ConfigError } = await import('../src/server.ts');
-  const { readSearchConfig } = await import('../src/search/work.ts');
+  const { ConfigError } = await import('../src/commerce/config.ts');
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new ConfigError('DATABASE_URL');
+  const encodedRouteKey = process.env.KERNEL_ROUTE_KEY;
+  if (!encodedRouteKey || !/^[A-Za-z0-9_-]+$/.test(encodedRouteKey)) throw new ConfigError('KERNEL_ROUTE_KEY');
+  const routeKey = Buffer.from(encodedRouteKey, 'base64url');
+  if (routeKey.byteLength !== 32 || routeKey.toString('base64url') !== encodedRouteKey)
+    throw new ConfigError('KERNEL_ROUTE_KEY');
+  const { readSearchConfig } = await import('../src/search/work.ts');
   const config = readSearchConfig(process.env);
   if (!config) throw new ConfigError('OPENSEARCH_URL');
   const { createPool } = await import('../src/database/pool.ts');
   const { createOpenSearch } = await import('../src/search/opensearch.ts');
-  const { RebuildError, rebuildSubjects } = await import('../src/search/generations.ts');
-  const { subjectSource } = await import('../src/semantic/search-source.ts');
+  const { RebuildError, rebuildSubjects, rebuildDiscovery } = await import('../src/search/generations.ts');
+  const { createRatedSubjectSource } = await import('../src/search/rated-source.ts');
   const pool = createPool(databaseUrl);
   try {
     const result = await rebuildSubjects({
+      publication: 'native',
       pool,
       search: createOpenSearch(config.url),
-      source: subjectSource(pool),
+      source: createRatedSubjectSource(pool, routeKey).source,
       prefix: config.prefix,
       // The worker's runner discovers the new generation on its own.
       runner: { async refresh() {} },
     });
-    console.log(JSON.stringify(result));
+    const { subjectListingSource } = await import('../src/library/listing-counts.ts');
+    const discovery = await rebuildDiscovery({
+      pool,
+      search: createOpenSearch(config.url),
+      source: createRatedSubjectSource(pool, routeKey).source,
+      listing: subjectListingSource(pool),
+      prefix: config.prefix,
+      routeKey,
+    });
+    console.log(JSON.stringify({ ...result, discovery }));
   } catch (error) {
     if (error instanceof RebuildError) {
       console.error(
@@ -182,7 +206,7 @@ async function main(): Promise<void> {
       docker(['stop', container]);
     }
   } else if (action === 'reset') {
-    if (containerExists()) docker(['rm', '-f', container]);
+    if (containerExists()) docker(['rm', '-f', '-v', container]);
     try {
       docker(['volume', 'rm', volume]);
     } catch {

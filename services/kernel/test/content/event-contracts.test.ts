@@ -14,24 +14,42 @@ const ids = {
   threadId: '88888888-8888-4888-8888-888888888888',
 };
 
+const threadIndex = {
+  placeId: ids.containerId,
+  kind: 'discussion' as const,
+  subjectIds: [ids.itemId],
+  activityAt: '2026-10-27T00:00:00.000Z',
+};
+
 const valid = {
   'com.rezics.content.thread.created.v1': {
     threadId: ids.threadId,
     itemId: ids.itemId,
     revisionId: ids.revisionId,
     actorId: ids.actorId,
+    ...threadIndex,
   },
   'com.rezics.content.post.created.v1': {
     threadId: ids.threadId,
     itemId: ids.postId,
     revisionId: ids.revisionId,
     actorId: ids.actorId,
+    ...threadIndex,
+  },
+  'com.rezics.content.post.published.v1': {
+    threadId: ids.threadId,
+    itemId: ids.postId,
+    revisionId: ids.revisionId,
+    actorId: ids.actorId,
+    ...threadIndex,
   },
   'com.rezics.content.revision.created.v1': {
     threadId: ids.threadId,
     itemId: ids.postId,
     revisionId: ids.revisionId,
     actorId: ids.actorId,
+    ...threadIndex,
+    previousSubjectIds: [ids.itemId],
   },
   'com.rezics.content.media.reserved.v1': { mediaId: ids.mediaId, containerId: ids.containerId, actorId: ids.actorId },
   'com.rezics.content.media.uploaded.v1': { mediaId: ids.mediaId, containerId: ids.containerId, actorId: ids.actorId },
@@ -59,7 +77,7 @@ const valid = {
     targetId: ids.postId,
     revisionId: ids.revisionId,
   },
-} satisfies Partial<Record<keyof typeof CONTENT_EVENTS, unknown>>;
+} satisfies Partial<Record<keyof ReturnType<typeof CONTENT_EVENTS>, unknown>>;
 
 function assertOriginalContracts(catalogue: Record<string, TSchema>): void {
   for (const [type, data] of Object.entries(valid)) {
@@ -76,10 +94,10 @@ function assertOriginalContracts(catalogue: Record<string, TSchema>): void {
 }
 
 test('content event contracts are closed typed ID-only schemas and reject unknown fields or authored body copies', () => {
-  assertOriginalContracts(CONTENT_EVENTS);
+  assertOriginalContracts(CONTENT_EVENTS());
 
   expect(
-    Value.Check(CONTENT_EVENTS['com.rezics.content.thread.created.v1'], {
+    Value.Check(CONTENT_EVENTS()['com.rezics.content.thread.created.v1'], {
       threadId: ids.threadId,
       itemId: ids.itemId,
       revisionId: ids.revisionId,
@@ -88,21 +106,21 @@ test('content event contracts are closed typed ID-only schemas and reject unknow
     }),
   ).toBe(false);
   expect(
-    Value.Check(CONTENT_EVENTS['com.rezics.content.media.rejected.v1'], {
+    Value.Check(CONTENT_EVENTS()['com.rezics.content.media.rejected.v1'], {
       mediaId: ids.mediaId,
       containerId: ids.containerId,
       decisionId: 'not-an-id',
     }),
   ).toBe(false);
   expect(
-    Value.Check(CONTENT_EVENTS['com.rezics.content.moderation.takedown.v1'], {
+    Value.Check(CONTENT_EVENTS()['com.rezics.content.moderation.takedown.v1'], {
       targetKind: 'account',
       targetId: ids.postId,
       securityRevision: '3',
     }),
   ).toBe(false);
 
-  const takedown = CONTENT_EVENTS['com.rezics.content.moderation.takedown.v1'];
+  const takedown = CONTENT_EVENTS()['com.rezics.content.moderation.takedown.v1'];
   for (const securityRevision of ['1', '9223372036854775807', '999999999999999999999999999999999999']) {
     expect(Value.Check(takedown, { targetKind: 'board', targetId: ids.containerId, securityRevision })).toBe(true);
   }
@@ -111,7 +129,7 @@ test('content event contracts are closed typed ID-only schemas and reject unknow
   }
   expect(Value.Check(takedown, { targetKind: 'media', targetId: ids.mediaId, securityRevision: '1' })).toBe(false);
 
-  const report = CONTENT_EVENTS['com.rezics.content.report.created.v1'];
+  const report = CONTENT_EVENTS()['com.rezics.content.report.created.v1'];
   for (const targetKind of ['board', 'thread', 'post']) {
     expect(Value.Check(report, { reportId: ids.reportId, targetKind, targetId: ids.itemId })).toBe(true);
   }
@@ -126,7 +144,7 @@ test('a synthetic closed additive event coexists with every required original co
     { mediaId: Type.Literal(ids.mediaId), containerId: Type.Literal(ids.containerId) },
     { additionalProperties: false },
   );
-  const extended = { ...CONTENT_EVENTS, [type]: schema };
+  const extended = { ...CONTENT_EVENTS(), [type]: schema };
   assertOriginalContracts(extended);
 
   const data = { mediaId: ids.mediaId, containerId: ids.containerId };
@@ -148,4 +166,24 @@ test('a synthetic closed additive event coexists with every required original co
   for (const unknownType of ['com.rezics.content.unknown.v1', 'content.thread.created.v1', 'toString']) {
     expect(Object.hasOwn(extended, unknownType)).toBe(false);
   }
+});
+
+test('first-publication evidence requires the exact revision and closed index fields', () => {
+  const schema = CONTENT_EVENTS()['com.rezics.content.post.published.v1'];
+  const data = valid['com.rezics.content.post.published.v1'];
+  for (const field of Object.keys(data)) {
+    const missing: Record<string, unknown> = { ...data };
+    delete missing[field];
+    expect(Value.Check(schema, missing)).toBe(false);
+  }
+  for (const [field, invalid] of [
+    ['revisionId', 'not-an-id'],
+    ['actorId', null],
+    ['kind', 'post'],
+    ['subjectIds', [ids.itemId, ids.itemId]],
+    ['activityAt', 'yesterday'],
+    ['previousSubjectIds', []],
+    ['visibility', 'published'],
+  ])
+    expect(Value.Check(schema, { ...data, [field as string]: invalid })).toBe(false);
 });

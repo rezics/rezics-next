@@ -1,8 +1,27 @@
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
-import { testDatabase } from '../../../../auth/scripts/database.ts';
+import { createAuthDatabase } from '../../support/auth-database.ts';
+
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `admission_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
 
 await import('reylo/register');
 const { createAuthBindings } = await import('../../../src/access/auth-bindings.ts');
@@ -34,7 +53,7 @@ const clientScopes = ['access:grant', operationAction, 'exposure:open', 'exposur
 
 type Person = { accountId: string; email: string; bearer: string };
 const pool = createPool(databaseUrl);
-let authDatabase: ReturnType<typeof testDatabase>;
+let authDatabase: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let authPool: Pool;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
@@ -191,7 +210,7 @@ beforeAll(async () => {
   });
   composition.mockRestore();
 
-  authDatabase = testDatabase();
+  authDatabase = await cloneAuthDatabase();
   authPool = new Pool({ connectionString: authDatabase.url });
   signingKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -282,7 +301,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await host?.stop();
   if (!host) await authPool?.end();
-  authDatabase?.close();
+  await authDatabase?.close();
   await pool.end();
 }, 60_000);
 
@@ -307,7 +326,10 @@ test('closed gate returns the same platform_closed to anonymous and ordinary acc
 
   const invalid = await get('/v1/gated-fixture', 'not-a-valid-bearer');
   expect(invalid.response.status).toBe(401);
-  expect(invalid.body).toMatchObject({ status: 401, code: 'authentication_required' });
+  expect(invalid.body).toMatchObject({ status: 401, code: 'invalid_credentials' });
+  expect(invalid.response.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+  expect(handlerCalls).toBe(before.handlerCalls);
+  expect(domainReads).toBe(before.domainReads);
   const publicRoute = await get('/v1/public-fixture');
   expect(publicRoute.response.status).toBe(200);
   expect(publicRoute.body).toEqual({ value: 'public' });

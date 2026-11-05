@@ -8,6 +8,7 @@ import { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import type { AccountActor } from '../../src/request/access.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 // The focused acceptance command also runs from the repository root.
@@ -16,7 +17,6 @@ const { productionActions } = await import('../support/production-actions.ts');
 const { createPool } = await import('../../src/database/pool.ts');
 const { readAccount } = await import('../../src/access/account-data.ts');
 const { createAccess } = await import('../../src/access/index.ts');
-const { createAccess: createPermissionAccess } = await import('../../src/access/permission.ts');
 const { setBoardScheme } = await import('../../src/community/board-scheme.ts');
 const { createRealmMembership } = await import('../../src/community/membership.ts');
 const { publish, reject, withdraw } = await import('../../src/community/publication.ts');
@@ -25,7 +25,8 @@ const { claimSpaceAddress } = await import('../../src/community/space-address.ts
 const { createSpace, updateSpace } = await import('../../src/community/space.ts');
 const { createBoard } = await import('../../src/content/board-create.ts');
 const { createPost, createThread, revisePost } = await import('../../src/content/commands.ts');
-const { EVENT_TYPES, readBatch } = await import('../../src/events/log.ts');
+const { EVENT_TYPES: EVENT_TYPESGetter, readBatch } = await import('../../src/events/log.ts');
+const EVENT_TYPES = EVENT_TYPESGetter();
 const { newId, routeOf } = await import('../../src/route/route.ts');
 const { bootstrapRelease, GLOBAL_CONTEXT } = await import('../../src/semantic/definitions.ts');
 const { createSubject, subjectTarget } = await import('../../src/semantic/subject.ts');
@@ -113,7 +114,7 @@ async function fixture(kernel: ReturnType<typeof createPool>, admin: Pool): Prom
     audience,
     secret: 'community-event-schema-secret-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(admin, routeOf(id)!, id);
         return (
@@ -130,7 +131,7 @@ async function fixture(kernel: ReturnType<typeof createPool>, admin: Pool): Prom
         if (reference !== accountId) throw new Error('Unknown fixture provisioning reference');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'community-events', firstParty: true, scopes: mounted });
   const access = createAccess({
@@ -320,12 +321,7 @@ test('community and content commands leave a log readBatch decodes, each emitted
   );
   const account = await readAccount(pool, routeOf(actor.accountId)!, actor.accountId);
   if (!account) throw new Error('missing account');
-  // Realm membership copies the actor, so the request account is the admission evidence.
-  const membershipAccess = createPermissionAccess({
-    actions: productionActions(),
-    accountEvidence: (_actor, requestContext) => requestContext.account ?? null,
-  });
-  const membership = createRealmMembership({ pool, access: membershipAccess });
+  const membership = createRealmMembership({ pool, access: f.access });
   const reservation = {
     accountId: actor.accountId,
     principal: { kind: 'realm' as const, id: realm.value.realmId },

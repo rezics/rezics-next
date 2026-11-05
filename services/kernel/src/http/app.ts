@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { Elysia, t, ValidationError } from 'elysia';
 import { throwAccessUnavailable } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
@@ -22,7 +23,7 @@ import { decodeSession, encodeSession, mergeSession, type SessionComponent } fro
 import type { KeyRing } from '../tokens/seal.ts';
 import { Admission } from './admission.ts';
 import { customMethodVerb } from './custom-method.ts';
-import { PROBLEM_TYPE_BASE, ProblemError, problemResponse } from './problem.ts';
+import { logInternalError, PROBLEM_TYPE_BASE, ProblemError, problemResponse } from './problem.ts';
 import {
   actionCatalogue,
   actionLabelOfMountedRoute,
@@ -35,13 +36,25 @@ import {
 import healthCheck from './health.sql';
 import { createWriteRateLimiter, type WriteRateLimiter } from '../access/write-rate.ts';
 import { createWriteRateStage, type WriteRateStageOptions } from '../access/write-rate-stage.ts';
+import { withCommandTiming } from '../command/timing.ts';
 import { deadlineFor, withRequestDeadline } from '../request/deadline.ts';
+import {
+  bodyLimitOf,
+  bodyModeOf,
+  parseBoundedBody,
+  DEFAULT_BODY_LIMIT,
+  MAX_BODY_LIMIT,
+  IngressBodyBudget,
+} from './body.ts';
+import { ADMISSION_LIMITS } from './admission.ts';
 
-export const REQUEST_DEADLINE_MS = DEFAULT_REQUEST_DEADLINE_MS;
+export function REQUEST_DEADLINE_MS() {
+  return memoizedValue(REQUEST_DEADLINE_MS, () => DEFAULT_REQUEST_DEADLINE_MS);
+}
 
 export function createApp({
   pool,
-  requestDeadlineMs = REQUEST_DEADLINE_MS,
+  requestDeadlineMs = REQUEST_DEADLINE_MS(),
   admission = new Admission(),
   access = createAccess,
   tokens,
@@ -70,8 +83,25 @@ export function createApp({
   let socketPeer: (request: Request) => string | undefined = () => undefined;
   const originalRequests = new WeakMap<Request, Request>();
   const requestIds = new WeakMap<Request, string>();
-  const jsonBodyChecks = new Map<string, ReturnType<typeof Compile>>();
+  const jsonBodyChecks = new Map<string, { optional: boolean; compile: () => ReturnType<typeof Compile> }>();
   const invalidJsonBodies = new WeakMap<Request, ValidationError>();
+  const boundedBodyErrors = new WeakMap<Request, unknown>();
+  // Undefined means "try the next parser" to Elysia. Preserve an absent wire
+  // body through parsing, then restore it before the route's schema checks.
+  const absentBody = Symbol('absent request body');
+  const bodyReservations = new WeakMap<Request, number>();
+  let bodyBudget: IngressBodyBudget | undefined;
+  const selfParsingRoutes = new Set([
+    'POST /v1/boards',
+    'POST /v1/realms/:realmId/boards',
+    'POST /v1/threads',
+    'POST /v1/threads/:id/posts',
+    'POST /v1/posts/:id/revisions',
+    'POST /v1/reports',
+    'POST /v1/sourceFences/$takedown',
+    'POST /v1/media/:id/$takeDown',
+    'POST /v1/webhooks/stripe',
+  ]);
   let mountedApp: { routes: readonly { method: string; path: string; hooks?: { detail?: unknown } }[] };
   let catalogue: MountedRouteCatalogue;
   const matchedRoutes = new WeakMap<Request, MountedRoute | undefined>();
@@ -98,8 +128,47 @@ export function createApp({
   };
 
   const app = new Elysia()
-    .onRequest(({ request }) => {
+    .onRequest(({ request, set }) => {
       idFor(request);
+      if (new URL(request.url).pathname === '/v1/viewerActions') set.headers['cache-control'] = 'private, no-store';
+    })
+    .onParse('global', async ({ request, route }) => {
+      const mounted = mountedFor(request, route);
+      if (!mounted) return;
+      const key = `${mounted.method.toUpperCase()} ${mounted.path}`;
+      if (selfParsingRoutes.has(key)) return;
+      const detail = mounted.hooks?.detail as Record<string, unknown> | undefined;
+      const limit = bodyLimitOf(detail);
+      const declared = Number(request.headers.get('content-length'));
+      const reservation =
+        request.headers.has('content-length') && Number.isSafeInteger(declared) && declared >= 0
+          ? Math.min(declared, limit)
+          : limit;
+      const largest = Math.max(
+        DEFAULT_BODY_LIMIT,
+        MAX_BODY_LIMIT(),
+        ...catalogue.routes.map((candidate) =>
+          bodyLimitOf(candidate.hooks?.detail as Record<string, unknown> | undefined),
+        ),
+      );
+      const budget = (ADMISSION_LIMITS.permits + ADMISSION_LIMITS.queue) * DEFAULT_BODY_LIMIT + 2 * largest;
+      bodyBudget ??= new IngressBodyBudget(budget);
+      try {
+        if (!bodyBudget.reserve(reservation)) throw new ProblemError('overloaded', { headers: { 'retry-after': '1' } });
+        bodyReservations.set(request, reservation);
+        const body = await parseBoundedBody(request, limit, bodyModeOf(detail));
+        return body === undefined ? absentBody : body;
+      } catch (error) {
+        boundedBodyErrors.set(request, error);
+        return {};
+      }
+    })
+    .onAfterResponse(({ request }) => {
+      const reservation = bodyReservations.get(request);
+      if (reservation !== undefined) {
+        bodyBudget?.release(reservation);
+        bodyReservations.delete(request);
+      }
     })
     .onError('global', ({ error, request, route }) => {
       let action: string | undefined;
@@ -111,7 +180,6 @@ export function createApp({
         mounted = undefined;
         action = undefined;
       }
-      const detail = mounted?.hooks?.detail as Record<string, unknown> | undefined;
       if (error instanceof PlatformClosedError) {
         const read = action?.endsWith(':read') === true;
         const effectStatus =
@@ -129,50 +197,43 @@ export function createApp({
           { status: 403, headers: { 'content-type': 'application/problem+json' } },
         );
       }
-      if (
-        error instanceof AuthenticationError &&
-        error.status === 401 &&
-        /(?:^|[\s,])error\s*=\s*(?:"invalid_token"|invalid_token)(?=$|[\s,])/i.test(error.challenge) &&
-        typeof detail?.['x-exposure'] === 'string' &&
-        detail['x-exposure'].startsWith('gate:')
-      ) {
-        // Reject invalid bearers before gate lookup without exposing token validity.
-        return problemResponse(new AuthenticationError(401, 'Bearer'), {
-          method: request.method,
-          id: idFor(request),
-          ...(action ? { action } : {}),
-        });
-      }
       // Native validation can fail before beforeHandle; retain the original body pointers.
       const bodyError = error instanceof ValidationError ? invalidJsonBodies.get(request) : undefined;
       const problem = problemResponse(bodyError ?? error, {
         method: request.method,
         id: idFor(request),
+        route: mounted?.path ?? (typeof route === 'string' ? route : undefined),
         ...(action ? { action } : {}),
       });
       // internal_error is the only 500 problem; log the cause the response hides, never request content.
       if (problem.status === 500) {
-        const cause = bodyError ?? error;
-        const code = cause instanceof Error ? (cause as { code?: unknown }).code : undefined;
-        console.error(
-          JSON.stringify({
-            event: 'internal_error',
-            request_id: idFor(request),
-            method: request.method,
-            route: mounted?.path ?? (typeof route === 'string' ? route : undefined),
-            name: cause instanceof Error ? cause.name : typeof cause,
-            ...(code === undefined ? {} : { code }),
-            stack: cause instanceof Error ? cause.stack : undefined,
-          }),
-        );
+        logInternalError({
+          requestId: idFor(request),
+          method: request.method,
+          route: mounted?.path ?? (typeof route === 'string' ? route : undefined),
+          cause: bodyError ?? error,
+        });
       }
+      if (new URL(request.url).pathname === '/v1/viewerActions')
+        problem.headers.set('cache-control', 'private, no-store');
       return problem;
     })
-    .onTransform('global', ({ body, request, route }) => {
+    .onTransform('global', (context) => {
+      if (context.body === absentBody) context.body = undefined;
+      const { body, request, route } = context;
+      const boundedError = boundedBodyErrors.get(request);
+      if (boundedError !== undefined) {
+        boundedBodyErrors.delete(request);
+        throw boundedError;
+      }
       const mediaType = request.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
       if (mediaType !== 'application/json' && !mediaType?.endsWith('+json')) return;
       const mounted = mountedFor(request, route);
-      const check = mounted && jsonBodyChecks.get(`${mounted.method} ${mounted.path}`);
+      const detail = mounted?.hooks?.detail as Record<string, unknown> | undefined;
+      if (bodyModeOf(detail) === 'raw') return;
+      const validation = mounted && jsonBodyChecks.get(`${mounted.method} ${mounted.path}`);
+      if (body === undefined && validation?.optional) return;
+      const check = validation?.compile();
       if (check && !check.Check(body))
         invalidJsonBodies.set(request, new ValidationError('body', body, check.Errors(body), check.Type()));
     })
@@ -191,7 +252,7 @@ export function createApp({
                 return await actorOf(accessForApp(), request, { pool, deadline: job.deadline });
               } catch (error) {
                 throwAccessUnavailable(error, job.deadline);
-                if (error instanceof AuthenticationError) throw error;
+                if (error instanceof AuthenticationError || error instanceof ProblemError) throw error;
                 throw new AuthenticationError(401, 'Bearer error="invalid_token"');
               }
             });
@@ -262,6 +323,13 @@ export function createApp({
           deadline: job.deadline,
           clock: requestClock,
         });
+        // Preserve exposure admission's normal refusal, then require the acting
+        // account and exact credential scope before a domain-state refusal.
+        // The command still evaluates its full native own-account permission.
+        if (detail?.['x-authority-anchor'] === 'own-account') {
+          if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+          if (!actor.scopes.includes(actionLabelOfMountedRoute(mounted))) throw new ProblemError('forbidden');
+        }
         await rateStage({
           request,
           route,
@@ -288,7 +356,8 @@ export function createApp({
   socketPeer = (request) => app.server?.requestIP(request)?.address;
   app.wrap((handle) => {
     // Elysia 2.0.0-rc.0 applies coerceBody even with normalize:false.
-    // Compile original schemas once, then check parsed JSON before its coercing validation.
+    // Compile each route's original schemas on first use, before its coercing validation.
+    // The first request must not spend its deadline compiling every unrelated route.
     const routes = app.routes;
     jsonBodyChecks.clear();
     for (const { method, path, hooks } of routes) {
@@ -304,33 +373,53 @@ export function createApp({
         }
         schemas.push(schema as TSchema);
       }
-      if (schemas.length)
-        jsonBodyChecks.set(
-          `${method} ${path}`,
-          Compile(app.models, schemas.length === 1 ? schemas[0]! : t.Intersect(schemas)),
-        );
+      if (schemas.length) {
+        let check: ReturnType<typeof Compile> | undefined;
+        jsonBodyChecks.set(`${method} ${path}`, {
+          optional: schemas.every((schema) => '~optional' in schema && schema['~optional'] === true),
+          compile: () => (check ??= Compile(app.models, schemas.length === 1 ? schemas[0]! : t.Intersect(schemas))),
+        });
+      }
     }
     catalogue = mountedRouteCatalogue(mountedApp, routes);
     const verbs = new Set(
       catalogue.routes.map((route) => customMethodVerb(route.path)).filter((verb) => verb !== undefined),
     );
     return (request) => {
-      return withRequestDeadline(Date.now() + requestDeadlineMs, () => {
-        const url = new URL(request.url);
-        const path = url.pathname;
-        // Also refuse encoded dollar signs so router aliases cannot expose internal routes.
-        if (/\/(?:\$|%24)/i.test(path))
-          return problemResponse(new ProblemError('not_found'), { method: request.method, id: idFor(request) });
+      return withCommandTiming(() =>
+        withRequestDeadline(deadlineFor(requestDeadlineMs), () => {
+          const url = new URL(request.url);
+          const path = url.pathname;
+          // Also refuse encoded dollar signs so router aliases cannot expose internal routes.
+          if (/\/(?:\$|%24)/i.test(path))
+            return problemResponse(new ProblemError('not_found'), { method: request.method, id: idFor(request) });
 
-        const colon = path.lastIndexOf(':');
-        if (colon > path.lastIndexOf('/') && verbs.has(path.slice(colon + 1))) {
-          url.pathname = `${path.slice(0, colon)}/$${path.slice(colon + 1)}`;
-          const rewritten = new Request(url, request);
-          originalRequests.set(rewritten, request);
-          return handle(rewritten);
-        }
-        return handle(request);
-      });
+          const colon = path.lastIndexOf(':');
+          if (colon > path.lastIndexOf('/') && verbs.has(path.slice(colon + 1))) {
+            url.pathname = `${path.slice(0, colon)}/$${path.slice(colon + 1)}`;
+            // Passing Request as init tees its stream and pulls before ingress admission.
+            // Forward the body itself so the bounded reader remains its only consumer.
+            const rewritten = new Request(url, {
+              method: request.method,
+              headers: request.headers,
+              body: request.body,
+              signal: request.signal,
+              cache: request.cache,
+              credentials: request.credentials,
+              integrity: request.integrity,
+              keepalive: request.keepalive,
+              mode: request.mode,
+              redirect: request.redirect,
+              referrer: request.referrer,
+              referrerPolicy: request.referrerPolicy,
+              duplex: 'half',
+            } as RequestInit);
+            originalRequests.set(rewritten, request);
+            return handle(rewritten);
+          }
+          return handle(request);
+        }),
+      );
     };
   });
   return app;

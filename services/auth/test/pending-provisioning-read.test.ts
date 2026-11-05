@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -57,7 +58,10 @@ test('both operations authorize first and use the dedicated reader exclusively',
     const calls: string[] = [];
     expect(
       await provision(
-        {
+        trustedAccessPorts({
+          async readFencedAccount(id) {
+            return this.readAccount(id);
+          },
           authorizeProvisioning: async (command) => {
             expect(command).toBe('approved-command');
             calls.push('authorize');
@@ -73,7 +77,7 @@ test('both operations authorize first and use the dedicated reader exclusively',
             calls.push('read');
             return account;
           },
-        },
+        }),
         automated,
       ),
     ).toEqual({ accountId: account.accountId });
@@ -106,7 +110,10 @@ test('present reader denial and invalid pending fields never fall back or create
       let ordinaryReads = 0;
       await expect(
         provision(
-          {
+          trustedAccessPorts({
+            async readFencedAccount(id) {
+              return this.readAccount(id);
+            },
             authorizeProvisioning: async () => ({ accountId: approved.accountId }),
             readAccount: async () => {
               ordinaryReads++;
@@ -114,7 +121,7 @@ test('present reader denial and invalid pending fields never fall back or create
             },
             readProvisioningAccount: async () =>
               patch === null ? null : ({ ...approved, ...patch } as typeof approved),
-          },
+          }),
           automated,
         ),
       ).rejects.toThrow();
@@ -123,7 +130,10 @@ test('present reader denial and invalid pending fields never fall back or create
     expect((await pool.query('SELECT id FROM "user" WHERE id=$1', [approved.accountId])).rows).toHaveLength(0);
     await expect(
       provision(
-        {
+        trustedAccessPorts({
+          async readFencedAccount(id) {
+            return this.readAccount(id);
+          },
           authorizeProvisioning: async () => {
             throw new Error('unapproved');
           },
@@ -133,7 +143,7 @@ test('present reader denial and invalid pending fields never fall back or create
           readProvisioningAccount: async () => {
             throw new Error('no read before approval');
           },
-        },
+        }),
         automated,
       ),
     ).rejects.toThrow('unapproved');
@@ -144,10 +154,13 @@ test('absent optional reader retains strict pending compatibility for isolated t
   for (const automated of [false, true]) {
     const { registrationId, expiresAt, ...account }: AccessAccount & { registrationId: string; expiresAt: string } =
       pending(automated);
-    const ports: TrustedAccessPorts = {
+    const ports: TrustedAccessPorts = trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       authorizeProvisioning: async () => ({ accountId: account.accountId }),
       readAccount: async () => account,
-    };
+    });
     expect(await provision(ports, automated)).toEqual({ accountId: account.accountId });
     for (const bad of [
       { ...account, accountId: 'different' },

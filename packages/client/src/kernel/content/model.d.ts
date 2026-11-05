@@ -1,3 +1,5 @@
+import type { CommunityPresentation } from './community-presentation-model.ts';
+export type { CommunityPresentation } from './community-presentation-model.ts';
 import type { DocumentSnapshot } from '@rezics/document';
 import type { Actor } from '../request/access.ts';
 import type { Partition } from '../partition/partition.ts';
@@ -23,6 +25,69 @@ export type ContentCommandValue = Readonly<{
     itemId: PostId;
     revisionId: RevisionId;
 }>;
+export type ReviewVoteCitation = Readonly<{
+    questionId: string;
+    units: number;
+    revision: number;
+}>;
+export type FeedReviewContext = Readonly<{
+    target: Readonly<{
+        state: 'available';
+        subject: Readonly<{
+            id: ContentId;
+            kind: string;
+            label: Readonly<{
+                value: string;
+                language: string;
+            }> | null;
+        }>;
+    }> | Readonly<{
+        state: 'absent' | 'withheld';
+    }>;
+    citation: Readonly<{
+        state: 'available';
+        question: Readonly<{
+            id: ContentId;
+            revision: number;
+            label: string;
+            grain: 'work' | 'release' | 'episode' | 'character';
+            scale: Readonly<{
+                min: number;
+                max: number;
+                displayStep: number;
+            }>;
+        }>;
+        units: number;
+        voteRevision: number;
+    }> | Readonly<{
+        state: 'absent' | 'withheld';
+    }>;
+}>;
+export type FeedParentAuthor = Readonly<{
+    id: ContentId;
+    displayName: string | null;
+    handle: string | null;
+}>;
+export type FeedParentContext = Readonly<{
+    kind: 'opening';
+}> | Readonly<{
+    kind: 'reply';
+    parent: Readonly<{
+        state: 'available';
+        id: PostId;
+        revisionId: RevisionId;
+        createdAt: string;
+        author: FeedParentAuthor | null;
+        excerpt: string | null;
+        language: string | null;
+        spoiler: boolean;
+    }> | Readonly<{
+        state: 'removed';
+        id: PostId;
+    }> | Readonly<{
+        state: 'withheld';
+    }>;
+}>;
 export type ItemMetadata = Readonly<{
     id: PostId;
     threadId: ThreadId;
@@ -39,6 +104,7 @@ export type ItemMetadata = Readonly<{
     revisedAt: string | null;
     sha256: string;
     mediaIds: readonly MediaId[];
+    voteCitation: ReviewVoteCitation | null;
 }>;
 export type RevisionMetadata = Readonly<{
     id: RevisionId;
@@ -53,6 +119,7 @@ export type RevisionMetadata = Readonly<{
     revisedAt: string | null;
     sha256: string;
     mediaIds: readonly MediaId[];
+    voteCitation: ReviewVoteCitation | null;
 }>;
 export type ErasedPlaceholder = Readonly<{
     id: PostId;
@@ -85,6 +152,7 @@ export type ThreadView = Readonly<{
     id: ThreadId;
     route: Route;
     authorId: ContentId;
+    kind: 'discussion' | 'review';
     title: string | null;
     licence: string;
     subjectIds: readonly ContentId[];
@@ -96,28 +164,35 @@ export type ThreadView = Readonly<{
     firstPost: PostEntry;
 }>;
 export declare function isErasedPlaceholder(entry: Readonly<{
-    availability: Availability;
+    availability: Availability | 'withheld';
     revisionId?: RevisionId;
 }>): entry is ErasedPlaceholder;
 export type BoardView = Readonly<{
     id: BoardId;
+    realmId: string | null;
+    community: CommunityPresentation | null;
     route: Route;
     title: string | null;
+    purpose: 'discussion' | 'reviews';
     visibility: Visibility;
     securityRevision: SecurityRevision;
     availability: Availability;
     createdAt: string;
 }>;
+export type BoardRecord = Omit<BoardView, 'community'>;
 export type ThreadInput = Readonly<{
+    kind?: 'discussion' | 'review';
     title: string;
     body: unknown;
     licence: string;
     subjectIds: readonly ContentId[];
     boardId: BoardId;
-    visibility: 'published' | 'draft';
+    visibility: 'published' | 'draft' | 'protected';
+    voteCitation?: ReviewVoteCitation;
 }>;
 export type PostInput = Readonly<{
     threadId: ThreadId;
+    visibility?: 'published' | 'draft' | 'protected';
     body: unknown;
     licence: string;
     subjectIds?: readonly ContentId[];
@@ -127,6 +202,9 @@ export type PostInput = Readonly<{
 }>;
 export type RevisionInput = Readonly<{
     threadId: ThreadId;
+    /** Review opening title, committed with this body revision. */
+    title?: string;
+    visibility?: 'published' | 'draft';
     itemId: PostId;
     body: unknown;
     licence?: string;
@@ -135,6 +213,7 @@ export type RevisionInput = Readonly<{
     mediaIds?: readonly MediaId[];
     /** Head the caller last observed. Null omits the check; the digest still records it. */
     expectedRevisionId?: string | null;
+    voteCitation?: ReviewVoteCitation;
 }>;
 export type RequestContext = Readonly<{
     idempotencyKey: string;

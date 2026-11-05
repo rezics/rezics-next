@@ -222,6 +222,7 @@ test.serial('anonymous reads a Space and cannot create or update one', async () 
     creator: creator.accountId,
     author: creator.accountId,
     predecessor: null,
+    realmId: null,
   });
   const head = space.headRevisionId;
   expect(created.response.headers.get('etag')).toBe(JSON.stringify(head));
@@ -323,6 +324,7 @@ test.serial(
     expect(next).toMatchObject({
       spaceId: space.spaceId,
       title: updatedTitle,
+      realmId: null,
       summary,
       predecessor: space.headRevisionId,
       creator: creator.accountId,
@@ -343,7 +345,7 @@ test.serial(
 );
 
 test.serial(
-  'an account without the grant, a suspended account and a stale head are denied with no effect and no disclosure',
+  'Space creation without a grant, non-owner updates and stale-head updates fail without writes or metadata in errors',
   async () => {
     // account:suspend is not mounted on this kernel, so this file does not suspend an account.
     await grantCreate();

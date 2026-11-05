@@ -1,5 +1,5 @@
+import { withReadTransaction } from './read.ts';
 import type { Pool, PoolClient } from 'pg';
-import { withConnection, discardConnection } from '../database/pool.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
@@ -34,15 +34,6 @@ type PageRow = {
 };
 
 type Queryable = Pool | PoolClient;
-
-async function rollback(client: PoolClient, error: unknown): Promise<never> {
-  try {
-    await client.query('ROLLBACK');
-  } catch (rollbackError) {
-    discardConnection(client, rollbackError as Error);
-  }
-  throw error;
-}
 
 function isCanonicalSubjectId(id: unknown): id is string {
   return typeof id === 'string' && routeOf(id) !== null;
@@ -96,44 +87,36 @@ export async function pageSubjects(
     cursorEpoch = decoded.epoch;
   }
 
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      await client.query("SET LOCAL statement_timeout = '300ms'");
-      const partitionState = await readPartition(client, partition);
-      if (!partitionState) {
-        await client.query('COMMIT');
-        return null;
-      }
-      if (cursorEpoch !== null && cursorEpoch !== partitionState.epoch) throw new PageCursorError('stale');
-
-      const rows = await readRows(client, {
-        partition_no: partition,
-        after_route: afterRoute,
-        after_id: afterId,
-        limit: size + 1,
-      });
-      await client.query('COMMIT');
-
-      const hasMore = rows.length > size;
-      const shown = rows.slice(0, size);
-      const subjects = shown.map((row) => ({ id: row.id, labels: row.body ?? {} }));
-      const last = shown.at(-1);
-      const next =
-        hasMore && last
-          ? encodeCursor(ring, binding, { epoch: partitionState.epoch, after: [last.route, last.id] })
-          : null;
-      return {
-        subjects,
-        next,
-        component: {
-          partition: partitionState.partitionNo,
-          epoch: partitionState.epoch,
-          position: partitionState.position,
-        },
-      };
-    } catch (error) {
-      return await rollback(client, error);
+  return withReadTransaction(pool, async (client) => {
+    const partitionState = await readPartition(client, partition);
+    if (!partitionState) {
+      return null;
     }
+    if (cursorEpoch !== null && cursorEpoch !== partitionState.epoch) throw new PageCursorError('stale');
+
+    const rows = await readRows(client, {
+      partition_no: partition,
+      after_route: afterRoute,
+      after_id: afterId,
+      limit: size + 1,
+    });
+
+    const hasMore = rows.length > size;
+    const shown = rows.slice(0, size);
+    const subjects = shown.map((row) => ({ id: row.id, labels: row.body ?? {} }));
+    const last = shown.at(-1);
+    const next =
+      hasMore && last
+        ? encodeCursor(ring, binding, { epoch: partitionState.epoch, after: [last.route, last.id] })
+        : null;
+    return {
+      subjects,
+      next,
+      component: {
+        partition: partitionState.partitionNo,
+        epoch: partitionState.epoch,
+        position: partitionState.position,
+      },
+    };
   });
 }

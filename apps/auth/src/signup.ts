@@ -1,5 +1,13 @@
-import { authPost, failureMessage } from './api';
-import { signIn, type SignInResult } from './sign-in';
+import { AUTH_POST_TIMEOUT_MS, failureMessage } from './api';
+import {
+  REGISTRATION_ACK_MAX_BYTES,
+  REGISTRATION_ERROR_MAX_BYTES,
+  registrationAcknowledgement,
+  registrationError,
+  type RegistrationAcknowledgement,
+} from '@rezics/auth-contract';
+import { readJsonBounded } from './private-auth-json';
+import type { SignInResult } from './sign-in';
 import { m } from './paraglide/messages.js';
 
 export type SignupBody = {
@@ -11,44 +19,120 @@ export type SignupBody = {
 };
 
 export type SignupFailure =
-  | { field: 'password'; message: string }
-  | { field: 'handle'; message: string }
-  | { field: 'form'; message: string; conflict: boolean };
+  | { kind: 'local-password'; field: 'password'; message: string }
+  | {
+      kind: 'request-rejected';
+      status: 400;
+      code: 'registration_denied';
+      retryAfter: null;
+      message: string;
+    }
+  | {
+      kind: 'handle-unavailable';
+      status: 409;
+      code: 'handle_unavailable';
+      retryAfter: null;
+      message: string;
+    }
+  | { kind: 'conflict'; status: 409; code: string; retryAfter: null; message: string }
+  | { kind: 'rate-limited'; status: 429; code: string; retryAfter: string | null; message: string }
+  | { kind: 'uncertain'; status: number; code: string; retryAfter: string | null; message: string };
 
-export type SignupSubmission = { ok: true; signIn: SignInResult } | { ok: false; failure: SignupFailure };
+export type SignupSubmission =
+  | { ok: true; acknowledgement: RegistrationAcknowledgement }
+  | { ok: false; failure: SignupFailure };
+export type SignupPasswordLimits = { minLength: number; maxLength: number };
 
 export function createSignupKey(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export function passwordAccepted(password: string): boolean {
-  const length = Array.from(password).length;
-  return length >= 8 && length <= 128;
+export function passwordAccepted(password: string, limits: SignupPasswordLimits): boolean {
+  return password.length >= limits.minLength && password.length <= limits.maxLength;
 }
 
-export async function submitSignup(input: SignupBody): Promise<SignupSubmission> {
-  if (!passwordAccepted(input.password)) {
-    return { ok: false, failure: { field: 'password', message: m.auth_signup_password_invalid() } };
+// Matches the kernel's handle contract; the server applies the same normalization on signup.
+export function normalizeSignupHandle(handle: string): string | null {
+  const normalized = handle.toLowerCase();
+  // Require the entire input: JavaScript's $ can also match before a final line terminator.
+  return /^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$/.exec(normalized)?.[0] === normalized ? normalized : null;
+}
+
+export async function submitSignup(input: SignupBody, limits: SignupPasswordLimits): Promise<SignupSubmission> {
+  if (!passwordAccepted(input.password, limits)) {
+    return {
+      ok: false,
+      failure: {
+        kind: 'local-password',
+        field: 'password',
+        message: m.auth_signup_password_invalid({
+          minimum: String(limits.minLength),
+          maximum: String(limits.maxLength),
+        }),
+      },
+    };
   }
-  const result = await authPost<{ accountId: string }>('/signup', input);
-  // The shared client treats only HTTP 200 as success. Registration answers 201 and issues no session.
-  if (result.ok || (!result.ok && result.status === 201))
-    return { ok: true, signIn: await signIn(input.email, input.password) };
-  return { ok: false, failure: explainSignup(result.status, result.code, result.retryAfter) };
+  const controller = new AbortController();
+  const uncertain = (): SignupSubmission => ({ ok: false, failure: explainSignup(503, 'unavailable', null) });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<SignupSubmission>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(uncertain());
+      controller.abort();
+    }, AUTH_POST_TIMEOUT_MS);
+  });
+  const send = async (): Promise<SignupSubmission> => {
+    try {
+      const response = await fetch('/signup', {
+        method: 'POST',
+        credentials: 'same-origin',
+        cache: 'no-store',
+        redirect: 'error',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+        signal: controller.signal,
+      });
+      const body = await readJsonBounded(
+        response,
+        response.status === 201 ? REGISTRATION_ACK_MAX_BYTES : REGISTRATION_ERROR_MAX_BYTES,
+        controller.signal,
+      );
+      if (response.status === 201 && registrationAcknowledgement(body)) return { ok: true, acknowledgement: body };
+      if (
+        registrationError(body) &&
+        ((response.status === 400 && body.error === 'registration_denied') || response.status === 409)
+      )
+        return { ok: false, failure: explainSignup(response.status, body.error, null) };
+      return uncertain();
+    } catch {
+      return uncertain();
+    }
+  };
+  try {
+    return await Promise.race([send(), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function explainSignup(status: number, code: string, retryAfter: string | null): SignupFailure {
-  if (status === 409 && code === 'handle_unavailable') {
-    return { field: 'handle', message: m.auth_signup_handle_unavailable() };
-  }
-  if (status === 409) return { field: 'form', message: m.auth_signup_conflict(), conflict: true };
   if (status === 400 && code === 'registration_denied') {
-    return { field: 'form', message: m.auth_signup_denied(), conflict: false };
+    return {
+      kind: 'request-rejected',
+      status,
+      code,
+      retryAfter: null,
+      message: m.auth_signup_denied(),
+    };
   }
+  if (status === 409 && code === 'handle_unavailable') {
+    return { kind: 'handle-unavailable', status, code, retryAfter: null, message: m.auth_signup_handle_unavailable() };
+  }
+  if (status === 409) return { kind: 'conflict', status, code, retryAfter: null, message: m.auth_signup_conflict() };
   if (status === 429)
-    return { field: 'form', message: failureMessage(429, 'rate_limited', retryAfter), conflict: false };
-  return { field: 'form', message: failureMessage(503, 'unavailable', null), conflict: false };
+    return { kind: 'rate-limited', status, code, retryAfter, message: failureMessage(429, 'rate_limited', retryAfter) };
+  return { kind: 'uncertain', status, code, retryAfter, message: failureMessage(503, 'unavailable', null) };
 }
 
 export function explainSignIn(result: Exclude<SignInResult, { ok: true }>): string {

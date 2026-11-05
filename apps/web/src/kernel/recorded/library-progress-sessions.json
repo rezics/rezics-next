@@ -1,0 +1,121 @@
+{
+  "progressSessions": [
+    {
+      "id": "01a17a3b-70a2-712a-bae6-f4cc72cd9182",
+      "subjectId": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
+      "versionSubjectId": null,
+      "mode": "cursor_position",
+      "unit": "chapter",
+      "total": null,
+      "amount": null,
+      "locator": "Part 2, chapter 14",
+      "position": "42",
+      "completedUnitCount": 0,
+      "state": "active",
+      "revision": 2,
+      "startedAt": "2026-10-26T18:22:28.378Z",
+      "completedAt": null,
+      "subject": {
+        "id": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
+        "type": "schema:Book",
+        "label": "Kokoro",
+        "types": ["schema:Book"],
+        "cover": {
+          "media": "01a17a3b-0884-7c01-8a3f-c0de00000001",
+          "width": 320,
+          "height": 480,
+          "placeholder": {
+            "thumbhash": "lCcGJQa4h4CEV6eYZ3dol8hwhAtX",
+            "color": "#6d4d6f"
+          },
+          "variants": [
+            {
+              "format": "webp",
+              "width": 320
+            }
+          ],
+          "focalPoint": null,
+          "credit": {
+            "rightsHolder": "REZICS fixtures",
+            "via": {
+              "name": "Generated fixture",
+              "url": "https://rezics.com"
+            },
+            "license": "CC0-1.0",
+            "obligations": []
+          }
+        }
+      }
+    },
+    {
+      "id": "01a17a3b-70c4-7a31-8e2d-5b9f1c0a3d41",
+      "subjectId": "01a17a3b-6bc3-764f-8727-7872d197bd93",
+      "versionSubjectId": null,
+      "mode": "scalar_amount",
+      "unit": "episode",
+      "total": "12",
+      "amount": "3",
+      "locator": null,
+      "position": null,
+      "completedUnitCount": 0,
+      "state": "active",
+      "revision": 3,
+      "startedAt": "2026-10-26T18:22:28.402Z",
+      "completedAt": null,
+      "subject": { "id": "01a17a3b-6bc3-764f-8727-7872d197bd93", "type": "schema:Book", "label": "The Tale of Genji" }
+    },
+    {
+      "id": "01a17a3b-70d6-7c58-9a0b-2e47d6f81b52",
+      "subjectId": "01a17a3b-6bd9-706f-b395-987536454933",
+      "versionSubjectId": null,
+      "mode": "scalar_amount",
+      "unit": "page",
+      "total": null,
+      "amount": "118",
+      "locator": null,
+      "position": null,
+      "completedUnitCount": 0,
+      "state": "active",
+      "revision": 2,
+      "startedAt": "2026-10-26T18:22:28.420Z",
+      "completedAt": null,
+      "subject": { "id": "01a17a3b-6bd9-706f-b395-987536454933", "type": "schema:Book", "label": "I Am a Cat" }
+    },
+    {
+      "id": "01a17a3b-70e9-7d92-b6c4-8f13a07e5c63",
+      "subjectId": "01a17a3b-6bab-705b-935e-d6dc0cacd82d",
+      "versionSubjectId": null,
+      "mode": "scalar_amount",
+      "unit": "percent",
+      "total": null,
+      "amount": "64",
+      "locator": null,
+      "position": null,
+      "completedUnitCount": 0,
+      "state": "active",
+      "revision": 2,
+      "startedAt": "2026-10-26T18:22:28.441Z",
+      "completedAt": null,
+      "subject": { "id": "01a17a3b-6bab-705b-935e-d6dc0cacd82d", "type": "schema:Book", "label": "Norwegian Wood" }
+    },
+    {
+      "id": "01a17a3b-70fb-7e0f-a3d8-4c62b95f1a74",
+      "subjectId": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
+      "versionSubjectId": null,
+      "mode": "completed_units",
+      "unit": "chapter",
+      "total": null,
+      "amount": null,
+      "locator": null,
+      "position": null,
+      "completedUnitCount": 5,
+      "state": "active",
+      "revision": 6,
+      "startedAt": "2026-10-26T18:22:28.463Z",
+      "completedAt": null,
+      "subject": { "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4", "type": "schema:Book", "label": "The Little Prince" }
+    }
+  ],
+  "next": null,
+  "status": 200
+}

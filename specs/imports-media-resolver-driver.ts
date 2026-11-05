@@ -1,8 +1,8 @@
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import type { Owner, RecordBindings } from '../services/importer/src/record-bindings.ts';
 
-export const MISSING_MEDIA_RESOLVER_DRIVER =
-  'IMPORT_MEDIA_RESOLVER_DRIVER is required: bind the real importer media resolver';
+export const INVALID_MEDIA_RESOLVER_DRIVER =
+  'IMPORT_MEDIA_RESOLVER_DRIVER must name a module exporting createMediaResolver';
 
 /** Ordinary public JSON operations, with HTTP status preserved for validation. */
 export interface MediaFencePort {
@@ -74,8 +74,20 @@ export type CreateMediaResolver = (options: MediaResolverOptions) => MediaResolv
  * No grants creation, website/BFF, image bytes, media:complete or kernel SQL.
  * The remote fake in the suite is a unit boundary, not authorization/API proof.
  */
-export async function loadMediaResolver(): Promise<CreateMediaResolver> {
-  const path = process.env.IMPORT_MEDIA_RESOLVER_DRIVER;
-  if (!path) throw new Error(MISSING_MEDIA_RESOLVER_DRIVER);
-  return (await import(path)).createMediaResolver as CreateMediaResolver;
+export async function loadMediaResolver(suppliedPath?: string): Promise<CreateMediaResolver> {
+  const configuredPath = suppliedPath ?? process.env.IMPORT_MEDIA_RESOLVER_DRIVER;
+  const path =
+    configuredPath === undefined
+      ? new URL('../services/importer/tests/media-resolver-driver.ts', import.meta.url).href
+      : configuredPath;
+  if (!path) throw new Error(INVALID_MEDIA_RESOLVER_DRIVER);
+  const binding: unknown = await import(path);
+  if (
+    binding === null ||
+    typeof binding !== 'object' ||
+    !('createMediaResolver' in binding) ||
+    typeof binding.createMediaResolver !== 'function'
+  )
+    throw new TypeError(INVALID_MEDIA_RESOLVER_DRIVER);
+  return binding.createMediaResolver as CreateMediaResolver;
 }

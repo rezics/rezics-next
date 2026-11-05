@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
@@ -17,7 +18,7 @@ import type { Access, AccountActor, Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
-import { measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { capture, measure, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -79,8 +80,9 @@ async function installAccount(accountId: string, state: 'active' | 'suspended'):
   await admin.query(
     `INSERT INTO access.account(route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch)
      VALUES ($1, $2, 'actor', $3, $4, false, 1)`,
-    [ownerRoute, accountId, state, newId(ownerRoute)],
+    [ownerRoute, accountId, 'active', newId(ownerRoute)],
   );
+  if (state === 'suspended') await suspendAccount(admin, accountId);
   const current = await readAccount(admin, ownerRoute, accountId);
   if (!current) throw new Error('Test account was not created');
   return current;
@@ -257,7 +259,11 @@ beforeAll(async () => {
   accounts.set(accountIds.suspended, await installAccount(accountIds.suspended, 'suspended'));
   accounts.set(accountIds.noScope, await installAccount(accountIds.noScope, 'active'));
   access = createAccess({
-    actions: new Map([['subject:read', { anonymous: true }]]),
+    actions: new Map([
+      ['subject:read', { anonymous: true }],
+      ['follow:create', { anonymous: false, authority: 'own-account' }],
+      ['follow:delete', { anonymous: false, authority: 'own-account' }],
+    ]),
     accountEvidence: (candidate) => accounts.get(candidate.accountId) ?? null,
   });
   followCommands = commands();
@@ -339,7 +345,7 @@ test('an account follows, unfollows and refollows a readable subject in its own 
       data: { targetId: subjectId },
     });
   }
-  const schema = EVENT_TYPES[FOLLOW_EVENT];
+  const schema = EVENT_TYPES()[FOLLOW_EVENT];
   expect(Value.Check(schema, { targetId: subjectId })).toBe(true);
   expect(Value.Check(schema, { targetId: subjectId, state: 'following' })).toBe(false);
   expect(Value.Check(schema, {})).toBe(false);
@@ -525,7 +531,7 @@ test('unknown, unreadable and private targets are refused alike and change nothi
   expect(await followCommands.readFollow(owner, privateShelf.id)).toBeNull();
 });
 
-test('suspended, anonymous and unauthorized personas change nothing and cannot be told apart', async () => {
+test('suspended, anonymous and unauthorized actors change nothing at the module boundary', async () => {
   const subjectId = await createReadableSubject('Persona book');
   const privateShelf = await insertCollection('private', foreignCurator);
   const before = await activity();
@@ -637,3 +643,67 @@ test('statements per follow, membership step and page stay equal as unrelated fo
   expect(membershipStatements).toEqual([membershipCost, membershipCost, membershipCost]);
   expect(pageStatements).toEqual([pageCost, pageCost, pageCost]);
 }, 120_000);
+
+test('owner removal keeps original identity and negative replay after the target becomes unavailable', async () => {
+  const subjectId = await createReadableSubject('Removed while hidden');
+  const target = { targetId: subjectId, targetType: 'subject' as const };
+  const originalKey = requestKey();
+  const first = await followCommands.follow(owner, target, originalKey);
+  const source = async () =>
+    (
+      await admin.query(
+        `SELECT revision::text, source_following FROM library.follow_count_source
+     WHERE route=$1 AND account_id=$2 AND target_type='subject' AND target_id=$3`,
+        [ownerRoute, owner.accountId, subjectId],
+      )
+    ).rows;
+  expect(await source()).toEqual([{ revision: '1', source_following: true }]);
+  await denyOwnerRead(subjectId);
+  // Lost acknowledgement: target preparation now fails, but the original
+  // currently authorized command still recovers its own immutable receipt.
+  const recovered = await followCommands.follow(owner, target, originalKey);
+  expect(recovered.command?.replayed).toBe(true);
+  expect(recovered.follow).toEqual(first.follow);
+  expect(await source()).toEqual([{ revision: '1', source_following: true }]);
+  const key = requestKey();
+  const measured = await capture(database, () => followCommands.unfollow(owner, subjectId, key));
+  const removed = measured.value;
+  expect(measured.capture.statements.some((sql) => /(?:semantic|community)\./.test(sql))).toBe(false);
+  expect(await source()).toEqual([{ revision: '2', source_following: false }]);
+  expect(removed.follow).toMatchObject({
+    targetId: subjectId,
+    targetType: 'subject',
+    state: 'unfollowed',
+    reason: 'explicit',
+    createdAt: first.follow.createdAt,
+  });
+  const events = await followEventRows(subjectId);
+  expect(events).toHaveLength(2);
+  const replay = await followCommands.unfollow(owner, target, key);
+  expect(replay.command?.replayed).toBe(true);
+  expect(replay.follow).toEqual(removed.follow);
+  const unchanged = await followCommands.unfollow(owner, target, requestKey());
+  expect(unchanged.command).toBeNull();
+  expect(unchanged.follow).toEqual(removed.follow);
+  expect(await source()).toEqual([{ revision: '2', source_following: false }]);
+  expect(await libraryFollow(subjectId)).toBeNull();
+  expect(await followCommands.readFollow(owner, subjectId)).toEqual(removed.follow);
+  expect(await followEventRows(subjectId)).toEqual(events);
+  expect(await refusal(() => followCommands.follow(owner, target, requestKey()))).toBeInstanceOf(LibraryNotFoundError);
+  expect(await refusal(() => followCommands.unfollow(other, subjectId, requestKey()))).toBeInstanceOf(
+    LibraryNotFoundError,
+  );
+  expect(await followCommands.readFollow(other, subjectId)).toBeNull();
+});
+
+test('a stored Collection edge can be removed after target deletion without refollow authority', async () => {
+  const shelf = await insertCollection('public', foreignCurator);
+  const target = { targetId: shelf.id, targetType: 'collection' as const };
+  await followCommands.follow(owner, target, requestKey());
+  await tombstone(shelf.id);
+  expect((await followCommands.unfollow(owner, target, requestKey())).follow.state).toBe('unfollowed');
+  expect(await refusal(() => followCommands.follow(owner, target, requestKey()))).toBeInstanceOf(LibraryNotFoundError);
+  expect(await refusal(() => followCommands.unfollow(other, shelf.id, requestKey()))).toBeInstanceOf(
+    LibraryNotFoundError,
+  );
+});

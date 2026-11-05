@@ -1,8 +1,19 @@
 /* Rezics UI: a maintained fork of SharkUI d43c3c2 (MIT) styled as Rezics Aura. */
 @import 'tailwindcss';
 @import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
 @import './hitbox.css';
 @import './prose.css';
+
+/* shadcn's Rhea defaults come first; the Aura tokens below are layered after them. The cloned components in
+   src/shadcn/ use shadcn's data-selected="true", while the Ark components set a bare data-selected, so the variant
+   matches both. */
+@custom-variant data-selected {
+  &:where([data-selected='true']),
+  &:where([data-selected]:not([data-selected='false'])) {
+    @slot;
+  }
+}
 
 /* Each app names the component sources Tailwind scans (apps/web builds only the ones it uses). */
 
@@ -63,6 +74,7 @@
 
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-solid: var(--destructive-solid);
 
   --color-brand: var(--brand);
   --color-rating: var(--rating);
@@ -320,8 +332,11 @@
   --rating: #bf7a0e; /* stars and rating bars */
   --vote-down: #6a5bb5; /* active downvote, kept apart from blue actions */
 
-  --destructive: #c42840;
-  --destructive-foreground: #b0233a;
+  /* Rhea uses --destructive for error and action text: match the text-safe accent ink.
+     Keep red in --destructive-solid for non-text danger affordances below. */
+  --destructive: #1f4a85;
+  --destructive-foreground: #1f4a85;
+  --destructive-solid: #c42840;
   --info: #65bae1;
   --info-foreground: #1f6f93;
   --success: #4aa651;
@@ -394,8 +409,9 @@
     --rating: #e9a93a;
     --vote-down: #a99cf0;
 
-    --destructive: #d63a50;
-    --destructive-foreground: #f0617a;
+    --destructive: #c9dbf5;
+    --destructive-foreground: #c9dbf5;
+    --destructive-solid: #d63a50;
     --info: #3bacda;
     --info-foreground: #8fd0ee;
     --success: #3a9742;
@@ -422,6 +438,165 @@
     --chart-3: #e9a93a;
     --chart-4: #f0524c;
     --chart-5: #a99cf0;
+  }
+}
+
+/* Reader opt-in. Keep the warm grounds, decorative borders and semantic danger/disabled states.
+   Let forced-colors use the browser's palette and control treatment. */
+@media (forced-colors: none) {
+  :root[data-contrast='more'],
+  :root[data-contrast='more'] .dark {
+    --foreground: #171f27;
+    --card-foreground: #171f27;
+    --popover-foreground: #171f27;
+    --secondary-foreground: #171f27;
+    --muted-foreground: #41484f;
+    --primary: #184477;
+    --primary-foreground: #ffffff;
+    --accent: #d6e4f5;
+    --accent-foreground: #12345d;
+    --control: #49443e;
+    --ring: #123f78;
+    --sidebar-foreground: #171f27;
+    --sidebar-primary: #184477;
+    --sidebar-primary-foreground: #ffffff;
+    --sidebar-accent: #d6e4f5;
+    --sidebar-accent-foreground: #12345d;
+    --sidebar-ring: #123f78;
+
+    @variant dark {
+      --foreground: #faf6ef;
+      --card-foreground: #faf6ef;
+      --popover-foreground: #faf6ef;
+      --secondary-foreground: #faf6ef;
+      --muted-foreground: #d1cac0;
+      --primary: #b2d1fc;
+      --primary-foreground: #071528;
+      --accent: #263f5e;
+      --accent-foreground: #f4f7fc;
+      --control: #bcb5aa;
+      --ring: #bfd8ff;
+      --sidebar-foreground: #faf6ef;
+      --sidebar-primary: #b2d1fc;
+      --sidebar-primary-foreground: #071528;
+      --sidebar-accent: #263f5e;
+      --sidebar-accent-foreground: #f4f7fc;
+      --sidebar-ring: #bfd8ff;
+    }
+  }
+
+  :root[data-contrast='more']
+    :is(
+      [data-slot='checkbox']:not([data-checked]),
+      [data-slot='radio-group-item']:not([data-checked]),
+      [data-slot='switch']:not([data-checked]),
+      [data-slot='button'][class*='border-border'],
+      [data-slot='toggle'].border,
+      [data-slot='toggle-group-item'].border
+    ):not(:disabled, [data-disabled], [aria-disabled='true'], [aria-invalid='true']) {
+    border-color: var(--control);
+  }
+
+  :root[data-contrast='more']
+    :is(
+      [data-slot='tabs-list'][data-variant='default'] > [data-slot='tabs-trigger'][data-active],
+      [data-slot='toggle'][aria-pressed='true'],
+      [data-slot='toggle-group-item'][aria-pressed='true']
+    ) {
+    background-color: var(--accent);
+    color: var(--accent-foreground);
+  }
+
+  :root[data-contrast='more'] :is([data-slot], a, button, input, select, textarea):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* Adapt generated Rhea states without changing their text, focus rings or control behavior. */
+[data-slot='button'].text-destructive,
+:is(
+    [data-slot='dropdown-menu-item'],
+    [data-slot='context-menu-item'],
+    [data-slot='menubar-item']
+  )[data-variant='destructive']:is(:focus, [data-highlighted]) {
+  background-color: color-mix(in srgb, var(--destructive-solid) 10%, transparent);
+  @variant dark {
+    background-color: color-mix(in srgb, var(--destructive-solid) 20%, transparent);
+  }
+}
+
+[data-slot='button'].text-destructive:hover {
+  background-color: color-mix(in srgb, var(--destructive-solid) 20%, transparent);
+  @variant dark {
+    background-color: color-mix(in srgb, var(--destructive-solid) 30%, transparent);
+  }
+}
+
+:is([data-slot='button'], [data-slot='alert']).text-destructive > svg,
+:is(
+    [data-slot='dropdown-menu-item'],
+    [data-slot='context-menu-item'],
+    [data-slot='menubar-item']
+  )[data-variant='destructive']
+  > svg {
+  stroke: var(--destructive-solid);
+}
+
+/* Editable surfaces use the opaque control tone (at least 3:1 on Aura grounds),
+   while decorative card borders retain --border. Grouped inputs have one boundary. */
+:is(
+  [data-slot='input'],
+  [data-slot='textarea'],
+  [data-slot='input-group'],
+  [data-slot='combobox-chips'],
+  [data-slot='native-select'],
+  [data-slot='select-trigger']
+) {
+  border-color: var(--control);
+}
+
+:is(
+  [data-slot='input'],
+  [data-slot='textarea'],
+  [data-slot='native-select'],
+  [data-slot='select-trigger']
+):focus-visible,
+[data-slot='input-group']:has([data-slot='input-group-control']:focus-visible),
+[data-slot='combobox-chips']:focus-within {
+  border-color: var(--ring);
+}
+
+[data-slot][aria-invalid='true'],
+:is([data-slot='input-group'], [data-slot='combobox-chips']):has([aria-invalid='true']) {
+  border-color: var(--destructive-solid);
+}
+
+/* Keep desktop density. Grow actual controls on phones and coarse pointers,
+   without turning inline tokens or editor toolbar buttons into standalone actions. */
+@media (pointer: coarse), (max-width: 767px) {
+  :is(
+    [data-slot='input'],
+    [data-slot='textarea'],
+    [data-slot='input-group'],
+    [data-slot='input-group-control'],
+    [data-slot='combobox-chips'],
+    [data-slot='combobox-item'],
+    [data-slot='native-select'],
+    [data-slot='select-trigger']
+  ) {
+    min-block-size: 44px;
+  }
+
+  :is([data-slot='button'], [data-slot='input-group-button'], [data-slot='combobox-clear']):not(
+    :where([data-slot='combobox-chip'] *, [role='toolbar'] *)
+  ) {
+    min-block-size: 44px;
+    min-inline-size: 44px;
+  }
+
+  [data-slot='input-group-addon']:is([data-align='inline-start'], [data-align='inline-end']) {
+    padding-block: 0;
   }
 }
 
@@ -533,273 +708,4 @@
     radial-gradient(120% 90% at 12% 18%, color-mix(in oklab, var(--brand) 12%, transparent) 0%, transparent 60%),
     radial-gradient(100% 90% at 88% 18%, color-mix(in oklab, var(--primary) 16%, transparent) 0%, transparent 62%),
     linear-gradient(135deg, color-mix(in oklab, var(--foreground) 5%, transparent) 0%, transparent 65%);
-}
-
-/* Document styles are shared by the editor and the server-rendered reading surface. */
-.rezics-document {
-  min-width: 0;
-  font-family: var(--font-work-serif);
-  font-size: 1.125rem;
-  line-height: 1.8;
-  overflow-wrap: anywhere;
-  text-autospace: normal;
-}
-.rezics-document .tiptap {
-  outline: none;
-  min-width: 0;
-}
-.rezics-document .tiptap:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-  border-radius: 0.25rem;
-}
-.document-editor .tiptap {
-  min-height: 45dvh;
-}
-.document-editor-compact .tiptap {
-  min-height: 6rem;
-}
-.rezics-document p {
-  margin-block: 0.75em;
-}
-.rezics-document > :first-child,
-.rezics-document .tiptap > :first-child {
-  margin-block-start: 0;
-}
-.rezics-document h1 {
-  font-size: 1.8em;
-  font-weight: 700;
-  line-height: 1.35;
-  margin-block: 1em 0.4em;
-}
-.rezics-document h2 {
-  font-size: 1.45em;
-  font-weight: 700;
-  line-height: 1.4;
-  margin-block: 1em 0.4em;
-}
-.rezics-document h3,
-.rezics-document h4,
-.rezics-document h5,
-.rezics-document h6 {
-  font-size: 1.2em;
-  font-weight: 600;
-  line-height: 1.5;
-  margin-block: 1em 0.4em;
-}
-.rezics-document ul {
-  list-style: disc;
-  padding-inline-start: 1.5em;
-  margin-block: 0.75em;
-}
-.rezics-document ol {
-  list-style: decimal;
-  padding-inline-start: 1.5em;
-  margin-block: 0.75em;
-}
-.rezics-document li > p {
-  margin-block: 0.25em;
-}
-.rezics-document blockquote {
-  border-inline-start: 3px solid var(--border);
-  padding-inline-start: 1em;
-  margin-block: 1em;
-  color: var(--muted-foreground);
-}
-.rezics-document a {
-  color: var(--primary);
-  text-decoration: underline;
-  text-underline-offset: 0.15em;
-}
-.rezics-document code {
-  font-family: ui-monospace, monospace;
-  font-size: 0.85em;
-  background: var(--muted);
-  border-radius: var(--radius-sm);
-  padding: 0.12em 0.3em;
-}
-.rezics-document pre {
-  overflow-x: auto;
-  padding: 1em;
-  border-radius: var(--radius);
-  background: var(--muted);
-  margin-block: 1em;
-  white-space: pre;
-}
-.rezics-document pre code {
-  background: none;
-  padding: 0;
-}
-.rezics-document hr {
-  border-block-start: 1px solid var(--border);
-  margin-block: 1.5em;
-}
-.rezics-document figure {
-  margin-block: 1em;
-}
-.rezics-document img,
-.rezics-document video {
-  max-width: 100%;
-  height: auto;
-  border-radius: var(--radius);
-}
-.rezics-document audio {
-  max-width: 100%;
-}
-.rezics-document figcaption {
-  margin-block-start: 0.4em;
-  font-family: var(--font-interface);
-  font-size: 0.8em;
-  color: var(--muted-foreground);
-}
-.rezics-document .document-table-scroll,
-.rezics-document .tableWrapper {
-  overflow-x: auto;
-  margin-block: 1em;
-}
-.rezics-document table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
-}
-.rezics-document td,
-.rezics-document th {
-  position: relative;
-  min-width: 4rem;
-  border: 1px solid var(--border);
-  padding: 0.5em 0.75em;
-  vertical-align: top;
-}
-.rezics-document th {
-  background: var(--muted);
-  font-weight: 600;
-  text-align: start;
-}
-.rezics-document td > p,
-.rezics-document th > p {
-  margin-block: 0;
-}
-.rezics-document .selectedCell::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: color-mix(in oklab, var(--primary) 16%, transparent);
-  pointer-events: none;
-}
-.rezics-document ul[data-type='taskList'] {
-  list-style: none;
-  padding-inline-start: 0;
-}
-.rezics-document li[data-type='taskItem'] {
-  display: flex;
-  gap: 0.65em;
-  align-items: baseline;
-}
-.rezics-document li[data-type='taskItem'] > label {
-  flex-shrink: 0;
-}
-.rezics-document li[data-type='taskItem'] > div {
-  min-width: 0;
-  flex: 1;
-}
-.rezics-document li[data-type='taskItem'] > [role='checkbox']::before {
-  content: '☐';
-}
-.rezics-document li[data-type='taskItem'] > [role='checkbox'][aria-checked='true']::before {
-  content: '☑';
-}
-.rezics-document input[type='checkbox'] {
-  accent-color: var(--primary);
-}
-.rezics-document ruby {
-  ruby-align: center;
-}
-.rezics-document rt {
-  font-size: 0.55em;
-}
-.rezics-document .document-component {
-  display: block;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0.75em 1em;
-  background: var(--muted);
-  font-family: var(--font-interface);
-  font-size: 0.85em;
-  margin-block: 0.75em;
-}
-.rezics-document span.document-component {
-  display: inline;
-  padding: 0.12em 0.35em;
-}
-.rezics-document .ProseMirror-selectednode {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-.rezics-document .document-spoiler-authored {
-  background: var(--accent);
-  color: var(--accent-foreground);
-  border-radius: var(--radius-sm);
-}
-.rezics-document .document-spoiler {
-  display: inline;
-  appearance: none;
-  margin: 0;
-  padding: 0 0.12em;
-  border: 0;
-  border-radius: 0.25em;
-  background: var(--muted-foreground);
-  font: inherit;
-  letter-spacing: inherit;
-  line-height: inherit;
-  vertical-align: baseline;
-  cursor: pointer;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-.rezics-document .document-spoiler,
-.rezics-document .document-spoiler :where(*) {
-  color: transparent !important;
-  -webkit-text-fill-color: transparent;
-  user-select: none !important;
-  -webkit-user-select: none !important;
-}
-.rezics-document .document-spoiler:hover {
-  background: color-mix(in oklab, var(--foreground) 72%, var(--muted-foreground));
-}
-.rezics-document .document-spoiler:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-.rezics-document .document-spoiler::selection,
-.rezics-document .document-spoiler *::selection {
-  background: transparent;
-  color: transparent;
-}
-.rezics-document .document-spoiler-revealed {
-  background: color-mix(in oklab, var(--primary) 16%, transparent);
-  border-radius: 0.2em;
-  color: inherit;
-  outline: none;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-.rezics-document .tiptap .is-empty[data-placeholder]::before {
-  content: attr(data-placeholder);
-  float: inline-start;
-  color: var(--muted-foreground);
-  height: 0;
-  pointer-events: none;
-}
-.rezics-document .tiptap .is-empty:not(.is-editor-empty)[data-placeholder]::before {
-  opacity: 0.72;
-}
-[data-placeholder-dir='ltr'] .tiptap [data-placeholder]::before {
-  unicode-bidi: plaintext;
-  text-align: left;
-  direction: ltr;
-}
-[data-placeholder-dir='rtl'] .tiptap [data-placeholder]::before {
-  unicode-bidi: plaintext;
-  text-align: right;
-  direction: rtl;
 }

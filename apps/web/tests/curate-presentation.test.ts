@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
-import { PROFILE_FORMAT, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
+import { PROFILE_FORMAT, profileDigest, type CompositionDocument, type PresentationProfile } from '@rezics/composition';
 import { profileTemplates, publishProfile, withTemplate } from '../src/features/pages/curate.ts';
 
 const doc = (id: string) =>
@@ -15,7 +15,6 @@ const profile: PresentationProfile = {
   ],
   routes: [{ route: '/', document: doc('home') }],
 };
-const digest = `sha256:${'a'.repeat(64)}`;
 const keys = { publish: '0192f3a0-6c1e-7b2a-9d4e-000000000001', activate: '0192f3a0-6c1e-7b2a-9d4e-000000000002' };
 
 type Seen = { method: string; path: string; authorization: string | null; key: string | null; body: unknown };
@@ -78,6 +77,7 @@ test('editing a template replaces or inserts it in order and never mutates the p
 
 test('publishing sends the profile, then activates it at the head the curator loaded', async () => {
   const edited = withTemplate(profile, { scope: 'type', key: 'schema:Movie' }, doc('movie'));
+  const digest = profileDigest(edited);
   const { seen, client } = kernel([answer(201, { digest }), answer(200, { digest, head: 8 })]);
   const result = await publishProfile(client, { profile: edited, expectedHead: 7, authorization: 'Bearer t', keys });
   expect(result).toEqual({ ok: true, digest, head: 8 });
@@ -100,27 +100,31 @@ test('publishing sends the profile, then activates it at the head the curator lo
 });
 
 test('a stale head, an invalid profile and a refusal come back as reasons', async () => {
+  const digest = profileDigest(profile);
   const run = async (answers: Response[]) => {
     const { seen, client } = kernel(answers);
     const result = await publishProfile(client, { profile, expectedHead: 7, authorization: 'Bearer t', keys });
     return { result, requests: seen.length };
   };
   expect(await run([answer(200, { digest }), problem(409, 'stale_editorial_head')])).toEqual({
-    result: { ok: false, reason: 'stale' },
+    result: { ok: false, reason: 'stale', phase: 'activate' },
     requests: 2,
   });
   const errors = [{ pointer: '/profile/generic/content/0/type', code: 'unsupported' }];
   expect(await run([problem(400, 'invalid_request', { errors })])).toEqual({
-    result: { ok: false, reason: 'invalid', errors },
+    result: { ok: false, reason: 'invalid', errors, phase: 'publish' },
     requests: 1,
   });
-  expect(await run([problem(403, 'forbidden')])).toEqual({ result: { ok: false, reason: 'forbidden' }, requests: 1 });
+  expect(await run([problem(403, 'forbidden')])).toEqual({
+    result: { ok: false, reason: 'forbidden', phase: 'publish' },
+    requests: 1,
+  });
   expect(await run([answer(201, { digest }), problem(403, 'forbidden')])).toEqual({
-    result: { ok: false, reason: 'forbidden' },
+    result: { ok: false, reason: 'forbidden', phase: 'activate' },
     requests: 2,
   });
   expect(await run([problem(429, 'rate_limited')])).toEqual({
-    result: { ok: false, reason: 'rate-limited' },
+    result: { ok: false, reason: 'rate-limited', phase: 'publish' },
     requests: 1,
   });
   const limited = kernel([new Response(null, { status: 429, headers: { 'retry-after': '30' } })]);
@@ -128,9 +132,10 @@ test('a stale head, an invalid profile and a refusal come back as reasons', asyn
     ok: false,
     reason: 'rate-limited',
     retryAfter: 30,
+    phase: 'publish',
   });
   expect(await run([problem(503, 'unavailable')])).toEqual({
-    result: { ok: false, reason: 'unavailable' },
+    result: { ok: false, reason: 'unavailable', phase: 'publish' },
     requests: 1,
   });
 });

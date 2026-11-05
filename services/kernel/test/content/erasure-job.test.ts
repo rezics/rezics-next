@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, expect, spyOn, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import pg from 'pg';
@@ -305,10 +306,7 @@ test('native image publication lock precedes irreversible rejection; committed c
       ).rows,
     ).toEqual([{ state: 'rejected', collection_pending: true }]);
     // Revoke the uploader after the native logical commit, before retrying bytes.
-    await admin.query(
-      `UPDATE access.account SET state='suspended',minimum_authn_epoch=2 WHERE route=12 AND account_id=$1`,
-      [row.uploader_id],
-    );
+    await suspendAccount(admin, row.uploader_id);
     expect(await purgeObject(pool, http.storage, row.media_id)).toMatchObject({ outcome: 'purged' });
     expect(http.objects.size).toBe(0);
     expect(await processImage(pool, http.storage, row.media_id)).toMatchObject({ state: 'already_terminal' });

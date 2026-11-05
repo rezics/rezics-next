@@ -1,4 +1,7 @@
-import type { ReactNode } from 'react';
+import { Card } from '@rezics/ui/shadcn/card';
+import type { ReactNode, Ref } from 'react';
+import { m } from './paraglide/messages.js';
+import { LocaleChoice } from './locale-choice-view';
 
 export function AuthShell({ children }: { children: ReactNode }) {
   return (
@@ -11,6 +14,7 @@ export function AuthShell({ children }: { children: ReactNode }) {
             </svg>
             <span>REZICS</span>
           </a>
+          <LocaleChoice />
         </div>
       </header>
       {children}
@@ -18,13 +22,41 @@ export function AuthShell({ children }: { children: ReactNode }) {
   );
 }
 
-export function AuthPage({ heading, children }: { heading: string; children?: ReactNode }) {
+export function AuthPage({
+  heading,
+  children,
+  returnToSecurity = false,
+  identity,
+  headingRef,
+  headingTabIndex,
+}: {
+  heading: string;
+  children?: ReactNode;
+  returnToSecurity?: boolean;
+  identity?: ReactNode;
+  headingRef?: Ref<HTMLHeadingElement>;
+  headingTabIndex?: number;
+}) {
   return (
     <main className="auth-main">
-      <section className="auth-card" aria-labelledby="auth-heading">
-        <h1 id="auth-heading">{heading}</h1>
+      <Card role="region" className="auth-card" aria-labelledby="auth-heading">
+        <h1
+          id="auth-heading"
+          ref={headingRef}
+          tabIndex={headingTabIndex}
+          aria-describedby={identity ? 'auth-account-identity-description' : undefined}
+        >
+          {heading}
+        </h1>
+        {identity}
+        {returnToSecurity ? (
+          <nav className="auth-operation-exit" aria-label={m.auth_security_heading()}>
+            <a href="/security">{m.auth_account_operation_return()}</a>
+            <p>{m.auth_account_operation_leave_notice()}</p>
+          </nav>
+        ) : null}
         {children}
-      </section>
+      </Card>
     </main>
   );
 }

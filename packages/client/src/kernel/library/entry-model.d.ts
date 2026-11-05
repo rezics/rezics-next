@@ -1,11 +1,12 @@
-export type EntryState = 'planned' | 'in_progress' | 'completed' | 'paused' | 'dropped';
-export type CopyStatus = 'ordered' | 'owned' | 'lent' | 'disposed';
+export type EntryState = string;
+export type CopyStatus = string;
 /** Database projection for one account's entry on a subject. */
 export type EntryRow = {
     route: number;
     accountId: string;
     subjectId: string;
     requestedSubjectId: string | null;
+    incarnationId: string | null;
     state: string;
     revision: number;
     createdAt: string;
@@ -13,8 +14,9 @@ export type EntryRow = {
     transactionId: string;
 };
 /** Private view of one library entry. State changes only through a revision compare-and-swap. */
-export type Entry = Omit<EntryRow, 'route' | 'state'> & {
+export type Entry = Omit<EntryRow, 'route' | 'state' | 'incarnationId'> & {
     state: EntryState;
+    incarnationId?: string | null;
 };
 export type EntryDraft = {
     accountId: string;
@@ -30,10 +32,11 @@ export type EntryPage = {
     state: EntryState | null;
     limit: number;
 };
-/** Database projection for one physical copy. Subject is not unique: one edition may have many copies. */
+/** Database projection for one holding. Subject is not unique: one edition may have many copies. */
 export type CopyRow = {
     route: number;
     copyId: string;
+    kind?: string | null;
     accountId: string;
     subjectId: string;
     status: string;
@@ -72,3 +75,9 @@ export type CopyPage = {
     limit: number;
 };
 export declare const MAX_LIBRARY_PAGE_SIZE = 100;
+/** Original ordinary deletion receipt; replay never extends this deadline. */
+export type EntryDeletion = {
+    deletionId: string;
+    revision: number;
+    restoreUntil: string;
+};

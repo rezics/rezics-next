@@ -1,0 +1,1 @@
+Decision: Keep preview review inline and collapsible within the admitted editor so returning preserves its unsaved input and one bounded captured result; each pending visit owns an AbortController carried through the BFF request to native page reads, while sequence and lease checks determine whether a result is current.

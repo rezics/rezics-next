@@ -1,19 +1,76 @@
 id: https://rezics.com/catalogue/anime
 name: anime
 version: 1.0.0
-description: Anime work, season, episode and film profile terms.
+description: Anime work, season, episode, film and publication release profile terms.
 prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
   wdt: http://www.wikidata.org/prop/direct/
   rezics: https://rezics.com/vocab/
+  bf: http://id.loc.gov/ontologies/bibframe/
+  marcrel: http://id.loc.gov/vocabulary/relators/
 default_range: string
 imports:
   - linkml:types
   - core
   - classification
 classes:
+  AnimeRelease:
+    is_a: CreativeWork
+    class_uri: rezics:AnimeRelease
+    description: >-
+      An independently identified publication or distributed embodiment of anime content,
+      distinct from its work, season or episode, a playback file, personal copy or distribution event.
+      Languages and formats describe one identified publication, not a Cartesian product of releases.
+      A single-work publication uses exampleOfWork; an anthology contains its actual works with
+      animeReleaseContains. Credits and publication facts describe this release only and are never
+      copied from its work. Source-record version is not a cut or edition designation.
+    slots:
+      - alternateName
+      - abstract
+      - exampleOfWork
+      - animeReleaseContains
+      - associatedMedia
+      - filmDistributor
+      - inLanguage
+      - datePublished
+      - distributionFormat
+      - copyrightNotice
+      - publisher
+      - translator
+      - author
+      - illustrator
+      - director
+      - musicBy
+      - producer
+      - productionCompany
+      - screenwriter
+      - voiceActor
+      - creativeWorkStatus
+    annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:datePublished, schema:director]
+      facets: exampleOfWork animeReleaseContains filmDistributor inLanguage datePublished distributionFormat publisher translator author illustrator director musicBy producer productionCompany screenwriter voiceActor
+      schema_org_type: https://schema.org/CreativeWork
+  MediaObject:
+    is_a: CreativeWork
+    class_uri: schema:MediaObject
+    description: >-
+      An independently identified catalogue file. Its hashes and technical facts describe the file record only;
+      they do not establish possession, download permission, playback or watched progress.
+    slots:
+      - author
+      - checksum
+      - fileSize
+      - fileCodec
+      - inLanguage
+      - fileQuality
+      - releaseGroup
+      - encodesCreativeWork
+    annotations:
+      schema_org_type: https://schema.org/MediaObject
   TVSeries:
     is_a: CreativeWorkSeries
     class_uri: schema:TVSeries
@@ -50,7 +107,37 @@ classes:
       - partOfSeries
       - workFormat
     annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:director, schema:datePublished, schema:numberOfEpisodes]
+      library:
+        id: anime.series
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: episode
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
       facets: workFormat genre keywords datePublished numberOfEpisodes author illustrator director musicBy producer productionCompany screenwriter developer voiceActor character partOfSeries
+      schema_org_type: https://schema.org/TVSeries
   Movie:
     is_a: LaunchWork
     class_uri: schema:Movie
@@ -83,7 +170,37 @@ classes:
       - partOfSeries
       - workFormat
     annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:director, schema:datePublished, schema:duration]
+      library:
+        id: anime.film
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: minute
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
       facets: workFormat genre keywords datePublished author illustrator director musicBy producer productionCompany screenwriter developer voiceActor contributor character partOfSeries
+      schema_org_type: https://schema.org/Movie
   TVSeason:
     is_a: LaunchWork
     class_uri: schema:TVSeason
@@ -116,7 +233,37 @@ classes:
       - partOfSeries
       - workFormat
     annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:director, schema:datePublished, schema:numberOfEpisodes]
+      library:
+        id: anime.season
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: episode
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
       facets: workFormat genre keywords datePublished numberOfEpisodes author illustrator director musicBy producer productionCompany screenwriter developer voiceActor character partOfSeries
+      schema_org_type: https://schema.org/TVSeason
   Episode:
     is_a: LaunchWork
     class_uri: schema:Episode
@@ -126,6 +273,14 @@ classes:
     exact_mappings:
       - wd:Q1983062
     slots:
+      - translator
+      - publisher
+      - developer
+      - screenwriter
+      - productionCompany
+      - producer
+      - illustrator
+      - author
       - datePublished
       - duration
       - episodeNumber
@@ -138,8 +293,87 @@ classes:
       - genre
       - keywords
     annotations:
-      facets: isPartOf datePublished duration director musicBy voiceActor contributor character partOfSeries genre keywords inLanguage
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:director, schema:datePublished, schema:duration]
+      library:
+        id: anime.episode
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: minute
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
+      facets: isPartOf datePublished duration director musicBy voiceActor contributor character partOfSeries genre keywords inLanguage author illustrator screenwriter producer
+      schema_org_type: https://schema.org/Episode
 slots:
+  animeReleaseContains:
+    slot_uri: bf:hasPart
+    description: An independently identified anime work included in this anthology publication.
+    any_of:
+      - range: TVSeries
+      - range: Movie
+      - range: TVSeason
+      - range: Episode
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: membership
+      inverse: bf:partOf
+      relation_order: name
+      acyclic: true
+  filmDistributor:
+    slot_uri: marcrel:fds
+    description: A person or organization credited with distributing this moving-image publication.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole appliesToPart
+      relation_group: credit
+      inverse: rezics:filmDistributionOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
+  associatedMedia:
+    slot_uri: schema:associatedMedia
+    description: A catalogue file associated with this identified anime publication release.
+    range: MediaObject
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: association
+      inverse: rezics:includedInRelease
+      relation_order: name
+  encodesCreativeWork:
+    slot_uri: schema:encodesCreativeWork
+    description: The anime episode or installment encoded by this catalogue file.
+    range: Episode
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: association
+      inverse: rezics:encodedByFile
+      relation_order: name
   numberOfEpisodes:
     slot_uri: schema:numberOfEpisodes
     description: The number of episodes or installments in the work or season.
@@ -150,22 +384,6 @@ slots:
     annotations:
       datatype: quantity
       units: '1'
-  startDate:
-    slot_uri: schema:startDate
-    description: The start of the original broadcast or release period.
-    range: date
-    exact_mappings:
-      - wd:P580
-    annotations:
-      datatype: time
-  endDate:
-    slot_uri: schema:endDate
-    description: The end of the original broadcast or release period.
-    range: date
-    exact_mappings:
-      - wd:P582
-    annotations:
-      datatype: time
   originalBroadcaster:
     slot_uri: wdt:P449
     description: The original broadcaster, when the source identifies the first broadcast.
@@ -175,6 +393,9 @@ slots:
       - wd:P449
     annotations:
       datatype: wikibase-item
+      relation_group: association
+      inverse: rezics:originalBroadcastOf
+      relation_order: name
   descriptiveLink:
     slot_uri: wdt:P973
     description: A link to a descriptive page about the anime work.
@@ -221,12 +442,7 @@ slots:
       - wd:P361
     annotations:
       datatype: wikibase-item
-  workFormat:
-    slot_uri: wdt:P7937
-    description: The source format of this anime work, represented by a source concept.
-    range: Concept
-    multivalued: true
-    exact_mappings:
-      - wd:P7937
-    annotations:
-      datatype: wikibase-item
+      relation_group: membership
+      inverse: schema:hasPart
+      relation_order: name
+      acyclic: true

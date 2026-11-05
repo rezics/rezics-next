@@ -1,9 +1,10 @@
 import { LinkML, type SchemaValidationReport } from '@neverblink/linkml';
-import { validateFilter, type FilterDocument, type FilterValidationError } from '@rezics/filter';
+import { createFilterConstruction, type FilterDocument, type FilterValidationError } from '@rezics/filter';
 import canonicalize from 'canonicalize';
 import { posix } from 'node:path';
 import { safePattern } from './pattern-safety.ts';
 import releaseSchema from '../schema/release.json';
+import { compileLibraryProfiles } from './compile-library-profiles.ts';
 import {
   DATA_TYPES,
   RELEASE_FORMAT,
@@ -13,8 +14,11 @@ import {
   type ContextSettings,
   type DataType,
   type PropertyDefinition,
+  type RelationDefinition,
+  type RelationGroup,
   type Release,
   type SavedFilter,
+  type TypeDefinition,
 } from './index.ts';
 
 export type CatalogueViolation = {
@@ -68,8 +72,31 @@ const slotKeys =
 const iri = /^[A-Za-z][A-Za-z0-9+.-]*:[^\s\u0000-\u0020\u007f-\u009f<>"{}|\\^`]*$(?![\s\S])/u;
 const normalize = (file: string) => posix.normalize(file).replace(/\.ya?ml$/u, '');
 const languagePattern = new RegExp(Object.keys(releaseSchema.$defs.labels.patternProperties)[0]!, 'u');
+const presentationGroup = (file: string) => posix.basename(file).replace(/\.ya?ml$/u, '');
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const filterName = /^[a-z][a-z0-9-]{0,63}$(?![\s\S])/u;
+const relationGroups = [
+  'order',
+  'derivation',
+  'world',
+  'membership',
+  'association',
+  'credit',
+  'appearance',
+  'classification',
+] as const;
+const relationOrders = ['position', 'date', 'name'] as const;
+const relationAnnotationKeys = [
+  'relation_group',
+  'inverse',
+  'symmetric',
+  'acyclic',
+  'relation_order',
+  'relation_filter',
+  'relation_slot_key',
+] as const;
+const schemaOrgType = /^https:\/\/schema\.org\/[A-Za-z0-9_-]+$(?![\s\S])/u;
+const coverRatio = /^(?:[1-9]|[1-5][0-9]|6[0-4]):(?:[1-9]|[1-5][0-9]|6[0-4])$(?![\s\S])/u;
 
 function savedFilterCode(error: FilterValidationError): 'invalid' | 'limit' {
   return error.problem === 'unsupported_query' && error.code === 'out_of_range' ? 'limit' : 'invalid';
@@ -124,6 +151,8 @@ export async function compileCatalogue(input: {
         add({ ...location, pointer: at(location.pointer, key) }, 'unsupported', 'Unsupported key');
   };
   const parsed = dictionary<Node>();
+  type ListDeclaration = { value: NonNullable<TypeDefinition['listPresentation']>; location: Location };
+  const listDeclarations = new Map<string, ListDeclaration>();
   const files = Object.keys(input.schemas).sort(compare);
   const maxSchemaFiles = 256;
   if (files.length > maxSchemaFiles)
@@ -138,10 +167,23 @@ export async function compileCatalogue(input: {
     allowed(slot, usage ? slotKeys : `slot_uri ${slotKeys}`, location);
     if (!record(slot)) return;
     if (slot.annotations !== undefined)
-      allowed(slot.annotations, 'datatype units qualifiers', {
-        ...location,
-        pointer: at(location.pointer, 'annotations'),
-      });
+      allowed(
+        slot.annotations,
+        `datatype units exact qualifiers disclosure minimum_exclusive ${relationAnnotationKeys.join(' ')}`,
+        {
+          ...location,
+          pointer: at(location.pointer, 'annotations'),
+        },
+      );
+    const annotations = object(slot.annotations);
+    if (Object.hasOwn(annotations, 'exact') && annotations.exact !== true)
+      add({ ...location, pointer: at(at(location.pointer, 'annotations'), 'exact') }, 'invalid', 'Exact must be true');
+    if (Object.hasOwn(annotations, 'minimum_exclusive') && annotations.minimum_exclusive !== true)
+      add(
+        { ...location, pointer: at(at(location.pointer, 'annotations'), 'minimum_exclusive') },
+        'invalid',
+        'Exclusive minimum must be true',
+      );
     if (slot.any_of !== undefined) {
       if (!Array.isArray(slot.any_of))
         add({ ...location, pointer: at(location.pointer, 'any_of') }, 'invalid', 'Expected a list');
@@ -177,13 +219,73 @@ export async function compileCatalogue(input: {
           const definition = object(value);
           if (definition.annotations !== undefined) {
             const annotationLocation = { ...location, pointer: at(location.pointer, 'annotations') };
-            allowed(definition.annotations, 'facets', annotationLocation);
-            const facets = object(definition.annotations).facets;
+            allowed(
+              definition.annotations,
+              'facets cover_ratio schema_org_type library list_presentation',
+              annotationLocation,
+            );
+            const annotations = object(definition.annotations);
+            if (Object.hasOwn(annotations, 'list_presentation')) {
+              const location = { file, pointer: at(annotationLocation.pointer, 'list_presentation') };
+              const hint = annotations.list_presentation;
+              allowed(hint, 'imageAspect keyFacts', location);
+              if (record(hint)) {
+                if (!['portrait', 'landscape', 'square'].includes(hint.imageAspect as string))
+                  add(
+                    { ...location, pointer: at(location.pointer, 'imageAspect') },
+                    'invalid',
+                    'Expected portrait, landscape or square',
+                  );
+                if (!Array.isArray(hint.keyFacts))
+                  add(
+                    { ...location, pointer: at(location.pointer, 'keyFacts') },
+                    'invalid',
+                    'Expected a list of property CURIEs',
+                  );
+                else {
+                  if (hint.keyFacts.length > 4)
+                    add(
+                      { ...location, pointer: at(location.pointer, 'keyFacts') },
+                      'limit',
+                      'At most four key facts are allowed',
+                    );
+                  const seen = new Set<string>();
+                  hint.keyFacts.forEach((key, index) => {
+                    const pointer = at(at(location.pointer, 'keyFacts'), index);
+                    if (typeof key !== 'string') add({ file, pointer }, 'invalid', 'Expected a property CURIE');
+                    else if (seen.has(key)) add({ file, pointer }, 'duplicate', 'Duplicate key fact');
+                    else seen.add(key);
+                  });
+                }
+                listDeclarations.set(name, { value: hint as ListDeclaration['value'], location });
+              }
+            }
+            const facets = annotations.facets;
             if (facets !== undefined && typeof facets !== 'string')
               add(
                 { ...annotationLocation, pointer: at(annotationLocation.pointer, 'facets') },
                 'invalid',
                 'Facets must be space-separated slot names',
+              );
+            if (
+              annotations.cover_ratio !== undefined &&
+              (typeof annotations.cover_ratio !== 'string' || !coverRatio.test(annotations.cover_ratio))
+            )
+              add(
+                { ...annotationLocation, pointer: at(annotationLocation.pointer, 'cover_ratio') },
+                'invalid',
+                'Cover ratio must be W:H with positive integer sides from 1 to 64',
+              );
+            if (
+              annotations.schema_org_type !== undefined &&
+              (typeof annotations.schema_org_type !== 'string' ||
+                annotations.schema_org_type.length > 256 ||
+                !schemaOrgType.test(annotations.schema_org_type))
+            )
+              add(
+                { ...annotationLocation, pointer: at(annotationLocation.pointer, 'schema_org_type') },
+                'invalid',
+                'Schema.org type must be https://schema.org/ followed by one term of letters, digits, underscores or hyphens',
               );
           }
           const usage = definition.slot_usage;
@@ -212,7 +314,28 @@ export async function compileCatalogue(input: {
   }
   if (!Object.hasOwn(input.schemas, input.root))
     add({ file: input.root, pointer: '' }, 'invalid', 'Root schema is missing');
+  const library = compileLibraryProfiles(parsed, add);
   stop();
+
+  // Native inert mappings are compiler data, outside LinkML's scalar annotations ABI.
+  // Preserve every other source field and all ordinary LinkML induction and linting.
+  const linkmlSchemas = { ...input.schemas };
+  for (const [file, source] of Object.entries(parsed)) {
+    const copy = structuredClone(source);
+    let changed = false;
+    for (const definition of Object.values(object(copy.classes))) {
+      const annotations = object(object(definition).annotations);
+      if (Object.hasOwn(annotations, 'library')) {
+        delete annotations.library;
+        changed = true;
+      }
+      if (Object.hasOwn(annotations, 'list_presentation')) {
+        delete annotations.list_presentation;
+        changed = true;
+      }
+    }
+    if (changed) linkmlSchemas[file] = JSON.stringify(copy);
+  }
 
   const fileFor = (id: unknown) => files.find((file) => parsed[file]!.id === id) ?? input.root;
   const report = (value: SchemaValidationReport) => {
@@ -232,7 +355,7 @@ export async function compileCatalogue(input: {
   let derived: Node = object(undefined);
   let globals: Node = object(undefined);
   try {
-    const loaded = LinkML.loadFromPath(input.root, input.schemas);
+    const loaded = LinkML.loadFromPath(input.root, linkmlSchemas);
     report(loaded.report);
     if (loaded.view) report(LinkML.lint(loaded.view));
     stop();
@@ -252,7 +375,7 @@ export async function compileCatalogue(input: {
       imports: [`./${posix.basename(input.root)}`],
       classes: { [carrier]: { abstract: true, slots: Object.keys(object(inventory.slots)).sort(compare) } },
     });
-    const all = LinkML.loadFromPath(path, { ...input.schemas, [path]: wrapper });
+    const all = LinkML.loadFromPath(path, { ...linkmlSchemas, [path]: wrapper });
     report(all.report);
     stop();
     if (!all.view) throw new Error('Cannot induce catalogue slots');
@@ -290,17 +413,22 @@ export async function compileCatalogue(input: {
     add(location, 'invalid', 'Expected a CURIE with a declared prefix');
     return undefined;
   };
-  type Term = { name: string; value: Node; location: Location; key: string };
+  type Term = { name: string; value: Node; source: Node; location: Location; key: string };
   const terms = (collection: 'classes' | 'slots', values: Node): Term[] => {
     const uri = collection === 'classes' ? 'class_uri' : 'slot_uri';
     const entries = Object.entries(values)
       .map(([name, value]) => {
         const node = object(value);
+        const file = fileFor(node.from_schema);
+        // LinkML may emit an expanded URI when a local prefix is absent from the
+        // merged output. Release keys retain the explicit source CURIE.
+        const source = object(object(parsed[file]![collection])[name]);
         return {
           name,
           value: node,
-          location: { file: fileFor(node.from_schema), pointer: at(`/${collection}`, name) },
-          key: node[uri] as string,
+          source,
+          location: { file, pointer: at(`/${collection}`, name) },
+          key: source[uri] as string,
         };
       })
       .sort((a, b) => compare(a.location.file, b.location.file) || compare(a.location.pointer, b.location.pointer));
@@ -363,6 +491,7 @@ export async function compileCatalogue(input: {
   }
   const slots = terms('slots', globals);
   const slotKeysByName = new Map(slots.map((term) => [term.name, term.key]));
+  const propertyLocations = new Map<string, Location>();
   const classChain = (name: string) => {
     const result: string[] = [];
     const seen = new Set<string>();
@@ -398,12 +527,23 @@ export async function compileCatalogue(input: {
     return found;
   };
   const mappings = (term: Term) => {
-    const result = unique(names(term.value.exact_mappings));
-    for (const mapping of result)
-      expand(mapping, { ...term.location, pointer: at(term.location.pointer, 'exact_mappings') });
+    const location = { ...term.location, pointer: at(term.location.pointer, 'exact_mappings') };
+    const authored = new Map(names(term.source.exact_mappings).map((curie) => [expand(curie, location), curie]));
+    const result = unique(names(term.value.exact_mappings).map((mapping) => authored.get(mapping) ?? mapping));
+    for (const mapping of result) expand(mapping, location);
     return result;
   };
   const facetOrigins = new Map<string, Map<string, { name: string; location: Location }>>();
+  // Memoize the nearest explicit whole object, including absence. LinkML has
+  // already rejected inheritance cycles; no emitted reader needs an ancestor walk.
+  const effectiveLists = new Map<string, ListDeclaration | undefined>();
+  const listFor = (name: string): ListDeclaration | undefined => {
+    if (effectiveLists.has(name)) return effectiveLists.get(name);
+    const parent = parents.get(name);
+    const value = listDeclarations.get(name) ?? (parent ? listFor(parent) : undefined);
+    effectiveLists.set(name, value);
+    return value;
+  };
   for (const term of classes) {
     const properties = unique(
       Object.keys(object(term.value.attributes)).flatMap((name) => slotKeysByName.get(name) ?? []),
@@ -421,6 +561,16 @@ export async function compileCatalogue(input: {
       seenBases.add(classUri);
       bases.push(classUri);
     }
+    let effectiveCoverRatio: string | undefined;
+    for (const ancestor of classChain(term.name)) {
+      const ratio = object(sourceClasses.get(ancestor)?.value.annotations).cover_ratio;
+      if (typeof ratio === 'string') {
+        effectiveCoverRatio = ratio;
+        break;
+      }
+    }
+    // Explicit and per class: nothing is derived from names, mappings or ancestors.
+    const ownSchemaOrgType = object(sourceClasses.get(term.name)?.value.annotations).schema_org_type;
     const facets: string[] = [];
     const facetNames = new Set<string>();
     const origins = new Map<string, { name: string; location: Location }>();
@@ -461,7 +611,12 @@ export async function compileCatalogue(input: {
       bases,
       properties,
       facets,
+      ...(effectiveCoverRatio === undefined ? {} : { coverRatio: effectiveCoverRatio }),
+      ...(listFor(term.name) === undefined ? {} : { listPresentation: structuredClone(listFor(term.name)!.value) }),
+      ...(typeof ownSchemaOrgType === 'string' ? { schemaOrgType: ownSchemaOrgType } : {}),
     };
+    const reference = library.reference(term.name);
+    if (reference) release.types[term.key]!.library = reference;
   }
   for (const term of slots) {
     const { value: slot, location } = term;
@@ -469,6 +624,8 @@ export async function compileCatalogue(input: {
     const annotation = (key: string) => ({ ...location, pointer: at(at(location.pointer, 'annotations'), key) });
     const annotations = object(slot.annotations);
     const datatype = annotations.datatype as DataType;
+    if (Object.hasOwn(annotations, 'exact') && datatype !== 'quantity')
+      add(annotation('exact'), 'invalid', 'Exact is only allowed for quantity');
     const range = slot.range ?? parsed[location.file]?.default_range ?? 'string';
     const ranges = Array.isArray(slot.any_of) ? slot.any_of.map((entry) => object(entry).range) : [range];
     const declaredClasses = ranges.flatMap((candidate) =>
@@ -507,6 +664,12 @@ export async function compileCatalogue(input: {
       qualifiers: [],
       value: {},
     };
+    if (annotations.disclosure !== undefined) {
+      if (annotations.disclosure !== 'sourceOrConsent')
+        add(annotation('disclosure'), 'invalid', 'Disclosure must be sourceOrConsent');
+      else property.disclosure = 'sourceOrConsent';
+    }
+    propertyLocations.set(term.key, location);
     if (annotations.qualifiers !== undefined && typeof annotations.qualifiers !== 'string')
       add(annotation('qualifiers'), 'invalid', 'Qualifiers must be space-separated slot names');
     for (const name of words(annotations.qualifiers)) {
@@ -515,6 +678,79 @@ export async function compileCatalogue(input: {
       else add(annotation('qualifiers'), 'invalid', `Unknown qualifier ${name}`);
     }
     property.qualifiers = unique(property.qualifiers);
+    if (relationAnnotationKeys.some((key) => Object.hasOwn(annotations, key))) {
+      const group = annotations.relation_group;
+      const hasInverse = Object.hasOwn(annotations, 'inverse');
+      const hasSymmetric = Object.hasOwn(annotations, 'symmetric');
+      if (!relationGroups.includes(group as (typeof relationGroups)[number]))
+        add(annotation('relation_group'), 'invalid', 'Relation group is required and must be recognized');
+      if (hasInverse === hasSymmetric)
+        add(
+          hasSymmetric ? annotation('symmetric') : annotation('relation_group'),
+          'invalid',
+          'A relation requires exactly one of inverse or symmetric',
+        );
+      if (datatype !== 'wikibase-item')
+        add(annotation('relation_group'), 'invalid', 'Relations are only allowed on item properties');
+
+      const direction: Partial<RelationDefinition> = {};
+      if (hasInverse) {
+        const inverse = annotations.inverse;
+        if (
+          typeof inverse !== 'string' ||
+          (inverse !== 'none' && !/^([a-z][a-z0-9_]*):([^\s]+)$(?![\s\S])/u.test(inverse))
+        )
+          add(annotation('inverse'), 'invalid', 'Inverse must be a CURIE or none');
+        else {
+          direction.inverse = inverse;
+          if (inverse !== 'none') expand(inverse, annotation('inverse'));
+        }
+      }
+      if (hasSymmetric) {
+        if (annotations.symmetric !== true) add(annotation('symmetric'), 'invalid', 'Symmetric must be true');
+        else direction.symmetric = true;
+      }
+      if (Object.hasOwn(annotations, 'acyclic')) {
+        if (annotations.acyclic !== true) add(annotation('acyclic'), 'invalid', 'Acyclic must be true');
+        else if (annotations.symmetric === true)
+          add(annotation('acyclic'), 'invalid', 'Symmetric relations cannot be acyclic');
+        else direction.acyclic = true;
+      }
+      const order = annotations.relation_order;
+      if (order !== undefined && !relationOrders.includes(order as (typeof relationOrders)[number]))
+        add(annotation('relation_order'), 'invalid', 'Relation order must be position, date or name');
+      if (order === 'position' && !property.qualifiers.includes('schema:position'))
+        add(annotation('relation_order'), 'invalid', 'Position order requires the schema:position qualifier');
+      const slotKey = annotations.relation_slot_key;
+      if (slotKey !== undefined && (typeof slotKey !== 'string' || !property.qualifiers.includes(slotKey)))
+        add(annotation('relation_slot_key'), 'invalid', 'Relation slot key must be an admitted item qualifier');
+      const filter = annotations.relation_filter;
+      const filters = Array.isArray(filter) ? filter : filter === undefined ? [] : [filter];
+      if (
+        filter !== undefined &&
+        (filters.length < 1 ||
+          filters.length > 2 ||
+          new Set(filters).size !== filters.length ||
+          filters.some((key) => typeof key !== 'string' || !property.qualifiers.includes(key)))
+      )
+        add(
+          annotation('relation_filter'),
+          'invalid',
+          'Relation filter must name one or two distinct admitted item qualifiers',
+        );
+      if (relationGroups.includes(group as (typeof relationGroups)[number])) {
+        property.relation = {
+          group: group as RelationGroup,
+          order: (relationOrders.includes(order as (typeof relationOrders)[number]) ? order : 'name') as
+            | 'position'
+            | 'date'
+            | 'name',
+          ...direction,
+          ...(typeof filter === 'string' || Array.isArray(filter) ? { filter: filter as string | string[] } : {}),
+          ...(typeof slotKey === 'string' ? { slotKey } : {}),
+        };
+      }
+    }
     if (datatype === 'wikibase-item') {
       const targets: string[] = [];
       for (const name of declaredClasses) {
@@ -530,8 +766,10 @@ export async function compileCatalogue(input: {
       const units = words(annotations.units);
       if (!units.length || units.length > 16)
         add(annotation('units'), 'invalid', 'Quantity needs between one and 16 units');
+      if (units.includes('*') && units.length !== 1)
+        add(annotation('units'), 'invalid', 'Any-unit wildcard must be used alone');
       property.units = unique(
-        units.map((unit) => (unit === '1' ? unit : (expand(unit, annotation('units'), false) ?? unit))),
+        units.map((unit) => (unit === '1' || unit === '*' ? unit : (expand(unit, annotation('units'), false) ?? unit))),
       );
     } else if (annotations.units !== undefined)
       add(annotation('units'), 'invalid', 'Units are only allowed for quantity');
@@ -546,6 +784,11 @@ export async function compileCatalogue(input: {
     }
     if (property.minimum !== undefined && property.maximum !== undefined && property.minimum > property.maximum)
       add(field('maximum_value'), 'invalid', 'Maximum is below minimum');
+    if (annotations.minimum_exclusive === true) {
+      if (datatype !== 'quantity' || typeof property.minimum !== 'number')
+        add(annotation('minimum_exclusive'), 'invalid', 'Exclusive minimum requires a quantity minimum');
+      else property.minimumExclusive = true;
+    }
     if (property.targets && property.targets.length > RELEASE_LIMITS.types)
       add(field('any_of'), 'limit', `At most ${RELEASE_LIMITS.types} targets are allowed`);
     property.value = valueSchema(datatype, {
@@ -553,8 +796,47 @@ export async function compileCatalogue(input: {
         ? { pattern: slot.pattern }
         : {}),
       ...(property.units ? { units: property.units, integer: range === 'integer' } : {}),
+      ...(datatype === 'quantity' && annotations.exact === true ? { exact: true } : {}),
     });
     release.properties[term.key] = property;
+  }
+  const propertyIris = new Set(Object.values(release.properties).map((property) => property.iri));
+  for (const [key, property] of Object.entries(release.properties)) {
+    const location = propertyLocations.get(key);
+    if (!property.relation || !location) continue;
+    const relation = property.relation;
+    if (relation.inverse && relation.inverse !== 'none') {
+      const inverseIri = expand(relation.inverse, {
+        ...location,
+        pointer: at(at(location.pointer, 'annotations'), 'inverse'),
+      });
+      if (
+        Object.hasOwn(release.properties, relation.inverse) ||
+        (inverseIri !== undefined && propertyIris.has(inverseIri))
+      )
+        add(
+          { ...location, pointer: at(at(location.pointer, 'annotations'), 'inverse') },
+          'invalid',
+          'The inverse property must not also be present in the release',
+        );
+    }
+    if (
+      relation.filter &&
+      (Array.isArray(relation.filter) ? relation.filter : [relation.filter]).some(
+        (key) => release.properties[key]?.datatype !== 'wikibase-item',
+      )
+    )
+      add(
+        { ...location, pointer: at(at(location.pointer, 'annotations'), 'relation_filter') },
+        'invalid',
+        'Relation filters must name an admitted item qualifier',
+      );
+    if (relation.slotKey && release.properties[relation.slotKey]?.datatype !== 'wikibase-item')
+      add(
+        { ...location, pointer: at(at(location.pointer, 'annotations'), 'relation_slot_key') },
+        'invalid',
+        'Relation slot keys must name an admitted item qualifier',
+      );
   }
   for (const [key, type] of Object.entries(release.types))
     for (const facet of type.facets) {
@@ -568,6 +850,18 @@ export async function compileCatalogue(input: {
         );
       }
     }
+  // Check every authored declaration, including unused abstract bases. Retain
+  // its actual source pointer when an inherited selection is invalid.
+  for (const [name, declaration] of listDeclarations) {
+    const attributes = object(object(object(derived.classes)[name]).attributes);
+    const properties = new Set(Object.keys(attributes).flatMap((slot) => slotKeysByName.get(slot) ?? []));
+    declaration.value.keyFacts.forEach((key, index) => {
+      const location = { ...declaration.location, pointer: at(at(declaration.location.pointer, 'keyFacts'), index) };
+      const property = release.properties[key];
+      if (!expand(key, location) || !properties.has(key) || !property || !facetable(property))
+        add(location, 'invalid', `Key fact ${key} must be an effective property representable by Search Fact`);
+    });
+  }
   if (classes.length > RELEASE_LIMITS.types || slots.length > RELEASE_LIMITS.properties)
     add({ file: input.root, pointer: '' }, 'limit', 'Release collection limit exceeded');
   if (typeof release.catalogue.id !== 'string' || !iri.test(release.catalogue.id))
@@ -589,7 +883,12 @@ export async function compileCatalogue(input: {
       parts.length > 2
     )
       add({ file, pointer: '' }, 'invalid', 'Expected a BCP 47 language tag or <group>/<tag>');
-    allowed(labels, 'types properties', { file, pointer: '' });
+    allowed(labels, 'types properties inverseProperties typeDescriptions propertyDescriptions libraryProfiles', {
+      file,
+      pointer: '',
+    });
+    if (Object.hasOwn(labels, 'libraryProfiles'))
+      library.presentation(parts.length === 2 ? parts[0] : undefined, tag, labels.libraryProfiles, file);
     for (const collection of ['types', 'properties'] as const) {
       if (labels[collection] !== undefined && !record(labels[collection]))
         add({ file, pointer: `/${collection}` }, 'invalid', 'Expected a label object');
@@ -608,6 +907,69 @@ export async function compileCatalogue(input: {
         }
       }
     }
+    if (labels.typeDescriptions !== undefined && !record(labels.typeDescriptions))
+      add({ file, pointer: '/typeDescriptions' }, 'invalid', 'Expected a description object');
+    for (const [key, description] of Object.entries(object(labels.typeDescriptions))) {
+      const location = { file, pointer: at('/typeDescriptions', key) };
+      const type = release.types[key];
+      if (!type) add(location, 'invalid', 'Unknown type');
+      else if (typeof description !== 'string' || !description.length || [...description].length > 1500)
+        add(location, 'invalid', 'Description must contain between one and 1500 characters');
+      else {
+        const identity = `${tag}\0typeDescriptions\0${key}`;
+        if (seenLabels.has(identity)) add(location, 'duplicate', 'Term already has a description in this language');
+        else {
+          seenLabels.add(identity);
+          type.descriptions ??= dictionary();
+          type.descriptions[tag] = description;
+        }
+      }
+    }
+    if (labels.propertyDescriptions !== undefined && !record(labels.propertyDescriptions))
+      add({ file, pointer: '/propertyDescriptions' }, 'invalid', 'Expected a description object');
+    for (const [key, description] of Object.entries(object(labels.propertyDescriptions))) {
+      const location = { file, pointer: at('/propertyDescriptions', key) };
+      const property = release.properties[key];
+      if (!property) add(location, 'invalid', 'Unknown property');
+      else if (typeof description !== 'string' || !description.length || [...description].length > 1500)
+        add(location, 'invalid', 'Description must contain between one and 1500 characters');
+      else {
+        const identity = `${tag}\0propertyDescriptions\0${key}`;
+        if (seenLabels.has(identity)) add(location, 'duplicate', 'Term already has a description in this language');
+        else {
+          seenLabels.add(identity);
+          property.descriptions ??= dictionary();
+          property.descriptions[tag] = description;
+        }
+      }
+    }
+    if (labels.inverseProperties !== undefined && !record(labels.inverseProperties))
+      add({ file, pointer: '/inverseProperties' }, 'invalid', 'Expected a label object');
+    for (const [key, label] of Object.entries(object(labels.inverseProperties))) {
+      const location = { file, pointer: at('/inverseProperties', key) };
+      const property = release.properties[key];
+      if (!property) add(location, 'invalid', 'Unknown property');
+      else if (!property.relation?.inverse || property.relation.inverse === 'none')
+        add(location, 'invalid', 'Inverse labels require a relation with an inverse CURIE');
+      else {
+        const sourceFile = propertyLocations.get(key)?.file ?? '';
+        const home = presentationGroup(sourceFile);
+        if (parts.length !== 2 || parts[0] !== home)
+          add(location, 'invalid', `Inverse labels belong in presentation/${home}/${tag}`);
+        else if (typeof label !== 'string' || !label.length || [...label].length > 256)
+          add(location, 'invalid', 'Label must contain between one and 256 characters');
+        else {
+          const identity = `${tag}\0inverseProperties\0${key}`;
+          if (seenLabels.has(identity))
+            add(location, 'duplicate', 'Term already has an inverse label in this language');
+          else {
+            seenLabels.add(identity);
+            property.relation!.inverseLabels ??= dictionary();
+            property.relation!.inverseLabels[tag] = label;
+          }
+        }
+      }
+    }
   }
   for (const collection of ['types', 'properties'] as const)
     for (const [key, term] of Object.entries(release[collection]))
@@ -617,6 +979,16 @@ export async function compileCatalogue(input: {
           'missing_label',
           'English label is required',
         );
+  for (const [key, property] of Object.entries(release.properties))
+    if (property.relation?.inverse && property.relation.inverse !== 'none' && !property.relation.inverseLabels?.en) {
+      const sourceFile = propertyLocations.get(key)?.file ?? '';
+      const home = presentationGroup(sourceFile);
+      add(
+        { file: `presentation/${home}/en`, pointer: at('/inverseProperties', key) },
+        'missing_label',
+        'English inverse label is required',
+      );
+    }
   stop();
 
   const contextIds = Object.keys(input.contexts ?? {}).sort(compare);
@@ -676,6 +1048,7 @@ export async function compileCatalogue(input: {
   stop();
 
   const savedEntries: { key: string; value: SavedFilter }[] = [];
+  const filterConstruction = createFilterConstruction(release);
   let filterCount = 0;
   for (const group of Object.keys(input.filters ?? {}).sort(compare)) {
     const file = `filters/${group}`;
@@ -724,7 +1097,7 @@ export async function compileCatalogue(input: {
       const filterPointer = at(pointer, 'filter');
       if (!Object.hasOwn(raw, 'filter')) add({ file, pointer: filterPointer }, 'invalid', 'Filter is required');
       else {
-        for (const error of validateFilter(raw.filter, release, { saved: false }))
+        for (const error of filterConstruction.validateFilter(raw.filter, { saved: false }))
           add(
             { file, pointer: `${filterPointer}${error.pointer}` },
             savedFilterCode(error),
@@ -748,6 +1121,9 @@ export async function compileCatalogue(input: {
     for (const item of savedEntries.sort((left, right) => compare(left.key, right.key))) filters[item.key] = item.value;
     release.filters = filters;
   }
+  stop();
+  const registry = library.registry();
+  if (registry) release.libraryProfiles = registry;
   stop();
   const defects = validateRelease(release);
   if (defects.length) throw new Error(`Compiler produced an invalid release: ${JSON.stringify(defects)}`);

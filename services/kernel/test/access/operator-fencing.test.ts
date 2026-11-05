@@ -1,3 +1,4 @@
+import { actionDeclarations } from './native-account-bindings-fixture.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
@@ -26,7 +27,7 @@ import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { accountsWorkModule } from '../../src/access/membership-work.ts';
 import { startWorker } from '../../src/worker.ts';
-import { encodeCursor } from '../../src/tokens/cursor.ts';
+import { encodeListCursor } from '../../src/tokens/list-cursor.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const password = 'continuation-password';
@@ -58,11 +59,7 @@ const routeKey = randomBytes(32);
 const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
 const stagingKey = randomBytes(32);
 const secret = randomBytes(48).toString('base64url');
-const actions = new Map([
-  ...LIFECYCLE_ACTIONS,
-  ...COMMITTED_CONTINUATION_ACTIONS,
-  ...scopes.map((scope) => [scope, { anonymous: false }] as const),
-]);
+const actions = new Map([...LIFECYCLE_ACTIONS, ...COMMITTED_CONTINUATION_ACTIONS, ...actionDeclarations(scopes)]);
 let frozen: Date | null = null;
 const clock = () => frozen ?? new Date();
 const admin = new Pool({ connectionString: connection('postgres') });
@@ -224,12 +221,31 @@ async function startKernelWorker() {
     if (value.done) throw new Error(`Worker exited: ${workerLog}`);
     output += new TextDecoder().decode(value.value);
   }
-  reader.releaseLock();
+  workerLog += output;
+  void (async () => {
+    while (true) {
+      const value = await reader.read();
+      if (value.done) return;
+      workerLog += new TextDecoder().decode(value.value);
+    }
+  })();
 }
 async function stopKernelWorker() {
   if (!worker) return;
-  worker.kill('SIGTERM');
-  await worker.exited;
+  const child = worker;
+  child.kill('SIGTERM');
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const exited = await Promise.race([
+    child.exited.then(() => true),
+    new Promise<boolean>((resolve) => {
+      timeout = setTimeout(() => resolve(false), 5000);
+    }),
+  ]);
+  if (timeout) clearTimeout(timeout);
+  if (!exited) {
+    child.kill('SIGKILL');
+    await child.exited;
+  }
   worker = undefined;
 }
 async function waitFor(work: () => Promise<boolean>) {
@@ -252,23 +268,81 @@ async function link(operatorAccountId: string, subjectAccountId: string) {
   });
   return held;
 }
+async function seedUnrelatedSubjects(operatorAccountId: string, subjects: string[]) {
+  if (subjects.length === 0) return;
+  const links = subjects.map((accountId) => ({
+    accountId,
+    route: routeOf(accountId)!,
+    reservationId: newId(routeOf(operatorAccountId)!),
+    reservationTransactionId: randomUUID(),
+    relationTransactionId: randomUUID(),
+  }));
+  const accounts = await facts.query(
+    `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete)
+     SELECT route,account_id,'actor','active',account_id,true
+     FROM unnest($1::integer[],$2::uuid[]) AS rows(route,account_id)`,
+    [links.map((link) => link.route), links.map((link) => link.accountId)],
+  );
+  await facts.query(
+    `INSERT INTO access.lifecycle_coordination
+       (route,account_id,reservation_id,related_account_id,purpose,transaction_id)
+     SELECT $1, $2, reservation_id, subject_account_id, 'operator', transaction_id
+     FROM unnest($3::uuid[],$4::uuid[],$5::uuid[]) AS rows(reservation_id,subject_account_id,transaction_id)`,
+    [
+      routeOf(operatorAccountId),
+      operatorAccountId,
+      links.map((link) => link.reservationId),
+      links.map((link) => link.accountId),
+      links.map((link) => link.reservationTransactionId),
+    ],
+  );
+  await facts.query(
+    `INSERT INTO access.operator_relation_slot
+       (route,subject_account_id,reservation_id,operator_account_id,terminal,transaction_id)
+     SELECT route,subject_account_id,reservation_id,$1,false,transaction_id
+     FROM unnest($2::integer[],$3::uuid[],$4::uuid[],$5::uuid[])
+       AS rows(route,subject_account_id,reservation_id,transaction_id)`,
+    [
+      operatorAccountId,
+      links.map((link) => link.route),
+      links.map((link) => link.accountId),
+      links.map((link) => link.reservationId),
+      links.map((link) => link.relationTransactionId),
+    ],
+  );
+  const linked = await facts.query(
+    `WITH input AS MATERIALIZED (
+       SELECT * FROM unnest($1::integer[],$2::uuid[],$3::uuid[],$4::uuid[])
+         AS rows(route,account_id,reservation_id,transaction_id)
+     ), counter_time AS MATERIALIZED (
+       SELECT set_config('rezics.operator_at', transaction_timestamp()::text, true)
+     )
+     UPDATE access.account a
+     SET operator_account_id=$5,operator_reservation_id=i.reservation_id,transaction_id=i.transaction_id
+     FROM input i CROSS JOIN counter_time
+     WHERE a.account_id=i.account_id AND a.route=i.route`,
+    [
+      links.map((link) => link.route),
+      links.map((link) => link.accountId),
+      links.map((link) => link.reservationId),
+      links.map((link) => link.relationTransactionId),
+      operatorAccountId,
+    ],
+  );
+  if (accounts.rowCount !== subjects.length || linked.rowCount !== subjects.length)
+    throw new Error(`Bulk fixture mismatch: accounts=${accounts.rowCount}, links=${linked.rowCount}`);
+}
 async function fixture() {
   const operator = await person();
   const credentials = [await person(), await person()];
   const credentialTokens = await Promise.all(credentials.map((value) => bearer(value.caller)));
   const subjects = credentials.map((value) => value.accountId);
-  // Remaining credentialless subjects use the native persisted account shape;
-  // all relationships and reservations go through native kernel commands.
-  for (let i = 2; i < 205; i++) {
-    const id = newId(0x7432);
-    await facts.query(
-      `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete)
-      VALUES ($1,$2,'actor','active',$2,true)`,
-      [routeOf(id), id],
-    );
-    subjects.push(id);
-  }
+  // The two credential-bearing subjects use native commands; unrelated fixture
+  // accounts and their persisted responsibility rows are seeded in bulk.
   for (const subject of subjects) await link(operator.accountId, subject);
+  const unrelated = Array.from({ length: 203 }, () => newId(0x7432));
+  await seedUnrelatedSubjects(operator.accountId, unrelated);
+  subjects.push(...unrelated);
   const pending = await readyBindings().operators.reserveResponsibility({
     operatorAccountId: operator.accountId,
     subjectAccountId: newId(0x7432),
@@ -385,15 +459,32 @@ if (process.env.OPERATOR_FENCE_CRASH_PAGE) {
     expect(root.barrierReceiptId).toBe(result.receiptId);
     expect(root.allowlist.map((value) => value.step)).toEqual(['revoke-auth-sessions', 'operator-responsibility-page']);
     await startKernelWorker();
-    await waitFor(
-      async () =>
-        (
-          await facts.query(
-            'SELECT count(*)::integer AS n FROM access.account WHERE account_id=ANY($1::uuid[]) AND authn_fenced',
-            [f.subjects],
-          )
-        ).rows[0].n === 205,
-    );
+    try {
+      await waitFor(
+        async () =>
+          (
+            await facts.query(
+              'SELECT count(*)::integer AS n FROM access.account WHERE account_id=ANY($1::uuid[]) AND authn_fenced',
+              [f.subjects],
+            )
+          ).rows[0].n === 205,
+      );
+    } catch (error) {
+      const diagnostic = await facts.query(
+        `SELECT count(*)::integer AS total,
+          count(*) FILTER (WHERE a.authn_fenced)::integer AS fenced,
+          count(*) FILTER (WHERE a.operator_account_id=$2)::integer AS operated,
+          count(*) FILTER (WHERE a.operator_relation_version=1)::integer AS versioned,
+          (SELECT count(*)::integer FROM access.operator_relation_slot s WHERE s.subject_account_id=ANY($1::uuid[])) AS slots,
+          (SELECT count(*)::integer FROM access.lifecycle_coordination c WHERE c.related_account_id=ANY($1::uuid[]) AND c.account_id=$2 AND c.purpose='operator') AS holds
+        FROM access.account a WHERE a.account_id=ANY($1::uuid[])`,
+        [f.subjects, f.operator.accountId],
+      );
+      await Bun.sleep(50);
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n${JSON.stringify(diagnostic.rows[0])}\n${workerLog}`,
+      );
+    }
     expect(
       (
         await facts.query(
@@ -473,7 +564,7 @@ if (process.env.OPERATOR_FENCE_CRASH_PAGE) {
     expect(errors).toBe('');
     const first = JSON.parse(output) as { next: string; pageKey: string };
     expect(first.next).toBeString();
-    const late = await readyBindings().operators.responsibilityPage({
+    const late = await readyBindings().operators.responsibilityWorkPage({
       operatorAccountId: f.operator.accountId,
       limit: 100,
       cursor: first.next!,
@@ -515,7 +606,7 @@ if (process.env.OPERATOR_FENCE_CRASH_PAGE) {
     expect((await suspended(f.subjects[0]!)).epoch).toBe('2');
   }, 60_000);
 
-  test('signed responsibility pages refuse altered, foreign, stale and invalid-limit cursors before scanning', async () => {
+  test('opaque responsibility pages refuse altered, foreign, stale and invalid-limit cursors before scanning', async () => {
     const operator = await person();
     const operatorId = operator.accountId;
     for (let i = 0; i < 3; i++)
@@ -537,20 +628,29 @@ if (process.env.OPERATOR_FENCE_CRASH_PAGE) {
     const changed = `${cursor.slice(0, 12)}${cursor[12] === 'A' ? 'B' : 'A'}${cursor.slice(13)}`;
     for (const bad of [
       changed,
-      encodeCursor(referenceKeys, { operation: 'wrong-purpose', parameters: {} }, { epoch: 1, after: [newId(1)] }),
+      await encodeListCursor(
+        referenceKeys,
+        { route: 'wrong-purpose', viewer: null, query: {} },
+        { epoch: 1, after: [newId(1)] },
+        new Date(),
+      ),
     ]) {
       await expect(
-        readyBindings().operators.responsibilityPage({ operatorAccountId: f.operator.accountId, cursor: bad }),
+        readyBindings().operators.responsibilityPage({
+          operatorAccountId: f.operator.accountId,
+          limit: 1,
+          cursor: bad,
+        }),
       ).rejects.toThrow();
     }
     await expect(
-      readyBindings().operators.responsibilityPage({ operatorAccountId: governor.accountId, cursor }),
+      readyBindings().operators.responsibilityPage({ operatorAccountId: governor.accountId, limit: 1, cursor }),
     ).rejects.toThrow();
     const partition = partitionOf(routeOf(f.operator.accountId)!);
     await facts.query('UPDATE core.partition SET epoch=epoch+1 WHERE partition_no=$1', [partition]);
     try {
       await expect(
-        readyBindings().operators.responsibilityPage({ operatorAccountId: f.operator.accountId, cursor }),
+        readyBindings().operators.responsibilityPage({ operatorAccountId: f.operator.accountId, limit: 1, cursor }),
       ).rejects.toThrow();
     } finally {
       await facts.query('UPDATE core.partition SET epoch=epoch-1 WHERE partition_no=$1', [partition]);

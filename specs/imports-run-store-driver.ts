@@ -20,6 +20,9 @@
  * projection is caller-sanitized normalized data; raw source input is NEVER an
  * argument. Native absent revision is literally unversioned, never a timestamp.
  * seal uses maintained prior/seen-survivor counters, not COUNT/history queries.
+ * A mass-disappearance complete seal snapshots missing identities with one
+ * `run_missing` INSERT...SELECT plus a stop header before release; that write
+ * is generation-scoped evidence, not a page, native effect or approval of loss.
  * No pending command is visible before successful seal. classify compares actual
  * staged/current metadata and atomically persists typed command bytes and keys
  * before returning. Identical metadata/projection must not fabricate a revision.
@@ -127,8 +130,8 @@ export type CreateImportRunStoreDriver = (options: { directory: string }) => Pro
  * Wrap ALL actual Database prepare/query/run/exec and executed Statement
  * get/all/iterate/run, including transaction controls and lazy iterator rows.
  * Count executions once, not preparations. Capture even on operation rejection.
- * No VM/fullscan/index-step/FFI counters. rows = actual rows delivered to caller;
- * blocks:0 means unavailable SQLite buffer evidence, not zero physical IO.
+ * No VM/fullscan/index-step/FFI counters. rows = actual rows delivered to caller.
+ * Summaries count SQLite statements and returned rows; buffer IO is not observed.
  * EXPLAIN every distinct SQL AND actual binding after ANALYZE at EVERY scale,
  * outside measurement. No fabricated counters, empty capture, or static flags.
  * Schema is raw sqlite_schema plus PRAGMA index_list/index_info/table_info
@@ -160,11 +163,10 @@ export interface Evidence {
   executions: Execution[];
 }
 
+export type RunStoreCounts = { 'sqlite returned rows': number; 'sqlite statements': number };
+
 /** Indexed-plan proof shared by the executable scenarios; never a product flag. */
-export function runStoreCost(
-  evidence: Evidence,
-  pageCap: number = CAPS.page,
-): { rows: number; blocks: 0; statements: number } {
+export function runStoreCounts(evidence: Evidence, pageCap: number = CAPS.page): RunStoreCounts {
   function requireProof(condition: unknown, message: string): asserts condition {
     if (!condition) throw new Error(`Run-store SQLite evidence: ${message}`);
   }
@@ -241,8 +243,13 @@ export function runStoreCost(
         );
       }
       // SQL spelling is additional evidence, never an exemption from a plan.
+      // INSERT destinations are writes; only FROM/JOIN/UPDATE relations must appear in reads.
       const escaped = relation.table.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      if (new RegExp(`\\b(?:FROM|JOIN|UPDATE|INTO)\\s+["\x60\\[]?${escaped}(?:["\x60\\]]|\\s|$)`, 'i').test(sql)) {
+      const insertTarget = /^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+["`\[]?(\w+)/i.exec(sql)?.[1];
+      if (
+        relation.table !== insertTarget &&
+        new RegExp(`\\b(?:FROM|JOIN|UPDATE|INTO)\\s+["\x60\\[]?${escaped}(?:["\x60\\]]|\\s|$)`, 'i').test(sql)
+      ) {
         requireProof(
           execution.reads.some((r) => r.table === relation.table),
           'growing relation omitted from read proof',
@@ -275,9 +282,17 @@ export function runStoreCost(
       if (!point) {
         // A source-prefix SEARCH alone still permits a whole source scan. A
         // page requires an anchored multi-column prefix, key range and LIMIT.
+        // Mass-disappearance evidence copies the exact missing prefix in one
+        // INSERT...SELECT; the bound is that prefix, not a caller page.
+        const missingSnapshot =
+          /^\s*INSERT\s+INTO\s+run_disappearance_missing\b/i.test(sql) &&
+          /\bINDEXED BY run_missing\b/i.test(sql) &&
+          index!.name === 'run_missing';
         requireProof(index!.columns.length >= 2 && equality(index!.columns[0]!), 'page lacks equality anchor');
-        requireProof(/\bLIMIT\s+(?:\?|[:@$]\w+|\d+)/i.test(sql), 'non-point access lacks bounded indexed keyset');
-        requireProof(execution.rows <= pageCap, 'page exceeds caller cap');
+        if (!missingSnapshot) {
+          requireProof(/\bLIMIT\s+(?:\?|[:@$]\w+|\d+)/i.test(sql), 'non-point access lacks bounded indexed keyset');
+          requireProof(execution.rows <= pageCap, 'page exceeds caller cap');
+        }
         const constrained = index!.columns.filter((c) =>
           new RegExp(`(?:^| AND )${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[=<>]`, 'i').test(constraints),
         );
@@ -285,5 +300,5 @@ export function runStoreCost(
       }
     }
   }
-  return { rows, blocks: 0, statements: evidence.executions.length };
+  return { 'sqlite returned rows': rows, 'sqlite statements': evidence.executions.length };
 }

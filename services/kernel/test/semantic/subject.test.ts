@@ -3,14 +3,18 @@ import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { createPool } from '../../src/database/pool.ts';
+import { startRelays } from '../../src/events/relays.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { itemFacts, resolveItem as resolve, SubjectInputError } from '../../src/semantic/item.ts';
+import { itemFacts, relationSlotId, resolveItem as resolve, SubjectInputError } from '../../src/semantic/item.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { checkSubjectInput } from '@rezics/definitions/validate';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import type { DataType } from '@rezics/definitions';
+import { fromPlainText } from '@rezics/document';
 import { rejectContent } from '../../src/semantic/rules.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
+import { slotId } from '../../src/semantic/slots.ts';
 import {
   createSubject,
   readLabels,
@@ -23,8 +27,11 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+const projection = linkProjection(pool);
+const relays = startRelays(pool, [projection], { intervalMs: 50 });
 beforeAll(() => bootstrapRelease(pool, bundledRelease));
 afterAll(async () => {
+  await relays.stop();
   await pool.end();
   await admin.end();
 });
@@ -97,6 +104,18 @@ function create(
   });
 }
 
+async function catchUpLinks(partition: number): Promise<void> {
+  for (let step = 0; step < 200; step++) {
+    const result = await projection.run(partition);
+    if (result.status === 'busy') {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      continue;
+    }
+    if (result.envelopes === 0) return;
+  }
+  throw new Error('Semantic link projection did not catch up');
+}
+
 async function seedAuthor(): Promise<void> {
   const id = soseki;
   await createSubject(pool, {
@@ -126,18 +145,50 @@ test('a created book is anchored by its idempotency key and reads back as a Wiki
   const dataTypes = Object.fromEntries(
     Object.entries(bundledRelease.properties).map(([id, property]) => [id, property.datatype]),
   ) as Record<string, DataType>;
+  const facts = itemFacts(subject.id, book, 'bf:Instance', bundledRelease);
+  const relationCounts = Object.fromEntries(
+    bundledRelease.types['bf:Instance']!.properties.filter((property) => {
+      const group = bundledRelease.properties[property]?.relation?.group;
+      return group !== undefined && group !== 'classification';
+    }).map((property) => [
+      property,
+      facts.filter((fact) => fact.kind === 'statement' && fact.operation === 'assert' && fact.property === property)
+        .length,
+    ]),
+  );
+  const reconstructed = resolve(subject.id, facts, 'bf:Instance', dataTypes, {
+    revision: 1,
+    release: bundledDigest,
+    context: GLOBAL_CONTEXT,
+    relationCounts,
+  });
+  expect(reconstructed.relationCounts).toEqual(relationCounts);
   expect(subject).toEqual(
-    resolve(subject.id, itemFacts(subject.id, book, 'bf:Instance'), 'bf:Instance', dataTypes, {
+    resolve(subject.id, facts, 'bf:Instance', dataTypes, {
       revision: 1,
       release: bundledDigest,
       context: GLOBAL_CONTEXT,
+      relationCounts: {},
     }),
   );
   expect(subject.labels).toEqual(book.labels);
   const statements = Object.values(subject.statements).flat();
   expect(statements).toHaveLength(5);
   for (const entry of statements) expect(routeOf(entry.id)).toBe(route);
-  expect(await readSubject(pool, subject.id, allow)).toEqual({ subject, component: created.component });
+  await catchUpLinks(partitionOf(route)!);
+  expect(await readSubject(pool, subject.id, allow, undefined, routeKey)).toEqual({
+    subject,
+    account: null,
+    summary: {
+      id: subject.id,
+      type: 'bf:Instance',
+      types: ['bf:Instance', ...bundledRelease.types['bf:Instance']!.bases],
+      label: { value: 'こゝろ', language: 'ja' },
+      creativeWork: true,
+      cover: null,
+    },
+    component: { ...created.component, position: await partitionPosition(partitionOf(route)!) },
+  });
 });
 
 test('each value is one compact fact row in its slot log, written under the command write basis', async () => {
@@ -145,6 +196,9 @@ test('each value is one compact fact row in its slot log, written under the comm
   const { subject, component } = await create(book);
   const translatorStatement = subject.statements['schema:translator']!.find(
     (statement) => statement.value.type === 'value' && statement.value.content === soseki,
+  )!;
+  const unresolvedTranslator = subject.statements['schema:translator']!.find(
+    (statement) => statement.value.type === 'somevalue',
   )!;
   const route = routeOf(subject.id)!;
   const { rows: key } = await admin.query(
@@ -159,9 +213,12 @@ test('each value is one compact fact row in its slot log, written under the comm
      FROM semantic.fact WHERE route = $1 AND subject_id = $2 GROUP BY slot_id`,
     [route, subject.id],
   );
-  // Two labels, one description, the two Japanese aliases and six statements, in eight slots.
+  // Two labels, one description, the two Japanese aliases and six statements, in nine slots: the resolved translator has its own relation slot.
   expect(facts.map((slot) => slot.seqs.length).reduce((a: number, b: number) => a + b, 0)).toBe(11);
-  expect(facts).toHaveLength(8);
+  expect(facts).toHaveLength(9);
+  const slotIds = facts.map((slot) => slot.slot_id);
+  expect(slotIds).toContain(relationSlotId(subject.id, 'schema:translator', soseki));
+  expect(slotIds).toContain(slotId(subject.id, 'schema:translator'));
   for (const slot of facts) {
     expect(slot.slot_id).toMatch(UUID_V8);
     expect(routeOf(slot.slot_id)).toBe(route);
@@ -201,8 +258,34 @@ test('each value is one compact fact row in its slot log, written under the comm
             statement: translatorStatement.id,
             target: soseki,
             present: true,
+            project_outbound: true,
+            relation: true,
+            slot_id: relationSlotId(subject.id, 'schema:translator', soseki),
+            external: null,
+            value: 'value',
+            outbound_order: 'position',
+            outbound_order_key: '1',
+            source_type: 'bf:Instance',
+            order_key: '1',
+            filter_value: '00000000-0000-0000-0000-000000000000',
           },
-        ],
+          {
+            property: 'schema:translator',
+            statement: unresolvedTranslator.id,
+            target: null,
+            present: true,
+            project_outbound: true,
+            relation: true,
+            slot_id: slotId(subject.id, 'schema:translator'),
+            external: null,
+            value: 'somevalue',
+            outbound_order: 'position',
+            outbound_order_key: '1',
+            source_type: 'bf:Instance',
+            order_key: '1',
+            filter_value: '00000000-0000-0000-0000-000000000000',
+          },
+        ].toSorted((left, right) => (left.statement < right.statement ? -1 : left.statement > right.statement ? 1 : 0)),
       },
     },
   ]);
@@ -280,16 +363,20 @@ test('labels of referenced subjects are read in their own partitions', async () 
 });
 
 test('an unknown or malformed id reads as nothing', async () => {
-  expect(await readSubject(pool, newId(0x0042), allow)).toBeNull();
-  expect(await readSubject(pool, 'not-an-id', allow)).toBeNull();
-  expect(await readSubject(pool, randomUUID(), allow)).toBeNull();
+  expect(await readSubject(pool, newId(0x0042), allow, undefined, routeKey)).toBeNull();
+  expect(await readSubject(pool, 'not-an-id', allow, undefined, routeKey)).toBeNull();
+  expect(await readSubject(pool, randomUUID(), allow, undefined, routeKey)).toBeNull();
 });
 
-test('subject creation rejects document and media contents in statements, qualifiers and references', () => {
+test('subject creation accepts authored documents and rejects media in statements, qualifiers and references', () => {
   for (const property of ['schema:abstract', 'schema:image']) {
     const release = structuredClone(bundledRelease);
     release.properties['schema:author']!.qualifiers.push(property);
-    const statement = { property: { id: property }, value: { type: 'value', content: null } };
+    const content =
+      property === 'schema:abstract'
+        ? { document: fromPlainText('An editor summary.'), licence: 'CC-BY-4.0', language: 'en' }
+        : newId(0x1234);
+    const statement = { property: { id: property }, value: { type: 'value', content } };
     for (const [statements, pointer] of [
       [{ [property]: [statement] }, `/statements/${property}/0/value/content`],
       [
@@ -310,9 +397,9 @@ test('subject creation rejects document and media contents in statements, qualif
       ],
     ] as const) {
       expect(
-        checkSubjectInput({ type: 'schema:Book', labels: { en: 'Example' }, statements }, release, rejectContent)
+        checkSubjectInput({ type: 'schema:Book', labels: { en: 'Example' }, statements }, release, rejectContent, true)
           .violations,
-      ).toEqual([{ pointer, code: 'unsupported' }]);
+      ).toEqual(property === 'schema:abstract' ? [] : [{ pointer, code: 'unsupported' }]);
     }
   }
 });

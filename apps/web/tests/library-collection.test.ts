@@ -1,9 +1,11 @@
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
+import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { slug } from '@rezics/definitions/slug';
 
 const app = join(import.meta.dir, '..');
 const timeout = 300_000;
@@ -334,52 +336,136 @@ function freePort(): Promise<number> {
     probe.once('error', reject);
     probe.listen(0, '127.0.0.1', () => {
       const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
+      probe.close((error) => (error ? reject(error) : resolve(port)));
     });
   });
 }
 
-let child: ChildProcess | undefined;
+let serverCustody: ProcessCustody | undefined;
 let started: Promise<string> | undefined;
+let teardownStarted = false;
+let serverStartupAbort: AbortController | undefined;
+const pendingServerStartups = new Set<Promise<string>>();
+let cleanupPromise: Promise<void> | undefined;
 
-// The documented command, pointed at the fake through the environment it reads in development.
+function ensureSiteStartupActive(output = '', cause?: unknown): void {
+  if (teardownStarted) {
+    const message = `dev server startup retired after suite teardown began${output ? `:\n${output}` : ''}`;
+    if (cause !== undefined) throw new Error(message, { cause });
+    throw new Error(message);
+  }
+}
+
+function siteStartupRequestSignal(): { signal: AbortSignal; dispose: () => void } {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  const parentSignal = serverStartupAbort?.signal;
+  const abort = () => controller.abort();
+  parentSignal?.addEventListener('abort', abort, { once: true });
+  if (parentSignal?.aborted) abort();
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timeout);
+      parentSignal?.removeEventListener('abort', abort);
+    },
+  };
+}
+
+function cleanupSuite(): Promise<void> {
+  return (cleanupPromise ??= (async () => {
+    teardownStarted = true;
+    serverStartupAbort?.abort();
+    const startupActions = [...pendingServerStartups].map((startup, index) => ({
+      label: `pending Vite startup ${index + 1}`,
+      run: () => startup,
+      timeoutMs: 15_000,
+    }));
+    const custody = serverCustody;
+    await cleanupAll([
+      ...startupActions,
+      { label: 'fake API listener', run: () => fake.stop(true), timeoutMs: 7000 },
+      { label: 'Vite process group', run: () => custody?.close(), timeoutMs: 8000 },
+    ]);
+  })());
+}
+
 function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: fake.url.origin,
-        AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId,
-        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-        API_RESOURCE: resource,
-        WEBSITE_SCOPES: scopes.join(' '),
-      },
-    });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
+  if (teardownStarted) return Promise.reject(new Error('Site startup requested after suite teardown began'));
+  if (!started) {
+    serverStartupAbort = new AbortController();
+    const startup = Promise.resolve().then(async () => {
+      ensureSiteStartupActive();
+      const port = await freePort();
+      ensureSiteStartupActive();
+      const origin = `http://127.0.0.1:${port}`;
+      let output = '';
+      const keep = (chunk: Uint8Array) => {
+        output = (output + Buffer.from(chunk).toString()).slice(-8000);
+      };
+      const startupChild = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+        cwd: app,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          KERNEL_ORIGIN: fake.url.origin,
+          AUTH_ISSUER: `${fake.url.origin}/auth`,
+          WEBSITE_CLIENT_ID: clientId,
+          WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+          API_RESOURCE: resource,
+          WEBSITE_SCOPES: scopes.join(' '),
+        },
+      });
+      const custody = ownNodeProcess(startupChild, {
+        label: 'Vite dev server',
+        outputLimit: 8000,
+        onOutput: keep,
+      });
+      serverCustody = custody;
+      let spawnError: Error | undefined;
+      startupChild.once('error', (error) => {
+        spawnError = error;
+      });
+      const deadline = Date.now() + 150_000;
       try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {
-        // The dev server is still starting.
+        for (;;) {
+          ensureSiteStartupActive(output);
+          if (spawnError)
+            throw new Error(`dev server spawn failed: ${spawnError.message}\n${output}`, { cause: spawnError });
+          if (startupChild.exitCode !== null)
+            throw new Error(`dev server exited with ${startupChild.exitCode}:\n${output}`);
+          let response: Response | undefined;
+          const request = siteStartupRequestSignal();
+          try {
+            response = await fetch(`${origin}/en`, {
+              redirect: 'manual',
+              signal: request.signal,
+            });
+          } catch (error) {
+            ensureSiteStartupActive(output, error);
+            // The dev server is still starting.
+          } finally {
+            request.dispose();
+          }
+          ensureSiteStartupActive(output);
+          if (response && response.status < 500) return origin;
+          if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
+          await Bun.sleep(500);
+        }
+      } catch (error) {
+        return await withCleanup(() => {
+          throw error;
+        }, [{ label: 'Vite startup process group', run: () => custody.close(), timeoutMs: 8000 }]);
       }
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
-    }
-  })();
+    });
+    started = startup;
+    pendingServerStartups.add(startup);
+    void startup.then(
+      () => pendingServerStartups.delete(startup),
+      () => pendingServerStartups.delete(startup),
+    );
+  }
   return started;
 }
 
@@ -444,14 +530,8 @@ function links(html: string) {
   }
   return found;
 }
-afterAll(() => {
-  fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
+afterAll(async () => {
+  await cleanupSuite();
 });
 
 test(
@@ -481,12 +561,17 @@ test(
     expect(reads.every((call) => call.method === 'GET' && call.view === 'FULL' && call.authorization === null)).toBe(
       true,
     );
+    expect(reads).toHaveLength(2);
     expect(reads.find((call) => call.path.endsWith('/members'))?.limit).toBe(pageLimit);
 
+    calls.length = 0;
     const ownerPage = await readPage(`/en/collections/${night.id}`, await alice());
     expect(ownerPage.status).toBe(200);
-    expect(main(ownerPage.html)).toContain('data-visibility="public"');
-    expect(main(ownerPage.html)).toContain('Public');
+    // Public server renders remain anonymous; curator controls arrive in the browser after hydration.
+    expect(main(ownerPage.html)).not.toContain('data-visibility');
+    const curatorServerReads = calls.filter((call) => call.path.startsWith(`/v1/collections/${night.id}`));
+    expect(curatorServerReads).toHaveLength(2);
+    expect(curatorServerReads.every((call) => call.authorization === null)).toBe(true);
     const other = await readPage(`/en/collections/${night.id}`, await blake());
     expect(other.status).toBe(200);
     expect(main(other.html)).toContain('Night shelf');
@@ -501,8 +586,7 @@ test(
     expect(quietMain).not.toContain('Night shelf');
     expect(quietMain).not.toContain('data-visibility');
     const unlistedOwner = await readPage(`/en/collections/${quiet.id}`, await alice());
-    expect(main(unlistedOwner.html)).toContain('data-visibility="unlisted"');
-    expect(main(unlistedOwner.html)).toContain('Unlisted');
+    expect(main(unlistedOwner.html)).not.toContain('data-visibility');
 
     const deleted = await readPage(`/en/collections/${orphan.id}`);
     expect(deleted.status).toBe(200);
@@ -536,6 +620,7 @@ test(
       limit: pageLimit,
       cursor,
     });
+    expect(calls.filter((call) => call.path.startsWith(`/v1/collections/${long.id}`))).toHaveLength(2);
   },
   timeout,
 );
@@ -549,9 +634,10 @@ test(
     const found = links(page.html);
     const zebra = found.find((link) => link.text === 'Zebra story');
     const apple = found.find((link) => link.text === 'Apple story');
-    expect(zebra?.href).toBe(`/en/subjects/${id(11)}`);
-    expect(apple?.href).toBe(`/en/subjects/${id(12)}`);
-    expect(main(page.html)).toContain('book');
+    expect(zebra?.href).toBe(`/en/subjects/${id(11)}/${slug('Zebra story')}`);
+    expect(apple?.href).toBe(`/en/subjects/${id(12)}/${slug('Apple story')}`);
+    // The fake serves no definitions, so the type has no name to show and its raw value stays out.
+    expect(main(page.html)).not.toContain('book');
     expect(main(page.html)).toContain('Unavailable');
     expect(page.html).not.toContain(hiddenSubjectId);
     expect(found.some((link) => link.href.includes(hiddenSubjectId) || link.text === hiddenSubjectId)).toBe(false);
@@ -616,6 +702,15 @@ test(
     expect(japanese.html).toContain('まだ公開されていません');
     expect(japanese.html).toContain('REZICSのこの部分は、まだ公開されていません。');
     expect(calls.some((call) => call.path.startsWith('/v1/collections/'))).toBe(true);
+  },
+  timeout,
+);
+
+test(
+  'suite teardown refuses a new Vite startup',
+  async () => {
+    await cleanupSuite();
+    await expect(site()).rejects.toThrow('Site startup requested after suite teardown began');
   },
   timeout,
 );

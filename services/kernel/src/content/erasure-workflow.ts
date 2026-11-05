@@ -1,3 +1,4 @@
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import { createHash } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
@@ -81,9 +82,12 @@ export async function pageAuthorErasurePosts(
   const receipt = await pageReceipt.run(client, {
     partition_no: input.partition_no,
     initiator_id: input.initiator_id,
-    operation_id: input.operation_id,
-    after_at: input.after_at,
-    after_id: input.after_id,
+    idempotency_keys: nativeReceiptKeyCandidates(
+      client,
+      'content.author-erasure.page',
+      input.initiator_id,
+      `wf:${input.operation_id}:erase:${input.after_at}:${input.after_id}`,
+    ),
     post_ids: posts.map((post) => post.post_id),
   });
   return posts.map((row) => {

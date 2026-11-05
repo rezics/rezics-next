@@ -1,0 +1,650 @@
+import { useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { flushSync } from 'react-dom';
+import { hasDocumentContent } from '@rezics/document';
+import { pickText } from '@rezics/composition';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { RichTextEditor } from '@rezics/ui/rich-text-editor';
+import { EntityPicker, type EntityPickerSearch, type EntityPickerSubject } from '@rezics/ui/entity-picker';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { coverSrc } from '../../media/cover-src';
+import { m } from '../../paraglide/messages.js';
+import { editorLabels } from '../../threads/composer';
+import { authoredFieldValue, newAuthoredField, type AuthoredField } from './authored-field';
+import { ScalarControl } from './statement-editor-view';
+import { editableScalar, type SnakInput, type StatementInput } from './statement-editor';
+import { mangaTarget, type MangaType } from './manga-profile';
+import type { StatementFeedback } from './statement-validation-presentation';
+import type { MangaReady } from './manga-profile-view';
+
+export type MangaRow = {
+  id: string;
+  statement: StatementInput;
+  label?: ReturnType<typeof pickText>;
+  original?: boolean;
+  authored?: AuthoredField;
+  targets?: Record<string, EntityPickerSubject[]>;
+  // Local control identities; never included in the native statement.
+  qualifierIds?: string[];
+};
+export function MangaInitialField({
+  row,
+  read,
+  type,
+  locale,
+  search,
+  disabled,
+  onChange,
+  onRemove,
+  feedback,
+  removalAllowed,
+}: {
+  row: MangaRow;
+  read: MangaReady;
+  type: MangaType;
+  locale: string;
+  search: EntityPickerSearch;
+  disabled: boolean;
+  onChange: (row: MangaRow) => void;
+  onRemove: () => void;
+  feedback: StatementFeedback;
+  removalAllowed?: (() => boolean) | undefined;
+}) {
+  const o = { locale: locale as never };
+  const property = read.release.properties[row.statement.property.id]!;
+  const title = pickText(property.labels, locale);
+  const invalid = (id: string) => ({
+    'aria-invalid': feedback.errors.some((error) => error.target === id) || undefined,
+    'aria-describedby':
+      feedback.errors
+        .filter((error) => error.target === id)
+        .map((error) => error.id)
+        .join(' ') || undefined,
+  });
+  const [qualifier, setQualifier] = useState('');
+  const [removingQualifier, setRemovingQualifier] = useState<string>();
+  const qualifierId = useId();
+  const section = useRef<HTMLElement>(null);
+  const qualifiers = row.statement.qualifiers ?? [];
+  const supportedQualifiers = property.qualifiers.filter(
+    (id) => read.release.properties[id]?.datatype === 'wikibase-item' || editableScalar(read.release.properties[id]),
+  );
+  const qualifierOptions = supportedQualifiers.filter((id) => !qualifiers.some((part) => part.property.id === id));
+  const qualifierAllowed = qualifierOptions.includes(qualifier);
+  useLayoutEffect(() => {
+    if (qualifier && !qualifierAllowed) setQualifier('');
+  }, [qualifier, qualifierAllowed]);
+  // Late editor emissions obey the current lock and exact row incarnation.
+  const current = useRef({ disabled, row, type, qualifier, qualifierOptions });
+  current.current = { disabled, row, type, qualifier, qualifierOptions };
+  const editable = () => !current.current.disabled && current.current.row === row;
+  const change = (next: MangaRow) => {
+    if (editable()) onChange(next);
+  };
+  const qualifierIds = qualifiers.map((_, index) => row.qualifierIds?.[index] ?? String(index));
+  const additionFocus = useRef<{ current: () => boolean; cancel: () => void } | null>(null);
+  useLayoutEffect(() => () => additionFocus.current?.cancel(), []);
+  useLayoutEffect(() => {
+    if (additionFocus.current && !additionFocus.current.current()) additionFocus.current.cancel();
+  });
+  function addQualifier(next: MangaRow, id: string, event?: MouseEvent<HTMLButtonElement>) {
+    additionFocus.current?.cancel();
+    const trigger = event?.currentTarget;
+    const scope = section.current;
+    const document = trigger?.ownerDocument;
+    const window = document?.defaultView;
+    let pending = !!(event?.detail === 0 && document?.activeElement === trigger && scope && window);
+    let frame: number | undefined;
+    const cancel = () => {
+      pending = false;
+      document?.removeEventListener('focusin', cancel);
+      document?.removeEventListener('pointerdown', cancel, true);
+      if (frame !== undefined) window?.cancelAnimationFrame(frame);
+      additionFocus.current = null;
+    };
+    if (pending) {
+      document!.addEventListener('focusin', cancel);
+      document!.addEventListener('pointerdown', cancel, true);
+    }
+    // The change adapter may refuse an otherwise current callback. Commit it before
+    // requesting orientation, and require this exact admitted row and stable part.
+    flushSync(() => {
+      change(next);
+      setQualifier('');
+    });
+    const admitted = () =>
+      pending &&
+      !current.current.disabled &&
+      current.current.type === type &&
+      current.current.row === next &&
+      current.current.row.qualifierIds?.includes(id) === true &&
+      (removalAllowed?.() ?? true) &&
+      section.current === scope &&
+      !!scope?.isConnected &&
+      !!trigger?.isConnected &&
+      !scope.closest('[hidden], [inert]') &&
+      (document!.activeElement === trigger ||
+        (trigger.matches(':disabled') && document!.activeElement === document!.body));
+    if (!admitted()) {
+      cancel();
+      return;
+    }
+    additionFocus.current = { current: admitted, cancel };
+    frame = window!.requestAnimationFrame(() => {
+      const allowed = admitted();
+      cancel();
+      if (!allowed) return;
+      const group = document!.getElementById(`${feedback.id}-qualifier-${id}`);
+      if (!group || !scope!.contains(group) || group.closest('[hidden], [inert]')) return;
+      const control = [
+        ...group.querySelectorAll<HTMLElement>('input:not([type="hidden"]), textarea, select, [role="combobox"]'),
+      ].find((item) => !item.matches(':disabled, [aria-disabled="true"]') && !item.closest('[hidden], [inert]'));
+      (control ?? group).focus();
+    });
+  }
+  const citationPart = row.statement.references?.[0]?.parts.find((part) => part.property.id === 'schema:url');
+  const citation =
+    citationPart?.value.type === 'value' && typeof citationPart.value.content === 'string'
+      ? citationPart.value.content
+      : '';
+  const authored = row.authored ?? newAuthoredField();
+  const hasValue = (value: unknown): boolean => {
+    if (typeof value === 'string') return !!value.trim();
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'object') return Object.values(value).some(hasValue);
+    return true;
+  };
+  const populated =
+    row.statement.value.type !== 'value' ||
+    (property.datatype === 'document'
+      ? hasDocumentContent(authored.document) || !!authored.language.trim() || !!authored.licence.trim()
+      : hasValue(row.statement.value.content)) ||
+    !!row.original ||
+    !!row.statement.qualifiers?.length ||
+    !!row.statement.references?.some((reference) => reference.parts.length) ||
+    !!Object.values(row.targets ?? {}).some((targets) => targets.length);
+  const update = (statement: StatementInput) => change({ ...row, statement });
+  const updateAuthored = (next: AuthoredField) =>
+    change({ ...row, authored: next, statement: { ...row.statement, value: authoredFieldValue(next) } });
+  const removeQualifier = (index: number) => {
+    if (!editable() || !section.current?.isConnected) return;
+    const next = {
+      ...row,
+      qualifierIds: qualifierIds.filter((_, at) => at !== index),
+      statement: { ...row.statement, qualifiers: qualifiers.filter((_, at) => at !== index) },
+    };
+    const propertyId = qualifiers[index]!.property.id;
+    if (
+      row.targets?.[propertyId] &&
+      row.statement.property.id !== propertyId &&
+      !next.statement.qualifiers.some((part) => part.property.id === propertyId)
+    ) {
+      next.targets = { ...row.targets };
+      delete next.targets[propertyId];
+    }
+    change(next);
+    setRemovingQualifier(undefined);
+    const retainedId = qualifierIds.find((_, at) => at !== index);
+    (
+      document.getElementById(qualifierId) ??
+      document.getElementById(`${feedback.id}-qualifier-${retainedId}-remove`) ??
+      document.getElementById(`${feedback.id}-qualifiers`)
+    )?.focus();
+  };
+  const name = (id: string) => pickText(read.release.properties[id]?.labels ?? {}, locale).text;
+  const control = (part: SnakInput, address: string, statement: (value: SnakInput['value']) => StatementInput) => {
+    const definition = read.release.properties[part.property.id];
+    return definition?.datatype === 'wikibase-item' ? (
+      <PickedTarget
+        part={part}
+        label={name(part.property.id)}
+        read={read}
+        search={search}
+        disabled={disabled}
+        picked={row.targets?.[part.property.id] ?? []}
+        mangaWork={type === 'schema:PublicationVolume' && part.property.id === 'wdt:P179'}
+        onChange={(value, items) =>
+          change({ ...row, statement: statement(value), targets: { ...row.targets, [part.property.id]: items } })
+        }
+      />
+    ) : (
+      <ScalarControl
+        part={part}
+        definition={definition}
+        read={{ release: read.release, public: { related: read.public?.related ?? {} } }}
+        locale={locale}
+        feedback={{ ...feedback, address }}
+        onChange={(value) => update(statement(value))}
+      />
+    );
+  };
+  return (
+    <section
+      ref={section}
+      id={`manga-row-${row.id}`}
+      tabIndex={-1}
+      aria-label={title.text}
+      className="min-w-0 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
+      <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
+        <ContentItemHeading level={3} className="font-sans text-lg font-semibold" lang={title.lang ?? undefined}>
+          {title.text}
+        </ContentItemHeading>
+        <fieldset
+          id={`${feedback.id}-fields`}
+          tabIndex={-1}
+          disabled={disabled}
+          data-content-item-slot="preview"
+          className="min-w-0 space-y-4 [&_label]:whitespace-normal [&_label]:text-start"
+        >
+          <div
+            id={`${feedback.id}-fact`}
+            data-manga-picker={property.datatype === 'wikibase-item' ? '' : undefined}
+            tabIndex={-1}
+            className="min-w-0 space-y-4"
+          >
+            {property.datatype === 'document' ? (
+              <>
+                <p className="text-sm text-muted-foreground">{m.authored_citation_hint({}, o)}</p>
+                <Field className="min-w-0">
+                  <FieldLabel htmlFor={`language-${row.id}`}>{m.authored_language({}, o)}</FieldLabel>
+                  <Input
+                    id={`language-${row.id}`}
+                    {...invalid(`language-${row.id}`)}
+                    value={authored.language}
+                    onChange={(event) =>
+                      updateAuthored({
+                        ...authored,
+                        language: event.target.value,
+                      })
+                    }
+                  />
+                </Field>
+                <Field className="min-w-0">
+                  <FieldLabel htmlFor={`licence-${row.id}`}>{m.authored_licence({}, o)}</FieldLabel>
+                  <Input
+                    id={`licence-${row.id}`}
+                    {...invalid(`licence-${row.id}`)}
+                    value={authored.licence}
+                    onChange={(event) =>
+                      updateAuthored({
+                        ...authored,
+                        licence: event.target.value,
+                      })
+                    }
+                  />
+                </Field>
+                <RichTextEditor
+                  label={title.text}
+                  labels={editorLabels()}
+                  lang={authored.language}
+                  value={authored.document}
+                  disabled={disabled}
+                  onChange={(document) => updateAuthored({ ...authored, document })}
+                />
+                <Field orientation="horizontal">
+                  <Checkbox
+                    id={`original-${row.id}`}
+                    {...invalid(`original-${row.id}`)}
+                    checked={row.original ?? false}
+                    onCheckedChange={(value) => change({ ...row, original: value === true })}
+                  />
+                  <FieldLabel htmlFor={`original-${row.id}`}>{m.authored_original({}, o)}</FieldLabel>
+                </Field>
+              </>
+            ) : (
+              control(row.statement, 'fact', (value) => ({
+                ...row.statement,
+                value,
+              }))
+            )}
+          </div>
+          <div id={`${feedback.id}-qualifiers`} tabIndex={-1} className="min-w-0 space-y-4">
+            {qualifiers.map((part, index) => (
+              <div
+                key={qualifierIds[index]}
+                id={`${feedback.id}-qualifier-${qualifierIds[index]}`}
+                role="group"
+                aria-label={name(part.property.id)}
+                data-manga-picker={
+                  read.release.properties[part.property.id]?.datatype === 'wikibase-item' ? '' : undefined
+                }
+                tabIndex={-1}
+                className="min-w-0 space-y-2 border-s-2 ps-3"
+              >
+                <ContentItemHeading
+                  level={4}
+                  className="font-sans text-sm font-medium"
+                  lang={pickText(read.release.properties[part.property.id]?.labels ?? {}, locale).lang ?? undefined}
+                >
+                  {name(part.property.id)}
+                </ContentItemHeading>
+                {control(part, `qualifier-${qualifierIds[index]}`, (value) => ({
+                  ...row.statement,
+                  qualifiers: row.statement.qualifiers!.map((snak, at) => (at === index ? { ...snak, value } : snak)),
+                }))}
+                <Button
+                  id={`${feedback.id}-qualifier-${qualifierIds[index]}-remove`}
+                  type="button"
+                  variant="ghost"
+                  aria-expanded={removingQualifier === qualifierIds[index]}
+                  onClick={() => {
+                    if (!editable()) return;
+                    if (part.value.type === 'value' && part.value.content === '') removeQualifier(index);
+                    else setRemovingQualifier(qualifierIds[index]);
+                  }}
+                >
+                  {m.relation_remove({}, o)}
+                </Button>
+                {removingQualifier === qualifierIds[index] && (
+                  <div
+                    role="group"
+                    aria-label={m.curation_remove_title({ template: name(part.property.id) }, o)}
+                    className="space-y-2"
+                  >
+                    <p>{m.curation_remove_title({ template: name(part.property.id) }, o)}</p>
+                    <div className="flex flex-wrap gap-3">
+                      <Button type="button" autoFocus disabled={disabled} onClick={() => removeQualifier(index)}>
+                        {m.contribution_confirm({}, o)}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={disabled}
+                        onClick={() => {
+                          if (!editable()) return;
+                          setRemovingQualifier(undefined);
+                          document.getElementById(`${feedback.id}-qualifier-${qualifierIds[index]}-remove`)?.focus();
+                        }}
+                      >
+                        {m.action_cancel({}, o)}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          {!!supportedQualifiers.length && (
+            <div className="flex min-w-0 flex-wrap items-end gap-3">
+              <Field className="min-w-0 basis-full sm:basis-48 sm:flex-1">
+                <FieldLabel htmlFor={qualifierId}>{m.correction_add_qualifier({}, o)}</FieldLabel>
+                <NativeSelect
+                  id={qualifierId}
+                  className="w-full min-w-0"
+                  aria-label={m.correction_add_qualifier({}, o)}
+                  value={qualifierAllowed ? qualifier : ''}
+                  onChange={(event) => {
+                    if (editable()) setQualifier(event.target.value);
+                  }}
+                >
+                  <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
+                  {qualifierOptions.map((id) => (
+                    <NativeSelectOption
+                      key={id}
+                      value={id}
+                      lang={pickText(read.release.properties[id]?.labels ?? {}, locale).lang ?? undefined}
+                    >
+                      {name(id)}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Button
+                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                type="button"
+                variant="outline"
+                disabled={disabled || !qualifierAllowed}
+                onClick={(event) => {
+                  if (
+                    !editable() ||
+                    !section.current?.isConnected ||
+                    current.current.qualifier !== qualifier ||
+                    !current.current.qualifierOptions.includes(qualifier)
+                  )
+                    return;
+                  const id = crypto.randomUUID();
+                  addQualifier(
+                    {
+                      ...row,
+                      qualifierIds: [...qualifierIds, id],
+                      statement: {
+                        ...row.statement,
+                        qualifiers: [
+                          ...qualifiers,
+                          { property: { id: qualifier }, value: { type: 'value', content: '' } },
+                        ],
+                      },
+                    },
+                    id,
+                    event,
+                  );
+                }}
+              >
+                {m.relation_add_qualifier({}, o)}
+              </Button>
+            </div>
+          )}
+          <Field id={`${feedback.id}-references`} tabIndex={-1} className="min-w-0">
+            <FieldLabel htmlFor={`citation-${row.id}`}>{m.relation_citation({}, o)}</FieldLabel>
+            <Input
+              type="url"
+              id={`citation-${row.id}`}
+              {...invalid(`citation-${row.id}`)}
+              value={citation}
+              onChange={(event) => {
+                const url = event.target.value;
+                const references = structuredClone(row.statement.references);
+                const reference = references[0] ?? { parts: [] };
+                const at = reference.parts.findIndex((part) => part.property.id === 'schema:url');
+                const part = {
+                  property: { id: 'schema:url' },
+                  value: { type: 'value' as const, content: url.trim() },
+                };
+                if (url.trim()) {
+                  if (at < 0) reference.parts.push(part);
+                  else
+                    reference.parts[at] = {
+                      ...reference.parts[at]!,
+                      value: part.value,
+                    };
+                } else if (at >= 0) reference.parts.splice(at, 1);
+                if (!references.length && reference.parts.length) references.push(reference);
+                if (references[0]?.parts.length === 0) references.shift();
+                update({
+                  ...row.statement,
+                  references,
+                });
+              }}
+            />
+          </Field>
+          <MangaRowRemove
+            row={row}
+            locale={locale}
+            disabled={disabled}
+            populated={populated}
+            onRemove={onRemove}
+            removalAllowed={removalAllowed}
+          />
+        </fieldset>
+      </ContentItemFrame>
+    </section>
+  );
+}
+
+function PickedTarget({
+  part,
+  label,
+  read,
+  search,
+  disabled,
+  mangaWork,
+  picked,
+  onChange,
+}: {
+  part: SnakInput;
+  label: string;
+  read: MangaReady;
+  search: EntityPickerSearch;
+  disabled: boolean;
+  mangaWork: boolean;
+  picked: EntityPickerSubject[];
+  onChange: (value: SnakInput['value'], items: EntityPickerSubject[]) => void;
+}) {
+  return (
+    <EntityPicker
+      label={label}
+      disabled={disabled}
+      value={picked}
+      src={coverSrc}
+      search={async (query, signal) =>
+        (await search(query, signal)).filter((entry) =>
+          entry.types.some(
+            (type) =>
+              mangaTarget(read.release, part.property.id, type) && (!mangaWork || type === 'schema:ComicSeries'),
+          ),
+        )
+      }
+      onValueChange={(items) => {
+        onChange({ type: 'value', content: items[0]?.id ?? '' }, items);
+      }}
+    />
+  );
+}
+
+/** Confirm one private row incarnation without consulting current public target data. */
+export function MangaRowRemove({
+  row,
+  locale,
+  disabled,
+  populated = true,
+  onRemove,
+  removalAllowed = () => true,
+}: {
+  row: MangaRow;
+  locale: string;
+  disabled: boolean;
+  populated?: boolean;
+  onRemove: () => void;
+  removalAllowed?: (() => boolean) | undefined;
+}) {
+  const o = { locale: locale as never };
+  const holder = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  const mounted = useRef(false);
+  const [choice, setChoice] = useState<{
+    row: MangaRow;
+    active: () => boolean;
+  } | null>(null);
+  const restoreFocus = useRef(false);
+  const current = useRef({ row, disabled, onRemove, removalAllowed, choice });
+  current.current = { row, disabled, onRemove, removalAllowed, choice };
+  const confirming = choice?.row === row && choice.active();
+  const editable = () =>
+    mounted.current &&
+    removalAllowed() &&
+    !current.current.disabled &&
+    current.current.row === row &&
+    current.current.removalAllowed();
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useLayoutEffect(() => {
+    if (!editable()) return;
+    if (confirming) cancel.current?.focus();
+    else if (restoreFocus.current) {
+      restoreFocus.current = false;
+      trigger.current?.focus();
+    }
+  }, [confirming, disabled]);
+  function dismiss() {
+    if (!editable() || current.current.choice !== choice) return;
+    current.current.choice = null;
+    restoreFocus.current = true;
+    setChoice(null);
+  }
+  function remove(owner: { row: MangaRow; active: () => boolean }) {
+    const section = holder.current?.closest('section');
+    if (
+      !editable() ||
+      !owner.active() ||
+      owner.row !== current.current.row ||
+      (choice && current.current.choice !== owner) ||
+      !section?.isConnected
+    )
+      return;
+    const controls = [
+      ...(section.parentElement?.querySelectorAll<HTMLElement>(
+        'button, input, select, textarea, [tabindex="0"], [contenteditable="true"]',
+      ) ?? []),
+    ];
+    const first = controls.findIndex((control) => section.contains(control));
+    const last = controls.findLastIndex((control) => section.contains(control));
+    const surviving = [...controls.slice(last + 1), ...controls.slice(0, first).reverse()];
+    current.current.choice = null;
+    flushSync(() => current.current.onRemove());
+    if (section.isConnected || !owner.active()) return;
+    surviving
+      .find(
+        (control) =>
+          control.isConnected &&
+          !control.matches(':disabled, [aria-disabled="true"], [type="hidden"]') &&
+          !control.closest('[hidden], [inert]'),
+      )
+      ?.focus();
+  }
+  const label = m.recipe_remove_field({}, o);
+  return (
+    <div ref={holder}>
+      {confirming ? (
+        <div
+          role="group"
+          aria-label={m.candidate_confirm_title({ action: label }, o)}
+          className="space-y-2"
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              event.stopPropagation();
+              dismiss();
+            }
+          }}
+        >
+          <p>{m.candidate_confirm_title({ action: label }, o)}</p>
+          <div className="flex flex-wrap gap-2">
+            <Button ref={cancel} type="button" variant="outline" disabled={disabled} onClick={dismiss}>
+              {m.candidate_cancel({}, o)}
+            </Button>
+            <Button type="button" variant="destructive" disabled={disabled} onClick={() => remove(choice)}>
+              {label}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          ref={trigger}
+          className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+          type="button"
+          variant="ghost"
+          disabled={disabled}
+          onClick={() => {
+            if (!editable()) return;
+            const owner = { row, active: current.current.removalAllowed };
+            if (populated) {
+              current.current.choice = owner;
+              setChoice(owner);
+            } else remove(owner);
+          }}
+        >
+          {label}
+        </Button>
+      )}
+    </div>
+  );
+}

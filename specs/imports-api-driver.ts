@@ -265,9 +265,9 @@ export interface ImportApiDriver {
    */
   takedown(source: Source, externalId: string, fieldGroup: string): Promise<void>;
   /**
-   * Configure the real limit with the kernel's optional authoritative clock
-   * dependency. No Date patch, request-time header or fake 429s. Commands resolve
-   * a fresh actor anchor on every attempt; kernel owns FIFO/serialization retries.
+   * Configure the real write-rate limit for the bulk importer's rate class through startup budget overrides. Windows
+   * run on database statement time, so nowMs has no effect and waits are real. No Date patch, request-time header or
+   * fake 429s. Commands resolve a fresh actor anchor on every attempt; kernel owns FIFO/serialization retries.
    */
   rateLimit(input: { requests: number; windowMs: number; nowMs: number }): Promise<void>;
   /**

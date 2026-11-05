@@ -1,0 +1,177 @@
+import { expect, test } from 'bun:test';
+import { bundledRelease } from '../src/bundled.ts';
+import { validateRelease } from '../src/index.ts';
+
+const locales = ['de', 'en', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'];
+const { types, properties } = bundledRelease;
+const creditQualifiers = ['schema:position', 'wdt:P1932', 'wdt:P3831', 'wdt:P518'];
+
+test('every bundled item property declares how it reads in both directions', () => {
+  expect(validateRelease(bundledRelease)).toEqual([]);
+  for (const property of Object.values(properties)) {
+    if (property.datatype !== 'wikibase-item') continue;
+    expect(property.relation).toBeDefined();
+    const relation = property.relation!;
+    if (relation.inverse && relation.inverse !== 'none') {
+      expect(properties[relation.inverse]).toBeUndefined();
+      expect(Object.keys(relation.inverseLabels ?? {}).sort()).toEqual(locales);
+      for (const label of Object.values(relation.inverseLabels ?? {})) expect(label.trim().length).toBeGreaterThan(0);
+    }
+    if (relation.group === 'credit') {
+      expect(property.qualifiers).toEqual(expect.arrayContaining(creditQualifiers));
+      expect(relation.order).toBe('position');
+      expect(relation.filter).toEqual(['wdt:P3831', 'wdt:P518']);
+    }
+  }
+  const canonical = {
+    'wdt:P155': ['wdt:P156', 'order', 'date'],
+    'wdt:P144': ['wdt:P4969', 'derivation', 'name'],
+    'schema:exampleOfWork': ['schema:workExample', 'derivation', 'date'],
+    'rezics:spinOffOf': ['wdt:P2512', 'derivation', 'name'],
+    'wdt:P8646': ['rezics:expansion', 'derivation', 'name'],
+    'wdt:P361': ['wdt:P527', 'membership', 'name'],
+    'schema:isPartOf': ['schema:hasPart', 'membership', 'name'],
+    'wdt:P179': ['rezics:seriesMember', 'membership', 'position'],
+    'wdt:P1433': ['rezics:publicationContains', 'membership', 'name'],
+  };
+  for (const [term, [inverse, group, order]] of Object.entries(canonical)) {
+    expect(properties[term]?.relation).toMatchObject({ inverse, group, order });
+    expect(properties[inverse!]).toBeUndefined();
+    for (const type of Object.values(types)) expect(type.properties).not.toContain(inverse);
+  }
+  for (const term of [
+    'wdt:P155',
+    'wdt:P144',
+    'schema:exampleOfWork',
+    'wdt:P361',
+    'schema:isPartOf',
+    'wdt:P179',
+    'wdt:P1433',
+  ])
+    expect(properties[term]?.relation?.acyclic).toBe(true);
+  expect(properties['wdt:P1889']?.relation).toMatchObject({ symmetric: true, group: 'world' });
+  expect(properties['schema:character']?.relation).toMatchObject({
+    group: 'appearance',
+    order: 'name',
+    filter: ['wdt:P3831', 'wdt:P518'],
+  });
+});
+
+test('every bundled type uses the published portrait cover frame', () => {
+  for (const type of Object.values(types)) expect(type.coverRatio).toBe('5:7');
+});
+
+test('a work names its representative edition for each language', () => {
+  const representative = properties['rezics:representativeEdition'];
+  expect(representative).toMatchObject({
+    datatype: 'wikibase-item',
+    multivalued: true,
+    qualifiers: ['schema:inLanguage'],
+    relation: { inverse: 'none', group: 'derivation' },
+  });
+  const editions = Object.entries(types)
+    .filter(([, type]) => type.properties.includes('schema:exampleOfWork'))
+    .map(([term]) => term)
+    .sort();
+  expect(editions).toEqual(['bf:Instance', 'rezics:AnimeRelease', 'wd:Q20631656']);
+  expect(representative?.targets).toEqual(editions);
+  expect(Object.keys(representative?.labels ?? {}).sort()).toEqual(locales);
+  for (const term of [
+    'schema:Book',
+    'schema:TVSeries',
+    'schema:Movie',
+    'schema:ComicSeries',
+    'schema:VideoGame',
+    'wd:Q689445',
+    'schema:MusicAlbum',
+  ])
+    expect(types[term]?.properties).toContain('rezics:representativeEdition');
+});
+
+test('credit properties are admitted on episodes and releases', () => {
+  const credits = Object.entries(properties).filter(([, property]) => property.relation?.group === 'credit');
+  expect(credits.map(([term]) => term)).toEqual(expect.arrayContaining(['schema:director', 'wdt:P58', 'wdt:P725']));
+  const oldRoles = [
+    'schema:publisher',
+    'schema:translator',
+    'schema:author',
+    'schema:contributor',
+    'wdt:P178',
+    'schema:director',
+    'schema:illustrator',
+    'schema:musicBy',
+    'schema:producer',
+    'schema:productionCompany',
+    'wdt:P58',
+    'wdt:P725',
+  ];
+  const releaseRoles = [
+    'marcrel:fds',
+    'schema:publisher',
+    'schema:translator',
+    'schema:author',
+    'schema:contributor',
+    'schema:director',
+    'schema:illustrator',
+    'schema:musicBy',
+    'schema:producer',
+    'schema:productionCompany',
+    'wdt:P58',
+    'wdt:P725',
+  ];
+  expect(credits.map(([term]) => term).sort()).toEqual([...oldRoles, 'marcrel:fds', 'schema:byArtist'].sort());
+  const applicability = {
+    'schema:Episode': oldRoles,
+    'bf:Instance': oldRoles,
+    'wd:Q20631656': oldRoles,
+    'rezics:AnimeRelease': releaseRoles,
+  };
+  for (const [holder, roles] of Object.entries(applicability)) {
+    expect(
+      credits
+        .filter(([term]) => types[holder]!.properties.includes(term))
+        .map(([term]) => term)
+        .sort(),
+    ).toEqual([...roles].sort());
+    for (const term of roles) expect(types[holder]?.properties).toContain(term);
+  }
+  for (const [term, property] of credits) {
+    expect(property.qualifiers).toEqual(expect.arrayContaining(creditQualifiers));
+    expect(property.relation?.order).toBe('position');
+    expect(property.relation?.filter).toEqual(['wdt:P3831', 'wdt:P518']);
+    if (term === 'wdt:P725') expect(property.qualifiers).toContain('wdt:P453');
+  }
+  for (const [holder, type] of Object.entries(types)) {
+    if (holder !== 'rezics:AnimeRelease') expect(type.properties).not.toContain('marcrel:fds');
+  }
+  expect(types['rezics:AnimeRelease']?.properties).not.toContain('wdt:P178');
+});
+
+test('story arcs are creative-work subjects held as ordered part ranges', () => {
+  expect(types['wd:Q2620972']).toMatchObject({
+    iri: 'http://www.wikidata.org/entity/Q2620972',
+    bases: ['schema:CreativeWork', 'schema:Thing'],
+    coverRatio: '5:7',
+  });
+  expect(properties['rezics:storyArc']).toMatchObject({
+    datatype: 'wikibase-item',
+    targets: ['wd:Q2620972'],
+    multivalued: true,
+    qualifiers: ['rezics:firstPart', 'rezics:lastPart', 'schema:position'],
+    relation: {
+      inverse: 'rezics:storyArcOf',
+      inverseLabels: { en: 'Story arc of' },
+      group: 'membership',
+      order: 'position',
+      acyclic: true,
+    },
+  });
+  for (const type of Object.values(types)) {
+    if (type.bases.includes('schema:CreativeWork')) expect(type.properties).toContain('rezics:storyArc');
+  }
+  for (const term of ['rezics:firstPart', 'rezics:lastPart']) {
+    expect(properties[term]?.datatype).toBe('string');
+    expect(properties[term]?.value).toEqual({ type: 'string', minLength: 1, maxLength: 1500 });
+  }
+  expect(properties['wdt:P518']).toMatchObject({ datatype: 'wikibase-item', targets: ['wd:Q2620972'] });
+});

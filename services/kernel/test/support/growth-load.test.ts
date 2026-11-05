@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from './growth.ts';
+import { checkGrowth, openGrowthDatabase, settle, type GrowthDatabase } from './growth.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -8,7 +8,7 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const schema = 'growth_load_test';
 const table = `${schema}.rows`;
 const operation = `SELECT sum(id) FROM ${table}`;
-const delayed = `SELECT pg_sleep(0.15), sum(id) FROM ${table}`;
+const delayed = `SELECT pg_sleep(0.5), sum(id) FROM ${table}`;
 
 let db: GrowthDatabase | undefined;
 let client: PoolClient | undefined;
@@ -21,8 +21,10 @@ beforeAll(async () => {
   await db.admin.query(`CREATE SCHEMA ${schema}`);
   await db.admin.query(`CREATE TABLE ${table} (id integer NOT NULL) WITH (autovacuum_enabled = false)`);
   await db.admin.query(`INSERT INTO ${table} SELECT generate_series(1, 16)`);
-  await db.admin.query('VACUUM (ANALYZE)');
+  await settle(db, { analyze: true });
   client = await db.pool.connect();
+  // Keep the warmup plan enabled so its notice can arrive during a later capture.
+  await client.query('SET auto_explain.log_min_duration = 0');
 });
 
 afterAll(async () => {
@@ -36,6 +38,8 @@ afterAll(async () => {
 function scheduleDelayedQuery(): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(() => {
+      // Dev disables auto_explain between captures; re-enable it before this query starts.
+      void client!.query('SET auto_explain.log_min_duration = 0');
       const query = client!.query(delayed);
       delayedQueries.push(query);
       void query.catch(() => {});
@@ -77,7 +81,8 @@ test('checkGrowth reports the same rows for an operation whose surrounding timin
     },
     async operation(_database, scale, repetition) {
       await client!.query(operation);
-      if (scale === 1 && repetition === 1) scheduleDelayedQuery();
+      // Queue delays before the next two runs so the lower median exposes a misattributed plan.
+      if (scale === 1 && repetition < 3) scheduleDelayedQuery();
     },
   });
 

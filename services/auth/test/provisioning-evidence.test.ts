@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { verifyPassword } from 'better-auth/crypto';
@@ -56,7 +57,10 @@ beforeAll(async () => {
     signing: { activeKid: key.kid, privateKeys: [key] },
     // This Auth-only trust fixture represents the pending Access boundary. It
     // proves native Auth commits, not the real pending receipt or lifecycle command.
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       readAccount: async (id) => accounts.get(id) ?? null,
       async authorizeProvisioning(reference) {
         authorizeHook?.();
@@ -64,7 +68,7 @@ beforeAll(async () => {
         if (!approval) throw new Error('Pending authorization unavailable');
         return structuredClone(approval);
       },
-    },
+    }),
   };
   service = await Auth.createAuthService(options);
 }, 60000);

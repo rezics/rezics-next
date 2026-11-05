@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { StripeUnavailableError } from '../../src/commerce/model.ts';
 import { createCommerceWork } from '../../src/commerce/work.ts';
 import { createCommerceWork as createEnqueue } from '../../src/commerce/enqueue.ts';
 import { orderExpiryWorkflowId } from '../../src/commerce/work-contract.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { routeOf, partitionOf } from '../../src/route/route.ts';
+import { refreshUserFixture } from './support/refresh-user-fixture.ts';
 import { until, workFixture } from './support/work-fixture.ts';
 
 setDefaultTimeout(30_000);
@@ -26,10 +28,18 @@ test('createCommerceWork returns the commerce module and keeps exactly the ADR-0
   });
   expect(module.name).toBe('commerce');
   expect(typeof module.register).toBe('function');
-  expect(Object.keys(WORK_QUEUES)).toEqual(['governance', 'effects', 'workflows', 'delivery', 'import', 'maintenance']);
+  expect(Object.keys(WORK_QUEUES)).toEqual([
+    'governance',
+    'effects',
+    'locator-effects',
+    'workflows',
+    'delivery',
+    'import',
+    'maintenance',
+  ]);
 });
 
-test('a verified paid event delivered twice runs one unpartitioned workflow and grants once in the buyer partition', async () => {
+test('a verified paid event delivered twice runs one event parent and one Session-partitioned refresh and grants once in the buyer partition', async () => {
   const { order, session } = await fixture.checkout();
   fixture.transport.fake.pay(session.id);
   const event = await fixture.deliver('checkout.session.completed', session.id);
@@ -51,13 +61,15 @@ test('a verified paid event delivered twice runs one unpartitioned workflow and 
     'commerce.checkoutSync',
     'DBOS.getResult',
   ]);
-  expect(await fixture.client.getWorkflow(checkoutId)).toMatchObject({ status: 'SUCCESS' });
+  expect(await fixture.client.getWorkflow(checkoutId)).toMatchObject({
+    status: 'SUCCESS',
+    queueName: 'effects',
+    queuePartitionKey: expect.stringContaining(session.id),
+  });
   const checkoutSteps = await fixture.client.listWorkflowSteps(checkoutId);
-  expect(checkoutSteps?.map((step) => step.name)).toEqual([
-    'commerce.clock',
-    'commerce.readCheckout',
-    'commerce.applyCheckout',
-  ]);
+  expect(checkoutSteps).toHaveLength(1);
+  expect(checkoutSteps?.map((step) => step.name)).not.toContain('commerce.readCheckout');
+  expect(checkoutSteps?.map((step) => step.name)).not.toContain('commerce.clock');
   const receipts = (
     await fixture.pool.query(
       'SELECT idempotency_key AS receipt_key, partition_no FROM core.receipt WHERE command_kind=$1 AND idempotency_key=$2',
@@ -140,34 +152,54 @@ test('a refund arriving before completed never grants, even when completed is de
   expect(await fixture.events(order.id, 'entitlement.granted')).toHaveLength(0);
 });
 
-test('concurrent session workflows converge when an older paid response arrives after the final refunded state', async () => {
+test('serialized Session workflows converge when payment is followed by the final refunded state', async () => {
   const { order, session } = await fixture.checkout();
   fixture.transport.fake.pay(session.id);
   const delay = fixture.transport.delayRead();
   const first = await fixture.deliver('checkout.session.completed', session.id);
+  let later: Awaited<ReturnType<typeof fixture.deliver>> | undefined;
   try {
     await delay.captured;
     const refund = fixture.transport.fake.refund(session.id, { amount: 1200 });
-    await fixture.finish((await fixture.deliver('refund.created', refund)).id);
+    later = await fixture.deliver('refund.created', refund);
+    const laterId = `checkout:${session.id}:${later.ref.eventId}`;
+    await until(
+      () => fixture.client.getWorkflow(laterId),
+      (row) => row !== undefined,
+    );
+    expect(await fixture.client.getWorkflow(laterId)).toMatchObject({ status: 'ENQUEUED', queueName: 'effects' });
     expect(await fixture.entitlements(order.id)).toHaveLength(0);
+    delay.release();
+    await fixture.finish(later.id);
   } finally {
     delay.release();
+    await fixture.finish(first.id);
+    if (later) await fixture.finish(later.id);
   }
   await fixture.finish(first.id);
   expect(await fixture.entitlements(order.id)).toHaveLength(0);
   expect(await fixture.events(order.id, 'entitlement.granted')).toHaveLength(0);
   expect(
-    fixture.transport.fake.requests.filter((request) => request.path === `/v1/checkout/sessions/${session.id}`),
+    fixture.transport.fake.requests.filter(
+      (request) =>
+        request.path === `/v1/checkout/sessions/${session.id}` &&
+        (request.params.has('expand[0]') || request.params.has('expand[]')),
+    ),
   ).toHaveLength(2);
 });
 
-test('Stripe unavailability retries the read step; a paid-order mismatch fails visibly without retrying it', async () => {
+test('Stripe unavailability retries the provider attempt; a paid-order mismatch fails visibly without retrying it', async () => {
   const { order, session } = await fixture.checkout();
   fixture.transport.fake.pay(session.id);
   const before = fixture.transport.reads;
+  const servedBefore = fixture.transport.fake.requests.filter(
+    (r) => r.path === `/v1/checkout/sessions/${session.id}`,
+  ).length;
   fixture.transport.failRead();
   await fixture.finish((await fixture.deliver('checkout.session.completed', session.id)).id);
-  expect(fixture.transport.reads - before).toBe(2);
+  const served = fixture.transport.fake.requests.filter((r) => r.path === `/v1/checkout/sessions/${session.id}`);
+  expect(fixture.transport.reads - before).toBe(served.length - servedBefore + 1);
+  expect(served.filter((r) => r.params.has('expand[0]') || r.params.has('expand[]'))).toHaveLength(1);
   fixture.transport.fake.sessions.get(session.id)!.metadata = { order_id: 'another-order' };
   const mismatch = await fixture.deliver('checkout.session.completed', session.id);
   await expect(fixture.finish(mismatch.id)).rejects.toThrow();
@@ -175,34 +207,36 @@ test('Stripe unavailability retries the read step; a paid-order mismatch fails v
   expect(await fixture.entitlements(order.id)).toHaveLength(1);
 });
 
-test('a worker killed between a durable read and apply recovers that read and grants exactly once', async () => {
-  const { order, session } = await fixture.checkout();
-  fixture.transport.fake.pay(session.id);
-  const lock = await fixture.pool.connect();
-  await lock.query('BEGIN');
-  await lock.query('SELECT order_id FROM commerce.purchase_order WHERE route=$1 AND order_id=$2 FOR UPDATE', [
-    routeOf(order.id),
-    order.id,
-  ]);
-  const before = fixture.transport.reads;
-  const event = await fixture.deliver('checkout.session.completed', session.id);
-  const checkoutId = `checkout:${session.id}:${event.ref.eventId}`;
+test('a worker killed after a full provider read recovers with a fresh read and grants exactly once', async () => {
+  await fixture.stop();
+  const native = await refreshUserFixture(fixture.transport.fake);
   try {
-    await until(
-      () => fixture.client.listWorkflowSteps(checkoutId),
-      (steps) => !!steps?.some((step) => step.name === 'commerce.readCheckout'),
-    );
-    await fixture.stop();
+    await native.start();
+    const { order, session } = await native.checkout();
+    native.fake.pay(session);
+    const event = await native.event('checkout.session.completed', session);
+    const hold = await native.arm(event.child, 'read');
+    await event.submit();
+    const captured = await hold.captured();
+    expect((await native.stop())?.pid).toBe(captured.pid);
+    expect(await native.receipts(event.child)).toHaveLength(0);
+    await native.start();
+    await native.finish(event.id);
+    expect(native.reads(event.child)).toHaveLength(2);
+    const response = await native.request(`/v1/orders/${order.id}`);
+    expect(response.status).toBe(200);
+    expect((await response.json()).order).toMatchObject({ settlement: 'paid', entitlementId: expect.any(String) });
+    const listed = await native.request('/v1/entitlements');
+    expect(listed.status).toBe(200);
+    expect(
+      (await listed.json()).entitlements.filter((row: { orderId: string }) => row.orderId === order.id),
+    ).toMatchObject([{ active: true }]);
+    expect(await native.events(order.id, 'entitlement.granted')).toHaveLength(1);
+    expect(await native.receipts(event.child)).toHaveLength(1);
   } finally {
-    await lock.query('ROLLBACK');
-    lock.release();
+    await native.close();
+    await fixture.start();
   }
-  expect(await fixture.entitlements(order.id)).toHaveLength(0);
-  await fixture.start();
-  await fixture.finish(event.id);
-  expect(fixture.transport.reads - before).toBe(1);
-  expect(await fixture.entitlements(order.id)).toHaveLength(1);
-  expect(await fixture.events(order.id, 'entitlement.granted')).toHaveLength(1);
 });
 
 for (const lost of [false, true])
@@ -253,7 +287,11 @@ for (const lost of [false, true])
     expect(await fixture.state(order.id)).toMatchObject({ settlement: 'paid' });
     expect(await fixture.entitlements(order.id)).toHaveLength(1);
     expect(
-      fixture.transport.fake.requests.filter((request) => request.path === `/v1/checkout/sessions/${saved}`),
+      fixture.transport.fake.requests.filter(
+        (request) =>
+          request.path === `/v1/checkout/sessions/${saved}` &&
+          (request.params.has('expand[0]') || request.params.has('expand[]')),
+      ),
     ).toHaveLength(2);
     await fixture.stop();
     await fixture.start();
@@ -277,7 +315,11 @@ test('reconciliation sleeps durably through expiry and repairs a missed expired 
   expect(await fixture.state(order.id)).toMatchObject({ settlement: 'failed' });
   expect(await fixture.entitlements(order.id)).toHaveLength(0);
   expect(
-    fixture.transport.fake.requests.filter((request) => request.path === `/v1/checkout/sessions/${session.id}`),
+    fixture.transport.fake.requests.filter(
+      (request) =>
+        request.path === `/v1/checkout/sessions/${session.id}` &&
+        (request.params.has('expand[0]') || request.params.has('expand[]')),
+    ),
   ).toHaveLength(2);
   await fixture.stop();
   await fixture.start();
@@ -337,4 +379,104 @@ test('a session outside commerce and a PaymentIntent without a session write not
     ).rows,
   ).toEqual(before.rows);
   expect((await fixture.client.listWorkflowSteps(id))?.map((step) => step.name)).toEqual(['commerce.resolveCheckout']);
+});
+
+test('lost HTTP creation recovers through a restarted durable worker with the identical Session request', async () => {
+  const key = Bun.randomUUIDv7();
+  fixture.transport.fake.nextCreateFault = 'lost';
+  await expect(fixture.checkoutRequest(key)).rejects.toBeInstanceOf(StripeUnavailableError);
+  const order = await fixture.orderForRequest(key);
+  const first = fixture.transport.fake.requests.find((r) => r.params.get('client_reference_id') === order.id)!;
+  const session = [...fixture.transport.fake.sessions.values()].find((s) => s.client_reference_id === order.id)!;
+  await fixture.stop();
+  try {
+    await fixture.start(0, { successUrl: 'https://changed.test/success', cancelUrl: 'https://changed.test/cancel' });
+    const id = await fixture.schedule(order.id);
+    await fixture.client.setWorkflowDelay(id, { delayUntilEpochMS: Date.now() });
+    await fixture.finish(id);
+    const calls = fixture.transport.fake.requests.filter((r) => r.params.get('client_reference_id') === order.id);
+    expect(calls).toHaveLength(2);
+    expect(calls.map((r) => r.rawParams)).toEqual([first.rawParams, first.rawParams]);
+    expect(calls.every((r) => r.headers.get('idempotency-key') === `order:${order.id}`)).toBe(true);
+    expect((await fixture.commands.readOrderForAccount(fixture.buyer, order.id))?.checkoutSessionId).toBe(session.id);
+    expect(
+      [...fixture.transport.fake.sessions.values()].filter((s) => s.client_reference_id === order.id),
+    ).toHaveLength(1);
+  } finally {
+    await fixture.stop();
+    await fixture.start();
+  }
+});
+
+test('Expired uncertain intent makes no new provider create and remains unknown rather than proving no prior Session', async () => {
+  const key = Bun.randomUUIDv7();
+  fixture.transport.fake.nextCreateFault = 'lost';
+  await expect(fixture.checkoutRequest(key)).rejects.toBeInstanceOf(StripeUnavailableError);
+  const order = await fixture.orderForRequest(key);
+  const first = fixture.transport.fake.requests.find((r) => r.params.get('client_reference_id') === order.id)!;
+  const attempt = (
+    await fixture.pool.query('SELECT * FROM commerce.checkout_creation_attempt WHERE route=$1 AND order_id=$2', [
+      routeOf(order.id),
+      order.id,
+    ])
+  ).rows;
+  await fixture.stop();
+  try {
+    await fixture.start(25 * 60 * 60 * 1000);
+    const id = `expired-creation:${order.id}`;
+    const handle = await fixture.client.enqueue(
+      { workflowName: 'commerce.reconcileOrder', queueName: 'workflows', workflowID: id },
+      order.id,
+    );
+    await expect(handle.getResult()).rejects.toThrow();
+    expect((await fixture.client.getWorkflow(id))?.status).toBe('ERROR');
+    expect(await fixture.state(order.id)).toMatchObject({ settlement: 'unknown' });
+    const calls = fixture.transport.fake.requests.filter((r) => r.params.get('client_reference_id') === order.id);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.rawParams).toBe(first.rawParams);
+    expect(
+      [...fixture.transport.fake.sessions.values()].filter((s) => s.client_reference_id === order.id),
+    ).toHaveLength(1);
+    expect(
+      (
+        await fixture.pool.query('SELECT * FROM commerce.checkout_creation_attempt WHERE route=$1 AND order_id=$2', [
+          routeOf(order.id),
+          order.id,
+        ])
+      ).rows,
+    ).toEqual(attempt);
+    expect(await fixture.entitlements(order.id)).toHaveLength(0);
+  } finally {
+    await fixture.stop();
+    await fixture.start();
+  }
+});
+
+test('a never-started order outside captured creation validity fails without renewing terms', async () => {
+  const order = await fixture.order();
+  await fixture.stop();
+  try {
+    await fixture.start(31 * 60 * 1000);
+    const id = `unstarted-creation:${order.id}`;
+    const handle = await fixture.client.enqueue(
+      { workflowName: 'commerce.reconcileOrder', queueName: 'workflows', workflowID: id },
+      order.id,
+    );
+    await handle.getResult();
+    expect(await fixture.state(order.id)).toMatchObject({ settlement: 'failed' });
+    expect(
+      fixture.transport.fake.requests.filter((r) => r.params.get('client_reference_id') === order.id),
+    ).toHaveLength(0);
+    expect(
+      (
+        await fixture.pool.query('SELECT * FROM commerce.checkout_creation_attempt WHERE route=$1 AND order_id=$2', [
+          routeOf(order.id),
+          order.id,
+        ])
+      ).rows,
+    ).toHaveLength(0);
+  } finally {
+    await fixture.stop();
+    await fixture.start();
+  }
 });

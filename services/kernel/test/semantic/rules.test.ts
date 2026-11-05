@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { fromPlainText } from '@rezics/document';
 import { valueSchema, type Release } from '@rezics/definitions';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import type { Violation } from '../../src/semantic/item.ts';
@@ -91,8 +92,9 @@ test('value contents are checked by the value schemas of the release', () => {
   expect(violations(pages({ amount: '+120', unit: MINUTE }))).toEqual([
     { pointer: '/statements/schema:numberOfPages/0/value/content/unit', code: 'invalid_format' },
   ]);
-  expect(violations(pages({ amount: '+120', unit: '1', upperBound: '+121' }))).toEqual([
-    { pointer: '/statements/schema:numberOfPages/0/value/content/upperBound', code: 'unknown_field' },
+  expect(violations(pages({ amount: '+120', unit: '1', upperBound: '+121' }))).toEqual([]);
+  expect(violations(pages({ amount: '+120', unit: '1', upperBound: '+119' }))).toEqual([
+    { pointer: '/statements/schema:numberOfPages/0/value/content/upperBound', code: 'out_of_range' },
   ]);
   expect(violations(edition({ 'schema:url': [snak('schema:url', 'ftp://example.org/kokoro')] }))).toEqual([
     { pointer: '/statements/schema:url/0/value/content', code: 'invalid_format' },
@@ -218,27 +220,43 @@ test('item values are collected with their target types for the caller to check'
   ]);
 });
 
-test('document and media values await content hooks, including nested snaks', () => {
+test('authored documents are accepted and media stays unsupported, including nested snaks', () => {
   for (const property of ['schema:abstract', 'schema:image']) {
-    // Rejection precedes content validation, including for malformed values.
+    // Media rejection still precedes value validation; authored values require an envelope.
     for (const content of [null, 'not a snapshot or media id', KOKORO])
       expect(violations(book({ [property]: [snak(property, content)] }))).toEqual([
-        { pointer: `/statements/${property}/0/value/content`, code: 'unsupported' },
+        {
+          pointer: `/statements/${property}/0/value/content`,
+          code: property === 'schema:abstract' ? 'invalid_type' : 'unsupported',
+        },
       ]);
     expect(violations(book({ [property]: [{ property: { id: property }, value: { type: 'somevalue' } }] }))).toEqual(
       [],
+    );
+    const content =
+      property === 'schema:abstract'
+        ? { document: fromPlainText('An editor summary.'), licence: 'CC-BY-4.0', language: 'en' }
+        : null;
+    expect(violations(book({ [property]: [snak(property, content)] }))).toEqual(
+      property === 'schema:abstract'
+        ? []
+        : [{ pointer: `/statements/${property}/0/value/content`, code: 'unsupported' }],
     );
     expect(
       violations(
         book({
           'schema:author': [
             snak('schema:author', SOSEKI, {
-              references: [{ parts: [snak(property, null)] }],
+              references: [{ parts: [snak(property, content)] }],
             }),
           ],
         }),
       ),
-    ).toEqual([{ pointer: '/statements/schema:author/0/references/0/parts/0/value/content', code: 'unsupported' }]);
+    ).toEqual(
+      property === 'schema:abstract'
+        ? []
+        : [{ pointer: '/statements/schema:author/0/references/0/parts/0/value/content', code: 'unsupported' }],
+    );
     const release = structuredClone(bundledRelease);
     release.properties['schema:author']!.qualifiers.push(property);
     expect(
@@ -246,12 +264,16 @@ test('document and media values await content hooks, including nested snaks', ()
         book({
           'schema:author': [
             snak('schema:author', SOSEKI, {
-              qualifiers: [snak(property, null)],
+              qualifiers: [snak(property, content)],
             }),
           ],
         }),
         release,
       ).violations,
-    ).toEqual([{ pointer: '/statements/schema:author/0/qualifiers/0/value/content', code: 'unsupported' }]);
+    ).toEqual(
+      property === 'schema:abstract'
+        ? []
+        : [{ pointer: '/statements/schema:author/0/qualifiers/0/value/content', code: 'unsupported' }],
+    );
   }
 });

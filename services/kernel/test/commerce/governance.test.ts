@@ -9,6 +9,7 @@ import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const root = new URL('../../../../', import.meta.url).pathname;
@@ -109,7 +110,7 @@ beforeAll(async () => {
     audience,
     secret: 'commerce-governance-test-secret-at-least-thirty-two-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(pool, routeOf(id)!, id);
         return (
@@ -126,7 +127,7 @@ beforeAll(async () => {
         if (!approvals.delete(reference)) throw new Error('Unknown fixture provisioning reference');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'commerce-test', firstParty: true, scopes: actions });
   for (const id of accounts) {

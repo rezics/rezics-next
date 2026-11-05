@@ -1,0 +1,17 @@
+types:
+  schema:MusicVenue: 'music venue'
+  schema:MusicEvent: 'music event'
+  wd:Q34379: 'musical instrument'
+
+properties:
+  schema:performer: 'performer'
+  wdt:P1303: 'instrument used'
+
+typeDescriptions:
+  schema:MusicVenue: 'A specific place used for music performances, separate from the music event held there.'
+  schema:MusicEvent: 'An identified music event with its own time and place, distinct from a performance or venue.'
+  wd:Q34379: 'A musical instrument identity, not a particular instrument instance or the person who uses it.'
+
+propertyDescriptions:
+  schema:performer: 'A person or organization credited as performing at this music event; the credit and its references belong to this exact event statement.'
+  wdt:P1303: 'The musical instrument used by the credited performer in this exact statement; it does not make the instrument part of the performer identity.'

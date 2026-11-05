@@ -2,14 +2,8 @@ import { kernelClient } from '../kernel/client';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
-import type {
-  LibraryEntryState,
-  SubjectLibraryMutation,
-  SubjectLibraryMutationResponse,
-  SubjectSlotEntry,
-} from './subject-slot';
-
-const entryStates = new Set<LibraryEntryState>(['planned', 'in_progress', 'completed', 'paused', 'dropped']);
+import { changePersonalLibraryEntry, libraryEntryStateWrite, removePersonalLibraryEntry } from './entries-read';
+import type { SubjectLibraryMutation, SubjectLibraryMutationResponse, SubjectSlotEntry } from './subject-slot';
 
 function problemCode(value: unknown): string | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
@@ -24,46 +18,74 @@ export async function applySubjectLibraryMutation(
   input: SubjectLibraryMutation,
 ): Promise<SubjectLibraryMutationResponse> {
   try {
-    await prepareSession(request, sessionEnv);
+    if (input.intent === 'entry') {
+      const client = kernelClient();
+      if (input.action === 'clear') {
+        if (!Number.isSafeInteger(input.revision) || !input.revision || input.revision < 1)
+          return { result: 'unavailable' };
+        const removed = await removePersonalLibraryEntry(client, request, sessionEnv, {
+          subjectId: input.subjectId,
+          ...(input.expectedReader === undefined ? {} : { expectedReader: input.expectedReader }),
+          ...(input.expectedCredential === undefined ? {} : { expectedCredential: input.expectedCredential }),
+          revision: input.revision,
+          ...(input.incarnationId === undefined ? {} : { incarnationId: input.incarnationId }),
+          idempotencyKey: input.idempotencyKey,
+        });
+        if (removed.ok) return { result: 'cleared', entry: null, ...(removed.undo ? { undo: removed.undo } : {}) };
+        if (removed.reason === 'conflict')
+          return {
+            result: 'conflict',
+            entry: {
+              subjectId: removed.entry.subjectId,
+              state: removed.entry.state,
+              revision: removed.entry.revision,
+              ...(removed.entry.incarnationId === undefined ? {} : { incarnationId: removed.entry.incarnationId }),
+            },
+          };
+        return { result: removed.reason === 'closed' ? 'closed' : 'unavailable' };
+      }
+      if (!input.state || libraryEntryStateWrite(input.state) === undefined) return { result: 'unavailable' };
+      const saved = await changePersonalLibraryEntry(client, request, sessionEnv, {
+        subjectId: input.subjectId,
+        ...(input.expectedReader === undefined ? {} : { expectedReader: input.expectedReader }),
+        ...(input.expectedCredential === undefined ? {} : { expectedCredential: input.expectedCredential }),
+        state: input.state,
+        ...(input.revision === undefined ? {} : { revision: input.revision }),
+        ...(input.incarnationId === undefined ? {} : { incarnationId: input.incarnationId }),
+        idempotencyKey: input.idempotencyKey,
+      });
+      if (saved.ok && saved.entry) return { result: 'saved', entry: saved.entry as SubjectSlotEntry };
+      if (saved.ok) return { result: 'unavailable' };
+      if (saved.reason === 'conflict')
+        return {
+          result: 'conflict',
+          entry: {
+            subjectId: saved.entry.subjectId,
+            state: saved.entry.state,
+            revision: saved.entry.revision,
+            ...(saved.entry.incarnationId === undefined ? {} : { incarnationId: saved.entry.incarnationId }),
+          },
+        };
+      if (saved.reason === 'unsupported_library_profile') return { result: 'unsupported_library_profile' };
+      return { result: saved.reason === 'closed' ? 'closed' : 'unavailable' };
+    }
+    if (await prepareSession(request, sessionEnv)) return { result: 'unavailable' };
     const authorization = viewerCredential(request);
     if (!authorization) return { result: 'unavailable' };
     const client = kernelClient();
     const headers = { authorization, 'idempotency-key': input.idempotencyKey };
-    if (input.intent === 'entry') {
-      if (input.action === 'clear') {
-        if (!Number.isSafeInteger(input.revision) || !input.revision || input.revision < 1)
-          return { result: 'unavailable' };
-        const removed = await client
-          .libraryEntries({ subjectId: input.subjectId })
-          .delete({}, { query: { revision: input.revision }, headers: headers as never });
-        if (removed.error) {
-          if (isPlatformClosedProblem(removed.status, removed.error.value)) return { result: 'closed' };
-          return {
-            result: removed.status === 409 && problemCode(removed.error) === 'conflict' ? 'conflict' : 'unavailable',
-          };
-        }
-        return { result: 'cleared', entry: null };
-      }
-      if (!input.state || !entryStates.has(input.state)) return { result: 'unavailable' };
-      const saved = await client
-        .libraryEntries({ subjectId: input.subjectId })
-        .put(
-          { state: input.state, ...(input.revision === undefined ? {} : { revision: input.revision }) },
-          { headers: headers as never },
-        );
-      if (saved.error) {
-        if (isPlatformClosedProblem(saved.status, saved.error.value)) return { result: 'closed' };
-        return { result: saved.status === 409 && problemCode(saved.error) === 'conflict' ? 'conflict' : 'unavailable' };
-      }
-      return { result: 'saved', entry: saved.data.libraryEntry as SubjectSlotEntry };
-    }
     if (!input.collectionId) return { result: 'unavailable' };
     const added = await client
       .collections({ collectionId: input.collectionId })
-      .members.post({ subjectId: input.subjectId }, { headers: headers as never });
+      .members.post(
+        { subjectId: input.subjectId },
+        { headers: headers as never, fetch: { cache: 'no-store', redirect: 'manual' } },
+      );
     if (added.error) {
       if (isPlatformClosedProblem(added.status, added.error.value)) return { result: 'closed' };
       if (added.status === 409 && problemCode(added.error) === 'collection_full') return { result: 'collection-full' };
+      if (added.status === 409 && problemCode(added.error) === 'dynamic_membership_immutable')
+        return { result: 'dynamic' };
       return { result: 'unavailable' };
     }
     return { result: 'added' };

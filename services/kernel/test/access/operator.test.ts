@@ -1,3 +1,4 @@
+import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { createPool, withConnection } from '../../src/database/pool.ts';
@@ -5,6 +6,7 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/permission.ts';
 import { AccessUnavailableError } from '../../src/access/index.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { createOperatorCommands, OperatorDeniedError } from '../../src/access/operator.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
@@ -18,7 +20,7 @@ const actions: ActionCatalogue = new Map([
   ['account:manage', { anonymous: false }],
   ['subject:read', { anonymous: false }],
 ]);
-const access = createAccess({ actions, accountEvidence: (_actor, context) => context.account });
+const access = admittedAccess({ actions });
 const operators = createOperatorCommands({
   pool,
   access,
@@ -41,18 +43,16 @@ afterAll(() => pool.end());
 let sequence = 0;
 const key = () => `operator-command-${++sequence}`;
 const row = (id: string) => withConnection(pool, (client) => readAccount(client, routeOf(id)!, id));
-const ctx = async (id: string, scopes = [...actions.keys()]) => ({
-  actor: {
-    kind: 'account',
-    accountId: id,
-    clientId: 'verified-client',
-    scopes,
-    requestedBy: null,
-    authnEpoch: 1,
-  } as AccountActor,
-  account: await row(id),
-  deadline: Date.now() + 3000,
-});
+const ctx = async (id: string, scopes = [...actions.keys()], clientId = 'verified-client') => {
+  const claims = { accountId: id, clientId, scopes, requestedBy: null, authnEpoch: 1 };
+  let actor: AccountActor;
+  try {
+    actor = await authenticateAccount(access, { pool, deadline: Date.now() + 290_000 }, claims);
+  } catch {
+    actor = { kind: 'account', ...claims };
+  }
+  return { actor, account: await row(id), deadline: Date.now() + 3000 };
+};
 async function person() {
   const registrationKey = key();
   const accountId = internal.registrationTarget(registrationKey);
@@ -198,11 +198,7 @@ test('only eligible operators with management authority can approve an automated
   for (const state of ['suspended', 'deleted']) {
     // These lifecycle fixtures have no outstanding operator or owner holds.
     const other = await person();
-    await pool.query('UPDATE access.account SET state=$3 WHERE route=$1 AND account_id=$2', [
-      routeOf(other),
-      other,
-      state,
-    ]);
+    await setFixtureAccountState(pool, other, state);
     await grant(human, other);
     await deny(approval(other, human, subjectId));
     await revoke(human, other);
@@ -525,10 +521,7 @@ test('unknown actions, missing evidence and delayed preparation fail closed thro
   expect(prepares).toBe(1);
   const original = await operators.authorizeOpening(await ctx(human), input);
   await expect(
-    operators.authorizeOpening(
-      { ...(await ctx(human)), actor: { ...(await ctx(human)).actor, clientId: 'changed-client' } },
-      input,
-    ),
+    operators.authorizeOpening(await ctx(human, [...actions.keys()], 'changed-client'), input),
   ).rejects.toBeInstanceOf(IdempotencyConflictError);
   expect(original.value.receiptId.length).toBeGreaterThan(0);
 });

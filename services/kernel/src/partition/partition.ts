@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import read from './read.sql';
+import readBatch from './read-batch.sql';
 
 export type WriteState = 'active' | 'fenced' | 'moved';
 
@@ -25,4 +26,21 @@ export async function readPartition(client: Queryable, partitionNo: number): Pro
     epoch: row.epoch,
     position: BigInt(row.position),
   };
+}
+
+export async function readPartitions(
+  client: Queryable,
+  partitionNos: readonly number[],
+): Promise<readonly Partition[]> {
+  const partitions = [...new Set(partitionNos)].sort((a, b) => a - b);
+  if (partitions.length === 0) return [];
+  const rows = await readBatch.run(client, { partitions });
+  return rows.map((row) => ({
+    partitionNo: row.partitionNo,
+    node: row.node,
+    writeState: row.writeState,
+    movedTo: row.movedTo,
+    epoch: row.epoch,
+    position: BigInt(row.position),
+  }));
 }

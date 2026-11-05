@@ -1,0 +1,39 @@
+{
+  "status": 200,
+  "items": [
+    {
+      "id": "01a1a000-0000-7000-8000-000000000011",
+      "realmId": "01a1a000-0000-7000-8000-000000000002",
+      "route": 1,
+      "visibility": "published",
+      "securityRevision": "1",
+      "createdAt": "2026-10-26T18:22:28.427Z",
+      "title": "Reading room",
+      "purpose": "discussion",
+      "availability": "available"
+    },
+    {
+      "id": "01a1a000-0000-7000-8000-000000000012",
+      "realmId": "01a1a000-0000-7000-8000-000000000002",
+      "route": 1,
+      "visibility": "published",
+      "securityRevision": "1",
+      "createdAt": "2026-10-26T18:22:28.427Z",
+      "title": "Monthly picks",
+      "purpose": "discussion",
+      "availability": "available"
+    },
+    {
+      "id": "01a1a000-0000-7000-8000-000000000013",
+      "realmId": "01a1a000-0000-7000-8000-000000000002",
+      "route": 1,
+      "visibility": "published",
+      "securityRevision": "1",
+      "createdAt": "2026-10-26T18:22:28.427Z",
+      "title": "Reviews and second thoughts",
+      "purpose": "reviews",
+      "availability": "available"
+    }
+  ],
+  "next": null
+}

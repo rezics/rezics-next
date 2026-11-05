@@ -1,0 +1,1067 @@
+import { afterAll, expect, test } from 'bun:test';
+import { createHash, randomUUID } from 'node:crypto';
+import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { chromium, type Browser, type Page } from 'playwright';
+
+import { startDevServer } from './support/dev-server';
+const timeout = 300_000;
+const clientId = 'rezics-website';
+const session = '__Host-rezics_session';
+const login = '__Host-rezics_login';
+// The API's RFC 8707 resource identifier in tests; production uses https://api.rezics.com.
+const resource = 'https://api.rezics.test';
+const scopes = ['openid'];
+const pageLimit = '100';
+
+// The website client's key, which only the Worker holds, and the issuer's signing key.
+const clientKeys = await generateKeyPair('ES256', { extractable: true });
+const clientJwk = { ...(await exportJWK(clientKeys.privateKey)), alg: 'ES256', kid: 'website-1' };
+const issuerKeys = await generateKeyPair('ES256', { extractable: true });
+const issuerJwk = { ...(await exportJWK(issuerKeys.publicKey)), alg: 'ES256', kid: 'issuer-1', use: 'sig' };
+
+type Grant = {
+  challenge: string;
+  nonce: string;
+  redirectUri: string;
+  scope: string;
+  sub: string;
+  expiresIn: number;
+  idNonce?: string;
+};
+type Family = { sub: string; current: string; expiresIn: number; revoked: boolean };
+const codes = new Map<string, Grant>();
+const families = new Map<string, Family>();
+const assertions = new Set<string>();
+const accessTokens: string[] = [];
+let counter = 0;
+
+const json = (body: unknown, status = 200, problem = false) =>
+  Response.json(body, {
+    status,
+    headers: {
+      'cache-control': 'no-store',
+      ...(problem ? { 'content-type': 'application/problem+json' } : {}),
+    },
+  });
+
+const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
+const stamp = '2026-04-02T15:04:05.000Z';
+const subjectId = id(1);
+const subject = { id: subjectId, label: 'Night watch', type: 'book', types: ['schema:Book'] };
+const definitionsRelease = {
+  types: {
+    book: {
+      labels: { en: 'Book', 'zh-Hans': '图书' },
+      library: { profileId: 'book-reading' },
+    },
+  },
+  libraryProfiles: {
+    'book-reading': {
+      id: 'book-reading',
+      entryStateSet: {
+        id: 'book-reading-states',
+        states: [{ id: 'in_progress', labels: { en: 'Active', 'zh-Hans': '进行中' }, role: 'active' }],
+      },
+      progress: {
+        allowed: [
+          {
+            mode: 'scalar_amount',
+            units: [
+              {
+                id: 'page',
+                labels: { en: 'Page', 'zh-Hans': '页' },
+                totalPolicy: 'optional',
+                identity: { kind: 'none' },
+                structure: { kind: 'none' },
+              },
+              {
+                id: 'chapter',
+                labels: { en: 'Chapter', 'zh-Hans': '章' },
+                identity: { kind: 'none' },
+                structure: { kind: 'none' },
+              },
+            ],
+          },
+          {
+            mode: 'cursor_position',
+            units: [
+              {
+                id: 'chapter',
+                labels: { en: 'Chapter', 'zh-Hans': '章' },
+                totalPolicy: 'forbidden',
+                identity: { kind: 'none' },
+                structure: { kind: 'none' },
+              },
+            ],
+          },
+          {
+            mode: 'completed_units',
+            units: [
+              {
+                id: 'episode',
+                labels: { en: 'Episode', 'zh-Hans': '集' },
+                totalPolicy: 'forbidden',
+                identity: { kind: 'session_local' },
+                structure: { kind: 'none' },
+              },
+            ],
+          },
+        ],
+      },
+      importSources: [],
+    },
+  },
+  properties: {},
+};
+const cover = {
+  media: id(900),
+  width: 640,
+  height: 960,
+  placeholder: { thumbhash: '', color: '#547080' },
+  variants: [{ format: 'webp', width: 640 }],
+  focalPoint: null,
+  credit: null,
+};
+const extraReads: string[] = [];
+let publicExposureReads = 0;
+const publicExposureReadTimes: number[] = [];
+let viewerExposureReads = 0;
+let viewerExposureGroups = ['reading_progress'];
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const decimal = /^(?:0|[1-9]\d{0,11})(?:\.\d{1,6})?$/;
+const unitIdPattern = /^[A-Za-z0-9._:~-]{1,128}$/;
+
+type Mode = 'scalar_amount' | 'cursor_position' | 'completed_units';
+type Unit = 'page' | 'chapter' | 'episode' | 'volume' | 'minute' | 'percent';
+type ProgressState = 'active' | 'completed' | 'abandoned';
+type Intent =
+  | { amount: string }
+  | { locator: string; position: string }
+  | { add: string[] }
+  | { remove: string[] }
+  | { add: string[]; remove: string[] }
+  | { action: 'complete' | 'abandon' };
+type Change = { id: string; revision: number; intent: Intent; createdAt: string };
+type ProgressSession = {
+  id: string;
+  subjectId: string;
+  versionSubjectId: string | null;
+  mode: Mode;
+  unit: Unit;
+  total: string | null;
+  amount: string | null;
+  locator: string | null;
+  position: string | null;
+  completedUnitCount: number;
+  state: ProgressState;
+  revision: number;
+  startedAt: string;
+  completedAt: string | null;
+  units: string[];
+  changes: Change[];
+};
+type Call = {
+  method: string;
+  path: string;
+  view: string | null;
+  limit: string | null;
+  cursor: string | null;
+  subjectId: string | null;
+  authorization: string | null;
+  key: string | null;
+  body: unknown;
+};
+
+const subjects = new Map([[subjectId, subject]]);
+const sessions = new Map<string, ProgressSession>();
+const calls: Call[] = [];
+const replay = new Map<string, { status: number; body: unknown }>();
+let gateClosed = false;
+let nextSession = 80;
+
+function problem(status: number, code: string) {
+  return {
+    type: `https://rezics.com/problems/${code}`,
+    title: code,
+    status,
+    code,
+    retryable: false,
+    effect_status: status === 409 ? 'not_applied' : 'not_applicable',
+    request_id: randomUUID(),
+  };
+}
+function sessionView(item: ProgressSession, full: boolean) {
+  return {
+    id: item.id,
+    subjectId: item.subjectId,
+    versionSubjectId: item.versionSubjectId,
+    mode: item.mode,
+    unit: item.unit,
+    total: item.total,
+    amount: item.amount,
+    locator: item.locator,
+    position: item.position,
+    completedUnitCount: item.completedUnitCount,
+    state: item.state,
+    revision: item.revision,
+    startedAt: item.startedAt,
+    completedAt: item.completedAt,
+    ...(full
+      ? {
+          subject: subjects.get(item.subjectId) ?? null,
+          versionSubject: item.versionSubjectId ? (subjects.get(item.versionSubjectId) ?? null) : null,
+        }
+      : {}),
+  };
+}
+function makeSession(
+  n: number,
+  mode: Mode,
+  unit: Unit,
+  extras: { total?: string; amount?: string; revision?: number; change?: Intent } = {},
+): ProgressSession {
+  const item: ProgressSession = {
+    id: id(n),
+    subjectId,
+    versionSubjectId: null,
+    mode,
+    unit,
+    total: extras.total ?? null,
+    amount: extras.amount ?? null,
+    locator: null,
+    position: null,
+    completedUnitCount: 0,
+    state: 'active',
+    revision: extras.revision ?? 1,
+    startedAt: stamp,
+    completedAt: null,
+    units: [],
+    changes: [],
+  };
+  if (extras.change) {
+    item.changes.push({
+      id: `${item.id}:${item.revision}`,
+      revision: item.revision,
+      intent: extras.change,
+      createdAt: stamp,
+    });
+  }
+  return item;
+}
+function seed() {
+  sessions.clear();
+  sessions.set(id(20), makeSession(20, 'scalar_amount', 'page', { total: '200' }));
+  sessions.set(id(21), makeSession(21, 'scalar_amount', 'minute', { total: '120' }));
+  sessions.set(id(22), makeSession(22, 'completed_units', 'episode'));
+  sessions.set(id(23), makeSession(23, 'scalar_amount', 'page', { amount: '4', revision: 2, change: { amount: '4' } }));
+  sessions.set(id(24), makeSession(24, 'scalar_amount', 'page', { amount: '9', revision: 2, change: { amount: '9' } }));
+}
+function reset() {
+  calls.length = 0;
+  replay.clear();
+  gateClosed = false;
+  nextSession = 80;
+  seed();
+}
+function diverge(sessionId: string) {
+  const item = sessions.get(sessionId);
+  if (!item) throw new Error(`missing session ${sessionId}`);
+  item.revision += 1;
+}
+function pageOf<T>(rows: T[], cursor: string | null, limit: number, key: string) {
+  if (cursor === 'stale') return { stale: true as const };
+  let offset = 0;
+  if (cursor) {
+    const saved = cursors.get(cursor);
+    if (!saved || saved.key !== key) return { stale: true as const };
+    offset = saved.offset;
+  }
+  const slice = rows.slice(offset, offset + limit);
+  const nextOffset = offset + slice.length;
+  let next: string | null = null;
+  if (nextOffset < rows.length) {
+    next = `page${++cursorSerial}`;
+    cursors.set(next, { key, offset: nextOffset });
+  }
+  return { stale: false as const, slice, next };
+}
+const cursors = new Map<string, { key: string; offset: number }>();
+let cursorSerial = 0;
+
+function sortedIds(values: string[]): string[] {
+  return [...values].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+}
+function unitList(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length > 100) return null;
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry !== 'string' || !unitIdPattern.test(entry) || seen.has(entry)) return null;
+    seen.add(entry);
+    ids.push(entry);
+  }
+  return ids;
+}
+function remembered(key: string | null) {
+  if (!key) return json(problem(400, 'invalid_request'), 400, true);
+  const prior = replay.get(key);
+  return prior ? json(prior.body, prior.status, prior.status >= 400) : null;
+}
+function remember(key: string, status: number, body: unknown) {
+  replay.set(key, { status, body });
+  return json(body, status, status >= 400);
+}
+function record(item: ProgressSession, body: Record<string, unknown>, key: string) {
+  if (typeof body.revision !== 'number' || body.revision !== item.revision || item.state !== 'active') {
+    return remember(key, 409, problem(409, 'conflict'));
+  }
+  const amount = Object.hasOwn(body, 'amount');
+  const cursor = Object.hasOwn(body, 'locator') || Object.hasOwn(body, 'position');
+  const units = Object.hasOwn(body, 'add') || Object.hasOwn(body, 'remove');
+  const groups = [amount, cursor, units].filter(Boolean).length;
+  let intent: Intent;
+  if (groups !== 1) return remember(key, 400, problem(400, 'invalid_request'));
+  if (item.mode === 'scalar_amount' && amount && typeof body.amount === 'string' && decimal.test(body.amount)) {
+    if (item.unit === 'percent' && Number(body.amount) > 100)
+      return remember(key, 400, problem(400, 'invalid_request'));
+    item.amount = body.amount;
+    intent = { amount: body.amount };
+  } else if (
+    item.mode === 'cursor_position' &&
+    cursor &&
+    typeof body.locator === 'string' &&
+    body.locator.length > 0 &&
+    body.locator.length <= 256 &&
+    typeof body.position === 'string' &&
+    decimal.test(body.position)
+  ) {
+    item.locator = body.locator;
+    item.position = body.position;
+    intent = { locator: body.locator, position: body.position };
+  } else if (item.mode === 'completed_units' && units && !amount && !cursor) {
+    const add = Object.hasOwn(body, 'add') ? unitList(body.add) : [];
+    const remove = Object.hasOwn(body, 'remove') ? unitList(body.remove) : [];
+    if (!add || !remove || add.length + remove.length > 100 || (add.length === 0 && remove.length === 0)) {
+      return remember(key, 400, problem(400, 'invalid_request'));
+    }
+    const set = new Set(item.units);
+    for (const unit of remove) set.delete(unit);
+    for (const unit of add) set.add(unit);
+    item.units = [...set].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+    item.completedUnitCount = item.units.length;
+    intent =
+      add.length > 0 && remove.length > 0
+        ? { add: sortedIds(add), remove: sortedIds(remove) }
+        : add.length > 0
+          ? { add: sortedIds(add) }
+          : { remove: sortedIds(remove) };
+  } else return remember(key, 400, problem(400, 'invalid_request'));
+  // An amount, including elapsed minutes that meet the total, never changes the session state.
+  item.revision += 1;
+  item.changes.push({ id: `${item.id}:${item.revision}`, revision: item.revision, intent, createdAt: stamp });
+  return remember(key, 200, { progressSession: sessionView(item, false) });
+}
+function transition(item: ProgressSession, body: Record<string, unknown>, key: string, action: 'complete' | 'abandon') {
+  if (Object.keys(body).some((name) => name !== 'revision')) return remember(key, 400, problem(400, 'invalid_request'));
+  if (typeof body.revision !== 'number' || body.revision !== item.revision || item.state !== 'active') {
+    return remember(key, 409, problem(409, 'conflict'));
+  }
+  item.state = action === 'complete' ? 'completed' : 'abandoned';
+  item.completedAt = action === 'complete' ? stamp : null;
+  item.revision += 1;
+  item.changes.push({
+    id: `${item.id}:${item.revision}`,
+    revision: item.revision,
+    intent: { action },
+    createdAt: stamp,
+  });
+  return remember(key, 200, { progressSession: sessionView(item, false) });
+}
+
+// OpenID provider copied from posting.test.ts; progress reads and writes use its access token.
+const fake = Bun.serve({
+  port: 0,
+  hostname: '127.0.0.1',
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === '/v1/platform/exposure') {
+      if (!request.headers.has('authorization')) {
+        publicExposureReads += 1;
+        publicExposureReadTimes.push(Date.now());
+        return json({ admitted: ['reading_progress'] });
+      }
+      viewerExposureReads += 1;
+      return json({ admitted: viewerExposureGroups });
+    }
+    const issuer = `${url.origin}/auth`;
+    const tokenEndpoint = `${issuer}/token`;
+    const client = async (form: URLSearchParams) => {
+      if (form.get('client_assertion_type') !== 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer') return false;
+      try {
+        // Auth's contract: the registered kid, iss = sub = the client, aud exactly the issuer, at most 120 seconds.
+        const { payload, protectedHeader } = await jwtVerify(form.get('client_assertion') ?? '', clientKeys.publicKey, {
+          issuer: clientId,
+          subject: clientId,
+          audience: issuer,
+          algorithms: ['ES256'],
+          maxTokenAge: '120s',
+        });
+        if (
+          protectedHeader.kid !== clientJwk.kid ||
+          payload.aud !== issuer ||
+          !payload.jti ||
+          assertions.has(payload.jti) ||
+          !payload.exp ||
+          !payload.iat ||
+          payload.exp - payload.iat > 120
+        )
+          return false;
+        assertions.add(payload.jti);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const issue = async (family: Family, nonce?: string) => {
+      counter += 1;
+      const access = `access-${counter}`;
+      const refresh = `refresh-${counter}`;
+      family.current = refresh;
+      families.set(refresh, family);
+      accessTokens.push(access);
+      const body: Record<string, unknown> = {
+        access_token: access,
+        token_type: 'Bearer',
+        expires_in: family.expiresIn,
+        refresh_token: refresh,
+        scope: ['openid', 'offline_access', ...scopes].join(' '),
+      };
+      if (nonce !== undefined) {
+        body.id_token = await new SignJWT({ nonce })
+          .setProtectedHeader({ alg: 'ES256', kid: 'issuer-1' })
+          .setIssuer(issuer)
+          .setSubject(family.sub)
+          .setAudience(clientId)
+          .setIssuedAt()
+          .setExpirationTime('5m')
+          .sign(issuerKeys.privateKey);
+      }
+      return json(body);
+    };
+
+    if (url.pathname === '/auth/.well-known/openid-configuration')
+      return json({
+        issuer,
+        authorization_endpoint: `${issuer}/authorize`,
+        token_endpoint: tokenEndpoint,
+        jwks_uri: `${issuer}/jwks`,
+        revocation_endpoint: `${issuer}/revoke`,
+        end_session_endpoint: `${issuer}/end-session`,
+        response_types_supported: ['code'],
+        code_challenge_methods_supported: ['S256'],
+        id_token_signing_alg_values_supported: ['ES256'],
+        token_endpoint_auth_methods_supported: ['private_key_jwt'],
+        token_endpoint_auth_signing_alg_values_supported: ['ES256'],
+      });
+    if (url.pathname === '/auth/jwks') return json({ keys: [issuerJwk] });
+    if (url.pathname === '/auth/token' && request.method === 'POST') {
+      const form = new URLSearchParams(await request.text());
+      if (!(await client(form))) return json({ error: 'invalid_client' }, 401);
+      if (form.get('grant_type') === 'authorization_code') {
+        const grant = codes.get(form.get('code') ?? '');
+        codes.delete(form.get('code') ?? '');
+        const verifier = form.get('code_verifier') ?? '';
+        if (
+          !grant ||
+          form.get('redirect_uri') !== grant.redirectUri ||
+          createHash('sha256').update(verifier).digest('base64url') !== grant.challenge
+        )
+          return json({ error: 'invalid_grant' }, 400);
+        return issue(
+          { sub: grant.sub, current: '', expiresIn: grant.expiresIn, revoked: false },
+          grant.idNonce ?? grant.nonce,
+        );
+      }
+      if (form.get('grant_type') === 'refresh_token') {
+        const family = families.get(form.get('refresh_token') ?? '');
+        if (!family || family.revoked || family.current !== form.get('refresh_token')) {
+          if (family) family.revoked = true;
+          return json({ error: 'invalid_grant' }, 400);
+        }
+        return issue(family);
+      }
+      return json({ error: 'unsupported_grant_type' }, 400);
+    }
+    if (url.pathname === '/auth/revoke' && request.method === 'POST') {
+      const form = new URLSearchParams(await request.text());
+      if (!(await client(form))) return json({ error: 'invalid_client' }, 401);
+      const family = families.get(form.get('token') ?? '');
+      if (family) family.revoked = true;
+      return new Response(null, { status: 200 });
+    }
+    if (url.pathname === '/v1/definitions/active') return json({ digest: 'layout' });
+    if (url.pathname === '/v1/definitions/releases/layout')
+      return json({ digest: 'layout', release: definitionsRelease });
+    if (url.pathname === '/v1/subjects:suggest') {
+      extraReads.push(url.pathname);
+      return json({
+        subjects: [
+          { id: subject.id, type: subject.type, labels: { en: subject.label }, summary: { ...subject, cover } },
+        ],
+        as_of: stamp,
+      });
+    }
+    if (url.pathname === '/v1/publishedLogs') {
+      extraReads.push(url.pathname);
+      return json({
+        publishedLogs: [
+          {
+            id: id(700),
+            accountId: 'alice',
+            subjectId,
+            sessionState: 'active',
+            startedAt: stamp,
+            completedAt: null,
+            note: 'A quiet chapter.',
+            publishedAt: stamp,
+            subject: { ...subject, cover },
+            account: { handle: 'mira', displayName: 'Mira Okabe' },
+          },
+        ],
+        next: null,
+      });
+    }
+    if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
+    // Home readiness reads pages:read with no session. Unknown routes stay not found, like a hidden record.
+    if (!url.pathname.startsWith('/v1/progressSessions')) return json(problem(404, 'not_found'), 404, true);
+    const body = request.method === 'GET' || request.method === 'HEAD' ? null : await request.json().catch(() => null);
+    calls.push({
+      method: request.method,
+      path: url.pathname,
+      view: url.searchParams.get('view'),
+      limit: url.searchParams.get('limit'),
+      cursor: url.searchParams.get('cursor'),
+      subjectId: url.searchParams.get('subjectId'),
+      authorization: request.headers.get('authorization'),
+      key: request.headers.get('idempotency-key'),
+      body,
+    });
+    if (!request.headers.get('authorization')?.startsWith('Bearer '))
+      return json(problem(401, 'authentication_required'), 401, true);
+    if (gateClosed) return json(problem(403, 'platform_closed'), 403, true);
+    const full = url.searchParams.get('view') === 'FULL';
+    const limit = Number(url.searchParams.get('limit') ?? 20);
+    const bounded = Number.isInteger(limit) && limit >= 1 && limit <= 100 ? limit : 20;
+
+    if (url.pathname === '/v1/progressSessions' && request.method === 'POST') {
+      const draft = body as { subjectId?: unknown; mode?: unknown; unit?: unknown; total?: unknown } | null;
+      const key = request.headers.get('idempotency-key');
+      const prior = remembered(key);
+      if (prior) return prior;
+      const mode = draft?.mode;
+      const unit = draft?.unit;
+      const modes = new Set(['scalar_amount', 'cursor_position', 'completed_units']);
+      const units = new Set(['page', 'chapter', 'episode', 'volume', 'minute', 'percent']);
+      if (
+        !draft ||
+        draft.subjectId !== subjectId ||
+        typeof mode !== 'string' ||
+        !modes.has(mode) ||
+        typeof unit !== 'string' ||
+        !units.has(unit) ||
+        (draft.total !== undefined && mode !== 'scalar_amount') ||
+        (typeof draft.total === 'string' && !decimal.test(draft.total))
+      )
+        return remember(key!, 400, problem(400, 'invalid_request'));
+      const item = makeSession(nextSession++, mode as Mode, unit as Unit, {
+        ...(typeof draft.total === 'string' ? { total: draft.total } : {}),
+      });
+      item.startedAt = `2026-05-01T00:00:${String(nextSession).padStart(2, '0')}.000Z`;
+      sessions.set(item.id, item);
+      return remember(key!, 201, { progressSession: sessionView(item, false) });
+    }
+    if (url.pathname === '/v1/progressSessions' && request.method === 'GET') {
+      const owner = url.searchParams.get('subjectId');
+      if (owner && !subjects.has(owner)) return json({ progressSessions: [], next: null });
+      const rows = [...sessions.values()]
+        .filter((item) => !owner || item.subjectId === owner)
+        .sort((left, right) => (left.startedAt < right.startedAt ? 1 : left.startedAt > right.startedAt ? -1 : 0));
+      const page = pageOf(rows, url.searchParams.get('cursor'), bounded, `sessions:${owner}`);
+      if (page.stale) return json(problem(409, 'stale_cursor'), 409, true);
+      return json({ progressSessions: page.slice.map((item) => sessionView(item, full)), next: page.next });
+    }
+    const action = /^\/v1\/progressSessions\/([^/]+):(record|complete|abandon)$/.exec(url.pathname);
+    if (action && request.method === 'POST') {
+      const item = sessions.get(action[1]!);
+      if (!item) return json(problem(404, 'not_found'), 404, true);
+      const key = request.headers.get('idempotency-key');
+      const prior = remembered(key);
+      if (prior) return prior;
+      const payload = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+      if (action[2] === 'record') return record(item, payload, key!);
+      return transition(item, payload, key!, action[2] as 'complete' | 'abandon');
+    }
+    const child = /^\/v1\/progressSessions\/([^/]+)\/(completedUnits|changes)$/.exec(url.pathname);
+    if (child && request.method === 'GET') {
+      const item = sessions.get(child[1]!);
+      if (!item) return json(problem(404, 'not_found'), 404, true);
+      if (child[2] === 'completedUnits') {
+        const page = pageOf(item.units, url.searchParams.get('cursor'), bounded, `units:${item.id}`);
+        if (page.stale) return json(problem(409, 'stale_cursor'), 409, true);
+        return json({ completedUnits: page.slice, next: page.next });
+      }
+      const page = pageOf(item.changes, url.searchParams.get('cursor'), bounded, `changes:${item.id}`);
+      if (page.stale) return json(problem(409, 'stale_cursor'), 409, true);
+      return json({ changes: page.slice, next: page.next });
+    }
+    const one = /^\/v1\/progressSessions\/([^/]+)$/.exec(url.pathname);
+    if (one && request.method === 'GET') {
+      const item = sessions.get(one[1]!);
+      if (!item) return json(problem(404, 'not_found'), 404, true);
+      return json({ progressSession: sessionView(item, full) });
+    }
+    return json(problem(404, 'not_found'), 404, true);
+  },
+});
+
+let devServer: Awaited<ReturnType<typeof startDevServer>> | undefined;
+let started: Promise<string> | undefined;
+
+// The documented command, pointed at the fake through the environment it reads in development.
+function site(): Promise<string> {
+  started ??= (async () => {
+    devServer = await startDevServer({
+      env: {
+        KERNEL_ORIGIN: fake.url.origin,
+        PUBLIC_ORIGIN: fake.url.origin,
+        AUTH_ISSUER: `${fake.url.origin}/auth`,
+        WEBSITE_CLIENT_ID: clientId,
+        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+        API_RESOURCE: resource,
+        WEBSITE_SCOPES: scopes.join(' '),
+      },
+      // The warm-up has no session cookie; these protected routes intentionally redirect to sign-in.
+      javaScriptEnabled: false,
+      warmUpPaths: [`/en/library/progress?subjectId=${subjectId}`, `/en/library/progress/${id(20)}`],
+    });
+    return devServer.origin;
+  })();
+  return started;
+}
+
+const setCookie = (response: Response, name: string) =>
+  response.headers.getSetCookie().find((line) => line.startsWith(`${name}=`));
+const cookieValue = (response: Response, name: string) =>
+  setCookie(response, name)
+    ?.split(';')[0]
+    ?.slice(name.length + 1);
+
+// Starts a sign-in, answers it as Auth would after the person signs in there, and returns the session cookie.
+async function signIn(returnTo = '/en') {
+  const origin = await site();
+  const start = await fetch(`${origin}/auth/sign-in?return_to=${encodeURIComponent(returnTo)}`, { redirect: 'manual' });
+  const location = new URL(start.headers.get('location')!);
+  const params = location.searchParams;
+  const code = `code-${randomUUID()}`;
+  codes.set(code, {
+    challenge: params.get('code_challenge')!,
+    nonce: params.get('nonce')!,
+    redirectUri: params.get('redirect_uri')!,
+    scope: params.get('scope')!,
+    sub: 'alice',
+    expiresIn: 3600,
+  });
+  const loginCookie = cookieValue(start, login);
+  const answer = await fetch(`${params.get('redirect_uri')}?code=${code}&state=${params.get('state')}`, {
+    redirect: 'manual',
+    headers: loginCookie ? { cookie: `${login}=${loginCookie}` } : {},
+  });
+  expect([302, 303], 'OpenID callback setup').toContain(answer.status);
+  const sessionCookie = cookieValue(answer, session);
+  expect(sessionCookie, 'signed-in session setup').toBeTruthy();
+  return { cookie: sessionCookie!, access: accessTokens.at(-1)! };
+}
+
+let browser: Browser | undefined;
+let person: Promise<{ cookie: string; access: string }> | undefined;
+async function open(
+  path: string,
+  javaScriptEnabled = true,
+  waitUntil: 'domcontentloaded' | 'networkidle' = 'networkidle',
+): Promise<{ page: Page; access: string }> {
+  person ??= signIn(path);
+  const auth = await person;
+  const origin = await site();
+  browser ??= await chromium.launch();
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 860 },
+    reducedMotion: 'reduce',
+    javaScriptEnabled,
+  });
+  await context.addCookies([
+    {
+      name: session,
+      value: auth.cookie,
+      domain: '127.0.0.1',
+      path: '/',
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+    },
+  ]);
+  const page = await context.newPage();
+  await page.route(
+    (url) => url.pathname.startsWith('/media/'),
+    (route) =>
+      route.fulfill({
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="960"><rect width="640" height="960" fill="#547080"/></svg>',
+      }),
+  );
+  await page.goto(`${origin}${path}`, { waitUntil });
+  if (javaScriptEnabled) await hydrated(page);
+  return { page, access: auth.access };
+}
+async function hydrated(page: Page) {
+  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+}
+afterAll(async () => {
+  await browser?.close();
+  fake.stop(true);
+  await devServer?.stop();
+});
+
+function layoutSeed(size = 5) {
+  reset();
+  extraReads.length = 0;
+  sessions.clear();
+  for (let index = 0; index < size; index += 1) {
+    const item = makeSession(20 + index, 'cursor_position', 'chapter', {
+      total: '100',
+      change: { locator: 'Part 2, chapter 14', position: '42' },
+    });
+    item.position = '42';
+    item.locator = 'Part 2, chapter 14';
+    sessions.set(item.id, item);
+  }
+}
+
+const main = (page: Page) => page.locator('main');
+
+test(
+  "the progress index shows each session as one row: cover, title, type label, state and a ProgressRow; the row links to its session and the subject page is in the row's menu",
+  async () => {
+    layoutSeed();
+    sessions.get(id(20))!.position = null; // Keep this row in locator mode so it displays the locator text.
+    const { page } = await open(`/en/library/progress?subjectId=${subjectId}`);
+    try {
+      const rows = main(page).locator('ol > li');
+      expect(await rows.count()).toBe(5);
+      const row = rows.first();
+      expect(await row.locator('[data-slot="cover"]').count()).toBe(1);
+      expect(await row.innerText()).toContain('Book');
+      expect(await row.getByText('Active', { exact: true }).count()).toBe(1);
+      expect(await row.getByText('Part 2, chapter 14', { exact: true }).count()).toBe(1);
+      expect(await row.getByRole('progressbar').count()).toBe(0);
+      expect(await row.getByRole('link').count()).toBe(1);
+      expect(await row.getByRole('link').getAttribute('href')).toContain(`/library/progress/${id(20)}`);
+      expect(await row.getByRole('link').innerText()).toContain('Night watch');
+      expect(await row.locator('.work-title').count()).toBe(0);
+      const start = main(page).getByRole('heading', { level: 2, name: 'Start tracking', exact: true });
+      expect(
+        await start.evaluate((el) =>
+          Boolean(el.compareDocumentPosition(document.querySelector('main ol')!) & Node.DOCUMENT_POSITION_PRECEDING),
+        ),
+      ).toBe(true);
+      await row.getByRole('button', { name: 'More actions', exact: true }).click();
+      expect(
+        await page.getByRole('menuitem', { name: 'Open subject page', exact: true }).getAttribute('href'),
+      ).toContain(subjectId);
+      await page.keyboard.press('Escape');
+      await row.getByRole('link').click();
+      await page.waitForURL(new RegExp(`/library/progress/${id(20)}`));
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'the start form chooses the subject with the entity picker and never shows a subject id; with subjectId in the URL it starts with that subject chosen, and starting a session works as on base',
+  async () => {
+    layoutSeed();
+    const { page } = await open(`/en/library/progress?subjectId=${subjectId}`);
+    try {
+      const picker = main(page).getByRole('combobox', { name: 'Subject', exact: true });
+      expect(await picker.inputValue()).toBe('Night watch');
+      expect(await main(page).locator('input[name="subjectId"][type="hidden"]').inputValue()).toBe(subjectId);
+      expect(await main(page).innerText()).not.toContain(subjectId);
+      expect(
+        await page
+          .locator('input:not([type="hidden"]):not([aria-hidden="true"]):visible')
+          .evaluateAll((els) => els.some((el) => (el as HTMLInputElement).value.includes('0192f3a0'))),
+      ).toBe(false);
+      const before = extraReads.length;
+      await picker.fill('Nig');
+      await picker.fill('Night');
+      await page.getByRole('option', { name: /Night watch/ }).click();
+      expect(extraReads.slice(before)).toEqual(['/v1/subjects:suggest']);
+      expect(await main(page).getByRole('combobox', { name: 'Unit', exact: true }).inputValue()).toBe('page');
+      await main(page).getByRole('radio', { name: 'Amount', exact: true }).check();
+      await main(page).getByRole('combobox', { name: 'Unit', exact: true }).selectOption('page');
+      await main(page).getByRole('textbox', { name: 'Total', exact: true }).fill('240');
+      await main(page).getByRole('button', { name: 'Start', exact: true }).click();
+      await page.waitForURL(new RegExp(`/library/progress/${id(80)}`));
+      expect(calls.find((call) => call.method === 'POST')?.body).toEqual({
+        subjectId,
+        mode: 'scalar_amount',
+        unit: 'page',
+        total: '240',
+      });
+      await page.goto(`${await site()}/en/library/progress?subjectId=${id(999)}`, { waitUntil: 'networkidle' });
+      await hydrated(page);
+      expect(await main(page).getByRole('combobox', { name: 'Subject', exact: true }).inputValue()).toBe('');
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'choosing a unit in the progress start form submits that unit',
+  async () => {
+    layoutSeed();
+    const { page } = await open(`/en/library/progress?subjectId=${subjectId}`);
+    try {
+      await main(page).getByRole('radio', { name: 'Amount', exact: true }).check();
+      const unit = main(page).getByRole('combobox', { name: 'Unit', exact: true });
+      await unit.selectOption('chapter');
+      await main(page).getByRole('textbox', { name: 'Total', exact: true }).fill('240');
+      await main(page).getByRole('button', { name: 'Start', exact: true }).click();
+      await page.waitForURL(new RegExp(`/library/progress/${id(80)}`));
+      expect(calls.find((call) => call.method === 'POST')?.body).toEqual({
+        subjectId,
+        mode: 'scalar_amount',
+        unit: 'chapter',
+        total: '240',
+      });
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'progress row and session Work titles use the interface font',
+  async () => {
+    layoutSeed();
+    const { page: indexPage } = await open(`/en/library/progress?subjectId=${subjectId}`);
+    try {
+      const rowTitle = main(indexPage).locator('ol > li').first().getByRole('link');
+      const rowFont = await rowTitle.evaluate((element) => getComputedStyle(element).fontFamily);
+      const interfaceFont = await indexPage.locator('body').evaluate((element) => getComputedStyle(element).fontFamily);
+      const titleFont = await indexPage.evaluate(() =>
+        getComputedStyle(document.documentElement).getPropertyValue('--font-work-serif').trim(),
+      );
+      expect(rowFont).toBe(interfaceFont);
+      expect(rowFont).not.toBe(titleFont);
+    } finally {
+      await indexPage.context().close();
+    }
+
+    const { page: sessionPage } = await open(`/en/library/progress/${id(20)}`);
+    try {
+      const headingTitle = main(sessionPage).locator('article > header p.text-2xl');
+      const headingFont = await headingTitle.evaluate((element) => getComputedStyle(element).fontFamily);
+      const interfaceFont = await sessionPage
+        .locator('body')
+        .evaluate((element) => getComputedStyle(element).fontFamily);
+      const titleFont = await sessionPage.evaluate(() =>
+        getComputedStyle(document.documentElement).getPropertyValue('--font-work-serif').trim(),
+      );
+      expect(headingFont).toBe(interfaceFont);
+      expect(headingFont).not.toBe(titleFont);
+    } finally {
+      await sessionPage.context().close();
+    }
+  },
+  timeout,
+);
+
+test('Unit and Total share the same field geometry at phone and desktop widths', async () => {
+  layoutSeed();
+  const serverRendered = await open(`/en/library/progress?subjectId=${subjectId}`, false, 'domcontentloaded');
+  try {
+    expect(await serverRendered.page.locator('select[name="unit"]').count()).toBe(1);
+  } finally {
+    await serverRendered.page.context().close();
+  }
+  const { page } = await open(`/en/library/progress?subjectId=${subjectId}`, true, 'domcontentloaded');
+  try {
+    const unit = main(page).getByRole('combobox', { name: 'Unit', exact: true });
+    expect(await main(page).locator('select[name="unit"]').count()).toBe(1);
+    for (const width of [390, 1280]) {
+      await page.setViewportSize({ width, height: 860 });
+      const geometry = await page.evaluate(() => {
+        const unit = document.querySelector('select[name="unit"]')!;
+        const total = document.querySelector('#progress-total')!;
+        const unitLabel = document.querySelector('label[for="progress-unit"]')!;
+        const totalLabel = document.querySelector('label[for="progress-total"]')!;
+        const style = (element: Element) => {
+          const rect = element.getBoundingClientRect();
+          const css = getComputedStyle(element);
+          return { top: rect.top, height: rect.height, radius: css.borderRadius, background: css.backgroundColor };
+        };
+        return { unit: style(unit), total: style(total), unitLabel: style(unitLabel), totalLabel: style(totalLabel) };
+      });
+      expect(geometry.unit).toEqual(geometry.total);
+      expect(geometry.unitLabel.top).toBe(geometry.totalLabel.top);
+      expect(await unit.count()).toBe(1);
+    }
+  } finally {
+    await page.context().close();
+  }
+});
+
+test('the progress form stays closed after hydration when viewer exposure omits its group', async () => {
+  layoutSeed();
+  const readsBefore = viewerExposureReads;
+  viewerExposureGroups = ['unrelated'];
+  const { page } = await open(`/en/library/progress?subjectId=${subjectId}`);
+  try {
+    expect(viewerExposureReads).toBeGreaterThan(readsBefore);
+    await page.waitForFunction(() => !document.querySelector('select[name="unit"]'));
+    expect(await main(page).locator('select[name="unit"]').count()).toBe(0);
+  } finally {
+    viewerExposureGroups = ['reading_progress'];
+    await page.context().close();
+  }
+});
+
+test(
+  "the session page shows the subject's cover from the page's reads, its state and progress in one header, change history entries with their relative time and the locator and position as separate labelled parts, an empty section as a muted line with the same spacing as the others, and log authors as the name and @handle",
+  async () => {
+    layoutSeed();
+    const { page } = await open(`/en/library/progress/${id(20)}`);
+    try {
+      const header = main(page).locator('article > header');
+      expect(await header.locator('[data-slot="cover"] img').getAttribute('src')).toContain(cover.media);
+      expect(await header.getByText('Active', { exact: true }).count()).toBe(1);
+      expect(await header.getByText('Part 2, chapter 14', { exact: true }).count()).toBe(1);
+      expect(await header.getByRole('progressbar').count()).toBe(0);
+      expect(await main(page).getByRole('heading', { level: 2 }).allTextContents()).toEqual([
+        'Change history',
+        'Completed units',
+        'Publish a reading log',
+        'Published logs',
+      ]);
+      expect(await header.locator('p.text-2xl').getAttribute('class')).not.toContain('work-title');
+      expect(await main(page).getByRole('button', { name: 'Update progress', exact: true }).count()).toBe(1);
+      const changes = main(page).getByRole('region', { name: 'Change history', exact: true });
+      expect(await changes.locator('time').getAttribute('datetime')).toBe(stamp);
+      expect(await changes.locator('time').innerText()).toMatch(/ago|yesterday/);
+      expect(await changes.locator('dt').allTextContents()).toEqual(['Locator', 'Position']);
+      expect(await changes.locator('dd').allTextContents()).toEqual(['Part 2, chapter 14', '42']);
+      expect(await main(page).getByRole('textbox', { name: 'Locator', exact: true }).count()).toBe(0);
+      const empty = main(page).getByRole('region', { name: 'Completed units', exact: true });
+      expect(await empty.locator('p').getAttribute('class')).toContain('text-muted-foreground');
+      expect(await empty.innerText()).toContain('No units have been completed yet.');
+      expect(await empty.innerText()).not.toContain('No progress sessions');
+      const gap = await empty.evaluate(
+        (el) => el.nextElementSibling!.getBoundingClientRect().top - el.getBoundingClientRect().bottom,
+      );
+      expect(gap).toBeGreaterThanOrEqual(32);
+      expect(await main(page).getByText('Mira Okabe', { exact: true }).count()).toBe(1);
+      expect(await main(page).getByText('@mira', { exact: true }).getAttribute('class')).toContain(
+        'text-muted-foreground',
+      );
+      const published = main(page).getByRole('region', { name: 'Published logs', exact: true }).locator('ol > li');
+      const log = published.first();
+      const byline = log.locator('p').first();
+      expect(await byline.evaluate((el) => getComputedStyle(el).display)).toBe('flex');
+      expect(await byline.evaluate((el) => getComputedStyle(el).flexWrap)).toBe('nowrap');
+      expect(await byline.locator('time').count()).toBe(1);
+      expect(await log.locator('[data-slot="cover"]').count()).toBe(0);
+      expect(await log.getByText('Night watch', { exact: true }).count()).toBe(0);
+      expect(await log.innerText()).toContain('A quiet chapter.');
+      const readLinks = log.getByRole('link', { name: 'Read log', exact: true });
+      expect(await readLinks.count()).toBe(2);
+      expect(await readLinks.nth(0).getAttribute('href')).toContain('/en/logs/');
+      expect(await readLinks.nth(1).getAttribute('href')).toContain('/en/logs/');
+      await main(page).getByRole('button', { name: 'Update progress', exact: true }).click();
+      expect(await page.getByRole('heading', { name: 'Update progress', exact: true }).count()).toBe(1);
+      expect(await page.getByRole('textbox', { name: 'Locator', exact: true }).inputValue()).toBe('Part 2, chapter 14');
+      expect(await page.getByRole('textbox', { name: 'Position', exact: true }).inputValue()).toBe('42');
+    } finally {
+      await page.context().close();
+    }
+  },
+  timeout,
+);
+
+test(
+  'both pages render without JavaScript, preserve bounded progress reads across the existing row fixtures, and keep suggestion reads bounded per settled keystroke',
+  async () => {
+    const publicReadsBefore = publicExposureReads;
+    const startedAt = Date.now();
+    for (const size of [10, 1_000, 10_000]) {
+      layoutSeed(size);
+      // Fresh sign-in isolates the SSR/hydration read caches at every size.
+      person = undefined;
+      const { page } = await open(`/en/library/progress?subjectId=${subjectId}`);
+      try {
+        expect(calls.filter((call) => call.method === 'GET').map((call) => call.path)).toEqual([
+          '/v1/progressSessions',
+        ]);
+        const picker = main(page).getByRole('combobox', { name: 'Subject', exact: true });
+        await picker.fill('Night');
+        await page.getByRole('option', { name: /Night watch/ }).waitFor();
+        expect(extraReads).toEqual(['/v1/subjects:suggest']);
+        calls.length = 0;
+        extraReads.length = 0;
+        await page.goto(`${await site()}/en/library/progress/${id(20)}`, { waitUntil: 'networkidle' });
+        await hydrated(page);
+        expect(
+          calls
+            .filter((call) => call.method === 'GET')
+            .map((call) => call.path)
+            .sort(),
+        ).toEqual(
+          [
+            `/v1/progressSessions/${id(20)}`,
+            `/v1/progressSessions/${id(20)}/changes`,
+            `/v1/progressSessions/${id(20)}/completedUnits`,
+          ].sort(),
+        );
+        expect(extraReads).toEqual(['/v1/publishedLogs']);
+      } finally {
+        await page.context().close();
+      }
+      for (const path of [`/en/library/progress?subjectId=${subjectId}`, `/en/library/progress/${id(20)}`]) {
+        person = undefined;
+        const { page: plain } = await open(path, false);
+        try {
+          expect(await main(plain).getByRole('heading', { level: 1 }).count()).toBe(1);
+          expect(await main(plain).innerText()).toContain('Night watch');
+          if (path.includes('?')) {
+            expect(await main(plain).getByRole('combobox', { name: 'Subject', exact: true }).count()).toBe(1);
+            expect(await main(plain).locator('select[name="unit"]').count()).toBe(1);
+          } else
+            expect(
+              await main(plain).getByRole('region', { name: 'Change history', exact: true }).locator('time').count(),
+            ).toBe(1);
+        } finally {
+          await plain.context().close();
+        }
+      }
+    }
+    const scaleDuration = Date.now() - startedAt;
+    expect(publicExposureReads - publicReadsBefore).toBeLessThanOrEqual(Math.floor(scaleDuration / 60_000) + 1);
+    for (let index = 1; index < publicExposureReadTimes.length; index += 1)
+      expect(publicExposureReadTimes[index]! - publicExposureReadTimes[index - 1]!).toBeGreaterThanOrEqual(60_000);
+  },
+  timeout,
+);

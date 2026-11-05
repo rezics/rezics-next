@@ -1,4 +1,7 @@
+import { readCommerceMoneyPolicy } from './money.ts';
 import type { StripePortConfig } from './stripe.ts';
+
+export const MAX_WEBHOOK_SECRETS = 4;
 
 export class ConfigError extends Error {
   constructor(variable: string) {
@@ -19,6 +22,14 @@ export type CommerceWorkerConfig = Omit<CommerceConfig, 'webhookSecrets'>;
 export type CheckoutUrls = Pick<CommerceWorkerConfig, 'successUrl' | 'cancelUrl'>;
 
 type Environment = Readonly<Record<string, string | undefined>>;
+/** A deployment's one direct account. Neither credentials nor provider payloads configure routing. */
+export function readCommerceProviderConfig(env: Environment) {
+  const accountNamespace = env.STRIPE_ACCOUNT_NAMESPACE ?? 'direct';
+  const mode = env.STRIPE_LIVEMODE ?? 'false';
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(accountNamespace)) throw new ConfigError('STRIPE_ACCOUNT_NAMESPACE');
+  if (mode !== 'true' && mode !== 'false') throw new ConfigError('STRIPE_LIVEMODE');
+  return { accountNamespace, livemode: mode === 'true' };
+}
 const commerceVariables = [
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRETS',
@@ -75,10 +86,13 @@ function readStripeApiKey(env: Environment): string {
 }
 
 function readWebhookSecrets(env: Environment): readonly string[] {
-  const webhookSecrets = required(env, 'STRIPE_WEBHOOK_SECRETS')
-    .split(',')
-    .map((value) => value.trim());
-  if (webhookSecrets.some((value) => !/^whsec_[A-Za-z0-9_]+$/.test(value)))
+  const values = required(env, 'STRIPE_WEBHOOK_SECRETS').split(',', MAX_WEBHOOK_SECRETS + 1);
+  if (values.length > MAX_WEBHOOK_SECRETS) throw new ConfigError('STRIPE_WEBHOOK_SECRETS');
+  const webhookSecrets = values.map((value) => value.trim());
+  if (
+    webhookSecrets.some((value) => !/^whsec_[A-Za-z0-9_]+$/.test(value)) ||
+    new Set(webhookSecrets).size !== webhookSecrets.length
+  )
     throw new ConfigError('STRIPE_WEBHOOK_SECRETS');
   return webhookSecrets;
 }
@@ -86,7 +100,11 @@ function readWebhookSecrets(env: Environment): readonly string[] {
 function readStripeConfig(env: Environment, apiKey = readStripeApiKey(env)): CommerceConfig['stripe'] {
   const managed = required(env, 'STRIPE_MANAGED_PAYMENTS');
   if (managed !== 'true' && managed !== 'false') throw new ConfigError('STRIPE_MANAGED_PAYMENTS');
-  const stripe: CommerceConfig['stripe'] = { apiKey, managedPayments: managed === 'true' };
+  const stripe: CommerceConfig['stripe'] = {
+    apiKey,
+    managedPayments: managed === 'true',
+    accountNamespace: readCommerceProviderConfig(env).accountNamespace,
+  };
   if (env.STRIPE_API_HOST !== undefined) {
     const value = required(env, 'STRIPE_API_HOST');
     const url = absoluteUrl(value, 'STRIPE_API_HOST', ['http:', 'https:']);
@@ -108,18 +126,28 @@ function readCheckoutConfig(env: Environment): Pick<CommerceWorkerConfig, 'succe
 
 /** Configuration shared by the worker's durable commerce workflows and the HTTP server. */
 export function readCommerceWorkerConfig(env: Environment): CommerceWorkerConfig | null {
-  if (!isCommerceConfigured(env)) return null;
-  return { stripe: readStripeConfig(env), ...readCheckoutConfig(env) };
+  if (!isCommerceConfigured(env)) {
+    readCommerceMoneyPolicy(env);
+    return null;
+  }
+  const config = { stripe: readStripeConfig(env), ...readCheckoutConfig(env) };
+  readCommerceMoneyPolicy(env);
+  return config;
 }
 
 /** HTTP-only configuration adds webhook verification secrets to the worker's shared settings. */
 export function readCommerceConfig(env: Environment): CommerceConfig | null {
-  if (!isCommerceConfigured(env)) return null;
+  if (!isCommerceConfigured(env)) {
+    readCommerceMoneyPolicy(env);
+    return null;
+  }
   const apiKey = readStripeApiKey(env);
   const webhookSecrets = readWebhookSecrets(env);
-  return {
+  const config = {
     stripe: readStripeConfig(env, apiKey),
     ...readCheckoutConfig(env),
     webhookSecrets,
   };
+  readCommerceMoneyPolicy(env);
+  return config;
 }

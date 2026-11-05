@@ -1,3 +1,5 @@
+import { memoizedValue } from '../memoized.ts';
+import type { OwnMediaDependencies } from './own-media.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -8,10 +10,13 @@ import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/re
 import { AuthenticationError } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { threadTarget } from './commands.ts';
+import { readDocumentMediaPresentations } from './media-presentation.ts';
+import { readOwnMediaInventory, recordOwnMediaReservation } from './own-media.ts';
 import { mutateContentPoint } from './erase-post.ts';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
 import {
   reserveMedia,
+  readAvatarUploadAdvice,
   NewThreadTargetExistsError,
   completeMedia,
   readReservation,
@@ -21,49 +26,71 @@ import {
 } from './media.ts';
 import {
   MediaReservationInputSchema,
+  RealmMediaReservationInputSchema,
   MediaCompletionInputSchema,
   MediaReservationResponseSchema,
   MediaCompletionResponseSchema,
   MediaDownloadQuerySchema,
   MediaDownloadResponseSchema,
+  AvatarUploadAdviceQuerySchema,
+  AvatarUploadAdviceResponseSchema,
+  DocumentMediaInputSchema,
+  DocumentMediaPageSchema,
+  OwnMediaInventoryQuerySchema,
+  OwnMediaInventoryPageSchema,
   strictContentSchema,
 } from './schemas.ts';
 
-type Dependencies = MediaDependencies & { routeKey: Uint8Array };
+type Dependencies = MediaDependencies & OwnMediaDependencies & { routeKey: Uint8Array };
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
-const readFailures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  500: problemSchema('internal_error'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-  ),
-};
-const writeFailures = {
-  ...readFailures,
-  403: problemSchema('forbidden'),
-  409: problemSchema('conflict'),
-  422: problemSchema('idempotency_conflict', 'too_many_events'),
-  429: problemSchema('rate_limited'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-    'rate_limit_unavailable',
-  ),
-};
-const sessionHeader = { [SESSION_HEADER]: t.String() };
-const commandHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
-const upload = defineRateLimit({ family: 'upload', units: 1 });
-const write = defineRateLimit({ family: 'write', units: 1 });
+function readFailures() {
+  return memoizedValue(readFailures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    500: problemSchema('internal_error'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+    ),
+  }));
+}
+function writeFailures() {
+  return memoizedValue(writeFailures, () => ({
+    ...readFailures(),
+    403: problemSchema('forbidden'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict', 'too_many_events'),
+    429: problemSchema('rate_limited'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+      'rate_limit_unavailable',
+    ),
+  }));
+}
+function sessionHeader() {
+  return memoizedValue(sessionHeader, () => ({ [SESSION_HEADER]: t.String() }));
+}
+function commandHeaders() {
+  return memoizedValue(commandHeaders, () =>
+    t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
+  );
+}
+function upload() {
+  return memoizedValue(upload, () => defineRateLimit({ family: 'upload', units: 1 }));
+}
+function write() {
+  return memoizedValue(write, () => defineRateLimit({ family: 'write', units: 1 }));
+}
 const secured = [{ bearerAuth: [] }];
+const readSecurity = [...secured, {}];
 function context(request: Request, deadline: number) {
   return {
     idempotencyKey: idempotencyKeyOf(request.headers.get(IDEMPOTENCY_HEADER)),
@@ -84,7 +111,7 @@ async function mutation<T>(work: () => Promise<T>) {
   }
 }
 function metadata(media: NonNullable<Awaited<ReturnType<typeof readReservation>>>) {
-  if (media.purpose !== 'post-image') throw new ProblemError('not_found');
+  if (media.purpose === 'cover') throw new ProblemError('not_found');
   return {
     id: media.id,
     state: media.erased ? ('erased' as const) : media.state,
@@ -95,29 +122,75 @@ function metadata(media: NonNullable<Awaited<ReturnType<typeof readReservation>>
     uploaderId: media.uploaderId,
     key: media.key,
     reservationRequestId: media.reservationRequestId,
+    ...(media.purpose !== 'post-image' ? { purpose: media.purpose } : {}),
   };
 }
 
 export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependencies: Dependencies) {
   return app
+    .get(
+      '/v1/media',
+      {
+        query: strictContentSchema(OwnMediaInventoryQuerySchema),
+        response: {
+          200: withHeaders(strictContentSchema(OwnMediaInventoryPageSchema), sessionHeader()),
+          ...readFailures(),
+        },
+        detail: {
+          operationId: 'media.own',
+          'x-exposure': 'public',
+          'x-action': 'media:read_reservation',
+          security: secured,
+        },
+      },
+      async ({ actor, query, admission, job, set }) =>
+        admission.run('normal', job, async () => {
+          set.headers['cache-control'] = 'private, no-store';
+          return readOwnMediaInventory(dependencies, actor, query, job.deadline);
+        }),
+    )
+    .post(
+      '/v1/media/presentations',
+      {
+        body: strictContentSchema(DocumentMediaInputSchema),
+        response: {
+          200: withHeaders(strictContentSchema(DocumentMediaPageSchema()), sessionHeader()),
+          ...readFailures(),
+        },
+        detail: {
+          operationId: 'media.presentations',
+          'x-exposure': 'public',
+          'x-action': 'media:read',
+          security: readSecurity,
+        },
+      },
+      async ({ actor, body, admission, job, set }) =>
+        admission.run('normal', job, async () => {
+          set.headers['cache-control'] = 'private, no-store';
+          return readDocumentMediaPresentations(dependencies, actor, body.ids, {
+            deadline: job.deadline,
+            routeKey: dependencies.routeKey,
+          });
+        }),
+    )
     .post(
       '/v1/media',
       {
         body: strictContentSchema(MediaReservationInputSchema),
-        headers: commandHeaders,
+        headers: commandHeaders(),
         response: {
           201: withHeaders(strictContentSchema(MediaReservationResponseSchema), {
-            ...sessionHeader,
+            ...sessionHeader(),
             location: t.String(),
           }),
-          ...writeFailures,
+          ...writeFailures(),
         },
         detail: {
           operationId: 'media.create',
           'x-exposure': 'public',
           'x-action': 'media:create',
           'x-resource-types': ['content.media'],
-          'x-rate-limit': upload,
+          'x-rate-limit': upload(),
           security: secured,
         },
       },
@@ -125,6 +198,7 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
         mutation(() =>
           admission.run('normal', job, async () => {
             if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+            if (body.purpose === 'avatar' && body.containerId !== actor.accountId) throw new ProblemError('not_found');
             const target =
               'newThread' in body
                 ? {
@@ -133,6 +207,50 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
                   }
                 : undefined;
             const result = await reserveMedia(dependencies, actor, body, context(request, job.deadline), target);
+            await recordOwnMediaReservation(dependencies.pool, actor, result.value.mediaId);
+            session.record(result);
+            const media = await readReservation(dependencies, result.value.mediaId, { actor, deadline: job.deadline });
+            if (!media) throw new ProblemError('not_found');
+            set.headers.location = `/v1/media/${media.id}`;
+            set.headers['cache-control'] = 'private, no-store';
+            return status(201, { media: metadata(media) });
+          }),
+        ),
+    )
+    .post(
+      '/v1/realms/:realmId/media',
+      {
+        params: t.Object({ realmId: t.String() }, { additionalProperties: false }),
+        body: strictContentSchema(RealmMediaReservationInputSchema),
+        headers: commandHeaders(),
+        response: {
+          201: withHeaders(strictContentSchema(MediaReservationResponseSchema), {
+            ...sessionHeader(),
+            location: t.String(),
+          }),
+          ...writeFailures(),
+        },
+        detail: {
+          operationId: 'realm_media.create',
+          'x-exposure': 'public',
+          'x-action': 'realm:manage',
+          'x-resource-types': ['content.media'],
+          'x-rate-limit': upload(),
+          security: secured,
+        },
+      },
+      async ({ params: { realmId: id }, actor, body, request, admission, job, session, set, status }) =>
+        mutation(() =>
+          admission.run('normal', job, async () => {
+            existing(id);
+            if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+            const result = await reserveMedia(
+              dependencies,
+              actor,
+              { ...body, containerId: id },
+              context(request, job.deadline),
+            );
+            await recordOwnMediaReservation(dependencies.pool, actor, result.value.mediaId);
             session.record(result);
             const media = await readReservation(dependencies, result.value.mediaId, { actor, deadline: job.deadline });
             if (!media) throw new ProblemError('not_found');
@@ -143,12 +261,34 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
         ),
     )
     .get(
+      '/v1/media/avatar-upload-advice',
+      {
+        query: strictContentSchema(AvatarUploadAdviceQuerySchema),
+        response: {
+          200: withHeaders(strictContentSchema(AvatarUploadAdviceResponseSchema), sessionHeader()),
+          ...readFailures(),
+        },
+        detail: {
+          operationId: 'media.avatar_upload_advice',
+          'x-exposure': 'public',
+          'x-action': 'media:create',
+          security: secured,
+        },
+      },
+      async ({ actor, admission, job, set }) =>
+        admission.run('normal', job, async () => {
+          if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+          set.headers['cache-control'] = 'private, no-store';
+          return readAvatarUploadAdvice(dependencies, actor, job.deadline);
+        }),
+    )
+    .get(
       '/v1/media/:id',
       {
         params,
         response: {
-          200: withHeaders(strictContentSchema(MediaReservationResponseSchema), sessionHeader),
-          ...readFailures,
+          200: withHeaders(strictContentSchema(MediaReservationResponseSchema), sessionHeader()),
+          ...readFailures(),
         },
         detail: {
           operationId: 'media.read_reservation',
@@ -174,16 +314,16 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
       {
         params,
         body: strictContentSchema(MediaCompletionInputSchema),
-        headers: commandHeaders,
+        headers: commandHeaders(),
         response: {
-          200: withHeaders(strictContentSchema(MediaCompletionResponseSchema), sessionHeader),
-          ...writeFailures,
+          200: withHeaders(strictContentSchema(MediaCompletionResponseSchema), sessionHeader()),
+          ...writeFailures(),
         },
         detail: {
           operationId: 'media.complete',
           'x-exposure': 'public',
           'x-action': 'media:complete',
-          'x-rate-limit': write,
+          'x-rate-limit': write(),
           security: secured,
         },
       },
@@ -205,16 +345,16 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
       '/v1/media/:id',
       {
         params,
-        headers: commandHeaders,
+        headers: commandHeaders(),
         response: {
-          204: withHeaders(t.Void(), sessionHeader),
-          ...writeFailures,
+          204: withHeaders(t.Void(), sessionHeader()),
+          ...writeFailures(),
         },
         detail: {
           operationId: 'media.erase',
           'x-exposure': 'public',
           'x-action': 'media:erase',
-          'x-rate-limit': write,
+          'x-rate-limit': write(),
           security: secured,
         },
       },
@@ -241,8 +381,8 @@ export function mediaRoutes(app: ReturnType<typeof definitionRoutes>, dependenci
         params,
         query: strictContentSchema(MediaDownloadQuerySchema),
         response: {
-          200: withHeaders(strictContentSchema(MediaDownloadResponseSchema), sessionHeader),
-          ...readFailures,
+          200: withHeaders(strictContentSchema(MediaDownloadResponseSchema), sessionHeader()),
+          ...readFailures(),
         },
         detail: {
           operationId: 'media.authorize_download',

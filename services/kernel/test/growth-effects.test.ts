@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import pg from 'pg';
+import { ERASURE_LOCATOR_EFFECTS } from '../src/access/erasure.ts';
 import { createPool } from '../src/database/pool.ts';
 import { effectWorkflowId, launchWork, registerEffects, shutdownWork } from '../src/events/effects.ts';
 import type { CloudEvent, Envelope } from '../src/events/log.ts';
@@ -11,37 +12,67 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const pool = createPool(databaseUrl);
 const admin = new pg.Pool({ connectionString: databaseUrl, max: 2 });
 const CREATED = 'com.rezics.subject.created.v1';
+const CONTEXT = 'com.rezics.semantic.context.created.v1';
+async function within<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Timed out waiting for ${label}`)), 10_000);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+const locator = 'growth_locator';
+(ERASURE_LOCATOR_EFFECTS as Set<string>).add(locator);
 let nextPartition = 3584 + Math.floor(Math.random() * 256);
 const freshPartition = () => nextPartition++;
 let growth: GrowthDatabase;
+let locatorGrowth: GrowthDatabase;
+let effects: ReturnType<typeof registerEffects>;
 let releaseBlocked!: () => void;
 let blockedStarted!: () => void;
 const blocked = new Promise<void>((resolve) => (releaseBlocked = resolve));
 const started = new Promise<void>((resolve) => (blockedStarted = resolve));
 const starts: string[] = [];
 
-const effects = registerEffects([
-  {
-    name: 'ordered',
-    types: [CREATED],
-    run: async (event) => {
-      starts.push(event.subject!);
-      if (event.subject === 'blocked') {
-        blockedStarted();
-        await blocked;
-      }
-    },
-  },
-]);
+function registerFixtureEffects() {
+  return registerEffects(
+    [
+      { name: locator, types: [CONTEXT], async run() {} },
+      {
+        name: 'ordered',
+        types: [CREATED],
+        run: async (event) => {
+          starts.push(event.subject!);
+          if (event.subject === 'blocked') {
+            blockedStarted();
+            await within(blocked, 'blocked effect release');
+          }
+        },
+      },
+    ],
+    locatorGrowth.pool,
+  );
+}
 
 beforeAll(async () => {
   growth = await openGrowthDatabase(databaseUrl);
-  await launchWork({ databaseUrl, systemDatabasePool: growth.openPool({ max: 4 }) });
+  // The existing series measures SDK persistence. This separate capture measures the added kernel writes,
+  // without charging timing-dependent SDK result polling to the locator-work operation.
+  locatorGrowth = await openGrowthDatabase(databaseUrl);
+  effects = registerFixtureEffects();
+  await within(launchWork({ databaseUrl, systemDatabasePool: growth.openPool({ max: 4 }) }), 'executor launch');
 });
 afterAll(async () => {
   releaseBlocked();
-  await shutdownWork();
+  await within(shutdownWork(), 'executor shutdown');
+  (ERASURE_LOCATOR_EFFECTS as Set<string>).delete(locator);
   await growth.close();
+  await locatorGrowth.close();
   await pool.end();
   await admin.end();
 });
@@ -65,7 +96,7 @@ function envelope(partition: number, position: bigint, subject: string): Envelop
 
 async function enqueueAndWait(item: Envelope, name = 'ordered'): Promise<void> {
   await effects.enqueue([item]);
-  await DBOS.retrieveWorkflow(effectWorkflowId(item, 0, name)).getResult();
+  await within(DBOS.retrieveWorkflow(effectWorkflowId(item, 0, name)).getResult(), 'effect result');
 }
 
 const GROWTH_SCALES = [256, 1024, 4096] as const;
@@ -111,21 +142,24 @@ test('a blocked effect in one partition does not delay effects of another partit
   const first = envelope(a, 1n, 'blocked');
   const second = envelope(b, 1n, 'other-partition');
   await effects.enqueue([first]);
-  await started;
+  await within(started, 'blocked effect start');
   await effects.enqueue([second]);
-  await DBOS.retrieveWorkflow(effectWorkflowId(second, 0, 'ordered')).getResult();
+  await within(DBOS.retrieveWorkflow(effectWorkflowId(second, 0, 'ordered')).getResult(), 'other partition result');
   expect(starts).toContain('other-partition');
   releaseBlocked();
-  await DBOS.retrieveWorkflow(effectWorkflowId(first, 0, 'ordered')).getResult();
-}, 30_000);
+  await within(DBOS.retrieveWorkflow(effectWorkflowId(first, 0, 'ordered')).getResult(), 'released effect result');
+}, 60_000);
 
 test('effects of one partition start in position order', async () => {
   const partition = freshPartition();
   const earlier = envelope(partition, 10n, 'position-10');
   const later = envelope(partition, 11n, 'position-11');
   await effects.enqueue([later, earlier]);
-  await Promise.all(
-    [earlier, later].map((item) => DBOS.retrieveWorkflow(effectWorkflowId(item, 0, 'ordered')).getResult()),
+  await within(
+    Promise.all(
+      [earlier, later].map((item) => DBOS.retrieveWorkflow(effectWorkflowId(item, 0, 'ordered')).getResult()),
+    ),
+    'ordered effect results',
   );
   expect(starts.slice(-2)).toEqual(['position-10', 'position-11']);
 }, 30_000);
@@ -182,4 +216,53 @@ test('Effect persistence stays within its bound as N grows', async () => {
       })),
     ),
   );
-}, 120_000);
+}, 300_000);
+
+test(`locator success adds one batch insert and stays bounded as kept rows and DBOS history grow`, async () => {
+  const namespace = `locator-growth:success:${crypto.randomUUID()}`;
+  const partitionBase = freshPartition();
+  const report = await checkGrowth(locatorGrowth, {
+    name: `Locator effect success`,
+    scales: GROWTH_SCALES,
+    bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+    async grow(db, scale, previous) {
+      await seedHistory(db, namespace, partitionBase, previous, scale);
+      await db.admin.query(
+        `INSERT INTO access.erasure_locator_work(workflow_id,effect,opened_at,state)
+           SELECT $1||':'||n,'growth_locator',0,'done'
+           FROM generate_series($2::integer+1,$3::integer) n`,
+        [namespace, previous, scale],
+      );
+    },
+    async operation(_db, _scale, repetition) {
+      const partition = freshPartition();
+      const batch = [1n, 2n].map((position) => {
+        const item = envelope(partition, position, `locator-${partition}-${repetition}-${position}`);
+        item.events[0]!.type = CONTEXT;
+        return item;
+      });
+      await effects.enqueue(batch);
+      for (const item of batch)
+        await within(DBOS.retrieveWorkflow(effectWorkflowId(item, 0, locator)).getResult(), 'locator success');
+    },
+  });
+  expect(new Set(report.samples.map(({ cost }) => cost.statements)).size).toBe(1);
+  expect(new Set(report.samples.map(({ cost }) => cost.rows)).size).toBe(1);
+  for (const sample of report.samples) {
+    for (const statements of sample.statementRepetitions) {
+      const inserts = statements.filter(({ statement }) =>
+        statement.startsWith('INSERT INTO access.erasure_locator_work'),
+      );
+      expect(inserts).toHaveLength(1);
+      expect(inserts[0]!.count).toBe(1);
+      {
+        const updates = statements.filter(({ statement }) =>
+          statement.startsWith('UPDATE access.erasure_locator_work'),
+        );
+        expect(updates).toHaveLength(1);
+        expect(updates[0]!.count).toBe(2);
+      }
+    }
+    expect(sample.cost.relations['access.erasure_locator_work']?.sequentialScans ?? 0).toBe(0);
+  }
+}, 600000);

@@ -5,6 +5,15 @@ export const MAX_IMPORT_TOTAL_WAIT_MS = 60000;
 export const MAX_IMPORT_DEADLINE_MS = 120000;
 export const MAX_IMPORT_ATTEMPTS = 5;
 
+/** Local retry admission only: no remote body, header text or credential is retained. */
+export type ImportRetryState = Readonly<{
+  notBefore?: number;
+  deadline: number;
+  stopped?: 'unrepresentable-delay' | 'wait-limit' | 'total-wait-limit' | 'deadline';
+}>;
+const retryStates = new WeakMap<Response, ImportRetryState>();
+export const importRetryState = (response: Response): ImportRetryState | undefined => retryStates.get(response);
+
 export type ImportHttpOptions = {
   origin: string;
   token: (fresh?: boolean) => Promise<string>;
@@ -35,6 +44,12 @@ function hasIdempotencyKey(header: string | null): boolean {
 
 function mayRetry(request: Request, body: Uint8Array | null): boolean {
   if (request.method === 'GET' || request.method === 'HEAD') return true;
+  if (request.method === 'PUT')
+    return (
+      /^\/v1\/subjects\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/source-statistics\/vndb$/.test(
+        new URL(request.url).pathname,
+      ) && hasIdempotencyKey(request.headers.get('idempotency-key'))
+    );
   if (request.method !== 'POST') return false;
   if (hasIdempotencyKey(request.headers.get('idempotency-key'))) return true;
   if (new URL(request.url).pathname !== '/v1/subjects:batchWrite' || body === null) return false;
@@ -176,17 +191,16 @@ const httpDate = new RegExp(
     `${weekday} ${month} (?: \\d|\\d{2}) \\d{2}:\\d{2}:\\d{2} \\d{4})$`,
 );
 
-function retryDelay(response: Response, attempt: number, now: () => number): number | null {
-  const fallback = backoff(attempt);
-  const header = response.status === 429 ? response.headers.get('retry-after') : null;
-  if (header === null) return fallback;
-  let delay: number;
-  if (/^\d+$/.test(header)) delay = Number(header) * 1000;
+function retryAfter(response: Response, receivedAt: number): number | null | undefined {
+  const header = response.headers.get('retry-after');
+  if (header === null) return undefined;
+  let notBefore: number;
+  if (/^\d+$/.test(header)) notBefore = receivedAt + Number(header) * 1000;
   else if (httpDate.test(header) && Number.isFinite(Date.parse(header)))
-    delay = Math.max(0, Date.parse(header) - now());
-  else return fallback;
-  // An unrepresentable advertised delay cannot safely be shortened to a backoff.
-  return Number.isSafeInteger(Math.ceil(delay)) ? Math.ceil(delay) : null;
+    notBefore = Math.max(receivedAt, Date.parse(header));
+  else return undefined;
+  // An unrepresentable advertised time cannot safely become a shorter backoff.
+  return Number.isSafeInteger(Math.ceil(notBefore)) ? Math.ceil(notBefore) : null;
 }
 
 function backoff(attempt: number): number {
@@ -272,6 +286,135 @@ async function boundedResponse(response: Response, limit: number, signal: AbortS
   }
 }
 
+/** Public, read-only JSON transport sharing the importer's response and retry bounds. */
+export function createBoundedPublicGet(options: {
+  origin: string;
+  pathPrefix: string;
+  fetch?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+  schedule?: (callback: () => void, ms: number) => () => void;
+  maxAttempts?: number;
+  maxResponseBytes?: number;
+  maxWaitMs?: number;
+  maxTotalWaitMs?: number;
+  deadlineMs?: number;
+}): (url: string, signal?: AbortSignal) => Promise<Response> {
+  const origin = new URL(options.origin);
+  if (
+    origin.protocol !== 'https:' ||
+    origin.username ||
+    origin.password ||
+    origin.pathname !== '/' ||
+    origin.search ||
+    origin.hash ||
+    !options.pathPrefix.startsWith('/') ||
+    options.pathPrefix.includes('..')
+  )
+    throw new TypeError('Expected a bounded HTTPS read origin and path');
+  const maxAttempts = boundedSetting(options.maxAttempts, MAX_IMPORT_ATTEMPTS, MAX_IMPORT_ATTEMPTS, 1);
+  const maxResponseBytes = boundedSetting(
+    options.maxResponseBytes,
+    MAX_IMPORT_RESPONSE_BYTES,
+    MAX_IMPORT_RESPONSE_BYTES,
+  );
+  const maxWaitMs = boundedSetting(options.maxWaitMs, MAX_IMPORT_WAIT_MS, MAX_IMPORT_WAIT_MS);
+  const maxTotalWaitMs = boundedSetting(options.maxTotalWaitMs, MAX_IMPORT_TOTAL_WAIT_MS, MAX_IMPORT_TOTAL_WAIT_MS);
+  const deadlineMs = boundedSetting(options.deadlineMs, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_DEADLINE_MS, 1);
+  const upstream = options.fetch ?? globalThis.fetch;
+  const now = options.now ?? Date.now;
+  const schedule = options.schedule ?? nativeSchedule;
+  const sleep = (ms: number, signal: AbortSignal) =>
+    abortable(signal, () => (options.sleep ? options.sleep(ms) : timerSleep(ms, signal, schedule)));
+
+  return async (input, caller) => {
+    const url = new URL(input);
+    if (
+      url.origin !== origin.origin ||
+      !url.pathname.startsWith(options.pathPrefix) ||
+      url.username ||
+      url.password ||
+      url.hash
+    )
+      throw new TypeError('Public reads must target the configured origin and path');
+    caller?.throwIfAborted();
+    const controller = new AbortController();
+    const signal = controller.signal;
+    const aborted = () => controller.abort(caller?.reason);
+    caller?.addEventListener('abort', aborted, { once: true });
+    const deadline = now() + deadlineMs;
+    let clearDeadline: (() => void) | undefined;
+    try {
+      clearDeadline = schedule(
+        () => controller.abort(new DOMException('Public read deadline exceeded', 'TimeoutError')),
+        deadlineMs,
+      );
+      let scheduledWait = 0;
+      for (let attempt = 1; ; attempt++) {
+        signal.throwIfAborted();
+        let response: Response;
+        try {
+          response = await abortable(signal, () =>
+            upstream(url.href, {
+              method: 'GET',
+              headers: { accept: 'application/json' },
+              credentials: 'omit',
+              referrerPolicy: 'no-referrer',
+              redirect: 'error',
+              signal,
+            }),
+          );
+        } catch (error) {
+          signal.throwIfAborted();
+          const delay = backoff(attempt);
+          if (attempt === maxAttempts || delay > maxWaitMs || delay > maxTotalWaitMs - scheduledWait) throw error;
+          scheduledWait += delay;
+          await sleep(delay, signal);
+          continue;
+        }
+        const receivedAt = now();
+        const adaptable = response.status === 429 || response.status === 503;
+        const hint = adaptable ? retryAfter(response, receivedAt) : undefined;
+        let buffered = false;
+        let overload = response.status === 429;
+        if (response.status === 503 && hint !== undefined) {
+          response = await boundedResponse(response, maxResponseBytes, signal);
+          buffered = true;
+          const problem: unknown = await abortable(signal, () =>
+            response
+              .clone()
+              .json()
+              .catch(() => null),
+          );
+          overload =
+            typeof problem === 'object' && problem !== null && 'retryable' in problem && problem.retryable === true;
+        }
+        const notBefore = overload ? hint : undefined;
+        const delay =
+          notBefore === null ? null : notBefore === undefined ? backoff(attempt) : Math.max(0, notBefore - now());
+        const stopped = (): boolean =>
+          delay === null ||
+          delay > maxWaitMs ||
+          delay > maxTotalWaitMs - scheduledWait ||
+          (notBefore !== undefined && now() + delay >= deadline);
+        if (
+          attempt === maxAttempts ||
+          !(response.status === 429 || (response.status >= 500 && response.status <= 599)) ||
+          stopped()
+        )
+          return buffered ? response : boundedResponse(response, maxResponseBytes, signal);
+        if (delay === null) return buffered ? response : boundedResponse(response, maxResponseBytes, signal);
+        scheduledWait += delay;
+        await abortable(signal, () => cancel(response.body));
+        await sleep(delay, signal);
+      }
+    } finally {
+      caller?.removeEventListener('abort', aborted);
+      clearDeadline?.();
+    }
+  };
+}
+
 /** Transport for createKernelClient; session state and write validation remain with the client/server. */
 export function createImportFetch(options: ImportHttpOptions): typeof fetch {
   const origin = new URL(options.origin);
@@ -310,6 +453,7 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
     const signal = controller.signal;
     const aborted = () => controller.abort(caller?.reason);
     caller?.addEventListener('abort', aborted, { once: true });
+    const deadline = now() + deadlineMs;
     let clearDeadline: (() => void) | undefined;
     try {
       clearDeadline = schedule(
@@ -378,15 +522,62 @@ export function createImportFetch(options: ImportHttpOptions): typeof fetch {
           attempt--;
           continue;
         }
+        const receivedAt = now();
+        let buffered = false;
+        const adaptable = response.status === 429 || response.status === 503;
+        const hint = adaptable ? retryAfter(response, receivedAt) : undefined;
+        let overload = response.status === 429;
+        if (response.status === 503 && hint !== undefined) {
+          // Interpret 503 hints only for the same public retryable classifier as
+          // the coordinator. Buffer before parsing, under the existing body cap.
+          response = await boundedResponse(response, maxResponseBytes, signal);
+          buffered = true;
+          const problem: unknown = await abortable(signal, () =>
+            response
+              .clone()
+              .json()
+              .catch(() => null),
+          );
+          overload =
+            typeof problem === 'object' && problem !== null && 'retryable' in problem && problem.retryable === true;
+        }
+        const notBefore = overload ? hint : undefined;
+        const delay =
+          notBefore === null ? null : notBefore === undefined ? backoff(attempt) : Math.max(0, notBefore - now());
+        const stopped = (): ImportRetryState['stopped'] =>
+          delay === null
+            ? 'unrepresentable-delay'
+            : delay > maxWaitMs
+              ? 'wait-limit'
+              : delay > maxTotalWaitMs - scheduledWait
+                ? 'total-wait-limit'
+                : notBefore !== undefined && now() + delay >= deadline
+                  ? 'deadline'
+                  : undefined;
+        const finish = async (refused = false) => {
+          const result = buffered ? response : await boundedResponse(response, maxResponseBytes, signal);
+          if (adaptable && (notBefore !== undefined || refused)) {
+            const reason = stopped();
+            retryStates.set(
+              result,
+              Object.freeze({
+                deadline,
+                ...(notBefore === undefined || notBefore === null ? {} : { notBefore }),
+                ...(reason === undefined ? {} : { stopped: reason }),
+              }),
+            );
+          }
+          return result;
+        };
         if (
           !retryable ||
           attempt === maxAttempts ||
           !(response.status === 429 || (response.status >= 500 && response.status <= 599))
         )
-          return await boundedResponse(response, maxResponseBytes, signal);
-        const delay = retryDelay(response, attempt, now);
-        if (delay === null || delay > maxWaitMs || delay > maxTotalWaitMs - scheduledWait)
-          return await boundedResponse(response, maxResponseBytes, signal);
+          return await finish();
+        if (stopped() !== undefined) return await finish(true);
+        // stopped() rejects the null (unrepresentable) case before scheduling.
+        if (delay === null) return await finish(true);
         scheduledWait += delay;
         await abortable(request.signal, () => cancel(response.body));
         await sleep(delay, request.signal);

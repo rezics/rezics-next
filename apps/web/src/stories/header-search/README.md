@@ -1,0 +1,67 @@
+# Header Search
+
+The reusable region lives in `search/header-search/`. AppShell mounts it once. The same native input stays in the
+pill, expanded panel and phone sheet. Route query and facet data enter through the ordinary GET form. ScopeChip
+and ShellSearch remain re-exports for existing callers.
+The [search interface contract](../../search/README.md) owns desktop centring, the compact transition, coherent
+surface paint and control focus. Filters remains on the left of the second row.
+
+A scope label never grants authority. A caller must supply its existing localized scoped search route; without
+one, scoped submission and suggestions stay unavailable. Removing the chip explicitly returns to global search.
+Global suggestions never run with a scope. An optional scoped suggestion loader must enforce that scope itself.
+No advanced search admission or Zone source is opened. `slots.ask` is empty and renders nothing.
+
+Filters use `HeaderSearchFilterProvider` and `useRegisterHeaderSearchFilters`. SearchPage registers its real current
+named Type/facet controls only when available. The header opens that control and transfers keyboard focus. Other
+routes may register an existing control through this seam; absent controls leave Filters disabled.
+
+The stories use a suggestion boundary adapted from the existing search recording. Errors reject; loading stays
+pending until cancelled. FiltersOpen uses SearchPage and its ordinary fake route boundary. Every state is reached
+through its play. No story represents native authority or visual approval.
+
+Review every exact ID at **phone390 and desktop1280**, with **en and zh-Hans**, **light and dark** toolbar globals.
+Root screenshot review is pending for every cell:
+
+| State ID                              | phone390 | desktop1280 |
+| ------------------------------------- | -------- | ----------- |
+| patterns-header-search--rest          | pending  | pending     |
+| patterns-header-search--scope-chip    | pending  | pending     |
+| patterns-header-search--expanded      | pending  | pending     |
+| patterns-header-search--typing        | pending  | pending     |
+| patterns-header-search--scope-removed | pending  | pending     |
+| patterns-header-search--filters-open  | pending  | pending     |
+| patterns-header-search--suggestions   | pending  | pending     |
+| patterns-header-search--no-results    | pending  | pending     |
+| patterns-header-search--loading       | pending  | pending     |
+| patterns-header-search--error         | pending  | pending     |
+| patterns-header-search--phone-sheet   | pending  | pending     |
+
+PhoneSheet and PhoneSheetKeyboardSubmission use the phone390 viewport global for the active phone state, with
+focus containment and Escape return. Other states choose presentation responsively. Expanded covers keyboard
+focus and recent discovery; Suggestions covers active-descendant selection. Canonical IDs remain unchanged;
+viewport, locale and theme variations use toolbar globals.
+
+Extra story callsites declared for this slice: `src/stories/header-search/header-search.stories.tsx` and
+`src/stories/header-search/HeaderSearch.mdx`, discovered by the existing Storybook glob. They give the reusable
+region one complete Patterns folder without changing Storybook configuration or sibling sources.
+
+Reference sources: Primer React `SelectPanel.tsx`, Discourse `search-menu.scss` and Open Library's selected-facet
+template in the indexed read-only clones. These supply responsive panel, scrolling and explicit context patterns;
+REZICS supplies its own native form, composer region and tokens. The supplied search/mobile images and adopted
+resume correction inform surface hierarchy and the retained second-row Filters placement.
+
+Implementation decisions: unsupported scopes stay visibly unavailable until explicitly removed; supported route
+filters keep their own forms and named concept choices; new query submission retains the route's supported
+Type/facet/sort conditions and drops its cursor. Suggestions use each member's own `coverRatio`, with an additive
+per-member ratio hook for a presentation already supplied by a read. The former isolated initial-open filter story
+is replaced by the canonical FiltersOpen interaction. Existing account and navigation stories remain intact.
+No sibling source or risk-owned file changed.
+
+Worker verification follows the maintainer's minimal override: only `bun run --cwd apps/web typecheck`; focused
+acceptance, unit execution, native/browser/remote checks, publication and screenshots are deferred. Written
+regressions cover the real presenter, transition reducer and request boundary. A typecheck pass is not their pass
+or Root visual approval.
+
+The default-composition regression is `apps/web/tests/header-search-composition.test.tsx`. It uses the existing
+Search PageStory route assembly and default ShellSearch, not an injected presenter. It is written for later
+integration execution; acceptance, story plays and screenshot review remain deferred for this change.

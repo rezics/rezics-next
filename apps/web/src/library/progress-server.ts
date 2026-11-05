@@ -1,9 +1,16 @@
 import { createServerFn } from '@tanstack/react-start';
-import { notFound } from '@tanstack/react-router';
+import { progressIndexAddress, progressSessionAddress } from './progress-address';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
+import { progressFormChoices, type ProgressChoices } from './progress-profile';
+import { readRelease } from '../subject/definitions';
+import { requestLocale } from '../kernel/client';
+import { isPlatformClosedError } from '../kernel/platform-closed';
 import { kernelClient } from '../kernel/client';
-import type { SessionEnv } from '../session/client';
+import { nameSubjectTypes } from '../subject/definitions';
+import { configured, type SessionEnv } from '../session/client';
+import { cookie, SESSION_COOKIE, validId } from '../session/cookies';
+import { sessionSubject, viewerCredential } from '../session/request';
 import {
   finishProgress,
   loadProgressIndex,
@@ -20,47 +27,41 @@ import {
   type ProgressStarted,
 } from './progress-reads';
 
-function optionalString(input: object, key: string, max: number): string | undefined {
-  const record = input as Record<string, unknown>;
-  if (!(key in record)) return undefined;
-  const value = record[key];
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string' || value.length === 0 || value.length > max) throw notFound();
-  return value;
-}
-
-function validateIndexInput(input: unknown): { subjectId?: string; cursor?: string } {
-  if (!input || typeof input !== 'object') return {};
-  const subjectId = optionalString(input, 'subjectId', 128);
-  const cursor = optionalString(input, 'cursor', 512);
-  return { ...(subjectId ? { subjectId } : {}), ...(cursor ? { cursor } : {}) };
-}
-
-function validateSessionInput(input: unknown): { id: string; changes?: string; units?: string } {
-  if (!input || typeof input !== 'object') throw notFound();
-  const id = optionalString(input, 'id', 128);
-  if (!id) throw notFound();
-  const changes = optionalString(input, 'changes', 512);
-  const units = optionalString(input, 'units', 512);
-  return { id, ...(changes ? { changes } : {}), ...(units ? { units } : {}) };
-}
-
 function requiredString(value: unknown, max: number): string {
   if (typeof value !== 'string' || value.length === 0 || value.length > max)
     throw new Error('Invalid progress request');
   return value;
 }
 
+function additionalMeasures(value: unknown): { unit: string; total?: string }[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length === 0 || value.length > 7) throw new Error('Invalid progress request');
+  return value.map((item) => {
+    if (!item || typeof item !== 'object') throw new Error('Invalid progress request');
+    const measure = item as Record<string, unknown>;
+    const total = measure.total === undefined ? undefined : requiredString(measure.total, 32);
+    return {
+      unit: requiredString(measure.unit, 128),
+      ...(total === undefined ? {} : { total }),
+    };
+  });
+}
+
 function validateStart(input: unknown): ProgressStartInput {
   if (!input || typeof input !== 'object') throw new Error('Invalid progress request');
   const value = input as Record<string, unknown>;
   const total = value.total === undefined ? undefined : requiredString(value.total, 32);
+  const versionSubjectId =
+    value.versionSubjectId === undefined ? undefined : requiredString(value.versionSubjectId, 128);
+  const extras = additionalMeasures(value.additionalMeasures);
   return {
     subjectId: requiredString(value.subjectId, 128),
+    ...(versionSubjectId === undefined ? {} : { versionSubjectId }),
     mode: requiredString(value.mode, 32),
-    unit: requiredString(value.unit, 32),
+    unit: requiredString(value.unit, 128),
     idempotencyKey: requiredString(value.idempotencyKey, 64),
     ...(total === undefined ? {} : { total }),
+    ...(extras === undefined ? {} : { additionalMeasures: extras }),
   };
 }
 
@@ -75,12 +76,15 @@ function validateRecord(input: unknown): ProgressRecordInput {
   if (!input || typeof input !== 'object') throw new Error('Invalid progress request');
   const value = input as Record<string, unknown>;
   if (typeof value.revision !== 'number') throw new Error('Invalid progress request');
+  if (value.clear !== undefined && value.clear !== true) throw new Error('Invalid progress request');
   const add = stringList(value.add);
   const remove = stringList(value.remove);
   return {
     sessionId: requiredString(value.sessionId, 128),
     revision: value.revision,
     idempotencyKey: requiredString(value.idempotencyKey, 64),
+    ...(value.measureId === undefined ? {} : { measureId: requiredString(value.measureId, 128) }),
+    ...(value.clear === true ? { clear: true as const } : {}),
     ...(value.amount === undefined ? {} : { amount: requiredString(value.amount, 32) }),
     ...(value.locator === undefined ? {} : { locator: requiredString(value.locator, 256) }),
     ...(value.position === undefined ? {} : { position: requiredString(value.position, 32) }),
@@ -103,65 +107,108 @@ function validateFinish(input: unknown): ProgressFinishInput {
   };
 }
 
-const READ_SHARE_MS = 5_000;
-const readCache = new Map<string, { at: number; value: unknown }>();
-const readInflight = new Map<string, Promise<unknown>>();
-
-function viewerReadKey(request: Request, kind: string, data: unknown): string {
-  return `${kind}\n${request.headers.get('cookie') ?? ''}\n${JSON.stringify(data)}`;
-}
-
-/** SSR and the following hydration share one kernel read. A failed read is not reused. */
-function shareRead<T>(key: string, load: () => Promise<T>): Promise<T> {
-  const now = Date.now();
-  const hit = readCache.get(key);
-  if (hit && now - hit.at < READ_SHARE_MS) return Promise.resolve(hit.value as T);
-  const pending = readInflight.get(key);
-  if (pending) return pending as Promise<T>;
-  const promise = load().then(
-    (value) => {
-      readCache.set(key, { at: Date.now(), value });
-      readInflight.delete(key);
-      if (readCache.size > 32) {
-        for (const [cachedKey, entry] of readCache) {
-          if (Date.now() - entry.at >= READ_SHARE_MS) readCache.delete(cachedKey);
-        }
-      }
-      return value;
-    },
-    (error: unknown) => {
-      readInflight.delete(key);
-      throw error;
-    },
-  );
-  readInflight.set(key, promise);
-  return promise;
-}
-
-function withFreshKey<T extends { idempotencyKey: string }>(page: T): T {
-  return { ...page, idempotencyKey: crypto.randomUUID() };
+/** Presentation consumes the already bounded page; it never repeats authentication or the list. */
+async function presentProgressIndex(page: ProgressIndex, locale: string): Promise<ProgressIndex> {
+  if (page.viewerState === 'forbidden') return page;
+  await nameSubjectTypes([
+    page.selectedSubject,
+    ...page.sessions.flatMap((session) => [session.subject, session.versionSubject]),
+  ]);
+  if (page.signedIn && page.viewerState !== 'account_retired' && page.viewerState !== 'unavailable') {
+    try {
+      const release = await readRelease();
+      const subject = page.selectedSubject;
+      page.progressChoices = subject ? progressFormChoices(release, subject.type, locale) : undefined;
+    } catch (error) {
+      if (isPlatformClosedError(error)) throw error;
+      page.choicesUnavailable = true;
+    }
+  }
+  return page;
 }
 
 export const readProgressIndex = createServerFn({ method: 'GET' })
-  .validator(validateIndexInput)
+  .validator(progressIndexAddress)
   .handler(async ({ data }): Promise<ProgressIndex> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    const page = await shareRead(viewerReadKey(request, 'index', data), () =>
-      loadProgressIndex(kernelClient(), request, env as Partial<SessionEnv>, data),
-    );
-    return withFreshKey(page);
+    const page = await loadProgressIndex(kernelClient(), request, env as Partial<SessionEnv>, data);
+    return presentProgressIndex(page, requestLocale(request) ?? 'en');
+  });
+
+export type CurrentViewerProgressIndex = {
+  viewer: string | null;
+  requested: {
+    subjectId: string;
+    state?: string;
+    mode?: string;
+    profileId?: string;
+    cursor: string | null;
+  };
+  locale: string;
+  page: ProgressIndex;
+};
+
+/** The viewer comes from the preparation performed by this exact successful reader. */
+export const readCurrentViewerProgressIndex = createServerFn({ method: 'GET' })
+  .validator(progressIndexAddress)
+  .handler(async ({ data }): Promise<CurrentViewerProgressIndex> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const request = getRequest();
+    const locale = requestLocale(request) ?? 'en';
+    const requested = {
+      subjectId: data.subjectId ?? '',
+      ...(data.state === undefined ? {} : { state: data.state }),
+      ...(data.mode === undefined ? {} : { mode: data.mode }),
+      ...(data.profileId === undefined ? {} : { profileId: data.profileId }),
+      cursor: data.cursor ?? null,
+    };
+    // With these preconditions, a signed-in reader necessarily prepared the cookie's active
+    // credential/subject pair. Explicit bearer requests have no such subject association;
+    // missing cookies/configuration must never reuse WeakMap state left on a retained request.
+    const associated =
+      configured(env as Partial<SessionEnv>) &&
+      validId(cookie(request, SESSION_COOKIE)) &&
+      !request.headers.has('authorization');
+    const empty = (idempotencyKey: string): CurrentViewerProgressIndex => ({
+      viewer: null,
+      requested,
+      locale,
+      page: {
+        signedIn: false,
+        viewerState: 'signed_out',
+        subjectId: requested.subjectId,
+        ...(requested.state === undefined ? {} : { state: requested.state }),
+        ...(requested.mode === undefined ? {} : { mode: requested.mode }),
+        ...(requested.profileId === undefined ? {} : { profileId: requested.profileId }),
+        selectedSubject: null,
+        sessions: [],
+        next: null,
+        emptyKind:
+          !requested.subjectId &&
+          requested.state === undefined &&
+          requested.mode === undefined &&
+          requested.profileId === undefined
+            ? 'owner-empty'
+            : 'filtered-empty',
+        idempotencyKey,
+      },
+    });
+    if (!associated) return empty(crypto.randomUUID());
+    const page = await loadProgressIndex(kernelClient(), request, env as Partial<SessionEnv>, data);
+    const viewer = page.signedIn && viewerCredential(request) ? sessionSubject(request) : undefined;
+    if (!viewer) return empty(page.idempotencyKey);
+    return { viewer, requested, locale, page: await presentProgressIndex(page, locale) };
   });
 
 export const readProgressSession = createServerFn({ method: 'GET' })
-  .validator(validateSessionInput)
+  .validator(progressSessionAddress)
   .handler(async ({ data }): Promise<ProgressSessionPage> => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    const page = await shareRead(viewerReadKey(request, 'session', data), () =>
-      loadProgressSession(kernelClient(), request, env as Partial<SessionEnv>, data),
-    );
-    return withFreshKey(page);
+    const page = await loadProgressSession(kernelClient(), request, env as Partial<SessionEnv>, data);
+    if (page.signedIn) await nameSubjectTypes([page.session.subject, page.session.versionSubject]);
+    return page;
   });
 
 export const startProgressSession = createServerFn({ method: 'POST' })
@@ -183,4 +230,12 @@ export const finishProgressSession = createServerFn({ method: 'POST' })
   .handler(async ({ data }): Promise<ProgressRecorded | ProgressFailure> => {
     setResponseHeader('cache-control', 'private, no-store');
     return finishProgress(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+/** Picker results already identify the accepting type; resolving its choices needs no subject request. */
+export const readProgressChoices = createServerFn({ method: 'GET' })
+  .validator((type: string) => requiredString(type, 256))
+  .handler(async ({ data }): Promise<ProgressChoices> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return progressFormChoices(await readRelease(), data, requestLocale() ?? 'en');
   });

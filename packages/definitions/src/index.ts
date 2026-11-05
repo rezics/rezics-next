@@ -1,162 +1,29 @@
 /// <reference path="./recheck.d.ts" />
-import { validateFilter, type FilterDocument, type FilterValidationError } from '@rezics/filter';
+import { createFilterConstruction, type FilterValidationError } from '@rezics/filter';
 import canonicalize from 'canonicalize';
-import { createHash } from 'node:crypto';
 import { safePattern } from './pattern-safety.ts';
-import { Compile } from 'typebox/schema';
-import schema from '../schema/release.json';
-
-export const RELEASE_FORMAT = 'https://rezics.com/definitions/release/1';
-// Headroom over the bundled catalogue plus 100 launch-grain verticals (3 types and 12 properties each).
-export const RELEASE_LIMITS = {
-  types: 1024,
-  properties: 4096,
-  propertiesPerType: 64,
-  facetsPerType: 16,
-  contexts: 256,
-  defaultsPerContext: 64,
-  bytes: 4 * 1024 * 1024,
-} as const;
-export const DATA_TYPES = [
-  'wikibase-item',
-  'string',
-  'external-id',
-  'url',
-  'monolingualtext',
-  'quantity',
-  'time',
-  'document',
-  'media',
-] as const;
-export type DataType = (typeof DATA_TYPES)[number];
-export type TypeDefinition = {
-  iri: string;
-  labels: Record<string, string>;
-  mappings: string[];
-  bases: string[];
-  properties: string[];
-  facets: string[];
-};
-export type PropertyDefinition = {
-  iri: string;
-  labels: Record<string, string>;
-  mappings: string[];
-  datatype: DataType;
-  multivalued: boolean;
-  targets?: string[];
-  units?: string[];
-  minimum?: number;
-  maximum?: number;
-  qualifiers: string[];
-  value: object;
-};
-export type ContextSettings = {
-  labels: Record<string, string>;
-  defaults: Record<string, 'inherit' | 'suppress'>;
-};
-export type SavedFilter = {
-  labels: Record<string, string>;
-  filter: FilterDocument;
-};
-export type Release = {
-  format: typeof RELEASE_FORMAT;
-  catalogue: { id: string; version: string };
-  generator: { name: string; version: string };
-  prefixes: Record<string, string>;
-  types: Record<string, TypeDefinition>;
-  properties: Record<string, PropertyDefinition>;
-  contexts?: Record<string, ContextSettings>;
-  filters?: Record<string, SavedFilter>;
-};
-export type ReleaseViolation = { pointer: string; code: 'invalid' | 'unsafe_pattern' | 'limit' };
+import { constructionValidator } from './publication-construction.ts';
+export { publicationLimits, PUBLICATION_LIMITS } from './publication-construction.ts';
+import { libraryProfileSemantics, libraryProgressSemantics } from './library-profile.ts';
+import { RELEASE_LIMITS, valueSchema, type Release, type ReleaseViolation, type ValueOptions } from './portable.ts';
+export * from './portable.ts';
+export { chooseLabel, languageRanges } from './language.ts';
 
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const subjectIdPattern = new RegExp(UUID);
 const INTEGER = '^[+-](?:0|[1-9][0-9]*)$';
-const DECIMAL = '^[+-](?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$';
-type ValueOptions = { pattern?: string; units?: string[]; integer?: boolean };
+const historicalTimeSchema = {
+  type: 'object',
+  required: ['time', 'precision', 'calendarmodel'],
+  additionalProperties: false,
+  properties: {
+    time: { type: 'string', pattern: '^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$' },
+    precision: { enum: [9, 10, 11] },
+    calendarmodel: { const: 'http://www.wikidata.org/entity/Q1985727' },
+  },
+};
 
-export function valueSchema(
-  datatype: 'monolingualtext',
-  options?: ValueOptions,
-): Extract<ReturnType<typeof buildValueSchema>, { properties: { text: object } }>;
-export function valueSchema(datatype: DataType, options?: ValueOptions): ReturnType<typeof buildValueSchema>;
-export function valueSchema(datatype: DataType, options: ValueOptions = {}) {
-  return buildValueSchema(datatype, options);
-}
-
-function buildValueSchema(datatype: DataType, options: ValueOptions) {
-  if (
-    (datatype === 'document' || datatype === 'media') &&
-    (options.units !== undefined || options.integer !== undefined)
-  )
-    throw new TypeError(`Quantity options are not supported for ${datatype}`);
-  if (options.pattern !== undefined && !['string', 'external-id', 'monolingualtext'].includes(datatype))
-    throw new TypeError(`Patterns are not supported for ${datatype}`);
-  const text = {
-    type: 'string',
-    minLength: 1,
-    maxLength: 1500,
-    ...(options.pattern === undefined ? {} : { pattern: options.pattern }),
-  };
-  switch (datatype) {
-    case 'media':
-      return { type: 'string', pattern: `${UUID}(?![\\s\\S])` };
-    case 'wikibase-item':
-      return { type: 'string', pattern: UUID };
-    case 'string':
-    case 'external-id':
-      return text;
-    case 'url':
-      return { type: 'string', maxLength: 1500, pattern: '^https?://[^\\s]+$' };
-    case 'monolingualtext':
-      return {
-        type: 'object',
-        required: ['text', 'language'],
-        additionalProperties: false,
-        properties: { text, language: { type: 'string', pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$' } },
-      };
-    case 'document':
-      return {
-        type: 'object',
-        required: ['language', 'document'],
-        additionalProperties: false,
-        properties: {
-          language: { type: 'string', pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$' },
-          document: { type: 'object' },
-        },
-      };
-    case 'quantity':
-      return {
-        type: 'object',
-        required: ['amount', 'unit'],
-        additionalProperties: false,
-        properties: {
-          amount: { type: 'string', pattern: options.integer ? INTEGER : DECIMAL },
-          unit: { enum: [...(options.units ?? [])] },
-        },
-      };
-    case 'time':
-      return {
-        type: 'object',
-        required: ['time', 'precision', 'calendarmodel'],
-        additionalProperties: false,
-        properties: {
-          time: { type: 'string', pattern: '^[+-][0-9]{4,}-[0-9]{2}-[0-9]{2}T00:00:00Z$' },
-          precision: { enum: [9, 10, 11] },
-          calendarmodel: { const: 'http://www.wikidata.org/entity/Q1985727' },
-        },
-      };
-    default:
-      throw new TypeError(`Unknown data type: ${datatype}`);
-  }
-}
-
-export function releaseDigest(release: Release): string {
-  return `sha256:${createHash('sha256').update(canonicalize(release)!, 'utf8').digest('hex')}`;
-}
-
-const validator = Compile(schema);
+const validator = constructionValidator;
 const own = (value: object, key: string) => Object.hasOwn(value, key);
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -223,16 +90,36 @@ function collectionLimits(value: unknown, add: (pointer: string, code: ReleaseVi
 // Canonical ordering does not change byte length. Count JSON bytes before sorting
 // keys or compiling schema errors, and stop as soon as the size bound is crossed.
 function exceedsSize(value: unknown): boolean {
-  const pending = [value];
+  const pending: { value: unknown; exit?: boolean }[] = [{ value }];
+  const ancestors = new Set<object>();
   let bytes = 0;
   while (pending.length) {
-    const item = pending.pop();
+    const entry = pending.pop()!;
+    const item = entry.value;
     if (item !== null && typeof item === 'object') {
-      const entries = Object.entries(item);
-      bytes += 2 + Math.max(0, entries.length - 1);
-      for (const [key, child] of entries) {
-        if (!Array.isArray(item)) bytes += Buffer.byteLength(JSON.stringify(key)) + 1;
-        pending.push(child);
+      if (entry.exit) {
+        ancestors.delete(item);
+        continue;
+      }
+      if (ancestors.has(item)) throw new TypeError('Expected acyclic JSON');
+      ancestors.add(item);
+      pending.push({ value: item, exit: true });
+      const array = Array.isArray(item);
+      const prototype = Object.getPrototypeOf(item);
+      if (prototype !== (array ? Array.prototype : Object.prototype) && prototype !== null)
+        throw new TypeError('Expected own JSON data');
+      const keys = Reflect.ownKeys(item);
+      if (array && keys.length !== item.length + 1) throw new TypeError('Expected dense JSON array');
+      bytes += 2 + Math.max(0, keys.length - (array ? 2 : 1));
+      for (const key of keys) {
+        if (array && key === 'length') continue;
+        if (typeof key !== 'string') throw new TypeError('Expected JSON key');
+        const field = Object.getOwnPropertyDescriptor(item, key)!;
+        if (!Object.hasOwn(field, 'value') || !field.enumerable) throw new TypeError('Expected own JSON data');
+        if (array && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= item.length))
+          throw new TypeError('Expected JSON array index');
+        if (!array) bytes += Buffer.byteLength(JSON.stringify(key)) + 1;
+        pending.push({ value: field.value });
       }
     } else {
       const json = JSON.stringify(item);
@@ -246,6 +133,11 @@ function exceedsSize(value: unknown): boolean {
 }
 
 function semantics(release: Release, add: (pointer: string, code?: ReleaseViolation['code']) => void) {
+  for (const [key, profile] of Object.entries(release.libraryProfiles ?? {})) {
+    const pointer = at('/libraryProfiles', key);
+    if (key !== profile.id) add(at(pointer, 'id'));
+    libraryProfileSemantics(profile, (child) => add(pointer + child));
+  }
   const expand = (curie: string): string | undefined => {
     const match = /^([a-z][a-z0-9_]*):([^\s]+)$(?![\s\S])/u.exec(curie);
     return match && own(release.prefixes, match[1]!) ? release.prefixes[match[1]!] + match[2]! : undefined;
@@ -294,28 +186,81 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
   }
   for (const [key, type] of Object.entries(release.types)) {
     const pointer = at('/types', key);
+    if (
+      type.library &&
+      (type.library.profileId === 'legacy-fixed-v1' ||
+        !release.libraryProfiles ||
+        !own(release.libraryProfiles, type.library.profileId))
+    )
+      add(at(pointer, 'library'));
     list(type.properties, at(pointer, 'properties'), release.properties);
     type.bases.forEach((base, index) => {
       if (expand(base) === undefined) add(at(at(pointer, 'bases'), index));
     });
+    const typeProperties = new Set(type.properties);
+    type.listPresentation?.keyFacts.forEach((key, index) => {
+      const property = release.properties[key];
+      if (expand(key) === undefined || !typeProperties.has(key) || !property || !facetable(property))
+        add(at(at(at(pointer, 'listPresentation'), 'keyFacts'), index));
+    });
     type.facets.forEach((facet, index) => {
       const facetPointer = at(at(pointer, 'facets'), index);
       const property = release.properties[facet];
-      if (expand(facet) === undefined || !type.properties.includes(facet) || !property || !facetable(property))
+      if (expand(facet) === undefined || !typeProperties.has(facet) || !property || !facetable(property))
         add(facetPointer);
     });
   }
   const targetNames = new Set(Object.keys(release.types));
   for (const type of Object.values(release.types)) for (const base of type.bases) targetNames.add(base);
+  const filters = createFilterConstruction(release);
+  const propertyIris = new Set(Object.values(release.properties).map((property) => property.iri));
   for (const [key, property] of Object.entries(release.properties)) {
     const pointer = at('/properties', key);
     list(property.qualifiers, at(pointer, 'qualifiers'), release.properties);
-    for (const member of ['targets', 'units', 'minimum', 'maximum'] as const) {
+    const qualifierMembership = filters.qualifiers(key);
+    const relation = property.relation;
+    if (relation) {
+      const relationPointer = at(pointer, 'relation');
+      if (property.datatype !== 'wikibase-item') add(relationPointer);
+      const hasInverse = own(relation, 'inverse');
+      const hasSymmetric = own(relation, 'symmetric');
+      if (hasInverse === hasSymmetric) add(relationPointer);
+      const inverse = relation.inverse;
+      if (typeof inverse === 'string' && inverse !== 'none') {
+        const inverseIri = expand(inverse);
+        if (inverseIri === undefined || own(release.properties, inverse) || propertyIris.has(inverseIri))
+          add(at(relationPointer, 'inverse'));
+        if (!own(relation, 'inverseLabels')) add(at(relationPointer, 'inverseLabels'));
+      } else if (own(relation, 'inverseLabels')) add(at(relationPointer, 'inverseLabels'));
+      if (hasSymmetric && own(relation, 'acyclic')) add(at(relationPointer, 'acyclic'));
+      if (relation.order === 'position' && !qualifierMembership.has('schema:position'))
+        add(at(relationPointer, 'order'));
+      if (relation.filter !== undefined) {
+        const filters = Array.isArray(relation.filter) ? relation.filter : [relation.filter];
+        for (const filter of filters) {
+          const qualifier = release.properties[filter];
+          if (!qualifierMembership.has(filter) || qualifier?.datatype !== 'wikibase-item')
+            add(at(relationPointer, 'filter'));
+        }
+      }
+      if (relation.slotKey !== undefined) {
+        const qualifier = release.properties[relation.slotKey];
+        if (!qualifierMembership.has(relation.slotKey) || qualifier?.datatype !== 'wikibase-item')
+          add(at(relationPointer, 'slotKey'));
+      }
+    }
+    for (const member of ['targets', 'units', 'minimum', 'minimumExclusive', 'maximum'] as const) {
       const allowed = member === 'targets' ? property.datatype === 'wikibase-item' : property.datatype === 'quantity';
       const required = member === 'targets' || member === 'units';
       if ((!allowed && own(property, member)) || (allowed && required && !own(property, member)))
         add(at(pointer, member));
     }
+    if (
+      (property.minimumExclusive !== undefined &&
+        (property.minimumExclusive !== true || property.minimum === undefined)) ||
+      (property.minimumExclusive === true && property.maximum !== undefined && property.maximum <= property.minimum!)
+    )
+      add(at(pointer, 'minimumExclusive'));
     if (property.targets) {
       const targetPointer = at(pointer, 'targets');
       list(property.targets, targetPointer);
@@ -323,7 +268,10 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
         if (!targetNames.has(target)) add(at(targetPointer, index));
       });
     }
-    if (property.units) list(property.units, at(pointer, 'units'), undefined, false);
+    if (property.units) {
+      list(property.units, at(pointer, 'units'), undefined, false);
+      if (property.units.includes('*') && property.units.length !== 1) add(at(pointer, 'units'));
+    }
     if (property.minimum !== undefined && property.maximum !== undefined && property.maximum < property.minimum)
       add(at(pointer, 'maximum'));
     const value = property.value as Record<string, unknown>;
@@ -337,8 +285,14 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
     if (property.datatype === 'quantity') {
       if (property.units) options.units = property.units;
       options.integer = amount.pattern === INTEGER;
+      // Exactness is serialized solely by the two absent bound fields. The
+      // canonical comparison below still requires the entire supported shape.
+      if (!own(fields, 'lowerBound') && !own(fields, 'upperBound')) options.exact = true;
     }
-    if (canonicalize(value) !== canonicalize(valueSchema(property.datatype, options))) add(at(pointer, 'value'));
+    const currentFixedSchema = canonicalize(value) === canonicalize(valueSchema(property.datatype, options));
+    const historicalTime = property.datatype === 'time' && canonicalize(value) === canonicalize(historicalTimeSchema);
+    const fixedSchema = currentFixedSchema || historicalTime;
+    if (!fixedSchema) add(at(pointer, 'value'));
     patterns(value, at(pointer, 'value'));
   }
   for (const [id, settings] of Object.entries(release.contexts ?? {}))
@@ -347,7 +301,7 @@ function semantics(release: Release, add: (pointer: string, code?: ReleaseViolat
   // A shipped filter names types, facets, years and amounts. Subject ids differ per deployment.
   for (const [key, saved] of Object.entries(release.filters ?? {})) {
     const filterPointer = at(at('/filters', key), 'filter');
-    for (const error of validateFilter(saved.filter, release, { saved: false }))
+    for (const error of filters.validateFilter(saved.filter, { saved: false }))
       add(`${filterPointer}${error.pointer}`, savedFilterCode(error));
     visitSubjectIds(saved.filter, filterPointer, (pointer) => add(pointer));
   }
@@ -370,6 +324,19 @@ function visitSubjectIds(value: unknown, pointer: string, add: (pointer: string)
   for (const key of Object.keys(value)) visitSubjectIds(value[key], at(pointer, key), add);
 }
 
+/** Cheap JSON/collection admission shared by publication's digest-existence probe and validation. */
+export function releaseAdmission(value: unknown): ReleaseViolation[] {
+  const violations: ReleaseViolation[] = [];
+  try {
+    const oversized = exceedsSize(value);
+    collectionLimits(value, (pointer, code) => violations.push({ pointer, code }));
+    if (!violations.length && oversized) violations.push({ pointer: '', code: 'limit' });
+  } catch {
+    violations.push({ pointer: '', code: 'invalid' });
+  }
+  return violations.sort((a, b) => (a.pointer < b.pointer ? -1 : a.pointer > b.pointer ? 1 : 0)).slice(0, 64);
+}
+
 export function validateRelease(value: unknown): ReleaseViolation[] {
   const violations = new Map<string, ReleaseViolation['code']>();
   const add = (pointer: string, code: ReleaseViolation['code'] = 'invalid') => {
@@ -381,20 +348,33 @@ export function validateRelease(value: unknown): ReleaseViolation[] {
       .slice(0, 64)
       .map(([pointer, code]) => ({ pointer, code }));
   try {
-    collectionLimits(value, add);
+    for (const violation of releaseAdmission(value)) add(violation.pointer, violation.code);
     if (violations.size) return result();
-    if (exceedsSize(value)) return [{ pointer: '', code: 'limit' }];
     // JCS rejects malformed Unicode as well as non-finite JSON numbers.
     canonicalize(value);
-    if (!validator.Check(value)) {
+    if (record(value) && record(value.libraryProfiles))
+      for (const [id, profile] of Object.entries(value.libraryProfiles))
+        libraryProgressSemantics(profile, (pointer) => add(at('/libraryProfiles', id) + pointer));
+    const schemaValid = validator.Check(value);
+    if (!schemaValid) {
       const [, errors] = validator.Errors(value);
       for (const error of errors) {
         if (error.keyword === 'required') {
-          for (const member of error.params.requiredProperties) add(at(error.instancePath, member));
+          for (const member of error.params.requiredProperties) {
+            const child = at(error.instancePath, member);
+            add(child);
+          }
         } else if (error.keyword === 'additionalProperties') {
-          for (const member of error.params.additionalProperties) add(at(error.instancePath, member));
-        } else add(error.instancePath);
+          for (const member of error.params.additionalProperties) {
+            const child = at(error.instancePath, member);
+            add(child);
+          }
+        } else {
+          add(error.instancePath);
+        }
       }
+    }
+    if (violations.size || !schemaValid) {
       if (!violations.size) add('');
       return result();
     }
@@ -405,3 +385,5 @@ export function validateRelease(value: unknown): ReleaseViolation[] {
     return result();
   }
 }
+
+export * from './catalogue-artifacts.ts';

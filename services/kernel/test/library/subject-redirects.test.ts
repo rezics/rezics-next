@@ -304,7 +304,14 @@ test('Collection pages and every library read keep serving rows held under a mer
   await request('PUT', `/v1/follows/${redirected}`);
   await mergeOnly([survivor, redirected]);
 
-  const expected = { id: survivor, type: 'schema:Book', label: expect.any(String) };
+  const expected = {
+    id: survivor,
+    type: 'schema:Book',
+    types: ['schema:Book', ...bundledRelease.types['schema:Book']!.bases],
+    label: { value: expect.any(String), language: 'en' },
+    creativeWork: true,
+    cover: null,
+  };
   const membersBasic = await json<{ members: { id: string; subjectId: string }[] }>(
     await request('GET', `/v1/collections/${shelf.id}/members`),
   );
@@ -499,14 +506,29 @@ test('redirect reads add one anchored read while writes and member pages stay co
     );
     expect(entryDelete.value.status).toBe(204);
 
-    const basicPage = await capture(db, () =>
-      request('GET', `/v1/collections/${basePage.id}/members?view=FULL&limit=1`),
+    const basicPage = await capture(
+      db,
+      () => request('GET', `/v1/collections/${basePage.id}/members?view=FULL&limit=1`),
+      { includeBackends: true },
     );
     const redirectPage = await capture(db, () =>
       request('GET', `/v1/collections/${redirectedPage.id}/members?view=FULL&limit=1`),
     );
     await json(basicPage.value);
     await json(redirectPage.value);
+
+    // Preserve actual statement texts across scales before diagnosing count variation.
+    // Include every pool and control/catalog statement; no measurement is filtered.
+    console.log(
+      'LIBRARY_BASIC_PAGE_CAPTURE',
+      JSON.stringify({
+        scale,
+        statements: basicPage.capture.statements,
+        backends: basicPage.capture.statementBackends,
+        backgroundStatements: basicPage.capture.backgroundStatements,
+        backgroundBackends: basicPage.capture.backgroundStatementBackends,
+      }),
+    );
 
     const countSubjectReads = (statements: readonly string[]) =>
       statements.filter((statement) => statement.includes('FROM semantic.subject AS s')).length;
@@ -527,8 +549,8 @@ test('redirect reads add one anchored read while writes and member pages stay co
   expect(statementCounts[1]).toEqual(statementCounts[0]);
   expect(statementCounts[2]).toEqual(statementCounts[0]);
   expect(subjectReads).toEqual([
-    { basicPage: 1, redirectPage: 2 },
-    { basicPage: 1, redirectPage: 2 },
-    { basicPage: 1, redirectPage: 2 },
+    { basicPage: 2, redirectPage: 3 },
+    { basicPage: 2, redirectPage: 3 },
+    { basicPage: 2, redirectPage: 3 },
   ]);
 });

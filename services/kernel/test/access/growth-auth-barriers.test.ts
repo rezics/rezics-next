@@ -2,8 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { createAuthService, createBarrierProofVerifier, type AuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { Client, Pool } from 'pg';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { createAuthBarrierCapabilities } from '../../src/access/auth-barriers.ts';
 import { createRecoveryCompletion } from '../../src/access/recovery-completion.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
@@ -11,10 +11,29 @@ import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `growth_auth_barr_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
+
 let db: GrowthDatabase;
 let lifecycle: ReturnType<typeof createLifecycleInternals>;
 let service: AuthService;
-let fixture: ReturnType<typeof testDatabase>;
+let fixture: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let database: Pool;
 let delivery = '';
 let delivered: (() => void) | undefined;
@@ -45,7 +64,7 @@ beforeAll(async () => {
     provisioningEvidence: async () => null,
     recoveryEvidence: async () => null,
   });
-  fixture = testDatabase();
+  fixture = await cloneAuthDatabase();
   database = new Pool({ connectionString: fixture.url });
   const barriers = createAuthBarrierCapabilities({ lifecycle, proofs: createBarrierProofVerifier({ database }) });
   const access = {
@@ -95,7 +114,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await db?.close();
   await database?.end();
-  fixture?.close();
+  await fixture?.close();
 });
 
 test('native Auth barriers stay bounded with same-account receipts and unrelated accounts at 1x 8x 64x', async () => {
@@ -142,9 +161,9 @@ test('native Auth barriers stay bounded with same-account receipts and unrelated
   });
   expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);
   for (const sample of report.samples) {
-    // Initial fence write, recovery floor write, committed receipt read and
+    // Initial fence write, recovery floor write, committed receipt read, Auth's receipt confirmation and
     // establishment-authorized fence-clear receipt validation each touch one row.
-    expect(sample.cost.relations?.['access.lifecycle_fence_receipt']?.rows).toBe(4);
+    expect(sample.cost.relations?.['access.lifecycle_fence_receipt']?.rows).toBe(5);
     expect(sample.cost.relations?.['access.account']?.rows).toBeGreaterThan(0);
   }
 }, 60_000);

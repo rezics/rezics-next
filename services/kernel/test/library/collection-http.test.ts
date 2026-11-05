@@ -1,21 +1,31 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import pg from 'pg';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
-import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
+import { bootstrapGovernance, PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import type { CollectionView, MemberView } from '../../src/library/collection-reads.ts';
 import { syncSubjectListing } from '../../src/library/listing.ts';
+import { libraryWorkModule } from '../../src/library/work-module.ts';
+import type { CloudEvent } from '../../src/events/log.ts';
+import { createWorkClient } from '../../src/work/client.ts';
+import { composeWork } from '../../src/work/registry.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
 import { decodeCursor, encodeCursor } from '../../src/tokens/cursor.ts';
+import { nativeFixture, cookies, password } from '../access/native-account-bindings-fixture.ts';
+import { testKernel, registerTestClient } from '../support/test-kernel.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { observeRetentionQueries } from './entry-retention-worker-runtime.ts';
 
 const owner = newId(0x6c31);
 const other = newId(0x6c31);
@@ -96,23 +106,54 @@ const members = (id: string) => `${path(id)}/members`;
 async function add(id: string, extras: { after?: string | null; note?: string } = {}) {
   return (await json<{ member: MemberView }>(await request('POST', members(id), { subjectId, ...extras }), 201)).member;
 }
-async function page<T>(url: string, plural: string, as: Persona = 'owner') {
+type SubjectCollectionCount = { value: number; exact: true };
+type CollectionPage<T> = { items: T[]; next: string | null; count?: SubjectCollectionCount };
+async function page<T>(
+  url: string,
+  plural: string,
+  as: Persona = 'owner',
+  extraKeys: readonly string[] = [],
+): Promise<CollectionPage<T>> {
   const result = await json<Record<string, unknown>>(await request('GET', url, undefined, as));
-  expect(Object.keys(result).sort()).toEqual([plural, 'next'].sort());
-  return { items: result[plural] as T[], next: result.next as string | null };
+  expect(Object.keys(result).sort()).toEqual([plural, 'next', ...extraKeys].sort());
+  let count: Record<string, unknown> | undefined;
+  if (extraKeys.includes('count')) {
+    expect(result.count).not.toBeNull();
+    expect(result.count).toBeDefined();
+    count = result.count as Record<string, unknown>;
+    expect(count.exact).toBe(true);
+    expect(Number.isInteger(count.value) && (count.value as number) >= 0).toBe(true);
+  }
+  return {
+    items: result[plural] as T[],
+    next: result.next as string | null,
+    ...(count ? { count: count as SubjectCollectionCount } : {}),
+  };
 }
-async function all<T>(url: string, plural: string, as: Persona = 'owner') {
+async function all<T>(
+  url: string,
+  plural: string,
+  as: Persona = 'owner',
+  options: { extraKeys?: readonly string[]; countMatchesItems?: boolean } = {},
+) {
   const items: T[] = [];
+  let count: SubjectCollectionCount | undefined;
   let cursor: string | null = null;
   do {
-    const result: { items: T[]; next: string | null } = await page<T>(
+    const result: CollectionPage<T> = await page<T>(
       `${url}${url.includes('?') ? '&' : '?'}limit=2${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
       plural,
       as,
+      options.extraKeys,
     );
+    if (result.count) {
+      if (count) expect(result.count).toEqual(count);
+      count = result.count;
+    }
     items.push(...result.items);
     cursor = result.next;
   } while (cursor);
+  if (options.countMatchesItems) expect(count?.value).toBe(items.length);
   return items;
 }
 
@@ -201,7 +242,7 @@ beforeAll(async () => {
   } finally {
     pg.Pool = NativePool;
   }
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE account_id=$1", [suspended]);
+  await suspendAccount(db.admin, suspended);
 });
 afterAll(async () => {
   await db?.close();
@@ -211,7 +252,10 @@ test('all Collection routes mount once and declare their exposure, actions and c
   const document = openApiDocument(app);
   const expected = {
     '/v1/collections': ['get', 'post'],
-    '/v1/collections/{collectionId}': ['get', 'patch', 'delete'],
+    '/v1/collections/{collectionId}': ['get', 'patch', 'delete', 'post'],
+    '/v1/collections/{collectionId}:restore': ['post'],
+    '/v1/collections/{collectionId}/metadata-history': ['get'],
+    '/v1/collections/{collectionId}/metadata-history/{revision}': ['get'],
     '/v1/collections/{collectionId}/members': ['get', 'post'],
     '/v1/collections/{collectionId}/members/{memberId}': ['patch', 'delete'],
     '/v1/collections/{collectionId}/members/{memberId}:move': ['post'],
@@ -224,6 +268,244 @@ test('all Collection routes mount once and declare their exposure, actions and c
   expect(document.paths['/v1/collections']?.post?.['x-resource-types']).toEqual(['library.collection']);
   expect(new Set(app.routes.map((route) => `${route.method} ${route.path}`)).size).toBe(app.routes.length);
   for (const action of scopes.slice(0, 4)) expect(actionCatalogue(app).has(action)).toBe(true);
+});
+
+test('metadata history keeps addressed private revisions owner-only, bounded and truthful about coverage', async () => {
+  const shelf = await collection();
+  const history = (id: string) => `${path(id)}/metadata-history`;
+  const initial = await json<{
+    collectionId: string;
+    coverage: { coverage: string };
+    items: { revision: number; changedFields: string[] }[];
+    next: string | null;
+    actions: { review: boolean; reapply: boolean };
+  }>(await request('GET', history(shelf.id)));
+  expect(initial).toMatchObject({
+    collectionId: shelf.id,
+    coverage: { coverage: 'complete', knownFromRevision: 1, prunedBeforeRevision: null },
+    items: [],
+    next: null,
+    actions: { review: true, reapply: false },
+  });
+
+  const firstKey = randomUUID();
+  const publicRevision = await json<{ collection: CollectionView }>(
+    await request(
+      'PATCH',
+      path(shelf.id),
+      { revision: 1, title: 'Private title', description: 'Private description', visibility: 'public' },
+      'owner',
+      firstKey,
+    ),
+  );
+  expect(
+    await json(
+      await request(
+        'PATCH',
+        path(shelf.id),
+        {
+          revision: 1,
+          title: 'Private title',
+          description: 'Private description',
+          visibility: 'public',
+        },
+        'owner',
+        firstKey,
+      ),
+    ),
+  ).toEqual(publicRevision);
+  await problem(await request('GET', history(shelf.id), undefined, 'other'), 404, 'not_found');
+
+  const privateRevision = await json<{ collection: CollectionView }>(
+    await request('PATCH', path(shelf.id), {
+      revision: 2,
+      title: 'Private again',
+      description: null,
+      visibility: 'private',
+    }),
+  );
+  const page = await json<{
+    items: { revision: number; recordedAt: string; changedFields: string[] }[];
+    coverage: { coverage: string };
+  }>(await request('GET', `${history(shelf.id)}?limit=2`));
+  expect(page.coverage.coverage).toBe('complete');
+  expect(page.items).toEqual([
+    {
+      revision: privateRevision.collection.revision,
+      recordedAt: expect.any(String),
+      changedFields: ['title', 'description', 'visibility'],
+    },
+    {
+      revision: publicRevision.collection.revision,
+      recordedAt: expect.any(String),
+      changedFields: ['title', 'description', 'visibility'],
+    },
+  ]);
+  const firstChange = await json<{
+    revision: number;
+    before: { title: string; description: string | null; visibility: string; cover: { state: string } };
+    after: { title: string; description: string | null; visibility: string; cover: { state: string } };
+    actions: { review: boolean; reapply: boolean };
+  }>(await request('GET', `${history(shelf.id)}/${publicRevision.collection.revision}`));
+  expect(firstChange).toMatchObject({
+    revision: publicRevision.collection.revision,
+    before: { title: shelf.title, description: shelf.description, visibility: 'private', cover: { state: 'none' } },
+    after: {
+      title: 'Private title',
+      description: 'Private description',
+      visibility: 'public',
+      cover: { state: 'none' },
+    },
+    actions: { review: true, reapply: false },
+  });
+  const secondChange = await json<{
+    revision: number;
+    before: { title: string; description: string | null; visibility: string };
+    after: { title: string; description: string | null; visibility: string };
+  }>(await request('GET', `${history(shelf.id)}/${privateRevision.collection.revision}`));
+  expect(secondChange).toMatchObject({
+    revision: privateRevision.collection.revision,
+    before: { title: 'Private title', description: 'Private description', visibility: 'public' },
+    after: { title: 'Private again', description: null, visibility: 'private' },
+  });
+  await problem(
+    await request('GET', `${history(shelf.id)}/${publicRevision.collection.revision}`, undefined, 'other'),
+    404,
+    'not_found',
+  );
+  await problem(await request('GET', history(shelf.id), undefined, 'other'), 404, 'not_found');
+
+  const stalePage = await json<{ next: string | null }>(await request('GET', `${history(shelf.id)}?limit=1`));
+  expect(stalePage.next).toBeString();
+  await request('PATCH', path(shelf.id), { revision: 3, title: 'Changed after page' });
+  await problem(
+    await request('GET', `${history(shelf.id)}?limit=1&cursor=${encodeURIComponent(stalePage.next!)}`),
+    409,
+    'stale_cursor',
+  );
+  const replayed = await json<{ collection: CollectionView }>(
+    await request('PATCH', path(shelf.id), { revision: 4, title: 'Replay once' }, 'owner', randomUUID()),
+  );
+  const replayKey = randomUUID();
+  const replay = await request('PATCH', path(shelf.id), { revision: 5, title: 'Same transaction' }, 'owner', replayKey);
+  const replayedAgain = await request(
+    'PATCH',
+    path(shelf.id),
+    { revision: 5, title: 'Same transaction' },
+    'owner',
+    replayKey,
+  );
+  expect(await replay.json()).toEqual(await replayedAgain.json());
+  const afterReplay = await json<{ items: { revision: number }[] }>(
+    await request('GET', `${history(shelf.id)}?limit=50`),
+  );
+  expect(afterReplay.items.filter((item) => item.revision === 6)).toHaveLength(1);
+  expect(replayed.collection.revision).toBe(5);
+
+  const rollbackShelf = await collection();
+  await db.admin.query(`
+    CREATE FUNCTION library.reject_collection_metadata_history_for_test() RETURNS trigger
+    LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'forced history append failure'; END $$;
+    CREATE TRIGGER reject_collection_metadata_history_for_test
+    BEFORE INSERT ON library.collection_metadata_history
+    FOR EACH ROW EXECUTE FUNCTION library.reject_collection_metadata_history_for_test();
+  `);
+  try {
+    const rejected = await request('PATCH', path(rollbackShelf.id), {
+      revision: rollbackShelf.revision,
+      title: 'Must roll back',
+    });
+    expect(rejected.status).toBe(500);
+    const current = await db.admin.query<{ revision: number; title: string }>(
+      'SELECT revision,title FROM library.collection WHERE route=$1 AND collection_id=$2',
+      [routeOf(rollbackShelf.id), rollbackShelf.id],
+    );
+    expect(current.rows).toEqual([{ revision: rollbackShelf.revision, title: rollbackShelf.title }]);
+    expect(
+      (
+        await db.admin.query('SELECT 1 FROM library.collection_metadata_history WHERE route=$1 AND collection_id=$2', [
+          routeOf(rollbackShelf.id),
+          rollbackShelf.id,
+        ])
+      ).rows,
+    ).toEqual([]);
+  } finally {
+    await db.admin.query(`
+      DROP TRIGGER reject_collection_metadata_history_for_test ON library.collection_metadata_history;
+      DROP FUNCTION library.reject_collection_metadata_history_for_test();
+    `);
+  }
+
+  const reassigned = await collection();
+  const held = await json<{ collection: CollectionView }>(
+    await request('PATCH', path(reassigned.id), {
+      revision: reassigned.revision,
+      title: 'Owner-only historical title',
+    }),
+  );
+  await db.admin.query(
+    `UPDATE library.collection SET curator_account_id=$3,revision=revision+1,updated_at=clock_timestamp()
+     WHERE route=$1 AND collection_id=$2`,
+    [routeOf(reassigned.id), reassigned.id, other],
+  );
+  await problem(await request('GET', `${history(reassigned.id)}/${held.collection.revision}`), 404, 'not_found');
+
+  const unknown = await collection();
+  await db.admin.query('DELETE FROM library.collection_metadata_history_state WHERE route=$1 AND collection_id=$2', [
+    routeOf(unknown.id),
+    unknown.id,
+  ]);
+  const unknownPage = await json<{
+    collectionId: string;
+    basis: object;
+    coverage: { coverage: string; knownFromRevision: number | null; prunedBeforeRevision: number | null };
+    items: unknown[];
+    next: string | null;
+    actions: { review: boolean; reapply: boolean };
+  }>(await request('GET', history(unknown.id)));
+  expect(unknownPage).toEqual({
+    collectionId: unknown.id,
+    basis: expect.any(Object),
+    coverage: { coverage: 'unknown', knownFromRevision: null, prunedBeforeRevision: null },
+    items: [],
+    next: null,
+    actions: { review: true, reapply: false },
+  });
+
+  const retained = await collection();
+  let revision = retained.revision;
+  for (let index = 0; index < 129; index += 1) {
+    const update = await json<{ collection: CollectionView }>(
+      await request('PATCH', path(retained.id), { revision, title: `Bounded change ${index}` }),
+    );
+    revision = update.collection.revision;
+  }
+  let cursor: string | null = null;
+  let count = 0;
+  let coverage = '';
+  do {
+    const nextPage: {
+      items: { revision: number }[];
+      next: string | null;
+      coverage: { coverage: string; knownFromRevision: number | null; prunedBeforeRevision: number | null };
+    } = await json(
+      await request('GET', `${history(retained.id)}?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`),
+    );
+    count += nextPage.items.length;
+    cursor = nextPage.next;
+    coverage = nextPage.coverage.coverage;
+    if (!nextPage.next) expect(nextPage.coverage).toMatchObject({ knownFromRevision: 3, prunedBeforeRevision: 3 });
+  } while (cursor);
+  expect(count).toBe(128);
+  expect(coverage).toBe('partial');
+  await problem(
+    await request('PATCH', path(retained.id), { revision: revision - 1, title: 'Conflict creates no history' }),
+    409,
+    'conflict',
+  );
+  expect(
+    (await json<{ items: { revision: number }[] }>(await request('GET', `${history(retained.id)}?limit=50`))).items,
+  ).toHaveLength(50);
 });
 
 test('curator creates replays updates conflicts and deletes with only the contracted public view', async () => {
@@ -239,9 +521,15 @@ test('curator creates replays updates conflicts and deletes with only the contra
     curatorAccountId: owner,
     title: 'First',
     description: null,
+    presentationKind: null,
+    presentationKindSource: 'mixed',
+    cover: null,
+    coverSource: 'none',
     visibility: 'private',
     revision: 1,
     memberCount: 0,
+    membershipKind: 'curated',
+    orderEpoch: 0,
     createdAt: expect.any(String),
     updatedAt: expect.any(String),
   });
@@ -279,6 +567,29 @@ test('curator creates replays updates conflicts and deletes with only the contra
   const deletedProblem = await problem(await request('GET', path(shelf.id)), 404, 'not_found');
   const unknownProblem = await problem(await request('GET', path(unknown)), 404, 'not_found');
   expect(deletedProblem).toEqual(unknownProblem);
+});
+
+test('exact Collection restore uses committed deletion metadata and preserves the retained record', async () => {
+  const shelf = await collection('private');
+  const first = await add(shelf.id, { note: 'first occurrence' });
+  const second = await add(shelf.id, { note: 'second occurrence' });
+  const key = randomUUID();
+  const deleted = await request('DELETE', `${path(shelf.id)}?revision=${shelf.revision}`, undefined, 'owner', key);
+  expect(deleted.status).toBe(204);
+  const deletionId = deleted.headers.get('Library-Collection-Deletion-Id');
+  const revision = Number(deleted.headers.get('Library-Collection-Deletion-Revision'));
+  expect(deletionId).toMatch(/^[0-9a-f-]{36}$/);
+  expect(revision).toBeGreaterThan(shelf.revision);
+  await problem(await request('GET', path(shelf.id), undefined, 'anonymous'), 404, 'not_found');
+  const restored = await json<{ collection: CollectionView }>(
+    await request('POST', `${path(shelf.id)}:restore`, { deletionId, revision }),
+  );
+  expect(restored.collection).toMatchObject({ ...shelf, revision: revision + 1, memberCount: 2 });
+  expect(await all(members(shelf.id), 'members')).toEqual([first, second]);
+  const replay = await request('DELETE', `${path(shelf.id)}?revision=${shelf.revision}`, undefined, 'owner', key);
+  expect(replay.status).toBe(204);
+  expect(replay.headers.get('Library-Collection-Deletion-Id')).toBe(deletionId);
+  expect(await json(await request('GET', path(shelf.id)))).toEqual(restored);
 });
 
 test('members support duplicate subjects first after last moves notes removal and cursor pages', async () => {
@@ -424,9 +735,60 @@ test('the anonymous subject page exposes only current public Collections with mu
   await add(shelf.id);
   await syncSubjectListing({ pool: db.pool }, { subjectId, collectionId: shelf.id });
   const expected = { id: shelf.id, curatorAccountId: owner, title: shelf.title, multiplicity: 2 };
-  expect(await all(`/v1/subjects/${subjectId}/collections`, 'collections', 'anonymous')).toContainEqual(expected);
+  expect(
+    await all(`/v1/subjects/${subjectId}/collections`, 'collections', 'anonymous', {
+      extraKeys: ['count'],
+      countMatchesItems: true,
+    }),
+  ).toContainEqual(expected);
   await json(await request('PATCH', path(shelf.id), { revision: shelf.revision, visibility: 'private' }));
-  expect(await all(`/v1/subjects/${subjectId}/collections`, 'collections', 'anonymous')).not.toContainEqual(expected);
+  // The source command publishes an event, and cross-home publication completes in native work.
+  const workClient = await createWorkClient(db.url);
+  const worker = await composeWork([libraryWorkModule], {
+    databaseUrl: db.url,
+    pool: db.pool,
+    client: workClient,
+    env: {},
+  });
+  try {
+    await worker.launch();
+    const row = (
+      await db.admin.query(
+        "SELECT * FROM core.outbox WHERE partition_no=$1 AND subject=$2 AND type='com.rezics.library.collection.listing.changed.v1' ORDER BY position DESC LIMIT 1",
+        [routeOf(shelf.id)! >> 4, shelf.id],
+      )
+    ).rows[0]!;
+    const event: CloudEvent = {
+      specversion: '1.0',
+      id: row.id,
+      source: `urn:rezics:log:${row.partition_no}.${row.epoch}`,
+      type: row.type,
+      subject: shelf.id,
+      time: row.recorded_at.toISOString(),
+      sequence: String(row.position).padStart(19, '0'),
+      datacontenttype: 'application/json',
+      data: row.data,
+    };
+    await (
+      await workClient.enqueue(
+        {
+          workflowName: 'effect',
+          queueName: 'effects',
+          queuePartitionKey: String(row.partition_no),
+          workflowID: randomUUID(),
+        },
+        'library_collection_listing',
+        event,
+      )
+    ).getResult({ pollingIntervalMs: 10 });
+    await workClient.retrieveWorkflow(event.id).getResult({ pollingIntervalMs: 10 });
+  } finally {
+    await worker.shutdown();
+    await workClient.close();
+  }
+  expect(
+    await all(`/v1/subjects/${subjectId}/collections`, 'collections', 'anonymous', { extraKeys: ['count'] }),
+  ).not.toContainEqual(expected);
   await problem(await request('GET', `/v1/subjects/${unknown}/collections`, undefined, 'anonymous'), 404, 'not_found');
 });
 
@@ -455,4 +817,292 @@ test('add-member requests and member pages keep equal statements across three un
   expect(pages[0]).toBeGreaterThan(0);
   expect(new Set(adds).size).toBe(1);
   expect(new Set(pages).size).toBe(1);
+});
+
+test('native Auth suspension rejects the old Collection bearer and sign-in without hiding anonymous known-ID public reads', async () => {
+  // Existing HTTP fixtures already own platform governance in this file's database.
+  // Clone the runner's pristine migrated template for the actual Auth caller.
+  const database = `collection_auth_${randomUUID().replaceAll('-', '')}`;
+  const url = new URL(process.env.DATABASE_URL!);
+  url.pathname = '/postgres';
+  const admin = new pg.Pool({ connectionString: url.toString() });
+  await admin.query(`CREATE DATABASE "${database}" TEMPLATE rezics`);
+  url.pathname = `/${database}`;
+  const native = await openGrowthDatabase(url.toString());
+  const auth = await nativeFixture(native.pool);
+  try {
+    const service = auth.host.service;
+    const kernel = testKernel({
+      pool: native.pool,
+      auth: { ...service.verifier, fetch: (url, init) => service.handler(new Request(url, init)) },
+      writeRate: createWriteRateLimiter({ secret: 'collection-native-auth-regression-secret' }),
+    });
+    const actions = [...actionCatalogue(kernel).keys()].filter((action) => action !== 'media:complete');
+    await registerTestClient(service, { clientId: 'collections-native', firstParty: true, scopes: actions });
+    const root = await auth.person(`root_${randomUUID().replaceAll('-', '')}`);
+    const curator = await auth.person(`curator_${randomUUID().replaceAll('-', '')}`);
+    await bootstrapGovernance(native.pool, root.accountId);
+    async function issue(accountId: string) {
+      const signed = await auth.request('/signin', {
+        account_id: accountId,
+        password,
+        client_id: 'collections-native',
+        scope: actions,
+      });
+      expect(signed.status).toBe(200);
+      const issued = await auth.request('/token', {}, cookies(signed));
+      expect(issued.status).toBe(200);
+      return ((await issued.json()) as { access_token: string }).access_token;
+    }
+    const rootBearer = await issue(root.accountId);
+    const curatorBearer = await issue(curator.accountId);
+    const call = (bearer: string | null, method: string, path: string, body?: unknown) =>
+      kernel.handle(
+        new Request(`http://kernel.test${path}`, {
+          method,
+          headers: {
+            ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
+            'content-type': 'application/json',
+            'idempotency-key': JSON.stringify(randomUUID()),
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+      );
+    expect((await call(rootBearer, 'POST', '/v1/platform/exposure/collections:open')).status).toBe(200);
+    await bootstrapRelease(native.pool, bundledRelease);
+    expect(
+      (
+        await call(rootBearer, 'POST', '/v1/grants', {
+          resource: PLATFORM_RESOURCE,
+          subject: { kind: 'active_accounts' },
+          actions: ['subject:create'],
+          valid: '(,)',
+        })
+      ).status,
+    ).toBe(201);
+    const createdSubject = await call(rootBearer, 'POST', '/v1/subjects', {
+      type: 'schema:Book',
+      labels: { en: 'Native curator discovery' },
+    });
+    expect(createdSubject.status).toBe(201);
+    const subjectId = ((await createdSubject.json()) as { subject: { id: string } }).subject.id;
+    const ids: string[] = [];
+    for (const visibility of ['public', 'unlisted', 'private']) {
+      const response = await call(curatorBearer, 'POST', '/v1/collections', {
+        title: `Native ${visibility}`,
+        visibility,
+      });
+      expect(response.status).toBe(201);
+      ids.push(((await response.json()) as { collection: CollectionView }).collection.id);
+    }
+    expect((await call(curatorBearer, 'POST', `/v1/collections/${ids[0]}/members`, { subjectId })).status).toBe(201);
+    await syncSubjectListing({ pool: native.pool }, { subjectId, collectionId: ids[0]! });
+    expect((await (await call(null, 'GET', `/v1/subjects/${subjectId}/collections`)).json()).collections).toHaveLength(
+      1,
+    );
+    expect(
+      (
+        await call(rootBearer, 'POST', `/v1/accounts/${curator.accountId}:suspend`, {
+          reason: 'Native Collection regression',
+        })
+      ).status,
+    ).toBe(200);
+    for (const path of [
+      `/v1/collections/${ids[0]}`,
+      `/v1/collections/${ids[1]}`,
+      `/v1/collections?curatorAccountId=${curator.accountId}`,
+    ]) {
+      const refused = await call(curatorBearer, 'GET', path);
+      expect(refused.status).toBe(401);
+      expect(refused.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+      expect((await refused.json()).code).toBe('invalid_credentials');
+    }
+    for (const id of ids.slice(0, 2)) expect((await call(null, 'GET', `/v1/collections/${id}`)).status).toBe(200);
+    expect((await call(null, 'GET', `/v1/collections/${ids[2]}`)).status).toBe(404);
+    const discovery = await call(null, 'GET', `/v1/collections?curatorAccountId=${curator.accountId}`);
+    expect(discovery.status).toBe(200);
+    expect(await discovery.json()).toEqual({ collections: [], next: null });
+    const publicSubjectPage = await call(null, 'GET', `/v1/subjects/${subjectId}/collections`);
+    expect(publicSubjectPage.status).toBe(200);
+    expect((await publicSubjectPage.json()).collections).toEqual([]);
+    const sessions = async () =>
+      (await auth.authPool.query('SELECT id FROM session WHERE "userId"=$1 ORDER BY id', [curator.accountId])).rows;
+    const before = await sessions();
+    const refused = await auth.request('/signin', {
+      account_id: curator.accountId,
+      password,
+      client_id: 'collections-native',
+      scope: actions,
+    });
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual({ error: 'account_suspended' });
+    expect(refused.headers.getSetCookie()).toEqual([]);
+    expect(await sessions()).toEqual(before);
+    const wrong = await auth.request('/signin', {
+      account_id: curator.accountId,
+      password: 'wrong password',
+      client_id: 'collections-native',
+      scope: actions,
+    });
+    expect(wrong.status).toBe(401);
+    expect(await sessions()).toEqual(before);
+  } finally {
+    await auth.close();
+    await native.close();
+    await dropTestDatabase(admin, database);
+    await admin.end();
+  }
+}, 180_000);
+
+test('Subject BASIC and FULL continuations preserve the public Collection population', async () => {
+  const shelves = [await collection('public'), await collection('public')];
+  for (const shelf of shelves) {
+    await add(shelf.id);
+    await syncSubjectListing({ pool: db.pool }, { subjectId, collectionId: shelf.id });
+  }
+  const withheld = await collection('public', 'other');
+  await json(await request('POST', members(withheld.id), { subjectId }, 'other'), 201);
+  await syncSubjectListing({ pool: db.pool }, { subjectId, collectionId: withheld.id });
+  const original = (await db.admin.query('SELECT public_views FROM access.account WHERE account_id=$1', [other]))
+    .rows[0]!;
+  await db.admin.query(
+    "UPDATE access.account SET public_views=jsonb_set(public_views,'{collections}','false') WHERE account_id=$1",
+    [other],
+  );
+  const populations: string[][] = [];
+  try {
+    for (const view of ['BASIC', 'FULL']) {
+      const url = `/v1/subjects/${subjectId}/collections?limit=1&view=${view}`;
+      let cursor: string | null = null;
+      const ids: string[] = [];
+      let emptyPages = 0;
+      do {
+        const result: { collections: { id: string }[]; next: string | null; count: SubjectCollectionCount } =
+          await json(
+            await request(
+              'GET',
+              `${url}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+              undefined,
+              'anonymous',
+            ),
+          );
+        expect(result.count.exact).toBe(true);
+        expect(result.count.value).toBeGreaterThanOrEqual(shelves.length);
+        if (!result.collections.length) emptyPages++;
+        ids.push(...result.collections.map(({ id }) => id));
+        if (cursor === null) {
+          expect(result.next).toBeString();
+          const foreignView = view === 'BASIC' ? 'FULL' : 'BASIC';
+          await problem(
+            await request(
+              'GET',
+              `/v1/subjects/${subjectId}/collections?limit=1&view=${foreignView}&cursor=${encodeURIComponent(result.next!)}`,
+            ),
+            400,
+            'invalid_cursor',
+          );
+          await problem(
+            await request(
+              'GET',
+              `/v1/subjects/${subjectId}/collections?limit=2&view=${view}&cursor=${encodeURIComponent(result.next!)}`,
+            ),
+            400,
+            'invalid_cursor',
+          );
+        }
+        cursor = result.next;
+      } while (cursor);
+      expect(ids).toEqual([...new Set(ids)].sort());
+      expect(ids).toEqual(expect.arrayContaining(shelves.map(({ id }) => id)));
+      expect(ids).not.toContain(withheld.id);
+      expect(emptyPages).toBeGreaterThan(0);
+      populations.push(ids);
+    }
+    expect(populations[0]).toEqual(populations[1]);
+  } finally {
+    await db.admin.query('UPDATE access.account SET public_views=$2 WHERE account_id=$1', [
+      other,
+      original.public_views,
+    ]);
+  }
+});
+
+test('FULL directory and Subject pages retain partition evidence through presentation, then recover', async () => {
+  const shelf = await collection('public');
+  await add(shelf.id);
+  await syncSubjectListing({ pool: db.pool }, { subjectId, collectionId: shelf.id });
+  let partition = routeOf(owner)! >> 4;
+  let original = (await db.admin.query('SELECT * FROM core.partition WHERE partition_no=$1', [partition])).rows[0]!;
+  let armed = false;
+  let removed = false;
+  await observeRetentionQueries(db.pool, async ({ sql }) => {
+    // This is the real FULL curator summary query, after the native page snapshot.
+    if (!armed || removed || !sql.includes('AS "avatarUrl"')) return;
+    removed = true;
+    const client = await db.admin.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SET LOCAL session_replication_role=replica');
+      await client.query('DELETE FROM core.partition WHERE partition_no=$1', [partition]);
+      await client.query('COMMIT');
+    } finally {
+      client.release();
+    }
+  });
+  async function restore() {
+    await db.admin.query(
+      `INSERT INTO core.partition(partition_no,node,write_state,moved_to,epoch,position)
+       VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (partition_no) DO NOTHING`,
+      [
+        original.partition_no,
+        original.node,
+        original.write_state,
+        original.moved_to,
+        original.epoch,
+        original.position,
+      ],
+    );
+  }
+  for (const url of [
+    `/v1/accounts/${owner}/collections?view=FULL&limit=100`,
+    `/v1/subjects/${subjectId}/collections?view=FULL&limit=100`,
+  ]) {
+    partition = routeOf(url.startsWith('/v1/subjects/') ? subjectId : owner)! >> 4;
+    original = (await db.admin.query('SELECT * FROM core.partition WHERE partition_no=$1', [partition])).rows[0]!;
+    expect((await request('GET', url, undefined, 'anonymous')).status).toBe(200);
+    armed = true;
+    removed = false;
+    try {
+      await problem(await request('GET', url, undefined, 'anonymous'), 503, 'partition_unavailable');
+      expect(removed).toBe(true);
+      // A short first page must also fail when the partition was already lost.
+      await problem(await request('GET', url, undefined, 'anonymous'), 503, 'partition_unavailable');
+    } finally {
+      armed = false;
+      await restore();
+    }
+    expect((await request('GET', url, undefined, 'anonymous')).status).toBe(200);
+  }
+});
+
+test('a Subject positive withdrawn during FULL presentation stays unavailable until native listing catches up', async () => {
+  const shelf = await collection('public');
+  await add(shelf.id);
+  await syncSubjectListing({ pool: db.pool }, { subjectId, collectionId: shelf.id });
+  let armed = true;
+  await observeRetentionQueries(db.pool, async ({ sql }) => {
+    if (!armed || !sql.includes('AS "avatarUrl"')) return;
+    armed = false;
+    await json(await request('PATCH', path(shelf.id), { revision: shelf.revision, visibility: 'private' }));
+  });
+  const url = `/v1/subjects/${subjectId}/collections?view=FULL&limit=100`;
+  try {
+    await problem(await request('GET', url, undefined, 'anonymous'), 503, 'dependency_unavailable');
+    expect(armed).toBe(false);
+  } finally {
+    armed = false;
+  }
+  await syncSubjectListing({ pool: db.pool }, { subjectId, collectionId: shelf.id });
+  const result = await json<{ collections: { id: string }[] }>(await request('GET', url, undefined, 'anonymous'));
+  expect(result.collections.map(({ id }) => id)).not.toContain(shelf.id);
 });

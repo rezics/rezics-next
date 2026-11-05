@@ -1,15 +1,107 @@
 types:
   schema:VideoGame: 电子游戏
-  wd:Q20631656: 软件发布
-  wd:Q209163: 资料片
+  wd:Q20631656: '版本'
+  wd:Q209163: '追加内容'
 properties:
   schema:gamePlatform: 游戏平台
   schema:gtin: GTIN
   wdt:P2899: 最低年龄
   wdt:P31: 隶属于
   wdt:P155: 上一项
+  rezics:releaseSupersedes: 取代
   wdt:P437: 发行方式
   wdt:P408: 软件引擎
   schema:numberOfPlayers: 游玩人数
   schema:minValue: 最小值
   wdt:P8646: 资料片原作
+inverseProperties:
+  schema:gamePlatform: '此平台的游戏'
+  wdt:P31: '此类型的发行版本'
+  wdt:P437: '此媒介的发行版本'
+  wdt:P155: '续作'
+  rezics:releaseSupersedes: '被取代'
+  wdt:P408: '使用此引擎的游戏'
+  wdt:P8646: '扩充作品'
+typeDescriptions:
+  schema:VideoGame: '汇总平台信息的电子游戏作品，与具体软件发行版及个人副本分开。'
+  wd:Q20631656: '体现一部或多部作品、可独立识别的软件发行版；平台和语言列表本身不会产生多个发行版。'
+  wd:Q209163: '可独立引用的游戏追加作品，包括资料片和 DLC；没有独立作品身份的补丁、下载文件或附带素材不算。'
+libraryProfiles:
+  game.playing:
+    states:
+      planned: '计划'
+      in_progress: '进行中'
+      completed: '已完成'
+      paused: '暂停'
+      dropped: '放弃'
+    units:
+      scalar_amount:
+        minute:
+          label: '分钟'
+          countForms:
+            other: '分钟'
+    copyKinds:
+      physical: '实体'
+      digital: '数字'
+    copyStatuses:
+      physical:
+        owned: '拥有'
+        disposed: '已处置'
+      digital:
+        owned: '拥有'
+  game.release:
+    states:
+      planned: '计划'
+      in_progress: '进行中'
+      completed: '已完成'
+      paused: '暂停'
+      dropped: '放弃'
+    units:
+      scalar_amount:
+        minute:
+          label: '分钟'
+          countForms:
+            other: '分钟'
+    copyKinds:
+      physical: '实体'
+      digital: '数字'
+    copyStatuses:
+      physical:
+        owned: '拥有'
+        disposed: '已处置'
+      digital:
+        owned: '拥有'
+  game.addon:
+    states:
+      planned: '计划'
+      in_progress: '进行中'
+      completed: '已完成'
+      paused: '暂停'
+      dropped: '放弃'
+    units:
+      scalar_amount:
+        minute:
+          label: '分钟'
+          countForms:
+            other: '分钟'
+    copyKinds:
+      physical: '实体'
+      digital: '数字'
+    copyStatuses:
+      physical:
+        owned: '拥有'
+        disposed: '已处置'
+      digital:
+        owned: '拥有'
+propertyDescriptions:
+  schema:gamePlatform: '游戏或发行版可运行的平台概念，可用语言限定词保留平台与语言的对应。'
+  schema:gtin: '此发行版的全球贸易项目代码，使用不带分隔符的 8、12、13 或 14 位数字。'
+  wdt:P2899: '此发行版分级所对应的最低年龄，以年（wd:Q577）为单位的非负整数数量记录。'
+  wdt:P31: '完整版、部分版或试用版等发行类型概念，不是对象在目录中的类型。'
+  wdt:P155: '此作品或发行版所接续的前一部作品或前一发行版。'
+  rezics:releaseSupersedes: '此发行版所取代的确切软件发行版，与时间顺序无关。'
+  wdt:P437: '此发行版的分发格式或实体媒介概念，例如光盘。'
+  wdt:P408: '表明游戏所用软件引擎的概念。'
+  schema:numberOfPlayers: '支持的最大玩家数，以无单位整数记录；若来源给出范围，值为上限，下限另以限定词保留。'
+  schema:minValue: '来源明确给出的玩家数范围下限，作为玩家数的无单位整数限定词；不从单个数字推定。'
+  wdt:P8646: '此独立追加作品所扩展的基础游戏，不是软件发行版体现的作品。'

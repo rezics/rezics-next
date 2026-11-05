@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { betterAuth, type BetterAuthOptions } from 'better-auth';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -32,14 +33,17 @@ beforeAll(async () => {
     secret,
     audience: 'https://growth.api.test',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount() {
         return null;
       },
       async authorizeProvisioning() {
         throw new Error('unused');
       },
-    },
+    }),
   });
 }, 60000);
 afterAll(async () => {

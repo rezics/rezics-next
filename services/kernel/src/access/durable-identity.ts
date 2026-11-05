@@ -1,5 +1,9 @@
+import { durableIdentityBridges, durableIdentityProofs } from './identity-bridge-maps.ts';
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
+import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { DurableInitiatorUnavailableError } from './durable-initiator.ts';
 import { accessEvidence } from './evidence.ts';
+import { ACCESS_EVIDENCE_TTL_MS, accessEvidenceDeadline } from './evidence-deadline.ts';
 import { requireAccessDeadline } from './unavailable.ts';
 import canonicalize from 'canonicalize';
 import { durableInitiatorCommitment } from './durable-initiator-capture.ts';
@@ -34,13 +38,17 @@ type Bridge = {
   restore(proof: DurableIdentity, context: AccessContext, time: AuthoritativeTime): Promise<AccountActor>;
   discard(actor: AccountActor): void;
 };
-const proofs = new WeakMap<DurableIdentity, Facts>();
-const bridges = new WeakMap<Access, Bridge>();
+function proofs(): WeakMap<DurableIdentity, Facts> {
+  return durableIdentityProofs as WeakMap<DurableIdentity, Facts>;
+}
+function bridges(): WeakMap<Access, Bridge> {
+  return durableIdentityBridges as WeakMap<Access, Bridge>;
+}
 export function installDurableIdentityBridge(access: Access, bridge: Bridge): void {
   const root = accessRoot(access);
   if (root !== access) throw new Error('Cannot install durable identity bridge on derived Access');
-  if (bridges.has(root)) throw new Error('Durable identity bridge already installed');
-  bridges.set(root, bridge);
+  if (bridges().has(root)) throw new Error('Durable identity bridge already installed');
+  bridges().set(root, bridge);
 }
 /** Consumed once, only by the installed authenticator for this exact call. */
 export function consumeDurableIdentity(
@@ -49,8 +57,8 @@ export function consumeDurableIdentity(
   context: AccessContext,
   time: AuthoritativeTime,
 ): Facts | undefined {
-  const facts = proofs.get(proof);
-  proofs.delete(proof);
+  const facts = proofs().get(proof);
+  proofs().delete(proof);
   requireAccessDeadline(context.deadline);
   if (facts) requireAccessDeadline(facts.deadline);
   authoritativeTimeValue(time);
@@ -65,7 +73,7 @@ export function consumeDurableIdentity(
   return facts;
 }
 export function discardDurableIdentity(access: Access, actor: AccountActor): void {
-  bridges.get(accessRoot(access))?.discard(actor);
+  bridges().get(accessRoot(access))?.discard(actor);
 }
 const hex = (value: unknown): value is string => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value);
 const text = (value: unknown, max: number): value is string =>
@@ -75,7 +83,7 @@ const resource = (value: { route: number; id: string }) =>
   routeOf(value.id) !== null && routeOf(value.id) === value.route;
 const scopes = (value: readonly string[]) =>
   Array.isArray(value) &&
-  value.length <= 100 &&
+  value.length <= MAX_CONSENTED_SCOPES &&
   value.every((s) => typeof s === 'string' && /^[\x21\x23-\x5b\x5d-\x7e]{1,128}$/.test(s));
 
 /** The only mint path: actual owning-module read, exact native creation receipt,
@@ -88,7 +96,7 @@ export async function restoreOperationIdentity(
   time: AuthoritativeTime,
 ): Promise<AccountActor> {
   const { access, pool, readOperation, readConsent } = config;
-  const bridge = bridges.get(accessRoot(access));
+  const bridge = bridges().get(accessRoot(access));
   const { context, operation } = input;
   requireAccessDeadline(context.deadline);
   authoritativeTimeValue(time);
@@ -105,7 +113,7 @@ export async function restoreOperationIdentity(
     typeof readConsent !== 'function'
   )
     throw new Error('Durable identity unavailable');
-  const deadline = context.deadline;
+  const deadline = accessEvidenceDeadline(context.deadline, ACCESS_EVIDENCE_TTL_MS);
   // Copy the allowlisted result before releasing the module's reader. Subsequent
   // callback/JSON mutations can never change the verified receipt binding.
   const record: DurableInitiatorRecord | null = await within(deadline, () =>
@@ -181,7 +189,7 @@ export async function restoreOperationIdentity(
     principal_kind: 'account',
     principal_id: actor.accountId,
     command_kind: creation.commandKind,
-    idempotency_key: creation.idempotencyKey,
+    idempotency_keys: nativeReceiptKeyCandidates(pool, creation.commandKind, actor.accountId, creation.idempotencyKey),
   });
   const binding = durableInitiatorCommitment(record);
   const response = receipt?.response as { durableInitiator?: unknown } | undefined;
@@ -238,7 +246,7 @@ export async function restoreOperationIdentity(
     scopes: Object.freeze([...new Set(actor.scopes.filter((scope) => currentScopes.has(scope)))]),
   });
   const proof = Object.freeze({}) as DurableIdentity;
-  proofs.set(proof, {
+  proofs().set(proof, {
     scope: bridge.scope,
     context,
     time,
@@ -252,6 +260,6 @@ export async function restoreOperationIdentity(
   try {
     return await bridge.restore(proof, context, time);
   } finally {
-    proofs.delete(proof);
+    proofs().delete(proof);
   }
 }

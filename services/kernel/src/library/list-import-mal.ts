@@ -1,0 +1,2089 @@
+import { memoizedValue } from '../memoized.ts';
+import { createHash, randomUUID } from 'node:crypto';
+import canonicalize from 'canonicalize';
+import type { Pool } from 'pg';
+import { readAccount } from '../access/account-data.ts';
+import { deadlineClient } from '../access/authenticate.ts';
+import { GrantDeniedError } from '../access/grant-commands.ts';
+import { mintReadTime, noEffect, type CommandTransaction, type CommandOutcome } from '../command/command.ts';
+import type { KernelClock } from '../clock.ts';
+import { tupleRoute } from '../content/imported-contract.ts';
+import { withConnection } from '../database/pool.ts';
+import { ProblemError } from '../http/problem.ts';
+import { accessCheck, type Access, type Actor, type AccountActor } from '../request/access.ts';
+import { routeOf } from '../route/route.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import type { SessionComponent } from '../tokens/session.ts';
+import type { ProgressSessionJournalDate, ProgressSessionJournalPatch } from './progress-model.ts';
+import { ProgressConflictError } from './sessions.ts';
+import type { createSessionCommands, ProgressSessionJournalAdmission } from './sessions.ts';
+import readClaim from '../semantic/bulk-read-claim.sql';
+import { createLibraryCommandRunner, LibraryNotFoundError } from './command-support.ts';
+import { createEntryCommands, LibraryConflictError } from './entries.ts';
+import type { Entry } from './entry-model.ts';
+import { readLibraryProfileSourceObservation } from './profile-source.ts';
+import { MAL_LIMITS, parseMal, type MalRow } from './list-import-mal-parser.ts';
+import {
+  createVoteCommands,
+  STANDARD_QUESTION_ID,
+  VoteReviewStaleError,
+  VoteReviewUnavailableError,
+  type RatingQuestion,
+  type VoteReview,
+  type VoteReviewGuard,
+} from '../rating/votes.ts';
+import { createPersonalLabelCommands } from './label-commands.ts';
+import { createLabelAssignmentCommands } from './label-assignment-commands.ts';
+import { reviewMalLabels } from './list-import-mal-labels.ts';
+import {
+  MAL_LABEL_LIMITS,
+  malDigest,
+  malTagEvidence,
+  type MalLabelReview,
+  type MalLabelSelection,
+  type MalLabelOutcome,
+} from './list-import-mal-tags.ts';
+import type { MalLabelFence } from './list-import-mal-label-fence.ts';
+import { createEntryPersonalCommands } from './entry-personal.ts';
+import { parseSourceTimestamp } from './entry-personal-model.ts';
+import {
+  ENTRY_IMPORT_METADATA_LIMITS,
+  assertEntryImportMetadataHistorySize,
+  entryImportMetadataDigest,
+  entryPersonalMetadataDigest,
+  type EntryImportMetadataOutcome,
+  type EntryImportMetadataProposals,
+  type EntryImportMetadataReview,
+  type EntryImportMetadataView,
+} from './list-import-entry-metadata.ts';
+import {
+  appendListImportMetadataReview,
+  createListImportMetadataCoordinator,
+} from './list-import-metadata-coordinator.ts';
+import {
+  confirmListImportMetadata,
+  listImportMetadataFenceFacts,
+  listImportMetadataOrConflict,
+  persistListImportMetadata,
+} from './list-import-metadata-core.ts';
+import type { LabelCommandAdmission } from './label-command-admission.ts';
+import {
+  describeProgressSources,
+  executeProgressAdoption,
+  progressResults,
+  reviewProgressAdoption,
+  type ProgressAdoptionCheckpoint,
+  type ProgressAdoptionInput,
+  type ProgressAdoptionPlan,
+  type ProgressSourceValue,
+} from './list-import-progress-adoption.ts';
+
+export type MalReviewInput = {
+  row: number;
+  target: string | null;
+  skip: boolean;
+  replace: boolean;
+  labels?: MalLabelSelection[];
+  progress?: ProgressAdoptionInput;
+  score?: MalScoreReviewInput;
+};
+export type MalScoreReviewInput =
+  | { action: 'adopt'; questionId: string; questionRevision: number; units: number; replaceCurrent?: boolean }
+  | { action: 'clear'; questionId: string; questionRevision: number };
+export type MalScoreReview = {
+  action: 'adopt' | 'clear';
+  source: MalRow['score'];
+  sourceSupport: {
+    status: 'owner-selection-required' | 'no-source-vote';
+    reason:
+      | 'native-units-require-explicit-selection'
+      | 'source-score-outside-integer-1-through-10'
+      | 'source-zero-means-no-rating'
+      | 'source-score-absent';
+  };
+  conversion: 'owner-selected-not-exact';
+  question: Pick<RatingQuestion, 'id' | 'revision' | 'label' | 'meaning' | 'grain' | 'lifecycleState'> & {
+    scale: Pick<RatingQuestion, 'minimumUnits' | 'maximumUnits' | 'stepUnits'>;
+  };
+  units: number | null;
+  replaceCurrent: boolean;
+  support: { status: 'supported' | 'unsupported'; reason: string | null };
+  baseline: {
+    state: 'present' | 'cleared' | 'absent';
+    units: number | null;
+    revision: number | null;
+    at: string | null;
+  };
+  guard?: VoteReviewGuard;
+  admission:
+    | {
+        status: 'conditional';
+        reason: null;
+      }
+    | {
+        status: 'unavailable';
+        reason: 'conditional-vote-admission-unavailable';
+        missingGuard: 'question-revision-and-target-identity-and-current-vote-revision';
+      };
+};
+export type MalScoreOutcome = {
+  action: 'adopt' | 'clear' | null;
+  status: 'applied' | 'unavailable' | 'stale' | 'skipped' | 'unsupported' | 'failed';
+  reason: string | null;
+  vote: { units: number | null; revision: number; at: string } | null;
+};
+export type MalDateField = 'startDate' | 'finishDate';
+export type MalDateAction = 'adopt' | 'clear';
+export type MalDateReviewInput = {
+  row: number;
+  occurrenceId: string;
+  startAction?: MalDateAction;
+  finishAction?: MalDateAction;
+};
+export type MalDateReviewField = {
+  action: MalDateAction | null;
+  status: 'already-equal' | 'ready' | 'conflict' | 'unsupported' | 'unknown' | 'not-selected' | 'clear';
+  sourceKind: MalRow['dates'][string]['kind'];
+  current: ProgressSessionJournalDate | null;
+  proposed: ProgressSessionJournalDate | null;
+  comparison: 'same' | 'different' | null;
+};
+export type MalDateReview = {
+  version: string;
+  importReviewVersion: string;
+  target: string;
+  occurrence: {
+    sessionId: string;
+    versionSubjectId: string | null;
+    profilePinDigest: string;
+  };
+  journalRevision: number;
+  profileCurrent: boolean;
+  startDate: MalDateReviewField;
+  finishDate: MalDateReviewField;
+};
+export type MalDateApplyInput = { confirm: true; rows: { row: number; version: string; fields: MalDateField[] }[] };
+export type MalDateFieldOutcome = {
+  field: MalDateField;
+  status: 'applied' | 'already-equal' | 'unknown' | 'unsupported' | 'not-selected' | 'stale' | 'failed';
+};
+export type MalDateOutcome = {
+  row: number;
+  version: string;
+  status: 'applied' | 'skipped' | 'stale' | 'unsupported' | 'failed';
+  fields: MalDateFieldOutcome[];
+  receipt: { sessionId: string; revision: number; changed: boolean } | null;
+  reason: string | null;
+};
+export function MAL_DATE_LIMITS() {
+  return memoizedValue(
+    MAL_DATE_LIMITS,
+    () =>
+      ({
+        rows: MAL_LIMITS.page,
+        fields: 2,
+        requestBytes: 16_384,
+        resultBytes: MAL_LABEL_LIMITS.outputBytes,
+      }) as const,
+  );
+}
+export type MalApplyInput = { confirm: true; rows: { row: number; version: string; fields: string[] }[] };
+export type MalOutcome = {
+  row: number;
+  status: 'applied' | 'skipped' | 'stale' | 'unsupported' | 'unavailable' | 'failed';
+  applied: string[];
+  retained: string[];
+  reason: string | null;
+  score?: MalScoreOutcome;
+  labels?: MalLabelOutcome[];
+  remainingLabels?: number[];
+  progress?: {
+    occurrence: ProgressAdoptionCheckpoint['occurrence'];
+    complete: boolean;
+    measures: ReturnType<typeof progressResults>;
+  };
+};
+type Binding = { subject: string; route: number; source: string; externalId: string };
+export type MalReview = {
+  version: string;
+  target: string | null;
+  skip: boolean;
+  replace: boolean;
+  state: string | null;
+  current: Pick<Entry, 'state' | 'revision' | 'incarnationId'> | null;
+  binding: Binding | null;
+  source: { release: string; epoch: string; acceptingType: string } | null;
+  conflict: boolean;
+  unsupported: string | null;
+  score?: MalScoreReview;
+  labels?: MalLabelReview;
+  fingerprint: string;
+  progress?: ProgressAdoptionPlan;
+};
+export type MalMetadataReviewInput = { row: number; sourceReviewToken: string };
+type Intent = {
+  review: MalReview;
+  fields: string[];
+  key: string;
+  score?: {
+    key: string;
+    attribution: { provider: 'mal'; uploadId: string; sourceRow: number; reviewVersion: string };
+    started?: boolean;
+    outcome?: MalScoreOutcome;
+  };
+  progress?: ProgressAdoptionCheckpoint;
+  outcome?: MalOutcome;
+};
+type LabelIntent = {
+  version: string;
+  selectionDigest: string;
+  items: {
+    value: number;
+    key: string;
+    label?: { id: string; revision: number; name?: string };
+    before?: boolean;
+    outcome?: MalLabelOutcome;
+  }[];
+};
+type Document = {
+  xml: string;
+  rows: MalRow[];
+  reviews: Record<string, MalReview>;
+  intents: Record<string, Intent>;
+  dateReviews: Record<string, MalDateReview>;
+  dateIntents: Record<string, DateIntent>;
+  labelIntents?: Record<string, LabelIntent>;
+  metadataReviews?: Record<string, EntryImportMetadataReview[]>;
+  canceled: boolean;
+};
+
+function malMetadataFence(record: EntryImportMetadataReview, doc: Document, ordinal: number) {
+  const review = doc.reviews[ordinal],
+    row = doc.rows[ordinal];
+  return listImportMetadataFenceFacts({
+    cancelled: doc.canceled,
+    currentSourceReviewToken: review?.version,
+    boundSourceReviewToken: record.sourceReviewToken,
+    currentSourceDigest: row ? entryImportMetadataDigest(row) : null,
+    boundSourceDigest: record.sourceDigest,
+    currentProfileDigest: review
+      ? entryImportMetadataDigest({
+          source: review.source,
+          binding: review.binding,
+          current: review.current,
+        })
+      : null,
+    boundProfileDigest: record.profileDigest,
+    currentIncarnationId: review?.current?.incarnationId ?? null,
+    boundIncarnationId: record.incarnationId,
+  });
+}
+type DateIntent = {
+  review: MalDateReview;
+  fields: MalDateField[];
+  key: string;
+  nativeRequestKey: string;
+  patch: ProgressSessionJournalPatch | null;
+  outcome?: MalDateOutcome;
+};
+type Dependencies = {
+  pool: Pool;
+  access: Access;
+  tokens: KeyRing;
+  routeKey: Uint8Array;
+  journal: ReturnType<typeof createSessionCommands>;
+  clock?: KernelClock;
+};
+const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
+const missing = () => new ProblemError('not_found');
+const stale = () => new ProblemError('conflict');
+
+function malProgressSources(row: MalRow): ProgressSourceValue[] {
+  const pairs: [string, string][] =
+    row.kind === 'anime'
+      ? [['my_watched_episodes', 'episode']]
+      : [
+          ['my_read_chapters', 'chapter'],
+          ['my_read_volumes', 'volume'],
+        ];
+  return pairs.map(([field, unit]) => {
+    const value = row.progress[field] ?? { kind: 'missing' as const };
+    return {
+      field,
+      unit,
+      state: value.kind,
+      ...(typeof value.value === 'number' && Number.isSafeInteger(value.value) ? { amount: String(value.value) } : {}),
+    };
+  });
+}
+
+function publicProgress(plan: ProgressAdoptionPlan, checkpoint: ProgressAdoptionCheckpoint | null | undefined) {
+  return {
+    occurrence: checkpoint?.occurrence ?? null,
+    complete: checkpoint?.complete ?? false,
+    measures: progressResults(plan, checkpoint),
+  };
+}
+
+function journalDate(value: MalRow['dates'][string]): ProgressSessionJournalDate | null {
+  if (value.kind !== 'value' || typeof value.value !== 'string' || !value.precision) return null;
+  const parts = value.value.split('-').map(Number);
+  if (parts.length < 1 || parts.length > 3 || parts.some((part) => !Number.isInteger(part) || part < 1)) return null;
+  return {
+    year: parts[0]!,
+    ...(value.precision === 'month' || value.precision === 'day' ? { month: parts[1]! } : {}),
+    ...(value.precision === 'day' ? { day: parts[2]! } : {}),
+  };
+}
+
+function sameJournalDate(left: ProgressSessionJournalDate | null, right: ProgressSessionJournalDate | null) {
+  return left?.year === right?.year && left?.month === right?.month && left?.day === right?.day;
+}
+
+function profilePinMatches(pin: unknown, source: MalReview['source']) {
+  if (source === null || typeof pin !== 'object' || pin === null || Array.isArray(pin)) return false;
+  const value = pin as Record<string, unknown>;
+  return (
+    value.provenance === 'profile' &&
+    value.releaseDigest === source.release &&
+    value.acceptingType === source.acceptingType
+  );
+}
+
+function dateReviewField(
+  source: MalRow['dates'][string],
+  current: ProgressSessionJournalDate | null,
+  action: MalDateAction | undefined,
+  profileCurrent: boolean,
+): MalDateReviewField {
+  const proposed = journalDate(source);
+  const comparison = proposed && current ? (sameJournalDate(proposed, current) ? 'same' : 'different') : null;
+  let status: MalDateReviewField['status'];
+  if (!profileCurrent) status = 'unsupported';
+  else if (action === 'clear') status = current === null ? 'already-equal' : 'clear';
+  else if (source.kind === 'missing' || source.kind === 'unknown') status = 'unknown';
+  else if (source.kind !== 'value' || proposed === null) status = 'unsupported';
+  else if (!action) status = 'not-selected';
+  else if (comparison === 'same') status = 'already-equal';
+  else status = current === null ? 'ready' : 'conflict';
+  return {
+    action: action ?? null,
+    status,
+    sourceKind: source.kind,
+    current,
+    proposed: action === 'clear' ? null : proposed,
+    comparison,
+  };
+}
+
+function sameReviewContext(
+  review: MalReview,
+  observation: {
+    target: string | null;
+    binding: Binding | null;
+    source: MalReview['source'];
+    current: Pick<Entry, 'state' | 'revision' | 'incarnationId'> | null;
+    state: string | null;
+  },
+) {
+  return (
+    review.target === observation.target &&
+    review.state === observation.state &&
+    hash(review.source) === hash(observation.source) &&
+    hash(review.binding) === hash(observation.binding) &&
+    hash(review.current) ===
+      hash(
+        observation.current
+          ? {
+              state: observation.current.state,
+              revision: observation.current.revision,
+              incarnationId: observation.current.incarnationId,
+            }
+          : null,
+      )
+  );
+}
+
+export function malMetadataProposals(row: MalRow): EntryImportMetadataProposals {
+  const noteRaw = row.fields.my_comments;
+  const note =
+    noteRaw === undefined
+      ? { state: 'absent' as const, sourceField: null }
+      : noteRaw === ''
+        ? { state: 'empty' as const, sourceField: 'my_comments', sourceValue: '' }
+        : !noteRaw.isWellFormed() || noteRaw.includes('\0')
+          ? {
+              state: 'invalid' as const,
+              sourceField: 'my_comments',
+              sourceValue: noteRaw,
+              reason: 'The retained note is not valid text.',
+            }
+          : Buffer.byteLength(noteRaw) > ENTRY_IMPORT_METADATA_LIMITS().noteBytes
+            ? {
+                state: 'unsupported' as const,
+                sourceField: 'my_comments',
+                reason: 'The retained note exceeds the native 4,096-byte limit.',
+              }
+            : { state: 'value' as const, sourceField: 'my_comments', value: noteRaw };
+  const priorityRaw = row.fields.my_priority;
+  const priorities: Record<string, number> = { '0': 100, '1': 50, '2': 1 };
+  const priority =
+    priorityRaw === undefined
+      ? { state: 'absent' as const, sourceField: null }
+      : Object.hasOwn(priorities, priorityRaw)
+        ? {
+            state: 'value' as const,
+            sourceField: 'my_priority',
+            sourceValue: Number(priorityRaw),
+            value: priorities[priorityRaw]!,
+            mapping: { id: 'mal-priority-position-v1', label: 'Low 0 → 100; Medium 1 → 50; High 2 → 1' },
+          }
+        : {
+            state: 'unsupported' as const,
+            sourceField: 'my_priority',
+            sourceValue: priorityRaw,
+            reason: 'Only retained MAL priorities 0, 1 and 2 have an explicitly confirmed native mapping.',
+          };
+  const privacyRaw = row.fields.my_privacy;
+  const privacyToken = privacyRaw?.trim().toLowerCase();
+  const privacyMeaning: 'private' | 'source_visible' | null =
+    privacyToken === 'private' || privacyToken === 'true'
+      ? 'private'
+      : privacyToken === 'public' || privacyToken === 'false'
+        ? 'source_visible'
+        : null;
+  const privacy =
+    privacyRaw === undefined
+      ? { state: 'absent' as const, sourceField: null, value: { status: 'absent' as const } }
+      : privacyRaw === ''
+        ? { state: 'empty' as const, sourceField: 'my_privacy', sourceValue: '' }
+        : privacyMeaning
+          ? {
+              state: 'value' as const,
+              sourceField: 'my_privacy',
+              sourceValue: privacyRaw,
+              value: { status: 'known' as const, meaning: privacyMeaning },
+            }
+          : Buffer.byteLength(privacyRaw) <= ENTRY_IMPORT_METADATA_LIMITS().privacyValueBytes &&
+              !/[\u0000-\u001f\u007f]/.test(privacyRaw)
+            ? {
+                state: 'unknown' as const,
+                sourceField: 'my_privacy',
+                sourceValue: privacyRaw,
+                value: { status: 'unknown' as const, sourceValue: privacyRaw },
+              }
+            : {
+                state: 'unsupported' as const,
+                sourceField: 'my_privacy',
+                reason: 'The source privacy token exceeds the native evidence bound.',
+              };
+  const updateFields = Object.keys(row.fields).filter((field) => /updated|timestamp|last_updated/i.test(field));
+  const sourceUpdated =
+    updateFields.length === 0
+      ? { state: 'absent' as const, sourceField: null, value: { status: 'absent' as const } }
+      : updateFields.length !== 1
+        ? {
+            state: 'unsupported' as const,
+            sourceField: null,
+            reason: 'MAL retains multiple update-time fields; their source meanings are not interchangeable.',
+          }
+        : (() => {
+            const field = updateFields[0]!,
+              raw = row.fields[field]!;
+            if (raw === '') return { state: 'empty' as const, sourceField: field, sourceValue: '' };
+            try {
+              return {
+                state: 'value' as const,
+                sourceField: field,
+                sourceValue: raw,
+                value: parseSourceTimestamp(raw),
+              };
+            } catch {
+              return Buffer.byteLength(raw) <= ENTRY_IMPORT_METADATA_LIMITS().timestampBytes &&
+                !/[\u0000-\u001f\u007f]/.test(raw)
+                ? {
+                    state: 'unknown' as const,
+                    sourceField: field,
+                    sourceValue: raw,
+                    value: { status: 'unknown' as const, sourceValue: raw },
+                  }
+                : {
+                    state: 'invalid' as const,
+                    sourceField: field,
+                    reason: 'The retained update time cannot fit the native timestamp evidence bound.',
+                  };
+            }
+          })();
+  return {
+    note,
+    priority,
+    privacy,
+    sourceCreated: {
+      state: 'unsupported',
+      sourceField: null,
+      reason: 'MAL does not retain an original entry-created time.',
+    },
+    sourceUpdated,
+  };
+}
+
+/** One source's bounded composition of current Semantic observations and native Library commands. */
+export function createMalImport(deps: Dependencies) {
+  const { pool, access, journal } = deps,
+    runner = createLibraryCommandRunner(deps),
+    entries = createEntryCommands(deps),
+    sessions = journal,
+    votes = createVoteCommands(deps);
+  const labels = createPersonalLabelCommands(deps),
+    assignments = createLabelAssignmentCommands(deps),
+    personalEntries = createEntryPersonalCommands(deps);
+  function owner(actor: Actor): AccountActor {
+    if (actor.kind !== 'account') throw new ProblemError('authentication_required');
+    if (!actor.scopes.includes('library_entry:read') || !actor.scopes.includes('library_entry:update'))
+      throw new ProblemError('forbidden');
+    return actor;
+  }
+  async function authority(actor: Actor, deadline: number) {
+    const a = owner(actor),
+      route = routeOf(a.accountId);
+    if (route === null) throw missing();
+    const check = await accessCheck(access, a, 'library_entry:update', { route, id: a.accountId }, { pool, deadline });
+    return withConnection(pool, async (client) => {
+      const db = deadlineClient(client, deadline),
+        current = await readAccount(db, route, a.accountId);
+      if (
+        !current ||
+        current.kind !== 'actor' ||
+        current.state !== 'active' ||
+        current.fenced ||
+        !Number.isSafeInteger(a.authnEpoch) ||
+        a.authnEpoch < 1 ||
+        current.minimumAuthnEpoch > BigInt(a.authnEpoch)
+      )
+        throw new ProblemError('forbidden');
+      const at = await mintReadTime(db, deps.clock);
+      if (!(await check(db, at))) throw new ProblemError('forbidden');
+      return { actor: a, route, at };
+    });
+  }
+  async function load(actor: Actor, id: string, deadline: number) {
+    const a = await authority(actor, deadline);
+    const result = await deadlineClient(pool, deadline).query<{ document: Document }>(
+      `SELECT document FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND id=$3 AND expires_at>clock_timestamp()`,
+      [a.route, a.actor.accountId, id],
+    );
+    const doc = result.rows[0]?.document;
+    if (!doc) throw missing();
+    doc.dateReviews ??= {};
+    doc.dateIntents ??= {};
+    doc.metadataReviews ??= {};
+    return { ...a, doc };
+  }
+  async function mutate(
+    actor: Actor,
+    id: string,
+    key: string,
+    operation: string,
+    input: unknown,
+    change: (doc: Document, tx: CommandTransaction) => Promise<void> | void,
+  ) {
+    const a = owner(actor),
+      route = routeOf(a.accountId)!;
+    return runner.ownAccount(
+      actor,
+      { action: 'library_entry:update', kind: `library.mal.${operation}`, requestKey: key, input: { id, input } },
+      async (tx) => {
+        const found = await tx.query<{ document: Document }>(
+          `SELECT document FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND id=$3 AND expires_at>clock_timestamp() FOR UPDATE`,
+          [route, a.accountId, id],
+        );
+        const doc = found.rows[0]?.document;
+        if (!doc) throw missing();
+        if (
+          doc.canceled &&
+          operation !== 'cancel' &&
+          operation !== 'delete' &&
+          operation !== 'outcome' &&
+          operation !== 'date-outcome' &&
+          operation !== 'metadata-progress'
+        )
+          throw stale();
+        await change(doc, tx);
+        if (operation === 'delete')
+          await tx.query(`DELETE FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND id=$3`, [
+            route,
+            a.accountId,
+            id,
+          ]);
+        else {
+          if (Buffer.byteLength(canonicalize(doc)!) > MAL_LIMITS.evidenceBytes)
+            throw new ProblemError('invalid_request', { detail: 'MAL: retained evidence exceeds 48 MiB' });
+          const saved = await tx.query(
+            `UPDATE library.list_import_mal SET document=$4
+            WHERE route=$1 AND account_id=$2 AND id=$3
+              AND octet_length($4::jsonb::text)<=$5`,
+            [route, a.accountId, id, canonicalize(doc), MAL_LIMITS.evidenceBytes],
+          );
+          if (saved.rowCount !== 1) throw new ProblemError('invalid_request');
+        }
+        return noEffect({ id }); // Receipts contain no source text or review payload.
+      },
+    );
+  }
+  async function preview(actor: Actor, xml: string, key: string, deadline: number) {
+    await authority(actor, deadline);
+    const rows = parseMal(xml),
+      a = owner(actor),
+      route = routeOf(a.accountId)!,
+      id = randomUUID();
+    const result = await runner.ownAccount(
+      actor,
+      { action: 'library_entry:update', kind: 'library.mal.preview', requestKey: key, input: { digest: hash(xml) } },
+      async (tx) => {
+        await tx.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`library.mal:${a.accountId}`]);
+        await tx.query(
+          `DELETE FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND expires_at<=clock_timestamp()`,
+          [route, a.accountId],
+        );
+        const count = await tx.query<{ n: string }>(
+          `SELECT count(*) AS n FROM library.list_import_mal WHERE route=$1 AND account_id=$2`,
+          [route, a.accountId],
+        );
+        if (Number(count.rows[0]!.n) >= MAL_LIMITS.uploads)
+          throw new ProblemError('conflict', { detail: 'Delete a retained MAL upload before uploading another' });
+        const doc: Document = {
+          xml,
+          rows,
+          reviews: {},
+          intents: {},
+          dateReviews: {},
+          dateIntents: {},
+          canceled: false,
+        };
+        if (Buffer.byteLength(JSON.stringify(doc)) > MAL_LIMITS.evidenceBytes)
+          throw new ProblemError('invalid_request', { detail: 'MAL: retained evidence exceeds 48 MiB' });
+        await tx.query(
+          `INSERT INTO library.list_import_mal(route,account_id,id,document,expires_at) VALUES($1,$2,$3,$4,clock_timestamp()+interval '7 days')`,
+          [route, a.accountId, id, canonicalize(doc)],
+        );
+        return noEffect({ id });
+      },
+    );
+    return result;
+  }
+  async function observe(actor: Actor, row: MalRow, chosen: string | null, deadline: number) {
+    const a = await authority(actor, deadline),
+      identifier = row.identifier;
+    const route = tupleRoute(deps.routeKey, identifier.source, identifier.value);
+    const claim = await readClaim.run(deadlineClient(pool, deadline), {
+      route,
+      source: identifier.source,
+      external_id: identifier.value,
+    });
+    const target = chosen ?? claim?.subject_id ?? null;
+    const binding: Binding | null =
+      chosen === null && claim
+        ? { subject: claim.subject_id, route, source: identifier.source, externalId: identifier.value }
+        : null;
+    if (!target)
+      return {
+        target: null,
+        binding,
+        source: null,
+        current: null,
+        state: null,
+        match: 'unmatched' as const,
+        profile: null,
+        profileBinding: null,
+      };
+    const observation = await readLibraryProfileSourceObservation(
+      { pool, access, actor: a.actor, at: a.at, deadline },
+      target,
+    );
+    if (!observation || observation.source.subjectId !== target)
+      return {
+        target: null,
+        binding: null,
+        source: null,
+        current: null,
+        state: null,
+        match: 'unavailable' as const,
+        profile: null,
+        profileBinding: null,
+      };
+    const { source, anchor } = observation;
+    let current: Entry | null = null;
+    try {
+      current = await entries.readEntry(actor, target);
+    } catch (e) {
+      if (!(e instanceof LibraryNotFoundError)) throw e;
+    }
+    const states =
+      source.kind === 'supported'
+        ? (source.profile.entryStateSet?.states.filter((s) => s.role === row.role) ?? [])
+        : [];
+    return {
+      target,
+      binding,
+      source: {
+        release: source.kind === 'supported' ? source.pin.releaseDigest : '',
+        epoch: anchor.identityEpoch.toString(),
+        acceptingType: anchor.acceptingType,
+      },
+      current: current
+        ? { state: current.state, revision: current.revision, incarnationId: current.incarnationId ?? null }
+        : null,
+      state: states.length === 1 ? states[0]!.id : null,
+      match: current ? ('already-matched' as const) : ('matched' as const),
+      profile: source.kind === 'supported' ? source.profile : null,
+      profileBinding:
+        source.kind === 'supported'
+          ? { pin: source.pin, epoch: anchor.identityEpoch.toString(), acceptingType: anchor.acceptingType }
+          : null,
+    };
+  }
+  async function page(actor: Actor, id: string, after: number, deadline: number) {
+    const { doc } = await load(actor, id, deadline);
+    const rows = [];
+    for (const row of doc.rows.slice(after, after + MAL_LIMITS.page)) {
+      const review = doc.reviews[row.index];
+      const observed = await observe(actor, row, review?.binding ? null : (review?.target ?? null), deadline);
+      const { profile, profileBinding: _profileBinding, ...observation } = observed;
+      const scoreReviewState = review?.score ? await scoreReviewCurrent(actor, row, review, observed) : null;
+      const currentVote =
+        review?.score && review.target ? await votes.readOwnVote(actor, review.score.question.id, review.target) : null;
+      rows.push({
+        ...row,
+        ...observation,
+        tagEvidence: malTagEvidence(row),
+        candidates: observation.target ? [{ subjectId: observation.target }] : [],
+        review: review ?? null,
+        scoreReviewState,
+        currentScoreVote: currentVote
+          ? { units: currentVote.units, revision: currentVote.revision, at: currentVote.changedAt }
+          : null,
+        outcome: doc.intents[row.index]?.outcome ?? null,
+        dateReview: doc.dateReviews[row.index] ?? null,
+        dateOutcome: doc.dateIntents[row.index]?.outcome ?? null,
+        labelOutcomes: doc.labelIntents?.[row.index]?.items.flatMap((i) => (i.outcome ? [i.outcome] : [])) ?? [],
+        progressMeasures: describeProgressSources(profile ?? null, malProgressSources(row)),
+        progress: review?.progress ? publicProgress(review.progress, doc.intents[row.index]?.progress) : null,
+      });
+    }
+    await authority(actor, deadline);
+    return {
+      id,
+      canceled: doc.canceled,
+      total: doc.rows.length,
+      rows,
+      sourcePath: `/v1/libraryImports/mal/${id}/source`,
+      next: after + rows.length < doc.rows.length ? after + rows.length : null,
+      limits: MAL_LIMITS,
+      labelLimits: MAL_LABEL_LIMITS,
+    };
+  }
+  function scoreQuestionView(question: RatingQuestion): MalScoreReview['question'] {
+    return {
+      id: question.id,
+      revision: question.revision,
+      label: question.label,
+      meaning: question.meaning,
+      grain: question.grain,
+      scale: {
+        minimumUnits: question.minimumUnits,
+        maximumUnits: question.maximumUnits,
+        stepUnits: question.stepUnits,
+      },
+      lifecycleState: question.lifecycleState,
+    };
+  }
+  function scoreBaseline(vote: VoteReview['currentVote']): MalScoreReview['baseline'] {
+    return {
+      state: vote.state === 'absent' ? 'absent' : vote.state === 'clear' ? 'cleared' : 'present',
+      units: vote.state === 'absent' ? null : vote.units,
+      revision: vote.state === 'absent' ? null : vote.revision,
+      at: vote.state === 'absent' ? null : vote.changedAt,
+    };
+  }
+  async function scoreReviewCurrent(
+    actor: Actor,
+    row: MalRow,
+    review: MalReview,
+    observation: Awaited<ReturnType<typeof observe>>,
+  ): Promise<'observations-match' | 'stale' | 'unavailable'> {
+    const selected = review.score;
+    if (!selected || !review.target) return 'unavailable';
+    if (!selected.guard) {
+      // Pre-guard retained reviews still require current Rating disclosure authority.
+      await votes.readOwnVote(actor, selected.question.id, review.target);
+      return 'unavailable';
+    }
+    try {
+      const current = await votes.readVoteReview(actor, selected.question.id, review.target);
+      return sameReviewContext(review, observation) &&
+        hash(current.guard) === hash(selected.guard) &&
+        hash(row) === review.fingerprint
+        ? 'observations-match'
+        : 'stale';
+    } catch (error) {
+      if (error instanceof VoteReviewUnavailableError) return 'unavailable';
+      throw error;
+    }
+  }
+  async function reviewScore(
+    actor: Actor,
+    row: MalRow,
+    target: string,
+    input: MalScoreReviewInput,
+  ): Promise<MalScoreReview> {
+    if (input.questionId !== STANDARD_QUESTION_ID || input.questionRevision !== 1) throw new ProblemError('conflict');
+    if (input.action === 'adopt') {
+      if (row.score.kind === 'zero' || row.score.kind === 'missing' || row.score.kind === 'unknown')
+        throw new ProblemError('invalid_request');
+      if (row.score.kind === 'invalid' && row.score.raw === undefined) throw new ProblemError('invalid_request');
+      if (!Number.isSafeInteger(input.units) || input.units < 0 || input.units > 20)
+        throw new ProblemError('invalid_request');
+    }
+    const native = await votes.readVoteReview(actor, input.questionId, target),
+      question = native.question;
+    if (question.revision !== input.questionRevision) throw stale();
+    const vote = native.currentVote;
+    const view = scoreQuestionView(question),
+      scaleSupported =
+        view.id === STANDARD_QUESTION_ID &&
+        view.revision === 1 &&
+        view.grain === 'work' &&
+        view.lifecycleState === 'active' &&
+        view.scale.minimumUnits === 0 &&
+        view.scale.maximumUnits === 20 &&
+        view.scale.stepUnits === 1;
+    return {
+      action: input.action,
+      source: row.score,
+      sourceSupport:
+        row.score.kind === 'zero'
+          ? { status: 'no-source-vote', reason: 'source-zero-means-no-rating' }
+          : row.score.kind === 'missing' || row.score.kind === 'unknown'
+            ? { status: 'no-source-vote', reason: 'source-score-absent' }
+            : row.score.kind === 'invalid'
+              ? { status: 'owner-selection-required', reason: 'source-score-outside-integer-1-through-10' }
+              : { status: 'owner-selection-required', reason: 'native-units-require-explicit-selection' },
+      conversion: 'owner-selected-not-exact',
+      question: view,
+      units: input.action === 'adopt' ? input.units : null,
+      replaceCurrent: input.action === 'adopt' && input.replaceCurrent === true,
+      baseline: scoreBaseline(vote),
+      support: {
+        status: scaleSupported ? 'supported' : 'unsupported',
+        reason: scaleSupported ? null : 'standard-question-revision-or-scale-unsupported',
+      },
+      guard: native.guard,
+      admission: { status: 'conditional', reason: null },
+    };
+  }
+  async function review(actor: Actor, id: string, input: MalReviewInput, key: string, deadline: number) {
+    const { doc } = await load(actor, id, deadline),
+      row = doc.rows[input.row];
+    if (!row) throw missing();
+    if (input.skip && (input.progress || input.score)) throw new ProblemError('invalid_request');
+    if (doc.metadataReviews?.[input.row]?.some((item) => item.confirmation && !item.confirmation.outcome))
+      throw stale();
+    const observed = await observe(actor, row, input.target, deadline);
+    if (!input.skip && (!observed.source || !observed.target)) throw missing();
+    if (input.progress && (!observed.profile || !observed.profileBinding || !observed.target))
+      throw new ProblemError('unsupported_library_profile');
+    if (input.score && !observed.target) throw new ProblemError('not_found');
+    const proposed: MalReview = {
+      version: key,
+      target: observed.target,
+      skip: input.skip,
+      replace: input.replace,
+      current: observed.current,
+      state: observed.state,
+      source: observed.source,
+      binding: observed.binding,
+      conflict: observed.current !== null && observed.current.state !== observed.state,
+      unsupported: observed.state === null ? 'no-unique-released-status-role' : null,
+      fingerprint: hash(row),
+      ...(input.score ? { score: await reviewScore(actor, row, observed.target!, input.score) } : {}),
+      ...(input.progress
+        ? {
+            progress: await reviewProgressAdoption(
+              sessions,
+              actor,
+              observed.target!,
+              observed.profile!,
+              observed.profileBinding!,
+              malProgressSources(row),
+              input.progress,
+              `mal-progress-start:${hash({ id, row: input.row, version: key })}`,
+            ),
+          }
+        : {}),
+    };
+    if (input.labels !== undefined)
+      proposed.labels = await reviewMalLabels(
+        deadlineClient(pool, deadline),
+        { route: routeOf(owner(actor).accountId)!, accountId: owner(actor).accountId },
+        row,
+        input.labels,
+      );
+    const result = await mutate(actor, id, key, 'review', input, (doc) => {
+      const prior = doc.intents[input.row];
+      if (prior?.score?.started && !prior.score.outcome) throw stale();
+      const priorOutcome = prior?.outcome?.status;
+      if (
+        input.labels === undefined &&
+        doc.intents[input.row] &&
+        priorOutcome !== 'stale' &&
+        priorOutcome !== 'unavailable' &&
+        prior?.outcome?.score?.reason !== 'score-action-not-reviewed'
+      )
+        throw stale();
+      if (malDigest(doc.rows[input.row]) !== malDigest(row)) throw stale();
+      delete doc.intents[input.row];
+      if (doc.labelIntents) delete doc.labelIntents[input.row];
+      doc.reviews[input.row] = proposed;
+    });
+    // A receipt for an older review cannot reinstall it after a refresh.
+    const current = await load(actor, id, deadline);
+    if (current.doc.reviews[input.row]?.version !== key) throw stale();
+    return result;
+  }
+  async function reviewDates(actor: Actor, id: string, input: MalDateReviewInput, key: string, deadline: number) {
+    const { doc } = await load(actor, id, deadline),
+      row = doc.rows[input.row],
+      imported = doc.reviews[input.row];
+    if (!row || !imported || imported.skip || !imported.target || !imported.source) throw stale();
+    const observation = await observe(actor, row, imported.binding ? null : imported.target, deadline);
+    if (
+      observation.target !== imported.target ||
+      observation.source === null ||
+      hash(observation.source) !== hash(imported.source) ||
+      hash(observation.binding) !== hash(imported.binding) ||
+      hash(
+        observation.current
+          ? {
+              state: observation.current.state,
+              revision: observation.current.revision,
+              incarnationId: observation.current.incarnationId,
+            }
+          : null,
+      ) !== hash(imported.current)
+    )
+      throw stale();
+    const fact = await journal.inspectSession(actor, input.occurrenceId);
+    if (fact.session.subjectId !== imported.target || fact.session.state === 'retired') throw stale();
+    const current = await journal.readSessionJournal(actor, input.occurrenceId);
+    const profileCurrent = profilePinMatches(fact.pin, observation.source);
+    const proposed: MalDateReview = {
+      version: key,
+      importReviewVersion: imported.version,
+      target: imported.target,
+      occurrence: {
+        sessionId: fact.session.id,
+        versionSubjectId: fact.session.versionSubjectId,
+        profilePinDigest: hash(fact.pin),
+      },
+      journalRevision: current.revision,
+      profileCurrent,
+      startDate: dateReviewField(row.dates.started!, current.startDate, input.startAction, profileCurrent),
+      finishDate: dateReviewField(row.dates.finished!, current.finishDate, input.finishAction, profileCurrent),
+    };
+    const result = await mutate(actor, id, key, 'date-review', input, (doc) => {
+      if (doc.reviews[input.row]?.version !== imported.version || malDigest(doc.rows[input.row]) !== malDigest(row))
+        throw stale();
+      const prior = doc.dateIntents[input.row];
+      if (prior && (!prior.outcome || ['applied', 'failed'].includes(prior.outcome.status))) throw stale();
+      delete doc.dateIntents[input.row];
+      doc.dateReviews[input.row] = proposed;
+    });
+    const refreshed = await load(actor, id, deadline);
+    if (refreshed.doc.dateReviews[input.row]?.version !== key) throw stale();
+    return result;
+  }
+  async function dateReviewCurrent(
+    actor: Actor,
+    row: MalRow,
+    imported: MalReview,
+    reviewed: MalDateReview,
+    deadline: number,
+  ) {
+    if (!reviewed.profileCurrent || reviewed.importReviewVersion !== imported.version) return false;
+    const observation = await observe(actor, row, imported.binding ? null : imported.target, deadline);
+    if (!sameReviewContext(imported, observation)) return false;
+    const fact = await journal.inspectSession(actor, reviewed.occurrence.sessionId);
+    if (
+      fact.session.subjectId !== reviewed.target ||
+      fact.session.state === 'retired' ||
+      fact.session.versionSubjectId !== reviewed.occurrence.versionSubjectId ||
+      hash(fact.pin) !== reviewed.occurrence.profilePinDigest ||
+      !profilePinMatches(fact.pin, observation.source)
+    )
+      return false;
+    const current = await journal.readSessionJournal(actor, reviewed.occurrence.sessionId);
+    return current.revision === reviewed.journalRevision;
+  }
+  async function applyLabels(
+    actor: Actor,
+    id: string,
+    row: MalRow,
+    review: MalReview,
+    deadline: number,
+    signal: AbortSignal,
+    record: (
+      value:
+        | CommandOutcome<unknown>
+        | Awaited<ReturnType<typeof sessions.startSession>>
+        | Awaited<ReturnType<typeof sessions.recordProgress>>,
+    ) => void,
+  ): Promise<{ outcomes: MalLabelOutcome[]; remaining: number[] }> {
+    const selected = review.labels;
+    if (!selected) return { outcomes: [], remaining: [] };
+    const outcomes: MalLabelOutcome[] = [],
+      a = owner(actor),
+      route = routeOf(a.accountId)!;
+    const failure = (value: number, status: MalLabelOutcome['status'], reason: string): MalLabelOutcome => ({
+      value,
+      status,
+      labelId: null,
+      assignment: null,
+      reason,
+    });
+    const current = async () => {
+      const { doc } = await load(actor, id, deadline);
+      if (
+        doc.canceled ||
+        doc.reviews[row.index]?.version !== review.version ||
+        doc.reviews[row.index]?.labels?.selectionDigest !== selected.selectionDigest ||
+        malDigest(doc.rows[row.index]) !== selected.sourceDigest
+      )
+        throw new LibraryConflictError();
+      const observation = await observe(actor, row, review.binding ? null : review.target, deadline);
+      if (
+        !review.source ||
+        !review.target ||
+        observation.target !== review.target ||
+        observation.source?.epoch !== review.source.epoch ||
+        observation.source.acceptingType !== review.source.acceptingType ||
+        malDigest(observation.binding) !== malDigest(review.binding)
+      )
+        throw new LibraryConflictError();
+      return doc;
+    };
+    try {
+      await current();
+    } catch (error) {
+      if (!(error instanceof LibraryConflictError || error instanceof LibraryNotFoundError)) throw error;
+      return { outcomes: selected.selections.map((s) => failure(s.value, 'stale', 'refresh-review')), remaining: [] };
+    }
+    let { doc } = await load(actor, id, deadline);
+    let intent = doc.labelIntents?.[row.index];
+    if (!intent) {
+      const keys = new Map<string, string>();
+      intent = {
+        version: review.version,
+        selectionDigest: selected.selectionDigest,
+        items: selected.selections.map((s) => {
+          const identity = malDigest(s.target),
+            key = keys.get(identity) ?? `mal-label:${id}:${row.index}:${hash(review.version)}:${s.value}`;
+          keys.set(identity, key);
+          return { value: s.value, key };
+        }),
+      };
+      const original = intent;
+      await mutate(
+        actor,
+        id,
+        `mal-label:${id}:${row.index}:${hash(review.version)}:intent`,
+        'label-intent',
+        { version: review.version, selectionDigest: selected.selectionDigest },
+        (doc) => {
+          if (doc.reviews[row.index]?.version !== review.version) throw stale();
+          doc.labelIntents ??= {};
+          doc.labelIntents[row.index] ??= original;
+        },
+      );
+      doc = (await load(actor, id, deadline)).doc;
+      intent = doc.labelIntents?.[row.index];
+    }
+    if (!intent || intent.version !== review.version || intent.selectionDigest !== selected.selectionDigest)
+      throw stale();
+    const saved = intent;
+    async function save(index: number, part: string) {
+      const item = saved.items[index]!;
+      await mutate(actor, id, `${item.key}:${part}:${item.value}`, 'outcome', item, (doc) => {
+        if (
+          doc.reviews[row.index]?.version !== review.version ||
+          doc.labelIntents?.[row.index]?.version !== review.version
+        )
+          throw stale();
+        doc.labelIntents[row.index]!.items[index] = item;
+      });
+    }
+    for (let index = 0; index < selected.selections.length; index++) {
+      if (signal.aborted || Date.now() + 100 >= deadline) break;
+      const selection = selected.selections[index]!,
+        item = saved.items[index]!;
+      if (!selection.target || !['ready', 'duplicate'].includes(selection.status)) {
+        outcomes.push(failure(selection.value, 'unsupported', selection.reason ?? selection.status));
+        continue;
+      }
+      try {
+        await current();
+        const fence: MalLabelFence = {
+          id,
+          row: row.index,
+          version: review.version,
+          sourceDigest: selected.sourceDigest,
+          selectionDigest: selected.selectionDigest,
+          subject: review.target!,
+          epoch: review.source!.epoch,
+          acceptingType: review.source!.acceptingType,
+          binding: review.binding,
+          label: null,
+        };
+        if (!item.label) {
+          if ('labelId' in selection.target) {
+            item.label = { id: selection.target.labelId, revision: selection.target.revision };
+          } else {
+            if (signal.aborted) break;
+            const created = await labels.createLabel(
+              actor,
+              { name: selection.target.name },
+              `${item.key}:create`,
+              fence,
+            );
+            record(created);
+            item.label = { ...created.value.label, name: selection.target.name };
+          }
+          await save(index, 'label');
+        }
+        const parent = await deadlineClient(pool, deadline).query<{ revision: number; name: string }>(
+          `SELECT revision,normalized_name AS name FROM library.personal_label
+           WHERE route=$1 AND account_id=$2 AND label_id=$3 AND deleted_at IS NULL`,
+          [route, a.accountId, item.label.id],
+        );
+        if (
+          parent.rows[0]?.revision !== item.label.revision ||
+          (item.label.name !== undefined && parent.rows[0]?.name !== item.label.name)
+        )
+          throw new LibraryConflictError();
+        if (item.outcome) {
+          outcomes.push(item.outcome);
+          continue;
+        }
+        if (item.before === undefined) {
+          const before = await deadlineClient(pool, deadline).query(
+            `SELECT assignment_id FROM library.label_assignment
+             WHERE route=$1 AND account_id=$2 AND subject_id=$3 AND label_id=$4
+               AND deleted_at IS NULL AND slot_no IS NOT NULL`,
+            [route, a.accountId, review.target, item.label.id],
+          );
+          item.before = before.rows.length > 0;
+          await save(index, 'before');
+        }
+        if (signal.aborted || Date.now() + 100 >= deadline) break;
+        const assigned = await assignments.assignLabel(
+          actor,
+          item.label.id,
+          { subjectId: review.target! },
+          `${item.key}:assign`,
+          { ...fence, label: item.label },
+        );
+        record(assigned);
+        const unchanged = assigned.value.unchanged ?? item.before;
+        item.outcome = {
+          value: selection.value,
+          status: selection.status === 'duplicate' || unchanged ? 'unchanged' : 'accepted',
+          labelId: item.label.id,
+          assignment: assigned.value.assignment,
+          reason: selection.status === 'duplicate' ? selection.reason : unchanged ? 'already-assigned' : null,
+        };
+        await save(index, 'outcome');
+        outcomes.push(item.outcome);
+      } catch (error) {
+        if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+        const code = error instanceof ProblemError ? error.code : '';
+        const isStale =
+          error instanceof LibraryConflictError ||
+          error instanceof LibraryNotFoundError ||
+          ['conflict', 'not_found'].includes(code) ||
+          (error as { code?: string })?.code === '23505';
+        outcomes.push({
+          ...failure(
+            selection.value,
+            isStale ? 'stale' : 'failed',
+            isStale
+              ? 'refresh-review'
+              : code === 'library_label_capacity'
+                ? 'library-label-capacity'
+                : 'native-command-unavailable-retry-original',
+          ),
+          labelId: item.label?.id ?? null,
+        });
+      }
+    }
+    return { outcomes, remaining: selected.selections.slice(outcomes.length).map((s) => s.value) };
+  }
+  async function apply(
+    actor: Actor,
+    id: string,
+    input: MalApplyInput,
+    deadline: number,
+    signal: AbortSignal,
+    record: (value: CommandOutcome<unknown> | SessionComponent) => void,
+  ) {
+    const outcomes: MalOutcome[] = [];
+    if (input.rows.length > MAL_LABEL_LIMITS.rows) throw new ProblemError('invalid_request');
+    const initial = (await load(actor, id, deadline)).doc;
+    const proposed = input.rows.flatMap((r) =>
+      r.fields.includes('tags') ? (initial.reviews[r.row]?.labels?.selections ?? []) : [],
+    );
+    if (proposed.filter((s) => s.target && 'name' in s.target).length > MAL_LABEL_LIMITS.newLabels)
+      throw new ProblemError('invalid_request', { detail: 'MAL: select at most 32 new labels per apply' });
+    for (const selected of input.rows) {
+      if (signal.aborted || Date.now() + 100 >= deadline) break;
+      const { doc } = await load(actor, id, deadline),
+        row = doc.rows[selected.row],
+        review = doc.reviews[selected.row];
+      if (!row || !review || review.version !== selected.version) throw stale();
+      const existing = doc.intents[selected.row];
+      if (doc.canceled && !existing?.score?.started) throw stale();
+      if (existing && hash(existing.fields) !== hash(selected.fields)) throw new ProblemError('idempotency_conflict');
+      const scoreState =
+        selected.fields.includes('score') && review.score && !existing?.score?.started
+          ? await scoreReviewCurrent(
+              actor,
+              row,
+              review,
+              await observe(actor, row, review.binding ? null : review.target, deadline),
+            )
+          : null;
+      if (
+        existing?.outcome &&
+        !selected.fields.includes('tags') &&
+        (!review.progress || existing.progress?.complete) &&
+        scoreState !== 'stale' &&
+        existing.outcome.score?.reason !== 'score-action-not-reviewed'
+      ) {
+        const acknowledged = structuredClone(existing.outcome);
+        if (acknowledged.score && review.score && review.target) {
+          // Re-authorize Rating disclosure even when the Library outcome is already retained.
+          const current = await votes.readOwnVote(actor, review.score.question.id, review.target);
+          if (acknowledged.score.status === 'applied')
+            acknowledged.score.vote = current
+              ? { units: current.units, revision: current.revision, at: current.changedAt }
+              : null;
+        }
+        outcomes.push(acknowledged);
+        continue;
+      }
+      const intent: Intent = existing ?? {
+        review,
+        fields: selected.fields,
+        key: `mal:${id}:${selected.row}:${hash(review.version)}`,
+        ...(review.score
+          ? {
+              score: {
+                key: `mal:${id}:${selected.row}:${hash(review.version)}:score`,
+                attribution: {
+                  provider: 'mal' as const,
+                  uploadId: id,
+                  sourceRow: row.index,
+                  reviewVersion: review.version,
+                },
+              },
+            }
+          : {}),
+      };
+      // Commit immutable operands before dispatch. A lost acknowledgement retries this exact native command.
+      await mutate(actor, id, `${intent.key}:intent`, 'intent', selected, (doc) => {
+        if (doc.reviews[selected.row]?.version !== selected.version) throw stale();
+        doc.intents[selected.row] ??= intent;
+      });
+      const r = intent.review;
+      const outcome: MalOutcome = {
+        row: row.index,
+        status: 'unsupported',
+        applied: [],
+        retained: Object.keys(row.fields),
+        reason: selected.fields.includes('tags')
+          ? 'selected-fields-have-no-reviewed-native-admission'
+          : 'only-status-has-native-admission',
+      };
+      if (hash(row) !== r.fingerprint) {
+        outcome.status = 'stale';
+        outcome.reason = 'refresh-review';
+      } else if (r.skip || (!selected.fields.length && !r.progress)) {
+        outcome.status = 'skipped';
+        outcome.reason = null;
+      } else if (selected.fields.includes('status') && r.state && r.target && r.source) {
+        if (r.conflict && !r.replace) {
+          outcome.status = 'skipped';
+          outcome.reason = 'preserve-current-fact';
+        } else {
+          try {
+            const result = await entries.putEntry(
+              actor,
+              r.target,
+              {
+                state: r.state,
+                ...(r.current
+                  ? {
+                      revision: r.current.revision,
+                      ...(r.current.incarnationId ? { incarnationId: r.current.incarnationId } : {}),
+                    }
+                  : {}),
+              },
+              intent.key,
+              {
+                release: r.source.release,
+                epoch: r.source.epoch,
+                acceptingType: r.source.acceptingType,
+                importFence: { id, row: row.index, version: r.version },
+                ...(r.binding ? { binding: r.binding } : {}),
+              },
+            );
+            record(result);
+            outcome.status = 'applied';
+            outcome.applied = ['status'];
+            outcome.reason = null;
+            outcome.retained = outcome.retained.filter((k) => k !== 'my_status');
+          } catch (e) {
+            if (e instanceof GrantDeniedError) throw new ProblemError('forbidden');
+            if (
+              e instanceof LibraryConflictError ||
+              e instanceof LibraryNotFoundError ||
+              (e instanceof ProblemError && ['conflict', 'unsupported_library_profile', 'not_found'].includes(e.code))
+            ) {
+              outcome.status = 'stale';
+              outcome.reason = 'refresh-review';
+            } else {
+              outcome.status = 'failed';
+              outcome.reason = 'native-command-unavailable-retry-original';
+            }
+          }
+        }
+      }
+      if (selected.fields.includes('score')) {
+        const scoreReview = r.score;
+        if (intent.score?.outcome && scoreReview) {
+          outcome.score = structuredClone(intent.score.outcome);
+          const current = await votes.readOwnVote(actor, scoreReview.question.id, r.target!);
+          if (outcome.score.status === 'applied') {
+            outcome.score.vote = current
+              ? { units: current.units, revision: current.revision, at: current.changedAt }
+              : null;
+            outcome.applied.push('score');
+            outcome.retained = outcome.retained.filter((field) => field !== 'my_score');
+            outcome.status = 'applied';
+          } else if (!outcome.applied.length) outcome.status = outcome.score.status;
+          outcome.reason = outcome.score.reason;
+        } else if (!scoreReview) {
+          outcome.score = {
+            action: null,
+            status: 'unsupported',
+            reason: 'score-action-not-reviewed',
+            vote: null,
+          };
+          if (!outcome.applied.length) outcome.status = 'unsupported';
+          outcome.reason = 'score-action-not-reviewed';
+        } else if (hash(row) !== r.fingerprint) {
+          outcome.score = { action: scoreReview.action, status: 'stale', reason: 'refresh-review', vote: null };
+          outcome.status = 'stale';
+          outcome.reason = 'refresh-review';
+        } else if (scoreReview.support.status !== 'supported') {
+          outcome.score = {
+            action: scoreReview.action,
+            status: 'unsupported',
+            reason: scoreReview.support.reason,
+            vote: null,
+          };
+          if (!outcome.applied.length) outcome.status = 'unsupported';
+          outcome.reason = scoreReview.support.reason;
+        } else {
+          if (!intent.score?.started && scoreState === 'stale') {
+            outcome.score = { action: scoreReview.action, status: 'stale', reason: 'refresh-review', vote: null };
+            outcome.status = 'stale';
+            outcome.reason = 'refresh-review';
+          } else if (!intent.score?.started && scoreState !== 'observations-match') {
+            outcome.score = {
+              action: scoreReview.action,
+              status: 'unavailable',
+              reason: 'conditional-vote-admission-unavailable',
+              vote: null,
+            };
+            outcome.status = 'unavailable';
+            outcome.reason = 'conditional-vote-admission-unavailable';
+          } else if (scoreReview.action === 'clear' && scoreReview.baseline.state !== 'present') {
+            outcome.score = { action: 'clear', status: 'skipped', reason: 'no-current-vote-to-clear', vote: null };
+            if (!outcome.applied.length) outcome.status = 'skipped';
+            outcome.reason = null;
+          } else if (
+            scoreReview.action === 'adopt' &&
+            scoreReview.baseline.state === 'present' &&
+            !scoreReview.replaceCurrent
+          ) {
+            outcome.score = {
+              action: 'adopt',
+              status: 'skipped',
+              reason: 'preserve-current-vote',
+              vote: null,
+            };
+            if (!outcome.applied.length) outcome.status = 'skipped';
+            outcome.reason = 'preserve-current-vote';
+          } else {
+            const checkpoint = intent.score!;
+            await mutate(actor, id, `${checkpoint.key}:started`, 'score-started', selected, (doc) => {
+              doc.intents[selected.row]!.score!.started = true;
+            });
+            checkpoint.started = true;
+            try {
+              const result = await votes.putVoteOutcome(
+                actor,
+                {
+                  questionId: scoreReview.question.id,
+                  targetId: r.target!,
+                  units: scoreReview.units,
+                  guard: scoreReview.guard!,
+                },
+                checkpoint.key,
+              );
+              if (result.component) record(result.component);
+              // A receipt proves admission; only the native reader supplies current state.
+              const current = await votes.readOwnVote(actor, scoreReview.question.id, r.target!);
+              outcome.score = {
+                action: scoreReview.action,
+                status: 'applied',
+                reason: null,
+                vote: current ? { units: current.units, revision: current.revision, at: current.changedAt } : null,
+              };
+              outcome.applied.push('score');
+              outcome.retained = outcome.retained.filter((field) => field !== 'my_score');
+              outcome.status = 'applied';
+              outcome.reason = null;
+            } catch (error) {
+              if (error instanceof VoteReviewStaleError || error instanceof VoteReviewUnavailableError) {
+                outcome.score = {
+                  action: scoreReview.action,
+                  status: error instanceof VoteReviewStaleError ? 'stale' : 'unavailable',
+                  reason: error.reason,
+                  vote: null,
+                };
+                outcome.status = outcome.score.status;
+                outcome.reason = error.reason;
+              } else {
+                // Keep the started checkpoint when delivery or readback throws; never resample it.
+                throw error;
+              }
+            }
+          }
+        }
+        if (intent.score && !intent.score.outcome && outcome.score) {
+          const scoreOutcome = outcome.score;
+          await mutate(actor, id, `${intent.score.key}:outcome`, 'outcome', scoreOutcome, (doc) => {
+            doc.intents[selected.row]!.score!.outcome ??= scoreOutcome;
+          });
+          intent.score.outcome = scoreOutcome;
+        }
+      }
+      if (selected.fields.includes('tags') && review.labels && !review.skip) {
+        const applied = await applyLabels(actor, id, row, review, deadline, signal, record);
+        outcome.labels = applied.outcomes;
+        outcome.remainingLabels = applied.remaining;
+        if (applied.outcomes.some((o) => o.status === 'accepted' || o.status === 'unchanged')) {
+          outcome.status = 'applied';
+          outcome.applied.push('tags');
+          outcome.reason = null;
+        }
+        if (applied.outcomes.some((o) => o.status === 'failed')) outcome.status = 'failed';
+        else if (applied.outcomes.some((o) => o.status === 'stale')) outcome.status = 'stale';
+        if (applied.remaining.length) outcome.reason = 'partial-cancellation';
+      }
+      if (r.progress && hash(row) === r.fingerprint) {
+        const checkpoint = await executeProgressAdoption(actor, sessions, r.progress, intent.progress, {
+          async canceled() {
+            return (await load(actor, id, deadline)).doc.canceled;
+          },
+          async binding() {
+            const current = await observe(actor, row, r.binding ? null : r.target, deadline);
+            const sameBinding =
+              current.binding === null
+                ? r.binding === null
+                : r.binding !== null &&
+                  current.binding.subject === r.binding.subject &&
+                  current.binding.route === r.binding.route &&
+                  current.binding.source === r.binding.source &&
+                  current.binding.externalId === r.binding.externalId;
+            const sameSource =
+              current.source !== null &&
+              r.source !== null &&
+              current.source.release === r.source.release &&
+              current.source.epoch === r.source.epoch &&
+              current.source.acceptingType === r.source.acceptingType;
+            if (current.target !== r.target || !sameBinding || !sameSource) return null;
+            return current.profileBinding;
+          },
+          async save(progress, admission = false) {
+            const digest = hash(progress);
+            try {
+              await mutate(
+                actor,
+                id,
+                `${intent.key}:progress:${digest}`,
+                admission ? 'intent' : 'outcome',
+                { row: selected.row, progressDigest: digest },
+                (doc) => {
+                  const current = doc.intents[selected.row];
+                  if (!current || current.review.version !== r.version) throw stale();
+                  current.progress = progress;
+                },
+              );
+              intent.progress = progress;
+              return true;
+            } catch (error) {
+              if (admission && error instanceof ProblemError && ['conflict', 'not_found'].includes(error.code))
+                return false;
+              throw error;
+            }
+          },
+          recordNative: record,
+        });
+        intent.progress = checkpoint;
+        outcome.progress = publicProgress(r.progress, checkpoint);
+        const measureStatuses = outcome.progress.measures.map((measure) => measure.status);
+        if (measureStatuses.includes('stale')) {
+          outcome.status = 'stale';
+          outcome.reason = 'refresh-review';
+        } else if (measureStatuses.includes('failed')) {
+          outcome.status = 'failed';
+          outcome.reason = 'native-command-unavailable-retry-original';
+        } else if (
+          outcome.status !== 'stale' &&
+          measureStatuses.some((status) => status === 'applied' || status === 'cleared')
+        ) {
+          outcome.status = 'applied';
+          outcome.reason = null;
+        }
+      }
+      if (outcome.score && ['stale', 'unavailable', 'failed', 'unsupported'].includes(outcome.score.status)) {
+        outcome.status = outcome.score.status as 'stale' | 'unavailable' | 'failed' | 'unsupported';
+        outcome.reason = outcome.score.reason;
+      }
+      // Failed dispatches retain the intent but permit resumption; acknowledged outcomes never change.
+      if (
+        !selected.fields.includes('tags') &&
+        outcome.status !== 'failed' &&
+        !outcome.remainingLabels?.length &&
+        (!r.progress || intent.progress?.complete)
+      )
+        await mutate(actor, id, `${intent.key}:outcome`, 'outcome', outcome, (doc) => {
+          const saved = doc.intents[selected.row]!;
+          saved.outcome = outcome;
+          if (saved.score && outcome.score) saved.score.outcome = outcome.score;
+        });
+      outcomes.push(outcome);
+      if (outcome.remainingLabels?.length) break;
+    }
+    await authority(actor, deadline);
+    if (Buffer.byteLength(canonicalize(outcomes)!) > MAL_DATE_LIMITS().resultBytes)
+      throw new ProblemError('invalid_request', { detail: 'MAL: apply outcomes exceed encoded byte limit' });
+    return {
+      id,
+      outcomes,
+      remaining: [
+        ...(outcomes.at(-1)?.remainingLabels?.length ? [outcomes.at(-1)!.row] : []),
+        ...input.rows.slice(outcomes.length).map((r) => r.row),
+      ],
+      stopped: outcomes.length < input.rows.length || !!outcomes.at(-1)?.remainingLabels?.length,
+    };
+  }
+  async function applyDates(
+    actor: Actor,
+    id: string,
+    input: MalDateApplyInput,
+    deadline: number,
+    signal: AbortSignal,
+    record: (value: CommandOutcome<unknown>) => void,
+  ) {
+    if (input.rows.length > MAL_DATE_LIMITS().rows) throw new ProblemError('invalid_request');
+    const outcomes: MalDateOutcome[] = [];
+    for (const selected of input.rows) {
+      if (signal.aborted || Date.now() + 100 >= deadline) break;
+      if (
+        selected.fields.length < 1 ||
+        selected.fields.length > MAL_DATE_LIMITS().fields ||
+        new Set(selected.fields).size !== selected.fields.length ||
+        selected.fields.some((field) => field !== 'startDate' && field !== 'finishDate')
+      )
+        throw new ProblemError('invalid_request');
+      const { doc } = await load(actor, id, deadline),
+        row = doc.rows[selected.row],
+        imported = doc.reviews[selected.row],
+        reviewed = doc.dateReviews[selected.row];
+      if (!row || !imported || !reviewed || reviewed.version !== selected.version || doc.canceled) throw stale();
+      let intent = doc.dateIntents[selected.row];
+      if (intent && (intent.review.version !== selected.version || hash(intent.fields) !== hash(selected.fields)))
+        throw new ProblemError('idempotency_conflict');
+      if (intent?.outcome && intent.outcome.status !== 'failed') {
+        outcomes.push(intent.outcome);
+        continue;
+      }
+
+      const key = intent?.key ?? `mal:${id}:${selected.row}:dates:${hash(reviewed.version)}`;
+      const nativeRequestKey = intent?.nativeRequestKey ?? `${key}:journal`;
+      const patch: { revision: number } & Partial<Record<MalDateField, ProgressSessionJournalDate | null>> = {
+        revision: reviewed.journalRevision,
+      };
+      const fieldOutcomes: MalDateFieldOutcome[] = selected.fields.map((field) => {
+        const decision = reviewed[field];
+        if (decision.status === 'unknown') return { field, status: 'unknown' };
+        if (decision.status === 'unsupported') return { field, status: 'unsupported' };
+        if (decision.status === 'not-selected') return { field, status: 'not-selected' };
+        if (decision.status === 'already-equal') return { field, status: 'already-equal' };
+        if (decision.status === 'clear') {
+          patch[field] = null;
+          return { field, status: 'applied' };
+        }
+        if (
+          (decision.status === 'ready' || decision.status === 'conflict') &&
+          decision.action === 'adopt' &&
+          decision.proposed
+        ) {
+          patch[field] = decision.proposed;
+          return { field, status: 'applied' };
+        }
+        return { field, status: 'unsupported' };
+      });
+      const hasPatch = Object.hasOwn(patch, 'startDate') || Object.hasOwn(patch, 'finishDate');
+      if (!intent) {
+        let current = !reviewed.profileCurrent;
+        if (reviewed.profileCurrent) current = await dateReviewCurrent(actor, row, imported, reviewed, deadline);
+        if (!current) {
+          const outcome: MalDateOutcome = {
+            row: selected.row,
+            version: selected.version,
+            status: 'stale',
+            fields: selected.fields.map((field) => ({ field, status: 'stale' })),
+            receipt: null,
+            reason: 'refresh-review',
+          };
+          intent = { review: reviewed, fields: selected.fields, key, nativeRequestKey, patch: null, outcome };
+          await mutate(actor, id, `${key}:intent`, 'date-intent', selected, (doc) => {
+            if (
+              doc.dateReviews[selected.row]?.version !== selected.version ||
+              doc.reviews[selected.row]?.version !== reviewed.importReviewVersion
+            )
+              throw stale();
+            doc.dateIntents[selected.row] ??= intent!;
+          });
+          outcomes.push(outcome);
+          continue;
+        }
+        intent = { review: reviewed, fields: selected.fields, key, nativeRequestKey, patch: hasPatch ? patch : null };
+        if (!hasPatch)
+          intent.outcome = {
+            row: selected.row,
+            version: selected.version,
+            status: fieldOutcomes.some((field) => field.status === 'unsupported' || field.status === 'unknown')
+              ? 'unsupported'
+              : 'skipped',
+            fields: fieldOutcomes,
+            receipt: null,
+            reason: fieldOutcomes.some((field) => field.status === 'not-selected') ? 'date-not-selected' : null,
+          };
+        await mutate(actor, id, `${key}:intent`, 'date-intent', selected, (doc) => {
+          if (
+            doc.dateReviews[selected.row]?.version !== selected.version ||
+            doc.reviews[selected.row]?.version !== reviewed.importReviewVersion
+          )
+            throw stale();
+          doc.dateIntents[selected.row] ??= intent!;
+        });
+        if (intent.outcome) {
+          outcomes.push(intent.outcome);
+          continue;
+        }
+      }
+
+      if (!intent.patch) {
+        if (intent.outcome) outcomes.push(intent.outcome);
+        continue;
+      }
+      let outcome: MalDateOutcome;
+      try {
+        const accountId = owner(actor).accountId;
+        const result = await journal.patchSessionJournal(
+          actor,
+          intent.review.occurrence.sessionId,
+          intent.patch,
+          intent.nativeRequestKey,
+          {
+            identity: {
+              provider: 'mal',
+              uploadId: id,
+              row: selected.row,
+              importReviewVersion: intent.review.importReviewVersion,
+              dateReviewVersion: intent.review.version,
+              sourceDigest: malDigest(row),
+            },
+            assert: async (tx) => {
+              const found = await tx.query<{ document: Document }>(
+                `SELECT document FROM library.list_import_mal
+                 WHERE route=$1 AND account_id=$2 AND id=$3 AND expires_at>clock_timestamp() FOR UPDATE`,
+                [routeOf(accountId), accountId, id],
+              );
+              const current = found.rows[0]?.document;
+              if (!current || current.canceled) throw stale();
+              current.dateReviews ??= {};
+              current.dateIntents ??= {};
+              if (
+                current.dateReviews[selected.row]?.version !== intent!.review.version ||
+                current.reviews[selected.row]?.version !== intent!.review.importReviewVersion ||
+                malDigest(current.rows[selected.row]!) !== malDigest(row) ||
+                current.dateIntents[selected.row]?.key !== intent!.key ||
+                hash(current.dateIntents[selected.row]?.patch) !== hash(intent!.patch)
+              )
+                throw stale();
+            },
+          } satisfies ProgressSessionJournalAdmission,
+        );
+        record(result);
+        const receipt = result.value;
+        outcome = {
+          row: selected.row,
+          version: selected.version,
+          status: receipt.changed ? 'applied' : 'skipped',
+          fields: fieldOutcomes.map((field) =>
+            field.status === 'applied' && !receipt.changed ? { ...field, status: 'already-equal' } : field,
+          ),
+          receipt,
+          reason: receipt.changed ? null : 'already-equal',
+        };
+      } catch (error) {
+        if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+        const staleError =
+          error instanceof ProgressConflictError ||
+          error instanceof LibraryNotFoundError ||
+          (error instanceof ProblemError &&
+            ['conflict', 'not_found', 'unsupported_library_profile'].includes(error.code));
+        outcome = {
+          row: selected.row,
+          version: selected.version,
+          status: staleError ? 'stale' : 'failed',
+          fields: fieldOutcomes.map((field) =>
+            field.status === 'applied' ? { ...field, status: staleError ? 'stale' : 'failed' } : field,
+          ),
+          receipt: null,
+          reason: staleError ? 'refresh-review' : 'native-command-unavailable-retry-original',
+        };
+      }
+      await mutate(actor, id, `${key}:outcome`, 'date-outcome', outcome, (doc) => {
+        const current = doc.dateIntents[selected.row];
+        if (!current || current.key !== intent!.key) throw stale();
+        current.outcome = outcome;
+      });
+      outcomes.push(outcome);
+    }
+    await authority(actor, deadline);
+    if (Buffer.byteLength(canonicalize(outcomes)!) > MAL_DATE_LIMITS().resultBytes)
+      throw new ProblemError('invalid_request', { detail: 'MAL date outcomes exceed the encoded byte limit' });
+    return {
+      id,
+      outcomes,
+      remaining: input.rows.slice(outcomes.length).map((row) => row.row),
+      stopped: outcomes.length < input.rows.length,
+    };
+  }
+  // Each public request keeps its original deadline in this closure, including native admission.
+  function metadataCoordinator(deadline: number) {
+    return createListImportMetadataCoordinator({
+      provider: 'mal',
+      native: personalEntries,
+      async prepareReview({ actor, id, ordinal, sourceReviewToken, key }) {
+        const account = owner(actor),
+          { doc } = await load(actor, id, deadline),
+          row = doc.rows[ordinal],
+          review = doc.reviews[ordinal];
+        if (
+          !row ||
+          !review ||
+          sourceReviewToken.length > 128 ||
+          review.version !== sourceReviewToken ||
+          review.skip ||
+          !review.target ||
+          !review.source ||
+          review.current?.incarnationId == null
+        )
+          throw stale();
+        const observation = await observe(actor, row, review.binding ? null : review.target, deadline);
+        if (!sameReviewContext(review, observation)) throw stale();
+        const personal = await personalEntries.readPersonalEntry(actor, review.target);
+        return {
+          history: doc.metadataReviews?.[ordinal] ?? [],
+          requestDigest: entryImportMetadataDigest({ sourceReviewToken, key }),
+          identity: {
+            sourceReviewToken,
+            subjectId: review.target,
+            clientId: account.clientId,
+            requestedBy: account.requestedBy ?? null,
+            annotationRevision: personal.annotationRevision,
+            personalDigest: entryPersonalMetadataDigest(personal),
+            sourceDigest: entryImportMetadataDigest(row),
+            profileDigest: entryImportMetadataDigest({
+              source: review.source,
+              binding: review.binding,
+              current: review.current,
+            }),
+            incarnationId: review.current.incarnationId,
+          },
+        };
+      },
+      async persistReview({ actor, id, ordinal, sourceReviewToken, key }, next) {
+        const result = await mutate(actor, id, key, 'metadata-review', { row: ordinal, sourceReviewToken }, (doc) => {
+          const current = doc.reviews[ordinal];
+          if (!current || current.version !== sourceReviewToken || doc.canceled) throw stale();
+          doc.metadataReviews ??= {};
+          doc.metadataReviews[ordinal] = appendListImportMetadataReview(
+            doc.metadataReviews[ordinal] ?? [],
+            next,
+          ).history;
+        });
+        const current = await load(actor, id, deadline),
+          stored = current.doc.metadataReviews?.[ordinal]?.find((item) => item.requestDigest === next.requestDigest);
+        if (!stored) throw stale();
+        return { ...result, value: { ...result.value, reviewToken: stored.token } };
+      },
+      async loadReview({ actor, id, ordinal }, reviewToken) {
+        const { doc } = await load(actor, id, deadline);
+        return doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken) ?? null;
+      },
+      async readView({ actor, id, ordinal }, reviewToken) {
+        const { doc } = await load(actor, id, deadline),
+          row = doc.rows[ordinal],
+          review = doc.reviews[ordinal],
+          metadata = doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
+        if (!row || !review || !metadata) throw stale();
+        const account = owner(actor),
+          personal = await personalEntries.readPersonalEntry(actor, metadata.subjectId),
+          observation = await observe(actor, row, review.binding ? null : review.target, deadline);
+        return {
+          review: metadata,
+          observation: {
+            sourceReviewToken: review.version,
+            subjectId: review.target,
+            clientId: account.clientId,
+            requestedBy: account.requestedBy ?? null,
+            sourceDigest: entryImportMetadataDigest(row),
+            profileDigest: entryImportMetadataDigest({
+              source: review.source,
+              binding: review.binding,
+              current: review.current,
+            }),
+            incarnationId: review.current?.incarnationId ?? null,
+            personal,
+            proposals: malMetadataProposals(row),
+            recordId: `${row.kind}/${row.identifier.value}`,
+            providerCurrent: sameReviewContext(review, observation),
+          },
+        };
+      },
+      async confirm({ actor, id, ordinal }, reviewToken, proposed) {
+        await mutate(
+          actor,
+          id,
+          `${id}:${ordinal}:${reviewToken}:confirm`,
+          'metadata-confirm',
+          { row: ordinal, reviewToken, selectionDigest: proposed.selectionDigest },
+          (doc) => {
+            const record = doc.metadataReviews?.[ordinal]?.find((item) => item.token === reviewToken);
+            if (!record) throw stale();
+            record.confirmation = listImportMetadataOrConflict(
+              confirmListImportMetadata(record.confirmation, proposed, malMetadataFence(record, doc, ordinal)),
+              () => {
+                throw stale();
+              },
+            );
+            assertEntryImportMetadataHistorySize(doc.metadataReviews?.[ordinal] ?? []);
+          },
+        );
+      },
+      async persist({ actor, id, ordinal }, token, confirmation) {
+        const stateDigest = entryImportMetadataDigest(confirmation);
+        await mutate(
+          actor,
+          id,
+          `${id}:${ordinal}:${token}:progress:${stateDigest}`,
+          'metadata-progress',
+          { row: ordinal, reviewToken: token, stateDigest },
+          (doc) => {
+            const record = doc.metadataReviews?.[ordinal]?.find((item) => item.token === token);
+            if (!doc.rows[ordinal] || !record) throw stale();
+            record.confirmation = listImportMetadataOrConflict(
+              persistListImportMetadata(record.confirmation, confirmation, malMetadataFence(record, doc, ordinal)),
+              () => {
+                throw stale();
+              },
+            );
+            assertEntryImportMetadataHistorySize(doc.metadataReviews?.[ordinal] ?? []);
+          },
+        );
+      },
+      async isCurrent({ actor, id, ordinal }, metadata) {
+        const latest = (await load(actor, id, deadline)).doc,
+          source = latest.reviews[ordinal],
+          row = latest.rows[ordinal];
+        if (
+          !source ||
+          !row ||
+          source.version !== metadata.sourceReviewToken ||
+          entryImportMetadataDigest(row) !== metadata.sourceDigest
+        )
+          return false;
+        const current = await observe(actor, row, source.binding ? null : source.target, deadline);
+        return sameReviewContext(source, current);
+      },
+      async isCancelled({ actor, id }) {
+        try {
+          return (await load(actor, id, deadline)).doc.canceled;
+        } catch (error) {
+          if (error instanceof ProblemError && error.code === 'not_found') return true;
+          throw error;
+        }
+      },
+      admission: ({ actor, id, ordinal }, metadata): LabelCommandAdmission => ({
+        // No new operand is added to existing native receipt digests.
+        input: undefined,
+        async prepare() {
+          const { doc } = await load(actor, id, deadline),
+            source = doc.reviews[ordinal],
+            row = doc.rows[ordinal];
+          if (
+            !source ||
+            !row ||
+            source.target !== metadata.subjectId ||
+            source.version !== metadata.sourceReviewToken ||
+            entryImportMetadataDigest(row) !== metadata.sourceDigest
+          )
+            throw stale();
+          const current = await observe(actor, row, source.binding ? null : source.target, deadline);
+          if (
+            !sameReviewContext(source, current) ||
+            entryImportMetadataDigest({ source: source.source, binding: source.binding, current: source.current }) !==
+              metadata.profileDigest
+          )
+            throw stale();
+          return async (tx) => {
+            const account = owner(actor),
+              route = routeOf(account.accountId)!;
+            const locked = await deadlineClient(tx, deadline).query<{ document: Document }>(
+              `SELECT document FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND id=$3
+               AND expires_at>clock_timestamp() FOR SHARE`,
+              [route, account.accountId, id],
+            );
+            const retained = locked.rows[0]?.document,
+              review = retained?.reviews[ordinal],
+              record = retained?.metadataReviews?.[ordinal]?.find((item) => item.token === metadata.token);
+            if (
+              !retained ||
+              retained.canceled ||
+              !review ||
+              review.version !== metadata.sourceReviewToken ||
+              review.target !== metadata.subjectId ||
+              account.clientId !== metadata.clientId ||
+              (account.requestedBy ?? null) !== metadata.requestedBy ||
+              entryImportMetadataDigest(retained.rows[ordinal]) !== metadata.sourceDigest ||
+              entryImportMetadataDigest({ source: review.source, binding: review.binding, current: review.current }) !==
+                metadata.profileDigest ||
+              !record?.confirmation ||
+              record.subjectId !== metadata.subjectId ||
+              record.confirmation.selectionDigest !== metadata.confirmation!.selectionDigest ||
+              (!record.confirmation.annotationStarted && !record.confirmation.provenanceStarted)
+            )
+              throw stale();
+            const entry = await deadlineClient(tx, deadline).query<{ incarnation_id: string; revision: number }>(
+              `SELECT incarnation_id,revision FROM library.entry WHERE route=$1 AND account_id=$2 AND subject_id=$3 FOR UPDATE`,
+              [route, account.accountId, metadata.subjectId],
+            );
+            if (
+              entry.rows[0]?.incarnation_id !== metadata.incarnationId ||
+              entry.rows[0]?.revision !== review.current?.revision
+            )
+              throw stale();
+          };
+        },
+      }),
+    });
+  }
+  async function reviewMetadata(
+    actor: Actor,
+    id: string,
+    input: MalMetadataReviewInput,
+    key: string,
+    deadline: number,
+  ) {
+    return metadataCoordinator(deadline).review({
+      actor,
+      id,
+      ordinal: input.row,
+      sourceReviewToken: input.sourceReviewToken,
+      key,
+    });
+  }
+  async function metadataView(
+    actor: Actor,
+    id: string,
+    ordinal: number,
+    reviewToken: string,
+    deadline: number,
+  ): Promise<EntryImportMetadataView> {
+    return metadataCoordinator(deadline).view({ actor, id, ordinal, reviewToken });
+  }
+  async function applyMetadata(
+    actor: Actor,
+    id: string,
+    ordinal: number,
+    reviewToken: string,
+    fields: unknown,
+    deadline: number,
+    signal?: AbortSignal,
+    recordCommand?: (command: CommandOutcome<unknown>) => void,
+  ): Promise<EntryImportMetadataOutcome> {
+    return metadataCoordinator(deadline).apply({
+      actor,
+      id,
+      ordinal,
+      reviewToken,
+      fields,
+      ...(signal === undefined ? {} : { signal }),
+      ...(recordCommand === undefined ? {} : { record: recordCommand }),
+    });
+  }
+  async function source(actor: Actor, id: string, deadline: number) {
+    const { doc } = await load(actor, id, deadline);
+    await authority(actor, deadline);
+    return { xml: doc.xml };
+  }
+  return {
+    preview,
+    page,
+    review,
+    reviewMetadata,
+    metadata: (actor: Actor, id: string, ordinal: number, token: string, deadline: number) =>
+      metadataView(actor, id, ordinal, token, deadline),
+    applyMetadata,
+    reviewDates,
+    apply,
+    applyDates,
+    source,
+    cancel: (actor: Actor, id: string, key: string) =>
+      mutate(actor, id, key, 'cancel', null, (doc) => {
+        doc.canceled = true;
+      }),
+    delete: (actor: Actor, id: string, key: string) => mutate(actor, id, key, 'delete', null, () => {}),
+  };
+}
+
+export type MalPreview = Awaited<ReturnType<ReturnType<typeof createMalImport>['page']>>;
+export type MalPreviewRow = MalPreview['rows'][number];

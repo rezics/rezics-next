@@ -3,6 +3,7 @@ import type { KeyRing } from '../tokens/seal.ts';
 import type { AuthenticationConfig } from './authenticate.ts';
 
 type Environment = Readonly<Record<string, string | undefined>>;
+export const MEMBERSHIP_WORK_DEADLINE_MS = 30_000;
 export type MembershipWorkConfig = { routeKey: Buffer; referenceKeys: KeyRing; auth: AuthenticationConfig };
 
 export function readMembershipRouteKey(env: Environment): Buffer {

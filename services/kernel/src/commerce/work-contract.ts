@@ -11,6 +11,20 @@ export const CHECKOUT_SYNC_WORKFLOW = 'commerce.checkoutSync';
 export const ORDER_RECONCILE_WORKFLOW = 'commerce.reconcileOrder';
 /** Rechecks a pending order once its Checkout Session has expired. */
 export const EXPIRY_SYNC_WORKFLOW = 'commerce.expirySync';
+/** Internal service caller; every separately named repair is a distinct durable trigger. */
+export const KNOWN_ORDER_REPAIR_WORKFLOW = 'commerce.repairOrder';
+
+export function checkoutPartitionKey(
+  provider: Readonly<{ accountNamespace: string; livemode: boolean }>,
+  sessionId: string,
+) {
+  return `commerce:${provider.accountNamespace}:${provider.livemode ? 'live' : 'test'}:${sessionId}`;
+}
+
+export function knownOrderRepairWorkflowId(orderId: string, name: string) {
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(name)) throw new TypeError('A bounded repair name is required');
+  return `order:${orderId}:repair:${name}`;
+}
 
 /** The workflow ID is the event deduplication: a redelivered event finds its existing workflow. */
 export function stripeEventWorkflowId(eventId: string): string {

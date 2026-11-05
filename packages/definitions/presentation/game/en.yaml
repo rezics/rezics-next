@@ -1,15 +1,110 @@
 types:
   schema:VideoGame: video game
-  wd:Q20631656: software release
-  wd:Q209163: expansion add-on
+  wd:Q20631656: 'release'
+  wd:Q209163: 'add-on'
 properties:
   schema:gamePlatform: game platform
   schema:gtin: GTIN
   wdt:P2899: minimum age
   wdt:P31: instance of
   wdt:P155: follows
+  rezics:releaseSupersedes: supersedes
   wdt:P437: distribution format
   wdt:P408: software engine
   schema:numberOfPlayers: number of players
   schema:minValue: minimum value
   wdt:P8646: expansion of
+inverseProperties:
+  schema:gamePlatform: 'Games on this platform'
+  wdt:P31: 'Releases of this type'
+  wdt:P437: 'Releases in this format'
+  wdt:P155: 'Sequel'
+  rezics:releaseSupersedes: 'Superseded by'
+  wdt:P408: 'Games using this engine'
+  wdt:P8646: 'Expansions'
+typeDescriptions:
+  schema:VideoGame: 'A video game work with its aggregate platform information; distinct from a specific software release or personal copy.'
+  wd:Q20631656: 'An independently identified software release representing one or more works; platform and language lists alone do not create separate releases.'
+  wd:Q209163: 'An independently referable game add-on work, including expansions and DLC; a patch, download file or bundled asset without work identity is not enough.'
+libraryProfiles:
+  game.playing:
+    states:
+      planned: 'Planned'
+      in_progress: 'In progress'
+      completed: 'Completed'
+      paused: 'Paused'
+      dropped: 'Dropped'
+    units:
+      scalar_amount:
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+    copyKinds:
+      physical: 'Physical'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Owned'
+        disposed: 'Disposed'
+      digital:
+        owned: 'Owned'
+  game.release:
+    states:
+      planned: 'Planned'
+      in_progress: 'In progress'
+      completed: 'Completed'
+      paused: 'Paused'
+      dropped: 'Dropped'
+    units:
+      scalar_amount:
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+    copyKinds:
+      physical: 'Physical'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Owned'
+        disposed: 'Disposed'
+      digital:
+        owned: 'Owned'
+  game.addon:
+    states:
+      planned: 'Planned'
+      in_progress: 'In progress'
+      completed: 'Completed'
+      paused: 'Paused'
+      dropped: 'Dropped'
+    units:
+      scalar_amount:
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+    copyKinds:
+      physical: 'Physical'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Owned'
+        disposed: 'Disposed'
+      digital:
+        owned: 'Owned'
+propertyDescriptions:
+  schema:gamePlatform: 'A platform Concept on which the game or release runs; a language qualifier can preserve the platform-language association.'
+  schema:gtin: "The release's Global Trade Item Number as 8, 12, 13 or 14 digits without separators."
+  wdt:P2899: "Minimum age associated with the release's rating, as a nonnegative whole-number quantity in years (wd:Q577)."
+  wdt:P31: 'A release-type Concept, such as complete, partial or trial; not the catalogue Type of the subject.'
+  wdt:P155: 'The prior work or release that this work or release follows.'
+  rezics:releaseSupersedes: 'The exact software release that this release replaces; independent of chronological order.'
+  wdt:P437: "A Concept identifying the release's distribution format or physical medium, such as an optical disc."
+  wdt:P408: 'A Concept naming the software engine used by this game.'
+  schema:numberOfPlayers: 'Maximum supported player count as a unitless whole number; for a stated range use its upper endpoint and qualify the lower endpoint separately.'
+  schema:minValue: 'The lower endpoint of a stated player-count range, as a unitless whole-number qualifier on number of players; do not infer it from a lone count.'
+  wdt:P8646: 'The base game expanded by this independently identified add-on work; not the work represented by a software release.'

@@ -23,14 +23,23 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import {
   contentGovernanceCredential,
-  createContentSystem,
+  createContentSystemWithOrdinaryScopes,
   type ContentCredential,
   type ContentSystem,
+  type ContentSystemOptions,
 } from '../content/support/system.ts';
 import { observeSql, type SqlExecution, type SqlObserver } from '../content/support/sql-observer.ts';
 import { assertSetupResponse } from '../content/support/setup-response.ts';
 import { openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { TEST_REQUEST_DEADLINE_MS } from '../support/test-kernel.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
+import { productionActions } from '../support/production-actions.ts';
 import { startConsentServer } from './membership-fixture.ts';
+import {
+  REALM_MEMBERSHIP_RECONCILIATION_WORKFLOW_NAME,
+  type RealmMembershipReconciliationInput,
+  type RealmMembershipReconciliationResult,
+} from '../../src/access/realm-membership-transition-legacy.ts';
 
 const AUDIENCE = 'https://content.test';
 
@@ -45,11 +54,16 @@ function workerStream(stream: ReadableStream<Uint8Array> | number | undefined): 
   return stream;
 }
 
+const workerIdentities = new WeakMap<ContentSystem, string>();
 async function startWorker(system: ContentSystem): Promise<{
   child: Bun.Subprocess;
   failure(): string | undefined;
+  output(): string;
+  stopped(): boolean;
   stop(): Promise<void>;
 }> {
+  const executorId = workerIdentities.get(system) ?? `community-${crypto.randomUUID()}`;
+  workerIdentities.set(system, executorId);
   const databaseUrl = system.database.pool.options.connectionString;
   if (!databaseUrl) throw new Error('Content fixture database URL is missing');
   const routeKey = Buffer.from(system.routeKey).toString('base64url');
@@ -63,13 +77,14 @@ async function startWorker(system: ContentSystem): Promise<{
   );
   const child = Bun.spawn(['bun', 'src/worker.ts'], {
     cwd: resolve(import.meta.dir, '../..'),
-    env: {
+    env: workerTestEnv({
       ...process.env,
       DATABASE_URL: databaseUrl,
       KERNEL_ROUTE_KEY: routeKey,
       KERNEL_SESSION_KEYS: sessionKeys,
-      KERNEL_EXECUTOR_ID: `community-${crypto.randomUUID()}`,
+      KERNEL_EXECUTOR_ID: executorId,
       KERNEL_WORKER_POOL_SIZE: '6',
+      KERNEL_RATING_COUNTER_SECRET: Buffer.alloc(32, 43).toString('base64url'),
       AUTH_ISSUER: 'https://community-worker.auth.test',
       AUTH_AUDIENCE: AUDIENCE,
       AUTH_JWKS_URL: 'https://community-worker.auth.test/.well-known/jwks.json',
@@ -84,7 +99,7 @@ async function startWorker(system: ContentSystem): Promise<{
       CONTENT_SOURCE_HOSTS: 'images.example.org',
       ...consent.env,
       OPENSEARCH_URL: '',
-    },
+    }),
     stdin: 'ignore',
     stdout: 'pipe',
     stderr: 'pipe',
@@ -117,15 +132,19 @@ async function startWorker(system: ContentSystem): Promise<{
     await Bun.sleep(20);
   }
   let stopping: Promise<void> | undefined;
+  let stopped = false;
   return {
     child,
     failure: () => workerFailure,
+    output: () => output,
+    stopped: () => stopped,
     stop: () =>
       (stopping ??= (async () => {
         if (child.exitCode === null) child.kill();
         await child.exited;
         await diagnostics;
         await consent.close();
+        stopped = true;
       })()),
   };
 }
@@ -170,10 +189,71 @@ type SharedCommunity = {
 
 let shared: SharedCommunity | undefined;
 
-async function buildShared(): Promise<SharedCommunity> {
-  const databaseUrl = process.env.DATABASE_URL;
+/** Await one actually returned native operation, including an expected failure.
+ * Other operations in this world's history keep their original durable status. */
+export async function waitCommunityWorkflow(workflowId: string): Promise<unknown> {
+  if (!shared) throw new Error('Community driver is not open');
+  return shared.work.retrieveWorkflow(workflowId).getResult({ pollingIntervalMs: 10 });
+}
+
+/** Deployment coordinator entry through the normally registered Accounts host. */
+export async function reconcileCommunityMembership(
+  input: RealmMembershipReconciliationInput,
+): Promise<RealmMembershipReconciliationResult> {
+  if (!shared) throw new Error('Community driver is not open');
+  const handle = await shared.work.enqueue<
+    (input: RealmMembershipReconciliationInput) => Promise<RealmMembershipReconciliationResult>
+  >(
+    {
+      queueName: 'workflows',
+      workflowName: REALM_MEMBERSHIP_RECONCILIATION_WORKFLOW_NAME,
+      workflowID: crypto.randomUUID(),
+    },
+    input,
+  );
+  const result = await handle.getResult({ pollingIntervalMs: 10 });
+  if (!result) throw new Error('Native reconciliation result is missing');
+  return result;
+}
+
+/** Pause this file's worker without changing its HTTP application or database. */
+export const worker = {
+  /** Test-local process death, scoped to this fixture's own child only. */
+  async crash(): Promise<void> {
+    if (!shared) throw new Error('Community driver is not open');
+    shared.worker.child.kill('SIGKILL');
+    await shared.worker.stop();
+  },
+  async stop(): Promise<void> {
+    if (!shared) throw new Error('Community driver is not open');
+    await shared.worker.stop();
+  },
+};
+
+/** Resume native workflows, preserving the worker handle held by existing drivers. */
+export async function restartWorker(): Promise<void> {
+  if (!shared) throw new Error('Community driver is not open');
+  if (!shared.worker.stopped()) throw new Error('Community worker is still running');
+  Object.assign(shared.worker, await startWorker(shared.system));
+}
+
+async function buildShared(
+  databaseUrl = process.env.DATABASE_URL,
+  authPoolFactory?: ContentSystemOptions['authPoolFactory'],
+): Promise<SharedCommunity> {
   if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
-  const system = await createContentSystem({ databaseUrl });
+  // Durable operations preserve the exact authenticated scope ceiling, which is
+  // bounded at 100 tokens. Request this fixture's product scopes through Auth
+  // rather than every unrelated action mounted on Kernel.
+  const ordinaryScopes = [...productionActions().keys()].filter((action) =>
+    /^(account|access|space|realm|board|thread|post|subject|context|definitions|statement|document|copy|moderation|exposure|report|rating|follow|reaction|openapi):/.test(
+      action,
+    ),
+  );
+  const system = await createContentSystemWithOrdinaryScopes(
+    { databaseUrl, ...(authPoolFactory === undefined ? {} : { authPoolFactory }) },
+    ordinaryScopes,
+  );
   let worker: Awaited<ReturnType<typeof startWorker>> | undefined;
   let work: WorkClient | undefined;
   let observer: SqlObserver | undefined;
@@ -182,6 +262,7 @@ async function buildShared(): Promise<SharedCommunity> {
     if (!isolatedUrl) throw new Error('Content fixture database URL is missing');
     work = await createWorkClient(isolatedUrl);
     const kernel = createKernel({
+      requestDeadlineMs: TEST_REQUEST_DEADLINE_MS,
       pool: system.database.pool,
       routeKey: system.routeKey,
       tokens: system.tokenKeys,
@@ -252,15 +333,32 @@ function closeShared(base: SharedCommunity): Promise<void> {
 }
 
 /** A test file builds its system and worker once; each test gets its own driver state over them. */
-export async function createCommunityDriver(): Promise<CommunityDriver> {
+export async function createCommunityDriver(
+  options: {
+    databaseUrl?: string;
+    settleTimeoutMs?: number;
+    authPoolFactory?: ContentSystemOptions['authPoolFactory'];
+  } = {},
+): Promise<CommunityDriver> {
   if (shared?.retired) await closeShared(shared);
-  const base = (shared ??= await buildShared());
-  return bindDriver(base);
+  const base = (shared ??= await buildShared(options.databaseUrl, options.authPoolFactory));
+  return bindDriver(base, options.settleTimeoutMs ?? 30_000);
 }
 
 /** Ends the system and worker the file's drivers share. Call it once when the file is done. */
 export async function closeCommunityDrivers(): Promise<void> {
   if (shared) await closeShared(shared);
+}
+
+/** Shared native composition for companion fixtures that need Auth-issued accounts and instrumented reads. */
+export function communityFixtureRuntime(): Pick<SharedCommunity, 'system' | 'kernel'> {
+  if (!shared) throw new Error('Community driver is not open');
+  return { system: shared.system, kernel: shared.kernel };
+}
+
+/** Native worker diagnostics for a companion fixture's failed durable operation. */
+export function communityWorkerOutput(): string {
+  return shared?.worker.output() ?? '';
 }
 
 /** Read the isolated fixture database from a companion integration test. */
@@ -272,7 +370,7 @@ export async function queryCommunityDatabase<T extends QueryResultRow>(
   return (await shared.system.database.pool.query<T>(statement, values)).rows;
 }
 
-function bindDriver(base: SharedCommunity): CommunityDriver {
+function bindDriver(base: SharedCommunity, settleTimeoutMs: number): CommunityDriver {
   const { system, kernel, worker, work, observer } = base;
   const pending = new Set<string>();
   let fixture: Fixture | undefined;
@@ -329,18 +427,24 @@ function bindDriver(base: SharedCommunity): CommunityDriver {
 
   async function settle(): Promise<void> {
     if (worker.failure()) throw new Error(`Production community worker failed: ${worker.failure()}`);
-    for (const id of pending) await work.retrieveWorkflow(id).getResult({ pollingIntervalMs: 10 });
+    const result = async (id: string) => {
+      try {
+        await work.retrieveWorkflow(id).getResult({ pollingIntervalMs: 10 });
+      } catch (cause) {
+        throw new Error(`Production community workflow ${id} failed:\n${worker.output()}`, { cause });
+      }
+    };
+    for (const id of pending) await result(id);
     pending.clear();
-    const deadline = Date.now() + 30_000;
+    const deadline = Date.now() + settleTimeoutMs;
     for (;;) {
       if (worker.failure()) throw new Error(`Production community worker failed: ${worker.failure()}`);
       const workflows = (await work.listWorkflows({ limit: 10_000 })).filter(
         (row) => row.status !== 'SUCCESS' && row.status !== 'DELAYED',
       );
-      for (const workflow of workflows)
-        await work.retrieveWorkflow(workflow.workflowID).getResult({ pollingIntervalMs: 10 });
+      for (const workflow of workflows) await result(workflow.workflowID);
       const behind = await system.database.pool.query(`
-        SELECT 1
+        SELECT partition.partition_no, partition.position, consumers.name, checkpoint.position AS checkpoint
           FROM core.partition AS partition
           CROSS JOIN (VALUES ('effects'::text), ('semantic_links'::text)) AS consumers(name)
           LEFT JOIN core.consumer_checkpoint AS checkpoint
@@ -348,7 +452,10 @@ function bindDriver(base: SharedCommunity): CommunityDriver {
          WHERE partition.position > COALESCE(checkpoint.position, 0)
          LIMIT 1`);
       if (!behind.rowCount && workflows.length === 0) return;
-      if (Date.now() >= deadline) throw new Error('Production community worker did not settle');
+      if (Date.now() >= deadline)
+        throw new Error(
+          `Production community worker did not settle: ${JSON.stringify({ behind: behind.rows, workflows, exitCode: worker.child.exitCode })}`,
+        );
       await Bun.sleep(10);
     }
   }

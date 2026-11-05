@@ -1,9 +1,24 @@
+import { memoizedValue } from '../memoized.ts';
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
+import { HANDLE_LOOKUP_PATTERN, isClaimHandle, isReservedHandle } from './handle-policy.ts';
+import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
+import { checkAvatarMedia } from '../content/avatar.ts';
+import { ProblemError } from '../http/problem.ts';
+import { accessClock } from './access-clock.ts';
+import { workflowApprovalBinding } from './workflow-approvals.ts';
+import tombstoneOperator from './workflow-approvals-tombstone-operator.sql';
 import { throwAccessUnavailable } from './unavailable.ts';
 import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
 export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  currentCommand,
+  type CommandAttempt,
+  type CommandAuthorization,
+  type CommandTransaction,
+} from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import {
   accessCommandAuthorization,
@@ -12,8 +27,10 @@ import {
   type AccessClient,
   type ActionCatalogue,
 } from '../request/access.ts';
-import { anchorRoute, derivedId, routeOf } from '../route/route.ts';
+import { anchorRoute, derivedId, partitionOf, routeOf } from '../route/route.ts';
 import type { PermissionContext } from './permission.ts';
+import { readAccount } from './account-data.ts';
+import { accountProfileAuthorityAnchor } from './account-viewer-actions.ts';
 import accountRead from './lifecycle-account.sql';
 import handleRead from './lifecycle-handle-read.sql';
 import handleReserve from './lifecycle-handle-reserve.sql';
@@ -31,11 +48,16 @@ import holdsRead from './lifecycle-holds.sql';
 import membershipChange from './lifecycle-membership.sql';
 import memberInsert from './lifecycle-member-insert.sql';
 import ownersRead from './lifecycle-owners.sql';
+import organizationClose from './organization-close-create.sql';
 import membershipTime from './lifecycle-membership-time.sql';
 import fenceStatement from './lifecycle-fence.sql';
+import erasureInsert from './lifecycle-erasure.sql';
+import { ERASURE_PARTICIPANT_VERSION } from './erasure.ts';
 import authBarrier from './auth-barriers-advance.sql';
+import openingRead from './auth-barriers-opening-read.sql';
 import fenceRead from './lifecycle-fence-read.sql';
 import fenceClear from './lifecycle-fence-clear.sql';
+import barrierReceiptRead from './auth-barriers-receipt-read.sql';
 import handleHold from './lifecycle-handle-hold.sql';
 import handlePublish from './lifecycle-handle-publish.sql';
 import operationRead from './lifecycle-handle-operation-read.sql';
@@ -54,16 +76,34 @@ import {
   type ContinuationBinding,
 } from './committed-continuations.ts';
 
-/** Authoritative application-clock policy: registration lasts 30 minutes and an
- * old handle redirects for 30 days. Neither clock nor timestamps come from JSON.
- * Coordination holds have NO expiry: only a durable workflow may resolve them.
+/** Authoritative application-clock policy: registration lasts 30 minutes and
+ * former handles forward for 30 days but retain their allocation forever.
+ * Neither clock nor timestamps come from JSON. Coordination holds have NO
+ * expiry: only a durable workflow may resolve them.
  */
+export function OrganizationCloseBlockedError() {
+  return memoizedValue(
+    OrganizationCloseBlockedError,
+    () =>
+      class OrganizationCloseBlockedError extends LifecycleDeniedError {
+        constructor(readonly blocker: { purpose: string; relatedAccountId: string }) {
+          super();
+          this.message = `Organization close blocked by ${blocker.purpose}: ${blocker.relatedAccountId}`;
+        }
+      },
+  );
+}
+export type OrganizationCloseBlockedError = InstanceType<ReturnType<typeof OrganizationCloseBlockedError>>;
 export const REGISTRATION_TTL_MS = 30 * 60 * 1000;
 export const HANDLE_REDIRECT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const HANDLE_CHANGE_LIMIT = 5;
+export const HANDLE_CHANGE_WINDOW_MS = HANDLE_REDIRECT_TTL_MS;
 export const LIFECYCLE_ACTIONS: ActionCatalogue = new Map([
   ['account:read', { anonymous: false }],
   ['account:update', { anonymous: false }],
   ['account:delete', { anonymous: false, replay: 'self-account-read' }],
+  ['account:manage', { anonymous: false }],
+  ['account:assign_reserved_handle', { anonymous: false }],
   ['organization:create', { anonymous: false }],
   ['organization:membership', { anonymous: false }],
 ]);
@@ -80,7 +120,11 @@ function accountRoute(accountId: string): number {
   return route;
 }
 export function normalizeHandle(handle: string): string {
-  requireAllowed(typeof handle === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(handle));
+  requireAllowed(isClaimHandle(handle));
+  return handle.toLowerCase();
+}
+export function normalizeLookupHandle(handle: string): string {
+  requireAllowed(typeof handle === 'string' && HANDLE_LOOKUP_PATTERN.test(handle));
   return handle.toLowerCase();
 }
 function normalized(handle: string): string {
@@ -101,6 +145,17 @@ function epoch(value: number): boolean {
   return Number.isSafeInteger(value) && value > 0;
 }
 type Boundary = { pool: Pool; clock?: () => Date };
+// The principal every internal lifecycle command receipts under, and the purpose-scoped key that
+// identifies one Auth barrier in it. Both read and write sides derive the key here.
+const SERVICE_PRINCIPAL_ID = '00000000-0000-8000-8000-000000000001';
+const barrierKey = (purpose: AuthenticationBarrierCommand['purpose'], key: string) => `${purpose}:${key}`;
+export type AuthenticationBarrierReceipt = {
+  accountId: string;
+  purpose: AuthenticationBarrierCommand['purpose'];
+  operationKey: string;
+  receiptId: string;
+  minimumAuthnEpoch: number;
+};
 export type LifecycleRequest = Omit<PermissionContext, 'pool'> & { actor: AccountActor };
 export type LifecycleCommand = { accountId: string; key: string };
 export type AuthenticationBarrierCommand = LifecycleCommand & {
@@ -109,6 +164,19 @@ export type AuthenticationBarrierCommand = LifecycleCommand & {
   proofReference: string;
   proofDigest: string;
   proofExpiresAt: string;
+  /** The operator opening of the session that reduces an automated account's consent. */
+  openingReceiptId?: string;
+};
+/** Whether the human of an operator opening still manages the operator: decided with the shared permission
+ * evaluator on the opening's recorded principal, before the account lock at the attempt's T, then checked
+ * again under the lock. The barrier holds no formula of its own.
+ */
+export type OpeningManagement = {
+  prepare(
+    attempt: CommandAttempt,
+    opening: { operatorAccountId: string; subjectAccountId: string; action: string; principal: AccountActor },
+  ): Promise<object>;
+  authorize(tx: AccessClient, attempt: CommandAttempt, proof: object): Promise<void>;
 };
 export type HandleTransition = LifecycleCommand & {
   handle: string;
@@ -124,7 +192,7 @@ function transitionInput(input: HandleTransition): HandleTransition {
   );
   requireAllowed(typeof input.reservationId === 'string');
   const handle = normalized(input.handle);
-  const expectedHandle = input.expectedHandle === null ? null : normalized(input.expectedHandle);
+  const expectedHandle = input.expectedHandle === null ? null : normalizeLookupHandle(input.expectedHandle);
   requireAllowed(handle !== expectedHandle);
   return {
     accountId: input.accountId,
@@ -192,11 +260,19 @@ async function publishHandle(
       await handlePublish.run(tx, {
         ...transitionParameters(input),
         old_reservation_id: old?.reservationId ?? '',
+        at: authoritativeTimeValue(currentCommand(tx).time),
+        handle_change_limit: HANDLE_CHANGE_LIMIT,
+        handle_change_window_ms: HANDLE_CHANGE_WINDOW_MS,
         transaction_id: transactionId,
       }),
     ),
   );
-  return { accountId: input.accountId, handle: input.handle, operationId: input.operationId };
+  return {
+    accountId: input.accountId,
+    handle: input.handle,
+    operationId: input.operationId,
+    ...(isReservedHandle(input.handle) ? { reservedHandleException: true } : {}),
+  };
 }
 /** Exact resulting floor is a decimal string, preserving PostgreSQL bigint.
  * receiptId, accountId and this floor identify the Auth invalidation barrier.
@@ -209,6 +285,7 @@ export type LifecycleFenceReceipt = {
   kind: string;
   priorOperatorAccountId: string | null;
 };
+type PreparedOpening = { row: NonNullable<Awaited<ReturnType<typeof openingRead.run>>>; proof: object };
 type TransactionAccount = NonNullable<Awaited<ReturnType<typeof accountRead.run>>>;
 async function locked(tx: AccessClient, accountId: string): Promise<TransactionAccount> {
   const account = await accountRead.run(tx, { route: accountRoute(accountId), account_id: accountId });
@@ -291,6 +368,7 @@ async function fence(
   const kind = tombstone ? 'tombstone' : 'fence';
   const priorOperatorAccountId = tombstone ? account.operatorAccountId : null;
   const rows = await fenceStatement.run(tx, {
+    at: authoritativeTimeValue(currentCommand(tx).time),
     route,
     account_id: account.accountId,
     receipt_id: receiptId,
@@ -363,6 +441,7 @@ export type RecoveryEvidence = {
 export function createLifecycleInternals(
   config: Boundary & {
     routeKey: Uint8Array;
+    access?: Access;
     provisioningEvidence: (evidence: unknown) => Promise<ProvisioningEvidence | null>;
     recoveryEvidence: (evidence: unknown) => Promise<RecoveryEvidence | null>;
   },
@@ -375,6 +454,39 @@ export function createLifecycleInternals(
     ...config,
     releaseCommandKind: 'membership-coordination-released',
   });
+  /** One anchored read: this exact fence receipt exists for the account and floor, committed by the
+   * barrier command of this purpose and operation key. A replaced or foreign receipt id is not found.
+   */
+  async function confirmBarrier(value: AuthenticationBarrierReceipt): Promise<boolean> {
+    const input = { ...value };
+    const route = accountRoute(input.accountId);
+    requireAllowed(
+      ['consent-reduction', 'recovery'].includes(input.purpose) &&
+        typeof input.operationKey === 'string' &&
+        input.operationKey.length > 0 &&
+        input.operationKey.length <= 128 &&
+        epoch(input.minimumAuthnEpoch) &&
+        input.minimumAuthnEpoch <= 2147483647 &&
+        routeOf(input.receiptId) === route,
+    );
+    const row = await withConnection(pool, (client) =>
+      barrierReceiptRead.run(client, {
+        route,
+        partition_no: partitionOf(route),
+        service_id: SERVICE_PRINCIPAL_ID,
+        receipt_keys: nativeReceiptKeyCandidates(
+          pool,
+          'access.authentication-floor-advanced',
+          SERVICE_PRINCIPAL_ID,
+          `${route}:${barrierKey(input.purpose, input.operationKey)}`,
+        ),
+        account_id: input.accountId,
+        receipt_id: input.receiptId,
+        minimum_authn_epoch: String(input.minimumAuthnEpoch),
+      }),
+    );
+    return !!row;
+  }
   return {
     /** Stable route AND identity: the coordinator's durable registration key is
      * namespaced independently from handle spelling. Keep routeKey stable. */
@@ -576,15 +688,23 @@ export function createLifecycleInternals(
       const route = handleRoute(input.handle);
       return execute(
         { route, id: input.handle, kind: 'handle-transition-released', key: input.key, input },
-        async (tx) => {
+        async (tx, transactionId) => {
           requireAllowed(matchesOperation(operation, input) && operation!.state === 'cancelled');
-          requireAllowed(affected(await transitionRelease.run(tx, { ...transitionParameters(input), route })));
+          requireAllowed(
+            affected(
+              await transitionRelease.run(tx, {
+                ...transitionParameters(input),
+                route,
+                transaction_id: transactionId,
+              }),
+            ),
+          );
           return { accountId: input.accountId, handle: input.handle };
         },
       );
     },
     async expireRegistration(input: LifecycleCommand & { handle: string; reservationId: string }) {
-      input = { ...input, handle: normalized(input.handle) };
+      input = { ...input, handle: normalizeLookupHandle(input.handle) };
       const route = accountRoute(input.accountId);
       return execute(
         { route, id: input.accountId, kind: 'registration-expired', key: input.key, input },
@@ -610,7 +730,7 @@ export function createLifecycleInternals(
       );
     },
     async releaseExpiredRegistrationHandle(input: LifecycleCommand & { handle: string; reservationId: string }) {
-      input = { ...input, handle: normalized(input.handle) };
+      input = { ...input, handle: normalizeLookupHandle(input.handle) };
       const proof = await withConnection(pool, (client) =>
         expiryRead.run(client, {
           route: accountRoute(input.accountId),
@@ -637,13 +757,71 @@ export function createLifecycleInternals(
         },
       );
     },
-    async reserveHandle(input: { handle: string; accountId: string; key: string }) {
+    async reserveHandle(input: { handle: string; accountId: string; key: string }, request?: LifecycleRequest) {
       input = { ...input };
       const handle = normalized(input.handle);
       accountRoute(input.accountId);
       const route = handleRoute(handle);
+      const existing = await readClaim(pool, handle);
+      if (existing?.accountId === input.accountId && (existing.state === 'reserved' || existing.formerUntil !== null)) {
+        const owner = await withConnection(pool, (client) =>
+          accountRead.run(client, { route: accountRoute(input.accountId), account_id: input.accountId }),
+        );
+        requireAllowed(owner?.state === 'active' && !owner.fenced);
+      }
+      const exception = isReservedHandle(handle);
+      const context = request && snapshotRequest(request);
+      let authorization: CommandAuthorization | undefined;
+      if (exception) {
+        requireAllowed(config.access && context);
+        const access = config.access;
+        const authorities = await Promise.all([
+          accessCommandAuthorization(
+            access,
+            context.actor,
+            'account:assign_reserved_handle',
+            PLATFORM_RESOURCE,
+            { ...context, pool },
+            () => new LifecycleDeniedError(),
+          ),
+          ...(context.actor.accountId === input.accountId
+            ? []
+            : [
+                accessCommandAuthorization(
+                  access,
+                  context.actor,
+                  'account:manage',
+                  { route: accountRoute(input.accountId), id: input.accountId },
+                  { ...context, pool },
+                  () => new LifecycleDeniedError(),
+                ),
+              ]),
+        ]);
+        authorization = {
+          action: 'account:assign_reserved_handle',
+          resource: PLATFORM_RESOURCE,
+          denied: () => new LifecycleDeniedError(),
+          prepare: (attempt) => Promise.all(authorities.map((authority) => authority.prepare!(attempt))),
+          async authorize(tx, attempt, evidence) {
+            for (const [index, authority] of authorities.entries()) {
+              requireAllowed((await authority.authorize(tx, attempt, (evidence as unknown[])[index])) === 'execute');
+            }
+            return 'execute';
+          },
+          async finalize(tx) {
+            for (const authority of authorities) requireAllowed(await authority.check(tx));
+          },
+        };
+      }
       return execute(
-        { route, id: handle, kind: 'handle-reserved', key: input.key, input: { handle, accountId: input.accountId } },
+        {
+          route,
+          id: handle,
+          kind: 'handle-reserved',
+          key: input.key,
+          input: { handle, accountId: input.accountId },
+          ...(authorization ? { actor: context!.actor, deadline: context!.deadline, authorization } : {}),
+        },
         async (tx, transactionId) => {
           const at = authoritativeTimeValue(currentCommand(tx).time);
           const expiresAt = new Date(Date.parse(at) + REGISTRATION_TTL_MS).toISOString();
@@ -661,7 +839,13 @@ export function createLifecycleInternals(
               }),
             ),
           );
-          return { handle, accountId: input.accountId, reservationId, expiresAt };
+          return {
+            handle,
+            accountId: input.accountId,
+            reservationId,
+            expiresAt,
+            ...(exception ? { reservedHandleException: true } : {}),
+          };
         },
       );
     },
@@ -729,7 +913,11 @@ export function createLifecycleInternals(
             transaction_id: transactionId,
           });
           requireAllowed(affected(changed));
-          await grants(tx, input.accountId, input.accountId, '', transactionId, ['account:read', 'account:manage']);
+          await grants(tx, input.accountId, input.accountId, '', transactionId, [
+            'account:read',
+            'account:manage',
+            'media:create',
+          ]);
           return { accountId: input.accountId };
         },
       );
@@ -803,13 +991,17 @@ export function createLifecycleInternals(
               }),
             ),
           );
-          return { handle, accountId: input.accountId };
+          return {
+            handle,
+            accountId: input.accountId,
+            ...(isReservedHandle(handle) ? { reservedHandleException: true } : {}),
+          };
         },
       );
     },
     async redirectHandle(input: LifecycleCommand & { handle: string }) {
       input = { ...input };
-      const handle = normalized(input.handle);
+      const handle = normalizeLookupHandle(input.handle);
       const route = handleRoute(handle);
       return execute(
         { route, id: handle, kind: 'handle-redirected', key: input.key, input: { handle, accountId: input.accountId } },
@@ -836,27 +1028,46 @@ export function createLifecycleInternals(
     },
     async expireHandle(input: { handle: string; key: string }) {
       input = { ...input };
-      const handle = normalized(input.handle);
+      const handle = normalizeLookupHandle(input.handle);
       const route = handleRoute(handle);
-      return execute({ route, id: handle, kind: 'handle-expired', key: input.key, input: { handle } }, async (tx) => {
-        requireAllowed(
-          affected(await handleExpire.run(tx, { route, handle, at: authoritativeTimeValue(currentCommand(tx).time) })),
-        );
-        return { handle, released: true };
-      });
+      return execute(
+        { route, id: handle, kind: 'handle-expired', key: input.key, input: { handle } },
+        async (tx, transactionId) => {
+          requireAllowed(
+            affected(
+              await handleExpire.run(tx, {
+                route,
+                handle,
+                at: authoritativeTimeValue(currentCommand(tx).time),
+                transaction_id: transactionId,
+              }),
+            ),
+          );
+          return { handle, released: true };
+        },
+      );
     },
     async resolveHandle(value: string) {
-      const handle = normalized(value);
+      const handle = normalizeLookupHandle(value);
       const claim = await withConnection(pool, (client) =>
         handleRead.run(client, { route: handleRoute(handle), handle }),
       );
-      if (
-        !claim ||
-        (claim.state === 'pending' && Date.parse(claim.expiresAt!) <= Date.parse(iso(clock))) ||
-        (claim.state === 'reserved' && Date.parse(claim.reservedUntil!) <= Date.parse(iso(clock)))
-      )
-        return null;
-      return { accountId: claim.accountId, redirect: claim.state === 'reserved' };
+      if (!claim || claim.accountId === null || claim.state === 'retired') return null;
+      const at = Date.parse(iso(clock));
+      const forwards = claim.formerUntil !== null && Date.parse(claim.formerUntil) > at;
+      if (claim.state === 'pending' && Date.parse(claim.expiresAt!) <= at) return null;
+      if (claim.state === 'pending' && claim.formerUntil === null)
+        return { accountId: claim.accountId, redirect: false };
+      const account = await withConnection(pool, (client) =>
+        accountRead.run(client, { route: accountRoute(claim.accountId), account_id: claim.accountId }),
+      );
+      if (!account || account.state === 'deleted') return null;
+      if (claim.state === 'active') return { accountId: claim.accountId, redirect: false };
+      if (claim.state === 'pending' && account.state === 'active' && account.handle === handle)
+        return { accountId: claim.accountId, redirect: false };
+      if (forwards && account.state === 'active' && account.handle)
+        return { accountId: claim.accountId, redirect: true };
+      return null;
     },
     /** Release the exact member hold and inverse together, after independently
      * reading immutable organization-local terminal evidence. */
@@ -1044,7 +1255,11 @@ export function createLifecycleInternals(
      * attempt, including receipt replay; floor comparison holds the account lock.
      * A later floor can never authorize an earlier operation's receipt.
      */
-    async advanceAuthenticationFloor(value: AuthenticationBarrierCommand, verifyAtAttempt: () => Promise<boolean>) {
+    async advanceAuthenticationFloor(
+      value: AuthenticationBarrierCommand,
+      verifyAtAttempt: () => Promise<boolean>,
+      management?: OpeningManagement,
+    ) {
       const input = { ...value };
       const route = accountRoute(input.accountId);
       requireAllowed(
@@ -1054,37 +1269,88 @@ export function createLifecycleInternals(
           /^[a-f0-9]{64}$/.test(input.proofReference) &&
           /^[a-f0-9]{64}$/.test(input.proofDigest) &&
           Number.isFinite(Date.parse(input.proofExpiresAt)) &&
+          (input.openingReceiptId === undefined ||
+            (input.purpose === 'consent-reduction' && routeOf(input.openingReceiptId) !== null)) &&
           typeof verifyAtAttempt === 'function',
       );
+      const openingRow = (client: AccessClient) =>
+        openingRead.run(client, {
+          route,
+          subject_id: input.accountId,
+          receipt_id: input.openingReceiptId!,
+          previous_floor: String(input.expectedMinimumAuthnEpoch),
+        });
+      async function readOpening(attempt: CommandAttempt): Promise<PreparedOpening> {
+        requireAllowed(management);
+        const row = await openingRow(pool);
+        requireAllowed(row && row.scopes.every((scope): scope is string => scope !== null));
+        const proof = await management.prepare(attempt, {
+          operatorAccountId: row.operatorId,
+          subjectAccountId: input.accountId,
+          action: row.action,
+          principal: Object.freeze({
+            kind: 'account',
+            accountId: row.humanId,
+            clientId: row.clientId,
+            scopes: Object.freeze([...row.scopes]),
+            requestedBy: row.requestedBy,
+            authnEpoch: Number(row.humanEpoch),
+          }),
+        });
+        return { row, proof };
+      }
       return execute(
         {
           route,
           id: input.accountId,
           kind: 'authentication-floor-advanced',
-          key: input.key,
+          key: barrierKey(input.purpose, input.key),
           input,
           authorization: {
             action: 'authentication-floor-advance',
             resource: { route, id: input.accountId },
-            prepare: () => verifyAtAttempt(),
-            async authorize(tx, attempt, verified) {
+            async prepare(attempt) {
+              const verified = await verifyAtAttempt();
+              // The management decision precedes the account lock. An exact replay of a committed
+              // advance never needs it, so a refusal here is only held until the lock shows the floor.
+              const opening =
+                input.openingReceiptId === undefined ? undefined : await readOpening(attempt).catch(() => undefined);
+              return { verified, opening };
+            },
+            async authorize(tx, attempt, prepared: { verified: boolean; opening?: PreparedOpening }) {
               requireAllowed(
-                verified === true &&
+                prepared.verified === true &&
                   Date.parse(input.proofExpiresAt) > Date.parse(authoritativeTimeValue(attempt.time)),
               );
-              const account = await locked(tx, input.accountId);
+              const { opening } = prepared;
+              // Route then id order, the operator's account included, as every lock of the pair.
+              const accounts = await lockAccounts(tx, [input.accountId, ...(opening ? [opening.row.operatorId] : [])]);
+              const account = accounts.get(input.accountId)!;
+              // Only a consent reduction reaches an automated account, and only through its opening.
+              const automated = account.operatorAccountId !== null;
               requireAllowed(
                 account.state === 'active' &&
                   account.kind === 'actor' &&
-                  account.operatorAccountId === null &&
-                  (input.purpose !== 'recovery' || account.fenced),
+                  automated === (input.openingReceiptId !== undefined) &&
+                  (input.purpose !== 'recovery' || (!automated && account.fenced)),
               );
               const floor = BigInt(account.minimumAuthnEpoch);
               requireAllowed(
                 floor === BigInt(input.expectedMinimumAuthnEpoch) ||
                   floor === BigInt(input.expectedMinimumAuthnEpoch + 1),
               );
-              return floor === BigInt(input.expectedMinimumAuthnEpoch) ? 'execute' : 'receipt-only';
+              if (floor !== BigInt(input.expectedMinimumAuthnEpoch)) return 'receipt-only';
+              if (automated) {
+                requireAllowed(management && opening);
+                const current = await openingRow(tx);
+                requireAllowed(
+                  current &&
+                    account.operatorAccountId === current.operatorId &&
+                    JSON.stringify(current) === JSON.stringify(opening.row),
+                );
+                await management.authorize(tx, attempt, opening.proof);
+              }
+              return 'execute';
             },
             denied: () => new LifecycleDeniedError(),
           },
@@ -1111,6 +1377,7 @@ export function createLifecycleInternals(
         async (tx, transactionId) => fence(tx, await locked(tx, input.accountId), false, transactionId),
       );
     },
+    confirmBarrier,
     async readFenceReceipt(accountId: string, receiptId: string): Promise<LifecycleFenceReceipt | null> {
       return withConnection(pool, (client) =>
         fenceRead.run(client, { route: accountRoute(accountId), account_id: accountId, receipt_id: receiptId }),
@@ -1123,6 +1390,49 @@ export function createLifecycleInternals(
       return account
         ? { fenced: account.fenced, receiptId: account.receiptId, minimumAuthnEpoch: account.minimumAuthnEpoch }
         : null;
+    },
+    /** Trusted Auth composition only, after the consent reduction and its session revocation committed.
+     * Clears the fence that exact consent barrier raised. A fence the barrier did not raise, or one a later floor
+     * moved past, stays and the completion still commits; a recovery fence needs its establishment evidence.
+     */
+    async completeConsentBarrier(value: AuthenticationBarrierReceipt) {
+      const input = { ...value };
+      const route = accountRoute(input.accountId);
+      requireAllowed(input.purpose === 'consent-reduction');
+      const minimum = String(input.minimumAuthnEpoch);
+      const confirm = () => confirmBarrier(input);
+      return execute(
+        {
+          route,
+          id: input.accountId,
+          kind: 'authentication-established',
+          key: `consent-completion:${input.receiptId}`,
+          input: { accountId: input.accountId, receiptId: input.receiptId, minimumAuthnEpoch: minimum },
+          authorization: {
+            action: 'authentication-establish',
+            resource: { route, id: input.accountId },
+            prepare: confirm,
+            async authorize(tx, _attempt, verified) {
+              requireAllowed(verified === true);
+              const account = await locked(tx, input.accountId);
+              requireAllowed(account.state === 'active' && account.kind === 'actor');
+              return 'execute';
+            },
+            denied: () => new LifecycleDeniedError(),
+          },
+        },
+        async (tx, transactionId) => {
+          await fenceClear.run(tx, {
+            route,
+            account_id: input.accountId,
+            receipt_id: input.receiptId,
+            minimum_authn_epoch: minimum,
+            authn_epoch: minimum,
+            transaction_id: transactionId,
+          });
+          return { accountId: input.accountId, receiptId: input.receiptId, minimumAuthnEpoch: minimum };
+        },
+      );
     },
     async clearFence(input: LifecycleCommand & { evidence: unknown }) {
       input = { ...input };
@@ -1214,7 +1524,7 @@ export function createLifecycleInternals(
  */
 export function createLifecycleCommands(config: Boundary & { access: Access }) {
   const { pool, access } = config;
-  const execute = lifecycleExecutor(pool, config.clock);
+  const execute = lifecycleExecutor(pool, config.clock ?? accessClock(access));
   async function authorize(context: LifecycleRequest, action: string, accountId: string) {
     return accessCommandAuthorization(
       access,
@@ -1256,8 +1566,11 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
       context = snapshotRequest(context);
       const route = accountRoute(input.accountId);
       const patch = validatePatch(input.patch);
-      const authorization = await authorize(context, 'account:update', input.accountId);
+      const subject = await withConnection(pool, (client) => readAccount(client, route, input.accountId));
+      const anchor = accountProfileAuthorityAnchor(subject, input.accountId);
+      const authorization = await authorize(context, anchor.action, anchor.id);
       const allowed = authorization.check;
+      let displayNameChanged = false;
       return execute(
         {
           route,
@@ -1265,13 +1578,32 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
           kind: 'account-updated',
           key: input.key,
           input: { patch },
+          additionalEvents: () =>
+            displayNameChanged
+              ? [
+                  {
+                    type: 'com.rezics.access.account-display-name-changed.v1',
+                    subject: input.accountId,
+                    data: { accountId: input.accountId },
+                  },
+                ]
+              : [],
           actor: context.actor,
           deadline: context.deadline,
           authorization,
         },
         async (tx, transactionId) => {
-          await locked(tx, input.accountId);
+          // A command retry must base its event on this transaction's locked row.
+          displayNameChanged = false;
+          const account = await locked(tx, input.accountId);
+          displayNameChanged =
+            Object.hasOwn(patch, 'displayName') && account.displayName !== (patch.displayName as string | null);
+          requireAllowed(account.kind === subject?.kind && account.operatorAccountId === subject.operatorAccountId);
           requireAllowed(await allowed(tx));
+          if (Object.hasOwn(patch, 'speakersListed') && account.kind !== 'organization')
+            throw new ProblemError('invalid_request');
+          if (typeof patch.avatar === 'string' && !(await checkAvatarMedia(tx, patch.avatar, input.accountId)))
+            throw new ProblemError('invalid_request');
           requireAllowed(
             affected(
               await updateStatement.run(tx, {
@@ -1371,18 +1703,73 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
       );
     },
     async tombstone(context: LifecycleRequest, input: LifecycleCommand & { continuation?: ContinuationBinding }) {
+      const approval = workflowApprovalBinding(context);
       input = { ...input };
       context = snapshotRequest(context);
       const continuation = input.continuation;
       if (continuation) validateContinuationBinding(continuation);
       const route = accountRoute(input.accountId);
-      const authorization = await authorize(context, 'account:delete', input.accountId);
+      // An automated account is deleted by the managers of its current operator, read here and
+      // fixed again under the account lock. Only the account itself holds its own delete action.
+      const subject =
+        context.actor.kind === 'account' && context.actor.accountId !== input.accountId
+          ? await withConnection(pool, (client) => readAccount(client, route, input.accountId))
+          : null;
+      const replayOperator =
+        subject?.kind === 'actor' && subject.state === 'deleted'
+          ? await withConnection(pool, (client) =>
+              tombstoneOperator.run(client, {
+                route,
+                account_id: input.accountId,
+                approval_route: route,
+                approval_id: null,
+                partition_no: partitionOf(route),
+                actor_id: context.actor.accountId,
+                idempotency_keys: nativeReceiptKeyCandidates(
+                  pool,
+                  'access.account-tombstoned',
+                  context.actor.accountId,
+                  `${route}:${input.key}`,
+                ),
+              }),
+            )
+          : null;
+      const operatorId =
+        subject?.kind === 'actor' && subject.state === 'active'
+          ? subject.operatorAccountId
+          : (replayOperator?.priorOperatorAccountId ?? null);
+      const organization =
+        subject?.kind === 'organization' &&
+        (
+          await withConnection(pool, (client) =>
+            ownersRead.run(client, {
+              route,
+              organization_id: input.accountId,
+              member_id: context.actor.accountId,
+              at: iso(config.clock ?? accessClock(access)),
+            }),
+          )
+        )?.owners !== 0;
+      const authorization =
+        operatorId || organization
+          ? await authorize(context, 'account:manage', operatorId ?? input.accountId)
+          : await authorize(context, 'account:delete', input.accountId);
       const allowed = authorization.check;
       return execute(
         {
           route,
           id: input.accountId,
           kind: 'account-tombstoned',
+          additionalEvents: () =>
+            subject?.kind === 'organization'
+              ? [
+                  {
+                    type: 'com.rezics.access.account-updated.v1',
+                    subject: input.accountId,
+                    data: { accountId: input.accountId },
+                  },
+                ]
+              : [],
           key: input.key,
           input: continuation
             ? {
@@ -1397,30 +1784,57 @@ export function createLifecycleCommands(config: Boundary & { access: Access }) {
         },
         async (tx, transactionId) => {
           const account = await locked(tx, input.accountId);
+          requireAllowed(operatorId === null || account.operatorAccountId === operatorId);
           requireAllowed(await allowed(tx));
           requireAllowed(account.state === 'active');
           const holds = await holdsRead.run(tx, { route, account_id: input.accountId });
+          if (account.kind === 'organization' && holds?.held && holds.purpose && holds.relatedAccountId)
+            throw new (OrganizationCloseBlockedError())({
+              purpose: holds.purpose,
+              relatedAccountId: holds.relatedAccountId,
+            });
           requireAllowed(holds && !holds.held);
           if (account.kind === 'organization') {
             const owners = await ownersRead.run(tx, {
               route,
               organization_id: input.accountId,
-              member_id: input.accountId,
+              member_id: context.actor.accountId,
               at: authoritativeTimeValue(currentCommand(tx).time),
             });
-            requireAllowed(owners && owners.owners === 0);
+            // Existing zero-owner deletion remains available through account:delete.
+            requireAllowed(owners && (organization ? owners.target === 1 : owners.owners === 0));
           }
           const priorHandle = account.handle;
           const priorOperatorAccountId = account.operatorAccountId;
           const priorReservationId = account.operatorReservationId;
           const receipt = await fence(tx, account, true, transactionId);
+          await erasureInsert.run(tx, {
+            route,
+            account_id: account.accountId,
+            version: ERASURE_PARTICIPANT_VERSION,
+            at: authoritativeTimeValue(currentCommand(tx).time),
+          });
+          if (account.kind === 'organization') {
+            await organizationClose.run(tx, {
+              route,
+              organization_id: input.accountId,
+              receipt_id: receipt.receiptId,
+              handle: priorHandle,
+              handle_key: continuation
+                ? `${continuation.commandKeyPrefix}:redirect-deleted-handle`
+                : `organization-close:${input.accountId}:handle`,
+            });
+          }
           if (continuation) {
             await insertDeletionContinuation(tx, {
               accountId: account.accountId,
               handle: priorHandle,
               operatorAccountId: priorOperatorAccountId,
               reservationId: priorReservationId,
-              binding: continuation,
+              binding: {
+                ...continuation,
+                ...(approval ? { approvalExpiresAt: approval.expiresAt } : {}),
+              },
               barrierReceiptId: receipt.receiptId,
               minimumAuthnEpoch: receipt.minimumAuthnEpoch,
               transactionId,
@@ -1441,7 +1855,31 @@ function validatePatch(value: unknown): Record<string, unknown> {
   for (const [key, field] of Object.entries(patch)) {
     if (['displayName', 'avatarUrl', 'biography'].includes(key))
       requireAllowed(field === null || (typeof field === 'string' && field.length <= 4096));
-    else if (key === 'birthDate')
+    else if (key === 'avatar') {
+      if (field !== null && (typeof field !== 'string' || routeOf(field) === null))
+        throw new ProblemError('invalid_request');
+    } else if (key === 'publicViews') {
+      requireAllowed(field && typeof field === 'object' && !Array.isArray(field));
+      for (const [view, enabled] of Object.entries(field))
+        requireAllowed(['posts', 'reviews', 'collections', 'realms'].includes(view) && typeof enabled === 'boolean');
+    } else if (key === 'speakersListed') requireAllowed(typeof field === 'boolean');
+    else if (key === 'links') {
+      requireAllowed(Array.isArray(field) && field.length <= 5);
+      for (const link of field) {
+        requireAllowed(link && typeof link === 'object' && !Array.isArray(link));
+        requireAllowed(Object.keys(link).length === 2 && Object.hasOwn(link, 'label') && Object.hasOwn(link, 'url'));
+        requireAllowed(typeof link.label === 'string' && link.label.length >= 1 && Array.from(link.label).length <= 64);
+        requireAllowed(typeof link.url === 'string' && Array.from(link.url).length <= 2048);
+        requireAllowed(/^https:\/\/[^/@\s]+(?:[/?#]|$)/i.test(link.url) && !/[\u0000-\u0020\u007f]/.test(link.url));
+        let url: URL;
+        try {
+          url = new URL(link.url);
+        } catch {
+          throw new LifecycleDeniedError();
+        }
+        requireAllowed(url.protocol === 'https:' && url.hostname && !url.username && !url.password);
+      }
+    } else if (key === 'birthDate')
       requireAllowed(
         field === null ||
           (typeof field === 'string' &&

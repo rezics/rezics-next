@@ -1,16 +1,23 @@
+import type { LibraryProgressUnitDescriptor } from './profile.ts';
 /**
  * Pure rules for progress sessions. Commands own the account and the stored rows.
  * A reread is a new session; nothing here rewrites another one.
  */
 export declare const MAX_COMPLETED_UNITS = 20000;
+export declare const MAX_PROGRESS_MEASURES = 8;
 export type ProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
-export type ProgressUnit = 'page' | 'chapter' | 'episode' | 'volume' | 'minute' | 'percent';
-export type ProgressState = 'active' | 'completed' | 'abandoned';
+export type ProgressUnit = string;
+export type ProgressState = 'active' | 'completed' | 'abandoned' | 'retired';
 export type ProgressAction = 'complete' | 'abandon';
 export type ProgressSessionCreate = {
     subjectId: string;
     versionSubjectId: string | null;
     mode: ProgressMode;
+    unit: ProgressUnit;
+    total: string | null;
+    additionalMeasures?: ProgressMeasureCreate[];
+};
+export type ProgressMeasureCreate = {
     unit: ProgressUnit;
     total: string | null;
 };
@@ -32,6 +39,18 @@ export type CompletedUnitsRecord = {
 export type ProgressRecord = ScalarRecord | CursorRecord | CompletedUnitsRecord;
 /** History payload. Unit ids are the ones given, sorted by code unit, never a filled range. */
 export type ProgressIntent = {
+    lifecycle: 'reopen' | 'retire';
+    previousState: Exclude<ProgressState, 'retired'>;
+    previousCompletedAt: string | null;
+} | {
+    clear: true;
+} | {
+    measureId: string;
+    clear: true;
+} | {
+    amount: string;
+} | {
+    measureId: string;
     amount: string;
 } | {
     locator: string;
@@ -58,16 +77,20 @@ export type ProgressRecordContext = {
     state: ProgressState;
 };
 /** Validate one new session. `total` belongs only to `scalar_amount` and is null when unknown. */
-export declare function parseSessionCreate(input: unknown): ProgressOutcome<ProgressSessionCreate>;
+export declare function parseSessionCreate(input: unknown, descriptor?: LibraryProgressUnitDescriptor | 'syntax'): ProgressOutcome<ProgressSessionCreate>;
+/** Validate an additional independent scalar unit using the same profile decimal and total rules. */
+export declare function parseProgressMeasureCreate(input: unknown, descriptor?: LibraryProgressUnitDescriptor | 'syntax'): ProgressOutcome<ProgressMeasureCreate>;
 /**
  * Validate one record for `mode`. Only an active session records.
- * Percent amounts stay within 0 to 100; no record changes the session state.
+ * Legacy percent amounts stay within 0 to 100; profiled amounts use only declared bounds.
  */
-export declare function parseRecord(mode: ProgressMode, input: unknown, context: ProgressRecordContext): ProgressOutcome<ProgressRecord>;
+export declare function parseRecord(mode: ProgressMode, input: unknown, context: ProgressRecordContext, descriptor?: LibraryProgressUnitDescriptor | 'syntax'): ProgressOutcome<ProgressRecord>;
 /** Complete or abandon an active session. An amount, position, or unit count is not an action. */
 export declare function transition(state: ProgressState, action: ProgressAction): ProgressOutcome<ProgressState>;
+/** Correct only the addressed occurrence; recorded values never imply completion. */
+export declare function correctOccurrence(state: ProgressState, action: 'reopen' | 'retire'): ProgressOutcome<ProgressState>;
 /** The history row for a validated record. Unit ids stay the given ids, in code-unit order. */
-export declare function changeIntent(record: ProgressRecord): ProgressIntent;
+export declare function changeIntent(record: ProgressRecord, measureId?: string): ProgressIntent;
 /**
  * Next sparse-set size. `added` is how many submitted ids were new.
  * `removed` is how many submitted ids already existed.

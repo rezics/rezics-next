@@ -1,9 +1,185 @@
 types:
-  schema:Book: obra escrita
-  bf:Instance: edición, traducción o versión
+  schema:Book: 'libro'
+  bf:Instance: 'edición'
 properties:
+  schema:wordCount: 'número de palabras'
   schema:exampleOfWork: versión, edición o traducción de
   schema:isbn: ISBN-13
   schema:publisher: editorial
   schema:numberOfPages: número de páginas
   schema:translator: traductor
+inverseProperties:
+  schema:exampleOfWork: 'Ediciones'
+  schema:publisher: 'Obras publicadas'
+  schema:translator: 'Obras traducidas'
+typeDescriptions:
+  schema:Book: 'Una obra bibliográfica independiente de una edición, traducción o ejemplar concreto.'
+  bf:Instance: 'Una edición publicada e identificada de un libro, como una traducción concreta; distinta de un ejemplar personal.'
+libraryProfiles:
+  book.reading:
+    states:
+      planned: 'Planeado'
+      in_progress: 'En curso'
+      completed: 'Completado'
+      paused: 'En pausa'
+      dropped: 'Abandonado'
+    units:
+      scalar_amount:
+        page:
+          label: 'página'
+          countForms:
+            one: 'página'
+            other: 'páginas'
+            many: 'páginas'
+    copyKinds:
+      physical: 'Físico'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'En propiedad'
+        disposed: 'Desprendido'
+      digital:
+        owned: 'En propiedad'
+  book.edition:
+    states:
+      planned: 'Planeado'
+      in_progress: 'En curso'
+      completed: 'Completado'
+      paused: 'En pausa'
+      dropped: 'Abandonado'
+    units:
+      scalar_amount:
+        page:
+          label: 'página'
+          countForms:
+            one: 'página'
+            other: 'páginas'
+            many: 'páginas'
+    copyKinds:
+      physical: 'Físico'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'En propiedad'
+        disposed: 'Desprendido'
+      digital:
+        owned: 'En propiedad'
+  legacy-fixed-v1:
+    states:
+      planned: 'Planeado'
+      in_progress: 'En curso'
+      completed: 'Completado'
+      paused: 'En pausa'
+      dropped: 'Abandonado'
+    units:
+      scalar_amount:
+        page:
+          label: 'página'
+          countForms:
+            one: 'página'
+            other: 'páginas'
+            many: 'páginas'
+        chapter:
+          label: 'capítulo'
+          countForms:
+            one: 'capítulo'
+            other: 'capítulos'
+            many: 'capítulos'
+        episode:
+          label: 'episodio'
+          countForms:
+            one: 'episodio'
+            other: 'episodios'
+            many: 'episodios'
+        minute:
+          label: 'minuto'
+          countForms:
+            one: 'minuto'
+            other: 'minutos'
+            many: 'minutos'
+        volume:
+          label: 'tomo'
+          countForms:
+            one: 'tomo'
+            other: 'tomos'
+            many: 'tomos'
+        percent: 'porcentaje'
+      cursor_position:
+        page:
+          label: 'página'
+          countForms:
+            one: 'página'
+            other: 'páginas'
+            many: 'páginas'
+        chapter:
+          label: 'capítulo'
+          countForms:
+            one: 'capítulo'
+            other: 'capítulos'
+            many: 'capítulos'
+        episode:
+          label: 'episodio'
+          countForms:
+            one: 'episodio'
+            other: 'episodios'
+            many: 'episodios'
+        minute:
+          label: 'minuto'
+          countForms:
+            one: 'minuto'
+            other: 'minutos'
+            many: 'minutos'
+        volume:
+          label: 'tomo'
+          countForms:
+            one: 'tomo'
+            other: 'tomos'
+            many: 'tomos'
+        percent: 'porcentaje'
+      completed_units:
+        page:
+          label: 'página'
+          countForms:
+            one: 'página'
+            other: 'páginas'
+            many: 'páginas'
+        chapter:
+          label: 'capítulo'
+          countForms:
+            one: 'capítulo'
+            other: 'capítulos'
+            many: 'capítulos'
+        episode:
+          label: 'episodio'
+          countForms:
+            one: 'episodio'
+            other: 'episodios'
+            many: 'episodios'
+        minute:
+          label: 'minuto'
+          countForms:
+            one: 'minuto'
+            other: 'minutos'
+            many: 'minutos'
+        volume:
+          label: 'tomo'
+          countForms:
+            one: 'tomo'
+            other: 'tomos'
+            many: 'tomos'
+        percent: 'porcentaje'
+    copyKinds:
+      legacy-unspecified: 'Sin especificar'
+    copyStatuses:
+      legacy-unspecified:
+        ordered: 'Pedido'
+        owned: 'En propiedad'
+        lent: 'Prestado'
+        disposed: 'Desprendido'
+propertyDescriptions:
+  schema:wordCount: 'Número exacto de palabras de la obra como entero sin unidad; no caracteres ni páginas de una edición.'
+  schema:exampleOfWork: 'La obra que materializa esta edición o lanzamiento; enlaza la obra misma, no un ejemplar personal.'
+  schema:isbn: 'El ISBN-13 de la edición empieza por 978 o 979; los guiones son opcionales, por ejemplo 9780140328721 o 978-0-14-032872-1.'
+  schema:publisher: 'Una persona u organización acreditada como editora de esta edición o lanzamiento.'
+  schema:numberOfPages: 'Número de páginas de la edición como cantidad entera sin unidad, igual o superior a 1.'
+  schema:translator: 'Una persona u organización acreditada por la traducción de esta edición o publicación.'

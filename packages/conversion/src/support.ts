@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { FIELD_GROUPS, SourceSchema, type FieldGroup, type Source } from '@rezics/definitions/bulk';
 import { checkMediaImportRequest } from '@rezics/definitions/media-import';
 import { documentVersion, normalizeDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import type { SourceVocabularyRequest } from './source-vocabulary.ts';
 
 /** Immutable caller configuration; resolutions and media IDs confer no authority. */
 export type ConversionContext = {
@@ -10,6 +12,13 @@ export type ConversionContext = {
   readonly resolvedReferences?: Readonly<Record<string, string>>;
   readonly mediaIds?: Readonly<Record<string, string>>;
   readonly source?: string;
+  /** Caller-owned normalized graph rows and explicit immutable native bindings. */
+  readonly sourceVocabulary?: SourceVocabularyRequest;
+  /**
+   * Admitted sanitized classification facts for `projectSourceClassification`.
+   * Public dump fields never populate this; an absent value withholds classification.
+   */
+  readonly sourceClassification?: unknown;
 };
 
 /** Canonical BCP 47 syntax, without source-specific language mappings. */
@@ -20,6 +29,14 @@ export function canonicalLanguageTag(tag: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** Romanized display form: insert or normalize a Latn script subtag. */
+export function latinLanguageTag(tag: string): string | null {
+  const parts = tag.split('-');
+  if (/^[A-Z][a-z]{3}$/u.test(parts[1] ?? '')) parts[1] = 'Latn';
+  else parts.splice(1, 0, 'Latn');
+  return canonicalLanguageTag(parts.join('-'));
 }
 
 const inLanguagePattern = /^[a-z]{2,3}(?:-[A-Z][a-z]{3})?(?:-(?:[A-Z]{2}|[0-9]{3}))?$/;
@@ -196,6 +213,60 @@ export function sourceDigest(normalizedProjection: unknown): string {
   return hash(text);
 }
 
+/** Exact nonnegative unitless integer; the decimal spelling is kept, never a float. */
+export function exactUnitlessIntegerQuantity(value: string): { amount: string; unit: '1' } | undefined {
+  if (!/^(?:0|[1-9][0-9]{0,15})$/u.test(value)) return;
+  return { amount: `+${value}`, unit: '1' };
+}
+
+/** Decode the two bounded VNDB representations without coercing absent or malformed data. */
+export function projectVndbReleaseMinimumAge(
+  value: unknown,
+  present: boolean,
+): {
+  sourceValue?: string | number | boolean | null | undefined;
+  quantity?: { amount: string; unit: 'http://www.wikidata.org/entity/Q577' };
+  diagnostic?:
+    | 'missing_minimum_age'
+    | 'unknown_minimum_age'
+    | 'invalid_minimum_age'
+    | 'non_integral_minimum_age'
+    | 'out_of_range_minimum_age';
+} {
+  if (!present) return { diagnostic: 'missing_minimum_age' };
+  const sourceValue =
+    value === null ||
+    typeof value === 'boolean' ||
+    (typeof value === 'string' && value.length <= 32 && value.isWellFormed()) ||
+    (typeof value === 'number' && Number.isFinite(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER)
+      ? value
+      : undefined;
+  if (value === null) return { sourceValue, diagnostic: 'unknown_minimum_age' };
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER)
+      return { diagnostic: 'invalid_minimum_age' };
+    if (!Number.isInteger(value)) return { sourceValue, diagnostic: 'non_integral_minimum_age' };
+    if (value < 0 || value > 18) return { sourceValue, diagnostic: 'out_of_range_minimum_age' };
+    return { sourceValue, quantity: { amount: `+${value}`, unit: 'http://www.wikidata.org/entity/Q577' } };
+  }
+  if (typeof value !== 'string' || value.length > 32 || !value.isWellFormed())
+    return { diagnostic: 'invalid_minimum_age' };
+  if (/^(?:0|[1-9][0-9]*)$/u.test(value)) {
+    const age = Number(value);
+    if (age > 18) return { sourceValue, diagnostic: 'out_of_range_minimum_age' };
+    return { sourceValue, quantity: { amount: `+${age}`, unit: 'http://www.wikidata.org/entity/Q577' } };
+  }
+  if (
+    /^-?(?:0|[1-9][0-9]*)\.[0-9]+$/u.test(value) &&
+    Number.isFinite(Number(value)) &&
+    !Number.isInteger(Number(value))
+  )
+    return { sourceValue, diagnostic: 'non_integral_minimum_age' };
+  if (/^-?(?:0|[1-9][0-9]*)$/u.test(value) && Number(value) < 0)
+    return { sourceValue, diagnostic: 'out_of_range_minimum_age' };
+  return { sourceValue, diagnostic: 'invalid_minimum_age' };
+}
+
 /**
  * A pure validator over JSON data that skips bodies it already accepted. Only acceptances are
  * remembered, keyed by the body's canonical JSON text (so member order never matters); callers
@@ -241,6 +312,17 @@ function compiled(pattern: string): RegExp {
     patterns.set(pattern, expression);
   }
   return expression;
+}
+
+/** Enforce the current released string/external-id contract; no extra checksum or padding. */
+export function matchesReleasedStringValue(propertyId: string, value: string): boolean {
+  const property = bundledRelease.properties[propertyId];
+  if (!property) return false;
+  const schema = property.value as { minLength?: unknown; maxLength?: unknown; pattern?: unknown };
+  if (typeof schema.minLength === 'number' && value.length < schema.minLength) return false;
+  if (typeof schema.maxLength === 'number' && value.length > schema.maxLength) return false;
+  if (typeof schema.pattern === 'string' && compiled(schema.pattern).exec(value)?.[0] !== value) return false;
+  return true;
 }
 
 export function sourceEnvelope(
@@ -312,6 +394,18 @@ export function safeSourceUrl(url: unknown, hosts: readonly string[]): string {
   return parsed.href;
 }
 
+/** Public website citations only; these URLs are never fetched by conversion. */
+export function sourceWebsiteUrl(value: string): string {
+  try {
+    const host = new URL(value).hostname;
+    if (value.length > 1500 || !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/u.test(host))
+      throw new TypeError('Invalid external website URL');
+    return safeSourceUrl(value, [host]);
+  } catch {
+    throw new TypeError('Invalid external website URL');
+  }
+}
+
 const documents = new Map<string, DocumentSnapshot>();
 const documentCapacity = 64;
 
@@ -349,3 +443,42 @@ function buildTextDocument(text: string): DocumentSnapshot {
     throw new RangeError('Text snapshot exceeds 32 KiB');
   return snapshot;
 }
+
+/** Exact source-context tuple syntax; this carries no native authority. */
+export function reviewedReferenceKey(schemeURI: string, literal: string): string {
+  if (!schemeURI.isWellFormed() || !literal.isWellFormed()) throw new TypeError('Invalid reviewed reference');
+  const key = `v1:${JSON.stringify([schemeURI, literal])}`;
+  if (key.length > 255 || Buffer.byteLength(key, 'utf8') > 255)
+    throw new TypeError('Reviewed reference exceeds its bound');
+  return key;
+}
+
+export const bangumiPublicTagScheme = 'https://rezics.com/schemes/bangumi/public-tags';
+export type VndbPublicTagCategory = 'cont' | 'ero' | 'tech';
+export const vndbPublicTagScheme = (category: VndbPublicTagCategory) =>
+  `https://rezics.com/schemes/vndb/public-tags/${category}`;
+export const vndbPublicTagConceptUri = (category: VndbPublicTagCategory, code: string) =>
+  `${vndbPublicTagScheme(category)}/${code}`;
+export const vndbPublicTagTaxonomy = (category: VndbPublicTagCategory) => `vndb.tag.${category}`;
+
+export const vndbReleasePlatformSchemeUri = 'https://vndb.org/releases/platforms';
+export const vndbReleasePlatformTaxonomy = 'vndb.releases.platform';
+export const vndbReleasePlatformConceptUri = (code: string) => `${vndbReleasePlatformSchemeUri}/${code}`;
+export const vndbReleaseMediumSchemeUri = 'https://vndb.org/releases/media';
+export const vndbReleaseMediumTaxonomy = 'vndb.releases.media';
+export const vndbReleaseMediumConceptUri = (code: string) => `${vndbReleaseMediumSchemeUri}/${code}`;
+export const vndbReleaseMediumCodes: ReadonlySet<string> = new Set([
+  'blr',
+  'mrt',
+  'cas',
+  'cd',
+  'dc',
+  'dvd',
+  'flp',
+  'gdr',
+  'in',
+  'mem',
+  'nod',
+  'umd',
+  'otc',
+]);

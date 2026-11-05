@@ -1,6 +1,41 @@
 types:
   schema:Recipe: 요리법
 properties:
+  schema:suitableForDiet: '적합한 식단'
+  schema:recipeInstructions: 조리 방법
   schema:recipeIngredient: 재료
   schema:cookTime: 조리 시간
   schema:recipeYield: 인분
+inverseProperties:
+  schema:suitableForDiet: '이 식단에 적합한 레시피'
+libraryProfiles:
+  recipe.cooking:
+    states:
+      planned: '예정'
+      in_progress: '진행 중'
+      completed: '완료'
+      paused: '일시 중지'
+      dropped: '중단'
+    units:
+      scalar_amount:
+        minute:
+          label: '분'
+          countForms:
+            other: '분'
+    copyKinds:
+      physical: '실물'
+      digital: '디지털'
+    copyStatuses:
+      physical:
+        owned: '소장'
+        disposed: '처분함'
+      digital:
+        owned: '소장'
+typeDescriptions:
+  schema:Recipe: '음식을 만드는 방법과 재료를 설명하는 조리법입니다. 음식 자체나 개인의 요리 세션과 구별합니다.'
+propertyDescriptions:
+  schema:suitableForDiet: '채식처럼 조리법에 명시된 식단 적합성을 나타내는 개념입니다. 재료 이름만으로 추정하지 않습니다.'
+  schema:recipeInstructions: '조리 단계를 작성한 문서입니다. 일반 문자열이나 URL 대신 문서 값을 사용합니다.'
+  schema:recipeIngredient: '밀가루 200 g처럼 언어가 지정된 텍스트로 적은 재료입니다. 식품을 구조적으로 연결할 때는 재료 관계를 사용합니다.'
+  schema:cookTime: '실제 조리에 걸리는 시간입니다. 분(wd:Q7727) 단위의 0 이상 정수로, 예를 들어 25를 기록합니다. 시각이나 준비 및 휴지 시간을 포함한 총시간이 아닙니다.'
+  schema:recipeYield: '완성되는 인분 수입니다. 예를 들어 4처럼 단위 없는 1 이상 정수 수량을 사용하며, 자유 형식의 분량 설명은 쓰지 않습니다.'

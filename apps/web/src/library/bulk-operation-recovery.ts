@@ -1,0 +1,208 @@
+import type {
+  BulkRead,
+  BulkOperation,
+  BulkOutcomes,
+  OperationAddress,
+  CancelCommand,
+  CancelResult,
+  BulkOutcomePageRead,
+} from './bulk-operation-recovery-native';
+
+export type LibraryBulkOperation = BulkOperation;
+export type LibraryBulkOutcome = BulkOutcomes['outcomes'][number];
+export type LibraryBulkCancelIntent = {
+  operationId: string;
+  sender: string;
+  idempotencyKey: string;
+  locale: string;
+  capture: string;
+};
+export type LibraryBulkRecoveryRead =
+  | { state: 'available'; operation: LibraryBulkOperation; outcomes: LibraryBulkOutcome[]; next: string | null }
+  | { state: 'expired' | 'forbidden' | 'invalid' | 'unavailable'; operationId: string };
+export type LibraryBulkOutcomePageRead = BulkOutcomePageRead;
+export type LibraryBulkRecoveryStatus = 'unattempted' | 'running' | 'skipped' | 'failed' | 'success';
+
+export type RecoveryState = {
+  read: BulkRead['state'] | 'loading';
+  operation?: BulkOperation;
+  page?: BulkOutcomes | undefined;
+  cursor?: string | undefined;
+  cancel?: CancelResult['state'] | 'sending';
+};
+type Access = {
+  current: () => boolean;
+  capture: () => () => boolean;
+  csrf: () => string;
+};
+type Transport = {
+  read: (address: OperationAddress) => Promise<BulkRead>;
+  cancel: (command: CancelCommand) => Promise<CancelResult>;
+};
+
+/** Private, mounted memory only. An uncertain cancellation retains its exact command and transport. */
+export class BulkOperationRecovery {
+  state: RecoveryState = { read: 'loading' };
+  private command?: CancelCommand;
+  private send?: Transport['cancel'];
+  private reading = false;
+  private sending = false;
+  private live = true;
+  constructor(
+    readonly address: Readonly<{ id: string; viewer: string }>,
+    private access: Access,
+    private transport: Transport,
+    private changed: () => void,
+  ) {}
+  retire() {
+    this.live = false;
+  }
+  private current() {
+    return this.live && this.access.current();
+  }
+  private publish() {
+    if (this.current()) this.changed();
+  }
+  async read(cursor = this.state.cursor) {
+    if (!this.current() || this.reading) return;
+    const current = this.access.capture();
+    this.reading = true;
+    this.state = { ...this.state, read: 'loading', cursor, page: undefined };
+    this.publish();
+    let result: BulkRead;
+    try {
+      result = await this.transport.read({ ...this.address, ...(cursor === undefined ? {} : { cursor }) });
+    } catch {
+      result = { state: 'unavailable' };
+    }
+    this.reading = false;
+    if (!this.current() || !current()) return;
+    if (result.state === 'ready' && result.operation.id !== this.address.id) result = { state: 'unavailable' };
+    if (result.state === 'ready')
+      this.state = { ...this.state, read: 'ready', operation: result.operation, page: result.page };
+    else this.state = { ...this.state, read: result.state, page: undefined };
+    this.publish();
+  }
+  more() {
+    if (this.state.read === 'ready' && this.state.page?.next) return this.read(this.state.page.next);
+  }
+  async cancel(retry = false) {
+    if (!this.current() || this.sending || !this.access.csrf()) return;
+    if (retry ? this.state.cancel !== 'uncertain' : !!this.command || this.state.read !== 'ready') return;
+    if (!this.command) {
+      const operation = this.state.operation;
+      if (
+        !operation ||
+        operation.cancelRequested ||
+        ['completed', 'completed_with_errors', 'cancelled', 'stopped', 'expired'].includes(operation.phase)
+      )
+        return;
+      this.command = Object.freeze({ ...this.address, key: crypto.randomUUID(), csrf: this.access.csrf() });
+      this.send = this.transport.cancel;
+    }
+    const current = this.access.capture();
+    this.sending = true;
+    this.state = { ...this.state, cancel: 'sending' };
+    this.publish();
+    let result: CancelResult;
+    try {
+      result = await this.send!(this.command);
+    } catch {
+      result = { state: 'uncertain' };
+    }
+    this.sending = false;
+    if (!this.current() || !current()) {
+      // The effect may have committed, but its late response carries no current disclosure authority.
+      this.state = { ...this.state, cancel: 'uncertain' };
+      return;
+    }
+    if (result.state === 'ready' && result.operation.id !== this.address.id) result = { state: 'uncertain' };
+    // A refused retry does not resolve whether the original attempt committed.
+    if (retry && result.state !== 'ready') result = { state: 'uncertain' };
+    this.state = {
+      ...this.state,
+      cancel: result.state,
+      ...(result.state === 'ready' ? { operation: result.operation } : {}),
+    };
+    this.publish();
+  }
+}
+
+export function bulkRecoveryStatus(outcome: LibraryBulkOutcome): LibraryBulkRecoveryStatus {
+  switch (outcome.state) {
+    case 'pending':
+      return 'unattempted';
+    case 'reconciling':
+      return 'running';
+    case 'applied':
+      return 'success';
+    case 'no_effect':
+    case 'conflict':
+    case 'cancelled':
+      return 'skipped';
+    case 'denied':
+    case 'failed':
+      return 'failed';
+  }
+}
+
+export function canCancelBulkOperation(operation: LibraryBulkOperation): boolean {
+  return !operation.cancelRequested && (operation.phase === 'preview' || operation.phase === 'applying');
+}
+
+export function isCurrentBulkRecoveryAddress(
+  addressOperationId: string,
+  requestedOperationId: string,
+  authorized: boolean,
+): boolean {
+  return authorized && addressOperationId === requestedOperationId;
+}
+
+/** Accept a page only for the still-current address, authority and native cursor. */
+export function appendBulkOutcomePage(input: {
+  addressOperationId: string;
+  authorized: boolean;
+  requestedOperationId: string;
+  requestedCursor: string;
+  current: LibraryBulkRecoveryRead;
+  page: BulkOutcomes;
+}): LibraryBulkRecoveryRead {
+  const { addressOperationId, authorized, requestedOperationId, requestedCursor, current, page } = input;
+  if (
+    !authorized ||
+    addressOperationId !== requestedOperationId ||
+    current.state !== 'available' ||
+    current.operation.id !== requestedOperationId ||
+    current.next !== requestedCursor
+  )
+    return current;
+  return { ...current, outcomes: page.outcomes, next: page.next };
+}
+
+/** Coordinates only; a staged request never changes the accepted path until success. */
+export class BulkOutcomeWindows {
+  cursor: string | undefined;
+  predecessors: Array<string | undefined> = [];
+  target: { cursor: string | undefined; kind: 'next' | 'previous' | 'first' | 'refresh' } | undefined;
+  stage(kind: 'next' | 'previous' | 'first' | 'refresh', next?: string | null) {
+    const cursor =
+      kind === 'first'
+        ? undefined
+        : kind === 'previous'
+          ? this.predecessors.at(-1)
+          : kind === 'next'
+            ? (next ?? undefined)
+            : this.cursor;
+    this.target = { cursor, kind };
+    return this.target;
+  }
+  commit(target: NonNullable<BulkOutcomeWindows['target']>) {
+    if (this.target !== target) return false;
+    if (target.kind === 'next') this.predecessors = [...this.predecessors, this.cursor].slice(-8);
+    if (target.kind === 'previous') this.predecessors.pop();
+    if (target.kind === 'first') this.predecessors = [];
+    this.cursor = target.cursor;
+    this.target = undefined;
+    return true;
+  }
+}

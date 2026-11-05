@@ -4,7 +4,8 @@ import { resolve } from 'node:path';
 
 test('all durable cover outcomes pass with production resolver', async () => {
   const suite = resolve(import.meta.dir, '../../../specs/imports-media-resolver.test.ts');
-  const driver = resolve(import.meta.dir, 'media-resolver-driver.ts');
+  // Import resolves this module-relative path from the placed spec checkout.
+  const driver = '../services/importer/tests/media-resolver-driver.ts';
   const count = readFileSync(suite, 'utf8').match(/^test\(/gm)?.length ?? 0;
   expect(count).toBeGreaterThan(0);
   const child = Bun.spawn([process.execPath, 'test', '--timeout', '30000', suite], {

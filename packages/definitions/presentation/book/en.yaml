@@ -2,8 +2,167 @@ types:
   schema:Book: book
   bf:Instance: edition
 properties:
+  schema:wordCount: 'word count'
   schema:exampleOfWork: edition of
   schema:isbn: ISBN-13
   schema:publisher: publisher
   schema:numberOfPages: number of pages
   schema:translator: translator
+inverseProperties:
+  schema:exampleOfWork: 'Editions'
+  schema:publisher: 'Publisher of'
+  schema:translator: 'Translator of'
+libraryProfiles:
+  book.reading:
+    states:
+      planned: 'Planned'
+      in_progress: 'In progress'
+      completed: 'Completed'
+      paused: 'Paused'
+      dropped: 'Dropped'
+    units:
+      scalar_amount:
+        page:
+          label: 'page'
+          countForms:
+            one: 'page'
+            other: 'pages'
+    copyKinds:
+      physical: 'Physical'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Owned'
+        disposed: 'Disposed'
+      digital:
+        owned: 'Owned'
+  book.edition:
+    states:
+      planned: 'Planned'
+      in_progress: 'In progress'
+      completed: 'Completed'
+      paused: 'Paused'
+      dropped: 'Dropped'
+    units:
+      scalar_amount:
+        page:
+          label: 'page'
+          countForms:
+            one: 'page'
+            other: 'pages'
+    copyKinds:
+      physical: 'Physical'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Owned'
+        disposed: 'Disposed'
+      digital:
+        owned: 'Owned'
+  legacy-fixed-v1:
+    states:
+      planned: 'Planned'
+      in_progress: 'In progress'
+      completed: 'Completed'
+      paused: 'Paused'
+      dropped: 'Dropped'
+    units:
+      scalar_amount:
+        page:
+          label: 'page'
+          countForms:
+            one: 'page'
+            other: 'pages'
+        chapter:
+          label: 'chapter'
+          countForms:
+            one: 'chapter'
+            other: 'chapters'
+        episode:
+          label: 'episode'
+          countForms:
+            one: 'episode'
+            other: 'episodes'
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+        volume:
+          label: 'volume'
+          countForms:
+            one: 'volume'
+            other: 'volumes'
+        percent: 'percent'
+      cursor_position:
+        page:
+          label: 'page'
+          countForms:
+            one: 'page'
+            other: 'pages'
+        chapter:
+          label: 'chapter'
+          countForms:
+            one: 'chapter'
+            other: 'chapters'
+        episode:
+          label: 'episode'
+          countForms:
+            one: 'episode'
+            other: 'episodes'
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+        volume:
+          label: 'volume'
+          countForms:
+            one: 'volume'
+            other: 'volumes'
+        percent: 'percent'
+      completed_units:
+        page:
+          label: 'page'
+          countForms:
+            one: 'page'
+            other: 'pages'
+        chapter:
+          label: 'chapter'
+          countForms:
+            one: 'chapter'
+            other: 'chapters'
+        episode:
+          label: 'episode'
+          countForms:
+            one: 'episode'
+            other: 'episodes'
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+        volume:
+          label: 'volume'
+          countForms:
+            one: 'volume'
+            other: 'volumes'
+        percent: 'percent'
+    copyKinds:
+      legacy-unspecified: 'Unspecified'
+    copyStatuses:
+      legacy-unspecified:
+        ordered: 'Ordered'
+        owned: 'Owned'
+        lent: 'Lent'
+        disposed: 'Disposed'
+typeDescriptions:
+  schema:Book: 'A book work independent of any particular edition, translation or physical copy.'
+  bf:Instance: 'An identified published edition of a book work, such as a particular translation; separate from a personal copy.'
+propertyDescriptions:
+  schema:wordCount: 'Exact number of words in the book work as a unitless integer; not character count or edition page count.'
+  schema:exampleOfWork: 'The creative work embodied by this edition or release; link the work itself, not another personal copy.'
+  schema:isbn: "The edition's ISBN-13, starting with 978 or 979; hyphens are optional, for example 9780140328721 or 978-0-14-032872-1."
+  schema:publisher: 'A person or organization credited with publishing this edition or release.'
+  schema:numberOfPages: "The edition's page count as a unitless whole-number quantity of at least 1."
+  schema:translator: 'A person or organization credited with translating this edition or publication.'

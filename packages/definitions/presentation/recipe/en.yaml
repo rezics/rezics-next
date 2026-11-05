@@ -1,6 +1,42 @@
 types:
   schema:Recipe: recipe
 properties:
+  schema:suitableForDiet: 'suitable for diet'
+  schema:recipeInstructions: instructions
   schema:recipeIngredient: ingredient
   schema:cookTime: cooking time
   schema:recipeYield: servings
+inverseProperties:
+  schema:suitableForDiet: 'Recipes for this diet'
+libraryProfiles:
+  recipe.cooking:
+    states:
+      planned: 'Planned'
+      in_progress: 'In progress'
+      completed: 'Completed'
+      paused: 'Paused'
+      dropped: 'Dropped'
+    units:
+      scalar_amount:
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+    copyKinds:
+      physical: 'Physical'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Owned'
+        disposed: 'Disposed'
+      digital:
+        owned: 'Owned'
+typeDescriptions:
+  schema:Recipe: 'Instructions and ingredients for preparing food; distinct from the food itself or a personal cooking session.'
+propertyDescriptions:
+  schema:suitableForDiet: "A Concept stating the recipe's dietary suitability, such as vegetarian; do not infer it from ingredient names."
+  schema:recipeInstructions: 'An authored document explaining the preparation steps; use a document value, not a plain string or URL.'
+  schema:recipeIngredient: 'An ingredient written as language-tagged text, such as 200 g flour; structured food links use made-from material instead.'
+  schema:cookTime: 'Duration of actual cooking as a nonnegative whole number of minutes (wd:Q7727), for example 25; not a time of day or total preparation and resting time.'
+  schema:recipeYield: 'Number of servings produced, as a unitless whole-number quantity of at least 1, for example 4; not free-text portion instructions.'

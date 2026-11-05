@@ -70,6 +70,35 @@ type Creation = {
 };
 const creations = new WeakMap<CommandTransaction, Creation>();
 
+/** Only binds module data written in the same command to a resource that command
+ * is creating. This read-only in-memory predicate reads no database row and issues
+ * no statement; it grants nothing and is not a permission check.
+ */
+export function creationDeclares(tx: CommandTransaction, resource: Readonly<Resource>): boolean {
+  try {
+    const { route, id } = resource;
+    if (typeof route !== 'number' || typeof id !== 'string' || !validResource({ route, id })) return false;
+    const command = currentCommand(tx);
+    const creation = creations.get(tx);
+    if (
+      !creation ||
+      creation.failed ||
+      creation.attempt.time !== command.time ||
+      command.authorization?.mode !== 'execute' ||
+      command.authorization.action !== creation.action ||
+      command.authorization.resource.route !== creation.parent.route ||
+      command.authorization.resource.id !== creation.parent.id ||
+      command.basis !== creation.attempt.basis ||
+      command.partition !== creation.attempt.partition
+    )
+      return false;
+    authoritativeTimeValue(command.time);
+    return creation.entries.some((entry) => entry.resource.route === route && entry.resource.id === id);
+  } catch {
+    return false;
+  }
+}
+
 function liveCreation(tx: CommandTransaction): Creation {
   const command = currentCommand(tx);
   const creation = creations.get(tx);

@@ -1,0 +1,30 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as Stories from './community-lifecycle.stories';
+
+<Meta of={Stories} />
+
+# Container lifecycle
+
+`ContainerLifecycleControls` is the Space and Realm lifecycle region. It uses current admitted actions supplied by
+an isolated adapter; it never calculates authority from membership, creator identity, role names or a browser clock.
+Removal requires a recorded reason and explicit confirmation. Restoration uses the current native admission,
+including the native restore window. Orphaned Realms remain ordinarily readable with governance frozen.
+Keyboard entry focuses Cancel, cancellation returns to the same current action while it remains available, and
+submission settlement focuses its current result status unless the person has moved focus elsewhere.
+
+An uncertain response keeps the exact target, key, reason and expected head. Refresh cannot turn uncertainty into
+success or rebase that request. A refused request preserves the native status/code and the draft. After a fresh read,
+reviewing a new intent explicitly accepts the new head and generates a new key only on submission.
+
+Confirmed removal hides the page's previous container content. Restoration keeps the Context pointer and requires a
+fresh container read plus an independently authorized live Context destination before offering a link. The old page
+payload stays hidden until navigation reloads it. Missing Context authority never links to Global.
+
+The pattern and page stories use isolated presentation fixtures. The runtime default adapter uses the existing native
+lifecycle reader, command and independent Context destination reader. Their native admission and current disclosure
+remain authoritative; browser session presence grants no lifecycle permission. See
+[caller lifetime ownership](../../../community/container-lifecycle-caller-lifetime.md) for credential, target and
+mounted-connection boundaries.
+
+Use the same story IDs with phone390 and desktop1280 viewport globals, locale and theme globals. The page story reuses
+this component inside AppShell. Web visual review and Root screenshots remain required before page completion.

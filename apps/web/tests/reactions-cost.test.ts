@@ -1,12 +1,13 @@
 import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import type { SessionEnv } from '../src/session/client.ts';
-import { changeReactionRequest } from '../src/threads/reaction-request.ts';
+import { changeReactionRequest, validateReaction } from '../src/threads/reaction-request.ts';
 import { loadThreadPage } from '../src/threads/thread-page.ts';
 
 const sessionId = 'a'.repeat(43);
 const csrf = 'A'.repeat(22);
 const threadId = '0192f3a0-6c1e-7b2a-9d4e-000000000002';
+const subjectId = '0192f3a0-6c1e-7b2a-9d4e-000000000003';
 const sizes = [1, 10, 100];
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -93,6 +94,8 @@ function recordingClient(size: number, metrics: Metrics, calls: KernelCall[]) {
         if (url.pathname === `/v1/threads/${threadId}/reaction` && request.method === 'DELETE') {
           return new Response(null, { status: 204 });
         }
+        if (url.pathname === `/v1/subjects/${subjectId}/reaction` && request.method === 'PUT')
+          return Response.json({ kind: 'like' });
         return Response.json({ status: 404, code: 'not_found' }, { status: 404 });
       } finally {
         pending -= 1;
@@ -133,15 +136,16 @@ test('thread page reads stay within their bound as s grows', async () => {
         sitekey: '',
         scriptUrl: 'https://site.test/turnstile.js',
       },
+      'anonymous',
     );
     expect(page.posts.posts).toHaveLength(size);
     expect(page.thread.reactions).toEqual({ upvote: size });
-    expect(metrics).toEqual({ K: 2, D: 1, R: 0, A: 0 });
+    expect(metrics).toEqual({ K: 2, D: 0, R: 0, A: 0 });
     expect(recorded.peak()).toBe(2);
     expect(calls.map((call) => `${call.method} ${call.path}`).sort()).toEqual(
       [`GET /v1/threads/${threadId}`, `GET /v1/threads/${threadId}/posts`].sort(),
     );
-    expect(calls.every((call) => call.authorization === 'Bearer access')).toBe(true);
+    expect(calls.every((call) => call.authorization === null)).toBe(true);
     expect(calls.some((call) => call.path.endsWith('/reaction'))).toBe(false);
   }
 });
@@ -153,7 +157,7 @@ test('setting or clearing a reaction stays within its bound as s grows', async (
       const calls: KernelCall[] = [];
       const recorded = recordingClient(size, metrics, calls);
       const result = await changeReactionRequest(
-        { target: 'post', id: recorded.stored[0]!, kind },
+        { target: 'post', id: recorded.stored[0]!, kind, expectedReader: 'member' },
         signedRequest('POST'),
         sessionEnv(metrics),
         recorded.client,
@@ -170,7 +174,7 @@ test('setting or clearing a reaction stays within its bound as s grows', async (
     const calls: KernelCall[] = [];
     const recorded = recordingClient(size, metrics, calls);
     const result = await changeReactionRequest(
-      { target: 'thread', id: threadId, kind: 'love' },
+      { target: 'thread', id: threadId, kind: 'love', expectedReader: 'member' },
       signedRequest('POST'),
       sessionEnv(metrics),
       recorded.client,
@@ -179,4 +183,74 @@ test('setting or clearing a reaction stays within its bound as s grows', async (
     expect(metrics).toEqual({ K: 1, D: 1, R: 0, A: 0 });
     expect(calls[0]?.path).toBe(`/v1/threads/${threadId}/reaction`);
   }
+});
+
+test('a matching subject reader keeps the current subject route and one-operation bound', async () => {
+  for (const size of sizes) {
+    const metrics: Metrics = { K: 0, D: 0, R: 0, A: 0 };
+    const calls: KernelCall[] = [];
+    const recorded = recordingClient(size, metrics, calls);
+    const result = await changeReactionRequest(
+      { target: 'subject', id: subjectId, kind: 'like', expectedReader: 'member' },
+      signedRequest('POST'),
+      sessionEnv(metrics),
+      recorded.client,
+    );
+    expect(result.ok).toBe(true);
+    expect(metrics).toEqual({ K: 1, D: 1, R: 0, A: 0 });
+    expect(calls.map((call) => call.path)).toEqual([`/v1/subjects/${subjectId}/reaction`]);
+    expect(calls[0]?.authorization).toBe('Bearer access');
+    expect(calls[0]?.idempotencyKey).toMatch(uuid);
+  }
+});
+
+test('replacement and missing original readers spend preparation only for every reaction target', async () => {
+  for (const size of sizes) {
+    for (const input of [
+      { target: 'thread' as const, id: threadId, kind: 'love' as const, expectedReader: 'former-member' },
+      { target: 'post' as const, id: `reaction-${0}`, kind: 'like' as const, expectedReader: 'former-member' },
+      { target: 'subject' as const, id: subjectId, kind: 'like' as const, expectedReader: 'former-member' },
+      { target: 'thread' as const, id: threadId, kind: 'love' as const },
+      { target: 'post' as const, id: `reaction-${0}`, kind: 'like' as const },
+      { target: 'subject' as const, id: subjectId, kind: 'like' as const },
+    ]) {
+      const metrics: Metrics = { K: 0, D: 0, R: 0, A: 0 };
+      const calls: KernelCall[] = [];
+      const recorded = recordingClient(size, metrics, calls);
+      const result = await changeReactionRequest(input, signedRequest('POST'), sessionEnv(metrics), recorded.client);
+      expect(result).toEqual({ ok: false, reason: 'forbidden' });
+      expect(metrics).toEqual({ K: 0, D: 1, R: 0, A: 0 });
+      expect(calls).toHaveLength(0);
+    }
+  }
+});
+
+test('reaction validation preserves an additive originating-reader mismatch fence', () => {
+  expect(validateReaction({ target: 'thread', id: threadId, kind: 'love', expectedReader: 'member' })).toEqual({
+    target: 'thread',
+    id: threadId,
+    kind: 'love',
+    expectedReader: 'member',
+  });
+  expect(() => validateReaction({ target: 'thread', id: threadId, kind: 'love', expectedReader: '' })).toThrow(
+    'Invalid reaction',
+  );
+});
+
+test('the originating-reader fence keeps the existing CSRF check ahead of native mutation', async () => {
+  const metrics: Metrics = { K: 0, D: 0, R: 0, A: 0 };
+  const calls: KernelCall[] = [];
+  const recorded = recordingClient(1, metrics, calls);
+  const request = signedRequest('POST');
+  request.headers.set('x-csrf-token', 'wrong');
+  await expect(
+    changeReactionRequest(
+      { target: 'subject', id: subjectId, kind: 'like', expectedReader: 'member' },
+      request,
+      sessionEnv(metrics),
+      recorded.client,
+    ),
+  ).rejects.toMatchObject({ problem: { status: 403, code: 'forbidden' } });
+  expect(metrics).toEqual({ K: 0, D: 1, R: 0, A: 0 });
+  expect(calls).toHaveLength(0);
 });

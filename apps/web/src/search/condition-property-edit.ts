@@ -1,0 +1,192 @@
+import { validateFilter, type ConceptSelection, type FilterDocument, type FilterRange } from '@rezics/filter';
+import type { ConditionMetadata } from './condition-editor-model';
+import { conditionConceptProperty } from './condition-concept-model';
+
+type Properties = ConditionMetadata['properties'];
+type PropertyDefinition = Properties[string] | undefined;
+
+export type ConditionPropertyTransition = {
+  original: FilterDocument;
+  next: FilterDocument;
+  requiresConfirmation: boolean;
+};
+
+function canonical(value: unknown): string {
+  if (value === undefined) return 'undefined';
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? String(value);
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, entry]) => `${JSON.stringify(key)}:${canonical(entry)}`)
+    .join(',')}}`;
+}
+
+function sameUnits(left: PropertyDefinition, right: PropertyDefinition): boolean {
+  return canonical([...(left?.units ?? [])].sort()) === canonical([...(right?.units ?? [])].sort());
+}
+
+function sameTargets(left: PropertyDefinition, right: PropertyDefinition): boolean {
+  const previous = [...new Set(left?.targets ?? [])].sort();
+  const next = [...new Set(right?.targets ?? [])].sort();
+  return previous.length > 0 && canonical(previous) === canonical(next);
+}
+
+function sameValueDefinition(left: PropertyDefinition, right: PropertyDefinition): boolean {
+  return (
+    !!left &&
+    !!right &&
+    !!left.datatype &&
+    left.datatype === right.datatype &&
+    sameUnits(left, right) &&
+    (left.datatype !== 'wikibase-item' || sameTargets(left, right)) &&
+    canonical(left.value) === canonical(right.value)
+  );
+}
+
+function sameRangeMeaning(left: PropertyDefinition, right: PropertyDefinition, range: FilterRange): boolean {
+  if (!left || !right || !left.datatype || left.datatype !== right.datatype) return false;
+  if (range.unit !== undefined)
+    return left.units?.includes(range.unit) === true && right.units?.includes(range.unit) === true;
+  return sameUnits(left, right);
+}
+
+function hasValues(values: readonly string[] | undefined): boolean {
+  return values?.some((value) => value !== '') ?? false;
+}
+
+function hasRange(range: FilterRange): boolean {
+  return range.gte !== undefined || range.lte !== undefined || (range.unit !== undefined && range.unit !== '');
+}
+
+function freshOperand(definition: PropertyDefinition) {
+  if (definition?.datatype === 'quantity') {
+    return { range: definition.units?.[0] ? { unit: definition.units[0] } : {} };
+  }
+  if (definition?.datatype === 'time') return { range: {} };
+  return { in: [''] };
+}
+
+export function changeStatementProperty(
+  value: FilterDocument,
+  nextProperty: string,
+  metadata: ConditionMetadata,
+): ConditionPropertyTransition {
+  const properties = metadata.properties;
+  if (!('statement' in value) || value.statement.property === nextProperty) {
+    return { original: value, next: value, requiresConfirmation: false };
+  }
+
+  const statement = value.statement;
+  const previousDefinition = properties[statement.property];
+  const nextDefinition = properties[nextProperty];
+  const operands: { in?: readonly string[]; range?: FilterRange; concept?: ConceptSelection } = {};
+  let requiresConfirmation = false;
+  let retainedOperand = false;
+
+  if ('in' in statement) {
+    const retainsConcept =
+      statement.concept !== undefined &&
+      conditionConceptProperty(previousDefinition) &&
+      conditionConceptProperty(nextDefinition);
+    if (retainsConcept) {
+      operands.in = statement.in;
+      operands.concept = statement.concept;
+      retainedOperand = true;
+    } else if (sameValueDefinition(previousDefinition, nextDefinition)) {
+      operands.in = statement.in;
+      retainedOperand = true;
+    } else if (hasValues(statement.in)) {
+      requiresConfirmation = true;
+    }
+    if (statement.concept && !retainsConcept) requiresConfirmation = true;
+  }
+
+  if ('range' in statement) {
+    if (sameRangeMeaning(previousDefinition, nextDefinition, statement.range)) {
+      operands.range = statement.range;
+      retainedOperand = true;
+    } else if (hasRange(statement.range)) {
+      requiresConfirmation = true;
+    }
+  }
+
+  if (!retainedOperand) Object.assign(operands, freshOperand(nextDefinition));
+
+  const qualifiers = (statement.qualifiers ?? []).filter((qualifier) => {
+    const compatible =
+      previousDefinition?.qualifiers?.includes(qualifier.property) === true &&
+      nextDefinition?.qualifiers?.includes(qualifier.property) === true &&
+      properties[qualifier.property] !== undefined;
+    if (compatible) return true;
+    if ('in' in qualifier ? hasValues(qualifier.in) : hasRange(qualifier.range)) requiresConfirmation = true;
+    return false;
+  });
+
+  let retainInverse = 'inverse' in statement && statement.inverse === true;
+  if (retainInverse) {
+    // Probe direction admission with complete placeholder values, independently of unfinished input.
+    const id = '018f0000-0000-7000-8000-00a000000020';
+    const probe = {
+      statement: {
+        property: nextProperty,
+        inverse: true,
+        ...(operands.in ? { in: [id] } : { range: {} }),
+        ...(operands.concept ? { concept: { scheme: id } } : {}),
+      },
+    };
+    retainInverse = validateFilter(probe, metadata, { inverse: true }).length === 0;
+    if (!retainInverse) requiresConfirmation = true;
+  }
+
+  const next: FilterDocument = {
+    statement: {
+      property: nextProperty,
+      ...operands,
+      ...(retainInverse ? { inverse: true as const } : {}),
+      ...(qualifiers.length ? { qualifiers } : {}),
+    },
+  } as FilterDocument;
+  return { original: value, next, requiresConfirmation };
+}
+
+export function changeQualifierProperty(
+  value: FilterDocument,
+  index: number,
+  nextProperty: string,
+  properties: Properties,
+): ConditionPropertyTransition {
+  if (!('statement' in value)) return { original: value, next: value, requiresConfirmation: false };
+  const qualifier = value.statement.qualifiers?.[index];
+  if (!qualifier || qualifier.property === nextProperty) {
+    return { original: value, next: value, requiresConfirmation: false };
+  }
+
+  const compatible = sameValueDefinition(properties[qualifier.property], properties[nextProperty]);
+  const qualifiers = value.statement.qualifiers!.map((entry, at) =>
+    at === index
+      ? {
+          property: nextProperty,
+          ...(compatible
+            ? 'in' in entry
+              ? { in: entry.in }
+              : { range: entry.range }
+            : nextProperty === 'rezics:spoilerLevel'
+              ? { in: [''] }
+              : freshOperand(properties[nextProperty])),
+        }
+      : entry,
+  );
+  const next: FilterDocument = { statement: { ...value.statement, qualifiers } };
+  return {
+    original: value,
+    next,
+    requiresConfirmation: !compatible && ('in' in qualifier ? hasValues(qualifier.in) : hasRange(qualifier.range)),
+  };
+}
+
+export function resolveConditionPropertyChange(
+  transition: ConditionPropertyTransition,
+  confirmed: boolean,
+): FilterDocument {
+  return confirmed ? transition.next : transition.original;
+}

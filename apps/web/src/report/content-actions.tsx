@@ -1,15 +1,164 @@
+import { QueryClientContext, type QueryClient } from '@tanstack/react-query';
+import { Button } from '@rezics/ui/shadcn/button';
 import { ContentActions } from '@rezics/ui/content-actions';
+import type { MenuEntry } from '@rezics/ui/menu';
+import { Input } from '@rezics/ui/shadcn/input';
 import type { ReportDialogLabels, ReportSubmission } from '@rezics/ui/report-dialog';
-import { Button } from '@rezics/ui/button';
-import { Menu, MenuContent, MenuItem, MenuTrigger } from '@rezics/ui/menu';
-import { EllipsisIcon, LinkIcon } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MutableRefObject,
+} from 'react';
 import { m } from '../paraglide/messages.js';
-import { getLocale } from '../paraglide/runtime.js';
-import { csrfHeaders } from '../threads/composer';
+import { getLocale, localizeHref } from '../paraglide/runtime.js';
+import { sessionQuery } from '../session/query';
 import { sendReport } from './actions';
 import type { ReportResult } from './submit.server';
 import { Verification, type VerificationConfig } from './turnstile';
+import type { OperationLease } from '../reader/lease';
+
+type SessionRecord = {
+  state?: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable' | string;
+  subject?: string | null;
+  csrfToken?: string | null;
+};
+
+type SessionAuthority = {
+  available: boolean;
+  session: SessionRecord | undefined;
+  fingerprint: string;
+};
+
+type SessionObservation = {
+  id: number;
+  subscribe: (notify: () => void) => () => void;
+  snapshot: () => number;
+  read: () => SessionAuthority;
+};
+
+let observationId = 0;
+const useClientLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
+
+function sessionFingerprint(session: SessionRecord | undefined, available: boolean): string {
+  return JSON.stringify([available, session?.state ?? 'unknown', session?.subject ?? null, session?.csrfToken ?? null]);
+}
+
+/** Watch only the session already in QueryClient. A cache success is an ownership event, even when its data echoes. */
+function observeSession(client: QueryClient | undefined): SessionObservation {
+  let revision = 0;
+  return {
+    id: ++observationId,
+    subscribe(notify) {
+      if (!client) return () => {};
+      return client.getQueryCache().subscribe((event) => {
+        const query = 'query' in event ? event.query : undefined;
+        if (!query || query.queryKey.length !== 1 || query.queryKey[0] !== sessionQuery.queryKey[0]) return;
+        const ownershipEvent =
+          event.type === 'added' ||
+          event.type === 'removed' ||
+          (event.type === 'updated' &&
+            (event.action.type === 'success' || event.action.type === 'setState' || event.action.type === 'error'));
+        if (!ownershipEvent) return;
+        revision += 1;
+        notify();
+      });
+    },
+    snapshot: () => revision,
+    read() {
+      const state = client?.getQueryState(sessionQuery.queryKey);
+      const session = client?.getQueryData<SessionRecord>(sessionQuery.queryKey);
+      const available = state?.status === 'success' && session !== undefined;
+      return { available, session, fingerprint: sessionFingerprint(session, available) };
+    },
+  };
+}
+
+function reportCredential(authority: SessionAuthority): { csrfToken: string } | null {
+  if (!authority.available || !authority.session) return null;
+  if (authority.session.state === 'signed-out') return { csrfToken: '' };
+  if (
+    authority.session.state === 'signed-in' &&
+    typeof authority.session.subject === 'string' &&
+    authority.session.subject.length > 0 &&
+    typeof authority.session.csrfToken === 'string' &&
+    authority.session.csrfToken.length > 0
+  )
+    return { csrfToken: authority.session.csrfToken };
+  return null;
+}
+
+function reportLeaseMatchesAuthority(
+  lease: OperationLease<'report'> | undefined,
+  authority: SessionAuthority,
+): boolean {
+  return (
+    !lease ||
+    (lease.current() &&
+      lease.reader === authority.session?.subject &&
+      lease.credential() === authority.session?.csrfToken)
+  );
+}
+
+type RetainedReport = {
+  target: { kind: 'thread' | 'post' | 'subject'; id: string };
+  revisionId?: string;
+  reason: ReportSubmission['reason'];
+  details: string;
+  token: string;
+  key: string;
+  sender: string | null;
+  credential: string;
+  sessionFingerprint: string;
+  sessionRevision: number;
+  commandLease?: OperationLease<'report'>;
+};
+
+function retainedReportData(attempt: RetainedReport) {
+  return {
+    target: attempt.target,
+    ...(attempt.revisionId !== undefined ? { revisionId: attempt.revisionId } : {}),
+    reason: attempt.reason,
+    ...(attempt.details ? { evidence: attempt.details } : {}),
+    botToken: attempt.token,
+    idempotencyKey: attempt.key,
+  };
+}
+
+let nextReportLeaseId = 1;
+const reportLeaseIds = new WeakMap<object, number>();
+
+function reportLeaseId(lease: OperationLease<'report'> | undefined): number | null {
+  if (!lease) return null;
+  let id = reportLeaseIds.get(lease);
+  if (!id) {
+    id = nextReportLeaseId++;
+    reportLeaseIds.set(lease, id);
+  }
+  return id;
+}
+
+function reportReasonText(reason: ReportSubmission['reason']): string {
+  switch (reason) {
+    case 'off_topic':
+      return m.report_off_topic();
+    case 'inappropriate':
+      return m.report_inappropriate();
+    case 'spam':
+      return m.report_spam();
+    case 'illegal':
+      return m.report_illegal();
+    case 'other':
+      return m.report_other();
+  }
+}
 
 function labels(): ReportDialogLabels {
   return {
@@ -39,6 +188,7 @@ function labels(): ReportDialogLabels {
     failure: m.report_unavailable(),
   };
 }
+
 function refusalText(result: Extract<ReportResult, { ok: false }>): string {
   switch (result.reason) {
     case 'closed':
@@ -54,79 +204,578 @@ function refusalText(result: Extract<ReportResult, { ok: false }>): string {
   }
 }
 
+type OwnerToken = { key: string; value: object };
+type CopyFocusIntent = {
+  active: boolean;
+  claimed: boolean;
+  allowTriggerRestore: boolean;
+  dispose: () => void;
+};
+type CopyResult =
+  | { kind: 'copied' }
+  | { kind: 'manual'; url: string; isCurrent: () => boolean; focusIntent: CopyFocusIntent | null };
+
+/** The overflow menu of a thread, post or subject the viewer did not write: copy its link or report it. */
 export function PostActions({
   target,
   revisionId,
-  ownsContent,
   verification,
+  extraEntries,
+  canonicalHref,
+  commandLease,
+  canStartReport = true,
 }: {
-  target: { kind: 'thread' | 'post'; id: string };
+  target: { kind: 'thread' | 'post' | 'subject'; id: string };
   revisionId?: string;
-  ownsContent: boolean;
   verification: VerificationConfig;
+  extraEntries?: MenuEntry[];
+  /** An admitted feed-row destination; detail callers keep their existing local target anchor. */
+  canonicalHref?: string;
+  /** Optional original native operation lease for a mounted contribution action. */
+  commandLease?: OperationLease<'report'>;
+  /** Current native advice gates new reports while an admitted uncertain report keeps its owner. */
+  canStartReport?: boolean;
 }) {
-  const [token, setToken] = useState('');
+  const client = useContext(QueryClientContext);
+  const observation = useMemo(() => observeSession(client), [client]);
+  const sessionRevision = useSyncExternalStore(observation.subscribe, observation.snapshot, () => 0);
+  const authority = observation.read();
+  const ownerKey = JSON.stringify([
+    observation.id,
+    sessionRevision,
+    authority.fingerprint,
+    target.kind,
+    target.id,
+    revisionId ?? null,
+    canonicalHref ?? null,
+    reportLeaseId(commandLease),
+  ]);
+  const ownerRef = useRef<OwnerToken | null>(null);
+  if (!ownerRef.current || ownerRef.current.key !== ownerKey) ownerRef.current = { key: ownerKey, value: {} };
+  const owner = ownerRef.current;
+
+  return (
+    <ReportActionsVisit
+      key={ownerKey}
+      activeOwner={ownerRef}
+      owner={owner.value}
+      observation={observation}
+      sessionRevision={sessionRevision}
+      sessionFingerprint={authority.fingerprint}
+      target={target}
+      {...(revisionId !== undefined ? { revisionId } : {})}
+      verification={verification}
+      canStartReport={canStartReport}
+      {...(commandLease ? { commandLease } : {})}
+      {...(extraEntries ? { extraEntries } : {})}
+      {...(canonicalHref ? { canonicalHref } : {})}
+    />
+  );
+}
+
+function ReportActionsVisit({
+  activeOwner,
+  owner,
+  observation,
+  sessionRevision,
+  sessionFingerprint: admittedFingerprint,
+  target,
+  revisionId,
+  verification,
+  canStartReport,
+  extraEntries,
+  canonicalHref,
+  commandLease,
+}: {
+  activeOwner: MutableRefObject<OwnerToken | null>;
+  owner: object;
+  observation: SessionObservation;
+  sessionRevision: number;
+  sessionFingerprint: string;
+  target: { kind: 'thread' | 'post' | 'subject'; id: string };
+  revisionId?: string;
+  verification: VerificationConfig;
+  canStartReport: boolean;
+  extraEntries?: MenuEntry[];
+  canonicalHref?: string;
+  commandLease?: OperationLease<'report'>;
+}) {
+  const [reportOpen, setReportOpen] = useState(false);
+  // A new open also retires retained shared form handlers from the previous ceremony.
+  const [ceremony, setCeremony] = useState(0);
+  const ceremonyRef = useRef(0);
+  const reportOpenRef = useRef(false);
+  const openIncarnation = useRef(0);
+  // Equal token bytes from a later vendor callback do not re-admit an older submit closure.
+  const [token, setToken] = useState({ value: '', revision: 0 });
+  const tokenRef = useRef('');
+  const tokenRevision = useRef(0);
+  const idempotencyKey = useRef('');
+  const [reportId, setReportId] = useState<string | null>(null);
+  const reportAttemptRef = useRef<RetainedReport | null>(null);
+  const [uncertainReport, setUncertainReport] = useState<RetainedReport | null>(null);
+  const [retryingReport, setRetryingReport] = useState(false);
+  const retryingReportRef = useRef(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const reset = useRef<(() => void) | null>(null);
-  const key = useRef('');
-  const start = useCallback(() => {
-    key.current = crypto.randomUUID();
+  const mounted = useRef(false);
+  const copyTrigger = useRef<HTMLButtonElement>(null);
+  const copyField = useRef<HTMLInputElement>(null);
+  const copyAttempt = useRef(0);
+  const keyboardCopyActivation = useRef<CopyFocusIntent | null>(null);
+  const copyFocusIntent = useRef<CopyFocusIntent | null>(null);
+  const copyFieldId = useId();
+  const copyStatusId = useId();
+  const [copyResult, setCopyResult] = useState<CopyResult | null>(null);
+  const ownerTarget = { kind: target.kind, id: target.id };
+
+  const cancelCopyFocusIntent = useCallback((intent: CopyFocusIntent | null = copyFocusIntent.current) => {
+    if (!intent) return;
+    intent.active = false;
+    intent.dispose();
+    if (keyboardCopyActivation.current === intent) keyboardCopyActivation.current = null;
+    if (copyFocusIntent.current === intent) copyFocusIntent.current = null;
   }, []);
-  const copyLink = () =>
-    navigator.clipboard.writeText(`${location.origin}${location.pathname}#${target.kind}-${target.id}`);
-  const report = async ({ reason, details }: ReportSubmission) => {
+
+  const armKeyboardCopyIntent = useCallback(() => {
+    cancelCopyFocusIntent();
+    const doc = copyTrigger.current?.ownerDocument;
+    if (!doc) return;
+
+    let intent: CopyFocusIntent;
+    const cancel = () => cancelCopyFocusIntent(intent);
+    const onFocusIn = (event: FocusEvent) => {
+      if (event.target === copyTrigger.current && intent.allowTriggerRestore) {
+        intent.allowTriggerRestore = false;
+        return;
+      }
+      cancel();
+    };
+    intent = {
+      active: true,
+      claimed: false,
+      allowTriggerRestore: true,
+      dispose: () => {
+        doc.removeEventListener('pointerdown', cancel, true);
+        doc.removeEventListener('keydown', cancel, true);
+        doc.removeEventListener('focusin', onFocusIn, true);
+      },
+    };
+    keyboardCopyActivation.current = intent;
+    copyFocusIntent.current = intent;
+    doc.addEventListener('pointerdown', cancel, true);
+    doc.addEventListener('keydown', cancel, true);
+    doc.addEventListener('focusin', onFocusIn, true);
+  }, [cancelCopyFocusIntent]);
+
+  const onCopyMenuKeyDownCapture = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.repeat || (event.key !== 'Enter' && event.key !== ' ')) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const menuItem = target.closest('[role="menuitem"]');
+    if ((menuItem?.getAttribute('aria-label') ?? menuItem?.textContent?.trim()) === m.report_copy())
+      armKeyboardCopyIntent();
+  };
+
+  useClientLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      reportOpenRef.current = false;
+      openIncarnation.current += 1;
+      tokenRevision.current += 1;
+      tokenRef.current = '';
+      idempotencyKey.current = '';
+      cancelCopyFocusIntent();
+      copyAttempt.current += 1;
+    };
+  }, [cancelCopyFocusIntent]);
+
+  const currentOwner = useCallback(() => {
+    if (!mounted.current || activeOwner.current?.value !== owner) return false;
+    if (observation.snapshot() !== sessionRevision) return false;
+    const authority = observation.read();
+    return authority.fingerprint === admittedFingerprint && reportLeaseMatchesAuthority(commandLease, authority);
+  }, [activeOwner, admittedFingerprint, commandLease, observation, owner, sessionRevision]);
+
+  const currentOpen = useCallback(
+    (incarnation: number) => currentOwner() && reportOpenRef.current && openIncarnation.current === incarnation,
+    [currentOwner],
+  );
+
+  const currentAuthority = observation.read();
+  const canReport =
+    canStartReport &&
+    Boolean(reportCredential(currentAuthority)) &&
+    currentAuthority.fingerprint === admittedFingerprint &&
+    reportLeaseMatchesAuthority(commandLease, currentAuthority);
+  const renderIncarnation = openIncarnation.current;
+
+  const isRetainedReportCurrent = useCallback(
+    (attempt: RetainedReport) => {
+      if (reportAttemptRef.current !== attempt || !currentOwner()) return false;
+      if (observation.snapshot() !== attempt.sessionRevision) return false;
+      const authority = observation.read();
+      return (
+        authority.fingerprint === attempt.sessionFingerprint &&
+        (authority.session?.subject ?? null) === attempt.sender &&
+        attempt.commandLease === commandLease &&
+        reportLeaseMatchesAuthority(attempt.commandLease, authority) &&
+        (!attempt.commandLease || attempt.commandLease.credential() === attempt.credential)
+      );
+    },
+    [commandLease, currentOwner, observation],
+  );
+
+  const closeReportForRecovery = useCallback(() => {
+    reportOpenRef.current = false;
+    openIncarnation.current += 1;
+    tokenRevision.current += 1;
+    tokenRef.current = '';
+    reset.current = null;
+    setToken({ value: '', revision: tokenRevision.current });
+    setReportOpen(false);
+  }, []);
+
+  const retryRetainedReport = useCallback(async () => {
+    const attempt = reportAttemptRef.current;
+    if (!attempt || retryingReportRef.current || !isRetainedReportCurrent(attempt)) return;
+    retryingReportRef.current = true;
+    setRetryingReport(true);
+    setRetryError(null);
     let result: ReportResult;
     try {
       result = await sendReport({
-        data: {
-          target,
-          ...(revisionId ? { revisionId } : {}),
-          reason,
-          ...(details ? { evidence: details } : {}),
-          botToken: token,
-          idempotencyKey: key.current,
-        },
-        headers: csrfHeaders(),
+        data: retainedReportData(attempt),
+        headers: { 'X-CSRF-Token': attempt.credential },
       });
     } catch {
-      reset.current?.();
-      throw new Error(m.report_unavailable());
+      retryingReportRef.current = false;
+      setRetryingReport(false);
+      if (!isRetainedReportCurrent(attempt)) return;
+      setRetryError(m.report_unavailable());
+      return;
     }
+    retryingReportRef.current = false;
+    setRetryingReport(false);
+    if (!isRetainedReportCurrent(attempt)) return;
+    reportAttemptRef.current = null;
+    setUncertainReport(null);
+    idempotencyKey.current = '';
     if (!result.ok) {
-      reset.current?.();
-      throw new Error(refusalText(result));
+      setReportError(refusalText(result));
+      return;
+    }
+    setReportError(null);
+    setReportId(result.reportId);
+  }, [isRetainedReportCurrent]);
+
+  const discardRetainedReport = useCallback(() => {
+    if (!reportAttemptRef.current || retryingReportRef.current) return;
+    reportAttemptRef.current = null;
+    setUncertainReport(null);
+    idempotencyKey.current = '';
+    setRetryError(null);
+    setReportError(null);
+  }, []);
+
+  useEffect(() => {
+    if (copyResult?.kind !== 'manual') return;
+    const intent = copyResult.focusIntent;
+    if (!intent) return;
+    const frame = requestAnimationFrame(() => {
+      const field = copyField.current;
+      if (
+        !intent.active ||
+        !intent.claimed ||
+        copyFocusIntent.current !== intent ||
+        !copyResult.isCurrent() ||
+        !field?.isConnected
+      ) {
+        cancelCopyFocusIntent(intent);
+        return;
+      }
+      cancelCopyFocusIntent(intent);
+      field.focus();
+      field.select();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [cancelCopyFocusIntent, copyResult]);
+
+  const retireCopyResult = useCallback(() => {
+    cancelCopyFocusIntent();
+    copyAttempt.current += 1;
+    setCopyResult(null);
+  }, [cancelCopyFocusIntent]);
+
+  const updateToken = useCallback(
+    (next: string) => {
+      if (!currentOpen(renderIncarnation)) return;
+      tokenRevision.current += 1;
+      tokenRef.current = next;
+      setToken({ value: next, revision: tokenRevision.current });
+    },
+    [currentOpen, renderIncarnation],
+  );
+
+  const startChallenge = useCallback(() => {
+    if (!currentOpen(renderIncarnation)) return;
+    if (!idempotencyKey.current) idempotencyKey.current = crypto.randomUUID();
+  }, [currentOpen, renderIncarnation]);
+
+  const changeReportOpen = useCallback(
+    (next: boolean) => {
+      if (!currentOwner() || renderIncarnation !== openIncarnation.current) return;
+      if (next) {
+        if (!canReport) return;
+        if (reportAttemptRef.current) return;
+        if (reportOpenRef.current) return;
+        retireCopyResult();
+        reportOpenRef.current = true;
+        openIncarnation.current += 1;
+        ceremonyRef.current += 1;
+        tokenRevision.current += 1;
+        tokenRef.current = '';
+        idempotencyKey.current = crypto.randomUUID();
+        reset.current = null;
+        setToken({ value: '', revision: tokenRevision.current });
+        setCeremony(openIncarnation.current);
+        setReportId(null);
+        setReportError(null);
+        setRetryError(null);
+        setReportOpen(true);
+        return;
+      }
+
+      if (renderIncarnation !== openIncarnation.current || !reportOpenRef.current) return;
+      retireCopyResult();
+      reportOpenRef.current = false;
+      openIncarnation.current += 1;
+      tokenRevision.current += 1;
+      tokenRef.current = '';
+      idempotencyKey.current = '';
+      reset.current = null;
+      setToken({ value: '', revision: tokenRevision.current });
+      setReportOpen(false);
+    },
+    [canReport, currentOwner, renderIncarnation, retireCopyResult],
+  );
+
+  const report = useCallback(
+    async ({ reason, details }: ReportSubmission) => {
+      const incarnation = renderIncarnation;
+      const submittedToken = token.value;
+      const submittedTokenRevision = token.revision;
+      const submittedKey = idempotencyKey.current;
+      const submittedReset = reset.current;
+      const admittedTarget = { kind: ownerTarget.kind, id: ownerTarget.id };
+      const admittedRevision = revisionId;
+
+      const currentVisit = () => currentOpen(incarnation) && idempotencyKey.current === submittedKey;
+      const currentAttempt = () =>
+        currentVisit() && tokenRef.current === submittedToken && tokenRevision.current === submittedTokenRevision;
+      if (!currentAttempt() || !submittedToken || !submittedKey || !canReport) throw new Error(m.report_unavailable());
+
+      const authority = observation.read();
+      const credential = commandLease ? commandLease.credential() : reportCredential(authority)?.csrfToken;
+      if (
+        credential === null ||
+        credential === undefined ||
+        authority.fingerprint !== admittedFingerprint ||
+        observation.snapshot() !== sessionRevision ||
+        !reportLeaseMatchesAuthority(commandLease, authority)
+      )
+        throw new Error(m.report_unavailable());
+
+      const attempt: RetainedReport = {
+        target: admittedTarget,
+        ...(admittedRevision !== undefined ? { revisionId: admittedRevision } : {}),
+        reason,
+        details,
+        token: submittedToken,
+        key: submittedKey,
+        sender: authority.session?.subject ?? null,
+        credential,
+        sessionFingerprint: authority.fingerprint,
+        sessionRevision,
+        ...(commandLease ? { commandLease } : {}),
+      };
+
+      let result: ReportResult;
+      try {
+        result = await sendReport({
+          data: retainedReportData(attempt),
+          headers: { 'X-CSRF-Token': credential },
+        });
+      } catch {
+        if (!currentVisit()) return;
+        if (!currentAttempt()) return;
+        reportAttemptRef.current = attempt;
+        setUncertainReport(attempt);
+        setReportError(null);
+        setRetryError(null);
+        submittedReset?.();
+        closeReportForRecovery();
+        throw new Error(m.report_unavailable());
+      }
+
+      if (!currentVisit()) return;
+      if (!result.ok) {
+        if (currentAttempt()) submittedReset?.();
+        throw new Error(refusalText(result));
+      }
+      setReportId(result.reportId);
+      setReportError(null);
+    },
+    [
+      admittedFingerprint,
+      canReport,
+      closeReportForRecovery,
+      commandLease,
+      currentOpen,
+      observation,
+      ownerTarget.id,
+      ownerTarget.kind,
+      renderIncarnation,
+      revisionId,
+      sessionRevision,
+      token,
+    ],
+  );
+
+  const copyLink = async () => {
+    const activation = keyboardCopyActivation.current;
+    keyboardCopyActivation.current = null;
+    const focusIntent =
+      activation?.active && !activation.claimed && copyFocusIntent.current === activation ? activation : null;
+    if (focusIntent) focusIntent.claimed = true;
+    else cancelCopyFocusIntent();
+
+    const url = canonicalHref
+      ? new URL(canonicalHref, location.origin).href
+      : `${location.origin}${location.pathname}${target.kind === 'subject' ? '' : `#${target.kind}-${target.id}`}`;
+    const attempt = ++copyAttempt.current;
+    const admittedCeremony = ceremony;
+    const admittedRender = renderIncarnation;
+    const isCurrent = () =>
+      copyAttempt.current === attempt &&
+      ceremonyRef.current === admittedCeremony &&
+      openIncarnation.current === admittedRender &&
+      currentOwner();
+    if (!isCurrent()) return;
+    setCopyResult(null);
+    try {
+      await navigator.clipboard.writeText(url);
+      if (isCurrent()) setCopyResult({ kind: 'copied' });
+      if (focusIntent) cancelCopyFocusIntent(focusIntent);
+    } catch {
+      if (isCurrent()) setCopyResult({ kind: 'manual', url, isCurrent, focusIntent });
+      else if (focusIntent) cancelCopyFocusIntent(focusIntent);
     }
   };
 
-  // The shared owner's menu also requires edit and delete handlers. Until those operations
-  // exist on this page, owners have only the supported copy-link action.
-  if (ownsContent)
-    return (
-      <Menu>
-        <MenuTrigger asChild>
-          <Button aria-label={m.report_more()} size="icon-sm" variant="ghost">
-            <EllipsisIcon aria-hidden="true" />
-          </Button>
-        </MenuTrigger>
-        <MenuContent>
-          <MenuItem onClick={copyLink} value="copy-link">
-            <LinkIcon aria-hidden="true" />
-            {m.report_copy()}
-          </MenuItem>
-        </MenuContent>
-      </Menu>
-    );
+  const closeCopyRecovery = () => {
+    const returnFocus = copyResult?.kind === 'manual' && copyResult.isCurrent();
+    retireCopyResult();
+    if (returnFocus && copyTrigger.current?.isConnected) copyTrigger.current.focus();
+  };
+
   return (
-    <ContentActions
-      ownsContent={false}
-      onCopyLink={copyLink}
-      onReport={report}
-      labels={{ moreActions: m.report_more(), copyLink: m.report_copy(), report: m.report_action() }}
-      reportLabels={labels()}
-      maxDetails={4096}
-      verified={Boolean(token)}
-      verification={
-        <Verification config={verification} locale={getLocale()} onToken={setToken} reset={reset} onStart={start} />
-      }
-    />
+    <>
+      <div className="contents" onKeyDownCapture={onCopyMenuKeyDownCapture}>
+        <ContentActions
+          key={ceremony}
+          ownsContent={false}
+          {...(extraEntries ? { extraEntries } : {})}
+          onCopyLink={copyLink}
+          triggerRef={copyTrigger}
+          onReport={report}
+          onReportOpenChange={changeReportOpen}
+          reportOpen={reportOpen}
+          labels={{ moreActions: m.report_more(), copyLink: m.report_copy(), report: m.report_action() }}
+          reportLabels={labels()}
+          maxDetails={4096}
+          verified={canReport && Boolean(token.value)}
+          verification={
+            <Verification
+              config={verification}
+              locale={getLocale()}
+              onToken={updateToken}
+              reset={reset}
+              onStart={startChallenge}
+            />
+          }
+        />
+      </div>
+      {uncertainReport ? (
+        <section
+          aria-label={m.report_unavailable()}
+          className="min-w-0 max-w-full space-y-2 text-sm"
+          data-slot="report-recovery"
+          role="alert"
+        >
+          <p>{m.report_unavailable()}</p>
+          <p>{reportReasonText(uncertainReport.reason)}</p>
+          {retryError ? <p role="alert">{retryError}</p> : null}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={retryingReport || !isRetainedReportCurrent(uncertainReport)}
+              onClick={() => void retryRetainedReport()}
+            >
+              {retryingReport ? m.report_submitting() : m.editorial_retry()}
+            </Button>
+            <Button type="button" variant="ghost" disabled={retryingReport} onClick={discardRetainedReport}>
+              {m.report_cancel()}
+            </Button>
+          </div>
+        </section>
+      ) : reportError ? (
+        <p role="alert" data-slot="report-recovery-error" className="text-sm">
+          {reportError}
+        </p>
+      ) : null}
+      {/* Keep the selected URL and its deliberate Close action together in the content action flow. */}
+      {copyResult ? (
+        <div className="min-w-0 max-w-full space-y-2 text-sm">
+          <p id={copyStatusId} role="status">
+            {copyResult.kind === 'copied' ? m.report_copy_success() : m.report_copy_recovery_description()}
+          </p>
+          {copyResult.kind === 'manual' ? (
+            <>
+              <label htmlFor={copyFieldId} className="block">
+                {m.report_copy_recovery_link_label()}
+              </label>
+              <Input
+                ref={copyField}
+                id={copyFieldId}
+                aria-describedby={copyStatusId}
+                type="text"
+                dir="ltr"
+                readOnly
+                spellCheck={false}
+                value={copyResult.url}
+                onFocus={(event) => event.currentTarget.select()}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Escape') return;
+                  event.preventDefault();
+                  closeCopyRecovery();
+                }}
+              />
+              <Button type="button" variant="outline" onClick={closeCopyRecovery}>
+                {m.report_copy_recovery_close()}
+              </Button>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+      {reportId && currentAuthority.session?.state === 'signed-in' && currentAuthority.session.subject ? (
+        <a className="text-sm underline underline-offset-4" href={localizeHref(`/moderation/reports/${reportId}`)}>
+          {m.reporter_status_view()}
+        </a>
+      ) : null}
+    </>
   );
 }

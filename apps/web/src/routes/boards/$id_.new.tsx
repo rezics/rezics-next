@@ -1,62 +1,369 @@
-import { createFileRoute, Link, useLoaderData, useLocation } from '@tanstack/react-router';
+import { requireSignedIn } from '../../session/guard';
+import { pageHead } from '../../shell/head';
+import { pageHeadContext } from '../../shell/head-context';
+import { buttonVariants } from '@rezics/ui/shadcn/button';
+import type { QueryClient } from '@tanstack/react-query';
+import { createFileRoute, Link, notFound } from '@tanstack/react-router';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
 import { startThread } from '../../threads/actions';
-import { csrfHeaders, draftFetch, PostComposer, SignInPrompt } from '../../threads/composer';
+import { threadLocation } from '../../threads/thread-href';
+import { boardRequestHref } from '../../threads/board-navigation';
+import { draftFetch, PostComposer } from '../../threads/composer';
+import { ReviewFields } from '../../threads/review-fields';
+import type { VoteCitation } from '../../threads/post-writes';
 import { readNewThreadPage } from '../../threads/reads';
+import { PageHeading } from '../../shell/page-heading';
+import { canSubmitThread } from '../../threads/review-policy';
+import { DiscussionSubjects } from '../../threads/discussion-subjects';
+import { contentSubjectPreset } from '../../threads/content-subject-search';
+import {
+  compositionDestinationPanelKey,
+  createCompositionDestinationReader,
+  type CompositionDestinationProjection,
+} from '../../threads/composition-destination';
+import { CompositionDestinationPanel } from '../../threads/composition-destination-panel';
+import { AuthoringDepartureProvider } from '../../threads/authoring-departure';
+import {
+  observeThreadCreationReader,
+  threadCreationReaderObservationMatches,
+  ThreadCreationLifetimeProvider,
+  threadCreationEditorKey,
+  threadCreationNavigationContext,
+  threadCreationPreset,
+  useThreadCreationLifetime,
+  type ThreadCreationReaderAdmission,
+} from '../../threads/thread-creation-lifetime';
 
 export const Route = createFileRoute('/boards/$id_/new')({
-  loader: ({ params }) => readNewThreadPage({ data: { id: params.id } }),
-  head: ({ loaderData }) => ({ meta: [{ title: loaderData?.board.title ?? m.thread_new_heading() }] }),
+  beforeLoad: requireSignedIn,
+  loader: ({ params, context }) =>
+    loadAdmittedNewThreadPage(context.queryClient, params.id, (expectedReaderSubject) =>
+      readNewThreadPage({ data: { id: params.id, expectedReaderSubject } }),
+    ),
+  validateSearch: threadCreationPreset,
+  head: ({ loaderData, match }) =>
+    pageHead(
+      { title: loaderData?.board.title ?? m.thread_new_heading(), robots: 'noindex, nofollow' },
+      pageHeadContext(match.pathname),
+    ),
   component: NewThreadPage,
 });
 
+export async function loadAdmittedNewThreadPage(
+  client: QueryClient,
+  id: string,
+  read: (expectedReaderSubject: string) => Promise<Awaited<ReturnType<typeof readNewThreadPage>>>,
+): Promise<Awaited<ReturnType<typeof readNewThreadPage>> & { readerAdmission: ThreadCreationReaderAdmission }> {
+  const observation = observeThreadCreationReader(client);
+  if (!observation) throw notFound();
+  const page = await read(observation.subject);
+  if (
+    page.board.id !== id ||
+    page.readerSubject !== observation.subject ||
+    !threadCreationReaderObservationMatches(client, observation, page.readerSubject)
+  )
+    throw notFound();
+  return { ...page, readerAdmission: { observation, actualSubject: page.readerSubject } };
+}
+
 function NewThreadPage() {
-  const { board, idempotencyKey } = Route.useLoaderData();
-  const { session } = useLoaderData({ from: '__root__' });
-  const location = useLocation();
+  const { board, idempotencyKey, readerAdmission } = Route.useLoaderData();
+  const { subject: presetSubject, subjectTitle: presetSubjectTitle, returnTo } = Route.useSearch();
+  return (
+    <NewThreadComposition
+      board={board}
+      idempotencyKey={idempotencyKey}
+      readerAdmission={readerAdmission}
+      {...(returnTo ? { returnTo } : {})}
+      {...(presetSubject ? { presetSubject } : {})}
+      {...(presetSubjectTitle ? { presetSubjectTitle } : {})}
+    />
+  );
+}
+
+type NewThreadCompositionProps = {
+  board: Awaited<ReturnType<typeof readNewThreadPage>>['board'];
+  idempotencyKey: string;
+  readerAdmission: ThreadCreationReaderAdmission;
+  returnTo?: string;
+  presetSubject?: string;
+  presetSubjectTitle?: string;
+};
+
+export function NewThreadComposition(props: NewThreadCompositionProps) {
+  const context = threadCreationEditorKey(props.board.id, props.presetSubject);
+  const [editor, setEditor] = useState(() => ({ context, key: props.idempotencyKey }));
+  if (editor.context !== context) {
+    // Search navigation can reuse loader data. A replacement must never borrow the retired intent's key.
+    setEditor({ context, key: crypto.randomUUID() });
+    return null;
+  }
+  return <NewThreadEditor key={editor.context} {...props} idempotencyKey={editor.key} />;
+}
+
+function NewThreadEditor({
+  board,
+  idempotencyKey,
+  readerAdmission,
+  returnTo,
+  presetSubject,
+  presetSubjectTitle,
+}: NewThreadCompositionProps) {
+  // Loader refreshes and display-hint changes keep the original draft and immutable command key.
+  const [origin] = useState(() => ({
+    board: { id: board.id, title: board.title, purpose: board.purpose },
+    boardId: board.id,
+    purpose: board.purpose,
+    idempotencyKey,
+    presetSubject: presetSubject ?? null,
+    presetSubjectTitle: presetSubjectTitle ?? null,
+    returnTo: returnTo ?? null,
+  }));
+  const visit = useThreadCreationLifetime(
+    {
+      boardId: board.id,
+      purpose: board.purpose,
+      initialKey: origin.idempotencyKey,
+      ...(presetSubject ? { initialSubject: presetSubject } : {}),
+    },
+    readerAdmission,
+  );
+  const { lifetime, ticket, current, bound } = visit;
+  const { credentialMode } = Route.useRouteContext();
+  const slowModeSource = useMemo(() => {
+    const identity = board;
+    let admitted = false;
+    let retired = false;
+    return {
+      identity,
+      current: () => {
+        const isCurrent = board === identity && lifetime.isCurrent(ticket, false);
+        if (isCurrent) admitted = true;
+        else if (admitted) retired = true;
+        return isCurrent && !retired;
+      },
+    };
+  }, [board, lifetime, ticket]);
+  const [destinationReader] = useState(() => createCompositionDestinationReader());
+  const destinationBinding = useRef<{ boardId: string; projection: CompositionDestinationProjection } | null>(null);
+  const destination = current && bound && board.id === origin.boardId ? destinationReader.read(board) : undefined;
+  destinationBinding.current = destination ? { boardId: board.id, projection: destination } : null;
+  const destinationIsCurrent = useCallback(
+    (expected: CompositionDestinationProjection) => {
+      const active = destinationBinding.current;
+      return Boolean(
+        active?.projection === expected &&
+        active.boardId === origin.boardId &&
+        lifetime.isBound(ticket, false) &&
+        lifetime.isCurrent(ticket, false),
+      );
+    },
+    [lifetime, origin.boardId, ticket],
+  );
+  useLayoutEffect(() => {
+    if (!destination) destinationReader.clear();
+  }, [Boolean(destination), destinationReader]);
+  useLayoutEffect(() => () => destinationReader.clear(), [destinationReader]);
+  const [initiallyAdmitted] = useState(() => bound);
+  const review = origin.purpose === 'reviews';
+  const [subjectId, setSubjectId] = useState<string | null>(origin.presetSubject);
+  const [discussionSubjects, setDiscussionSubjects] = useState(() =>
+    origin.presetSubject
+      ? [contentSubjectPreset(origin.presetSubject, origin.presetSubjectTitle ?? m.thread_discussion_subject())]
+      : [],
+  );
+  const [voteCitation, setVoteCitation] = useState<VoteCitation | undefined>();
+  const lockedSubmissionContext = useRef({
+    active: false,
+    value: undefined as ThreadSubmissionContext | undefined,
+  });
+  const renderedSubmissionContext = useRef<ThreadSubmissionContext | undefined>(undefined);
+  const editable = lifetime.isEditable(ticket);
+  const searchScope = JSON.stringify([visit.scopeKey, lifetime.accountId, lifetime.csrfToken, visit.sessionRevision]);
+
+  const handleIntentLockChange = useCallback(
+    (locked: boolean) => {
+      if (!lifetime.isCurrent(ticket)) return;
+      lockedSubmissionContext.current = locked
+        ? { active: true, value: cloneSubmissionContext(renderedSubmissionContext.current) }
+        : { active: false, value: undefined };
+      lifetime.setIntentLocked(ticket, locked);
+    },
+    [lifetime, ticket],
+  );
+  const handleSubjectChange = useCallback(
+    (next: string | null) => {
+      if (!lifetime.isEditable(ticket)) return;
+      setSubjectId(next);
+      setVoteCitation(undefined);
+    },
+    [lifetime, ticket],
+  );
+  const handleVoteCitationChange = useCallback(
+    (next: VoteCitation | undefined) => {
+      if (lifetime.isEditable(ticket)) setVoteCitation(next);
+    },
+    [lifetime, ticket],
+  );
+  const liveSubmissionContext: ThreadSubmissionContext | undefined = bound
+    ? review
+      ? { kind: 'review', subjectId: subjectId ?? '', ...(voteCitation ? { voteCitation } : {}) }
+      : { subjectIds: discussionSubjects.map((subject) => subject.id) }
+    : undefined;
+  renderedSubmissionContext.current = liveSubmissionContext;
+  const submissionContext = lockedSubmissionContext.current.active
+    ? lockedSubmissionContext.current.value
+    : liveSubmissionContext;
+
+  useLayoutEffect(() => {
+    const title = `${(bound ? origin.board.title : null) ?? m.thread_new_heading()} – REZICS`;
+    document.title = title;
+    document.head
+      .querySelectorAll<HTMLMetaElement>('meta[property="og:title"], meta[name="twitter:title"]')
+      .forEach((meta) => meta.setAttribute('content', title));
+  }, [bound, origin.board.title]);
+
+  if (!initiallyAdmitted) return <p role="status">{m.thread_authoring_session_changed()}</p>;
 
   return (
-    <article className="max-w-4xl space-y-8 text-foreground">
-      <header className="space-y-3">
-        <p className="text-sm font-medium text-muted-foreground">{board.title ?? m.threads_untitled()}</p>
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{m.thread_new_heading()}</h1>
-      </header>
-      {session === 'signed-in' ? (
-        <PostComposer
-          initialKey={idempotencyKey}
-          titleRequired
-          boardId={board.id}
-          onSubmit={async ({ title, body, idempotencyKey: key, mediaIds }) => {
-            const result = await startThread({
-              data: {
-                boardId: board.id,
-                title,
-                body,
-                idempotencyKey: key,
-                ...(mediaIds.length > 0 ? { mediaIds } : {}),
-              },
-              headers: csrfHeaders(),
-              fetch: draftFetch(body),
-            });
-            if (result.ok)
-              document.cookie = `rezics_draft_key=${result.thread.id}.${key}; Path=/; Max-Age=120; SameSite=Lax`;
-            return result.ok ? { ok: true as const, value: result.thread } : result;
-          }}
-          onSuccess={(thread) => {
-            window.location.assign(`/${getLocale()}/threads/${thread.id}`);
-          }}
-        />
-      ) : session === 'signed-out' ? (
-        <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />
-      ) : null}
-      <Link
-        to="/boards/$id"
-        params={{ id: board.id }}
-        className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+    <ThreadCreationLifetimeProvider lifetime={lifetime}>
+      <AuthoringDepartureProvider
+        navigationContext={threadCreationNavigationContext}
+        onNavigationLeave={lifetime.depart}
       >
-        {m.board_threads_heading()}
-      </Link>
-    </article>
+        <article className="max-w-6xl space-y-8 text-foreground">
+          <header className="space-y-3">
+            {origin.returnTo ? (
+              <a
+                data-slot="thread-create-return"
+                className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                href={origin.returnTo}
+              >
+                {m.library_subject_return_reader()}
+              </a>
+            ) : null}
+            {bound ? (
+              <p className="text-sm font-medium text-muted-foreground">{origin.board.title ?? m.threads_untitled()}</p>
+            ) : null}
+            <PageHeading>{m.thread_new_heading()}</PageHeading>
+          </header>
+          <div className="grid min-w-0 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+            {destination ? (
+              <aside className="min-w-0 lg:col-start-2 lg:row-start-1">
+                <CompositionDestinationPanel
+                  key={compositionDestinationPanelKey(destination)}
+                  destination={destination}
+                  isCurrent={destinationIsCurrent}
+                />
+              </aside>
+            ) : null}
+            <div className="min-w-0 space-y-5 lg:col-start-1 lg:row-start-1" inert={!editable}>
+              {bound ? (
+                review ? (
+                  <ReviewFields
+                    key={searchScope}
+                    {...(origin.presetSubject ? { initialSubjectId: origin.presetSubject } : {})}
+                    {...(origin.presetSubjectTitle ? { initialSubjectTitle: origin.presetSubjectTitle } : {})}
+                    onSubjectChange={handleSubjectChange}
+                    onVoteCitationChange={handleVoteCitationChange}
+                    disabled={!editable}
+                    searchScope={searchScope}
+                  />
+                ) : (
+                  <DiscussionSubjects
+                    key={searchScope}
+                    value={discussionSubjects}
+                    onValueChange={(items) => {
+                      if (lifetime.isEditable(ticket)) setDiscussionSubjects(items);
+                    }}
+                    disabled={!editable}
+                    searchScope={searchScope}
+                  />
+                )
+              ) : (
+                <p role="status">{m.thread_authoring_session_changed()}</p>
+              )}
+              <PostComposer
+                initialKey={origin.idempotencyKey}
+                titleRequired
+                canSubmit={current && canSubmitThread(origin.purpose, subjectId)}
+                boardId={origin.boardId}
+                slowModeScopeKey={JSON.stringify([
+                  'new-thread',
+                  origin.boardId,
+                  origin.purpose,
+                  subjectId,
+                  getLocale(),
+                  credentialMode,
+                ])}
+                slowModeCredentialMode={credentialMode}
+                slowModeSource={slowModeSource}
+                submissionContext={submissionContext}
+                onIntentLockChange={handleIntentLockChange}
+                onSubmit={async ({
+                  title,
+                  body,
+                  idempotencyKey: key,
+                  mediaIds,
+                  submissionContext: originalContext,
+                }) => {
+                  if (!lifetime.isCurrent(ticket)) return { ok: false as const, reason: 'unavailable' as const };
+                  const result = await startThread({
+                    data: {
+                      boardId: origin.boardId,
+                      title,
+                      body,
+                      idempotencyKey: key,
+                      ...originalContext!,
+                      ...(mediaIds.length > 0 ? { mediaIds } : {}),
+                    },
+                    headers: { 'X-CSRF-Token': lifetime.csrfToken },
+                    fetch: draftFetch(body),
+                  });
+                  if (!lifetime.isCurrent(ticket)) return { ok: false as const, reason: 'unavailable' as const };
+                  if (result.ok)
+                    document.cookie = `rezics_draft_key=${result.thread.id}.${key}; Path=/; Max-Age=120; SameSite=Lax`;
+                  return result.ok ? { ok: true as const, value: result.thread } : result;
+                }}
+                onSuccess={(thread) => {
+                  if (!lifetime.isCurrent(ticket)) return;
+                  const locale = getLocale();
+                  const boardReturn = origin.returnTo
+                    ? boardRequestHref(locale, origin.boardId, { returnTo: origin.returnTo })
+                    : undefined;
+                  window.location.assign(threadLocation(locale, thread, undefined, undefined, undefined, boardReturn));
+                }}
+              />
+            </div>
+          </div>
+          {bound ? (
+            <Link
+              to="/boards/$id"
+              params={{ id: origin.boardId }}
+              search={origin.returnTo ? { returnTo: origin.returnTo } : {}}
+              className={buttonVariants({ variant: 'outline', size: 'lg' })}
+            >
+              {m.board_threads_heading()}
+            </Link>
+          ) : null}
+        </article>
+      </AuthoringDepartureProvider>
+    </ThreadCreationLifetimeProvider>
   );
+}
+
+type ThreadSubmissionContext =
+  | { kind: 'review'; subjectId: string; voteCitation?: VoteCitation }
+  | { subjectIds: string[] };
+
+function cloneSubmissionContext(context: ThreadSubmissionContext | undefined): ThreadSubmissionContext | undefined {
+  if (!context) return undefined;
+  if ('subjectIds' in context) return { subjectIds: [...context.subjectIds] };
+  return {
+    kind: 'review',
+    subjectId: context.subjectId,
+    ...(context.voteCitation ? { voteCitation: { ...context.voteCitation } } : {}),
+  };
 }

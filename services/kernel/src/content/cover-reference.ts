@@ -2,6 +2,7 @@ import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/defini
 import type { PoolClient } from 'pg';
 import { authoritativeTimeValue, currentCommand, type CommandTransaction } from '../command/command.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import type { ClaimMediaInput } from './media.ts';
 import claimCoverMediaStatement from './claim-cover-media.sql';
 import type { ImportedSource, Rights } from './imported-contract.ts';
@@ -13,7 +14,15 @@ export type CoverReference = Readonly<{
   containerId: string;
   rights: Rights;
   source: ImportedSource;
+  credit?: MediaImportRequest['credit'];
+  width?: number;
+  height?: number;
+  placeholder?: Readonly<{ thumbhash: string; color: string }>;
+  variants?: readonly Readonly<{ format: 'avif' | 'webp'; width: number }>[];
+  focalPoint?: Readonly<{ x: number; y: number }> | null;
 }>;
+
+type CoverSourceReference = Pick<CoverReference, 'id' | 'digest' | 'containerId' | 'rights' | 'source'>;
 
 /** Return field errors for imported cover metadata before a write is attempted. */
 export function validateCoverReferenceMetadata(value: unknown): string[] {
@@ -52,13 +61,46 @@ export async function checkMediaObject(
   id: string,
   role: 'cover',
 ): Promise<CoverReference | null> {
-  const route = routeOf(id);
-  if (route === null || role !== 'cover') return null;
-  const rows = await readCoverReference.run(client, { route, media_id: id });
-  return rows.length === 1 ? coverReference(rows[0]!) : null;
+  const references = await checkMediaObjects(client, [id], role);
+  return references.get(id) ?? null;
 }
 
-function coverReference(row: Awaited<ReturnType<typeof claimCoverMediaStatement.run>>[number]): CoverReference | null {
+/** Read up to 256 available source-backed cover references with one statement per media partition. */
+export async function checkMediaObjects(
+  client: Pick<PoolClient, 'query'>,
+  ids: readonly string[],
+  role: 'cover',
+): Promise<Map<string, CoverReference | null>> {
+  const uniqueIds = [...new Set(ids)];
+  if (uniqueIds.length < 1 || uniqueIds.length > 256)
+    throw new RangeError('Cover reference batches must contain 1 to 256 ids');
+
+  const results = new Map<string, CoverReference | null>();
+  const groups = new Map<number, { routes: number[]; mediaIds: string[] }>();
+  for (const id of uniqueIds) {
+    results.set(id, null);
+    const route = routeOf(id);
+    if (role !== 'cover' || route === null) continue;
+    const partition = partitionOf(route);
+    let group = groups.get(partition);
+    if (!group) {
+      group = { routes: [], mediaIds: [] };
+      groups.set(partition, group);
+    }
+    group.routes.push(route);
+    group.mediaIds.push(id);
+  }
+
+  for (const [partition, { routes, mediaIds }] of groups) {
+    const rows = await readCoverReference.run(client, { partition, routes, media_ids: mediaIds });
+    for (const row of rows) results.set(row.mediaId, coverReferenceWithMetadata(row));
+  }
+  return results;
+}
+
+function coverReference(
+  row: Awaited<ReturnType<typeof claimCoverMediaStatement.run>>[number],
+): CoverSourceReference | null {
   if (row.sha256 === null) return null;
   const input = {
     containerId: row.containerId,
@@ -80,6 +122,64 @@ function coverReference(row: Awaited<ReturnType<typeof claimCoverMediaStatement.
       attribution: `(c) ${credit.rightsHolder}; via [${credit.via.name}](${credit.via.url})`,
     },
     source: provenance,
+  };
+}
+
+function coverReferenceWithMetadata(
+  row: Awaited<ReturnType<typeof readCoverReference.run>>[number],
+): CoverReference | null {
+  const source = coverReference({
+    mediaId: row.mediaId,
+    containerId: row.containerId,
+    sha256: row.sha256,
+    sourceUrl: row.sourceUrl,
+    credit: row.credit,
+    provenance: row.provenance,
+  });
+  if (
+    source === null ||
+    row.width === null ||
+    row.width < 1 ||
+    row.height === null ||
+    row.height < 1 ||
+    row.thumbhash === null ||
+    row.color === null ||
+    !/^#[0-9a-f]{6}$/.test(row.color)
+  )
+    return null;
+
+  let variants: unknown;
+  try {
+    variants = JSON.parse(row.variantsJson) as unknown;
+  } catch {
+    return null;
+  }
+  if (
+    !Array.isArray(variants) ||
+    variants.length > 12 ||
+    variants.some(
+      (variant) =>
+        typeof variant !== 'object' ||
+        variant === null ||
+        !('format' in variant) ||
+        (variant.format !== 'avif' && variant.format !== 'webp') ||
+        !('width' in variant) ||
+        typeof variant.width !== 'number' ||
+        !Number.isInteger(variant.width) ||
+        variant.width < 1,
+    )
+  )
+    return null;
+
+  const focalPoint = row.focalX === null || row.focalY === null ? null : { x: row.focalX, y: row.focalY };
+  return {
+    ...source,
+    credit: row.credit as MediaImportRequest['credit'],
+    width: row.width,
+    height: row.height,
+    placeholder: { thumbhash: row.thumbhash, color: row.color },
+    variants: variants as NonNullable<CoverReference['variants']>,
+    focalPoint,
   };
 }
 
@@ -119,8 +219,14 @@ export async function claimCoverMedia(
     input.mediaIds.some((id) => routeOf(id) !== route) ||
     (command.authorization !== null &&
       (command.authorization.mode !== 'execute' ||
-        command.authorization.resource.id !== reference.subjectId ||
-        command.authorization.resource.route !== subjectRoute))
+        !(
+          (command.authorization.resource.id === reference.subjectId &&
+            command.authorization.resource.route === subjectRoute) ||
+          ((command.authorization.action === 'statement:propose' ||
+            command.authorization.action === 'subject:create') &&
+            command.authorization.resource.id === GLOBAL_CONTEXT &&
+            command.authorization.resource.route === routeOf(GLOBAL_CONTEXT))
+        )))
   )
     throw new TypeError('Invalid cover reference command context');
   const rows = await claimCoverMediaStatement.run(tx, {

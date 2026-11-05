@@ -28,4 +28,7 @@ export declare function grantCommand<T>(config: {
     key: string;
     input: unknown;
     denied: () => Error;
+    /** A transfer's new direct holder must be a real active native account.
+     * Checked on its source connection before target checkout, including replay. */
+    recipientAccountId?: string;
 }, mutate: (tx: CommandTransaction, transactionId: string) => Promise<T>): Promise<import("../command/command.ts").CommandOutcome<Awaited<T>>>;

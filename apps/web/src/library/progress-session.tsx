@@ -1,36 +1,554 @@
-import { Link, useLocation } from '@tanstack/react-router';
-import { useId, useRef, useState } from 'react';
+import { parseRecord, progressDecimalPlaces } from '@rezics/progress';
+import { progressDecimalIssue, progressLocatorIssue } from './progress-decimal-input';
+import { ProgressDecimalInput, ProgressInputError } from './progress-decimal-input-field';
+import { ProgressAddressCorrection } from './progress-address-correction';
+import * as exposure from '../kernel/exposure';
+import { useQuery } from '@tanstack/react-query';
+import { personalRead } from '../kernel/query';
+import { useReadingAuthority } from './reading-detail-current-origin';
+import type { GatedOperation } from '../kernel/exposure';
+import type { ProgressDetail, ProgressDetailAddress } from './progress-detail-server';
+import { ProgressLogs } from './logs-progress';
+import { PublicationNoteDraftNavigation, usePublicationNoteDraftNavigation } from './publication-note-draft-navigation';
+import { Input } from '@rezics/ui/shadcn/input';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
+import type { ReactNode } from 'react';
+import { RelativeTime } from './logs-progress';
+import { ProgressRow } from '@rezics/ui/progress-row';
+import { Button } from '@rezics/ui/shadcn/button';
+import { isNotFound, Link, useLocation, useRouter } from '@tanstack/react-router';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  admitHistory,
+  historyPaths,
+  historySearch,
+  type HistoryPaths,
+  type HistorySection,
+  type HistoryTarget,
+} from './progress-history-windows/coordinates';
+import { Menu } from '@rezics/ui/menu';
+import { ContentItem } from '@rezics/ui/content-item';
+import { Dialog, DialogContent, DialogTitle } from '@rezics/ui/shadcn/dialog';
+import { BottomSheet } from '@rezics/ui/bottom-sheet';
 import { m } from '../paraglide/messages.js';
-import { SignInPrompt, csrfHeaders } from '../threads/composer';
+import { subjectHref } from '../subject/subject-href';
+import { getLocale } from '../paraglide/runtime.js';
+import { PageHeading } from '../shell/page-heading';
+import { csrfHeaders } from '../threads/composer';
 import {
   parseUnitBatch,
   type ProgressChange,
-  type ProgressMode,
-  type ProgressSessionPage,
-  type ProgressSessionView,
+  type ProgressFailure,
+  type ProgressSessionPage as ProgressSessionPageRead,
   type ProgressState,
-  type ProgressUnit,
+  type ProgressRecordInput,
+  type ProgressFinishInput,
+  type ProgressSessionView,
+  type ProgressSnapshot,
+  applyProgressSnapshot,
 } from './progress-reads';
-import { finishProgressSession, recordProgressSession } from './progress-server';
-import { SubjectRef } from './subject-ref';
+import { finishProgressSession, recordProgressSession, readProgressSession } from './progress-server';
+import { rowRatio, SubjectCover, SubjectIdentity } from './subject-row';
+import { displayLibraryTitle, LibraryTitle } from './title';
+import { progressFailureMessage, progressView } from './progress-label';
+import { scalarRecordingValue } from './progress-view';
+import { ProgressCorrectionReview } from './progress-actions';
+import { progressIndexSelectionLocationState, type ProgressReturnContext } from './progress-start-draft-navigation';
+import { subjectProgressEntryLocationState, subjectSlotReturnTo } from './subject-slot-return-context';
+import { PrivateOccurrenceControls } from './private-diary/occurrence-detail';
+import { isPlatformClosedError } from '../kernel/platform-closed';
+import {
+  IndependentMeasuresReadout,
+  IndependentMeasuresVisit,
+  projectIndependentMeasures,
+  sessionHasIndependentMeasures,
+} from './independent-measures';
+import { EpisodeChecklistVisit, bindFromDetail } from './episode-checklist';
+import {
+  continueCanonicalEpisodes,
+  inspectCanonicalEpisodes,
+  loadCanonicalEpisodeChecklist,
+  recordCanonicalEpisodes,
+} from './episode-checklist/server';
+import { progressSessionAddress } from './progress-address';
+import { progressHistoryRecord } from './progress-history-restore';
 
 const buttonClass =
-  'inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted';
-const fieldClass = 'w-full rounded-lg border border-border bg-background px-3 py-2';
+  'inline-flex min-h-[44px] min-w-[44px] items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 
-function modeLabel(mode: ProgressMode): string {
-  if (mode === 'cursor_position') return m.library_progress_mode_cursor();
-  if (mode === 'completed_units') return m.library_progress_mode_units();
-  return m.library_progress_mode_amount();
+const { Exposure } = exposure;
+const readDetail = async (data: ProgressDetailAddress, isCurrent: () => boolean) => {
+  if (!isCurrent()) throw new Error('Progress detail read retired');
+  const { readProgressDetail } = await import('./progress-detail-server');
+  if (!isCurrent()) throw new Error('Progress detail read retired');
+  const result = await readProgressDetail({ data });
+  if (!isCurrent()) throw new Error('Progress detail read retired');
+  return result;
+};
+
+const detailOperations = [
+  'progress_session.read',
+  'progress_session.changes',
+  'progress_session.units',
+  'published_log.list',
+  'progress_session.record',
+  'progress_session.complete',
+  'progress_session.abandon',
+  'published_log.create',
+] as const;
+function sameAddress(a: ProgressDetailAddress, b: ProgressDetailAddress) {
+  return a.id === b.id && a.changes === b.changes && a.units === b.units && a.logs === b.logs;
 }
 
-function unitLabel(unit: ProgressUnit): string {
-  if (unit === 'chapter') return m.library_progress_unit_chapter();
-  if (unit === 'episode') return m.library_progress_unit_episode();
-  if (unit === 'volume') return m.library_progress_unit_volume();
-  if (unit === 'minute') return m.library_progress_unit_minute();
-  if (unit === 'percent') return m.library_progress_unit_percent();
-  return m.library_progress_unit_page();
+function matchingDetail(
+  detail: ProgressDetail | undefined,
+  viewer: string | null,
+  address: ProgressDetailAddress,
+): detail is Extract<ProgressDetail, { state: 'ready' }> {
+  return (
+    detail?.state === 'ready' &&
+    detail.viewer === viewer &&
+    sameAddress(detail.address, address) &&
+    detail.progress.signedIn &&
+    detail.logs.signedIn &&
+    detail.progress.session.id === address.id
+  );
+}
+
+export type ProgressCommandGuard = {
+  isCurrent: () => boolean;
+  headers: () => HeadersInit | null;
+};
+
+/** Compatible standalone callers may omit the mounted command capture. */
+export type ProgressDetailOrigin = {
+  viewer: string;
+  address: ProgressDetailAddress;
+  isCurrent: (write?: boolean) => boolean;
+  refresh: () => Promise<ProgressSessionPageRead>;
+  capture?: (operation?: GatedOperation) => ProgressCommandGuard;
+  observation?: object | undefined;
+  /** Private intent custody survives admission/read replacement, never viewer or address replacement. */
+  lifetime?: object | undefined;
+};
+const detailReads = detailOperations.slice(0, 4);
+type HistoryNavigation = {
+  paths: HistoryPaths;
+  refresh: (changes: string | undefined, units: string | undefined) => void;
+  stage: (target: HistoryTarget, address: ProgressDetailAddress, keyboard: boolean) => () => void;
+};
+const HistoryNavigationContext = createContext<HistoryNavigation | undefined>(undefined);
+
+/** The actual viewer observation owns the read; loader identity only rejects mismatches. */
+export function CurrentProgressDetail({
+  loaded,
+  address,
+  returnContext,
+}: {
+  loaded: ProgressDetail;
+  address: ProgressDetailAddress;
+  returnContext?: ProgressReturnContext | undefined;
+}) {
+  const { client, browser, store, snapshot } = useReadingAuthority(detailOperations);
+  const viewer = browser ? snapshot.viewer : loaded.viewer;
+  const locale = getLocale();
+  const location = useLocation();
+  const router = useRouter();
+  const historyScope = JSON.stringify([
+    viewer,
+    address.id,
+    address.logs,
+    locale,
+    location.pathname,
+    location.hash,
+    location.search.history,
+    detailReads.map((op) => snapshot.admissions.get(op)?.id),
+  ]);
+  const historyAuthority = useMemo(() => ({}), [historyScope, snapshot.identity, snapshot.observation]);
+  type Visit = {
+    authority: object;
+    location: typeof location;
+    address: ProgressDetailAddress;
+    paths: HistoryPaths;
+    staged?: {
+      target: HistoryTarget;
+      address: ProgressDetailAddress;
+      keyboard: boolean;
+      focus: Element | null;
+      entered?: boolean;
+    };
+    admitted?: string;
+  };
+  const visitRef = useRef<Visit | null>(null);
+  let visit = visitRef.current;
+  const changedLocation = visit?.location !== location;
+  const carrying = visit?.staged && sameAddress(visit.staged.address, address);
+  if (
+    !visit ||
+    visit.authority !== historyAuthority ||
+    ((changedLocation || !sameAddress(visit.address, address)) && !carrying)
+  ) {
+    visit = {
+      authority: historyAuthority,
+      location,
+      address,
+      paths: historyPaths(),
+    };
+    visitRef.current = visit;
+  }
+  visit.location = location;
+  visit.address = address;
+  useLayoutEffect(() => {
+    const cancelFocus = () => {
+      if (visitRef.current?.staged) visitRef.current.staged.keyboard = false;
+    };
+    document.addEventListener('focusin', cancelFocus);
+    return () => document.removeEventListener('focusin', cancelFocus);
+  }, []);
+  const custodySignature = JSON.stringify([
+    browser ? snapshot.owner : viewer,
+    address.id,
+    address.changes,
+    address.units,
+    address.logs,
+    locale,
+  ]);
+  const custody = useRef<{ signature: string; identity: object; value: object } | null>(null);
+  if (custody.current?.signature !== custodySignature || custody.current.identity !== snapshot.identity)
+    custody.current = { signature: custodySignature, identity: snapshot.identity, value: {} };
+  const readEpisode = detailReads.map((operation) => snapshot.admissions.get(operation)?.id);
+  const signature = JSON.stringify([
+    viewer,
+    address.id,
+    address.changes,
+    address.units,
+    address.logs,
+    locale,
+    readEpisode,
+    location.state.key,
+  ]);
+  const [instance] = useState(() => crypto.randomUUID());
+  type Boundary = {
+    signature: string;
+    identity: object;
+    location: object;
+    active: boolean;
+    epoch: number;
+    seed?: ProgressDetail;
+  };
+  const ref = useRef<Boundary | null>(null);
+  const enrolled = useRef(false);
+  if (
+    !ref.current ||
+    !ref.current.active ||
+    ref.current.signature !== signature ||
+    ref.current.identity !== snapshot.identity ||
+    ref.current.location !== location
+  ) {
+    const previous = ref.current;
+    if (previous) previous.active = false;
+    const seed =
+      (!browser || (!enrolled.current && snapshot.viewer && snapshot.ready)) && matchingDetail(loaded, viewer, address)
+        ? loaded
+        : undefined;
+    if (browser && snapshot.viewer && snapshot.ready) enrolled.current = true;
+    ref.current = {
+      signature,
+      identity: snapshot.identity,
+      location,
+      active: true,
+      epoch: (previous?.epoch ?? 0) + 1,
+      ...(seed ? { seed } : {}),
+    };
+  }
+  const boundary = ref.current;
+  useLayoutEffect(
+    () =>
+      router.subscribe('onBeforeNavigate', ({ toLocation }) => {
+        const currentVisit = visitRef.current;
+        const staged = currentVisit?.staged;
+        // Only one deliberate navigation carries coordinates. A second event,
+        // including equal replacement and A/B/A, retires them before React publishes.
+        const eligible =
+          currentVisit &&
+          staged &&
+          !staged.entered &&
+          toLocation.pathname === currentVisit.location.pathname &&
+          toLocation.hash === currentVisit.location.hash &&
+          (toLocation.search as Record<string, unknown>).history === currentVisit.location.search.history &&
+          sameAddress(progressSessionAddress({ ...toLocation.search, id: staged.address.id }), staged.address);
+        if (eligible) staged.entered = true;
+        else visitRef.current = null;
+        if (ref.current) ref.current.active = false;
+      }),
+    [router],
+  );
+  const mounted = useRef(0);
+  useLayoutEffect(() => {
+    mounted.current++;
+    return () => {
+      mounted.current--;
+    };
+  }, []);
+  const sameBoundary = () => ref.current === boundary && boundary.active && getLocale() === locale;
+  const isCurrent = () => sameBoundary() && (!browser || store.current(snapshot, detailReads));
+  const allowed = !browser || store.current(snapshot, detailReads);
+  const queryKey = ['progress-detail', instance, signature, boundary.epoch] as const;
+  const query = useQuery({
+    ...personalRead,
+    queryKey,
+    queryFn: () => readDetail(address, isCurrent),
+    enabled: personalRead.enabled && browser && !!viewer && allowed,
+    initialData: boundary.seed,
+    staleTime: Infinity,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const [, renderRetired] = useState(0);
+  const evidence = useRef<{ boundary: Boundary; query: object; version: number; retired: boolean } | null>(null);
+  const checkEvidence = () => {
+    const enrolled = evidence.current;
+    if (!enrolled || enrolled.boundary !== boundary || enrolled.retired) return false;
+    const query = client.getQueryCache().find({ queryKey, exact: true });
+    const state = client.getQueryState<ProgressDetail>(queryKey);
+    if (
+      query === enrolled.query &&
+      state?.status === 'success' &&
+      state.dataUpdateCount === enrolled.version &&
+      matchingDetail(state.data, viewer, address)
+    )
+      return true;
+    enrolled.retired = true;
+    return false;
+  };
+  const actualQuery = client.getQueryCache().find({ queryKey, exact: true });
+  const actualState = client.getQueryState<ProgressDetail>(queryKey);
+  if (
+    actualQuery &&
+    actualState?.status === 'success' &&
+    matchingDetail(actualState.data, viewer, address) &&
+    (evidence.current?.boundary !== boundary ||
+      evidence.current.query !== actualQuery ||
+      evidence.current.version !== actualState.dataUpdateCount)
+  ) {
+    if (evidence.current) evidence.current.retired = true;
+    evidence.current = { boundary, query: actualQuery, version: actualState.dataUpdateCount, retired: false };
+  }
+  useLayoutEffect(() => {
+    const observe = () => {
+      const accepted = evidence.current;
+      if (accepted?.boundary === boundary && !accepted.retired && !checkEvidence()) renderRetired((value) => value + 1);
+    };
+    const release = client.getQueryCache().subscribe(observe);
+    observe();
+    return release;
+  }, [boundary, client, actualQuery]);
+  const originRef = useRef<{ boundary: Boundary; value: ProgressDetailOrigin } | null>(null);
+  if (originRef.current?.boundary !== boundary && viewer) {
+    // These methods retain the owning viewer/address, while captures enroll a particular
+    // successful observation and operation. Churn cannot replace the editor's exact intent.
+    const owns = () => mounted.current > 0 && sameBoundary();
+    const currentReads = () =>
+      owns() &&
+      checkEvidence() &&
+      store.current(store.read(), detailReads) &&
+      store.read().identity === boundary.identity;
+    originRef.current = {
+      boundary,
+      value: {
+        viewer,
+        address,
+        lifetime: custody.current.value,
+        isCurrent: (write = false) =>
+          currentReads() && (!write || store.current(store.read(), ['published_log.create'])),
+        capture: (operation) => {
+          const enrolled = store.read();
+          const actualRead = evidence.current;
+          const operations = operation ? [...detailReads, operation] : detailReads;
+          const current = () =>
+            owns() &&
+            actualRead === evidence.current &&
+            checkEvidence() &&
+            enrolled.identity === boundary.identity &&
+            store.current(enrolled, operations, true);
+          return { isCurrent: current, headers: () => (current() ? store.headers(enrolled, operations) : null) };
+        },
+        get observation() {
+          return store.read().observation;
+        },
+        refresh: async () => {
+          const enrolled = store.read();
+          const actualRead = evidence.current;
+          const current = () =>
+            owns() &&
+            actualRead === evidence.current &&
+            checkEvidence() &&
+            enrolled.identity === boundary.identity &&
+            store.current(enrolled, detailReads, true);
+          if (!current()) return { signedIn: false, idempotencyKey: '' };
+          const admittedAddress = { ...address };
+          delete admittedAddress.changes;
+          delete admittedAddress.units;
+          const paths = visitRef.current!.paths;
+          if (paths.changes.current !== undefined) admittedAddress.changes = paths.changes.current;
+          if (paths.units.current !== undefined) admittedAddress.units = paths.units.current;
+          const fresh = await readDetail(admittedAddress, current);
+          if (!current() || !matchingDetail(fresh, viewer, admittedAddress))
+            return { signedIn: false, idempotencyKey: '' };
+          return fresh.progress;
+        },
+      },
+    };
+  }
+  let detail = (!browser || checkEvidence()) && matchingDetail(query.data, viewer, address) ? query.data : undefined;
+  if (
+    detail &&
+    matchingDetail(loaded, viewer, address) &&
+    loaded.progress.session.revision > detail.progress.session.revision
+  )
+    detail = loaded;
+  // A healthy same-viewer rotation pauses dispatch while its new scoped read is pending.
+  // Keeping this already accepted read mounted preserves the existing publication editor.
+  const healthyPause = browser && snapshot.healthyPause;
+  if (query.isError && visit.staged) visit.staged.keyboard = false;
+  // Admission consumes actual returned cursors: a stale native cursor may have restarted.
+  const focus = useRef<{ visit: Visit; section: HistorySection; element: Element | null } | null>(null);
+  const admission = `${boundary.epoch}:${actualState?.dataUpdateCount}`;
+  if (detail && isCurrent() && (!browser || checkEvidence()) && visit.admitted !== admission) {
+    const staged = visit.staged;
+    const target = staged && sameAddress(staged.address, address) ? staged.target : undefined;
+    if (visit.admitted && !target) visit.paths = historyPaths();
+    admitHistory(visit.paths, target, detail.progress.changesCursor, detail.progress.unitsCursor);
+    visit.admitted = admission;
+    if (target && staged?.keyboard) focus.current = { visit, section: target.section, element: staged.focus };
+    delete visit.staged;
+  }
+  function originatingCurrent() {
+    return originRef.current?.value.isCurrent();
+  }
+  useLayoutEffect(() => {
+    const pending = focus.current;
+    focus.current = null;
+    if (
+      pending &&
+      pending.visit === visitRef.current &&
+      originatingCurrent() &&
+      (document.activeElement === pending.element || !pending.element?.isConnected)
+    ) {
+      document.querySelector<HTMLElement>(`[data-progress-history-heading="${pending.section}"]`)?.focus();
+    }
+  });
+  if (query.data?.state === 'invalid' && sameAddress(query.data.address, address) && isCurrent())
+    return <ProgressAddressCorrection address={address} issue={query.data.issue} />;
+  if (!viewer || (!allowed && !healthyPause) || !detail)
+    return (
+      <article className="max-w-4xl space-y-6">
+        <PageHeading>{m.library_progress_heading()}</PageHeading>
+        <p role="status">{m.library_progress_unavailable()}</p>
+        <Link to="/library/progress" search={{}} className={buttonClass}>
+          {m.library_progress_return_to_progress()}
+        </Link>
+        {viewer && allowed ? (
+          <Button
+            variant="outline"
+            className="min-h-11 min-w-11"
+            disabled={query.isFetching}
+            onClick={() => {
+              if (isCurrent()) void query.refetch();
+            }}
+          >
+            {m.library_progress_retry()}
+          </Button>
+        ) : null}
+      </article>
+    );
+  const originating = originRef.current!.value;
+  const session = detail.progress.session;
+  const currentReturnContext =
+    returnContext &&
+    originating.isCurrent() &&
+    returnContext.locale === locale &&
+    returnContext.sessionId === session.id &&
+    returnContext.subjectId === session.subjectId &&
+    (!returnContext.startedAt || returnContext.startedAt === session.startedAt)
+      ? returnContext
+      : undefined;
+  return (
+    <HistoryNavigationContext.Provider
+      value={{
+        paths: visit.paths,
+        refresh: (changes, units) => {
+          if (visitRef.current === visit && originating.isCurrent())
+            admitHistory(visit.paths, undefined, changes, units);
+        },
+        stage: (target, destination, keyboard) => {
+          const from = router.state.location;
+          const staged = { target, address: destination, keyboard, focus: document.activeElement };
+          visit.staged = staged;
+          return () => {
+            if (visit.staged === staged && router.state.location === from) delete visit.staged;
+          };
+        },
+      }}
+    >
+      <ProgressSessionPage
+        key={`${instance}:${boundary.epoch}`}
+        page={detail.progress}
+        logsCursor={address.logs}
+        originating={originating}
+        returnContext={currentReturnContext}
+      >
+        <ProgressLogs progress={detail.progress} logs={detail.logs} search={address} originating={originating} />
+      </ProgressSessionPage>
+    </HistoryNavigationContext.Provider>
+  );
+}
+
+type LoadedPage = Extract<ProgressSessionPageRead, { signedIn: true }>;
+type CapturedIntent =
+  | { kind: 'record' | 'add' | 'remove'; data: ProgressRecordInput }
+  | { kind: 'finish'; data: ProgressFinishInput };
+function freezeCapturedIntent(intent: CapturedIntent): CapturedIntent {
+  if (intent.kind === 'finish')
+    return Object.freeze({ kind: 'finish', data: Object.freeze(structuredClone(intent.data)) });
+  const data = structuredClone(intent.data);
+  if (data.add) Object.freeze(data.add);
+  if (data.remove) Object.freeze(data.remove);
+  return Object.freeze({ kind: intent.kind, data: Object.freeze(data) });
+}
+type EditorLifetime = {
+  page: LoadedPage;
+  originating?: ProgressDetailOrigin | undefined;
+  custody: EditorCustody;
+  history: symbol | null;
+};
+type EditorCustody = { retry?: CapturedIntent; credential?: HeadersInit; flight?: object };
+type ProgressDraftBaseline = {
+  amount: string;
+  locator: string;
+  position: string;
+  addText: string;
+  removeText: string;
+};
+
+function hasUnsavedProgressDraft(
+  mode: LoadedPage['session']['mode'],
+  baseline: ProgressDraftBaseline,
+  draft: ProgressDraftBaseline,
+): boolean {
+  if (mode === 'scalar_amount') return draft.amount.trim() !== baseline.amount.trim();
+  if (mode === 'cursor_position')
+    return draft.locator !== baseline.locator || draft.position.trim() !== baseline.position.trim();
+  return draft.addText.trim() !== baseline.addText.trim() || draft.removeText.trim() !== baseline.removeText.trim();
+}
+
+const editors = new WeakMap<object, EditorCustody>();
+function editorLifetime(page: LoadedPage, originating?: ProgressDetailOrigin): EditorLifetime {
+  const key = originating?.lifetime ?? originating;
+  const custody = (key && editors.get(key)) || {};
+  if (key) editors.set(key, custody);
+  return { page, originating, history: null, custody };
 }
 
 function stateLabel(state: ProgressState): string {
@@ -39,430 +557,1527 @@ function stateLabel(state: ProgressState): string {
   return m.library_progress_state_active();
 }
 
-function percentOf(amount: string, total: string): string {
-  const value = Number(amount);
-  const whole = Number(total);
-  if (!Number.isFinite(value) || !Number.isFinite(whole) || whole === 0) return '0';
-  return String(Math.round((value / whole) * 100 * 100) / 100);
+const historyTextLimit = 160;
+const historyUnitLimit = 4;
+const historyDisclosureClass =
+  'min-h-11 cursor-pointer content-center rounded-md text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+const historyPreviewClass = 'min-w-0 [&:has(>details[open])>[data-history-preview]]:hidden';
+
+function longHistoryText(value: string): boolean {
+  return value.length > historyTextLimit || value.split(/\r\n|\r|\n/, 4).length > 3;
 }
 
-function progressText(session: ProgressSessionView): string | null {
-  if (session.mode === 'scalar_amount' && session.amount && session.total) {
-    return m.library_progress_ratio({
-      amount: session.amount,
-      total: session.total,
-      percent: percentOf(session.amount, session.total),
-    });
-  }
-  if (session.mode === 'scalar_amount' && session.unit === 'percent' && session.amount) {
-    return m.library_progress_percent({ percent: session.amount });
-  }
-  if (session.mode === 'completed_units' && session.total) {
-    return m.library_progress_ratio({
-      amount: String(session.completedUnitCount),
-      total: session.total,
-      percent: percentOf(String(session.completedUnitCount), session.total),
-    });
-  }
-  return null;
+function historyExcerpt(value: string): string {
+  // Do not split a surrogate pair. Only the preview is shortened; disclosure uses the original.
+  const end = (value.codePointAt(historyTextLimit - 1) ?? 0) > 0xffff ? historyTextLimit - 1 : historyTextLimit;
+  return value.length > end ? `${value.slice(0, end)}…` : value;
 }
 
-function changeText(change: ProgressChange): string {
-  if (change.action === 'complete') return stateLabel('completed');
-  if (change.action === 'abandon') return stateLabel('abandoned');
-  return [change.amount, change.locator, change.position, ...change.add, ...change.remove].filter(Boolean).join(' ');
+function mergeIndependentSnapshot(current: ProgressSessionView, snapshot: ProgressSnapshot): ProgressSessionView {
+  return applyProgressSnapshot(current, snapshot);
 }
 
-export function ProgressSessionPage({ page }: { page: ProgressSessionPage }) {
-  const location = useLocation();
-  if (!page.signedIn) {
+function ProgressHistoryFacts({ change, preview = false }: { change: ProgressChange; preview?: boolean }) {
+  return (
+    <dl className="flex min-w-0 flex-wrap gap-x-8 gap-y-3">
+      {(
+        [
+          [m.library_progress_unit(), change.measureId],
+          [m.library_progress_amount(), change.amount],
+          [m.library_progress_locator(), change.locator],
+          [m.library_progress_position(), change.position],
+          [m.library_progress_clear(), change.cleared ? m.library_progress_measure_clear() : null],
+        ] as const
+      )
+        .filter(([, value]) => value != null)
+        .map(([label, value]) => (
+          <div key={label} className="min-w-0 max-w-full space-y-1">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className={`whitespace-pre-wrap [overflow-wrap:anywhere] ${preview ? 'line-clamp-2' : ''}`}>
+              {preview ? historyExcerpt(value!) : value}
+            </dd>
+          </div>
+        ))}
+      {(
+        [
+          [m.library_progress_units_added(), change.add],
+          [m.library_progress_units_removed(), change.remove],
+        ] as const
+      ).map(([label, units]) =>
+        units.length ? (
+          <div key={label} className="min-w-0 max-w-full space-y-1">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd>
+              <ul className="space-y-1">
+                {(preview ? units.slice(0, 2) : units).map((unit, occurrence) => (
+                  // Each immutable change owns its ordered occurrences, including duplicates.
+                  <li
+                    key={occurrence}
+                    className={`whitespace-pre-wrap [overflow-wrap:anywhere] ${preview ? 'line-clamp-2' : ''}`}
+                  >
+                    {preview ? historyExcerpt(unit) : unit}
+                  </li>
+                ))}
+              </ul>
+              {preview && units.length > 2 ? <span aria-hidden="true">…</span> : null}
+            </dd>
+          </div>
+        ) : null,
+      )}
+    </dl>
+  );
+}
+
+function progressHistoryPreview(change: ProgressChange, occurrence: number) {
+  const values = [change.amount, change.locator, change.position];
+  if (!values.some((value) => value !== null) && !change.add.length && !change.remove.length) return null;
+  const expandable =
+    values.some((value) => value !== null && longHistoryText(value)) ||
+    [change.add, change.remove].some((units) => units.length > historyUnitLimit || units.some(longHistoryText));
+  if (!expandable) return <ProgressHistoryFacts change={change} />;
+  return (
+    <div className={historyPreviewClass}>
+      <div data-history-preview>
+        <ProgressHistoryFacts change={change} preview />
+      </div>
+      <details className="min-w-0 space-y-3">
+        <summary className={historyDisclosureClass}>
+          {m.library_progress_history_reader_change_details({ number: occurrence })}
+        </summary>
+        <ProgressHistoryFacts change={change} />
+      </details>
+    </div>
+  );
+}
+
+function ProgressHistoryUnit({ value, occurrence }: { value: string; occurrence: number }) {
+  if (!longHistoryText(value)) return <span className="whitespace-pre-wrap [overflow-wrap:anywhere]">{value}</span>;
+  return (
+    <div className={historyPreviewClass}>
+      <p data-history-preview className="line-clamp-2 whitespace-pre-wrap [overflow-wrap:anywhere]">
+        {historyExcerpt(value)}
+      </p>
+      <details className="min-w-0 space-y-3">
+        <summary className={historyDisclosureClass}>
+          {m.library_progress_history_reader_unit_details({ number: occurrence })}
+        </summary>
+        <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{value}</p>
+      </details>
+    </div>
+  );
+}
+
+/** Read-only navigation captures this render's current authority without joining editor custody. */
+function ProgressHistoryLink({
+  operation,
+  id,
+  search,
+  originating,
+  children,
+  target,
+}: {
+  operation: 'progress_session.changes' | 'progress_session.units';
+  id: string;
+  search: { changes?: string; units?: string; logs?: string };
+  originating: ProgressDetailOrigin | undefined;
+  children: ReactNode;
+  target?: HistoryTarget;
+}) {
+  const navigation = useContext(HistoryNavigationContext);
+  const router = useRouter();
+  const admitted = exposure.useOperation(operation);
+  const locale = getLocale();
+  const guard = originating?.capture?.();
+  const token = {};
+  const rendered = useRef(token);
+  rendered.current = token;
+  const mounted = useRef(false);
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const current = () =>
+    mounted.current &&
+    rendered.current === token &&
+    admitted &&
+    getLocale() === locale &&
+    (guard ? guard.isCurrent() : !originating || originating.isCurrent());
+  if (!admitted) return null;
+  return (
+    <Link
+      to="/library/progress/$id"
+      params={{ id }}
+      search={(previous) => {
+        if (!target || !navigation) return search;
+        return historySearch(previous, search);
+      }}
+      state={(previous) => previous}
+      hash={(previous) => previous}
+      preload={false}
+      onClick={(event) => {
+        if (!current()) {
+          event.preventDefault();
+          return;
+        }
+        if (
+          navigation &&
+          target &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.altKey &&
+          !event.shiftKey &&
+          event.button === 0
+        ) {
+          event.preventDefault();
+          const previous = router.state.location.search;
+          const destination = { id, ...search };
+          const nextSearch = historySearch(previous, search);
+          const cancel = navigation.stage(target, destination, event.detail === 0);
+          void router
+            .navigate({
+              to: '/library/progress/$id',
+              params: { id },
+              search: nextSearch,
+              state: (previous) => previous,
+              hash: (previous) => previous,
+            })
+            .then(cancel);
+        }
+      }}
+      onAuxClick={(event) => {
+        if (!current()) event.preventDefault();
+      }}
+      className={buttonClass}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function ProgressHistoryControls({
+  section,
+  cursor,
+  next,
+  id,
+  originating,
+  search,
+}: {
+  section: HistorySection;
+  cursor: string | undefined;
+  next: string | null;
+  id: string;
+  originating: ProgressDetailOrigin | undefined;
+  search: { changes?: string; units?: string; logs?: string };
+}) {
+  const navigation = useContext(HistoryNavigationContext);
+  const path = navigation?.paths[section];
+  const link = (movement: HistoryTarget['movement'], at: string | undefined, label: string) => {
+    const destination = { ...search };
+    delete destination[section];
+    if (at !== undefined) destination[section] = at;
     return (
-      <article className="max-w-4xl space-y-8 text-foreground">
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{m.library_progress_heading()}</h1>
-        <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0] ?? location.pathname} />
-      </article>
+      <ProgressHistoryLink
+        operation={section === 'changes' ? 'progress_session.changes' : 'progress_session.units'}
+        id={id}
+        originating={originating}
+        search={destination}
+        target={{ section, movement, cursor: at }}
+      >
+        {label}
+      </ProgressHistoryLink>
     );
-  }
-  return <SessionEditor page={page} />;
+  };
+  return (
+    <>
+      {originating?.address[section] && !cursor ? <p role="status">{m.library_progress_history_restarted()}</p> : null}
+      <div className="flex flex-wrap gap-3">
+        {path?.previous.length ? link('previous', path.previous.at(-1), m.library_window_previous()) : null}
+        {cursor ? link('first', undefined, m.library_collections_first_page()) : null}
+        {next ? link('more', next, m.library_progress_more()) : null}
+      </div>
+    </>
+  );
 }
 
-function SessionEditor({ page }: { page: Extract<ProgressSessionPage, { signedIn: true }> }) {
+export function ProgressSessionPage({
+  page,
+  children,
+  logsCursor,
+  originating,
+  returnContext,
+}: {
+  page: ProgressSessionPageRead;
+  children?: ReactNode;
+  logsCursor?: string | undefined;
+  originating?: ProgressDetailOrigin | undefined;
+  returnContext?: ProgressReturnContext | undefined;
+}) {
+  if (!page.signedIn) return null;
+  return (
+    <PublicationNoteDraftNavigation messages="progress">
+      <SessionEditor page={page} logsCursor={logsCursor} originating={originating} returnContext={returnContext}>
+        {children}
+      </SessionEditor>
+    </PublicationNoteDraftNavigation>
+  );
+}
+
+function ProgressSessionReturnControls({
+  session,
+  returnContext,
+}: {
+  session: ProgressSessionView;
+  returnContext?: ProgressReturnContext | undefined;
+}) {
+  const locale = getLocale();
+  const context =
+    returnContext &&
+    returnContext.locale === locale &&
+    returnContext.sessionId === session.id &&
+    returnContext.subjectId === session.subjectId &&
+    (!returnContext.startedAt || returnContext.startedAt === session.startedAt)
+      ? returnContext
+      : undefined;
+  const subjectReturn = session.subject
+    ? subjectSlotReturnTo(
+        context?.sourceReturnTo,
+        { id: session.subject.id, label: displayLibraryTitle(session.subject.label, locale).text },
+        locale,
+      )
+    : undefined;
+  return (
+    <nav className="flex flex-wrap gap-2" aria-label={m.library_progress_return_to_progress()}>
+      <Link
+        to="/library/progress"
+        search={context ? context.indexSearch : {}}
+        {...(context
+          ? {
+              state: (previous) =>
+                ({ ...previous, ...progressIndexSelectionLocationState(context, session.startedAt) }) as never,
+            }
+          : {})}
+        className={buttonClass}
+      >
+        {m.library_progress_return_to_progress()}
+      </Link>
+      <Link to="/library/progress" search={progressRestartSearch(context, session.subjectId)} className={buttonClass}>
+        {m.library_progress_restart()}
+      </Link>
+      {subjectReturn ? (
+        <a href={subjectReturn} className={buttonClass}>
+          {m.library_progress_return_to_subject()}
+        </a>
+      ) : null}
+    </nav>
+  );
+}
+
+function progressRestartSearch(context: ProgressReturnContext | undefined, subjectId: string) {
+  const search = context ? { ...context.indexSearch } : {};
+  delete search.cursor;
+  return { ...search, subjectId };
+}
+
+function SessionEditor({
+  page,
+  children,
+  logsCursor,
+  originating,
+  returnContext,
+}: {
+  page: LoadedPage;
+  children?: ReactNode;
+  logsCursor?: string | undefined;
+  originating?: ProgressDetailOrigin | undefined;
+  returnContext?: ProgressReturnContext | undefined;
+}) {
+  const historyNavigation = useContext(HistoryNavigationContext);
+  const [positions, setPositions] = useState({ changes: page.changesCursor, units: page.unitsCursor });
+  const lifetime = useRef<EditorLifetime | null>(null);
+  const draftBaseline = useRef<ProgressDraftBaseline | null>(null);
+  lifetime.current ??= editorLifetime(page, originating);
+  const retained = lifetime.current.custody.retry;
+  const retainedRecord = retained && retained.kind !== 'finish' ? retained.data : undefined;
   const [session, setSession] = useState(page.session);
-  const [seenId, setSeenId] = useState(page.session.id);
-  const [key, setKey] = useState(page.idempotencyKey);
-  const [amount, setAmount] = useState('');
-  const [locator, setLocator] = useState('');
-  const [position, setPosition] = useState('');
-  const [addText, setAddText] = useState('');
-  const [removeText, setRemoveText] = useState('');
+  const [seenPage, setSeenPage] = useState(page);
+  const [key, setKey] = useState(retained?.data.idempotencyKey ?? page.idempotencyKey);
+  const [amount, setAmount] = useState(retainedRecord?.amount ?? '');
+  const [locator, setLocator] = useState(retainedRecord?.locator ?? '');
+  const [position, setPosition] = useState(retainedRecord?.position ?? '');
+  const [validateRecord, setValidateRecord] = useState(false);
+  const [addText, setAddText] = useState(retainedRecord?.add?.join('\n') ?? '');
+  const [removeText, setRemoveText] = useState(retainedRecord?.remove?.join('\n') ?? '');
   const [alert, setAlert] = useState<string | null>(null);
-  const [confirming, setConfirming] = useState<'complete' | 'abandon' | null>(null);
-  const pending = useRef(false);
+  const [nativeField, setNativeField] = useState<string | null>(null);
+  const [acknowledged, setAcknowledged] = useState<number | null>(null);
+  const [confirming, setConfirming] = useState<'complete' | 'abandon' | null>(
+    retained?.kind === 'finish' ? retained.data.action : null,
+  );
+  const [editing, setEditing] = useState(false);
+  const [review, setReview] = useState<CapturedIntent | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [conflict, setConflict] = useState(false);
+  const [draftOpened, setDraftOpened] = useState(false);
+  const [unsupported, setUnsupported] = useState(false);
+  const [readDenied, setReadDenied] = useState(false);
+  const completeAllowed = exposure.useOperation('progress_session.complete');
+  const abandonAllowed = exposure.useOperation('progress_session.abandon');
+  const offered = !unsupported && session.meaning === 'known' && session.recordingState === 'supported';
+  const [phone, setPhone] = useState(false);
   const addId = useId();
   const removeId = useId();
   const addHint = useId();
   const removeHint = useId();
   const changesHeading = useId();
   const unitsHeading = useId();
+  const amountHint = useId();
+  const locatorError = useId();
+  const amountId = useId();
+  const locatorId = useId();
+  const positionId = useId();
+  const structureHint = useId();
 
-  if (page.session.id !== seenId) {
-    setSeenId(page.session.id);
-    setSession(page.session);
-    setKey(page.idempotencyKey);
-    setAmount('');
-    setLocator('');
-    setPosition('');
-    setAddText('');
-    setRemoveText('');
-    setAlert(null);
-    setConfirming(null);
+  useLayoutEffect(() => {
+    // Restore an identity after React's development effect cleanup/setup cycle.
+    const origin = (lifetime.current ??= editorLifetime(page, originating));
+    return () => {
+      if (lifetime.current === origin) lifetime.current = null;
+    };
+  }, [originating ?? page]);
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 767px), (pointer: coarse)');
+    const update = () => setPhone(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+
+  const viewGuard = originating?.capture?.();
+  const canEdit = () => !originating || (viewGuard ? viewGuard.isCurrent() : originating.isCurrent());
+  const commandGuards = {
+    record: originating?.capture?.('progress_session.record'),
+    complete: originating?.capture?.('progress_session.complete'),
+    abandon: originating?.capture?.('progress_session.abandon'),
+  };
+  const renderToken = {};
+  const rendered = useRef(renderToken);
+  // An interrupted or no-op render cannot retire handlers belonging to the visible draft.
+  // Only a committed replacement owns the next set of browser events.
+  useLayoutEffect(() => {
+    rendered.current = renderToken;
+  });
+  const canHandle = () => rendered.current === renderToken && canEdit();
+  function edit(change: () => void) {
+    if (canHandle()) change();
   }
-
-  function explain(reason: string) {
-    setAlert(reason === 'conflict' ? m.library_progress_conflict() : m.library_progress_invalid());
-  }
-
-  async function onRecord() {
-    if (pending.current || session.state !== 'active') return;
-    setAlert(null);
-    const intent =
-      session.mode === 'cursor_position'
-        ? { locator: locator.trim(), position: position.trim() }
-        : { amount: amount.trim() };
-    pending.current = true;
-    try {
-      const result = await recordProgressSession({
-        data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, ...intent },
-        headers: csrfHeaders(),
+  function editRecord(change: () => void) {
+    if (lifetime.current?.custody.retry || lifetime.current?.custody.flight || review) return;
+    if (!commandGuards.record || commandGuards.record.isCurrent())
+      edit(() => {
+        setNativeField(null);
+        setAcknowledged(null);
+        change();
       });
-      if (!result.ok) {
-        explain(result.reason);
-        return;
-      }
-      const change: ProgressChange = {
-        id: `${session.id}:${result.session.revision}`,
-        revision: result.session.revision,
-        createdAt: new Date().toISOString(),
-        action: null,
-        amount: 'amount' in intent ? intent.amount : null,
-        locator: 'locator' in intent ? intent.locator : null,
-        position: 'position' in intent ? intent.position : null,
-        add: [],
-        remove: [],
+  }
+
+  function openUpdate() {
+    if (!canHandle() || (commandGuards.record && !commandGuards.record.isCurrent())) return;
+    const retry = lifetime.current?.custody.retry;
+    const recording = retry && retry.kind !== 'finish' ? retry.data : undefined;
+    if (!draftOpened) {
+      const baseline = {
+        amount: recording?.amount ?? session.amount ?? '',
+        locator: recording?.locator ?? session.locator ?? '',
+        position: recording?.position ?? session.position ?? '',
+        addText: recording?.add?.join('\n') ?? '',
+        removeText: recording?.remove?.join('\n') ?? '',
       };
-      setKey(crypto.randomUUID());
+      draftBaseline.current = baseline;
+      setValidateRecord(false);
+      setAmount(baseline.amount);
+      setLocator(baseline.locator);
+      setPosition(baseline.position);
+      setAddText(baseline.addText);
+      setRemoveText(baseline.removeText);
+      setDraftOpened(true);
+    }
+    if (retry) setReview(retry);
+    setEditing(true);
+  }
+
+  const originChanged = lifetime.current !== null && lifetime.current.originating !== originating;
+  if (page !== seenPage || originChanged) {
+    setSeenPage(page);
+    setPositions({ changes: page.changesCursor, units: page.unitsCursor });
+    if (originating && !originChanged) {
+      // A current refresh reconciles revision without rebuilding an unresolved command.
+      if (page.session.revision >= session.revision) setSession(page.session);
+      if (lifetime.current) lifetime.current.history = null;
+      setReadDenied(false);
+    } else {
+      // Compatible standalone pages retain their page replacement fence.
+      lifetime.current = editorLifetime(page, originating);
+      setUnsupported(false);
+      setReadDenied(false);
+      setSession(page.session);
+      setKey(lifetime.current.custody.retry?.data.idempotencyKey ?? page.idempotencyKey);
+      setValidateRecord(false);
       setAmount('');
       setLocator('');
       setPosition('');
-      setSession((current) => ({
-        ...current,
-        revision: result.session.revision,
-        amount: result.session.amount,
-        locator: result.session.locator,
-        position: result.session.position,
-        completedUnitCount: result.session.completedUnitCount,
-        state: result.session.state,
-        completedAt: result.session.completedAt,
-        total: result.session.total,
-        changes: [...current.changes, change],
-      }));
-    } catch {
-      setAlert(m.library_progress_invalid());
-    } finally {
-      pending.current = false;
+      setAddText('');
+      setRemoveText('');
+      draftBaseline.current = null;
+      setEditing(false);
+      setReview(null);
+      setBusy(false);
+      setConflict(false);
+      setDraftOpened(false);
+      setAlert(null);
+      setConfirming(null);
     }
   }
 
+  function isCurrent(origin: EditorLifetime | null): origin is EditorLifetime {
+    return (
+      origin !== null &&
+      lifetime.current === origin &&
+      canEdit() &&
+      origin.originating === originating &&
+      (originating ? originating.isCurrent() : origin.page === page)
+    );
+  }
+
+  // Descendants consult the retained reader during rendering as well as in async callbacks.
+  // Event-handler custody changes at commit; reader custody changes only with its source.
+  const currentReader = lifetime.current;
+  const readerIsCurrent = () => isCurrent(currentReader);
+
+  const pendingCommand =
+    lifetime.current?.custody.retry !== undefined || lifetime.current?.custody.flight !== undefined;
+  const baseline = draftBaseline.current;
+  const draftDirty =
+    draftOpened &&
+    baseline !== null &&
+    session.state === 'active' &&
+    offered &&
+    hasUnsavedProgressDraft(session.mode, baseline, { amount, locator, position, addText, removeText });
+  const stagedIntent = review !== null && !pendingCommand;
+  const progressDraftDirty = () => draftDirty || stagedIntent || confirming !== null;
+  const departure = usePublicationNoteDraftNavigation({
+    identity: lifetime.current!,
+    state: {
+      active: isCurrent(lifetime.current),
+      dirty: progressDraftDirty(),
+      locked: pendingCommand,
+    },
+    getState: () => ({
+      active: isCurrent(lifetime.current),
+      dirty: progressDraftDirty(),
+      locked: lifetime.current?.custody.flight !== undefined || lifetime.current?.custody.retry !== undefined,
+    }),
+    discard: () => {
+      const origin = lifetime.current;
+      if (!isCurrent(origin) || origin.custody.flight || origin.custody.retry) return;
+      draftBaseline.current = null;
+      setValidateRecord(false);
+      setAmount(session.amount ?? '');
+      setLocator(session.locator ?? '');
+      setPosition(session.position ?? '');
+      setAddText('');
+      setRemoveText('');
+      setDraftOpened(false);
+      setEditing(false);
+      setReview(null);
+      setConflict(false);
+      setConfirming(null);
+      setAlert(null);
+    },
+  });
+  function closeUpdate() {
+    const origin = lifetime.current;
+    if (!canHandle() || !isCurrent(origin)) return;
+    void departure.requestNavigation().then((stay) => {
+      if (!stay && canHandle() && isCurrent(origin)) setEditing(false);
+    });
+  }
+
+  function explain(reason: ProgressFailure['reason'], recording = false) {
+    setAlert(progressFailureMessage(reason));
+    if (reason === 'forbidden' || reason === 'closed') {
+      const origin = lifetime.current;
+      if (origin) {
+        delete origin.custody.retry;
+        delete origin.custody.credential;
+      }
+      draftBaseline.current = null;
+      setDraftOpened(false);
+      setAmount('');
+      setLocator('');
+      setPosition('');
+      setAddText('');
+      setRemoveText('');
+      setReview(null);
+      setConflict(false);
+      setSession((current) => ({ ...current, subject: null, versionSubject: null, recordingState: 'unavailable' }));
+      setEditing(false);
+    }
+    if (recording && reason === 'unsupported_library_profile') {
+      setUnsupported(true);
+    }
+  }
+
+  async function refreshHistory(origin = lifetime.current) {
+    if (!isCurrent(origin)) return;
+    const request = Symbol();
+    origin.history = request;
+    const isLatest = () => isCurrent(origin) && origin.history === request;
+    try {
+      const fresh = originating
+        ? await originating.refresh()
+        : await readProgressSession({
+            data: {
+              id: session.id,
+              ...(positions.changes ? { changes: positions.changes } : {}),
+              ...(positions.units ? { units: positions.units } : {}),
+            },
+          });
+      if (!isLatest()) return;
+      if (fresh.signedIn) {
+        if (!originating || fresh.session.revision >= session.revision) {
+          setPositions({ changes: fresh.changesCursor, units: fresh.unitsCursor });
+          historyNavigation?.refresh(fresh.changesCursor, fresh.unitsCursor);
+        }
+        setSession((current) => (!originating || fresh.session.revision >= current.revision ? fresh.session : current));
+        setReadDenied(false);
+        setAlert(null);
+        return fresh;
+      } else {
+        setReadDenied(true);
+        setAlert(m.library_progress_refused());
+      }
+    } catch (error) {
+      if (!isLatest()) return;
+      if (isNotFound(error) || isPlatformClosedError(error)) {
+        setReadDenied(true);
+        setAlert(m.library_progress_refused());
+      } else {
+        setSession((current) => ({ ...current, subject: null, versionSubject: null, recordingState: 'unavailable' }));
+        setAlert(m.library_progress_unavailable());
+      }
+      setEditing(false);
+    }
+  }
+
+  async function dispatch(intent: CapturedIntent, origin: EditorLifetime) {
+    const guard = commandGuards[intent.kind === 'finish' ? intent.data.action : 'record'];
+    if (
+      !isCurrent(origin) ||
+      (guard && !guard.isCurrent()) ||
+      (originating && !guard && !originating.isCurrent(true)) ||
+      origin.custody.flight
+    )
+      return;
+    const headers = guard ? guard.headers() : csrfHeaders();
+    if (!headers) return;
+    origin.custody.retry ??= freezeCapturedIntent(intent);
+    const captured = origin.custody.retry;
+    const credential = (origin.custody.credential ??= Object.freeze(Object.fromEntries(new Headers(headers))));
+    if (
+      captured.kind !== intent.kind ||
+      (captured.kind === 'finish' && intent.kind === 'finish' && captured.data.action !== intent.data.action)
+    )
+      return;
+    setAlert(null);
+    setBusy(true);
+    const flight = {};
+    origin.custody.flight = flight;
+    const currentAttempt = () => isCurrent(origin) && origin.custody.flight === flight && (!guard || guard.isCurrent());
+    origin.history = null;
+    try {
+      const result =
+        captured.kind === 'finish'
+          ? await finishProgressSession({ data: captured.data, headers: credential })
+          : await recordProgressSession({ data: captured.data, headers: credential });
+      // Native work may commit after retirement; its completion has no replacement UI authority.
+      if (!currentAttempt()) return;
+      if (!result.ok) {
+        setConflict(result.reason === 'conflict');
+        if (result.reason === 'invalid') {
+          // A definitive field refusal permits a corrected intent; an unknown result never does.
+          delete origin.custody.retry;
+          delete origin.custody.credential;
+          setNativeField(result.field ?? 'record');
+          setReview(null);
+          setKey(crypto.randomUUID());
+        }
+        explain(result.reason, captured.kind !== 'finish');
+        return;
+      }
+      if (originating && result.session.id !== originating.address.id) {
+        setReadDenied(true);
+        return;
+      }
+      delete origin.custody.retry;
+      delete origin.custody.credential;
+      setConflict(false);
+      setNativeField(null);
+      setAcknowledged(result.session.revision);
+      setReview(null);
+      setDraftOpened(false);
+      setKey(crypto.randomUUID());
+      if (captured.kind === 'record') {
+        if (captured.data.clear) {
+          setAddText('');
+          setRemoveText('');
+        }
+        setAmount('');
+        setLocator('');
+        setPosition('');
+      }
+      if (captured.kind === 'add') setAddText('');
+      if (captured.kind === 'remove') setRemoveText('');
+      if (captured.kind === 'finish') setConfirming(null);
+      draftBaseline.current = null;
+      setSession((current) =>
+        !originating || result.session.revision >= current.revision
+          ? applyProgressSnapshot(current, result.session)
+          : current,
+      );
+      await refreshHistory(origin);
+      if (!currentAttempt()) return;
+      setEditing(false);
+    } catch {
+      if (!currentAttempt()) return;
+      setAlert(m.library_progress_unavailable());
+    } finally {
+      // This physical latch belongs to the dispatched command, not an admission render.
+      if (origin.custody.flight === flight) delete origin.custody.flight;
+      if (isCurrent(origin)) setBusy(false);
+    }
+  }
+
+  async function onRecord() {
+    const origin = lifetime.current;
+    if (!canHandle() || !isCurrent(origin) || session.state !== 'active' || !offered) return;
+    if (origin.custody.retry) {
+      stage(origin.custody.retry);
+      return;
+    }
+    setValidateRecord(true);
+    if (session.mode === 'cursor_position') {
+      if (progressLocatorIssue(locator) || progressDecimalIssue(position, session.inputRules)) return;
+    } else if (progressDecimalIssue(amount, session.inputRules)) return;
+    const intent =
+      session.mode === 'cursor_position' ? { locator, position: position.trim() } : { amount: amount.trim() };
+    const checked = parseRecord(
+      session.mode,
+      intent,
+      { unit: session.unit, state: session.state },
+      {
+        ...(session.inputRules?.min === undefined ? {} : { minimum: session.inputRules.min }),
+        ...(session.inputRules?.max === undefined ? {} : { maximum: session.inputRules.max }),
+        ...(session.inputRules?.step === undefined || session.inputRules.step === 'any'
+          ? {}
+          : {
+              precision: progressDecimalPlaces(session.inputRules.step),
+            }),
+      },
+    );
+    if (!checked.ok) {
+      setNativeField(checked.field);
+      return;
+    }
+    stage({
+      kind: 'record',
+      data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, ...intent },
+    });
+  }
+
   async function onUnits(kind: 'add' | 'remove') {
-    if (pending.current || session.state !== 'active') return;
+    const origin = lifetime.current;
+    if (!canHandle() || !isCurrent(origin) || origin.custody.flight || session.state !== 'active' || !offered) return;
+    if (origin.custody.retry) {
+      if (origin.custody.retry.kind === kind) stage(origin.custody.retry);
+      return;
+    }
     const parsed = parseUnitBatch(kind === 'add' ? addText : removeText);
     if (!parsed.ok) {
       setAlert(parsed.reason === 'limit' ? m.library_progress_batch_limit() : m.library_progress_invalid());
       return;
     }
-    setAlert(null);
-    pending.current = true;
-    try {
-      const result = await recordProgressSession({
-        data: {
-          sessionId: session.id,
-          revision: session.revision,
-          idempotencyKey: key,
-          ...(kind === 'add' ? { add: parsed.ids } : { remove: parsed.ids }),
-        },
-        headers: csrfHeaders(),
-      });
-      if (!result.ok) {
-        explain(result.reason);
-        return;
-      }
-      const change: ProgressChange = {
-        id: `${session.id}:${result.session.revision}`,
-        revision: result.session.revision,
-        createdAt: new Date().toISOString(),
-        action: null,
-        amount: null,
-        locator: null,
-        position: null,
-        add: kind === 'add' ? parsed.ids : [],
-        remove: kind === 'remove' ? parsed.ids : [],
-      };
-      setKey(crypto.randomUUID());
-      if (kind === 'add') setAddText('');
-      else setRemoveText('');
-      setSession((current) => {
-        const next = new Set(current.units);
-        if (kind === 'add') for (const id of parsed.ids) next.add(id);
-        else for (const id of parsed.ids) next.delete(id);
-        return {
-          ...current,
-          revision: result.session.revision,
-          completedUnitCount: result.session.completedUnitCount,
-          state: result.session.state,
-          completedAt: result.session.completedAt,
-          units: [...next].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0)),
-          changes: [...current.changes, change],
-        };
-      });
-    } catch {
-      setAlert(m.library_progress_invalid());
-    } finally {
-      pending.current = false;
-    }
+    stage({
+      kind,
+      data: {
+        sessionId: session.id,
+        revision: session.revision,
+        idempotencyKey: key,
+        ...(kind === 'add' ? { add: parsed.ids } : { remove: parsed.ids }),
+      },
+    });
+  }
+
+  function stage(intent: CapturedIntent) {
+    const origin = lifetime.current;
+    if (!canHandle() || !isCurrent(origin) || origin.custody.flight) return;
+    setReview(origin.custody.retry ?? freezeCapturedIntent(intent));
+    setEditing(true);
+  }
+
+  async function reviewLatest() {
+    const origin = lifetime.current;
+    if (!canHandle() || !isCurrent(origin) || !conflict || origin.custody.flight) return;
+    setBusy(true);
+    const fresh = await refreshHistory(origin);
+    if (!isCurrent(origin)) return;
+    setBusy(false);
+    if (!fresh || fresh.session.revision < session.revision) return;
+    // Only an explicit conflict recovery retires the rejected operands. Uncertain retries keep them exactly.
+    delete origin.custody.retry;
+    delete origin.custody.credential;
+    const newKey = crypto.randomUUID();
+    setKey(newKey);
+    setConflict(false);
+    if (review?.kind === 'record' && review.data.clear) {
+      setReview({ kind: 'record', data: { ...review.data, revision: fresh.session.revision, idempotencyKey: newKey } });
+    } else setReview(null);
   }
 
   async function onFinish(action: 'complete' | 'abandon') {
-    if (pending.current || session.state !== 'active') return;
-    setAlert(null);
-    pending.current = true;
-    try {
-      const result = await finishProgressSession({
-        data: { sessionId: session.id, action, revision: session.revision, idempotencyKey: key },
-        headers: csrfHeaders(),
-      });
-      if (!result.ok) {
-        explain(result.reason);
-        return;
-      }
-      setKey(crypto.randomUUID());
-      setConfirming(null);
-      const change: ProgressChange = {
-        id: `${session.id}:${result.session.revision}`,
-        revision: result.session.revision,
-        createdAt: new Date().toISOString(),
-        action,
-        amount: null,
-        locator: null,
-        position: null,
-        add: [],
-        remove: [],
-      };
-      setSession((current) => ({
-        ...current,
-        revision: result.session.revision,
-        amount: result.session.amount,
-        state: result.session.state,
-        completedAt: result.session.completedAt,
-        changes: [...current.changes, change],
-      }));
-    } catch {
-      setAlert(m.library_progress_invalid());
-    } finally {
-      pending.current = false;
-    }
+    const origin = lifetime.current;
+    if (!canHandle() || !isCurrent(origin) || session.state !== 'active') return;
+    await dispatch(
+      { kind: 'finish', data: { sessionId: session.id, action, revision: session.revision, idempotencyKey: key } },
+      origin,
+    );
   }
 
-  const progress = progressText(session);
+  if (readDenied) {
+    return (
+      <article className="max-w-4xl space-y-6">
+        <PageHeading>{m.library_progress_heading()}</PageHeading>
+        <p role="alert">{m.library_progress_refused()}</p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            if (canHandle()) void refreshHistory();
+          }}
+        >
+          {m.library_progress_retry()}
+        </Button>
+      </article>
+    );
+  }
 
-  return (
-    <article className="max-w-4xl space-y-8 text-foreground">
-      <header className="space-y-3">
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{m.library_progress_heading()}</h1>
-        <p className="flex flex-wrap items-baseline gap-2">
-          <SubjectRef subject={session.subject} />
+  const locatorIssue = validateRecord ? progressLocatorIssue(locator) : null;
+  const ratio = rowRatio([session.subject, session.versionSubjectId ? session.versionSubject : session.subject]);
+  const progress = progressView(session, getLocale());
+  const currentAmount = scalarRecordingValue(session, session.amount, getLocale());
+  const resultingAmount = scalarRecordingValue(session, amount, getLocale());
+  const sessionTotal = scalarRecordingValue(session, session.total, getLocale());
+  const progressLabel =
+    session.mode === 'cursor_position' && session.position !== null && progress
+      ? `${m.library_progress_position()}: ${progress.text}`
+      : (progress?.text ?? m.home_continue_in_progress());
+  const recordForm = (
+    <Exposure operation="progress_session.record">
+      <section aria-labelledby="record-progress-heading" className="space-y-4">
+        <h2 id="record-progress-heading" className="text-xl font-semibold">
+          {m.library_progress_record_heading()}
+        </h2>
+        <p className="text-lg font-medium break-words">
+          {session.subject ? (
+            <LibraryTitle label={session.subject.label} locale={getLocale()} />
+          ) : (
+            m.library_subject_unavailable()
+          )}
         </p>
         {session.versionSubjectId ? (
-          <p className="flex flex-wrap items-baseline gap-2">
-            <SubjectRef subject={session.versionSubject} />
+          <p className="text-sm text-muted-foreground">
+            {session.versionSubject ? (
+              <LibraryTitle label={session.versionSubject.label} locale={getLocale()} />
+            ) : (
+              m.library_subject_unavailable()
+            )}
           </p>
         ) : null}
-        <p>{modeLabel(session.mode)}</p>
-        <p>{unitLabel(session.unit)}</p>
-        {session.total ? <p>{session.total}</p> : null}
-        <p data-progress-state={session.state}>{stateLabel(session.state)}</p>
-        {progress ? <p data-progress>{progress}</p> : null}
-        {session.mode === 'cursor_position' && (session.locator || session.position) ? (
-          <p>{[session.locator, session.position].filter(Boolean).join(' ')}</p>
-        ) : null}
-      </header>
-      <input type="hidden" name="idempotencyKey" value={key} />
-      {alert ? (
-        <p role="alert" className="rounded-lg border border-border bg-card p-3">
-          {alert}
+        <p className="text-sm">
+          {m.library_progress_unit()}: {session.unitLabel || m.library_progress_unit_unspecified()}
         </p>
-      ) : null}
-      {session.state === 'active' && session.mode !== 'completed_units' ? (
-        <div className="space-y-4">
-          {session.mode === 'scalar_amount' ? (
-            <label className="block space-y-1">
-              <span className="text-sm font-medium">{m.library_progress_amount()}</span>
-              <input className={fieldClass} value={amount} onChange={(event) => setAmount(event.target.value)} />
-            </label>
-          ) : (
-            <>
-              <label className="block space-y-1">
-                <span className="text-sm font-medium">{m.library_progress_locator()}</span>
-                <input className={fieldClass} value={locator} onChange={(event) => setLocator(event.target.value)} />
+        {session.mode === 'completed_units' || session.mode === 'cursor_position' ? (
+          <p className="text-sm text-muted-foreground">{m.library_progress_structure_unverified()}</p>
+        ) : null}
+        <ProgressRecordingMeaning session={session} />
+        {nativeField ? (
+          <p role="alert">{m.library_journal_native_refusal({ field: progressFieldLabel(nativeField) })}</p>
+        ) : null}
+        {pendingCommand ? <p role="status">{m.library_journal_retry_identity()}</p> : null}
+        {session.state !== 'active' ? <p className="text-muted-foreground">{stateLabel(session.state)}</p> : null}
+        {session.state === 'active' && sessionHasIndependentMeasures(session) ? (
+          <IndependentMeasuresVisit
+            session={session}
+            credential={() => commandGuards.record?.headers() ?? csrfHeaders()}
+            isCurrent={() => readerIsCurrent() && (commandGuards.record?.isCurrent() ?? true)}
+            onAcknowledged={(snapshot) => {
+              if (!canHandle()) return;
+              setSession((current) => mergeIndependentSnapshot(current, snapshot));
+              void refreshHistory();
+            }}
+            onRefresh={() => refreshHistory()}
+            {...(logsCursor === undefined ? {} : { logsCursor })}
+          />
+        ) : null}
+        <EpisodeChecklistVisit
+          binding={bindFromDetail({
+            viewer: originating?.viewer ?? null,
+            locale: getLocale(),
+            subjectId: session.subjectId,
+            sessionId: session.id,
+            revision: session.revision,
+          })}
+          credential={() => commandGuards.record?.headers() ?? csrfHeaders()}
+          isCurrent={() => readerIsCurrent() && (commandGuards.record?.isCurrent() ?? true)}
+          onRevision={(revision) => {
+            if (!canHandle()) return;
+            setSession((current) => (revision > current.revision ? { ...current, revision } : current));
+          }}
+          sender={async ({ sessionId, credential, key, revision, intent }) =>
+            recordCanonicalEpisodes({
+              data: { sessionId, revision, key, intent },
+              headers: credential,
+            })
+          }
+          load={async () => {
+            const loaded = await loadCanonicalEpisodeChecklist({
+              data: {
+                sessionId: session.id,
+                subjectId: session.subjectId,
+                revision: session.revision,
+                locale: getLocale(),
+                viewer: originating?.viewer ?? null,
+              },
+              headers: commandGuards.record?.headers() ?? csrfHeaders(),
+            });
+            return loaded.visit;
+          }}
+          inspect={async (ids) =>
+            inspectCanonicalEpisodes({
+              data: { sessionId: session.id, ids },
+              headers: commandGuards.record?.headers() ?? csrfHeaders(),
+            })
+          }
+          continueRetained={async (cursor) =>
+            continueCanonicalEpisodes({
+              data: { sessionId: session.id, ...(cursor ? { cursor } : {}) },
+              headers: commandGuards.record?.headers() ?? csrfHeaders(),
+            })
+          }
+          work={{
+            id: session.subjectId,
+            label: session.subject ? displayLibraryTitle(session.subject.label, getLocale()).text : null,
+          }}
+        />
+        {offered &&
+        session.state === 'active' &&
+        session.mode !== 'completed_units' &&
+        !sessionHasIndependentMeasures(session) ? (
+          <form
+            className="max-w-xl space-y-4"
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              void onRecord();
+            }}
+          >
+            {session.mode === 'scalar_amount' ? (
+              <div className="space-y-3">
+                <p className="text-sm">
+                  {m.library_progress_current_total({ value: currentAmount ?? m.library_progress_unrecorded() })}
+                </p>
+                <div className="space-y-1">
+                  <label htmlFor={amountId} className="text-sm font-medium">
+                    {m.library_progress_amount()}
+                  </label>
+                  <ProgressDecimalInput
+                    id={amountId}
+                    rules={session.inputRules}
+                    issue={validateRecord ? progressDecimalIssue(amount, session.inputRules) : null}
+                    required
+                    aria-describedby={amountHint}
+                    value={amount}
+                    onChange={(event) => editRecord(() => setAmount(event.target.value))}
+                  />
+                </div>
+                <p id={amountHint} className="text-sm text-muted-foreground">
+                  {m.library_progress_replace_total()}
+                </p>
+                <p role="status" className="text-sm font-medium">
+                  {resultingAmount === null
+                    ? m.library_progress_total_preview_empty()
+                    : m.library_progress_resulting_total({ value: resultingAmount })}
+                </p>
+                {sessionTotal !== null ? (
+                  <p className="text-sm text-muted-foreground">
+                    {m.library_progress_session_total({ value: sessionTotal })}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  <label htmlFor={locatorId} className="text-sm font-medium">
+                    {m.library_progress_locator()}
+                  </label>
+                  <Input
+                    id={locatorId}
+                    value={locator}
+                    required
+                    aria-invalid={locatorIssue ? true : undefined}
+                    aria-describedby={locatorIssue ? locatorError : undefined}
+                    onChange={(event) => editRecord(() => setLocator(event.target.value))}
+                  />
+                  <ProgressInputError id={locatorError} issue={locatorIssue} />
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor={positionId} className="text-sm font-medium">
+                    {m.library_progress_position()}
+                  </label>
+                  <ProgressDecimalInput
+                    id={positionId}
+                    rules={session.inputRules}
+                    issue={validateRecord ? progressDecimalIssue(position, session.inputRules) : null}
+                    required
+                    value={position}
+                    onChange={(event) => editRecord(() => setPosition(event.target.value))}
+                  />
+                </div>
+              </>
+            )}
+            <Button type="submit">{m.library_progress_record()}</Button>
+          </form>
+        ) : null}
+        {offered && session.state === 'active' && session.mode === 'completed_units' ? (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label htmlFor={addId} className="text-sm font-medium">
+                {m.library_progress_add_units()}
               </label>
-              <label className="block space-y-1">
-                <span className="text-sm font-medium">{m.library_progress_position()}</span>
-                <input className={fieldClass} value={position} onChange={(event) => setPosition(event.target.value)} />
+              <Textarea
+                id={addId}
+                aria-describedby={addHint}
+                value={addText}
+                onChange={(event) => editRecord(() => setAddText(event.target.value))}
+              />
+              <p id={addHint} className="text-sm text-muted-foreground">
+                {m.library_progress_batch_limit()}
+              </p>
+              <Button variant="outline" onClick={() => void onUnits('add')}>
+                {m.library_progress_add_units()}
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor={removeId} className="text-sm font-medium">
+                {m.library_progress_remove_units()}
               </label>
-            </>
-          )}
-          <button type="button" className={buttonClass} onClick={() => void onRecord()}>
-            {m.library_progress_record()}
-          </button>
-        </div>
-      ) : null}
-      {session.state === 'active' && session.mode === 'completed_units' ? (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label htmlFor={addId} className="text-sm font-medium">
-              {m.library_progress_add_units()}
-            </label>
-            <textarea
-              id={addId}
-              className={fieldClass}
-              aria-describedby={addHint}
-              value={addText}
-              onChange={(event) => setAddText(event.target.value)}
-            />
-            <p id={addHint} className="text-sm text-muted-foreground">
-              {m.library_progress_batch_limit()}
-            </p>
-            <button type="button" className={buttonClass} onClick={() => void onUnits('add')}>
-              {m.library_progress_add_units()}
-            </button>
+              <Textarea
+                id={removeId}
+                aria-describedby={removeHint}
+                value={removeText}
+                onChange={(event) => editRecord(() => setRemoveText(event.target.value))}
+              />
+              <p id={removeHint} className="text-sm text-muted-foreground">
+                {m.library_progress_batch_limit()}
+              </p>
+              <Button variant="outline" onClick={() => void onUnits('remove')}>
+                {m.library_progress_remove_units()}
+              </Button>
+            </div>
           </div>
-          <div className="space-y-2">
-            <label htmlFor={removeId} className="text-sm font-medium">
-              {m.library_progress_remove_units()}
-            </label>
-            <textarea
-              id={removeId}
-              className={fieldClass}
-              aria-describedby={removeHint}
-              value={removeText}
-              onChange={(event) => setRemoveText(event.target.value)}
-            />
-            <p id={removeHint} className="text-sm text-muted-foreground">
-              {m.library_progress_batch_limit()}
-            </p>
-            <button type="button" className={buttonClass} onClick={() => void onUnits('remove')}>
-              {m.library_progress_remove_units()}
-            </button>
-          </div>
-        </div>
-      ) : null}
-      {session.state === 'active' ? (
-        <div className="flex flex-wrap gap-3">
-          <button type="button" className={buttonClass} onClick={() => setConfirming('complete')}>
-            {m.library_progress_complete()}
-          </button>
-          <button type="button" className={buttonClass} onClick={() => setConfirming('abandon')}>
-            {m.library_progress_abandon()}
-          </button>
-          {confirming === 'complete' ? (
-            <>
-              <button type="button" className={buttonClass} onClick={() => void onFinish('complete')}>
+        ) : null}
+        {session.state === 'active' && confirming ? (
+          <div className="flex flex-wrap gap-3">
+            {confirming === 'complete' ? (
+              <Button variant="outline" onClick={() => void onFinish('complete')}>
                 {m.library_progress_confirm_complete()}
-              </button>
-              <button type="button" className={buttonClass} onClick={() => setConfirming(null)}>
-                {m.library_progress_cancel()}
-              </button>
-            </>
-          ) : null}
-          {confirming === 'abandon' ? (
-            <>
-              <button type="button" className={buttonClass} onClick={() => void onFinish('abandon')}>
+              </Button>
+            ) : null}
+            {confirming === 'abandon' ? (
+              <Button variant="outline" onClick={() => void onFinish('abandon')}>
                 {m.library_progress_confirm_abandon()}
-              </button>
-              <button type="button" className={buttonClass} onClick={() => setConfirming(null)}>
-                {m.library_progress_cancel()}
-              </button>
-            </>
+              </Button>
+            ) : null}
+            <Button variant="outline" onClick={() => edit(() => setConfirming(null))}>
+              {m.library_progress_cancel()}
+            </Button>
+          </div>
+        ) : session.state !== 'active' ? (
+          <p>
+            <a
+              href={`/${getLocale()}/library/progress?subjectId=${encodeURIComponent(session.subjectId)}`}
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              {m.library_progress_restart()}
+            </a>
+          </p>
+        ) : null}
+      </section>
+    </Exposure>
+  );
+
+  const editorContent = (
+    <>
+      {offered || draftOpened || pendingCommand ? (
+        <fieldset disabled={busy || pendingCommand || review !== null} className="min-w-0">
+          {recordForm}
+        </fieldset>
+      ) : null}
+      {review && review.kind !== 'finish' ? (
+        <section className="space-y-4">
+          <ProgressSessionReturnControls session={session} returnContext={returnContext} />
+          <ProgressCorrectionReview
+            data={review.data}
+            busy={busy}
+            conflict={conflict}
+            onConfirm={() => {
+              const origin = lifetime.current;
+              if (canHandle() && isCurrent(origin)) void dispatch(review, origin);
+            }}
+            onCancel={() =>
+              edit(() => {
+                if (!lifetime.current?.custody.retry && !lifetime.current?.custody.flight) setReview(null);
+              })
+            }
+            onReload={() => void reviewLatest()}
+          />
+        </section>
+      ) : null}
+    </>
+  );
+
+  return (
+    <article className="max-w-4xl space-y-10 text-foreground">
+      <header className="space-y-6">
+        <PageHeading>{m.library_progress_heading()}</PageHeading>
+        <ProgressSessionReturnControls session={session} returnContext={returnContext} />
+        <div className="flex items-start gap-5 sm:gap-7">
+          <div className="w-24 shrink-0 sm:w-40">
+            <SubjectCover subject={session.subject} ratio={ratio} size="fill" priority />
+          </div>
+          <div className="min-w-0 flex-1 space-y-4">
+            <div className="space-y-1">
+              <p className="text-2xl font-medium [overflow-wrap:anywhere] sm:text-3xl">
+                {session.subject ? (
+                  <Link
+                    to={
+                      subjectHref(
+                        { id: session.subject.id, label: displayLibraryTitle(session.subject.label, getLocale()).text },
+                        getLocale(),
+                      ).to
+                    }
+                    params={
+                      subjectHref(
+                        { id: session.subject.id, label: displayLibraryTitle(session.subject.label, getLocale()).text },
+                        getLocale(),
+                      ).params
+                    }
+                    className="underline-offset-4 hover:underline"
+                  >
+                    <LibraryTitle label={session.subject.label} locale={getLocale()} />
+                  </Link>
+                ) : (
+                  m.library_subject_unavailable()
+                )}
+              </p>
+              {session.subject?.typeLabel ? (
+                <p className="text-sm text-muted-foreground">{session.subject.typeLabel}</p>
+              ) : null}
+            </div>
+            <p className="text-sm font-medium">
+              <span data-progress-state={session.state}>{stateLabel(session.state)}</span>
+            </p>
+            {sessionHasIndependentMeasures(session) ? (
+              <IndependentMeasuresReadout measures={projectIndependentMeasures(session)} revision={session.revision} />
+            ) : (
+              <ProgressRow value={progress?.percent == null ? null : progress.percent / 100} label={progressLabel} />
+            )}
+            {session.meaning !== 'known' ? (
+              <p role="status" className="text-sm text-muted-foreground">
+                {session.meaning === 'unknown' ? m.library_progress_meaning_unknown() : m.library_history_unavailable()}
+              </p>
+            ) : null}
+            {session.mode === 'completed_units' || session.mode === 'cursor_position' ? (
+              <p id={structureHint} className="text-sm text-muted-foreground">
+                {m.library_progress_structure_unverified()}
+              </p>
+            ) : null}
+            {session.mode === 'cursor_position' && session.position !== null && session.locator ? (
+              <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+                <div className="space-y-1">
+                  <dt className="text-muted-foreground">{m.library_progress_locator()}</dt>
+                  <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{session.locator}</dd>
+                </div>
+              </dl>
+            ) : null}
+            {session.total && session.mode === 'scalar_amount' && session.amount === null ? (
+              <p className="text-sm text-muted-foreground">
+                {m.library_progress_total()}: {session.total}
+              </p>
+            ) : null}
+            <details className="space-y-2 text-sm text-muted-foreground">
+              <summary className="cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                {m.library_progress_details()}
+              </summary>
+              <dl className="space-y-2">
+                <div>
+                  <dt>{m.library_progress_mode()}</dt>
+                  <dd>
+                    <code className="break-all">{session.mode}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>{m.library_progress_unit()}</dt>
+                  <dd>
+                    <code className="break-all">{session.unit}</code>
+                  </dd>
+                </div>
+              </dl>
+            </details>
+          </div>
+        </div>
+        {session.versionSubjectId ? <SubjectIdentity subject={session.versionSubject} ratio={ratio} /> : null}
+      </header>
+      <PrivateOccurrenceControls
+        session={session}
+        isCurrent={readerIsCurrent}
+        lifetime={originating?.lifetime ?? originating}
+      />
+      {unsupported || session.recordingState === 'unsupported' ? (
+        <p role="status">{m.library_progress_no_longer_offered()}</p>
+      ) : session.recordingState !== 'supported' ? (
+        <div className="space-y-2">
+          <p role="status">{m.library_progress_recording_unavailable()}</p>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (canHandle()) void refreshHistory();
+            }}
+          >
+            {m.library_progress_retry()}
+          </Button>
+        </div>
+      ) : null}
+      {acknowledged !== null ? (
+        <p role="status">{m.library_progress_saved_revision({ revision: acknowledged })}</p>
+      ) : null}
+      {alert && !editing ? <p role="alert">{alert}</p> : null}
+      {session.state === 'active' ? (
+        <div className="flex items-center gap-2">
+          {offered || sessionHasIndependentMeasures(session) ? (
+            <Button onClick={openUpdate}>{m.library_progress_update()}</Button>
+          ) : null}
+          {completeAllowed || abandonAllowed ? (
+            <Menu
+              title={m.library_collection_actions()}
+              trigger={
+                <Button variant="ghost" className="min-h-10 px-3" aria-label={m.library_collection_actions()}>
+                  {m.library_collection_actions()}
+                </Button>
+              }
+              entries={[
+                ...(completeAllowed
+                  ? [
+                      {
+                        type: 'item' as const,
+                        label: m.library_progress_complete(),
+                        onSelect: () => {
+                          if (canHandle() && (commandGuards.complete?.isCurrent() ?? true)) setConfirming('complete');
+                        },
+                      },
+                    ]
+                  : []),
+                ...(abandonAllowed
+                  ? [
+                      {
+                        type: 'item' as const,
+                        label: m.library_progress_abandon(),
+                        onSelect: () => {
+                          if (canHandle() && (commandGuards.abandon?.isCurrent() ?? true)) setConfirming('abandon');
+                        },
+                      },
+                    ]
+                  : []),
+              ]}
+            />
           ) : null}
         </div>
-      ) : (
-        <p>
+      ) : null}
+      {session.state === 'active' && confirming && !editing ? (
+        <div className="flex flex-wrap gap-3">
+          <Button variant="outline" onClick={() => void onFinish(confirming)}>
+            {confirming === 'complete' ? m.library_progress_confirm_complete() : m.library_progress_confirm_abandon()}
+          </Button>
+          <Button variant="outline" onClick={() => edit(() => setConfirming(null))}>
+            {m.library_progress_cancel()}
+          </Button>
+        </div>
+      ) : null}
+      <Exposure operation="progress_session.record">
+        <Button
+          variant="outline"
+          onClick={() =>
+            stage({
+              kind: 'record',
+              data: { sessionId: session.id, revision: session.revision, idempotencyKey: key, clear: true },
+            })
+          }
+        >
+          {m.library_progress_clear()}
+        </Button>
+      </Exposure>
+      <Exposure operation="progress_session.create">
+        <section className="space-y-3">
           <Link
             to="/library/progress"
-            search={{ subjectId: session.subjectId }}
-            className="text-primary underline-offset-4 hover:underline"
+            search={progressRestartSearch(returnContext, session.subjectId)}
+            {...(session.subject && returnContext?.sourceReturnTo
+              ? {
+                  state: subjectProgressEntryLocationState(
+                    subjectSlotReturnTo(
+                      returnContext.sourceReturnTo,
+                      { id: session.subject.id, label: displayLibraryTitle(session.subject.label, getLocale()).text },
+                      getLocale(),
+                    ),
+                  ) as never,
+                }
+              : {})}
+            className={buttonClass}
           >
-            {m.library_progress_restart()}
+            {m.library_progress_new_session()}
           </Link>
-        </p>
-      )}
+          <p className="text-sm text-muted-foreground">{m.library_progress_new_session_scope()}</p>
+        </section>
+      </Exposure>
+      {editing ? (
+        phone ? (
+          <BottomSheet
+            open={editing}
+            onOpenChange={(value) => (value ? edit(() => setEditing(true)) : closeUpdate())}
+            title={m.library_progress_update()}
+          >
+            <input type="hidden" name="idempotencyKey" value={key} />
+            {alert ? (
+              <p role="alert" className="rounded-lg border border-border bg-card p-3">
+                {alert}
+              </p>
+            ) : null}
+            {editorContent}
+          </BottomSheet>
+        ) : (
+          <Dialog open={editing} onOpenChange={(value) => (value ? edit(() => setEditing(true)) : closeUpdate())}>
+            <DialogContent className="max-h-[85dvh] overflow-y-auto">
+              <DialogTitle>{m.library_progress_update()}</DialogTitle>
+              <input type="hidden" name="idempotencyKey" value={key} />
+              {alert ? (
+                <p role="alert" className="rounded-lg border border-border bg-card p-3">
+                  {alert}
+                </p>
+              ) : null}
+              {editorContent}
+            </DialogContent>
+          </Dialog>
+        )
+      ) : null}
       <section role="region" aria-labelledby={changesHeading} className="space-y-3">
-        <h2 id={changesHeading} className="text-xl font-semibold">
+        <h2 id={changesHeading} data-progress-history-heading="changes" tabIndex={-1} className="text-xl font-semibold">
           {m.library_progress_changes()}
         </h2>
         {session.changes.length ? (
-          <ol className="divide-y divide-border/60 border-y border-border/60">
-            {session.changes.map((change) => (
-              <li key={change.id} className="py-3">
-                <span>{changeText(change)}</span>
-              </li>
-            ))}
+          <ol key={JSON.stringify([session.id, positions.changes])} className="space-y-1">
+            {session.changes.map((change, occurrence) => {
+              const record = progressHistoryRecord(session, change);
+              return (
+                <ContentItem
+                  key={change.id}
+                  headingLevel={3}
+                  title={
+                    change.action
+                      ? stateLabel(change.action === 'complete' ? 'completed' : 'abandoned')
+                      : m.library_progress_change_recorded()
+                  }
+                  metadata={<RelativeTime value={change.createdAt} />}
+                  preview={
+                    <>
+                      {progressHistoryPreview(change, occurrence + 1)}
+                      {record ? (
+                        <Exposure operation="progress_session.record">
+                          <Button
+                            variant="outline"
+                            disabled={busy || pendingCommand}
+                            onClick={() =>
+                              stage({
+                                kind: 'record',
+                                data: {
+                                  sessionId: session.id,
+                                  revision: session.revision,
+                                  idempotencyKey: key,
+                                  ...record,
+                                },
+                              })
+                            }
+                          >
+                            {m.library_progress_review()}
+                          </Button>
+                        </Exposure>
+                      ) : null}
+                    </>
+                  }
+                />
+              );
+            })}
           </ol>
         ) : (
-          <p className="text-muted-foreground">{m.library_progress_empty()}</p>
+          <p className="text-muted-foreground">
+            {positions.changes || session.changesNext
+              ? m.library_progress_history_reader_changes_page_empty()
+              : m.library_progress_changes_empty()}
+          </p>
         )}
-        {session.changesNext ? (
-          <Link
-            to="/library/progress/$id"
-            params={{ id: session.id }}
-            search={{
-              changes: session.changesNext,
-              ...(page.unitsCursor ? { units: page.unitsCursor } : {}),
-            }}
-            className={buttonClass}
-          >
-            {m.library_progress_more()}
-          </Link>
-        ) : null}
+        <ProgressHistoryControls
+          section="changes"
+          cursor={positions.changes}
+          next={session.changesNext}
+          id={session.id}
+          originating={originating}
+          search={{
+            ...(logsCursor ? { logs: logsCursor } : {}),
+            ...(positions.units ? { units: positions.units } : {}),
+          }}
+        />
       </section>
-      <section role="region" aria-labelledby={unitsHeading} className="space-y-3">
-        <h2 id={unitsHeading} className="text-xl font-semibold">
+      <section
+        role="region"
+        aria-labelledby={unitsHeading}
+        aria-describedby={session.mode === 'completed_units' ? structureHint : undefined}
+        className="space-y-3"
+      >
+        <h2 id={unitsHeading} data-progress-history-heading="units" tabIndex={-1} className="text-xl font-semibold">
           {m.library_progress_units()}
         </h2>
         {session.units.length ? (
-          <ul className="divide-y divide-border/60 border-y border-border/60">
-            {session.units.map((unit) => (
-              <li key={unit} className="py-2">
-                {unit}
+          <ul
+            // Native unit rows have no IDs. Scope occurrence identity to this exact ordered page,
+            // so an open disclosure cannot migrate to another record after page replacement.
+            key={JSON.stringify([session.id, positions.units, session.units])}
+            className="space-y-3"
+          >
+            {session.units.map((unit, occurrence) => (
+              <li key={occurrence} className="min-w-0 py-2">
+                <ProgressHistoryUnit value={unit} occurrence={occurrence + 1} />
               </li>
             ))}
           </ul>
         ) : (
-          <p className="text-muted-foreground">{m.library_progress_empty()}</p>
+          <p className="text-muted-foreground">
+            {positions.units || session.unitsNext
+              ? m.library_progress_history_reader_units_page_empty()
+              : m.library_progress_units_empty()}
+          </p>
         )}
-        {session.unitsNext ? (
-          <Link
-            to="/library/progress/$id"
-            params={{ id: session.id }}
-            search={{
-              units: session.unitsNext,
-              ...(page.changesCursor ? { changes: page.changesCursor } : {}),
-            }}
-            className={buttonClass}
-          >
-            {m.library_progress_more()}
-          </Link>
-        ) : null}
+        <ProgressHistoryControls
+          section="units"
+          cursor={positions.units}
+          next={session.unitsNext}
+          id={session.id}
+          originating={originating}
+          search={{
+            ...(logsCursor ? { logs: logsCursor } : {}),
+            ...(positions.changes ? { changes: positions.changes } : {}),
+          }}
+        />
       </section>
+      {children}
     </article>
+  );
+}
+
+function progressFieldLabel(field: string): string {
+  if (field === 'amount') return m.library_progress_amount();
+  if (field === 'locator') return m.library_progress_locator();
+  if (field === 'position') return m.library_progress_position();
+  if (field === 'measureId' || field === 'unit') return m.library_progress_unit();
+  if (field === 'add' || field === 'remove') return m.library_progress_units();
+  return m.library_progress_record_heading();
+}
+
+/** Explain only the facts supplied for this occurrence, without inventing profile choices or conversions. */
+function ProgressRecordingMeaning({ session }: { session: ProgressSessionView }) {
+  const measures =
+    session.mode === 'scalar_amount' && session.measures?.length
+      ? session.measures
+      : [{ unit: session.unit, unitLabel: session.unitLabel, inputRules: session.inputRules }];
+  const meaning =
+    session.mode === 'scalar_amount'
+      ? m.library_progress_scalar_meaning()
+      : session.mode === 'cursor_position'
+        ? m.library_progress_cursor_meaning()
+        : m.library_progress_units_meaning();
+  return (
+    <details className="space-y-3 rounded-lg border p-3">
+      <summary className="min-h-10 cursor-pointer content-center font-medium">
+        {m.library_progress_profile_rules()}
+      </summary>
+      <p className="text-sm">{meaning}</p>
+      {session.mode === 'scalar_amount' && measures.length > 1 ? (
+        <p className="text-sm">{m.library_progress_independent_meaning()}</p>
+      ) : null}
+      <ul className="space-y-4">
+        {measures.map((measure) => (
+          <li key={measure.unit} className="space-y-2">
+            <p className="font-medium">{measure.unitLabel || m.library_progress_unit_unspecified()}</p>
+            <p className="text-sm text-muted-foreground">{m.library_progress_unit_identity({ unit: measure.unit })}</p>
+            {measure.inputRules ? (
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                {measure.inputRules.min !== undefined ? (
+                  <div>
+                    <dt className="text-muted-foreground">{m.library_progress_minimum()}</dt>
+                    <dd>{measure.inputRules.min}</dd>
+                  </div>
+                ) : null}
+                {measure.inputRules.max !== undefined ? (
+                  <div>
+                    <dt className="text-muted-foreground">{m.library_progress_maximum()}</dt>
+                    <dd>{measure.inputRules.max}</dd>
+                  </div>
+                ) : null}
+                <div>
+                  <dt className="text-muted-foreground">{m.library_progress_precision()}</dt>
+                  <dd>
+                    {measure.inputRules.step === 'any'
+                      ? m.library_progress_precision_any()
+                      : m.library_progress_precision_digits({ digits: progressDecimalPlaces(measure.inputRules.step) })}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">{m.library_progress_total_policy()}</dt>
+                  <dd>
+                    {measure.inputRules.total === 'required'
+                      ? m.library_progress_total_required()
+                      : measure.inputRules.total === 'forbidden'
+                        ? m.library_progress_total_forbidden()
+                        : m.library_progress_total_optional()}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-sm text-muted-foreground">{m.library_progress_recording_unavailable()}</p>
+            )}
+          </li>
+        ))}
+      </ul>
+      <p className="text-sm text-muted-foreground">{m.library_progress_completion_explicit()}</p>
+    </details>
   );
 }

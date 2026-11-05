@@ -1,197 +1,490 @@
-import { admitFilter, facetProperties, FILTER_LIMITS, type FilterDocument, type FilterRelease } from '@rezics/filter';
-import { createServerFn } from '@tanstack/react-start';
-import type { KernelClient } from '@rezics/client';
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-  useListCollection,
-} from '@rezics/ui/combobox';
-import { Link, useNavigate } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
-import { getLocale } from '../paraglide/runtime.js';
-import { m } from '../paraglide/messages.js';
-import { env } from 'cloudflare:workers';
-import { kernelClient } from '../kernel/client.ts';
+import { QueryTextRecovery } from './query-text-recovery';
 
-type SearchResult = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$search']['post']>>['data']>;
-type SuggestResult = NonNullable<Awaited<ReturnType<KernelClient['subjects']['$suggest']['get']>>['data']>;
-type FacetResult = {
-  facets: {
-    property: string;
-    relation: 'exact' | 'lower_bound';
-    values: { value: string; count: number; labels: Record<string, string> }[];
-  }[];
-  total: { value: number; relation: 'exact' | 'lower_bound' };
-  as_of: string;
-};
+export {
+  correctSearchInput,
+  discoverySearchHref,
+  facetValuesFromSearch,
+  rangeValuesFromSearch,
+  removeSearchInput,
+  searchFormFields,
+  searchInputDependency,
+  searchInputFingerprint,
+  searchLoaderDeps,
+  searchParams,
+  searchUrlIntake,
+} from './search-params';
+export type {
+  SearchInputIssue,
+  SearchInputIssueReason,
+  SearchLoaderDeps,
+  SearchParams,
+  SearchUrlIntake,
+} from './search-params';
+export { SearchInputRecovery } from './search-input-recovery';
+import { useSearchWindow } from './search-window';
+import { SearchResultsRegion } from './search-regions/results';
+import { QuerySharePreview } from './query-share-preview';
+import { parseQueryShare, shareUnavailable } from './query-share';
+
+import { facetProperties, parseFilter, type FilterDocument, type FilterRange } from '@rezics/filter';
+import { pickText } from '@rezics/composition';
+import * as v from 'valibot';
+import { useLocation, useRouter } from '@tanstack/react-router';
+import { createServerFn } from '@tanstack/react-start';
+import { getRequest } from '@tanstack/react-start/server';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { BottomSheet } from '@rezics/ui/bottom-sheet';
+
+import { SlidersHorizontalIcon, XIcon } from 'lucide-react';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import { cn } from '@rezics/ui/utils';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { getLocale, locales } from '../paraglide/runtime.js';
+import { m } from '../paraglide/messages.js';
+import { kernelClient } from '../kernel/client.ts';
+import { requestLanguages } from '../kernel/languages.ts';
+import { bundledRelease } from '@rezics/definitions/bundled';
+import { readRelease, type Release } from '../subject/definitions.ts';
+import { PageHeading } from '../shell/page-heading';
+import { localizedLabel } from './results.tsx';
+
+import { discoveryRequest, realmSearchRequest } from './search-request.ts';
+import { applicableRefinementProperties, refinementProperties, type RefinementApplicability } from './refinement/model';
+import { readFacetPage, facetProblem, refinementKey, type FacetState } from './refinement/request';
+import { scopedRefinementRequests } from './refinement/scoped-refinement';
+import { Refinement, type RefinementData } from './refinement/refinement';
+import { readRefinement } from './refinement/server';
+import { createRangeDraftState, updateRangeDraft, type RangeDraft } from './refinement/range-draft';
+import { isPlatformClosedError } from '../kernel/platform-closed';
+import { readDiscoveryKinds, type DiscoveryKindsState, type LegacySearchPage, type DiscoveryState } from './discovery';
+import {
+  facetSearchInvalidation,
+  readSearchOutcome,
+  searchPageForRecovery,
+  searchRecoveryFromResponse,
+  searchUnavailablePage,
+  type SearchRecoveryState,
+} from './search-recovery';
+
+import { useSearchRetryFocus } from './search-retry-focus';
+import {
+  discoverySearchHref,
+  realmCatalogueSearchLoaderDeps,
+  searchUrlIntake,
+  type SearchLoaderDeps,
+} from './search-params';
+import {
+  isSearchResourceScope,
+  parseSearchResourceScope,
+  removeSearchResourceScope,
+  searchFilterWithScope,
+  type SearchResourceScope,
+} from './advanced-scope';
+import { hasResultSearchIntent } from './search-intent';
+import { DiscoveryKinds } from './discovery-kinds';
+
+import { useDiscoveryPersonalResults } from './discovery-personal-host';
+
+import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
+import { ConditionEditor } from './condition-editor';
+import { searchQuantityUnitText } from './condition-quantity';
+import type { ConditionEntityContext } from './condition-entity';
+import { SearchRealmDiscovery } from './realm-discovery';
+import { isRealmDiscoverySearch, type RealmDiscoveryReader } from './realm-discovery-loader';
+import { readScopedSearchReader } from './search-reader';
+import { canonicalRealmRatingPopulationId, RATING_POPULATION_FIELD } from './rating-population';
+import type { RealmRatingPopulationOption, RealmRatingReadiness } from './rating-population';
+import {
+  RESOURCE_LANGUAGE_PROPERTY,
+  RESOURCE_LANGUAGE_SELECTION_LIMIT,
+  resourceLanguageRefinement,
+  withoutResourceLanguageSelection,
+  type ResourceLanguageRefinement,
+} from './language-refinement';
+import { searchRequiresCurrentReader, searchSessionLifetime } from './scoped-search-lifetime';
+import { sessionCsrfToken, useSession } from '../session/query';
+import { searchSessionOwner } from './search-session-owner';
+import { useSearchQuery } from './use-search-query';
+import type { RealmDiscoveryState } from '../community/realm-discovery';
+import {
+  conditionAdmission,
+  conditionMetadata,
+  conditionSearchState,
+  type ConditionMetadata,
+  type SearchProblem,
+} from './condition-editor-model';
+import { conditionConceptSuggestionFilter } from './condition-concept-model';
+import { createFilterDraft, resetFilterDraft } from './filter-draft-reset';
+import { useFilterSurfaceFocus } from './filter-surface-focus';
+import { useConditionComposition } from './condition-composition';
+type SearchResult = LegacySearchPage;
+export type SearchFacetValueLabel = { text: string; lang?: string };
 type SearchParams = {
   query: string;
-  cursor?: string;
-  type?: string;
+  locale: string;
+  cursor?: string | undefined;
+  sort?: 'rating' | undefined;
+  type?: string | undefined;
+  kinds?: string[] | undefined;
+  languages?: string[] | undefined;
+  filter?: string | undefined;
+  resourceScope?: SearchResourceScope | undefined;
+  ratingPopulation?: string | undefined;
+  representation?: 'subjects-v1';
+  kindCursor?: string;
+  reader?: string | undefined;
   facetValues: Record<string, string[]>;
+  ranges?: Record<string, FilterRange>;
+  condition?: FilterDocument | undefined;
 };
-type SearchPageData = {
+export type SearchPageData = {
+  recovery?: SearchRecoveryState;
+  conditionMetadata?: ConditionMetadata;
+  problem?: SearchProblem;
+  queryState?: SearchLoaderDeps;
+  refinement?: RefinementData;
+  resourceLanguage?: ResourceLanguageRefinement;
+  ranges?: Record<string, FilterRange>;
+  condition?: FilterDocument | undefined;
   result?: SearchResult;
-  type?: string;
+  discovery?: DiscoveryState;
+  refinementApplicability?: RefinementApplicability;
+  type?: string | undefined;
   typeLabels?: Record<string, string>;
+  hitTypes: Record<string, Record<string, string>>;
+  /** The properties whose time values give a hit its year, in the order the search asked for them. */
+  yearProperties: string[];
   typeChoices: { id: string; labels: Record<string, string> }[];
   groups: {
     property: string;
     labels: Record<string, string>;
-    values: { value: string; count: number; labels: Record<string, string> }[];
+    values: {
+      value: string;
+      labels: Record<string, string>;
+      parentTypeLabels?: Record<string, string>;
+    }[];
   }[];
   selectedFacets: Record<string, string[]>;
-  selectedFacetLabels: Record<string, Record<string, string>>;
+  selectedFacetLabels: Record<string, Record<string, SearchFacetValueLabel>>;
   facetsAvailable: boolean;
-};
-type Release = FilterRelease & {
-  types: Record<string, { labels?: Record<string, string>; bases?: readonly string[]; facets?: readonly string[] }>;
-  properties: Record<string, { labels?: Record<string, string>; datatype: string; value?: { pattern?: string } }>;
+  facetRetry: boolean;
+  facetIndexNotReady: boolean;
+  staleCursorRestarted: boolean;
+  sort: 'relevance' | 'rating';
+  ratingPopulation?: string;
+  ratingPopulations?: readonly RealmRatingPopulationOption[];
+  ratingReadiness?: RealmRatingReadiness;
 };
 
-const definitionMemory = new Map<string, { storedAt: number; value: unknown }>();
+function conditionEntityLookupContext(
+  data: SearchPageData | undefined,
+  locale: string,
+  reader: string | null,
+): ConditionEntityContext | undefined {
+  if (!data?.conditionMetadata) return undefined;
+  const base = {
+    locale,
+    ...(reader ? { reader } : {}),
+    ...(data.conditionMetadata.digest ? { release: data.conditionMetadata.digest } : {}),
+  };
+  if (!data.queryState) return { ...base, available: false };
+  const state = data.queryState;
+  const parsedScope = parseSearchResourceScope(state.filter);
+  const scope = state.resourceScope ?? parsedScope.scope;
+  const scopeMismatch =
+    parsedScope.scope !== undefined &&
+    scope !== undefined &&
+    (parsedScope.scope.kind !== scope.kind || parsedScope.scope.id !== scope.id.toLowerCase());
+  const missingScope = parsedScope.scope !== undefined && scope === undefined;
+  const otherReaderBound = searchRequiresCurrentReader({
+    ...state,
+    resourceScope: undefined,
+    ratingPopulation: undefined,
+  });
+  return {
+    ...base,
+    ...(scope ? { resourceScope: scope } : {}),
+    available:
+      typeof data.conditionMetadata.digest === 'string' &&
+      data.conditionMetadata.digest.length > 0 &&
+      !parsedScope.invalidInput &&
+      !scopeMismatch &&
+      !missingScope &&
+      state.ratingPopulation === undefined &&
+      !otherReaderBound &&
+      (scope === undefined || reader !== null),
+  };
+}
+/** At most this many facet properties are asked for on a single-type search. */
+const FACT_PROPERTIES = 2;
+/** At most this many time properties are asked for to give hits their year. */
+const YEAR_PROPERTIES = 4;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-async function cachedDefinition<T>(url: string, ttl?: number): Promise<T> {
-  const now = Date.now();
-  const remembered = definitionMemory.get(url);
-  const cache = typeof caches === 'undefined' ? undefined : (caches as unknown as { default?: Cache }).default;
-  const request = new Request(url, { method: 'GET' });
-
-  if (cache) {
-    try {
-      const cached = await cache.match(request);
-      if (cached) {
-        const storedAt = Number(cached.headers.get('x-rezics-definition-stored-at'));
-        if (ttl === undefined || (Number.isFinite(storedAt) && now - storedAt < ttl)) {
-          const value = (await cached.json()) as T;
-          definitionMemory.set(url, { storedAt: Number.isFinite(storedAt) ? storedAt : now, value });
-          return value;
-        }
-        await cache.delete(request);
-      }
-    } catch {
-      // The memory copy below keeps local development working if the Cache API is unavailable.
-    }
-  }
-
-  if (remembered && (ttl === undefined || now - remembered.storedAt < ttl)) return remembered.value as T;
-
-  const response = await fetch(request);
-  if (!response.ok) throw new Error('Definitions read failed');
-  const value = (await response.json()) as T;
-  const storedAt = Date.now();
-  definitionMemory.set(url, { storedAt, value });
-  if (cache) {
-    const cacheHeaders = new Headers({
-      'content-type': 'application/json',
-      'cache-control': ttl === undefined ? 'public, max-age=31536000, immutable' : 'public, max-age=60',
-      'x-rezics-definition-stored-at': String(storedAt),
-    });
-    try {
-      await cache.put(request, new Response(JSON.stringify(value), { headers: cacheHeaders }));
-    } catch {
-      // Some local Cache API implementations reject entries; the bounded memory copy is the fallback.
-    }
-  }
-  return value;
-}
-
-function kernelOrigin(): string {
-  const origin = (env as { KERNEL_ORIGIN?: string }).KERNEL_ORIGIN;
-  if (origin) return origin;
-  if (import.meta.env.DEV) return 'http://kernel.local';
-  throw new Error('KERNEL_ORIGIN is required to read definitions');
-}
-
-async function readRelease(): Promise<Release> {
-  const origin = kernelOrigin();
-  const activeUrl = new URL('/v1/definitions/active', origin).href;
-  const active = await cachedDefinition<{ digest?: unknown }>(activeUrl, 60_000);
-  if (typeof active.digest !== 'string' || active.digest.length === 0 || active.digest.length > 256)
-    throw new Error('Active definitions release is invalid');
-  const releaseUrl = new URL(`/v1/definitions/releases/${encodeURIComponent(active.digest)}`, origin).href;
-  const response = await cachedDefinition<{ digest?: unknown; release?: unknown }>(releaseUrl);
-  const value = response.release;
-  if (response.digest !== active.digest || !isRecord(value) || !isRecord(value.types) || !isRecord(value.properties))
-    throw new Error('Definitions release is invalid');
-  return value as unknown as Release;
 }
 
 function allowedType(release: Release, type: unknown): type is string {
   return typeof type === 'string' && Object.hasOwn(release.types, type) && isRecord(release.types[type]);
 }
 
-function selectedFilters(
-  release: Release,
-  type: string,
-  requested: Record<string, string[]>,
-): { selected: Record<string, string[]>; filter: FilterDocument } {
-  const allowedProperties = facetProperties(release, [type]);
-  const selected: Record<string, string[]> = {};
-  const clauses: FilterDocument[] = [{ type: { in: [type] } }];
-
-  for (const property of allowedProperties) {
-    if (clauses.length >= FILTER_LIMITS.leaves) break;
-    if (!Object.hasOwn(requested, property) || !Object.hasOwn(release.properties, property)) continue;
-    const values = requested[property];
-    if (!Array.isArray(values)) continue;
-    const accepted: string[] = [];
-    for (const value of values.slice(0, FILTER_LIMITS.in)) {
-      if (typeof value !== 'string' || accepted.includes(value)) continue;
-      try {
-        admitFilter(
-          {
-            and: [{ type: { in: [type] } }, { statement: { property, in: [value] } }],
-          },
-          release,
-          { saved: false },
-        );
-        accepted.push(value);
-      } catch {
-        // Only values accepted by the definitions release can enter the kernel filter.
-      }
-    }
-    if (accepted.length === 0) continue;
-    selected[property] = accepted;
-    clauses.push({ statement: { property, in: accepted } });
-  }
-
-  const filter: FilterDocument = { and: clauses };
-  return { selected, filter: admitFilter(filter, release, { saved: false }) };
+/** Properties whose values a result row can show: items, years, quantities and codes with a declared pattern. */
+function factProperties(release: Release, type: string): string[] {
+  return facetProperties(release, [type])
+    .filter((property) => {
+      const definition = Object.hasOwn(release.properties, property) ? release.properties[property] : undefined;
+      if (!definition) return false;
+      if (['wikibase-item', 'time', 'quantity'].includes(definition.datatype)) return true;
+      return definition.datatype === 'string' && !!definition.value?.pattern;
+    })
+    .slice(0, FACT_PROPERTIES);
 }
 
-const readSearch = createServerFn({ method: 'GET' })
-  .validator((input: unknown): SearchParams => {
-    if (!isRecord(input) || typeof input.query !== 'string' || input.query.length > 256)
-      throw new Error('Invalid search');
-    if (input.cursor !== undefined && typeof input.cursor !== 'string') throw new Error('Invalid cursor');
-    if (input.type !== undefined && typeof input.type !== 'string') throw new Error('Invalid type');
-    const facetValues: Record<string, string[]> = Object.create(null);
-    if (isRecord(input.facetValues)) {
-      for (const [property, values] of Object.entries(input.facetValues).slice(0, FILTER_LIMITS.leaves)) {
-        if (typeof values === 'string') facetValues[property] = [values];
-        else if (Array.isArray(values))
-          facetValues[property] = values
-            .slice(0, FILTER_LIMITS.in)
-            .filter((value): value is string => typeof value === 'string');
+/**
+ * Time properties that give a hit its year: the type's own first one, or on a search across types the first of
+ * every returnable type, so each result can show a year without more than four properties in the request.
+ */
+function yearProperties(release: Release, type?: string): string[] {
+  const candidates = type
+    ? facetProperties(release, [type])
+    : Object.keys(release.types).flatMap((id) => facetProperties(release, [id]));
+  const found = new Set<string>();
+  for (const property of candidates) {
+    if (found.size >= (type ? 1 : YEAR_PROPERTIES)) break;
+    const definition = Object.hasOwn(release.properties, property) ? release.properties[property] : undefined;
+    if (definition?.datatype === 'time') found.add(property);
+  }
+  return [...found];
+}
+
+function validateSearchInput(input: unknown): SearchParams {
+  if (
+    !isRecord(input) ||
+    typeof input.query !== 'string' ||
+    typeof input.locale !== 'string' ||
+    !input.locale ||
+    input.locale.length > 35
+  )
+    throw new Error('Invalid search');
+  if (input.facetValues !== undefined && !isRecord(input.facetValues)) throw new Error('Invalid facets');
+  const urlInput: Record<string, unknown> = {
+    q: input.query,
+    type: input.type,
+    cursor: input.cursor,
+    sort: input.sort,
+    kinds: input.kinds,
+    language: input.languages,
+    filter: input.filter,
+    [RATING_POPULATION_FIELD]: input.ratingPopulation,
+  };
+  if (isRecord(input.facetValues)) {
+    for (const [property, values] of Object.entries(input.facetValues)) urlInput[`f.${property}`] = values;
+  }
+  const intake = searchUrlIntake(urlInput);
+  if (intake.kind !== 'ready') throw new Error('Invalid search');
+  const parsed = {
+    q: intake.request.query,
+    type: intake.request.type,
+    cursor: intake.request.cursor,
+    sort: intake.request.sort,
+    kinds: intake.request.kinds,
+    language: intake.request.languages,
+    filter: intake.request.filter,
+  };
+  if (input.resourceScope !== undefined && !isSearchResourceScope(input.resourceScope))
+    throw new Error('Invalid search resource scope');
+  if (input.reader !== undefined && (typeof input.reader !== 'string' || input.reader.length > 256))
+    throw new Error('Invalid search reader');
+  if (parsed.filter !== undefined && typeof parsed.filter !== 'string') throw new Error('Invalid search filter');
+  const ratingPopulation =
+    input.ratingPopulation === undefined || input.ratingPopulation === ''
+      ? undefined
+      : canonicalRealmRatingPopulationId(input.ratingPopulation);
+  if (input.ratingPopulation !== undefined && input.ratingPopulation !== '' && !ratingPopulation)
+    throw new Error('Invalid Search rating population');
+  const filterScope = typeof parsed.filter === 'string' ? parseSearchResourceScope(parsed.filter) : {};
+  if (filterScope.invalidInput) throw new Error('Invalid search resource scope');
+  if (
+    isSearchResourceScope(input.resourceScope) &&
+    filterScope.scope &&
+    (input.resourceScope.kind !== filterScope.scope.kind ||
+      input.resourceScope.id.toLowerCase() !== filterScope.scope.id)
+  )
+    throw new Error('Search resource scope does not match its filter');
+  const resourceScope = isSearchResourceScope(input.resourceScope) ? input.resourceScope : filterScope.scope;
+  const filter = searchFilterWithScope(typeof parsed.filter === 'string' ? parsed.filter : undefined, resourceScope);
+  if (input.kindCursor !== undefined && (typeof input.kindCursor !== 'string' || input.kindCursor.length > 4864))
+    throw new Error('Invalid kind cursor');
+  const facetValues = intake.request.facets;
+  return {
+    query: parsed.q,
+    locale: input.locale,
+    type: parsed.type,
+    cursor: parsed.cursor,
+    sort: parsed.sort,
+    ...(ratingPopulation ? { ratingPopulation } : {}),
+    kinds: parsed.kinds,
+    languages: parsed.language,
+    ...(filter !== undefined ? { filter } : {}),
+    ...(resourceScope ? { resourceScope } : {}),
+    ...(typeof input.reader === 'string' ? { reader: input.reader } : {}),
+    facetValues,
+    ...(isRecord(input.ranges)
+      ? {
+          ranges: Object.fromEntries(
+            Object.entries(input.ranges).map(([property, range]) => {
+              const parsed = parseFilter({ statement: { property, range } });
+              if (!('statement' in parsed) || !('range' in parsed.statement)) throw new Error('Invalid range');
+              return [property, parsed.statement.range];
+            }),
+          ),
+        }
+      : {}),
+    ...(input.condition ? { condition: parseFilter(input.condition) } : {}),
+    ...(input.representation === 'subjects-v1' ? { representation: 'subjects-v1' } : {}),
+    ...(typeof input.kindCursor === 'string' ? { kindCursor: input.kindCursor } : {}),
+  };
+}
+
+function requestParams(data: SearchParams): SearchLoaderDeps {
+  return {
+    query: data.query,
+    type: data.type,
+    facets: data.facetValues,
+    ...(data.ranges ? { ranges: data.ranges } : {}),
+    ...(data.condition ? { condition: data.condition } : {}),
+    cursor: data.cursor,
+    sort: data.sort,
+    kinds: data.kinds,
+    languages: data.languages,
+    filter: data.filter,
+    resourceScope: data.resourceScope,
+    ratingPopulation: data.ratingPopulation,
+  };
+}
+
+function selectedFacetValueLabels(
+  facets: Record<string, string[]>,
+  result: FacetState | undefined,
+  locale: string,
+): SearchPageData['selectedFacetLabels'] {
+  const admitted = result?.status === 'ready' ? result.page.facets : [];
+  return Object.fromEntries(
+    Object.entries(facets).map(([property, values]) => {
+      const nativeFacet = admitted.find((facet) => facet.property === property);
+      return [
+        property,
+        Object.fromEntries(
+          values.flatMap((value) => {
+            const labels = nativeFacet?.values.find((entry) => entry.value === value)?.labels;
+            if (!labels) return [];
+            const picked = localizedLabel(labels, locale);
+            return picked.text.trim()
+              ? [[value, { text: picked.text, ...(picked.lang ? { lang: picked.lang } : {}) }]]
+              : [];
+          }),
+        ),
+      ];
+    }),
+  );
+}
+
+const readKindsWithLocale = createServerFn({ method: 'GET' })
+  .validator(validateSearchInput)
+  .handler(async ({ data }) => {
+    if (!data.kindCursor) throw new Error('Missing kind cursor');
+    const requestContext = getRequest();
+    const reader = searchRequiresCurrentReader(data) ? await readScopedSearchReader(requestContext) : undefined;
+    if (searchRequiresCurrentReader(data) && (!reader || data.reader !== reader.owner))
+      return { status: 'unavailable' as const, recovery: { status: 'session' as const } };
+    if (data.resourceScope?.kind === 'realm') {
+      const request = {
+        ...realmSearchRequest({ ...requestParams(data), cursor: undefined }, requestLanguages(data.locale)),
+        kindCursor: data.kindCursor,
+        limit: 1,
+      };
+      const outcome = await readSearchOutcome(
+        request,
+        (body) =>
+          kernelClient(data.locale).subjects.$search.post(body, {
+            ...(reader ? { headers: { authorization: reader.authorization } } : {}),
+            fetch: { signal: requestContext.signal, cache: 'no-store' },
+          }),
+        requestContext.signal,
+        'subjects',
+      );
+      if (outcome.result?.kinds) {
+        const { values, omitted, next } = outcome.result.kinds;
+        return {
+          status: 'ready' as const,
+          kinds: {
+            values: values.map(({ count: _count, ...kind }) => kind),
+            ...(omitted ? { omitted } : {}),
+            next,
+          },
+          asOf: outcome.result.as_of,
+        };
       }
+      const recovery = outcome.recovery;
+      const status: Exclude<DiscoveryKindsState['status'], 'ready'> =
+        recovery.status === 'closed'
+          ? 'closed'
+          : recovery.status === 'denied' || recovery.status === 'session'
+            ? 'denied'
+            : recovery.status === 'restart'
+              ? 'restart'
+              : recovery.status === 'invalid' || recovery.status === 'invalid-cursor'
+                ? 'invalid'
+                : recovery.status === 'index-not-ready' || recovery.status === 'source-not-ready'
+                  ? 'preparing'
+                  : 'unavailable';
+      return { status, ...(status === 'unavailable' ? { retryable: true } : {}), recovery };
     }
-    return {
-      query: input.query,
-      ...(typeof input.cursor === 'string' ? { cursor: input.cursor } : {}),
-      ...(typeof input.type === 'string' ? { type: input.type } : {}),
-      facetValues,
-    };
-  })
+    let recovery: SearchRecoveryState | undefined;
+    const state = await readDiscoveryKinds(
+      discoveryRequest(requestParams(data), requestLanguages(data.locale)),
+      data.kindCursor,
+      async (body) => {
+        const response = await kernelClient(data.locale).subjects.$search.post(body, {
+          ...(reader ? { headers: { authorization: reader.authorization } } : {}),
+          fetch: { signal: getRequest().signal, cache: 'no-store' },
+        });
+        if (response.error || response.status !== 200)
+          recovery = searchRecoveryFromResponse(response, Date.now(), data.kindCursor);
+        return response;
+      },
+    );
+    if (state.status === 'closed') recovery = { status: 'closed' };
+    return { ...state, ...(recovery ? { recovery } : {}) };
+  });
+
+const prepareShareWithLocale = createServerFn({ method: 'GET' })
+  .validator(validateSearchInput)
+  .handler(async ({ data }) => {
+    const reader = await readScopedSearchReader(getRequest());
+    if ((data.reader ?? undefined) !== reader?.owner) return shareUnavailable();
+    const body = discoveryRequest({ ...requestParams(data), cursor: undefined }, requestLanguages(data.locale));
+    const response = await kernelClient(data.locale).subjects.$search.post(
+      { ...body, prepareShare: true },
+      {
+        ...(reader ? { headers: { authorization: reader.authorization } } : {}),
+        fetch: { signal: getRequest().signal, cache: 'no-store' },
+      },
+    );
+    return response.status === 200 ? parseQueryShare(response.data) : shareUnavailable();
+  });
+
+const readSearchWithLocale = createServerFn({ method: 'GET' })
+  .validator(validateSearchInput)
   .handler(async ({ data }): Promise<SearchPageData> => {
+    const requestContext = getRequest();
+    const signal = requestContext.signal;
+    const queryState = requestParams(data);
+    const realmCatalogue = queryState.resourceScope?.kind === 'realm';
+    const reader = searchRequiresCurrentReader(data) ? await readScopedSearchReader(requestContext) : undefined;
+    if (searchRequiresCurrentReader(data) && (!reader || data.reader !== reader.owner))
+      return { ...searchUnavailablePage(queryState), recovery: { status: 'session' } };
     let release: Release | undefined;
     try {
       release = await readRelease();
@@ -199,373 +492,1471 @@ const readSearch = createServerFn({ method: 'GET' })
       release = undefined;
     }
 
-    const type = release && allowedType(release, data.type) ? data.type : undefined;
-    const selected = release && type ? selectedFilters(release, type, data.facetValues) : undefined;
-    const filter = selected?.filter;
-    const hasSearch = data.query.length > 0 || type !== undefined;
-    const searchPromise: Promise<SearchResult | undefined> = hasSearch
+    const type = data.type;
+    const knownType = release && allowedType(release, type) ? type : undefined;
+    const languages = data.languages ?? requestLanguages(data.locale);
+    const selectedSemanticKinds =
+      release && data.kinds?.length ? data.kinds.filter((kind) => allowedType(release, kind)) : undefined;
+    const years = release
+      ? knownType
+        ? yearProperties(release, knownType)
+        : selectedSemanticKinds
+          ? [...new Set(selectedSemanticKinds.flatMap((kind) => yearProperties(release, kind)))].slice(
+              0,
+              YEAR_PROPERTIES,
+            )
+          : yearProperties(release)
+      : [];
+    const properties = release
+      ? [
+          ...new Set([
+            ...(knownType
+              ? factProperties(release, knownType)
+              : (selectedSemanticKinds?.flatMap((kind) => factProperties(release, kind)) ?? [])),
+            ...years,
+          ]),
+        ].slice(0, 4)
+      : [];
+    const refinementTypes =
+      knownType ?? (data.facetValues.type?.length ? data.facetValues.type : selectedSemanticKinds);
+    const roster = release ? refinementProperties(release, refinementTypes) : [];
+    let refinementRequests: ReturnType<typeof scopedRefinementRequests> | undefined;
+    try {
+      const fallbackLanguages = requestLanguages(data.locale);
+      refinementRequests = scopedRefinementRequests(queryState, fallbackLanguages, []);
+    } catch {
+      refinementRequests = undefined;
+    }
+    const body = refinementRequests?.search;
+    const hasSearch =
+      hasResultSearchIntent(queryState) ||
+      queryState.resourceScope !== undefined ||
+      (queryState.sort === 'rating' && queryState.ratingPopulation !== undefined);
+    const sendSearch = async (
+      request: Parameters<ReturnType<typeof kernelClient>['subjects']['$search']['post']>[0],
+    ) => {
+      const response = await kernelClient(data.locale).subjects.$search.post(request, {
+        ...(reader ? { headers: { authorization: reader.authorization } } : {}),
+        fetch: { signal, cache: 'no-store' },
+      });
+      return response;
+    };
+    const realmRatingUnavailable = data.sort === 'rating' && data.ratingPopulation !== undefined;
+    const runSearch = hasSearch || body !== undefined;
+    const searchPromise = runSearch
       ? (async () => {
-          const response = await kernelClient().subjects.$search.post({
-            ...(data.query ? { text: data.query } : {}),
-            limit: 100,
-            ...(data.cursor ? { cursor: data.cursor } : {}),
-            ...(filter ? { filter } : {}),
-          });
-          if (response.error) throw new Error('Search failed');
-          return response.data as SearchResult;
+          // No installed Content complete-order adapter exists yet. Never ask Global Search and relabel it.
+          if (realmRatingUnavailable) return { recovery: { status: 'unavailable' } as SearchRecoveryState };
+          if (!body) return { recovery: { status: 'invalid' } as SearchRecoveryState };
+          if (realmCatalogue) {
+            const request = {
+              ...realmSearchRequest(queryState, requestLanguages(data.locale)),
+              ...(properties.length ? { properties } : {}),
+            };
+            return readSearchOutcome(request, sendSearch, signal, 'subjects');
+          }
+          const request = {
+            ...body,
+            ...(!hasSearch || !properties.length ? {} : { properties }),
+            ...(!hasSearch ? { limit: 1 } : {}),
+          };
+          if (data.representation !== 'subjects-v1') {
+            return readSearchOutcome(request, sendSearch, signal);
+          }
+          const { representation: _representation, kindPage: _metadata, kindCountLeaf: _counts, ...legacy } = request;
+          return readSearchOutcome(legacy, sendSearch, signal);
         })()
       : Promise.resolve(undefined);
 
-    const facetPropertiesForType = release && type ? facetProperties(release, [type]).slice(0, 8) : [];
-    const facetsPromise: Promise<FacetResult | null | undefined> =
-      release && type && facetPropertiesForType.length > 0
-        ? kernelClient()
-            .subjects.$facets.post({
-              ...(data.query ? { text: data.query } : {}),
-              ...(filter ? { filter } : {}),
-              facets: facetPropertiesForType.map((property) => ({ property, size: 10 })),
-            })
-            .then((response) => {
-              if (response.error) return null;
-              return response.data as FacetResult;
-            })
-            .catch(() => null)
-        : Promise.resolve(undefined);
-
-    const [result, facetResult] = await Promise.all([searchPromise, facetsPromise]);
-    const facetsAvailable = !release || !type || facetResult !== null;
-    const valuesByProperty = new Map((facetResult?.facets ?? []).map((facet) => [facet.property, facet.values]));
-    const groups =
-      release && type && facetResult
-        ? facetPropertiesForType.map((property) => ({
-            property,
-            labels: release!.properties[property]?.labels ?? {},
-            values: valuesByProperty.get(property) ?? [],
-          }))
-        : [];
-    const typeChoices = release
-      ? Object.entries(release.types)
-          .filter(
-            ([, definition]) =>
-              isRecord(definition) && Array.isArray(definition.facets) && definition.facets.length > 0,
-          )
-          .map(([id, definition]) => ({ id, labels: definition.labels ?? {} }))
-      : [];
-
-    return {
+    const outcome = await searchPromise;
+    const result = hasSearch && outcome && 'result' in outcome ? outcome.result : undefined;
+    const discovery = outcome && 'discovery' in outcome ? outcome.discovery : undefined;
+    const applicability =
+      discovery?.status === 'ready'
+        ? discovery.page.applicability
+        : realmCatalogue && outcome?.recovery.status === 'ready'
+          ? ({ type: 'all', statement: 'all' } satisfies RefinementApplicability)
+          : undefined;
+    const eligibleFacets = applicableRefinementProperties(roster, applicability).filter(
+      (entry) => entry.mode === 'values' || entry.mode === 'types',
+    );
+    const requestedFacets = [
+      ...eligibleFacets.filter((entry) => entry.property === RESOURCE_LANGUAGE_PROPERTY),
+      ...eligibleFacets.filter((entry) => entry.property !== RESOURCE_LANGUAGE_PROPERTY),
+    ]
+      .slice(0, 8)
+      .map(({ property }) => ({ property, size: 10 }));
+    let facetResult: FacetState | undefined;
+    if (body && (discovery?.status === 'ready' || (realmCatalogue && result !== undefined)) && requestedFacets.length) {
+      try {
+        const optionRequest = scopedRefinementRequests(
+          withoutResourceLanguageSelection(queryState),
+          requestLanguages(data.locale),
+          requestedFacets,
+        );
+        if (optionRequest.facets)
+          facetResult = await readFacetPage(optionRequest.facets, (request) =>
+            kernelClient(data.locale).subjects.$facets.post(request, {
+              ...(reader ? { headers: { authorization: reader.authorization } } : {}),
+              fetch: { signal, cache: 'no-store' },
+            }),
+          ).catch((error): FacetState => {
+            if (signal.aborted) throw error;
+            if (isPlatformClosedError(error))
+              return {
+                status: 'refused',
+                code: 'platform_closed',
+                httpStatus: error.status,
+                problem: facetProblem(error.problem),
+              };
+            return { status: 'unavailable', code: error instanceof Error ? error.name : 'transport_error' };
+          });
+      } catch (error) {
+        if (signal.aborted) throw error;
+        facetResult = { status: 'invalid', code: error instanceof Error ? error.name : 'invalid_facet_request' };
+      }
+    }
+    const recovery = !outcome
+      ? undefined
+      : ['session', 'closed', 'denied'].includes(outcome.recovery.status)
+        ? outcome.recovery
+        : (facetSearchInvalidation(facetResult) ?? outcome.recovery);
+    const problem = recovery && 'problem' in recovery ? recovery.problem : undefined;
+    const typeChoices = discovery?.status === 'ready' ? discovery.page.kinds.values : [];
+    const hitTypes: Record<string, Record<string, string>> = {};
+    if (release)
+      for (const subject of result?.subjects ?? [])
+        if (allowedType(release, subject.type)) hitTypes[subject.type] = release.types[subject.type]?.labels ?? {};
+    return searchPageForRecovery({
+      queryState,
+      ...(recovery ? { recovery } : {}),
+      ...(release ? { conditionMetadata: conditionMetadata(release) } : {}),
+      ...(problem ? { problem } : {}),
       ...(result ? { result } : {}),
+      ...(discovery ? { discovery } : {}),
+      ...(applicability ? { refinementApplicability: applicability } : {}),
       ...(type ? { type } : {}),
-      ...(type && release ? { typeLabels: release.types[type]?.labels ?? {} } : {}),
+      ...(knownType && release ? { typeLabels: release.types[knownType]?.labels ?? {} } : {}),
+      hitTypes,
+      yearProperties: years,
       typeChoices,
-      groups,
-      selectedFacets: selected?.selected ?? {},
-      selectedFacetLabels: Object.fromEntries(
-        Object.keys(selected?.selected ?? {}).map((property) => [
-          property,
-          release?.properties[property]?.labels ?? {},
-        ]),
+      groups: [],
+      ...(release
+        ? {
+            refinement: {
+              key: refinementKey({
+                principal: reader?.owner ?? 'anonymous',
+                languages,
+                release: release.digest!,
+                source: data.resourceScope ? `${data.resourceScope.kind}:${data.resourceScope.id}` : 'public-global',
+                text: data.query,
+                ...(body?.filter ? { filter: body.filter } : {}),
+                ...(data.resourceScope ? { scope: data.resourceScope } : {}),
+                ...(data.ratingPopulation ? { ratingPopulation: data.ratingPopulation } : {}),
+                sort: data.sort ?? 'relevance',
+                mode: searchRequiresCurrentReader(data) ? 'personal' : 'public-anonymous',
+              }),
+              properties: roster,
+              ...(facetResult ? { initial: facetResult } : {}),
+            },
+          }
+        : {}),
+      resourceLanguage: resourceLanguageRefinement(
+        roster,
+        data.facetValues[RESOURCE_LANGUAGE_PROPERTY] ?? [],
+        facetResult ?? (release ? undefined : { status: 'unavailable', code: 'release_unavailable' }),
+        release !== undefined,
+        applicability?.statement,
       ),
-      facetsAvailable: release !== undefined && facetsAvailable,
-    };
+      ...(data.ranges ? { ranges: data.ranges } : {}),
+      ...(data.condition ? { condition: data.condition } : {}),
+      selectedFacets: data.facetValues,
+      selectedFacetLabels: selectedFacetValueLabels(data.facetValues, facetResult, data.locale),
+      facetsAvailable: release !== undefined,
+      facetRetry: false,
+      facetIndexNotReady: facetResult?.status === 'preparing',
+      staleCursorRestarted: false,
+      sort: data.sort ?? 'relevance',
+      ...(data.ratingPopulation ? { ratingPopulation: data.ratingPopulation } : {}),
+      ...(realmRatingUnavailable ? { ratingReadiness: { status: 'unavailable' as const } } : {}),
+    });
   });
 
-function localizedLabel(labels: Record<string, string>, locale: string): { text: string; lang?: string } {
-  const order =
-    locale === 'zh-Hant'
-      ? ['zh-Hant', 'zh-Hans', 'en']
-      : locale === 'zh-Hans'
-        ? ['zh-Hans', 'zh-Hant', 'en']
-        : [locale, 'en'];
-  const lang = order.find((key) => labels[key]) ?? Object.keys(labels)[0];
-  return { text: lang ? labels[lang]! : '', ...(lang ? { lang } : {}) };
+function languageDisplayName(tag: string, locale: string) {
+  try {
+    return new Intl.DisplayNames([locale], { type: 'language' }).of(tag) ?? tag;
+  } catch {
+    return tag;
+  }
 }
 
-function searchHref(
-  locale: string,
-  query: string,
-  type: string | undefined,
-  facets: Record<string, string[]>,
-  cursor?: string,
-): string {
-  const params = new URLSearchParams();
-  if (query) params.set('q', query);
-  if (type) params.set('type', type);
-  for (const [property, values] of Object.entries(facets))
-    for (const value of values) params.append(`f.${property}`, value);
-  if (cursor) params.set('cursor', cursor);
-  const search = params.toString();
-  return `/${locale}/search${search ? `?${search}` : ''}`;
+const linkClass = cn(buttonVariants({ variant: 'link' }), 'h-auto justify-start p-0');
+type MessageOptions = { locale: (typeof locales)[number] };
+
+function messageOptions(locale: string): MessageOptions {
+  return { locale: locales.find((value) => value === locale) ?? 'en' };
 }
 
-export function SearchPage({ query, cursor, data }: { query: string; cursor?: string; data?: SearchPageData }) {
-  const [formQuery, setFormQuery] = useState(query);
+/** Search filters author a native request-only resource leaf; the server remains the access authority. */
+function AdvancedScope({
+  filter,
+  scope,
+  locale,
+  onRemove,
+}: {
+  filter: string | undefined;
+  scope: SearchResourceScope | undefined;
+  locale: string;
+  onRemove: () => void;
+}) {
+  const typeId = useId();
+  const resourceId = useId();
+  const options = messageOptions(locale);
+  const [kind, setKind] = useState<SearchResourceScope['kind'] | ''>(scope?.kind ?? '');
+  const [id, setId] = useState(scope?.id ?? '');
+  useEffect(() => {
+    setKind(scope?.kind ?? '');
+    setId(scope?.id ?? '');
+  }, [scope?.kind, scope?.id]);
+
+  const selected = kind && isSearchResourceScope({ kind, id }) ? { kind, id: id.toLowerCase() } : undefined;
+  const nextFilter = selected
+    ? searchFilterWithScope(filter, selected)
+    : scope && !kind
+      ? removeSearchResourceScope(filter)
+      : filter;
+  return (
+    <fieldset className="space-y-3 rounded-lg border border-border/60 p-3">
+      <legend className="px-1 text-sm font-medium">{m.access_resource({}, options)}</legend>
+      <Field>
+        <FieldLabel htmlFor={typeId}>{m.library_follow_count_context_select_type({}, options)}</FieldLabel>
+        <NativeSelect
+          id={typeId}
+          value={kind}
+          onChange={(event) => {
+            const next = event.currentTarget.value as SearchResourceScope['kind'] | '';
+            setKind(next);
+            if (!next && scope) onRemove();
+          }}
+        >
+          <NativeSelectOption value="">{m.header_search_global({}, options)}</NativeSelectOption>
+          <NativeSelectOption value="realm">Realm</NativeSelectOption>
+          <NativeSelectOption value="collection">Collection</NativeSelectOption>
+        </NativeSelect>
+      </Field>
+      {kind && (
+        <Field>
+          <FieldLabel htmlFor={resourceId}>{m.access_identity_resource_id({}, options)}</FieldLabel>
+          <input
+            id={resourceId}
+            type="text"
+            value={id}
+            required
+            pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+            autoComplete="off"
+            onChange={(event) => setId(event.currentTarget.value)}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </Field>
+      )}
+      <input type="hidden" name="filter" value={nextFilter ?? ''} />
+      <div className="flex flex-wrap gap-2">
+        {kind && (
+          <Button type="submit" variant="outline">
+            {m.search_submit({}, options)}
+          </Button>
+        )}
+        {scope && (
+          <Button type="button" variant="ghost" onClick={onRemove}>
+            {m.header_search_remove_scope({ scope: `${scope.kind} ${scope.id}` }, options)}
+          </Button>
+        )}
+      </div>
+      {scope && <p className="text-xs text-muted-foreground">{`${scope.kind} ${scope.id}`}</p>}
+    </fieldset>
+  );
+}
+
+export function SearchPage({
+  query,
+  cursor,
+  data,
+  filtersOnly = false,
+  initiallyOpen = false,
+  realmDiscovery,
+  realmDiscoveryRead,
+  onRetry,
+  locale: localeProp,
+  session = null,
+  readerOwner,
+  searchHref,
+  fixedResourceScope,
+  hrefForState,
+  formAction,
+  heading,
+  embedded = false,
+  isCurrent = () => true,
+}: {
+  query: string;
+  cursor?: string;
+  data?: SearchPageData;
+  filtersOnly?: boolean;
+  initiallyOpen?: boolean;
+  realmDiscovery?: RealmDiscoveryState;
+  realmDiscoveryRead?: RealmDiscoveryReader;
+  onRetry?: (() => PromiseLike<unknown> | void) | undefined;
+  locale?: string;
+  session?: string | null;
+  readerOwner?: string | undefined;
+  searchHref?: string | undefined;
+  /** Embedded scope owners keep the native resource fixed while sharing Search controls. */
+  fixedResourceScope?: SearchResourceScope | undefined;
+  hrefForState?: ((state: SearchLoaderDeps) => string) | undefined;
+  formAction?: string | undefined;
+  heading?: ReactNode;
+  embedded?: boolean;
+  isCurrent?: (() => boolean) | undefined;
+}) {
+  const sourceData = data;
+  const currentData = useRef(data);
+  currentData.current = data;
+  const [invalidation, setInvalidation] = useState<{ owner: SearchPageData; state: SearchRecoveryState }>();
+  if (data) data = searchPageForRecovery(data, invalidation?.owner === data ? invalidation.state : data.recovery);
   const [hydrated, setHydrated] = useState(false);
-  const locale = getLocale();
+  const [filterSurface, setFilterSurface] = useState<'desktop' | 'mobile' | undefined>();
+  const router = useRouter({ warn: false });
+  const typeControlId = useId();
+  const locale = localeProp ?? getLocale();
+  const personal = useDiscoveryPersonalResults({
+    source: data?.discovery,
+    request: data?.queryState ? discoveryRequest(data.queryState, requestLanguages(locale)) : undefined,
+    locale,
+    returnTo:
+      searchHref ??
+      discoverySearchHref(
+        locale,
+        data?.queryState ?? { query, facets: {}, type: undefined, cursor: undefined, sort: undefined },
+      ),
+    enabled:
+      !!data?.discovery &&
+      !!data.queryState &&
+      !filtersOnly &&
+      !(data.discovery.status === 'restart' && searchRequiresCurrentReader(data.queryState)),
+  });
+  if (data?.discovery && personal.state) data = { ...data, discovery: personal.state };
+  const options = messageOptions(locale);
+  const unitMessages = {
+    missing: () => m.search_quantity_unit_missing({}, options),
+    unitless: () => m.search_quantity_unitless_count({}, options),
+    marker: (unit: string) => m.search_quantity_unit_marker({ unit }, options),
+    notAdmitted: (unit: string) => m.search_quantity_unit_not_admitted({ unit }, options),
+    unavailable: (unit: string) => m.search_quantity_unit_label_unavailable({ unit }, options),
+  };
   const type = data?.type;
   const result = data?.result;
+  const discovery = data?.discovery;
   const selectedFacets = data?.selectedFacets ?? {};
-  const activeFilterCount =
-    (type ? 1 : 0) + Object.values(selectedFacets).reduce((sum, values) => sum + values.length, 0);
+  const resourceLanguage = data?.resourceLanguage;
+  const committedInput: SearchLoaderDeps = data?.queryState ?? {
+    query,
+    type,
+    facets: selectedFacets,
+    cursor,
+    sort: data?.sort === 'rating' ? 'rating' : undefined,
+    ratingPopulation: data?.ratingPopulation,
+  };
+  const committedState: SearchLoaderDeps = fixedResourceScope
+    ? {
+        ...committedInput,
+        resourceScope: fixedResourceScope,
+        filter: searchFilterWithScope(committedInput.filter, fixedResourceScope),
+      }
+    : committedInput;
+  const hrefFor = (state: SearchLoaderDeps) => {
+    const fixed = fixedResourceScope
+      ? {
+          ...state,
+          resourceScope: fixedResourceScope,
+          filter: searchFilterWithScope(state.filter, fixedResourceScope),
+        }
+      : state;
+    return hrefForState?.(fixed) ?? discoverySearchHref(locale, fixed);
+  };
+  const windowNavigation = useSearchWindow({
+    cursor: committedState.cursor,
+    href: (cursor) => hrefFor({ ...committedState, cursor }),
+    locale,
+    session,
+    ready: data?.recovery?.status === 'ready',
+    settled: data?.recovery?.status !== 'loading',
+    recoverable: ['unavailable', 'index-not-ready', 'source-not-ready'].includes(data?.recovery?.status ?? ''),
+    checkpoint: discovery?.status === 'ready' ? discovery.page.as_of : result?.as_of,
+    enabled: !filtersOnly && isCurrent(),
+  });
+  const stateKey = JSON.stringify([committedState, locale]);
+  const composition = useConditionComposition(stateKey);
+  const latestStateKey = useRef(stateKey);
+  latestStateKey.current = stateKey;
+  const filterFocus = useFilterSurfaceFocus(stateKey);
+  const [rangeDraftState, setRangeDraftState] = useState(() => createRangeDraftState(stateKey));
+  if (rangeDraftState.key !== stateKey) setRangeDraftState(createRangeDraftState(stateKey));
+  const baseline = { condition: data?.condition, languages: committedState.languages };
+  const [draft, setDraft] = useState(() => createFilterDraft(stateKey, baseline));
+  const [revertedKey, setRevertedKey] = useState<string>();
+  if (draft.key !== stateKey) {
+    setDraft(createFilterDraft(stateKey, baseline));
+  }
+  const admit = useMemo(
+    () => (data?.conditionMetadata ? conditionAdmission(data.conditionMetadata) : undefined),
+    [data?.conditionMetadata],
+  );
+  const localIssues = admit?.(draft.condition, committedState) ?? [];
+  const issues = [
+    ...(data?.problem?.errors ?? []),
+    ...(draft.attempted || draft.condition !== data?.condition ? localIssues : []),
+  ];
+  const editedState = {
+    ...conditionSearchState(committedState, draft.condition, draft.languages),
+    filter: committedState.filter,
+    resourceScope: committedState.resourceScope,
+  };
+  // Pending fields can be incomplete. Result navigation consumes only an admitted tree.
+  const navigationState = localIssues.length ? committedState : editedState;
+  const editableData = data ? { ...data, queryState: navigationState, condition: navigationState.condition } : data;
+  const editing =
+    JSON.stringify([draft.condition, editedState.languages]) !==
+    JSON.stringify([committedState.condition, committedState.languages]);
+  const conceptFilter = data?.conditionMetadata ? conditionConceptSuggestionFilter(data.conditionMetadata) : undefined;
+  const conceptRequiresReader = !!data?.queryState && searchRequiresCurrentReader(data.queryState);
+  const conceptLookup = {
+    enabled: !!conceptFilter && !!data?.conditionMetadata?.digest && !conceptRequiresReader,
+    ...(conceptFilter ? { filter: conceptFilter } : {}),
+    ...(data?.conditionMetadata?.digest ? { releaseDigest: data.conditionMetadata.digest } : {}),
+    lifetimeKey: JSON.stringify([locale, session, data?.conditionMetadata?.digest, committedState]),
+    key: JSON.stringify([locale, session, data?.conditionMetadata?.digest, committedState, draft.condition]),
+    ...(!conceptFilter || !data?.conditionMetadata?.digest
+      ? { blocked: 'metadata' as const }
+      : committedState.resourceScope
+        ? { blocked: 'scope' as const }
+        : conceptRequiresReader
+          ? { blocked: 'private' as const }
+          : {}),
+  };
+  const number = new Intl.NumberFormat(locale);
+  const label = (labels: Record<string, string> | undefined, fallback: string) =>
+    localizedLabel(labels ?? {}, locale).text.trim() || fallback;
+  const constraints: {
+    key: string;
+    text: string;
+    state: SearchLoaderDeps;
+    details?: unknown;
+    lang?: string;
+    description?: string;
+    descriptionLang?: string;
+  }[] = [];
+  const add = (
+    key: string,
+    text: string,
+    state: SearchLoaderDeps,
+    details?: unknown,
+    lang?: string,
+    description?: string,
+    descriptionLang?: string,
+  ) =>
+    constraints.push({
+      key,
+      text,
+      state: { ...state, cursor: undefined },
+      details,
+      ...(lang ? { lang } : {}),
+      ...(description ? { description } : {}),
+      ...(descriptionLang ? { descriptionLang } : {}),
+    });
+  if (type)
+    add(
+      'type',
+      `${m.search_subject_type({}, options)}: ${label(data?.typeLabels, m.search_constraint_identity_kind_unavailable({}, options))}`,
+      {
+        ...navigationState,
+        type: undefined,
+      },
+      { type },
+    );
+  for (const kind of navigationState.kinds ?? []) {
+    const choice =
+      discovery?.status === 'ready' ? discovery.page.kinds.values.find((entry) => entry.id === kind) : undefined;
+    const kindLabel = choice ? localizedLabel(choice.labels, locale) : undefined;
+    const description = pickText(bundledRelease.types[kind]?.descriptions ?? {}, locale);
+    add(
+      `kind:${kind}`,
+      `${m.home_kind_label({}, options)}: ${label(
+        choice?.labels,
+        m.search_constraint_identity_kind_unavailable({}, options),
+      )}`,
+      { ...navigationState, kinds: navigationState.kinds?.filter((value) => value !== kind) },
+      { kind },
+      kindLabel?.lang,
+      description.text,
+      description.lang ?? undefined,
+    );
+  }
+  for (const [property, values] of Object.entries(selectedFacets))
+    for (const value of values) {
+      const page = data?.refinement?.initial;
+      const valueLabels =
+        property === RESOURCE_LANGUAGE_PROPERTY
+          ? page?.status === 'ready'
+            ? page.page.facets
+                .find((entry) => entry.property === RESOURCE_LANGUAGE_PROPERTY)
+                ?.values.find((entry) => entry.value === value)?.labels
+            : undefined
+          : page?.status === 'ready'
+            ? page.page.facets
+                .find((entry) => entry.property === property)
+                ?.values.find((entry) => entry.value === value)?.labels
+            : undefined;
+      const selectedLanguage =
+        property === RESOURCE_LANGUAGE_PROPERTY
+          ? resourceLanguage?.selected.find((entry) => entry.value === value)
+          : undefined;
+      const languageLabel =
+        property === RESOURCE_LANGUAGE_PROPERTY ? localizedLabel(valueLabels ?? {}, locale) : undefined;
+      const fallbackValue =
+        property === RESOURCE_LANGUAGE_PROPERTY
+          ? selectedLanguage?.needsRepair
+            ? m.search_resource_language_repair({ value }, options)
+            : (selectedLanguage?.canonical ?? value)
+          : m.search_constraint_identity_value_unavailable({}, options);
+      add(
+        `facet:${property}:${value}`,
+        `${
+          property === 'type'
+            ? m.search_subject_types({}, options)
+            : property === RESOURCE_LANGUAGE_PROPERTY
+              ? m.search_resource_language({}, options)
+              : label(
+                  data?.conditionMetadata?.properties[property]?.labels,
+                  m.search_constraint_identity_property_unavailable({}, options),
+                )
+        }: ${
+          property === RESOURCE_LANGUAGE_PROPERTY
+            ? languageLabel?.text.trim() || fallbackValue
+            : label(valueLabels, fallbackValue)
+        }`,
+        {
+          ...navigationState,
+          facets: { ...selectedFacets, [property]: values.filter((entry) => entry !== value) },
+        },
+        { property, value },
+        property === RESOURCE_LANGUAGE_PROPERTY ? languageLabel?.lang : undefined,
+      );
+    }
+  for (const [property, range] of Object.entries(data?.ranges ?? {}))
+    add(
+      `range:${property}`,
+      `${label(data?.conditionMetadata?.properties[property]?.labels, m.search_constraint_identity_property_unavailable({}, options))}: ${
+        range.gte === undefined ? '…' : `≥ ${range.gte}`
+      } – ${range.lte === undefined ? '…' : `≤ ${range.lte}`}${
+        data?.conditionMetadata?.properties[property]?.datatype === 'quantity'
+          ? ` (${searchQuantityUnitText(
+              range.unit,
+              data.conditionMetadata.properties[property]?.units ?? [],
+              locale,
+              unitMessages,
+            )})`
+          : range.unit
+            ? ` (${range.unit})`
+            : ''
+      }`,
+      {
+        ...navigationState,
+        ranges: Object.fromEntries(Object.entries(data?.ranges ?? {}).filter(([key]) => key !== property)),
+      },
+      { property, range },
+    );
+  for (const tag of draft.languages ?? [])
+    add(`language:${tag}`, `${m.condition_language({}, options)}: ${languageDisplayName(tag, locale)}`, {
+      ...navigationState,
+      languages: draft.languages?.filter((entry) => entry !== tag),
+    });
+  if (draft.condition) add('condition', m.condition_heading({}, options), { ...navigationState, condition: undefined });
+  const filterWithoutScope = navigationState.resourceScope
+    ? removeSearchResourceScope(navigationState.filter)
+    : navigationState.filter;
+  if (filterWithoutScope)
+    add('filter', m.search_existing_filter({}, options), {
+      ...navigationState,
+      filter: navigationState.resourceScope
+        ? searchFilterWithScope(undefined, navigationState.resourceScope)
+        : undefined,
+    });
+  const activeFilterCount = constraints.length;
   useEffect(() => setHydrated(true), []);
-  useEffect(() => setFormQuery(query), [query]);
+  const desktopPanel = useRef<HTMLDivElement>(null);
+  const openFilters = useCallback(() => {
+    const owner = latestStateKey.current;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const desktop = window.matchMedia('(min-width: 1024px)').matches;
+    const surface = desktop ? 'desktop' : 'mobile';
+    const id = filterFocus.begin({
+      owner,
+      kind: 'open',
+      surface,
+      opener,
+      document,
+      ...(desktop ? { resolveDestination: () => desktopPanel.current } : {}),
+    });
+    setFilterSurface(surface);
+    if (desktop) filterFocus.schedule(id, owner);
+  }, [filterFocus]);
+  const closeFilters = useCallback(() => {
+    const owner = latestStateKey.current;
+    const surfaceRoot = desktopPanel.current ?? document.querySelector<HTMLElement>('[role="dialog"]');
+    const id = filterFocus.begin({
+      owner,
+      kind: 'close',
+      document,
+      ...(surfaceRoot ? { surfaceRoot } : {}),
+    });
+    setFilterSurface(undefined);
+    filterFocus.schedule(id, owner);
+  }, [filterFocus]);
+  useEffect(() => {
+    if (filterSurface === 'desktop') filterFocus.restoreOpen(latestStateKey.current, 'desktop');
+    if (!filterSurface) return;
+    const media = window.matchMedia('(min-width: 1024px)');
+    const resize = () => {
+      const next = media.matches ? 'desktop' : 'mobile';
+      if (next === filterSurface) return;
+      filterFocus.retire();
+      setFilterSurface(next);
+    };
+    media.addEventListener('change', resize);
+    return () => media.removeEventListener('change', resize);
+  }, [filterFocus, filterSurface]);
+  useEffect(() => {
+    if (initiallyOpen) openFilters();
+  }, [initiallyOpen, openFilters]);
+  useEffect(() => {
+    if (data?.problem?.errors?.some(({ pointer }) => pointer !== '/text')) openFilters();
+  }, [data?.problem, openFilters]);
 
-  const typeLabel = type
-    ? localizedLabel(data?.typeLabels ?? data?.typeChoices.find((choice) => choice.id === type)?.labels ?? {}, locale)
+  const hasFilterPanel = data !== undefined;
+  const filterRegion = useMemo(
+    () => ({ activeCount: activeFilterCount, open: openFilters }),
+    [activeFilterCount, openFilters],
+  );
+  useRegisterHeaderSearchFilters(hasFilterPanel, filterRegion);
+  const revertStatus = useRef<HTMLParagraphElement>(null);
+  const checkpoint = discovery?.status === 'ready' ? discovery.page.as_of : result?.as_of;
+  const requestOwnerKey = JSON.stringify([stateKey, locale, session]);
+  const recoveryOwnerKey = JSON.stringify([requestOwnerKey, readerOwner, checkpoint]);
+  const retryFocus = useSearchRetryFocus(
+    {
+      scope: requestOwnerKey,
+      locale,
+      session,
+      checkpoint,
+      ...(discovery?.status === 'ready' && discovery.page.emptyRecovery
+        ? { observation: discovery.page.emptyRecovery }
+        : result?.emptyRecovery
+          ? { observation: result.emptyRecovery }
+          : {}),
+      reader: readerOwner,
+    },
+    data?.recovery?.status !== 'loading',
+  );
+  const results = (
+    <SearchResultsRegion
+      key={JSON.stringify([stateKey, locale, session, readerOwner])}
+      query={query}
+      result={result}
+      locale={locale}
+      type={type}
+      selectedFacets={selectedFacets}
+      data={editableData}
+      continuationAllowed={!editing}
+      invalid={localIssues.length > 0}
+      onRetry={onRetry}
+      retryState={committedState}
+      recoveryOwnerKey={recoveryOwnerKey}
+      onNavigate={(href) => {
+        void router?.navigate({ href });
+      }}
+      retryFocus={retryFocus}
+      currentSearchHref={searchHref}
+      personal={personal}
+      windowNavigation={windowNavigation}
+    />
+  );
+  const navigate = (href: string, removingCondition = false) => {
+    if (!isCurrent()) return;
+    setDraft((previous) => ({ ...previous, attempted: true }));
+    if (!removingCondition && localIssues.length) {
+      requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-condition-errors]')?.focus());
+      return;
+    }
+    void router?.navigate({ href });
+  };
+  const removeScope = () =>
+    navigate(
+      hrefFor({
+        ...committedState,
+        filter: removeSearchResourceScope(committedState.filter),
+        resourceScope: undefined,
+        cursor: undefined,
+      }),
+    );
+  const clearResourceLanguage = () =>
+    navigate(
+      hrefFor({
+        ...committedState,
+        facets: Object.fromEntries(
+          Object.entries(selectedFacets).filter(([property]) => property !== RESOURCE_LANGUAGE_PROPERTY),
+        ),
+        cursor: undefined,
+      }),
+    );
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    if (!isCurrent()) {
+      event.preventDefault();
+      return;
+    }
+    if (composition.isComposing()) {
+      event.preventDefault();
+      return;
+    }
+    setDraft((previous) => ({ ...previous, attempted: true }));
+    if (localIssues.length || router) event.preventDefault();
+    if (localIssues.length) {
+      const form = event.currentTarget;
+      requestAnimationFrame(() => form.querySelector<HTMLElement>('[data-condition-errors]')?.focus());
+      return;
+    }
+    if (router) {
+      const params = new URLSearchParams();
+      for (const [key, value] of new FormData(event.currentTarget))
+        if (typeof value === 'string' && value !== '') params.append(key, value);
+      const action = new URL(formAction ?? `/${locale}/search`, 'https://rezics.invalid');
+      for (const [key, value] of params) action.searchParams.append(key, value);
+      navigate(`${action.pathname}${action.search}`);
+    }
+  };
+  const revertDraft = () => {
+    const expectedKey = stateKey;
+    if (latestStateKey.current !== expectedKey) return;
+    setDraft((previous) => resetFilterDraft(previous, expectedKey, latestStateKey.current, baseline));
+    setRevertedKey(expectedKey);
+    requestAnimationFrame(() => {
+      if (latestStateKey.current === expectedKey) revertStatus.current?.focus();
+    });
+  };
+  const follow = (event: React.MouseEvent<HTMLElement>) => {
+    const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>('a[href]');
+    if (
+      !router ||
+      !anchor ||
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    event.preventDefault();
+    navigate(anchor.getAttribute('href')!, anchor.dataset.removeCondition === 'true');
+  };
+  const filterEntrance = (
+    <div className="space-y-3" onClick={follow}>
+      <Button
+        id="search-filter-entry"
+        type="button"
+        variant="outline"
+        aria-controls="search-filters"
+        aria-expanded={!hydrated || filterSurface !== undefined}
+        onClick={openFilters}
+      >
+        <SlidersHorizontalIcon aria-hidden="true" className="size-4" />
+        {m.search_filters({}, options)} ({number.format(activeFilterCount)})
+      </Button>
+      {constraints.length > 0 && (
+        <ul aria-label={m.refinement_selected({}, options)} data-search-constraints className="flex flex-wrap gap-2">
+          {constraints.map(({ key, text, state, lang, description, descriptionLang }, index) => (
+            <li key={key} className="min-w-0 max-w-full">
+              <a
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'h-auto min-h-11 max-w-full whitespace-normal py-2',
+                )}
+                data-remove-condition={key === 'condition' ? 'true' : undefined}
+                aria-label={m.refinement_remove(
+                  {
+                    value: m.search_constraint_identity_filter(
+                      { number: number.format(index + 1), label: text },
+                      options,
+                    ),
+                  },
+                  options,
+                )}
+                href={hrefFor(state)}
+              >
+                <span lang={lang} className="min-w-0 text-start wrap-anywhere">
+                  <span className="block">
+                    {m.search_constraint_identity_filter({ number: number.format(index + 1), label: text }, options)}
+                  </span>
+                  {description && (
+                    <span lang={descriptionLang} className="block pt-1 text-xs text-muted-foreground">
+                      {description}
+                    </span>
+                  )}
+                </span>
+                <XIcon aria-hidden="true" className="size-3" />
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+      {constraints.some(({ details }) => details !== undefined) && (
+        <details className="min-w-0 text-sm" data-search-constraint-details>
+          <summary className="min-h-11 w-fit max-w-full cursor-pointer rounded-sm py-2 wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+            {m.search_constraint_identity_details({}, options)}
+          </summary>
+          <dl className="space-y-3 pt-2">
+            {constraints.map(({ key, text, details }, index) =>
+              details !== undefined ? (
+                <div key={key} className="min-w-0 space-y-1">
+                  <dt className="font-medium wrap-anywhere">
+                    {m.search_constraint_identity_filter({ number: number.format(index + 1), label: text }, options)}
+                  </dt>
+                  <dd className="min-w-0">
+                    <code
+                      tabIndex={0}
+                      className="block max-w-full rounded-sm select-text whitespace-pre-wrap wrap-anywhere focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    >
+                      {JSON.stringify(details, null, 2)}
+                    </code>
+                  </dd>
+                </div>
+              ) : null,
+            )}
+          </dl>
+        </details>
+      )}
+    </div>
+  );
+
+  const resourceLanguageCurrentness = resourceLanguage?.asOf
+    ? m.search_resource_language_current(
+        {
+          date: new Intl.DateTimeFormat(locale, {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+            timeZone: 'UTC',
+          }).format(new Date(resourceLanguage.asOf)),
+        },
+        options,
+      )
     : undefined;
-  const hasFilterPanel = Boolean(data?.facetsAvailable && (data.typeChoices.length > 0 || type));
+  const filterApplicability =
+    data?.refinementApplicability ??
+    (data?.discovery?.status === 'ready' ? data.discovery.page.applicability : undefined);
+  const kindDirectory =
+    data?.discovery?.status === 'ready'
+      ? { initial: data.discovery.page.kinds, checkpoint: data.discovery.page.as_of }
+      : data?.queryState?.resourceScope?.kind === 'realm' && data.result?.kinds
+        ? { initial: data.result.kinds, checkpoint: data.result.as_of }
+        : undefined;
+  const typeApplicability = filterApplicability?.type ?? 'unknown';
+  const statementApplicability = filterApplicability?.statement ?? 'unknown';
+  const typeRefinementAvailable = typeApplicability === 'all' || typeApplicability === 'partial';
+  const statementRefinementAvailable = statementApplicability === 'all' || statementApplicability === 'partial';
+  const selectedTypeCondition = Boolean(type || selectedFacets.type?.length);
+  const selectedStatementCondition =
+    Object.keys(selectedFacets).some((property) => property !== 'type') ||
+    Object.keys(data?.ranges ?? {}).length > 0 ||
+    Boolean(draft.condition);
+  const ownerOnlyPopulation = typeApplicability === 'none' && statementApplicability === 'none';
+  const retainedFilterCondition = ownerOnlyPopulation && Boolean(removeSearchResourceScope(data?.queryState?.filter));
+  const retainedUnavailableCondition =
+    (selectedTypeCondition && typeApplicability === 'none') ||
+    (selectedStatementCondition && statementApplicability === 'none') ||
+    retainedFilterCondition;
+  const partialRefinement = typeApplicability === 'partial' || statementApplicability === 'partial';
+  const unavailableSemanticCondition =
+    (selectedTypeCondition && typeApplicability === 'unknown') ||
+    (selectedStatementCondition && statementApplicability === 'unknown');
+  const filterRefinementProperties = applicableRefinementProperties(
+    data?.refinement?.properties ?? [],
+    filterApplicability,
+  )
+    .filter(
+      (entry) =>
+        (entry.property === 'type' ? typeRefinementAvailable : statementRefinementAvailable) &&
+        (entry.mode !== 'types' || selectedFacets.type?.length) &&
+        !(
+          entry.property === RESOURCE_LANGUAGE_PROPERTY &&
+          resourceLanguage?.applicability !== 'applicable' &&
+          resourceLanguage?.applicability !== 'partial'
+        ),
+    )
+    .map((entry) =>
+      entry.property === RESOURCE_LANGUAGE_PROPERTY
+        ? {
+            ...entry,
+            labels: { ...entry.labels, [locale]: m.search_resource_language({}, options) },
+            help: [m.search_resource_language_help({}, options), resourceLanguageCurrentness].filter(Boolean).join(' '),
+          }
+        : entry,
+    )
+    .sort((left, right) =>
+      left.property === RESOURCE_LANGUAGE_PROPERTY ? -1 : right.property === RESOURCE_LANGUAGE_PROPERTY ? 1 : 0,
+    );
+
+  const filterContents = (surface: 'desktop' | 'mobile') => (
+    <div className="space-y-5 pt-3 lg:pt-0">
+      <input type="hidden" name="q" value={query} />
+      {data?.sort === 'rating' && <input type="hidden" name="sort" value="rating" />}
+      {committedState.ratingPopulation && (
+        <input type="hidden" name={RATING_POPULATION_FIELD} value={committedState.ratingPopulation} />
+      )}
+      {fixedResourceScope ? (
+        <input
+          type="hidden"
+          name="filter"
+          value={searchFilterWithScope(data?.queryState?.filter ?? committedState.filter, fixedResourceScope) ?? ''}
+        />
+      ) : (
+        <AdvancedScope
+          key={`${surface}-${JSON.stringify(data?.queryState?.resourceScope ?? null)}`}
+          filter={data?.queryState?.filter}
+          scope={data?.queryState?.resourceScope}
+          locale={locale}
+          onRemove={removeScope}
+        />
+      )}
+      {resourceLanguage?.applicability === 'not-applicable' && (type || resourceLanguage.selected.length > 0) && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.search_resource_language_not_applicable({}, options)}
+        </p>
+      )}
+      {resourceLanguage?.applicability === 'unknown' && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.search_resource_language_metadata_unavailable({}, options)}
+        </p>
+      )}
+      {partialRefinement && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.search_refinement_partial({}, options)}
+        </p>
+      )}
+      {ownerOnlyPopulation && !retainedUnavailableCondition && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.search_refinement_owner_only({}, options)}
+        </p>
+      )}
+      {retainedUnavailableCondition && (
+        <div role="status" className="space-y-2 text-sm text-muted-foreground">
+          <p>{m.search_refinement_not_applicable({}, options)}</p>
+          {data?.queryState && (
+            <a className={linkClass} href={hrefFor({ ...data.queryState, kinds: undefined, cursor: undefined })}>
+              {m.search_kind_navigation_all({}, options)}
+            </a>
+          )}
+        </div>
+      )}
+      {unavailableSemanticCondition && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.search_refinement_metadata_unavailable({}, options)}
+        </p>
+      )}
+      {resourceLanguage?.applicability !== 'applicable' &&
+        resourceLanguage?.applicability !== 'partial' &&
+        resourceLanguage?.actions.clear && (
+          <Button type="button" variant="outline" size="sm" onClick={clearResourceLanguage}>
+            {m.search_resource_language_clear({}, options)}
+          </Button>
+        )}
+      {(draft.languages ?? []).map((tag) => (
+        <input key={tag} type="hidden" name="language" value={tag} />
+      ))}
+      {(!kindDirectory ? (data?.queryState?.kinds ?? []) : []).map((kind) => (
+        <input key={kind} type="hidden" name="kinds" value={kind} />
+      ))}
+      {(!data?.refinement ||
+        Object.entries(selectedFacets).some(
+          ([property]) => !filterRefinementProperties.some((entry) => entry.property === property),
+        )) &&
+        Object.entries(selectedFacets).flatMap(([property, values]) =>
+          !data?.refinement || !filterRefinementProperties.some((entry) => entry.property === property)
+            ? values.map((value) => (
+                <input key={`${property}:${value}`} type="hidden" name={`f.${property}`} value={value} />
+              ))
+            : [],
+        )}
+      {!typeRefinementAvailable && type && <input type="hidden" name="type" value={type} />}
+      {kindDirectory && data?.queryState && (
+        <DiscoveryKinds
+          key={JSON.stringify([data.queryState, locale, session, readerOwner, kindDirectory])}
+          initial={kindDirectory.initial}
+          checkpoint={kindDirectory.checkpoint}
+          locale={locale}
+          selected={data.queryState.kinds ?? []}
+          hydrated={hydrated}
+          onRefresh={onRetry ? () => void onRetry() : undefined}
+          onRefreshFocus={retryFocus.captureRetryFocus}
+          onRefusalFocus={(source) => retryFocus.captureRetryFocus(source, true)}
+          onRefusal={(state) => {
+            if (sourceData && currentData.current === sourceData) setInvalidation({ owner: sourceData, state });
+          }}
+          load={async (kindCursor, signal) => {
+            const response = await readKindsWithLocale({
+              data: {
+                ...data.queryState!,
+                facetValues: selectedFacets,
+                locale,
+                kindCursor,
+                ...(searchRequiresCurrentReader(data.queryState!) && session ? { reader: session } : {}),
+              },
+              signal,
+              ...(searchRequiresCurrentReader(data.queryState!)
+                ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } }
+                : {}),
+            });
+            return response;
+          }}
+        />
+      )}
+      {typeRefinementAvailable ? (
+        <Field>
+          <FieldLabel htmlFor={`${typeControlId}-${surface}`}>{m.search_subject_type({}, options)}</FieldLabel>
+          <p className="text-sm text-muted-foreground">{m.search_subject_type_help({}, options)}</p>
+          <NativeSelect
+            id={`${typeControlId}-${surface}`}
+            name="type"
+            value={type ?? ''}
+            onChange={(event) => {
+              if (hydrated) event.currentTarget.form?.requestSubmit();
+            }}
+          >
+            <NativeSelectOption value="">{m.search_all_subject_types({}, options)}</NativeSelectOption>
+            {type && !data?.conditionMetadata?.types[type] && (
+              <NativeSelectOption value={type}>
+                {label(data?.typeLabels, m.search_constraint_identity_kind_unavailable({}, options))}
+              </NativeSelectOption>
+            )}
+            {Object.entries(data?.conditionMetadata?.types ?? {}).map(([id, definition]) => (
+              <NativeSelectOption key={id} value={id}>
+                {label(definition.labels, m.search_constraint_identity_kind_unavailable({}, options))}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </Field>
+      ) : null}
+      {data?.refinement && filterRefinementProperties.length > 0 && (
+        <Refinement
+          key={`${surface}-${data.refinement.key}`}
+          rangeDraftKey={stateKey}
+          rangeDraftState={rangeDraftState}
+          onRangeDraftChange={(property: string, draft: RangeDraft) =>
+            setRangeDraftState((previous) => updateRangeDraft(previous, stateKey, property, draft))
+          }
+          data={{ ...data.refinement, properties: filterRefinementProperties }}
+          showSummary={false}
+          onNavigate={navigate}
+          clearActions={
+            resourceLanguage?.actions.clear
+              ? { [RESOURCE_LANGUAGE_PROPERTY]: m.search_resource_language_clear({}, options) }
+              : {}
+          }
+          preserveSelectedWhenUnavailable={[RESOURCE_LANGUAGE_PROPERTY]}
+          selectedValueFallbacks={[RESOURCE_LANGUAGE_PROPERTY]}
+          selectionLimits={{ [RESOURCE_LANGUAGE_PROPERTY]: RESOURCE_LANGUAGE_SELECTION_LIMIT }}
+          conditions={{
+            ...(type ? { type } : {}),
+            facetValues: selectedFacets,
+            ...(data.queryState?.kinds ? { kinds: data.queryState.kinds } : {}),
+            ...(draft.languages ? { languages: draft.languages } : {}),
+            ...(data.queryState?.filter ? { filter: data.queryState.filter } : {}),
+            ...(data.queryState?.resourceScope ? { resourceScope: data.queryState.resourceScope } : {}),
+            ...(data.queryState?.ratingPopulation ? { ratingPopulation: data.queryState.ratingPopulation } : {}),
+            ...(data.ranges ? { ranges: data.ranges } : {}),
+            ...(draft.condition ? { condition: draft.condition } : {}),
+          }}
+          query={query}
+          locale={locale}
+          load={async (facets, signal) => {
+            const response = await readRefinement({
+              data: {
+                query,
+                locale,
+                ...(searchRequiresCurrentReader(data.queryState!) && session ? { reader: session } : {}),
+                conditions: {
+                  ...(type ? { type } : {}),
+                  facetValues: withoutResourceLanguageSelection({
+                    ...committedState,
+                    facets: selectedFacets,
+                  }).facets,
+                  ...(data.queryState?.kinds ? { kinds: data.queryState.kinds } : {}),
+                  ...(data.queryState?.languages ? { languages: data.queryState.languages } : {}),
+                  ...(data.queryState?.filter ? { filter: data.queryState.filter } : {}),
+                  ...(data.queryState?.resourceScope ? { resourceScope: data.queryState.resourceScope } : {}),
+                  ...(data.queryState?.ratingPopulation ? { ratingPopulation: data.queryState.ratingPopulation } : {}),
+                  ...(data.ranges ? { ranges: data.ranges } : {}),
+                  ...(data.condition ? { condition: data.condition } : {}),
+                },
+                facets,
+              },
+              signal,
+              ...(searchRequiresCurrentReader(data.queryState!)
+                ? { headers: { 'X-CSRF-Token': sessionCsrfToken() ?? '' } }
+                : {}),
+            });
+            const state = facetSearchInvalidation(response);
+            if (!signal.aborted && sourceData && currentData.current === sourceData && state)
+              setInvalidation({ owner: sourceData, state });
+            return response;
+          }}
+          {...(data.sort === 'rating' ? { sort: 'rating' as const } : {})}
+        />
+      )}
+      {statementRefinementAvailable ? (
+        <ConditionEditor
+          requestIdentity={JSON.stringify([stateKey, session])}
+          value={draft.condition}
+          onChange={(condition) => setDraft((previous) => ({ ...previous, condition }))}
+          metadata={data?.conditionMetadata}
+          conceptLookup={conceptLookup}
+          preventImplicitSubmit={composition.preventImplicitSubmit}
+          locale={locale}
+          entityLookup={conditionEntityLookupContext(data, locale, session)}
+          issues={issues}
+          values={Object.fromEntries(
+            data?.refinement?.initial?.status === 'ready'
+              ? data.refinement.initial.page.facets.map(({ property, values }) => [property, values])
+              : [],
+          )}
+          languages={draft.languages}
+          onLanguages={(languages) => setDraft((previous) => ({ ...previous, languages }))}
+        />
+      ) : draft.condition ? (
+        <input type="hidden" name="condition" value={JSON.stringify(draft.condition)} />
+      ) : null}
+      {!data?.conditionMetadata && (
+        <a className={linkClass} href={hrefFor(committedState)}>
+          {m.search_facet_retry({}, options)}
+        </a>
+      )}
+      {data?.queryState?.filter && <p className="text-sm text-muted-foreground">{m.condition_retained({}, options)}</p>}
+      {Object.entries(data?.ranges ?? {}).map(([property, range]) => (
+        <input key={property} type="hidden" name={`r.${property}`} value={JSON.stringify(range)} />
+      ))}
+      {editing && (
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="outline" onClick={revertDraft}>
+            {m.search_filter_revert_action({}, options)}
+          </Button>
+        </div>
+      )}
+      <p
+        ref={revertStatus}
+        role="status"
+        aria-live="polite"
+        tabIndex={-1}
+        className="rounded-sm text-sm text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        {revertedKey === stateKey ? m.search_filter_revert_status({}, options) : ''}
+      </p>
+    </div>
+  );
+
+  const desktopOpen = !hydrated || filterSurface === 'desktop';
+  const filterControls = (
+    <>
+      {desktopOpen && (
+        <div
+          id="search-filters"
+          ref={desktopPanel}
+          role="region"
+          aria-label={m.search_filters({}, options)}
+          tabIndex={-1}
+          className="min-w-0 rounded-xl border border-border/60 p-4"
+          onKeyDown={(event) => {
+            if (event.defaultPrevented || composition.isComposing(event)) return;
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              closeFilters();
+            }
+          }}
+          onClick={follow}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-medium">{m.search_filters({}, options)}</h2>
+            <Button type="button" variant="ghost" hidden={!hydrated} onClick={closeFilters}>
+              {m.search_close_filters({}, options)}
+            </Button>
+          </div>
+          <form
+            key={stateKey}
+            {...composition.handlers}
+            id="desktop-filter-form"
+            method="get"
+            onSubmit={submit}
+            action={formAction ?? `/${locale}/search`}
+          >
+            {filterContents('desktop')}
+          </form>
+        </div>
+      )}
+      {filterSurface === 'mobile' && (
+        <BottomSheet
+          open
+          onOpenChange={(open) => {
+            if (!open) closeFilters();
+          }}
+          closeLabel={m.search_close_filters({}, options)}
+          title={`${m.search_filters({}, options)} (${number.format(activeFilterCount)})`}
+        >
+          <form
+            key={stateKey}
+            {...composition.handlers}
+            id="search-filters"
+            method="get"
+            action={formAction ?? `/${locale}/search`}
+            onSubmit={submit}
+            onClick={follow}
+          >
+            {filterContents('mobile')}
+          </form>
+        </BottomSheet>
+      )}
+    </>
+  );
+
+  if (filtersOnly) {
+    if (!hasFilterPanel) return null;
+    return (
+      <div className="w-full space-y-4">
+        {filterEntrance}
+        {filterControls}
+      </div>
+    );
+  }
+
+  const browsing = isRealmDiscoverySearch(committedState) && !editing && !result && !discovery && !data?.recovery;
+  const textError = data?.recovery?.status === 'invalid' ? data.recovery.textError : undefined;
+  const content =
+    textError && textError.query === query && committedState.query === query ? (
+      <QueryTextRecovery
+        key={JSON.stringify([stateKey, locale, session])}
+        value={query}
+        diagnostic={textError.diagnostic}
+        locale={locale}
+        retryAt={data?.recovery && 'retryAt' in data.recovery ? data.recovery.retryAt : undefined}
+        onApply={(value) => {
+          void router?.navigate({
+            href: hrefFor({ ...committedState, query: value, cursor: undefined }),
+          });
+        }}
+      />
+    ) : browsing ? (
+      <SearchRealmDiscovery
+        key={JSON.stringify([locale, stateKey, realmDiscovery])}
+        initial={realmDiscovery ?? { kind: 'loading' }}
+        locale={locale}
+        {...(realmDiscoveryRead ? { read: realmDiscoveryRead } : {})}
+      />
+    ) : (
+      results
+    );
 
   return (
-    <section className="mx-auto max-w-5xl space-y-6 px-4">
-      <h1 className="font-serif text-3xl">{m.search_heading()}</h1>
-      <form method="get" action={`/${locale}/search`} className="space-y-5">
-        <div className="flex gap-2">
-          <label className="sr-only" htmlFor="search-query">
-            {m.search_label()}
-          </label>
-          <input
-            id="search-query"
-            name="q"
-            value={formQuery}
-            onChange={(event) => setFormQuery(event.target.value)}
-            className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3"
-          />
-          <button className="rounded-xl bg-primary px-4 text-primary-foreground">{m.search_submit()}</button>
-        </div>
-        {type && <input type="hidden" name="type" value={type} />}
-        {hasFilterPanel ? (
-          <div className="grid items-start gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
-            <details open className="rounded-xl border border-border/60 p-4 lg:col-start-1 lg:row-start-1">
-              <summary className="cursor-pointer font-medium lg:hidden">
-                {m.search_filters()} ({new Intl.NumberFormat(locale).format(activeFilterCount)})
-              </summary>
-              <div className="space-y-5 pt-3 lg:pt-0">
-                {type ? (
-                  <section className="space-y-3">
-                    <h2 className="font-medium">
-                      {m.search_type()}: <span lang={typeLabel?.lang}>{typeLabel?.text || type}</span>
-                    </h2>
-                    <a className="text-sm underline" href={searchHref(locale, query, undefined, {})}>
-                      {m.search_clear_type()}
-                    </a>
-                    {Object.entries(selectedFacets).length > 0 && (
-                      <ul className="space-y-2 border-t border-border/60 pt-3">
-                        {Object.entries(selectedFacets).map(([property, values]) => {
-                          const label = localizedLabel(data?.selectedFacetLabels[property] ?? {}, locale);
-                          return (
-                            <li key={property} className="flex items-baseline justify-between gap-2 text-sm">
-                              <span lang={label.lang}>{label.text || property}</span>
-                              <a
-                                className="underline"
-                                href={searchHref(
-                                  locale,
-                                  query,
-                                  type,
-                                  Object.fromEntries(
-                                    Object.entries(selectedFacets).filter(
-                                      ([selectedProperty]) => selectedProperty !== property,
-                                    ),
-                                  ),
-                                )}
-                              >
-                                {m.search_clear_facet()} ({new Intl.NumberFormat(locale).format(values.length)})
-                              </a>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                    {data?.groups.map((group) => {
-                      const propertyLabel = localizedLabel(group.labels, locale);
-                      const selected = selectedFacets[group.property] ?? [];
-                      return (
-                        <fieldset key={group.property} className="space-y-2 border-t border-border/60 pt-3">
-                          <legend className="font-medium" lang={propertyLabel.lang}>
-                            {propertyLabel.text || group.property}
-                          </legend>
-                          <ul className="space-y-2">
-                            {group.values.map((entry) => {
-                              const valueLabel = localizedLabel(entry.labels, locale);
-                              const id = `facet-${encodeURIComponent(group.property)}-${encodeURIComponent(entry.value)}`;
-                              return (
-                                <li key={entry.value}>
-                                  <label className="flex items-start gap-2 text-sm" htmlFor={id} lang={valueLabel.lang}>
-                                    <input
-                                      id={id}
-                                      type="checkbox"
-                                      name={`f.${group.property}`}
-                                      value={entry.value}
-                                      defaultChecked={selected.includes(entry.value)}
-                                      onChange={(event) => {
-                                        if (hydrated) event.currentTarget.form?.requestSubmit();
-                                      }}
-                                    />
-                                    <span>
-                                      {valueLabel.text || entry.value} (
-                                      {new Intl.NumberFormat(locale).format(entry.count)})
-                                    </span>
-                                  </label>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        </fieldset>
-                      );
-                    })}
-                  </section>
-                ) : (
-                  <section className="space-y-3">
-                    <h2 className="font-medium">{m.search_types()}</h2>
-                    <ul className="space-y-2">
-                      {data?.typeChoices.map((choice) => {
-                        const label = localizedLabel(choice.labels, locale);
-                        return (
-                          <li key={choice.id}>
-                            <a className="underline" href={searchHref(locale, query, choice.id, {})} lang={label.lang}>
-                              {label.text || choice.id}
-                            </a>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </section>
-                )}
-                <button type="submit" hidden={hydrated} className="rounded-lg border border-border px-3 py-2 text-sm">
-                  {m.search_apply()}
-                </button>
-              </div>
-            </details>
-            <div className="space-y-4 lg:col-start-2 lg:row-start-1">
-              {renderResults(query, cursor, result, locale, type, selectedFacets)}
-            </div>
+    <section className="mx-auto max-w-5xl space-y-6">
+      {heading ?? <PageHeading>{m.search_heading({}, options)}</PageHeading>}
+      {!embedded && data?.recovery?.status === 'ready' && data.queryState && (
+        <QuerySharePreview
+          key={JSON.stringify([stateKey, locale, session])}
+          locale={locale}
+          changed={editing || Object.keys(rangeDraftState.properties).length > 0}
+          prepare={(signal) =>
+            prepareShareWithLocale({
+              signal,
+              data: {
+                query: committedState.query,
+                locale,
+                facetValues: committedState.facets,
+                type: committedState.type,
+                kinds: committedState.kinds,
+                languages: committedState.languages,
+                condition: committedState.condition,
+                ranges: committedState.ranges,
+                filter: committedState.filter,
+                sort: committedState.sort,
+                resourceScope: committedState.resourceScope,
+                ratingPopulation: committedState.ratingPopulation,
+                reader: session ?? undefined,
+              },
+            })
+          }
+        />
+      )}
+      {hasFilterPanel ? (
+        <>
+          {filterEntrance}
+          <div className={cn('grid items-start gap-6', desktopOpen && 'lg:grid-cols-[16rem_minmax(0,1fr)]')}>
+            {filterControls}
+            <div className="min-w-0 space-y-4">{content}</div>
           </div>
-        ) : (
-          renderResults(query, cursor, result, locale, type, selectedFacets)
-        )}
-      </form>
+        </>
+      ) : (
+        content
+      )}
     </section>
   );
 }
 
-function renderResults(
-  query: string,
-  cursor: string | undefined,
-  result: SearchResult | undefined,
-  locale: string,
-  type: string | undefined,
-  selectedFacets: Record<string, string[]>,
-) {
-  if (!result) return null;
-  if (result.subjects.length === 0) return <p>{m.search_no_results()}</p>;
+/** Search-owned Realm catalogue section mounted by the existing Realm page composition. */
+export function RealmCatalogueSearch({
+  realmId,
+  locale,
+  isCurrent,
+}: {
+  realmId: string;
+  locale: string;
+  isCurrent: () => boolean;
+}) {
+  const location = useLocation();
+  const browserSession = useSession();
+  const reader = searchSessionOwner(browserSession);
+  const search = location.search as Record<string, unknown>;
+  const authored = realmCatalogueSearchLoaderDeps(search);
+  const resourceScope: SearchResourceScope = { kind: 'realm', id: realmId.toLowerCase() };
+  const queryState: SearchLoaderDeps = {
+    ...authored,
+    resourceScope,
+    filter: authored.invalidInput ? authored.filter : searchFilterWithScope(authored.filter, resourceScope),
+  };
+  const pathname = `/${encodeURIComponent(locale)}/realms/${encodeURIComponent(realmId)}`;
+  const pageSearch = new URLSearchParams();
+  if (search.node === 'boards' || search.node === 'publications') pageSearch.set('node', search.node);
+  if (typeof search.cursor === 'string' && search.cursor) pageSearch.set('cursor', search.cursor);
+  const action = `${pathname}${pageSearch.size ? `?${pageSearch}` : ''}`;
+  const hrefForState = (state: SearchLoaderDeps) => {
+    const url = new URL(
+      discoverySearchHref(locale, state, { pathname, cursorParam: 'searchCursor' }),
+      'https://rezics.invalid',
+    );
+    if (search.node === 'boards' || search.node === 'publications') url.searchParams.set('node', search.node);
+    if (typeof search.cursor === 'string' && search.cursor) url.searchParams.set('cursor', search.cursor);
+    url.hash = 'search-results';
+    return `${url.pathname}${url.search}${url.hash}`;
+  };
+  const currentHref = hrefForState(queryState);
+  const heading = <h2 className="text-xl font-semibold">{m.realm_catalogue_heading({}, messageOptions(locale))}</h2>;
+  if (searchRequiresCurrentReader(queryState) && (browserSession.state !== 'signed-in' || !reader))
+    return (
+      <SearchPage
+        query={queryState.query}
+        data={{ ...searchUnavailablePage(queryState), recovery: { status: 'session' } }}
+        locale={locale}
+        session={null}
+        searchHref={currentHref}
+        fixedResourceScope={resourceScope}
+        hrefForState={hrefForState}
+        formAction={action}
+        heading={heading}
+        embedded
+        isCurrent={isCurrent}
+      />
+    );
   return (
-    <>
-      <p className="text-sm text-muted-foreground">{m.search_results()}</p>
-      <ul className="divide-y divide-border/60 rounded-xl border border-border/60">
-        {result.subjects.map((subject) => {
-          const label = localizedLabel(subject.labels, locale);
-          return (
-            <li key={subject.id} className="px-4 py-3">
-              <Link
-                to="/subjects/$id"
-                params={{ id: subject.id }}
-                lang={label.lang}
-                className="font-medium underline-offset-4 hover:underline"
-              >
-                {label.text}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-      {result.next && (
-        <a
-          href={searchHref(locale, query, type, selectedFacets, result.next)}
-          className="inline-flex rounded-lg border px-3 py-2"
-        >
-          {m.search_more()}
-        </a>
-      )}
-    </>
+    <LoadedRealmCatalogueSearch
+      key={searchSessionLifetime(locale, { ...queryState, cursor: undefined }, reader ?? undefined)}
+      queryState={queryState}
+      locale={locale}
+      {...(reader ? { reader } : {})}
+      pathname={pathname}
+      searchHref={currentHref}
+      hrefForState={hrefForState}
+      formAction={action}
+      heading={heading}
+      isCurrent={isCurrent}
+    />
   );
+}
+
+function LoadedRealmCatalogueSearch({
+  queryState,
+  locale,
+  reader,
+  pathname,
+  searchHref,
+  hrefForState,
+  formAction,
+  heading,
+  isCurrent,
+}: {
+  queryState: SearchLoaderDeps;
+  locale: string;
+  reader?: string;
+  pathname: string;
+  searchHref: string;
+  hrefForState: (state: SearchLoaderDeps) => string;
+  formAction: string;
+  heading: ReactNode;
+  isCurrent: () => boolean;
+}) {
+  const [active, setActive] = useState(false);
+  useEffect(() => {
+    setActive(isCurrent());
+  }, [isCurrent]);
+  const { data, readerOwner, retry } = useSearchQuery(
+    locale,
+    queryState,
+    reader,
+    {
+      pathname,
+      cursorParam: 'searchCursor',
+    },
+    active,
+  );
+  return (
+    <SearchPage
+      query={queryState.query}
+      data={data}
+      locale={locale}
+      session={reader ?? null}
+      readerOwner={readerOwner}
+      searchHref={searchHref}
+      onRetry={() => {
+        if (isCurrent()) retry();
+      }}
+      fixedResourceScope={queryState.resourceScope}
+      hrefForState={hrefForState}
+      formAction={formAction}
+      heading={heading}
+      embedded
+      isCurrent={isCurrent}
+    />
+  );
+}
+
+/** The route's loader call; the page locale travels with the request so the server asks for the right languages. */
+function readSearch({
+  data,
+  locale = getLocale(),
+  signal,
+}: {
+  data: Omit<SearchParams, 'locale'>;
+  locale?: string;
+  signal?: AbortSignal;
+}): Promise<SearchPageData> {
+  return readSearchWithLocale({ data: { ...data, locale }, ...(signal ? { signal } : {}) });
 }
 
 export { readSearch };
 
-export function ShellSearch() {
-  const locale = getLocale();
-  const navigate = useNavigate();
-  const [inputValue, setInputValue] = useState('');
-  const collectionState = useListCollection({
-    initialItems: [] as { value: string; label: string; subject: SuggestResult['subjects'][number] }[],
-  });
-  const collection = collectionState.collection;
-  useEffect(() => {
-    const value = inputValue.trim();
-    if (!value) {
-      collectionState.clear();
-      return;
-    }
-    const controller = new AbortController();
-    const timer = window.setTimeout(async () => {
-      try {
-        const response = await fetch(`/api/search/suggestions?q=${encodeURIComponent(value)}`, {
-          signal: controller.signal,
-        });
-        if (!response.ok) return;
-        const result = (await response.json()) as SuggestResult;
-        collectionState.set(
-          result.subjects.map((subject) => ({
-            value: subject.id,
-            label: localizedLabel(subject.labels, locale).text,
-            subject,
-          })),
-        );
-      } catch (error) {
-        if (!(error instanceof DOMException && error.name === 'AbortError')) collectionState.clear();
-      }
-    }, 200);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [inputValue, locale]);
-  const submit = () => {
-    if (inputValue.trim())
-      void navigate({
-        to: '/search',
-        search: { q: inputValue.trim(), type: undefined, facetValues: {}, cursor: undefined },
-      });
-  };
-  return (
-    <Combobox
-      collection={collection}
-      onInputValueChange={({ inputValue: value }) => setInputValue(value)}
-      onValueChange={({ value }) => {
-        const id = value[0];
-        if (id) void navigate({ to: '/subjects/$id', params: { id } });
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' && !event.currentTarget.getAttribute('aria-activedescendant')) {
-          event.preventDefault();
-          submit();
-        }
-      }}
-    >
-      <ComboboxInput
-        className="h-9 w-28 text-sm sm:w-44"
-        aria-label={m.search_label()}
-        placeholder={m.search_placeholder()}
-        showTrigger={false}
-      />
-      <ComboboxContent>
-        <ComboboxEmpty>{m.search_no_suggestions()}</ComboboxEmpty>
-        <ComboboxList>
-          {collection.items.map((item) => (
-            <ComboboxItem item={item} key={item.value}>
-              {item.label}
-            </ComboboxItem>
-          ))}
-        </ComboboxList>
-      </ComboboxContent>
-    </Combobox>
-  );
-}
+// Retain current callers while the reusable region owns the only query implementation.
+export { ShellSearch } from './header-search/shell-search';
+export { ScopeChip } from './header-search/scope-chip';
+export type { SearchScope, SearchScopeKind } from './header-search/types';

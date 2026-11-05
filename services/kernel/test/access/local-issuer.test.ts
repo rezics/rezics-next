@@ -1,3 +1,4 @@
+import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { decodeJwt, exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -6,6 +7,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { AuthenticationError } from '../../src/request/access.ts';
 import type { AuthenticationConfig } from '../../src/access/authenticate.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const url = process.env.DATABASE_URL;
@@ -71,7 +73,7 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
         audience,
         secret: 'local-issuer-test-secret-with-at-least-32-bytes',
         signing: { activeKid: 'local', privateKeys: [key] },
-        trustedAccess: {
+        trustedAccess: trustedAccessPorts({
           async readAccount(id) {
             const account = await readAccount(pool, route, id);
             return (
@@ -90,7 +92,7 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
             approved = false;
             return { accountId: person };
           },
-        },
+        }),
       });
       await pool.query(
         `INSERT INTO access.account (route,account_id,kind,state,transaction_id)
@@ -248,7 +250,7 @@ for (const [index, host] of ['127.0.0.1', 'localhost', '[::1]'].entries()) {
         );
       }
       for (const state of ['suspended', 'deleted']) {
-        await pool.query('UPDATE access.account SET state=$3 WHERE route=$1 AND account_id=$2', [route, person, state]);
+        await setFixtureAccountState(pool, person, state);
         await invalid(access.authenticate(token, context()));
       }
       await pool.query("UPDATE access.account SET state='active', authn_fenced=true WHERE route=$1 AND account_id=$2", [

@@ -1,0 +1,17 @@
+{
+  "status": 200,
+  "space": {
+    "spaceId": "01a1a000-0000-7000-8000-000000000001",
+    "realmId": "01a1a000-0000-7000-8000-000000000002",
+    "state": "active",
+    "headRevisionId": "01a1a000-0000-7000-8000-000000000003",
+    "createdAt": "2026-10-26T18:22:28.427Z",
+    "creator": "01a1a000-0000-7000-8000-000000000004",
+    "predecessor": null,
+    "address": "quiet-novel-club",
+    "title": "The Quiet Novel Club",
+    "summary": "A reading circle for long evenings and short novels. We read slowly, quote generously and never spoil the ending.",
+    "revisionCreatedAt": "2026-10-26T18:22:28.427Z",
+    "author": "01a1a000-0000-7000-8000-000000000004"
+  }
+}

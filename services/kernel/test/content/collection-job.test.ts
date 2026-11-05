@@ -11,6 +11,7 @@ import { authoritativeTimeValue, runCommand } from '../../src/command/command.ts
 import { createPool } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
@@ -239,7 +240,13 @@ async function reference(m: Media) {
           {
             type: 'com.rezics.content.post.created.v1',
             subject: itemId,
-            data: { threadId: m.containerId, itemId, revisionId, actorId: m.uploaderId },
+            data: {
+              threadId: m.containerId,
+              itemId,
+              revisionId,
+              actorId: m.uploaderId,
+              ...SUBJECT_THREAD_EVENT_FIELDS,
+            },
           },
         ],
       };
@@ -287,7 +294,7 @@ test('all unclaimed states collect at exactly 24 hours; younger, claimed, erased
   expect(await job().collectPartition(partition, 100)).toMatchObject({ examined: 0, collected: 0, complete: true });
   expect(await effects()).toEqual(snapshot);
   const events = (await admin.query('SELECT type,data FROM core.outbox')).rows;
-  for (const event of events) expect(Object.hasOwn(CONTENT_EVENTS, event.type)).toBe(true);
+  for (const event of events) expect(Object.hasOwn(CONTENT_EVENTS(), event.type)).toBe(true);
   expect(events.filter((e) => e.type === 'com.rezics.content.media.collected.v1')).toHaveLength(4);
   expect(await job().collectPartition(partition + 1, 1)).toMatchObject({ collected: 1 });
 });

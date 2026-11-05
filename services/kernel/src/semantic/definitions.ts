@@ -1,4 +1,11 @@
-import { releaseDigest, validateRelease, type Release, type ReleaseViolation } from '@rezics/definitions';
+import {
+  publicationLimits,
+  releaseAdmission,
+  releaseDigest,
+  validateRelease,
+  type Release,
+  type ReleaseViolation,
+} from '@rezics/definitions';
 import type { Pool } from 'pg';
 import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
 import { systemClock } from '../clock.ts';
@@ -8,6 +15,8 @@ import pointer from './definitions-active.sql';
 import exists from './definitions-exists.sql';
 import publish from './definitions-publish.sql';
 import read from './definitions-read.sql';
+import { readComposedRelease } from './extensions.ts';
+import { stageReleaseTypeDirectory } from './definition-type-directory.ts';
 
 export const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const resource = Object.freeze({ route: 0, id: GLOBAL_CONTEXT });
@@ -29,19 +38,23 @@ function validated(value: unknown): Release {
   return value as Release;
 }
 
-function freeze(value: unknown): void {
+export function freeze(value: unknown): void {
   if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return;
   for (const child of Object.values(value)) freeze(child);
   Object.freeze(value);
 }
 
 /** A cache hit reads the digest only. The cache stores validated, digest-checked bodies, and a release is immutable. */
-export async function readRelease(pool: Pool | CommandTransaction, digest: string): Promise<Release | null> {
+export async function readRelease(
+  pool: Pool | CommandTransaction,
+  digest: string,
+  options: { composed?: boolean } = {},
+): Promise<Release | null> {
   if (DIGEST.exec(digest)?.[0] !== digest) return null;
   const cached = releases.get(digest);
   if (cached) return (await exists.run(pool, { route: resource.route, digest })) ? cached : null;
   const row = await read.run(pool, { route: resource.route, digest });
-  if (!row) return null;
+  if (!row) return options.composed === false ? null : readComposedRelease(pool, digest);
   const release = validated(row.body);
   if (releaseDigest(release) !== digest) throw new Error('Stored definition release digest mismatch');
   freeze(release);
@@ -49,7 +62,9 @@ export async function readRelease(pool: Pool | CommandTransaction, digest: strin
   return release;
 }
 
-export async function activeRelease(pool: Pool): Promise<{ digest: string; head: number; release: Release } | null> {
+export async function activeRelease(
+  pool: Pool | CommandTransaction,
+): Promise<{ digest: string; head: number; release: Release } | null> {
   const active = await pointer.run(pool, { route: resource.route });
   if (!active) return null;
   const release = releases.get(active.digest) ?? (await readRelease(pool, active.digest));
@@ -57,7 +72,7 @@ export async function activeRelease(pool: Pool): Promise<{ digest: string; head:
   return { ...active, release };
 }
 
-type WriteOptions = {
+export type WriteOptions = {
   actor: AccountActor;
   idempotencyKey: string;
   digest: Uint8Array;
@@ -67,9 +82,18 @@ type WriteOptions = {
   clock?: () => Date;
 };
 
-function commandOptions(options: WriteOptions, kind: string, action: string) {
-  return {
+/** The command options of a definition write on `target`: Global's own partition unless a Context's extension is written. */
+export function commandOptions(
+  options: WriteOptions,
+  kind: string,
+  action: string,
+  target: { partition: number; resource: { route: number; id: string } } = {
     partition: 0,
+    resource,
+  },
+) {
+  return {
+    partition: target.partition,
     ...(options.deadline === undefined ? {} : { deadline: options.deadline }),
     receipt: {
       actorAccountId: options.actor.accountId,
@@ -86,7 +110,7 @@ function commandOptions(options: WriteOptions, kind: string, action: string) {
       options.authorization ??
       ({
         action,
-        resource,
+        resource: target.resource,
         denied: () => new DefinitionAccessDeniedError(),
         async authorize(tx, attempt) {
           if (!(await options.authorize(tx, attempt.time))) throw new DefinitionAccessDeniedError();
@@ -98,9 +122,28 @@ function commandOptions(options: WriteOptions, kind: string, action: string) {
 }
 
 export async function publishRelease(pool: Pool, options: WriteOptions & { release: unknown }) {
-  // Validate before runCommand can check out a connection, including for a replay.
-  const release = validated(options.release);
-  const digest = releaseDigest(release);
+  // A historical exemption is established by one indexed point on this same
+  // pool, never a caller flag. JSON admission precedes digest work. Authorization
+  // and receipt/key conflict ordering remain inside runCommand at fresh T.
+  const admission = releaseAdmission(options.release);
+  if (admission.length) throw new DefinitionInputError(admission);
+  const caps = publicationLimits(options.release);
+  let publishedDigest: string | undefined;
+  let submitted = options.release;
+  if (caps.length) {
+    // The database await must retain owned data, not a mutable caller graph.
+    submitted = structuredClone(options.release);
+    publishedDigest = releaseDigest(submitted as Release);
+    if (
+      !(await exists.run(pool, {
+        route: resource.route,
+        digest: publishedDigest,
+      }))
+    )
+      throw new DefinitionInputError(caps);
+  }
+  const release = validated(submitted);
+  const digest = publishedDigest ?? releaseDigest(release);
   const command = await runCommand(
     pool,
     commandOptions(options, 'definitions.publish', 'definitions:publish'),
@@ -113,20 +156,33 @@ export async function publishRelease(pool: Pool, options: WriteOptions & { relea
       });
       return {
         value: { digest, created: rows !== null },
-        events: [{ type: 'com.rezics.definitions.published.v1', subject: GLOBAL_CONTEXT, data: { digest } }],
+        events: [
+          {
+            type: 'com.rezics.definitions.published.v1',
+            subject: GLOBAL_CONTEXT,
+            data: { digest },
+          },
+        ],
       };
     },
   );
   return {
     ...command.value,
-    component: { partition: command.partition, epoch: command.epoch, position: command.position },
+    component: {
+      partition: command.partition,
+      epoch: command.epoch,
+      position: command.position,
+    },
     replayed: command.replayed,
   };
 }
 
 export async function activateRelease(
   pool: Pool,
-  options: WriteOptions & { releaseDigest: string; expectedHead: number | null },
+  options: WriteOptions & {
+    releaseDigest: string;
+    expectedHead: number | null;
+  },
 ) {
   const command = await runCommand(
     pool,
@@ -134,8 +190,9 @@ export async function activateRelease(
     async (tx, { transactionId }) => {
       const digest = options.releaseDigest;
       // This runs after command authorization and receipt lookup, even for a malformed digest.
-      if (DIGEST.exec(digest)?.[0] !== digest || !(await read.run(tx, { route: resource.route, digest })))
-        throw new DefinitionNotFoundError();
+      const stored = DIGEST.exec(digest)?.[0] === digest ? await read.run(tx, { route: resource.route, digest }) : null;
+      if (!stored) throw new DefinitionNotFoundError();
+      await stageReleaseTypeDirectory(tx, digest, stored.body as Release);
       const rows = await activate.run(tx, {
         route: resource.route,
         digest,
@@ -146,13 +203,23 @@ export async function activateRelease(
       const head = rows[0]!.head;
       return {
         value: { digest, head },
-        events: [{ type: 'com.rezics.definitions.activated.v1', subject: GLOBAL_CONTEXT, data: { digest, head } }],
+        events: [
+          {
+            type: 'com.rezics.definitions.activated.v1',
+            subject: GLOBAL_CONTEXT,
+            data: { digest, head },
+          },
+        ],
       };
     },
   );
   return {
     ...command.value,
-    component: { partition: command.partition, epoch: command.epoch, position: command.position },
+    component: {
+      partition: command.partition,
+      epoch: command.epoch,
+      position: command.position,
+    },
     replayed: command.replayed,
   };
 }
@@ -167,13 +234,21 @@ class AlreadyActive extends Error {
 export async function bootstrapRelease(pool: Pool, release: Release, clock: () => Date = systemClock): Promise<string> {
   const existing = await pointer.run(pool, { route: resource.route });
   if (existing) return existing.digest;
+  const caps = publicationLimits(release);
+  if (caps.length) throw new DefinitionInputError(caps);
   const body = validated(release);
   const digest = releaseDigest(body);
   try {
     const command = await runCommand(pool, { partition: 0, clock }, async (tx, { transactionId }) => {
       const active = await pointer.run(tx, { route: resource.route });
       if (active) throw new AlreadyActive(active.digest);
-      await publish.run(tx, { route: resource.route, digest, body, transaction_id: transactionId });
+      await publish.run(tx, {
+        route: resource.route,
+        digest,
+        body,
+        transaction_id: transactionId,
+      });
+      await stageReleaseTypeDirectory(tx, digest, body);
       const rows = await activate.run(tx, {
         route: resource.route,
         digest,
@@ -184,8 +259,16 @@ export async function bootstrapRelease(pool: Pool, release: Release, clock: () =
       return {
         value: digest,
         events: [
-          { type: 'com.rezics.definitions.published.v1', subject: GLOBAL_CONTEXT, data: { digest } },
-          { type: 'com.rezics.definitions.activated.v1', subject: GLOBAL_CONTEXT, data: { digest, head: 1 } },
+          {
+            type: 'com.rezics.definitions.published.v1',
+            subject: GLOBAL_CONTEXT,
+            data: { digest },
+          },
+          {
+            type: 'com.rezics.definitions.activated.v1',
+            subject: GLOBAL_CONTEXT,
+            data: { digest, head: 1 },
+          },
         ],
       };
     });

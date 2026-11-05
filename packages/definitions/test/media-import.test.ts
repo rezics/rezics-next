@@ -68,6 +68,28 @@ test('portable request, accepted receipt and poll expose their bounded public sh
   expect(checkMediaImportRequest(input)).toEqual([]);
 });
 
+test('authored crop and focal point use strict pixel and unit-fraction shapes', () => {
+  const input = request() as MediaImportRequest & { crop?: string; focalPoint?: { x: number; y: number } };
+  input.crop = 'xywh=10,20,300,400';
+  input.focalPoint = { x: 0, y: 1 };
+  expect(checkMediaImportRequest(input)).toEqual([]);
+  expect(Compile(MediaImportRequestSchema).Check(input)).toBe(true);
+
+  for (const crop of ['xywh=percent:10,20,30,40', 'xywh=-1,0,1,1', 'xywh=0,0,0,1', 'xywh=0,0,1.5,1', 'xywh=1,2,3']) {
+    const malformed = { ...request(), crop };
+    expect(checkMediaImportRequest(malformed).some((v) => v.pointer === '/crop')).toBe(true);
+    expect(Compile(MediaImportRequestSchema).Check(malformed)).toBe(false);
+  }
+  expect(
+    checkMediaImportRequest({ ...request(), crop: 'xywh=0,0,2147483648,1' }).some((v) => v.pointer === '/crop'),
+  ).toBe(true);
+  for (const focalPoint of [{ x: -0.01, y: 0.5 }, { x: 0.5, y: 1.01 }, { x: 0.5 }, { x: 0.5, y: 0.5, z: 0 }]) {
+    const malformed = { ...request(), focalPoint };
+    expect(checkMediaImportRequest(malformed).some((v) => v.pointer.startsWith('/focalPoint'))).toBe(true);
+    expect(Compile(MediaImportRequestSchema).Check(malformed)).toBe(false);
+  }
+});
+
 test('closed envelopes retain bulk citation parts and refuse private or unknown members', () => {
   const input = request();
   input.provenance.references[0]!.parts.push(

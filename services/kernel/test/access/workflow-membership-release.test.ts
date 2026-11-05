@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { createOperatorCommands } from '../../src/access/operator.ts';
 import {
   createLifecycleCommands,
@@ -11,12 +11,11 @@ import {
 } from '../../src/access/lifecycle.ts';
 import { IdempotencyConflictError } from '../../src/command/command.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import type { AccountActor } from '../../src/request/access.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
 pool.options.max = 1;
 const actions = new Map([...LIFECYCLE_ACTIONS, ['account:manage', { anonymous: false }] as const]);
-const access = createAccess({ actions, accountEvidence: (_actor, context) => context.account });
+const access = admittedAccess({ actions });
 const commands = createLifecycleCommands({ pool, access });
 const operators = createOperatorCommands({ pool, access, actions, managementAction: 'account:manage' });
 const proofs = new Map<
@@ -35,14 +34,11 @@ const key = () => `membership-release-${++sequence}`;
 const row = (id: string) => withConnection(pool, (client) => readAccount(client, routeOf(id)!, id));
 async function context(id: string) {
   return {
-    actor: {
-      kind: 'account',
-      accountId: id,
-      clientId: 'verified-client',
-      scopes: [...actions.keys()],
-      requestedBy: null,
-      authnEpoch: 1,
-    } as AccountActor,
+    actor: await authenticateAccount(
+      access,
+      { pool, deadline: Date.now() + 10_000 },
+      { accountId: id, clientId: 'verified-client', scopes: [...actions.keys()], requestedBy: null, authnEpoch: 1 },
+    ),
     account: await row(id),
     deadline: Date.now() + 5000,
   };
@@ -217,4 +213,18 @@ test('permanent terminal slot denies delayed activation even while its hold stil
   ).rows;
   expect(slots).toEqual([{ terminal: true }]);
   expect((await operators.deletionEligibility(member)).safe).toBe(true);
+});
+
+test('an owner who leaves after a successor owner exists releases their own hold on the committed terminal record', async () => {
+  const owner = await person();
+  const successor = await person();
+  const org = await organization(owner);
+  const [ownerHold] = await holds(owner);
+  await set(owner, await reserve(org, successor), 'owner');
+  const leaving = { organizationId: org, memberAccountId: owner, reservationId: ownerHold! };
+  await set(owner, leaving, null);
+  // The owner no longer holds the right that removed them; release needs no actor.
+  await internal.releaseMembershipCoordination({ ...leaving, key: key() });
+  expect(await holds(owner)).toEqual([]);
+  expect((await operators.deletionEligibility(owner)).safe).toBe(true);
 });

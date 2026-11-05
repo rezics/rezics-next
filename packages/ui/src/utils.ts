@@ -15,7 +15,7 @@ export type ClassValue =
  * winning. It reuses the merger tailwind-variants bundles; importing tailwind-merge as well shipped the same
  * code to every page twice. */
 export function cn(...values: ClassValue[]): string {
-  // Like clsx, a falsy number from `count && 'class'` adds nothing; tailwind-variants would keep "0".
+  // Keep clsx's falsy-number behavior even when 0 is the only argument; tailwind-variants v4 keeps a lone "0".
   return merge(...(values.map((value) => (value === 0 ? null : value)) as Parameters<typeof merge>)) ?? '';
 }
 

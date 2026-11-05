@@ -16,12 +16,12 @@ Type templates place their `SubjectList`s after the header and before `MoreState
 `schema:Person` lists `schema:author`, `schema:illustrator`, `schema:director`, `schema:musicBy`
 and `wdt:P725`, limit 12. `schema:Organization` lists `schema:publisher`, `schema:productionCompany`
 and `wdt:P178`, limit 12. `skos:Concept` lists `schema:genre`, limit 24. `wd:Q95074` lists
-`schema:character`, limit 24. Route `/` is the site home template: a `SearchBox`, then a `LinkGrid`
-of Books, Anime, Visual novels and Recipes, then one `TypeList` per vertical in that order, sorted
-by `collections` with limit 12. The home plans four searches and no subject read. Each search
-returns at most 12 subjects, so the page's read cost is 48 of 128. `setupPresentation` bootstraps
-the profile once at startup, immediately after `setupSemantic`. When a profile is already active,
-that bootstrap is one pointer read.
+`schema:character`, limit 24. Recipe remains a home TypeList vertical and uses the generic template.
+Route `/` is the site home template: a level-1 `Heading`, a `SearchBox`, the
+`personal` `Slot`, then one `TypeList` per vertical (Books, Anime, Visual novels and Recipes, in that order), sorted by
+`collections` with limit 12. The host fills the `personal` slot for the signed-in viewer; the page read never does. The home plans four searches and no subject read. Each search returns at most 12 subjects, so the
+page's read cost is 48 of 128. `setupPresentation` bootstraps the profile once at startup, immediately after
+`setupSemantic`. When a profile is already active, that bootstrap is one pointer read.
 
 Build checks in `test/presentation/platform-profile.test.ts`:
 
@@ -29,64 +29,307 @@ Build checks in `test/presentation/platform-profile.test.ts`:
 - every list in a shipped document is admitted by the bundled release
 - setup activates the platform profile once
 
+Each shipped `TypeList` lowers its concrete selectors into the same closed
+public filter grammar used by Search. Profile admission checks those selectors
+against the effective release; an unknown Type remains an invalid profile and
+is never converted into an empty catalogue read. The Home's four selectors are
+`schema:Book`, `schema:TVSeries` plus `schema:Movie`, `wd:Q689445`, and
+`schema:Recipe`.
+
+## Release scope and evidence
+
+The closed composition format, platform profile and released definitions cover the eight launch configurations through the shared renderer; the generic page needs no vertical-specific implementation. This proves neither native execution nor browser acceptance for every type. Original Zone starters remain inert documents and do not provide the common Zone page runtime.
+
+Profile commands retain their invocation digest, detached plain-data body and original callback or authorization capability. Validation, hashing and storage use the same captured body. Authority is checked fresh on every attempt and before receipt replay. Bootstrap returns after one active-pointer read without writing when a profile is already active.
+
+The page reader has one bounded descriptor aggregate, separate from routing, definition and control reads; it does not promise one total site HTTP request. A non-agent routing Subject GET is at most one. The shared limits of 16 descriptors and 128 distinct output slots apply at publication and execution, not backend postings, native Access, dependency work, bytes or SQL. See [Semantic acceptance](../../../../docs/goals/semantic.capabilities.md) for revision-bound outcome evidence; examples and typing do not certify native or browser acceptance.
+
+## Aggregate execution admission
+
+`readPage` admits the whole plan before dispatch. Every descriptor has closed outer fields and owns plain JSON
+data; inherited inputs, accessors, serialization hooks, cycles, non-finite numbers and values JSON would discard
+are refused. Validation precedes deduplication, so an invalid alias cannot hide behind a valid read. Errors use
+sorted, escaped `/reads/...` pointers. The raw descriptor count remains at most `MAX_PAGE_READS` (16), including
+aliases. Search descriptors accept an opaque top-level `cursor`, which the adapter forwards to the standalone Search body.
+`body.cursor` remains closed to callers; other Search grammar and authorization remain with the standalone route
+and its per-read result. Public OwnerLeaf filters reject the entire aggregate before dispatch.
+
+Search limits use the standalone positive integer range 1–100 and default 20. Page languages override descriptor
+languages when supplied; without them each descriptor keeps its language choice, and an omitted chain keeps every
+language. After binding languages and the native limit default, canonical effective reads share one dispatch and
+the exact same result for every original key. Sum the distinct reads' output slots using `MAX_PAGE_COST` (128): one
+for subject, reaction or account identity, and the validated native limit for list reads. Overflow refuses the whole
+plan before any dispatch. Dispatch still runs at most four reads at once, forwards only authorization and session
+credentials, retains public statement hydration, and merges all observed session tokens with the caller's token.
+
+A subject `308` can follow once, using the same GET operation, to an exact canonical same-origin
+`/v1/subjects/<id>` Location (root-relative or absolute). Credentials in the URL, query strings, fragments, encoded
+or normalized path variants and other operations are refused. A refused redirect or the second response is returned
+with the existing per-read semantics; observations from both allowed hops remain in the aggregate session.
+
+The declared native page, language and read suites cover admission boundaries, aliases, standalone errors,
+credentials and redirect custody. The fixed-plan growth case in `test/presentation/pages.test.ts` measures actual
+native subject dispatch, database rows and wire bytes at 64, 512 and 4096 unrelated subjects and revision histories.
+This evidence covers aggregate admission and custody, without claiming whole-query privacy or release promotion.
+
+Later Zone common-page execution is separate from inert starters and the original common page format. Its proof
+still requires admitted direct/prepared plans, preparation of a second plan after an earlier read, current
+LOCAL/FOREIGN query-safety acknowledgments, revocation after that read, finite retained completion, atomic `200`,
+`202 {next}` or `503` without a cursor, current session/cursor restart behavior and aggregate native counters.
+No old final-256, replay or home-basis gate, cached permission, or unimplemented Source/default-worker/epoch/query-compiler/
+preparation port is claimed here.
+
+## Deletion lifecycle
+
+[Deletion](../../../../docs/deletion.md) and [first public scope](../../../../docs/scope.md) apply to the source
+records rendered on pages. Presentation stores platform configuration: immutable `presentation.profile` bodies keyed
+by `(route, digest)`, and append-only `presentation.profile_activation` rows keyed by `(route, head)` referencing
+those bodies. These are composition templates and activation history, not accounts' public profile records or copies
+of their posts/private state. `profiles.ts` reuses at most four validated, owned, deeply frozen configurations by digest; page results and planned
+reads are assembled per request, not persisted as a second source store.
+
+Publishing retains previous bodies; activation appends a head and selects the latest one without deleting old heads
+or profiles. Both record classes currently remain stored without an automatic expiry or physical cleanup job.
+The activation foreign key preserves referenced profiles. There is no user soft-delete, restore or purge route for
+this immutable platform configuration, and no implemented cleanup bound to claim. Selecting an older profile is a
+new activation with the expected current head, not restoration of user data. Configuration retention does not exempt
+personal/private source data from deletion policy.
+
+[Semantic](../semantic/README.md), [Content](../content/README.md) and [Accounts](../access/README.md) remain authoritative
+for source soft deletion, 30-day restoration, legal holds and account erasure; Collection/library state remains with
+[its owner](../library/README.md). Presentation performs no source purge and retains no deleted content for evidence.
+`http/pages.ts` probes subjects/accounts through their current standalone routes before resolving their templates;
+a non-200 subject probe propagates its result, and an unavailable public account yields no account page. Planned
+sub-reads run the same standalone disclosure routes, so page composition cannot authorize a stale search candidate
+or revive a deleted source record. Search-derived page lists inherit [Search's current disclosure, readiness and
+source/foreign dependency checks](../search/README.md#deletion-lifecycle). The initial public Search wire omits counts, including rating
+totals; internal accounting remains private, and a separately proved safe aggregate contract may later admit a
+count. Composition adds no Search authorization or safety proof.
+
+Restoring source data uses the source owner's restore command and current eligibility checks. For search-backed
+lists it must also advance the source position and emit reindexing changes, producing newer external versions as
+[Search documents](../search/README.md#deletion-lifecycle); Presentation has no separate restore cache or reindex job.
+No physical cleanup operation is added here. Source cleanup bounds belong to their owners; profile reads/writes and
+page dispatch retain the Cost bounds below.
+
+## Private curation opening
+
+`GET /v1/presentation/curation` returns the active digest, head and immutable profile with the native viewer kind and
+independent `presentation.publish` / `presentation.activate` advice for the exact Global Context. Missing active state
+is a separate response. The read requires current `presentation:read` eligibility; an allowed command is derived only
+from the matching mounted action and operation pair returned by `viewerActions`. The private response is `no-store`;
+the cacheable active and immutable-profile representations remain unchanged. Advice creates no receipt and is not
+authorization for either command.
+
+Decision: Keep the local draft editable when command advice is denied or unavailable, disable disallowed commands, and retry activation of a confirmed published digest with its original key without republishing.
+
+- Touches: one current Global read-eligibility check before and after assembly; two `(route, head)` latest-activation seeks; one `(route, digest)` profile-body seek; two in-process `viewerActions` reads, each for exactly the Global Context. Each viewer-action read uses its mounted fixed resource bindings and existing bounded Access preparation and final checks; it does not inspect command receipts or prior profile bodies.
+- Bound: constant selected rows and statements as profile count `P`, activation history `H`, unrelated Global grants `G`, and unrelated Contexts grow; indexed blocks are logarithmic in those populations plus the existing Access formula bound at its fixed admitted input. The profile contributes at most `MAX_PROFILE_BYTES` (1 MiB) of canonical UTF-8; Web admits at most 1 MiB + 4 KiB for the closed response. Advice output has two action states and one viewer kind. No list, history, offset or count is returned.
+- Growth checks: `test/presentation/growth-profile-routes.test.ts` exercises profile and activation populations 256/1024/4096 while holding the selected profile and response size fixed. `test/access/growth-viewer-actions.test.ts` checks unrelated grants, resource references and histories at those same populations. Both retain constant examined rows/statements and logarithmic index blocks.
+
 ## Cost
 
-These bounds follow `profiles.ts`, its SQL, and the presentation profile migration and schema dump; they are derivations, not measurements.
-Let P be the number of stored profiles and H the activation head count. A body is at most `MAX_PROFILE_BYTES` (1 MiB); growth checks hold that size fixed.
-Rows means rows examined, including filtered rows, not just returned rows; blocks means shared blocks accessed, including index, heap, and payload blocks.
-A primary-key probe examines O(1) rows and O(log size) blocks. Logarithms mean `log(2 + size)`. No operation scans earlier profiles.
-Publish and activate are receipted commands on partition 0. K denotes the seven framework statements of one fresh attempt; add one receipt read when a receipt is configured.
+Bounds count examined rows, shared index and heap blocks, and SQL statements. `P` is the number of stored profiles and
+`H` the number of activation heads in route 0. Profile bodies are bounded by `MAX_PROFILE_BYTES` (1 MiB); body
+validation and hashing are linear in that fixed input. Page bounds assume a valid published profile, fixed descriptor
+and page limits, and each dispatched route's own Cost bound. These are source-derived bounds, not latency measurements.
 
-### Page read execution
+### Read a validated immutable profile
 
-- Touches: `readPage` dispatches each distinct descriptor through its standalone route: `Anchored subject read` in `src/semantic/README.md` or `Search planning and engine page` in `src/search/README.md`. A subject `308` adds one subject route.
-- Bound: For k <= 16 descriptors, equal canonical JSON descriptors share a dispatch, so there are at most k distinct dispatches, with at most four running at once. SQL rows, blocks and statements are the sum of those route costs, plus any followed subject route; this executor issues no SQL. Cost is independent of N, P and H beyond those routes. Session merging is O(k x 32) components.
-- Growth check: `test/presentation/reads.test.ts`: `a page holds at most sixteen valid reads, runs at most four at a time and dispatches identical reads once`; dispatches stay at most k at every page size.
-
-### Page read
-
-- Touches: `POST /v1/pages:read`: one Global Context authorization, then one `activeProfile` lookup and, for a subject target, one `activeRelease` lookup. Each lookup is a primary-key probe cached by digest. `resolveTemplate` is O(log T) for T <= 128. `planReads` is linear in at most 256 nodes. At most 16 sub-reads return at most 128 subjects, each costing its standalone route (`Anchored subject read` or `Search planning and engine page`). The subject read that selects the template is reused and is not repeated. This request releases its admission slot before those sub-reads; each sub-read takes its own.
-- Bound: Rows and statements constant in N; blocks logarithmic. Template resolution and planning add no SQL. Sub-read rows, blocks and statements are those of their own README rows.
-- Growth check: `test/presentation/growth-pages.test.ts`: `Page read stays within its bound as N grows`
-
-### Profile publish
-
-- Touches: `publishProfile` validates and hashes one body (linear in at most 1 MiB, once per publish, before a connection is checked out) and inserts 0 or 1 `presentation.profile` row through `profile_pkey(route, digest)`; a conflict does nothing. The receipted command emits one `com.rezics.presentation.profile.published.v1` event even when the digest exists. Grow P and H; fix body size and authorization evidence.
-- Bound: Rows O(1), blocks O(log P + log H), one body statement, nine including the command; no scan of earlier profiles.
-- Growth check: `test/presentation/growth-profiles.test.ts`: `Profile publish stays within its bound as P grows`
-
-### Profile activate
-
-- Touches: `activateProfile` reads 0 or 1 body through `profile_pkey`, then reads the latest head through a backward `profile_activation_pkey(route, head)` probe and inserts 0 or 1 activation when that head is the expected head, with a profile foreign-key probe. A stale head writes nothing and rolls back. A missing digest raises `ProfileNotFoundError` after authorization. Grow P and H; fix body size and authorization evidence.
-- Bound: Rows O(1), blocks O(log P + log H), two body statements, ten including the command; no scan of earlier profiles.
-- Growth check: `test/presentation/growth-profiles.test.ts`: `Profile activate stays within its bound as P grows`
-
-### Profile read
-
-- Touches: `readProfile`: a malformed digest does no SQL; otherwise one `profile_pkey` probe reads 0 or 1 body, including on a cache hit. A cold body is validated once, its digest verified with `profileDigest`, frozen and cached by digest. Grow P and H; fix body size.
-- Bound: Rows O(1), blocks O(log P + log H), zero or one data statement; no scan of earlier profiles.
-- Growth check: `test/presentation/growth-profiles.test.ts`: `Profile read stays within its bound as P grows`
+- Touches: one partition-0 keyed profile read and at most four retained immutable bodies. Every read, including a
+  cache hit from another pool, validates the actual stored body with the platform validator and verifies its digest.
+- Bound: unchanged constant SQL statements/rows and logarithmic indexed blocks in `P`; validation/hash work is
+  linear in at most `MAX_PROFILE_BYTES` (1 MiB). Least-recently-used eviction retains at most four bodies and at most
+  4 MiB of canonical UTF-8 payload, independently of database history. The private cache owns byte accounting once;
+  no history scan, authorization, missing-row or active-head state is cached. Cache admission adds no public rejection.
+  These are retained payload/cardinality bounds, excluding JavaScript object/Map overhead, caller-held snapshots,
+  concurrent reads and transient validation/cloning allocations; they are not physical heap or peak-memory promises.
+- Growth check: original native profile reads plus “cold hot evicted and cross-pool profile reads stay bounded at 1x
+  8x and 64x history” in `test/presentation/growth-profiles.test.ts`. The frozen native eviction case in
+  `test/presentation/profile-cache.test.ts` and the additional cases in `test/presentation/profiles.test.ts` prove LRU
+  reuse, concurrent reads, pool snapshot existence, cold/hot malformed-body refusal, error cleanup, owned immutability
+  and exact canonical accounting, including four valid 1 MiB multibyte bodies retaining exactly 4 MiB.
+  Publication cases bind the dedicated receipt-key fixture; the cache file evaluates the commerce catalogue before
+  presentation so the well-known Global Context id is initialized.
 
 ### Active profile lookup
 
-- Touches: `activeProfile`: a backward `profile_activation_pkey` probe with LIMIT 1 reads 0 or 1 head; a cache miss adds Profile read, which has its own growth check. Grow P and H; fix the active body size. The check runs the default warm-up at each scale and takes the median of the default repetitions, measuring the warm lookup.
-- Bound: Rows O(1), blocks O(log P + log H), one or two data statements; no scan of earlier profiles.
-- Growth check: `test/presentation/growth-profiles.test.ts`: `Active profile lookup stays within its bound as P grows`
+- Touches: latest partition-0 activation by `(route, head)` with `LIMIT 1`, then the referenced profile by
+  `(route, digest)` on every lookup, including a warm cache. The database remains the active-head and existence authority.
+- Bound: two data statements, constant rows and logarithmic indexed blocks in `H` and `P`, independent of earlier
+  heads; body validation and retained payload obey the profile-read bounds above.
+- Growth check: original “Active profile lookup stays within its bound as P grows” and the 1x/8x/64x retention
+  lifecycle case in `test/presentation/growth-profiles.test.ts`; real-Access publication, activation CAS, receipts,
+  sessions, explicit Global grants and denials across eviction in `test/presentation/profiles.test.ts`.
 
-### Profile bootstrap
+### Profile and active-profile HTTP reads
 
-- Touches: `bootstrapProfile`: one latest-head probe when a profile is active, returning that digest. When none is active, one command repeats the probe, publishes 0 or 1 profile, inserts the first activation and emits two events, without a receipt or basis. Grow P and H; fix body size, including the already-active path.
-- Bound: Rows O(1), blocks O(log P + log H), one statement when active, otherwise eleven including the command; a race may add one head lookup after rollback. No scan of earlier profiles.
-- Growth check: `test/presentation/growth-profiles.test.ts`: `Profile bootstrap stays within its bound as P grows`
+- Touches: authorize the Global Context through Access, then perform the profile or active-profile lookup above.
+- Bound: constant rows/statements and logarithmic indexed blocks in profile, activation and unrelated Global Context
+  counts, including route authorization. Every stored body is validated/hashed within 1 MiB; retention stays within
+  four entries and 4 MiB. These bounds do not establish composed-page, dispatched backend or physical-memory costs.
+- Growth check: “Profile routes stay within their bound with Global Context authorization as profiles grow” in
+  `test/presentation/growth-profile-routes.test.ts`; original HTTP cases in `test/presentation/profile-routes.test.ts`.
 
-### Profile read route
+| Operation                                                          | Touches                                                                                                                                                                                                                                                                                                                                                                        | Bound                                                                                                                                                                                                                                                                                                                                                                     | Growth check                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Profile publish                                                    | Validate and hash one body; insert 0 or 1 `presentation.profile` row through `(route, digest)`. A conflict is a no-op. The receipted command also reads/writes its fixed partition-0 receipt, basis, position and outbox state, authorizes on the Global Context, and emits one event.                                                                                         | Constant rows and statements, logarithmic blocks in profile and fixed command history (`P`, `H`, and command history); validation and hashing are linear in body bytes, capped at 1 MiB.                                                                                                                                                                                  | `test/presentation/growth-profiles.test.ts`: “Profile publish stays within its bound as P grows”                                                                                                                                                                                                                                                                                                                                          |
+| Profile activate                                                   | Read 0 or 1 profile by `(route, digest)`, probe the latest activation by `(route, head)`, and conditionally insert one activation row. The receipted command also touches its fixed command state and emits one event.                                                                                                                                                         | Constant rows and statements, logarithmic blocks in `P`, `H`, and fixed command history; no scan of earlier profiles or heads.                                                                                                                                                                                                                                            | `test/presentation/growth-profiles.test.ts`: “Profile activate stays within its bound as P grows”                                                                                                                                                                                                                                                                                                                                         |
+| Subject page read                                                  | Authorize the Global Context, resolve the active profile and (for subject or account targets) active release, resolve the template and plan up to 256 nodes. Dispatch at most 16 distinct reads, at most four concurrently; dispatches with the same canonical descriptor share one request. Subject address resolution can follow the bounded redirect into its account page. | Constant profile, release and authorization rows/statements with logarithmic indexed blocks as their populations grow. Planning is linear in at most 256 nodes; sub-read costs compose from their cited rows below and their owning README rows. At most 16 distinct descriptors and 128 total requested output slots; these do not bound backend or authorization work.  | `test/presentation/growth-pages.test.ts`: “Page read stays within its bound as N grows”                                                                                                                                                                                                                                                                                                                                                   |
+| Inverse links and public collections page reads                    | Inverse links check visibility and Access, read indexed inverse rows, and fill labels for returned holders. Public collections read the exact count from `subject_listing`, scan indexed subject-collection pairs, then check current visibility of returned Collections.                                                                                                      | Inverse links return at most `limit`; candidates are at most `4 × limit + 1` with a type filter or `limit + 1` without, plus at most 1,000 count candidates. Public collections use `limit` 1–6, scan at most `limit + 1` pairs, and inspect at most `limit` Collections. Rows are bounded by these fixed limits and statements stay constant as the anchor's lists grow. | `test/presentation/page-read-kinds.test.ts`: “inverse links read stays within its bound at 1, 10 and 100 holders”; “public collections read stays within its bound at 1, 10 and 100 collections”                                                                                                                                                                                                                                          |
+| Account page, identity, discussions, replies and collections reads | Account pages probe the handle claim and account, then dispatch at most 16 distinct reads with summed published `readCost` at most 128. Identity reads may add one avatar summary. Discussion/review pages read at most `4 × limit` candidates and hydrate returned threads; replies hydrate each reply and containing thread; collections use the BASIC view.                 | Constant rows and statements and logarithmic blocks as unrelated accounts and account activity grow, at fixed limits. Each list does O(limit) candidate and hydration work: thread limit 1–20, reply limit 1–20, and collection limit 1–24.                                                                                                                               | `test/presentation/agent-read-kinds.test.ts`: “account page read stays within its bound at 1, 10 and 100 threads”; “account identity read stays within its bound at 1, 10 and 100 unrelated accounts”; “account discussions read stays within its bound at 1, 10 and 100 threads”; “account replies read stays within its bound at 1, 10 and 100 replies”; “account collections read stays within its bound at 1, 10 and 100 collections” |
+| Reaction counts page read                                          | Check subject visibility and Access, then read the subject's reaction-total range; the page does not read the viewer's own reaction.                                                                                                                                                                                                                                           | At most seven reaction-total rows in one statement, independent of contributor count; visibility and authorization add a constant number of point reads and statements with logarithmic blocks.                                                                                                                                                                           | `test/presentation/page-read-kinds.test.ts`: “reaction counts read stays within its bound at 1, 10 and 100 contributors”                                                                                                                                                                                                                                                                                                                  |
 
-- Touches: `GET /v1/presentation/profiles/:digest`: one Global Context authorization, then Profile read above; the route adds no SQL of its own.
-- Bound: Profile read plus one Global Context authorization: rows O(1), blocks O(log P + log H), constant statement count.
-- Growth check: `test/presentation/growth-profiles.test.ts`: `Profile read stays within its bound as P grows`. This check measures the lookup without the route or its Global Context authorization.
+The profile-route growth check exercises both HTTP routes with Global Context authorization while profile and unrelated
+Context populations grow. It supplies the route-level evidence that the direct profile lookup checks alone did not cover.
 
-### Active profile route
+## Selected subject pages and continuation
 
-- Touches: `GET /v1/presentation/active`: one Global Context authorization, then Active profile lookup above; the route adds no SQL of its own.
-- Bound: Active profile lookup plus one Global Context authorization: rows O(1), blocks O(log P + log H), constant statement count.
-- Growth check: `test/presentation/growth-profiles.test.ts`: `Active profile lookup stays within its bound as P grows`. This check measures the lookup without the route or its Global Context authorization.
+`pages.read` accepts `target.realm` only with a subject target. The native Realm, publication
+and Context readers select one Context for every factual subject/link/relation descriptor.
+A genuine null publication selects independently authorized Global facts and exposes only
+Global population metadata. Unknown, denied or banned Realms never become a Global success.
+After leaves, fresh subject, Context, Realm, publication and protected-ban guards discard
+changed output: concealment is 404, changed selection is retryable `dependency_unavailable`.
+
+`ThreadList` and `ReviewList` read the existing `subject_threads.list` operation with the native
+`discussion` and `review` kinds. Both use limit six for Global and retain limit five for selected
+Realms, using the Realm population ID as place (Global uses the Global Context ID). The unmodified
+`{threads,next}` body, original status and merged native session retain current board/post/place disclosure.
+No alternate review store, question default, grant, count or order is inferred. Web renders the aggregate
+leaves and does not supplement them with Global reads. Scoped producers without a native adapter return
+unavailable rather than Global or empty data.
+
+A subject full view may continue one current `paged:true` node with top-level
+`continuation: {node,cursor}`. Planning substitutes the opaque native cursor before dedup;
+links and forward relations use separate native property streams. Thread cursors retain their
+native 4096-character bound; Semantic routes retain their native cursor admission. All leaves
+share the existing 16-read/128-slot budget and four dispatch workers. Authority controls are
+fixed anchored native reads under the original admission and deadline, with no new retry.
+
+A subject page continuation resolves its current template and Context before planning. It dispatches the selected
+node's native links/relations/subject-threads read and retains ordinary subject/control reads. Other links, relations,
+Search and subject-thread descriptors return 204 with an empty body; they are unrequested, not empty lists. Clients retain independent group state or
+offer a fresh-start link when opening a continued document directly. Full-document planning bounds still apply.
+
+### Work franchise overview
+
+The [showcase-work entry](../../../../apps/web/src/features/pages/showcase-work/index.ts) exports WorkFranchiseReading, selectWorkFranchiseRegion, loadSubjectPage and subjectBody. The selector accepts a page and a node/property/direction with an optional cursor, then returns the exact page, selected window and continuation; a mismatch or continuation from another node returns undefined. Failed or withheld selection remains selected. onContinue receives only that node's continuation, and the grouped renderer performs no acquisition.
+
+The preview contains at most twelve assertions total and three per stream, subject to tighter selected-view caps. Web owns rendering, navigation grammar and outer return; Semantic owns grouping, evidence and node continuation. Subject pages owns the visit. This uses the existing renderer and native page contract without another callable.
+
+### Document bodies in aggregate pages
+
+`documentRead` describes the configured document-valued properties for the selected subject and Context. The
+executor reuses that page's disclosed subject observation and `pageDocumentReferences` selects at most one released
+statement per property by rank and reader/original language; equal-rank, equal-language candidates use the smallest
+statement UUID in code-unit order. It dispatches the selected unique body IDs through the existing in-process
+`GET /v1/documents/{id}` operation. This is the only body disclosure path: locators, history and competing
+candidates are not readers.
+
+The subject and optional Context stay bound for the whole operation. After body reads, the HTTP page reader reserves
+and performs a final selected-subject read; concealment remains 404, and a changed subject observation discards the
+page result as retryable `dependency_unavailable`. The body route retains its own current disclosure checks. A body
+404 remains absent for Web to render as unavailable; other body failures retain their failure status. Web receives
+only exact id/subject/candidate/language/digest matches with an available validated body.
+
+Each selected body costs one native read and one requested-value slot. The plan admits at most fifteen distinct
+bodies (one subject read plus fifteen bodies reaches the existing sixteen-read ceiling) and shares the page's
+128-slot budget. The final subject guard and other probes or reads reduce the available body allowance. Admission
+rejects an oversized effective plan instead of truncating selected values. Overflow of that fifteen-body ceiling is
+admitted from the disclosed observation; a Recipe page selects at most its two document-typed properties and is not
+an overflow fixture. Bodies remain request-local and the aggregate page response stays `private, no-store`.
+
+- Touches: the disclosed subject observation, then one standalone `GET /v1/documents/{id}` per selected unique body
+  with that body's current Access check. Unrelated authored-field and subject rows in the selected subject's partition
+  are not returned.
+- Bound: constant native requests, Access checks and response bytes for a fixed selected neighbourhood; constant SQL
+  rows and statements; logarithmic indexed blocks as that partition's unrelated history grows.
+- Growth check: `test/presentation/public-documents.test.ts`: “fixed public bodies keep native request, SQL, Access and
+  byte bounds at unrelated histories 64/512/4096”.
+
+## Configured catalogue lists
+
+`TypeList` accepts an optional public `FilterDocument` in `props.filter`. The shared Filter parser owns its grammar
+and limits; planning intersects it with `props.types` without replacing the configured type restriction. The closed
+composition schema and editor expose this same document, including saved catalogue filters. Publication admits
+TypeList filters against the active semantic release, including saved expansion, and refuses private OwnerLeaf
+operands. Runtime resolution admits the selected document again against the current release.
+Serialized JSON configuration is also accepted through that same public parser and admission; it cannot introduce
+private operands or replace the configured Types.
+
+Decision: retained doctor readback pins the active release and shipped Home profile, resolves Anime and Book from
+exact current Bangumi source bindings, and verifies their finite native relation reads plus candidate/document
+disclosure anonymously and as the development member. Synopsis publication goes through native acceptance and
+Global adoption; the database connection is read-only and no observed Subject ID is retained between runs.
+The regression is enabled only with a non-`kernel_test_*` `DATABASE_URL` and
+`PAGE_DATA_CHECK_MEMBER_TOKEN`; `KERNEL_ORIGIN` selects the retained Kernel when it is not on the local default.
+
+A TypeList on a route, subject overview, account page or full view may continue by node ID. Its native Search cursor
+is attached before deduplication, so identical sibling lists remain independent after one advances. Other Search,
+links and relation descriptors are unrequested (204) on that continued response. Full-document admission still uses
+16 distinct reads and 128 slots; each configured list retains its published limit of at most 24. `paged:true` is an
+optional preview limit of at most 12, and is not needed to reach later pages.
+
+The Web renderer uses only native hit pages and their explicit `next`. More and See all open `/search/list` with the
+page target, node and opaque cursor. Each request resolves the current server-owned filter, types, sort, languages
+and selected Context through `pages.read`; URLs cannot supply an account override or a replacement filter. The full
+list uses the shared cover grid, and unavailable pages offer retry instead of claiming empty or complete results.
+Realm populations keep the existing unavailable Search adapter until their native producer supports that scope.
+
+## Common Collection members in compositions
+
+`Members` configures one closed source: `{kind:"collection",id}`, `{kind:"everything"}`, or
+`{kind:"state",profileId,stateSetId,stateId}`. State identifiers come from an accepted Library profile.
+There is no account selector. `filter` is the ordinary serialized JSON filter from common-members GET;
+`sort` is always native `id`. The native owner admits the filter, including owner leaves and retained
+preparation. `TypeList` retains the public catalogue filter contract above. Members support `paged`
+and independent node continuations.
+
+Presentation binds viewer-self keys through Commerce's native logical-key resolver. This point-discovery
+method delegates to the existing built-in read and ID authority; it never scans the viewer's Collection
+population. An account target belonging to another viewer conceals these reads. Anonymous viewers also
+receive concealment. Bound member requests use the existing common GET with `view=FULL`, exact filter,
+limit and opaque cursor. Responses retain native status, body and Retry-After; 202 and unavailable are
+never converted into an empty successful list. No Source or owner-query execution is implemented here.
+
+Composed dispatches and viewer-self resolution points share the request's 16-read/128-slot ledger. Each distinct viewer-self descriptor
+also admits and charges two reads/slots for native discovery and its final current-owner recheck. The
+final rechecks run after leaf/document work, before output. Standalone member execution retains its own
+current source/disclosure and preparation guards. Scoped Realm member/search adapters remain explicitly
+unavailable until their native producers support the same selected Context.
+
+The Web renderer consumes embedded summaries without per-row hydration. More uses the existing session
+BFF. Concealed public-shell member reads hydrate only after the browser establishes a signed-in session,
+including private curated sources; their native disclosure still decides the result. More reloads the
+current composition with only that node's native continuation. Other member/search nodes return 204 and
+retain independent client state. Preparing, stale, invalid, unavailable, empty and concealed results have
+distinct behavior; private continuation queries use no browser cache retention.
+
+Relative Zone routes never become Global route continuation targets. Their source-dependent reads remain
+at the native Zone readiness boundary until its owner supplies node continuation support.
+
+## Captured unpublished preview
+
+Decision: `POST /v1/pages:previewDraft` accepts one detached publication-valid `profile` with the closed native
+`target`, optional `languages` and optional `continuation`; it executes through the same resolver, planner and
+executor as `pages:read`, as an anonymous public reader after curator publish and caller/public read admission.
+The operation requires an authenticated curator under the existing `presentation:publish` policy. It does not
+publish, activate, persist a profile, create a receipt or change the active head. Unknown route keys are unsupported,
+not generic fallbacks. All response bodies are private/no-store. Successful bodies add `draft: { digest, target,
+advice: 'allowed' }`; the ordinary `profile` digest names the captured candidate, never an activation acknowledgement.
+Advice describes this operation only and does not replace independent publish/activate advice or command admission.
+
+Admission handoff keeps the unpublished draft in mounted editor memory keyed by reader; retirement restores focus to
+the preview capture control only when preview-owned focus is removed and leaves editor-owned focus untouched.
+
+Cost: capture uses the publication canonicalization, registry, one MiB UTF-8 cap and template/structural bounds.
+Admission adds fixed Global Context publish/caller-read/public-read decisions and one current release lookup;
+these use existing point/indexed authority reads, independent of unrelated profile and subject populations.
+There is no preview-profile storage or cache lookup. After selection all indexed seeks, raw examined rows, nested
+producer work, per-leaf bytes and final disclosure remain the aggregate Cost above: at most 16 reads and 128 summed
+slots, with each producer's independent examined-input and byte bounds. Output LIMIT is not the upstream bound.
+Focused HTTP coverage is `test/presentation/draft-preview.test.ts`; native public admission and wire bounds at
+256/1024/4096 are in `test/presentation/draft-preview-growth.test.ts`. Mounted retention and retirement coverage is
+in `apps/web/tests/presentation-draft-preview.test.tsx`, with the connected `AdmissionReplacementPreservesDraft`
+example in `apps/web/src/stories/presentation-draft-preview.stories.tsx`.

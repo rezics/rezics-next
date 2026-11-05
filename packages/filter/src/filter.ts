@@ -1,3 +1,6 @@
+import type { OwnerLeaf } from './owner-filter.ts';
+import { calendarRangeBounds, readCalendarDate, type CalendarRange } from './calendar-date.ts';
+
 export const FILTER_LIMITS = Object.freeze({ leaves: 32, depth: 4, or: 16, in: 64, qualifiers: 4 } as const);
 
 export type FieldErrorCode =
@@ -8,10 +11,48 @@ export type FieldErrorCode =
   | 'out_of_range'
   | 'unsupported';
 export type FilterProblem = 'invalid_request' | 'unsupported_query';
-export type FilterRange = { readonly gte?: number; readonly lte?: number; readonly unit?: string };
-export type FilterQualifier = { readonly property: string; readonly in: readonly string[] };
+export type NumericFilterRange = {
+  readonly type?: never;
+  readonly gte?: number;
+  readonly lte?: number;
+  readonly unit?: string;
+};
+/** Explicit calendar endpoints never inherit the numeric range's year/quantity meaning. */
+export type TimeFilterRange = Readonly<CalendarRange> & { readonly type: 'time'; readonly unit?: never };
+export type FilterRange = NumericFilterRange | TimeFilterRange;
+export type FilterQualifier =
+  | { readonly property: string; readonly in: readonly string[] }
+  | { readonly property: string; readonly range: NumericFilterRange };
+export type ConceptSelection = Readonly<{ scheme: string; includeChildren?: boolean }>;
+
+/** Canonical equality operands for the released, dimensionless spoiler quantity. */
+export const SPOILER_LEVELS = Object.freeze(['0', '1', '2'] as const);
+
+/**
+ * Read an exact native quantity, without coercing strings, units or uncertainty.
+ * An absent or malformed value stays unknown; it is never an implicit level zero.
+ */
+export function readNativeSpoilerLevel(input: unknown): string | null {
+  const amount = dataField(input, 'amount');
+  if (dataField(input, 'unit') !== '1' || typeof amount !== 'string') return null;
+  // Match exact decimals rather than rounding through Number (1.000...001 is not 1).
+  const level = /^\+?0*([012])(?:\.0+)?$/.exec(amount)?.[1];
+  if (level === undefined) return null;
+  for (const key of ['lowerBound', 'upperBound']) {
+    const bound = dataField(input, key);
+    if (bound !== undefined && bound !== amount) return null;
+  }
+  return level;
+}
 export type FilterStatement =
-  | { readonly property: string; readonly in: readonly string[]; readonly qualifiers?: readonly FilterQualifier[] }
+  | {
+      readonly property: string;
+      readonly in: readonly string[];
+      readonly concept?: ConceptSelection;
+      /** Selected source subjects point to the candidate through this relation. */
+      readonly inverse?: true;
+      readonly qualifiers?: readonly FilterQualifier[];
+    }
   | { readonly property: string; readonly range: FilterRange; readonly qualifiers?: readonly FilterQualifier[] };
 
 export type FilterDocument =
@@ -20,7 +61,34 @@ export type FilterDocument =
   | { readonly not: FilterDocument }
   | { readonly type: { readonly in: readonly string[] } }
   | { readonly statement: FilterStatement }
-  | { readonly saved: string };
+  | { readonly saved: string }
+  | OwnerLeaf;
+
+/** An exact native question identity. Definition revisions are resolved by the server. */
+export type RatingQuestionLeaf = { readonly ratingQuestion: { readonly id: string } };
+export type RealmLeaf = { readonly realm: { readonly id: string } };
+
+/** Opt-in discovery grammar. Catalogue/saved consumers retain FilterDocument. */
+export type DiscoveryFilterDocument =
+  | { readonly and: readonly DiscoveryFilterDocument[] }
+  | { readonly or: readonly DiscoveryFilterDocument[] }
+  | { readonly not: DiscoveryFilterDocument }
+  | { readonly kind: { readonly in: readonly string[] } }
+  | RatingQuestionLeaf
+  | RealmLeaf
+  | Exclude<FilterDocument, { readonly and: unknown } | { readonly or: unknown } | { readonly not: unknown }>;
+
+export type SpoilerThreshold = 0 | 1 | 2;
+
+function catalogueOnly(filter: DiscoveryFilterDocument): FilterDocument {
+  if ('kind' in filter) throw new FilterError('invalid_request', '/kind', 'unknown_field');
+  if ('ratingQuestion' in filter) throw new FilterError('invalid_request', '/ratingQuestion', 'unknown_field');
+  if ('realm' in filter) throw new FilterError('invalid_request', '/realm', 'unknown_field');
+  if ('and' in filter) return { and: filter.and.map(catalogueOnly) };
+  if ('or' in filter) return { or: filter.or.map(catalogueOnly) };
+  if ('not' in filter) return { not: catalogueOnly(filter.not) };
+  return filter;
+}
 
 export type FilterRelease = {
   types: Record<string, { bases?: readonly string[]; facets?: readonly string[] }>;
@@ -28,12 +96,28 @@ export type FilterRelease = {
     string,
     {
       datatype: string;
+      relation?: { group: string };
       qualifiers?: readonly string[];
       units?: readonly string[];
-      value?: { pattern?: string };
+      value?: { pattern?: string; minLength?: number; maxLength?: number };
     }
   >;
   filters?: Record<string, { filter: unknown }>;
+};
+
+function spoilerThresholdSupport(release: FilterRelease, property: string): 'supported' | 'missing' | 'unaffected' {
+  const definition = Object.hasOwn(release.properties, property) ? release.properties[property] : undefined;
+  const group = definition?.relation?.group;
+  if (group !== 'classification' && group !== 'appearance') return 'unaffected';
+  return definition?.qualifiers?.includes('rezics:spoilerLevel') === true ? 'supported' : 'missing';
+}
+
+/** Owner-context admission checks structure, not authorization, capabilities or accepted historical pins. */
+export type FilterAdmissionOptions = {
+  saved?: boolean;
+  owner?: true;
+  inverse?: true;
+  spoilerThreshold?: SpoilerThreshold;
 };
 
 export type FilterValidationError = { problem: FilterProblem; pointer: string; code: FieldErrorCode };
@@ -135,6 +219,23 @@ function parseFacet(input: unknown, pointer: string, statement: boolean): { prop
 
 function parseRange(input: unknown, pointer: string): FilterRange {
   const fields = record(input, pointer);
+  if (Object.hasOwn(fields, 'type')) {
+    const typePointer = appendPointer(pointer, 'type');
+    if (ownValue(fields, 'type', typePointer) !== 'time') fail(typePointer, 'invalid_format');
+    const parsed: { type: 'time'; gte?: string; lte?: string } = { type: 'time' };
+    for (const key of Object.getOwnPropertyNames(fields)) {
+      if (key === 'type') continue;
+      const fieldPointer = appendPointer(pointer, key);
+      if (key !== 'gte' && key !== 'lte') fail(fieldPointer, 'unknown_field');
+      const value = ownValue(fields, key, fieldPointer);
+      if (typeof value !== 'string') fail(fieldPointer, 'invalid_type');
+      if (!readCalendarDate(value)) fail(fieldPointer, 'invalid_format');
+      parsed[key] = value;
+    }
+    if (parsed.gte === undefined && parsed.lte === undefined) fail(appendPointer(pointer, 'gte'), 'required');
+    if (!calendarRangeBounds(parsed)) fail(pointer, 'out_of_range');
+    return parsed;
+  }
   const parsed: { gte?: number; lte?: number; unit?: string } = {};
   for (const key of Object.getOwnPropertyNames(fields)) {
     const fieldPointer = appendPointer(pointer, key);
@@ -157,15 +258,42 @@ function parseQualifier(input: unknown, pointer: string): FilterQualifier {
   const fields = record(input, pointer);
   let property: string | undefined;
   let selected: string[] | undefined;
+  let range: FilterRange | undefined;
+  if (Object.hasOwn(fields, 'in') && Object.hasOwn(fields, 'range'))
+    fail(appendPointer(pointer, 'range'), 'unsupported');
   for (const key of Object.getOwnPropertyNames(fields)) {
     const fieldPointer = appendPointer(pointer, key);
     if (key === 'property') property = stringValue(ownValue(fields, key, fieldPointer), fieldPointer, true);
     else if (key === 'in') selected = values(ownValue(fields, key, fieldPointer), fieldPointer, false);
+    else if (key === 'range') range = parseRange(ownValue(fields, key, fieldPointer), fieldPointer);
     else fail(fieldPointer, 'unknown_field');
   }
   if (property === undefined) fail(appendPointer(pointer, 'property'), 'required');
+  if (range !== undefined) {
+    if (range.type === 'time') fail(appendPointer(pointer, 'range'), 'unsupported', 'unsupported_query');
+    return { property, range };
+  }
   if (selected === undefined) fail(appendPointer(pointer, 'in'), 'required');
   return { property, in: selected };
+}
+
+function parseConceptSelection(input: unknown, pointer: string): ConceptSelection {
+  const fields = record(input, pointer);
+  let scheme: string | undefined;
+  let includeChildren: boolean | undefined;
+  for (const key of Object.getOwnPropertyNames(fields)) {
+    const fieldPointer = appendPointer(pointer, key);
+    if (key === 'scheme') {
+      scheme = stringValue(ownValue(fields, key, fieldPointer), fieldPointer, false);
+      if (uuidPattern.exec(scheme)?.[0] !== scheme) fail(fieldPointer, 'invalid_format');
+    } else if (key === 'includeChildren') {
+      const value = ownValue(fields, key, fieldPointer);
+      if (typeof value !== 'boolean') fail(fieldPointer, 'invalid_type');
+      includeChildren = value;
+    } else fail(fieldPointer, 'unknown_field');
+  }
+  if (scheme === undefined) fail(appendPointer(pointer, 'scheme'), 'required');
+  return { scheme, ...(includeChildren === undefined ? {} : { includeChildren }) };
 }
 
 function parseQualifiers(input: unknown, pointer: string): FilterQualifier[] {
@@ -186,10 +314,121 @@ function parseSaved(input: unknown, pointer: string): string {
   return input;
 }
 
+const ownerIdPattern = /^[a-z][a-z0-9_.-]{0,63}$/;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+function ownerId(input: unknown, pointer: string): string {
+  const value = stringValue(input, pointer, false);
+  if (ownerIdPattern.exec(value)?.[0] !== value) fail(pointer, 'invalid_format');
+  return value;
+}
+
+function requiredValue(fields: object, key: string, pointer: string): unknown {
+  if (!Object.hasOwn(fields, key)) fail(pointer, 'required');
+  return ownValue(fields, key, pointer);
+}
+
+function parseRatingQuestion(input: unknown, pointer: string): RatingQuestionLeaf {
+  return { ratingQuestion: parseResourceId(input, pointer) };
+}
+
+function parseResourceId(input: unknown, pointer: string): { readonly id: string } {
+  const fields = record(input, pointer);
+  for (const key of Object.getOwnPropertyNames(fields))
+    if (key !== 'id') fail(appendPointer(pointer, key), 'unknown_field');
+  const idPointer = appendPointer(pointer, 'id');
+  const id = requiredValue(fields, 'id', idPointer);
+  if (typeof id !== 'string') fail(idPointer, 'invalid_type');
+  if (uuidPattern.exec(id)?.[0] !== id) fail(idPointer, 'invalid_format');
+  return { id };
+}
+
+function parseOwner(input: unknown, pointer: string): OwnerLeaf {
+  const fields = record(input, pointer);
+  const keys = Object.getOwnPropertyNames(fields);
+  if (keys.length !== 1) fail(pointer, 'unsupported');
+  const family = keys[0]!;
+  const familyPointer = appendPointer(pointer, family);
+  if (family === 'presence') {
+    const value = ownValue(fields, family, familyPointer);
+    if (typeof value !== 'boolean') fail(familyPointer, 'invalid_type');
+    if (value !== true) fail(familyPointer, 'invalid_format');
+    return { owner: { presence: true } };
+  }
+  let allowed: readonly string[];
+  switch (family) {
+    case 'state':
+      allowed = ['profileId', 'stateSetId', 'in'];
+      break;
+    case 'label':
+      allowed = ['id'];
+      break;
+    case 'session':
+      allowed = ['profileId', 'lifecycle'];
+      break;
+    case 'holding':
+      allowed = ['profileId', 'kind', 'status'];
+      break;
+    default:
+      return fail(familyPointer, 'unknown_field');
+  }
+  const operands = record(ownValue(fields, family, familyPointer), familyPointer);
+  for (const key of Object.getOwnPropertyNames(operands)) {
+    if (!allowed.includes(key)) fail(appendPointer(familyPointer, key), 'unknown_field');
+  }
+  const required = (key: string) => requiredValue(operands, key, appendPointer(familyPointer, key));
+  const id = (key: string) => ownerId(required(key), appendPointer(familyPointer, key));
+  if (family === 'label') {
+    const value = stringValue(required('id'), appendPointer(familyPointer, 'id'), false);
+    if (uuidPattern.exec(value)?.[0] !== value) fail(appendPointer(familyPointer, 'id'), 'invalid_format');
+    return { owner: { label: { id: value } } };
+  }
+  const profileId = id('profileId');
+  if (family === 'state') {
+    const stateSetId = id('stateSetId');
+    const inPointer = appendPointer(familyPointer, 'in');
+    const items = array(required('in'), inPointer, FILTER_LIMITS.in);
+    const selected: string[] = [];
+    const seen = new Set<string>();
+    for (let index = 0; index < items.length; index++) {
+      const itemPointer = appendPointer(inPointer, index);
+      const value = ownerId(ownValue(items, index, itemPointer), itemPointer);
+      if (seen.has(value)) fail(itemPointer, 'invalid_format');
+      seen.add(value);
+      selected.push(value);
+    }
+    return { owner: { state: { profileId, stateSetId, in: selected } } };
+  }
+  if (family === 'session') {
+    const lifecyclePointer = appendPointer(familyPointer, 'lifecycle');
+    const lifecycle = stringValue(required('lifecycle'), lifecyclePointer, false);
+    if (lifecycle !== 'active' && lifecycle !== 'completed' && lifecycle !== 'abandoned')
+      fail(lifecyclePointer, 'invalid_format');
+    return { owner: { session: { profileId, lifecycle } } };
+  }
+  return {
+    owner: {
+      holding: {
+        profileId,
+        ...(Object.hasOwn(operands, 'kind') ? { kind: id('kind') } : {}),
+        ...(Object.hasOwn(operands, 'status') ? { status: id('status') } : {}),
+      },
+    },
+  };
+}
+
 export function parseFilter(input: unknown): FilterDocument {
+  return catalogueOnly(parseDocument(input, false));
+}
+
+export function parseDiscoveryFilter(input: unknown): DiscoveryFilterDocument {
+  return parseDocument(input, true);
+}
+
+function parseDocument(input: unknown, discovery: boolean): DiscoveryFilterDocument {
   let leaves = 0;
 
-  function node(input: unknown, pointer: string, depth: number, underNot: boolean): FilterDocument {
+  function node(input: unknown, pointer: string, depth: number, underNot: boolean): DiscoveryFilterDocument {
     const fields = record(input, pointer);
     const keys = Object.getOwnPropertyNames(fields);
     if (keys.length !== 1) fail(pointer, 'unsupported');
@@ -204,7 +443,7 @@ export function parseFilter(input: unknown): FilterDocument {
           fieldPointer,
           key === 'or' ? FILTER_LIMITS.or : undefined,
         );
-        const children: FilterDocument[] = [];
+        const children: DiscoveryFilterDocument[] = [];
         for (let index = 0; index < items.length; index++) {
           const childPointer = appendPointer(fieldPointer, index);
           children.push(node(ownValue(items, index, childPointer), childPointer, depth + 1, false));
@@ -215,6 +454,23 @@ export function parseFilter(input: unknown): FilterDocument {
         if (underNot) fail(pointer, 'unsupported', 'unsupported_query');
         if (depth >= FILTER_LIMITS.depth) fail(pointer, 'out_of_range', 'unsupported_query');
         return { not: node(ownValue(fields, key, fieldPointer), fieldPointer, depth + 1, true) };
+      case 'kind': {
+        if (!discovery) return fail(fieldPointer, 'unknown_field');
+        if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
+        const selection = record(ownValue(fields, key, fieldPointer), fieldPointer);
+        for (const field of Object.getOwnPropertyNames(selection))
+          if (field !== 'in') fail(appendPointer(fieldPointer, field), 'unknown_field');
+        const inPointer = appendPointer(fieldPointer, 'in');
+        return { kind: { in: values(requiredValue(selection, 'in', inPointer), inPointer, false) } };
+      }
+      case 'ratingQuestion':
+        if (!discovery) return fail(fieldPointer, 'unknown_field');
+        if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
+        return parseRatingQuestion(ownValue(fields, key, fieldPointer), fieldPointer);
+      case 'realm':
+        if (!discovery) return fail(fieldPointer, 'unknown_field');
+        if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
+        return { realm: parseResourceId(ownValue(fields, key, fieldPointer), fieldPointer) };
       case 'type': {
         if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
         return { type: { in: parseFacet(ownValue(fields, key, fieldPointer), fieldPointer, false).in } };
@@ -225,13 +481,20 @@ export function parseFilter(input: unknown): FilterDocument {
         const statementKeys = Object.getOwnPropertyNames(statementFields);
         const hasIn = Object.hasOwn(statementFields, 'in');
         const hasRange = Object.hasOwn(statementFields, 'range');
+        const hasConcept = Object.hasOwn(statementFields, 'concept');
+        const hasInverse = Object.hasOwn(statementFields, 'inverse');
 
         if (hasIn && hasRange) fail(appendPointer(fieldPointer, 'range'), 'unsupported');
+        if (hasInverse && (!hasIn || hasRange || hasConcept))
+          fail(appendPointer(fieldPointer, 'inverse'), 'unsupported');
+        if (hasConcept && (!hasIn || hasRange)) fail(appendPointer(fieldPointer, 'concept'), 'unsupported');
 
         let property: string | undefined;
         let selected: string[] | undefined;
         let range: FilterRange | undefined;
+        let concept: ConceptSelection | undefined;
         let qualifiers: FilterQualifier[] | undefined;
+        let inverse: true | undefined;
         for (const statementKey of statementKeys) {
           const propertyPointer = appendPointer(fieldPointer, statementKey);
           if (statementKey === 'property') {
@@ -240,6 +503,12 @@ export function parseFilter(input: unknown): FilterDocument {
             selected = values(ownValue(statementFields, statementKey, propertyPointer), propertyPointer, false);
           } else if (statementKey === 'range') {
             range = parseRange(ownValue(statementFields, statementKey, propertyPointer), propertyPointer);
+          } else if (statementKey === 'concept') {
+            concept = parseConceptSelection(ownValue(statementFields, statementKey, propertyPointer), propertyPointer);
+          } else if (statementKey === 'inverse') {
+            if (ownValue(statementFields, statementKey, propertyPointer) !== true)
+              fail(propertyPointer, 'invalid_format');
+            inverse = true;
           } else if (statementKey === 'qualifiers') {
             qualifiers = parseQualifiers(ownValue(statementFields, statementKey, propertyPointer), propertyPointer);
           } else {
@@ -248,6 +517,7 @@ export function parseFilter(input: unknown): FilterDocument {
         }
         if (property === undefined) fail(appendPointer(fieldPointer, 'property'), 'required');
         if (selected === undefined && range === undefined) fail(appendPointer(fieldPointer, 'in'), 'required');
+        if (concept && selected!.length !== 1) fail(appendPointer(fieldPointer, 'in'), 'invalid_format');
 
         const qualifierField = qualifiers === undefined ? {} : { qualifiers };
         leaves += qualifiers?.length ?? 0;
@@ -256,9 +526,18 @@ export function parseFilter(input: unknown): FilterDocument {
           statement:
             selected === undefined
               ? { property, range: range!, ...qualifierField }
-              : { property, in: selected, ...qualifierField },
+              : {
+                  property,
+                  in: selected,
+                  ...(concept ? { concept } : {}),
+                  ...(inverse ? { inverse } : {}),
+                  ...qualifierField,
+                },
         };
       }
+      case 'owner':
+        if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
+        return parseOwner(ownValue(fields, key, fieldPointer), fieldPointer);
       case 'saved':
         if (++leaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
         return { saved: parseSaved(ownValue(fields, key, fieldPointer), fieldPointer) };
@@ -270,10 +549,37 @@ export function parseFilter(input: unknown): FilterDocument {
   return node(input, '', 0, false);
 }
 
+/** Walk every node in source order, including NOT children. Expand saved filters through admission first. */
+export function* walkFilter(filter: FilterDocument): IterableIterator<FilterDocument> {
+  yield filter;
+  if ('and' in filter) {
+    for (const child of filter.and) yield* walkFilter(child);
+  } else if ('or' in filter) {
+    for (const child of filter.or) yield* walkFilter(child);
+  } else if ('not' in filter) {
+    yield* walkFilter(filter.not);
+  }
+}
+
 export function positiveFilter(filter: FilterDocument): boolean {
   if ('not' in filter) return false;
   if ('and' in filter) return filter.and.some(positiveFilter);
   if ('or' in filter) return filter.or.every(positiveFilter);
+  return true;
+}
+
+/** Discovery visitors are explicit so saved/dynamic catalogue consumers keep their closed grammar. */
+export function* walkDiscoveryFilter(filter: DiscoveryFilterDocument): IterableIterator<DiscoveryFilterDocument> {
+  yield filter;
+  if ('and' in filter || 'or' in filter) {
+    for (const child of 'and' in filter ? filter.and : filter.or) yield* walkDiscoveryFilter(child);
+  } else if ('not' in filter) yield* walkDiscoveryFilter(filter.not);
+}
+
+export function positiveDiscoveryFilter(filter: DiscoveryFilterDocument): boolean {
+  if ('not' in filter) return false;
+  if ('and' in filter) return filter.and.some(positiveDiscoveryFilter);
+  if ('or' in filter) return filter.or.every(positiveDiscoveryFilter);
   return true;
 }
 
@@ -293,6 +599,25 @@ function ownRecordValue(input: unknown, key: string): unknown {
   return field.found ? field.value : undefined;
 }
 
+export function relationFacetProperty(release: FilterRelease, property: string): boolean {
+  const properties = dataField(release, 'properties');
+  const definition = ownRecordValue(properties, property);
+  const relation = dataField(definition, 'relation');
+  switch (dataField(relation, 'group')) {
+    case 'order':
+    case 'derivation':
+    case 'world':
+    case 'membership':
+    case 'association':
+    case 'credit':
+    case 'appearance':
+    case 'classification':
+      return true;
+    default:
+      return false;
+  }
+}
+
 function ownStringList(input: unknown, key: string): string[] {
   const value = dataField(input, key);
   if (!Array.isArray(value)) return [];
@@ -310,44 +635,116 @@ function hasOwnMapKey(map: unknown, key: string): boolean {
   return field.found && isRecord(field.value);
 }
 
-function includesOwnString(list: unknown, expected: string): boolean {
-  if (!Array.isArray(list)) return false;
-  for (let index = 0; index < list.length; index++) {
-    const field = ownData(list, index);
-    if (field.found && field.value === expected) return true;
-  }
-  return false;
+/** An explicit construction lifetime. The caller owns a snapshot; raw entry points create a fresh one. */
+export function createFilterConstruction(release: FilterRelease) {
+  // Own all descriptor-backed data before retaining indexes across admissions.
+  const snapshot = snapshotData(release) as FilterRelease;
+  const construction = buildConstruction(snapshot);
+  return {
+    admitFilter: (filter: FilterDocument, options?: FilterAdmissionOptions) =>
+      catalogueOnly(admitConstructed(filter, snapshot, options, construction)),
+    validateFilter: (input: unknown, options?: FilterAdmissionOptions) =>
+      validateConstructed(input, snapshot, options, construction),
+    facetProperties: (types: readonly string[]) => displayFacets(construction, types),
+    qualifiers: (property: string): ReadonlySet<string> => construction.qualifiers.get(property) ?? emptyFacets,
+  };
 }
 
-function typeFacets(types: unknown, type: string): Set<string> {
-  const result = new Set<string>();
-  const definition = ownRecordValue(types, type);
-  if (!isRecord(definition)) return result;
-  for (const facet of ownStringList(definition, 'facets')) result.add(facet);
-  for (const base of ownStringList(definition, 'bases')) {
-    const baseDefinition = ownRecordValue(types, base);
-    if (!isRecord(baseDefinition)) continue;
-    for (const facet of ownStringList(baseDefinition, 'facets')) result.add(facet);
+// Copy own data only. Accessors, inherited fields and holes remain absent, never evaluated.
+function snapshotData(value: unknown, ancestors = new Set<object>()): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (ancestors.has(value)) return undefined;
+  ancestors.add(value);
+  const copy: Record<string, unknown> | unknown[] = Array.isArray(value)
+    ? new Array(value.length)
+    : Object.create(null);
+  for (const key of Object.getOwnPropertyNames(value)) {
+    if (Array.isArray(value) && key === 'length') continue;
+    const field = ownData(value, key);
+    if (field.found)
+      Object.defineProperty(copy, key, {
+        value: snapshotData(field.value, ancestors),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
   }
-  return result;
+  ancestors.delete(value);
+  return copy;
 }
 
-export function facetProperties(release: FilterRelease, types: readonly string[]): string[] {
-  const definitions = dataField(release, 'types');
-  const result = new Set<string>();
-  for (const type of types) {
-    for (const property of typeFacets(definitions, type)) result.add(property);
+const emptyFacets: ReadonlySet<string> = new Set();
+type Construction = {
+  facets: Map<string, ReadonlySet<string>>;
+  all: ReadonlySet<string>;
+  qualifiers: Map<string, ReadonlySet<string>>;
+  units: Map<string, ReadonlySet<string>>;
+  patterns: Map<object, RegExp | null>;
+};
+
+function buildConstruction(release: FilterRelease): Construction {
+  const types = dataField(release, 'types');
+  const direct = new Map<string, readonly string[]>();
+  const facets = new Map<string, ReadonlySet<string>>();
+  const all = new Set<string>();
+  if (isRecord(types)) {
+    for (const type of Object.getOwnPropertyNames(types)) {
+      direct.set(type, ownStringList(ownRecordValue(types, type), 'facets'));
+    }
+    for (const type of Object.getOwnPropertyNames(types)) {
+      const definition = ownRecordValue(types, type);
+      const selected = new Set<string>();
+      for (const facet of direct.get(type) ?? []) selected.add(facet);
+      for (const base of ownStringList(definition, 'bases')) {
+        for (const facet of direct.get(base) ?? []) selected.add(facet);
+      }
+      facets.set(type, selected);
+      for (const facet of selected) all.add(facet);
+    }
   }
+  const qualifiers = new Map<string, ReadonlySet<string>>();
+  const units = new Map<string, ReadonlySet<string>>();
+  const properties = dataField(release, 'properties');
+  if (isRecord(properties))
+    for (const property of Object.getOwnPropertyNames(properties)) {
+      const definition = ownRecordValue(properties, property);
+      qualifiers.set(property, new Set(ownStringList(definition, 'qualifiers')));
+      units.set(property, new Set(ownStringList(definition, 'units')));
+    }
+  return { facets, all, qualifiers, units, patterns: new Map() };
+}
+
+const immutableConstructions = new WeakMap<object, Construction>();
+function constructionFor(release: FilterRelease): Construction {
+  const known = immutableConstructions.get(release);
+  if (known) return known;
+  const construction = buildConstruction(release);
+  const seen = new Set<object>();
+  function immutable(value: unknown): boolean {
+    if (value === null || typeof value !== 'object' || seen.has(value)) return true;
+    if (!Object.isFrozen(value)) return false;
+    seen.add(value);
+    return Reflect.ownKeys(value).every((key) => {
+      const field = Object.getOwnPropertyDescriptor(value, key)!;
+      return Object.hasOwn(field, 'value') && immutable(field.value);
+    });
+  }
+  if (immutable(release)) immutableConstructions.set(release, construction);
+  return construction;
+}
+
+function displayFacets(construction: Construction, types: readonly string[]): string[] {
+  const result = new Set<string>();
+  for (const type of types) for (const facet of construction.facets.get(type) ?? emptyFacets) result.add(facet);
   return [...result];
 }
 
-const allFacetsByRelease = new WeakMap<object, ReadonlySet<string>>();
+export function facetProperties(release: FilterRelease, types: readonly string[]): string[] {
+  return displayFacets(constructionFor(release), types);
+}
 
-// One compiled pattern per property definition. A missing or unusable pattern is cached as null.
-const codePatterns = new WeakMap<object, RegExp | null>();
-
-function codePattern(definition: object): RegExp | null {
-  if (codePatterns.has(definition)) return codePatterns.get(definition) ?? null;
+function codePattern(definition: object, construction: Construction): RegExp | null {
+  if (construction.patterns.has(definition)) return construction.patterns.get(definition) ?? null;
   const value = dataField(definition, 'value');
   const source = isRecord(value) ? dataField(value, 'pattern') : undefined;
   let compiled: RegExp | null = null;
@@ -358,22 +755,8 @@ function codePattern(definition: object): RegExp | null {
       compiled = null;
     }
   }
-  codePatterns.set(definition, compiled);
+  construction.patterns.set(definition, compiled);
   return compiled;
-}
-
-function allReleaseFacets(release: FilterRelease): ReadonlySet<string> {
-  const known = allFacetsByRelease.get(release);
-  if (known) return known;
-  const facets = new Set<string>();
-  const types = dataField(release, 'types');
-  if (isRecord(types)) {
-    for (const type of Object.getOwnPropertyNames(types)) {
-      for (const facet of typeFacets(types, type)) facets.add(facet);
-    }
-  }
-  allFacetsByRelease.set(release, facets);
-  return facets;
 }
 
 function containsSaved(filter: FilterDocument): boolean {
@@ -388,11 +771,12 @@ function mappedPointer(actual: string, source: string | undefined): string {
   return source ?? actual;
 }
 
-export function admitFilter(
-  filter: FilterDocument,
+function admitConstructed(
+  filter: DiscoveryFilterDocument,
   release: FilterRelease,
-  options: { saved?: boolean } = {},
-): FilterDocument {
+  options: FilterAdmissionOptions & { kinds?: ReadonlySet<string> } = {},
+  construction: Construction,
+): DiscoveryFilterDocument {
   const expansions = new Map<string, FilterDocument | null>();
   const allowSaved = options.saved !== false;
   const filters = dataField(release, 'filters');
@@ -452,15 +836,13 @@ export function admitFilter(
     }
   }
 
-  const allowedFacets = new Set<string>();
-  if (returnable === undefined) {
-    for (const facet of allReleaseFacets(release)) allowedFacets.add(facet);
-  } else {
-    for (const type of returnable) {
-      if (!hasOwnMapKey(types, type)) continue;
-      for (const facet of typeFacets(types, type)) allowedFacets.add(facet);
-    }
-  }
+  const selectedFacets =
+    returnable === undefined
+      ? [construction.all]
+      : returnable
+          .filter((type) => hasOwnMapKey(types, type))
+          .map((type) => construction.facets.get(type) ?? emptyFacets);
+  const allowedFacet = (property: string) => selectedFacets.some((facets) => facets.has(property));
 
   let expandedLeaves = 0;
 
@@ -480,8 +862,6 @@ export function admitFilter(
       if (!hasOwnMapKey(typeMap, type)) reject(valuePointer, source, 'unsupported', 'unsupported_query');
     }
   }
-
-  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
   function validateUuidValues(values: readonly string[], pointer: string, source: string | undefined): void {
     for (let index = 0; index < values.length; index++) {
@@ -503,18 +883,46 @@ export function admitFilter(
   ): void {
     const statement = node.statement;
     const propertyPointer = appendPointer(appendPointer(pointer, 'statement'), 'property');
-    if (!allowedFacets.has(statement.property)) reject(propertyPointer, source, 'unsupported', 'unsupported_query');
+    const inverse = 'inverse' in statement && statement.inverse !== undefined;
+    if (inverse) {
+      if (
+        options.inverse !== true ||
+        statement.inverse !== true ||
+        !('in' in statement) ||
+        statement.concept !== undefined ||
+        !construction.all.has(statement.property) ||
+        !relationFacetProperty(release, statement.property)
+      )
+        reject(
+          appendPointer(appendPointer(pointer, 'statement'), 'inverse'),
+          source,
+          'unsupported',
+          'unsupported_query',
+        );
+    } else if (!allowedFacet(statement.property)) reject(propertyPointer, source, 'unsupported', 'unsupported_query');
 
     const properties = dataField(release, 'properties');
     const definition = propertyDefinition(properties, statement.property);
     if (!definition) reject(propertyPointer, source, 'unsupported', 'unsupported_query');
     const datatype = dataField(definition, 'datatype');
+    if (inverse && datatype !== 'wikibase-item') reject(propertyPointer, source, 'unsupported', 'unsupported_query');
 
     if ('in' in statement) {
       const inPointer = appendPointer(appendPointer(pointer, 'statement'), 'in');
-      if (datatype === 'wikibase-item') validateUuidValues(statement.in, inPointer, source);
+      if (statement.concept) {
+        const conceptPointer = appendPointer(appendPointer(pointer, 'statement'), 'concept');
+        if (
+          datatype !== 'wikibase-item' ||
+          statement.in.length !== 1 ||
+          typeof statement.concept.scheme !== 'string' ||
+          uuidPattern.exec(statement.concept.scheme)?.[0] !== statement.concept.scheme ||
+          (statement.concept.includeChildren !== undefined && typeof statement.concept.includeChildren !== 'boolean')
+        )
+          reject(conceptPointer, source, 'unsupported', 'unsupported_query');
+        validateUuidValues(statement.in, inPointer, source);
+      } else if (datatype === 'wikibase-item') validateUuidValues(statement.in, inPointer, source);
       else if (datatype === 'string') {
-        const pattern = codePattern(definition);
+        const pattern = codePattern(definition, construction);
         if (!pattern) reject(inPointer, source, 'unsupported', 'unsupported_query');
         for (let index = 0; index < statement.in.length; index++) {
           const value = statement.in[index]!;
@@ -528,9 +936,11 @@ export function admitFilter(
       if (datatype !== 'time' && datatype !== 'quantity')
         reject(rangePointer, source, 'unsupported', 'unsupported_query');
       const range = statement.range;
-      if (datatype === 'time') {
+      if (range.type === 'time') {
+        if (datatype !== 'time') reject(rangePointer, source, 'unsupported', 'unsupported_query');
+      } else if (datatype === 'time') {
         for (const key of Object.keys(range)) {
-          const value = range[key as keyof FilterRange];
+          const value = range[key as keyof NumericFilterRange];
           const rangeFieldPointer = appendPointer(rangePointer, key);
           if (key === 'unit') reject(rangeFieldPointer, source, 'unsupported', 'unsupported_query');
           if ((key === 'gte' || key === 'lte') && !Number.isSafeInteger(value))
@@ -539,38 +949,80 @@ export function admitFilter(
       } else {
         if (range.unit === undefined)
           reject(appendPointer(rangePointer, 'unit'), source, 'required', 'invalid_request');
-        const units = dataField(definition, 'units');
-        if (!includesOwnString(units, range.unit))
+        if (!construction.units.get(statement.property)?.has(range.unit))
           reject(appendPointer(rangePointer, 'unit'), source, 'unsupported', 'unsupported_query');
       }
     }
 
     const qualifiers = statement.qualifiers;
     if (qualifiers) {
-      const declaredQualifiers = dataField(definition, 'qualifiers');
+      const declaredQualifiers = construction.qualifiers.get(statement.property) ?? emptyFacets;
       for (let index = 0; index < qualifiers.length; index++) {
         const qualifier = qualifiers[index]!;
         const qualifierPointer = appendPointer(appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'), index);
         const qualifierPropertyPointer = appendPointer(qualifierPointer, 'property');
         const qualifierDefinition = propertyDefinition(properties, qualifier.property);
-        if (
-          !includesOwnString(declaredQualifiers, qualifier.property) ||
-          !qualifierDefinition ||
-          dataField(qualifierDefinition, 'datatype') !== 'wikibase-item'
-        )
+        if (!declaredQualifiers.has(qualifier.property) || !qualifierDefinition)
           reject(qualifierPropertyPointer, source, 'unsupported', 'unsupported_query');
-        validateUuidValues(qualifier.in, appendPointer(qualifierPointer, 'in'), source);
+        const inPointer = appendPointer(qualifierPointer, 'in');
+        const datatype = dataField(qualifierDefinition, 'datatype');
+        if ('range' in qualifier) {
+          const rangePointer = appendPointer(qualifierPointer, 'range');
+          if (datatype !== 'quantity' || qualifier.property === 'rezics:spoilerLevel')
+            reject(rangePointer, source, 'unsupported', 'unsupported_query');
+          if (qualifier.range.unit === undefined)
+            reject(appendPointer(rangePointer, 'unit'), source, 'required', 'invalid_request');
+          if (!construction.units.get(qualifier.property)?.has(qualifier.range.unit!))
+            reject(appendPointer(rangePointer, 'unit'), source, 'unsupported', 'unsupported_query');
+          continue;
+        }
+        if (datatype === 'wikibase-item') validateUuidValues(qualifier.in, inPointer, source);
+        else if (
+          datatype === 'quantity' &&
+          qualifier.property === 'rezics:spoilerLevel' &&
+          construction.units.get(qualifier.property)?.has('1')
+        ) {
+          for (const [valueIndex, value] of qualifier.in.entries())
+            if (!(SPOILER_LEVELS as readonly string[]).includes(value))
+              reject(appendPointer(inPointer, valueIndex), source, 'invalid_format', 'invalid_request');
+        } else if (datatype === 'string') {
+          const schema = dataField(qualifierDefinition, 'value');
+          const declaredPattern = dataField(schema, 'pattern');
+          const pattern = codePattern(qualifierDefinition, construction);
+          if (declaredPattern !== undefined && declaredPattern !== '' && !pattern)
+            reject(inPointer, source, 'unsupported', 'unsupported_query');
+          const minimum = dataField(schema, 'minLength');
+          const maximum = dataField(schema, 'maxLength');
+          for (let valueIndex = 0; valueIndex < qualifier.in.length; valueIndex++) {
+            const value = qualifier.in[valueIndex]!;
+            const valuePointer = appendPointer(inPointer, valueIndex);
+            // Qualifiers retain the grammar's byte limit, not the catalogue code-facet limit.
+            try {
+              stringValue(value, valuePointer, false);
+            } catch (error) {
+              if (error instanceof FilterError) reject(valuePointer, source, error.errors[0]!.code, error.problem);
+              throw error;
+            }
+            const length = [...value].length;
+            if (
+              (typeof minimum === 'number' && length < minimum) ||
+              (typeof maximum === 'number' && length > maximum) ||
+              (pattern && !pattern.test(value))
+            )
+              reject(valuePointer, source, 'invalid_format', 'invalid_request');
+          }
+        } else reject(qualifierPropertyPointer, source, 'unsupported', 'unsupported_query');
       }
     }
   }
 
   function visit(
-    node: FilterDocument,
+    node: DiscoveryFilterDocument,
     pointer: string,
     depth: number,
     underNot: boolean,
     source: string | undefined,
-  ): FilterDocument {
+  ): DiscoveryFilterDocument {
     if ('and' in node || 'or' in node) {
       const isAnd = 'and' in node;
       const operator = isAnd ? 'and' : 'or';
@@ -601,6 +1053,31 @@ export function admitFilter(
     if ('statement' in node) expandedLeaves += node.statement.qualifiers?.length ?? 0;
     if (expandedLeaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
 
+    if ('kind' in node) {
+      const inPointer = appendPointer(appendPointer(pointer, 'kind'), 'in');
+      if (!options.kinds) reject(appendPointer(pointer, 'kind'), source, 'unsupported', 'unsupported_query');
+      if (node.kind.in.length === 0 || node.kind.in.length > FILTER_LIMITS.in)
+        reject(inPointer, source, 'out_of_range', 'unsupported_query');
+      for (const [index, kind] of node.kind.in.entries())
+        if (!options.kinds.has(kind))
+          reject(appendPointer(inPointer, index), source, 'unsupported', 'unsupported_query');
+      return { kind: { in: [...node.kind.in] } };
+    }
+
+    if ('realm' in node) {
+      if (!options.kinds || source !== undefined)
+        reject(appendPointer(pointer, 'realm'), source, 'unsupported', 'unsupported_query');
+      return { realm: parseResourceId(node.realm, appendPointer(pointer, 'realm')) };
+    }
+
+    if ('ratingQuestion' in node) {
+      // The request grammar is the only entry point. A saved definition is
+      // parsed by parseFilter before expansion and cannot acquire this operand.
+      if (!options.kinds || source !== undefined)
+        reject(appendPointer(pointer, 'ratingQuestion'), source, 'unsupported', 'unsupported_query');
+      return parseRatingQuestion(node.ratingQuestion, appendPointer(pointer, 'ratingQuestion'));
+    }
+
     if ('type' in node) {
       if (node.type.in.length === 0 || node.type.in.length > FILTER_LIMITS.in)
         reject(appendPointer(appendPointer(pointer, 'type'), 'in'), source, 'out_of_range', 'unsupported_query');
@@ -608,12 +1085,26 @@ export function admitFilter(
       return { type: { in: [...node.type.in] } };
     }
 
+    if ('owner' in node) {
+      if (options.owner !== true) reject(appendPointer(pointer, 'owner'), source, 'unsupported', 'unsupported_query');
+      return parseOwner(node.owner, appendPointer(pointer, 'owner'));
+    }
+
     const statement = node.statement;
     if ('in' in statement) {
       if (statement.in.length === 0 || statement.in.length > FILTER_LIMITS.in)
         reject(appendPointer(appendPointer(pointer, 'statement'), 'in'), source, 'out_of_range', 'unsupported_query');
     } else {
-      if (
+      if (statement.range.type === 'time') {
+        // Admission also accepts typed construction directly, rather than only parser output.
+        try {
+          parseRange(statement.range, appendPointer(appendPointer(pointer, 'statement'), 'range'));
+        } catch (error) {
+          if (!(error instanceof FilterError)) throw error;
+          const field = error.errors[0]!;
+          reject(field.pointer, source, field.code, error.problem);
+        }
+      } else if (
         (statement.range.gte === undefined && statement.range.lte === undefined) ||
         (statement.range.gte !== undefined &&
           statement.range.lte !== undefined &&
@@ -637,7 +1128,22 @@ export function admitFilter(
       );
     if (statement.qualifiers) {
       for (let index = 0; index < statement.qualifiers.length; index++) {
-        const values = statement.qualifiers[index]!.in;
+        const qualifier = statement.qualifiers[index]!;
+        if ('range' in qualifier) {
+          const { gte, lte } = qualifier.range;
+          if ((gte === undefined && lte === undefined) || (gte !== undefined && lte !== undefined && gte > lte))
+            reject(
+              appendPointer(
+                appendPointer(appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'), index),
+                'range',
+              ),
+              source,
+              'out_of_range',
+              'invalid_request',
+            );
+          continue;
+        }
+        const values = qualifier.in;
         const valuesPointer = appendPointer(
           appendPointer(appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'), index),
           'in',
@@ -652,29 +1158,79 @@ export function admitFilter(
       }
     }
     validateStatement(node, pointer, source);
+    let admittedStatement = statement;
+    const thresholdSupport =
+      options.spoilerThreshold === undefined ? 'unaffected' : spoilerThresholdSupport(release, statement.property);
+    if (thresholdSupport === 'missing')
+      reject(appendPointer(pointer, 'statement'), source, 'unsupported', 'unsupported_query');
+    if (options.spoilerThreshold !== undefined && thresholdSupport === 'supported') {
+      const allowed = SPOILER_LEVELS.slice(0, options.spoilerThreshold + 1);
+      const qualifiers = [...(statement.qualifiers ?? [])];
+      const spoilerIndices = qualifiers.flatMap((qualifier, index) =>
+        qualifier.property === 'rezics:spoilerLevel' ? [index] : [],
+      );
+      if (!spoilerIndices.length) qualifiers.push({ property: 'rezics:spoilerLevel', in: allowed });
+      else {
+        for (const index of spoilerIndices) {
+          // validateStatement admits spoiler qualifiers only as canonical equality sets.
+          const qualifier = qualifiers[index] as Extract<FilterQualifier, { in: readonly string[] }>;
+          const selected = qualifier.in.filter((value) => allowed.includes(value as (typeof allowed)[number]));
+          if (!selected.length) {
+            const qualifierPointer = appendPointer(
+              appendPointer(appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'), index),
+              'in',
+            );
+            reject(qualifierPointer, source, 'invalid_format', 'invalid_request');
+          }
+          qualifiers[index] = { property: qualifier.property, in: selected };
+        }
+      }
+      if (qualifiers.length > FILTER_LIMITS.qualifiers)
+        reject(
+          appendPointer(appendPointer(pointer, 'statement'), 'qualifiers'),
+          source,
+          'out_of_range',
+          'unsupported_query',
+        );
+      expandedLeaves += qualifiers.length - (statement.qualifiers?.length ?? 0);
+      if (expandedLeaves > FILTER_LIMITS.leaves) fail('', 'out_of_range', 'unsupported_query');
+      admittedStatement = { ...statement, qualifiers };
+      validateStatement({ statement: admittedStatement }, pointer, source);
+    }
     return {
       statement:
-        'in' in statement
+        'in' in admittedStatement
           ? {
-              property: statement.property,
-              in: [...statement.in],
-              ...(statement.qualifiers
+              property: admittedStatement.property,
+              in: [...admittedStatement.in],
+              ...(admittedStatement.inverse ? { inverse: true as const } : {}),
+              ...(admittedStatement.concept
                 ? {
-                    qualifiers: statement.qualifiers.map((qualifier) => ({
+                    concept: {
+                      scheme: admittedStatement.concept.scheme,
+                      ...(admittedStatement.concept.includeChildren === undefined
+                        ? {}
+                        : { includeChildren: admittedStatement.concept.includeChildren }),
+                    },
+                  }
+                : {}),
+              ...(admittedStatement.qualifiers
+                ? {
+                    qualifiers: admittedStatement.qualifiers.map((qualifier) => ({
                       property: qualifier.property,
-                      in: [...qualifier.in],
+                      ...('in' in qualifier ? { in: [...qualifier.in] } : { range: { ...qualifier.range } }),
                     })),
                   }
                 : {}),
             }
           : {
-              property: statement.property,
-              range: { ...statement.range },
-              ...(statement.qualifiers
+              property: admittedStatement.property,
+              range: { ...admittedStatement.range },
+              ...(admittedStatement.qualifiers
                 ? {
-                    qualifiers: statement.qualifiers.map((qualifier) => ({
+                    qualifiers: admittedStatement.qualifiers.map((qualifier) => ({
                       property: qualifier.property,
-                      in: [...qualifier.in],
+                      ...('in' in qualifier ? { in: [...qualifier.in] } : { range: { ...qualifier.range } }),
                     })),
                   }
                 : {}),
@@ -685,14 +1241,15 @@ export function admitFilter(
   return visit(filter, '', 0, false, undefined);
 }
 
-export function validateFilter(
+function validateConstructed(
   input: unknown,
   release: FilterRelease,
-  options?: { saved?: boolean },
+  options: FilterAdmissionOptions | undefined,
+  construction: Construction,
 ): FilterValidationError[] {
   try {
     const parsed = parseFilter(input);
-    admitFilter(parsed, release, options);
+    admitConstructed(parsed, release, options, construction);
     return [];
   } catch (error) {
     if (error instanceof FilterError) {
@@ -701,4 +1258,45 @@ export function validateFilter(
     }
     return [{ problem: 'invalid_request', pointer: '', code: 'invalid_type' }];
   }
+}
+
+/** Raw mutable releases are indexed anew for every public call. */
+export function admitFilter(
+  filter: FilterDocument,
+  release: FilterRelease,
+  options?: FilterAdmissionOptions,
+): FilterDocument {
+  return catalogueOnly(admitConstructed(filter, release, options, constructionFor(release)));
+}
+
+/** Expands only catalogue saved filters and charges the complete mixed tree before deduplication. */
+export function admitDiscoveryFilter(
+  filter: DiscoveryFilterDocument,
+  release: FilterRelease,
+  kinds: ReadonlySet<string>,
+  options?: Pick<FilterAdmissionOptions, 'inverse' | 'owner' | 'spoilerThreshold'>,
+): DiscoveryFilterDocument {
+  return admitConstructed(filter, release, { ...options, kinds }, constructionFor(release));
+}
+
+export function validateDiscoveryFilter(
+  input: unknown,
+  release: FilterRelease,
+  kinds: ReadonlySet<string>,
+): FilterValidationError[] {
+  try {
+    admitDiscoveryFilter(parseDiscoveryFilter(input), release, kinds);
+    return [];
+  } catch (error) {
+    if (error instanceof FilterError) return error.errors.map((field) => ({ problem: error.problem, ...field }));
+    return [{ problem: 'invalid_request', pointer: '', code: 'invalid_type' }];
+  }
+}
+
+export function validateFilter(
+  input: unknown,
+  release: FilterRelease,
+  options?: FilterAdmissionOptions,
+): FilterValidationError[] {
+  return validateConstructed(input, release, options, constructionFor(release));
 }

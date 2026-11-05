@@ -8,6 +8,7 @@ export const CONTENT_WORKFLOWS = {
   collect: 'content.collect',
   authorErase: 'content.authorErase',
   importFromUrl: 'content.importFromUrl',
+  subjectReactionMerge: 'content.subjectReactionMerge',
 } as const;
 
 /** DBOS queues are provisioned by the corresponding kernel/content runtime. */
@@ -17,6 +18,7 @@ export const CONTENT_QUEUES = {
   collect: 'maintenance',
   authorErase: 'governance',
   importFromUrl: 'import',
+  subjectReactionMerge: 'effects',
 } as const;
 
 export const MEDIA_WORK_EVENTS = {
@@ -49,6 +51,13 @@ export type AuthorEraseWorkInput = {
 /** ID-only URL import request; the workflow resolves the source URL and current state when it runs. */
 export type ImportFromUrlWorkInput = {
   mediaId: string;
+  source: ContentWorkSource;
+};
+
+/** A semantic merge event starts a bounded sweep of the merged subject's reactors. */
+export type SubjectReactionMergeWorkInput = {
+  id: string;
+  survivor: string;
   source: ContentWorkSource;
 };
 
@@ -100,4 +109,16 @@ export function contentWorkWorkflowId(
           ? `content_author_erase_${objectId}`
           : `content_import_from_url_${objectId}`;
   return effectWorkflowId(envelope as Envelope, eventIndex, effectName);
+}
+
+/** One durable merge job per source event and merged subject. */
+export function subjectReactionMergeWorkflowId(
+  envelope: Pick<Envelope, 'epoch' | 'partition' | 'position'>,
+  eventIndex: number,
+  mergedId: string,
+): string {
+  if (!Number.isSafeInteger(eventIndex) || eventIndex < 0)
+    throw new RangeError('eventIndex must be a non-negative integer');
+  if (mergedId.length === 0) throw new RangeError('A merged subject ID is required');
+  return effectWorkflowId(envelope as Envelope, eventIndex, `content_subject_reaction_merge_${mergedId}`);
 }

@@ -1,7 +1,10 @@
+import { communityReportReadCheck, communityReportTargetFacts } from '../community/report-targets.ts';
+import { ProblemError } from '../http/problem.ts';
 import { createHmac } from 'node:crypto';
 import type { Pool } from 'pg';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { createResourceAnonymousEligibility } from '../access/eligibility.ts';
+import { commandAccessContext } from '../access/command-admission.ts';
 import { resourceAuthorization } from '../access/resource-authorization.ts';
 import {
   authoritativeTimeValue,
@@ -16,19 +19,32 @@ import {
   type PrincipalCommandReceipt,
 } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
+import { readAccount } from '../access/account-data.ts';
 import { anonymousCommandTarget, anonymousRequestDigest, requestDigest } from '../http/request.ts';
 import { readPartition } from '../partition/partition.ts';
-import { accessCheck, type Access, type AccessClient, type Actor } from '../request/access.ts';
+import { accessCheck, type Access, type AccessClient, type AccessCheck, type Actor } from '../request/access.ts';
 import { anchorRoute, derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
+import { globalContextAnchor } from '../semantic/context.ts';
+import { subjectReadEligibility } from '../semantic/eligibility.ts';
+import { readSubjectReference } from '../semantic/references.ts';
+import { SubjectRedirectError } from '../semantic/merges.ts';
+import subjectFacts from './read-report-subject.sql';
+import cataloguePage from './catalogue-report-page.sql';
+import catalogueKindPage from './report-catalogue-kind-page.sql';
 import insert from './insert-report.sql';
 import page from './page-target-reports.sql';
+import boardPage from './board-report-page.sql';
+import { reportBoardPlacement } from './board-report-candidates.ts';
 import read from './read-report.sql';
+import reporterHistoryCases from './reporter-history-cases.sql';
 import readReportBoard from './read-report-board.sql';
 import readReportPost from './read-report-post.sql';
 import readReportPostThread from './read-report-post-thread.sql';
 import readReportRevision from './read-report-revision.sql';
+import readInspectionRevision from './report-inspection-revision.sql';
 import readReportThread from './read-report-thread.sql';
 import { readBoard, readPost, readThread } from './reads.ts';
 import type { TurnstileVerifier } from './turnstile.ts';
@@ -37,7 +53,21 @@ import type { Anchored, BoardId, Page, PostId, ReportId, RequestContext, Revisio
 export type ReportTarget =
   | Readonly<{ kind: 'board'; id: BoardId }>
   | Readonly<{ kind: 'thread'; id: ThreadId }>
-  | Readonly<{ kind: 'post'; id: PostId }>;
+  | Readonly<{ kind: 'post'; id: PostId }>
+  | Readonly<{ kind: 'subject'; id: string }>
+  | Readonly<{ kind: 'space'; id: string }>
+  | Readonly<{ kind: 'realm'; id: string }>;
+type ReportScope = ReportTarget | Readonly<{ kind: 'catalogue'; id: string }>;
+export const CATALOGUE_REPORT_PAGE_LIMIT = 50;
+// Four independently current inspections per candidate, each with Global and Subject snapshots, plus report fill.
+export const SUBJECT_REPORT_INSPECTIONS_PER_CANDIDATE = 4;
+export const CATALOGUE_REPORT_SNAPSHOT_CEILING =
+  3 + CATALOGUE_REPORT_PAGE_LIMIT * (2 * SUBJECT_REPORT_INSPECTIONS_PER_CANDIDATE + 1);
+export type ReportSelection = Readonly<{
+  status?: 'all' | 'pending' | 'resolved';
+  targetKind?: 'all' | ReportTarget['kind'];
+  order?: 'newest' | 'oldest';
+}>;
 export type ReportInput = Readonly<{
   target: ReportTarget;
   revisionId?: RevisionId;
@@ -52,9 +82,18 @@ export type ReportView = Readonly<{
   reason: string;
   evidence: string | null;
   createdAt: string;
+  outcome: 'actioned' | 'dismissed' | null;
+  resolvedAt: string | null;
   transactionId: string;
   reporterId: string | null;
 }>;
+/** The reporter's submitted record, without moderator-only storage metadata. */
+export type ReporterReportView = Pick<
+  ReportView,
+  'id' | 'target' | 'revisionId' | 'reason' | 'evidence' | 'reporterId' | 'createdAt' | 'outcome' | 'resolvedAt'
+> &
+  Readonly<{ targetAvailability: 'available' | 'unavailable' }>;
+export type ReportReadView = ReportView | ReporterReportView;
 export type ReportDependencies = Readonly<{
   pool: Pool;
   access: Access;
@@ -68,7 +107,8 @@ const operation = 'content.report.create';
 const createAction = 'report:create';
 const inspectAction = 'moderation:read_reports';
 const reasons = new Set(['off_topic', 'inappropriate', 'spam', 'illegal', 'other']);
-type ReadContext = Readonly<{ actor: Actor; deadline: number }>;
+export type ReportReadContext = Readonly<{ actor: Actor; deadline: number }>;
+type ReadContext = ReportReadContext;
 type ReportRow = {
   route: number;
   report_id: string;
@@ -80,6 +120,8 @@ type ReportRow = {
   reporter_account_id: string | null;
   recorded_transaction_id: string;
   created_at: string;
+  outcome: 'actioned' | 'dismissed' | null;
+  resolved_at: string | null;
 };
 type TargetFacts = {
   fingerprint: string;
@@ -115,7 +157,8 @@ function route(id: string): number {
 }
 
 function validateTarget(target: ReportTarget): void {
-  if (!target || !['board', 'thread', 'post'].includes(target.kind)) throw new TypeError('Invalid report target');
+  if (!target || !['board', 'thread', 'post', 'subject', 'space', 'realm'].includes(target.kind))
+    throw new TypeError('Invalid report target');
   route(target.id);
 }
 
@@ -163,6 +206,11 @@ async function snapshot<T>(
  * exact route and ID. Missing ancestry, cycles and depth overflow fail closed. */
 async function targetFacts(client: AccessClient, target: ReportTarget): Promise<TargetFacts | null> {
   const home = route(target.id);
+  if (target.kind === 'space' || target.kind === 'realm') return communityReportTargetFacts(client, target);
+  if (target.kind === 'subject') {
+    const subject = await subjectFacts.run(client, { route: home, subject_id: target.id });
+    return subject ? { fingerprint: JSON.stringify(subject) } : null;
+  }
   if (target.kind === 'board') {
     const board = await readReportBoard.run(client, { route: home, id: target.id });
     return board ? { fingerprint: JSON.stringify(board) } : null;
@@ -199,6 +247,15 @@ async function discloseTarget(
   const initial = await snapshot(dependencies, target.id, context.deadline, (client) => targetFacts(client, target));
   const facts = initial.value;
   if (!facts) throw new ReportUnavailableError();
+  if (target.kind === 'space' || target.kind === 'realm') {
+    if (!(await readableCommunityTarget(dependencies, target, context, facts.fingerprint)))
+      throw new ReportUnavailableError();
+    return facts;
+  }
+  if (target.kind === 'subject') {
+    if (!(await readableSubject(dependencies, target.id, context))) throw new ReportUnavailableError();
+    return facts;
+  }
   const readers = { pool: dependencies.pool, access: dependencies.access, tokens: tokens(dependencies) };
   const disclosed =
     target.kind === 'board'
@@ -217,7 +274,8 @@ async function exactRevision(
   revisionId: string | null,
 ): Promise<boolean> {
   if (!revisionId) return true;
-  if (target.kind === 'board' || !facts.threadId || route(revisionId) !== route(target.id)) return false;
+  if (!['thread', 'post'].includes(target.kind) || !facts.threadId || route(revisionId) !== route(target.id))
+    return false;
   const revision = await readReportRevision.run(client, {
     route: route(revisionId),
     id: revisionId,
@@ -285,7 +343,9 @@ export async function createReport(
     if (proof?.ok !== true) throw new ReportProofRequiredError();
   }
   let validRevision = false;
-  const resource = { route: route(target.id), id: target.id };
+  let subjectReadCheck: AccessCheck | undefined;
+  const resource =
+    target.kind === 'subject' ? globalContextAnchor.resource : { route: route(target.id), id: target.id };
   const eligibility = createResourceAnonymousEligibility({
     resource,
     action: createAction,
@@ -305,11 +365,18 @@ export async function createReport(
     action: createAction,
     anchor: {
       resource: { ...resource, eligibility },
-      async validate(client) {
-        const partition = await readPartition(client, partitionOf(resource.route));
+      async validate(client, time) {
+        if (target.kind === 'subject') {
+          if (!(await globalContextAnchor.validate(client, time))) return false;
+          if (!subjectReadCheck || !(await subjectReadCheck(client, time))) throw new ReportUnavailableError();
+        }
+        const partition = await readPartition(client, partitionOf(route(target.id)));
         if (!partition || partition.writeState === 'moved' || !observed) return false;
         const current = await targetFacts(client, target);
-        if (!current || current.fingerprint !== observed.fingerprint) return false;
+        if (!current || current.fingerprint !== observed.fingerprint) {
+          if (target.kind === 'space' || target.kind === 'realm') throw new ReportUnavailableError();
+          return false;
+        }
         // This fact is consumed only by a new command body, AFTER receipt lookup.
         // A changed, nonexistent revision under a reused key must still conflict.
         validRevision = await exactRevision(client, target, current, semantic.revisionId);
@@ -324,7 +391,32 @@ export async function createReport(
       // Resolve disclosure inside each live command attempt before report:create
       // authorization can turn an unreadable target into a generic denial.
       observed = await discloseTarget(dependencies, target, { actor, deadline: context.deadline });
-      return accessAuthorization.prepare!(attempt);
+      if (target.kind === 'subject') {
+        subjectReadCheck = await accessCheck(
+          dependencies.access,
+          actor,
+          'subject:read',
+          {
+            route: route(target.id),
+            id: target.id,
+            eligibility: subjectReadEligibility({ route: route(target.id), id: target.id }),
+          },
+          commandAccessContext({ pool: dependencies.pool, deadline: context.deadline }, attempt),
+        );
+      }
+      const prepared = await accessAuthorization.prepare!(attempt);
+      if (target.kind === 'space' || target.kind === 'realm') {
+        if (
+          !(await readableCommunityTarget(
+            dependencies,
+            target,
+            { actor, deadline: context.deadline },
+            observed.fingerprint,
+          ))
+        )
+          throw new ReportUnavailableError();
+      }
+      return prepared;
     },
   };
   const receipt: PrincipalCommandReceipt = {
@@ -350,6 +442,7 @@ export async function createReport(
       report_id: home.id,
       target_kind: target.kind,
       target_id: target.id,
+      target_witness: target.kind === 'space' || target.kind === 'realm' ? observed!.fingerprint : null,
       revision_id: semantic.revisionId,
       reason: semantic.reason,
       evidence: semantic.evidence,
@@ -379,7 +472,60 @@ export async function createReport(
   });
 }
 
-async function inspect(dependencies: ReportDependencies, target: ReportTarget, context: ReadContext) {
+/** Native eligibility can conceal missing/removed heads by throwing not_found. Infrastructure failures propagate. */
+async function readableCommunityTarget(
+  dependencies: ReportDependencies,
+  target: Extract<ReportTarget, { kind: 'space' | 'realm' }>,
+  context: ReadContext,
+  expected?: string,
+): Promise<boolean> {
+  try {
+    const check = await communityReportReadCheck(dependencies, target, context);
+    return (
+      await snapshot(dependencies, target.id, context.deadline, async (client) => {
+        const facts = await communityReportTargetFacts(client, target);
+        return !!facts && (expected === undefined || facts.fingerprint === expected) && (await check(client));
+      })
+    ).value;
+  } catch (error) {
+    if (error instanceof ProblemError && error.code === 'not_found') return false;
+    throw error;
+  }
+}
+
+async function readableSubject(dependencies: ReportDependencies, id: string, context: ReadContext): Promise<boolean> {
+  const resource = { route: route(id), id, eligibility: subjectReadEligibility({ route: route(id), id }) };
+  const check = await accessCheck(dependencies.access, context.actor, 'subject:read', resource, {
+    pool: dependencies.pool,
+    deadline: context.deadline,
+  });
+  try {
+    return !!(await within(context.deadline, () =>
+      readSubjectReference(dependencies.pool, id, (client) => check(deadlineClient(client, context.deadline))),
+    ));
+  } catch (error) {
+    if (error instanceof SubjectRedirectError) return false;
+    throw error;
+  }
+}
+
+async function inspect(dependencies: ReportDependencies, target: ReportScope, context: ReadContext) {
+  if (target.kind === 'catalogue') return inspectCatalogue(dependencies, context);
+  if (target.kind === 'space' || target.kind === 'realm') {
+    if (!(await readableCommunityTarget(dependencies, target, context))) {
+      return snapshot(dependencies, target.id, context.deadline, async () => false);
+    }
+  }
+  if (target.kind === 'subject') {
+    const subject = await snapshot(
+      dependencies,
+      target.id,
+      context.deadline,
+      async (client) => !!(await targetFacts(client, target)),
+    );
+    const allowed = await inspectCatalogue(dependencies, context);
+    return { ...subject, value: subject.value && allowed.value };
+  }
   const check =
     context.actor.kind === 'account'
       ? await accessCheck(
@@ -398,6 +544,126 @@ async function inspect(dependencies: ReportDependencies, target: ReportTarget, c
   );
 }
 
+async function inspectCatalogue(dependencies: ReportDependencies, context: ReadContext) {
+  const check =
+    context.actor.kind === 'account'
+      ? await accessCheck(dependencies.access, context.actor, inspectAction, globalContextAnchor.resource, {
+          pool: dependencies.pool,
+          deadline: context.deadline,
+        })
+      : null;
+  return snapshot(
+    dependencies,
+    GLOBAL_CONTEXT,
+    context.deadline,
+    async (client) =>
+      !!check &&
+      !!(
+        await client.query('SELECT 1 FROM semantic.context WHERE route = $1 AND context_id = $2 AND kind = $3', [
+          0,
+          GLOBAL_CONTEXT,
+          'global',
+        ])
+      ).rowCount &&
+      (await check(client)),
+  );
+}
+
+function sameReportReference(left: ReportRow, right: ReportRow): boolean {
+  return (
+    left.route === right.route &&
+    left.report_id === right.report_id &&
+    left.target_kind === right.target_kind &&
+    left.target_id === right.target_id &&
+    left.revision_id === right.revision_id &&
+    left.reporter_account_id === right.reporter_account_id &&
+    left.recorded_transaction_id === right.recorded_transaction_id &&
+    left.created_at === right.created_at &&
+    left.outcome === right.outcome &&
+    left.resolved_at === right.resolved_at
+  );
+}
+
+async function reporterCanReadOwnReport(
+  dependencies: ReportDependencies,
+  actor: Actor,
+  reporterAccountId: string,
+  context: ReadContext,
+): Promise<boolean> {
+  if (actor.kind !== 'account' || actor.accountId !== reporterAccountId) return false;
+  return (await reporterHistoryAuthority(dependencies, context)).value;
+}
+
+/** Reporter retention uses the native current account policy independently of
+ * target readership and inspection. This is also the own-inventory admission. */
+export async function reporterHistoryAuthority(
+  dependencies: ReportDependencies,
+  context: ReadContext,
+): Promise<Anchored<boolean>> {
+  const actor = context.actor;
+  if (actor.kind !== 'account') throw new ReportUnavailableError();
+  const reporterAccountId = actor.accountId;
+  const accountRoute = route(reporterAccountId);
+  const check = await accessCheck(
+    dependencies.access,
+    actor,
+    'account:read',
+    { route: accountRoute, id: reporterAccountId },
+    { pool: dependencies.pool, deadline: context.deadline },
+  );
+  return snapshot(dependencies, reporterAccountId, context.deadline, async (client) => {
+    const account = await readAccount(client, accountRoute, reporterAccountId);
+    if (
+      !account ||
+      account.accountId !== actor.accountId ||
+      account.kind !== 'actor' ||
+      account.state !== 'active' ||
+      account.fenced ||
+      BigInt(actor.authnEpoch) < account.minimumAuthnEpoch
+    )
+      return false;
+    return check(client);
+  });
+}
+
+/** Private submitted fields come from the original cases, grouped by native
+ * home, only after current recipient authorization on every fill/recheck. */
+export async function readReporterHistoryCases(
+  dependencies: ReportDependencies,
+  ids: readonly string[],
+  context: ReadContext,
+): Promise<ReadonlyMap<string, ReportView>> {
+  if (ids.length > 21) throw new RangeError('At most 20 raw cases and one exact selection');
+  if (context.actor.kind !== 'account') throw new ReportUnavailableError();
+  const reporter = context.actor.accountId;
+  const groups = new Map<number, string[]>();
+  for (const id of new Set(ids)) {
+    const home = partitionOf(route(id));
+    const group = groups.get(home) ?? [];
+    group.push(id);
+    groups.set(home, group);
+  }
+  const records = new Map<string, ReportView>();
+  if (groups.size === 0 && !(await reporterHistoryAuthority(dependencies, context)).value)
+    throw new ReportUnavailableError();
+  for (const keys of groups.values()) {
+    if (!(await reporterHistoryAuthority(dependencies, context)).value) throw new ReportUnavailableError();
+    const result = await snapshot(dependencies, keys[0]!, context.deadline, async (client) => {
+      const parameters = { reporter, keys: JSON.stringify(keys.map((id) => ({ route: route(id), id }))) };
+      return (
+        await client.query<ReportRow>(
+          reporterHistoryCases.sql,
+          reporterHistoryCases.params.map((name) => parameters[name as keyof typeof parameters]),
+        )
+      ).rows;
+    });
+    for (const row of result.value) {
+      if (row.reporter_account_id === reporter && row.reason !== null) records.set(row.report_id, view(row));
+    }
+  }
+  return records;
+}
+
 function view(row: ReportRow): ReportView {
   if (row.reason === null) throw new ReportUnavailableError();
   return {
@@ -409,7 +675,83 @@ function view(row: ReportRow): ReportView {
     evidence: row.evidence,
     reporterId: row.reporter_account_id,
     createdAt: row.created_at,
+    outcome: row.outcome,
+    resolvedAt: row.resolved_at,
     transactionId: row.recorded_transaction_id,
+  };
+}
+
+async function loadReport(
+  dependencies: ReportDependencies,
+  reportId: ReportId,
+  context: ReadContext,
+  includePrivate: boolean,
+  ownerAccountId: string | null = null,
+): Promise<Anchored<ReportRow | null>> {
+  return snapshot(dependencies, reportId, context.deadline, async (client) => {
+    const parameters = {
+      route: route(reportId),
+      report_id: reportId,
+      include_private: includePrivate,
+      owner_account_id: ownerAccountId,
+    };
+    const { rows } = await client.query<ReportRow>(
+      read.sql,
+      read.params.map((name) => parameters[name as keyof typeof parameters]),
+    );
+    return rows[0] ?? null;
+  });
+}
+
+/** Native exact reads own current target/container/Realm disclosure. Each checkout
+ * is released before the next home is touched; failures propagate to the caller. */
+async function targetAvailability(
+  dependencies: ReportDependencies,
+  target: ReportTarget,
+  context: ReadContext,
+): Promise<ReporterReportView['targetAvailability']> {
+  if (target.kind === 'space' || target.kind === 'realm')
+    return (await readableCommunityTarget(dependencies, target, context)) ? 'available' : 'unavailable';
+  if (target.kind === 'subject')
+    return (await readableSubject(dependencies, target.id, context)) ? 'available' : 'unavailable';
+  const readers = { pool: dependencies.pool, access: dependencies.access, tokens: tokens(dependencies) };
+  if (target.kind === 'board') {
+    const { value } = await readBoard(readers, target.id, context);
+    return value?.availability === 'available' && value.visibility !== 'taken_down' ? 'available' : 'unavailable';
+  }
+  if (target.kind === 'thread') {
+    const { value } = await readThread(readers, target.id, context);
+    return value?.availability === 'available' &&
+      value.visibility !== 'taken_down' &&
+      value.firstPost.availability === 'available'
+      ? 'available'
+      : 'unavailable';
+  }
+  const located = await snapshot(dependencies, target.id, context.deadline, (client) =>
+    readReportPostThread.run(client, { route: route(target.id), id: target.id }),
+  );
+  if (!located.value || routeOf(located.value.thread_id) !== route(target.id)) return 'unavailable';
+  const { value } = await readPost(readers, located.value.thread_id, target.id, context);
+  return value?.availability === 'available' && value.visibility !== 'taken_down' ? 'available' : 'unavailable';
+}
+
+/** Lists always use inspection, even when a moderator happens to own a report. */
+async function inspectReport(
+  dependencies: ReportDependencies,
+  reportId: ReportId,
+  target: ReportTarget,
+  context: ReadContext,
+): Promise<Anchored<ReportView | null>> {
+  const initial = await inspect(dependencies, target, context);
+  if (!initial.value) return { ...initial, value: null };
+  const record = await loadReport(dependencies, reportId, context, true);
+  const final = await inspect(dependencies, target, context);
+  return {
+    ...record,
+    value:
+      record.value && final.value && record.value.target_kind === target.kind && record.value.target_id === target.id
+        ? view(record.value)
+        : null,
   };
 }
 
@@ -418,23 +760,269 @@ export async function readReport(
   reportId: ReportId,
   context: ReadContext,
 ): Promise<Anchored<ReportView | null>> {
-  const load = (includePrivate: boolean) =>
-    snapshot(dependencies, reportId, context.deadline, async (client) => {
-      const parameters = { route: route(reportId), report_id: reportId, include_private: includePrivate };
-      const { rows } = await client.query<ReportRow>(
-        read.sql,
-        read.params.map((name) => parameters[name as keyof typeof parameters]),
-      );
-      return rows[0] ?? null;
-    });
-  // Resolve only references until the current target's moderator check passes.
-  const reference = await load(false);
+  // Resolve only references until ownership or current target inspection passes.
+  const reference = await loadReport(dependencies, reportId, context, false);
   if (!reference.value) return { ...reference, value: null };
   const target: ReportTarget = { kind: reference.value.target_kind, id: reference.value.target_id };
-  if (!(await inspect(dependencies, target, context)).value) return { ...reference, value: null };
-  const record = await load(true);
-  const final = await inspect(dependencies, target, context);
-  return { ...record, value: record.value && final.value ? view(record.value) : null };
+
+  if (context.actor.kind === 'account' && reference.value.reporter_account_id === context.actor.accountId) {
+    const owner = context.actor.accountId;
+    if (await reporterCanReadOwnReport(dependencies, context.actor, owner, context)) {
+      const record = await loadReport(dependencies, reportId, context, true, owner);
+      if (!record.value || !sameReportReference(reference.value, record.value)) return { ...record, value: null };
+      const availability = await targetAvailability(dependencies, target, context);
+      const finalReference = await loadReport(dependencies, reportId, context, false, owner);
+      if (
+        !finalReference.value ||
+        !sameReportReference(reference.value, finalReference.value) ||
+        !(await reporterCanReadOwnReport(dependencies, context.actor, owner, context))
+      )
+        return { ...finalReference, value: null };
+      // Retain the native adapter's existing complete signature for direct callers.
+      // HTTP uses reportReadView to expose only the reporter's submitted record.
+      const submitted = { ...view(record.value), targetAvailability: availability };
+      return { ...finalReference, value: submitted };
+    }
+  }
+
+  return inspectReport(dependencies, reportId, target, context);
+}
+
+/** Exact moderator selection. Authorization is checked on the report's parent
+ * before the private row is retained; a missing current target does not turn a
+ * retained, independently authorized report into a concealed report. */
+export async function readModerationReportReference(
+  dependencies: ReportDependencies,
+  reportId: ReportId,
+  context: ReadContext,
+): Promise<Anchored<ReportView | null>> {
+  const reference = await loadReport(dependencies, reportId, context, false);
+  if (!reference.value) return { ...reference, value: null };
+  const target: ReportTarget = { kind: reference.value.target_kind, id: reference.value.target_id };
+  if (!(await moderationReportParentAllowed(dependencies, target, context))) return { ...reference, value: null };
+
+  const record = await loadReport(dependencies, reportId, context, true);
+  const finalReference = await loadReport(dependencies, reportId, context, false);
+  if (
+    !record.value ||
+    !finalReference.value ||
+    !sameReportReference(reference.value, record.value) ||
+    !sameReportReference(reference.value, finalReference.value) ||
+    !(await moderationReportParentAllowed(dependencies, target, context))
+  )
+    return { ...finalReference, value: null };
+  return { ...finalReference, value: view(record.value) };
+}
+
+async function moderationReportParentAllowed(
+  dependencies: ReportDependencies,
+  target: ReportTarget,
+  context: ReadContext,
+): Promise<boolean> {
+  if (context.actor.kind !== 'account') return false;
+  if (target.kind === 'subject') return (await inspectCatalogue(dependencies, context)).value;
+  if (target.kind === 'space' || target.kind === 'realm') {
+    const check = await communityReportReadCheck(dependencies, target, context);
+    return snapshot(dependencies, target.id, context.deadline, async (client) => {
+      const facts = await communityReportTargetFacts(client, target);
+      return !!facts && (await check(client));
+    }).then(({ value }) => value);
+  }
+  const check = await accessCheck(
+    dependencies.access,
+    context.actor,
+    inspectAction,
+    { route: route(target.id), id: target.id },
+    { pool: dependencies.pool, deadline: context.deadline },
+  );
+  return snapshot(dependencies, target.id, context.deadline, async (client) => !!check && (await check(client))).then(
+    ({ value }) => value,
+  );
+}
+
+export type ReportTargetInspection = Readonly<{
+  state: 'available' | 'taken-down' | 'erased' | 'withheld' | 'unavailable';
+  value: unknown | null;
+  destination: Readonly<{ boardId: string; threadId?: string; realmId?: string }> | null;
+}>;
+
+/** One exact current-target read and, when recorded, one exact historical post
+ * revision read. Current destination disclosure is a separate native read. */
+export async function readReportTargetInspection(
+  dependencies: ReportDependencies,
+  report: ReportView,
+  context: ReadContext,
+): Promise<Readonly<{ current: ReportTargetInspection; reportedRevision: ReportTargetInspection }>> {
+  const target = report.target;
+  const facts = await snapshot(dependencies, target.id, context.deadline, (client) => targetFacts(client, target));
+  const notAvailable: ReportTargetInspection = { state: 'unavailable', value: null, destination: null };
+  const readers = { pool: dependencies.pool, access: dependencies.access, tokens: tokens(dependencies) };
+  let reportedRevision: ReportTargetInspection = notAvailable;
+  if (report.revisionId && (target.kind === 'thread' || target.kind === 'post')) {
+    const metadata = await snapshot(dependencies, report.revisionId, context.deadline, (client) =>
+      readInspectionRevision.run(client, {
+        route: route(report.revisionId!),
+        id: report.revisionId!,
+        target_kind: target.kind,
+        target_id: target.id,
+      }),
+    );
+    if (metadata.value) {
+      const result = await readPost(
+        readers,
+        metadata.value.thread_id as ThreadId,
+        metadata.value.post_id as PostId,
+        context,
+        report.revisionId,
+      );
+      const post = result.value;
+      reportedRevision = {
+        state:
+          post?.availability === 'available' ? 'available' : post?.availability === 'erased' ? 'erased' : 'unavailable',
+        value: post?.availability === 'available' ? post : null,
+        destination: null,
+      };
+    }
+  }
+  if (!facts.value) return { current: notAvailable, reportedRevision };
+
+  let current: ReportTargetInspection = notAvailable;
+  if (target.kind === 'board') {
+    const result = await readBoard(readers, target.id, context);
+    const board = result.value;
+    if (board?.availability === 'available' && board.visibility !== 'taken_down') {
+      current = {
+        state: 'available',
+        value: board,
+        destination: { boardId: board.id, ...(board.realmId ? { realmId: board.realmId } : {}) },
+      };
+    } else if (board?.availability === 'erased') current = { ...notAvailable, state: 'erased' };
+    else if (board?.visibility === 'taken_down') current = { ...notAvailable, state: 'taken-down' };
+  } else if (target.kind === 'thread' || target.kind === 'post') {
+    const threadId = facts.value.threadId;
+    if (threadId) {
+      const thread = await readThread(readers, threadId, context);
+      const board = thread.value ? await readBoard(readers, thread.value.boardId, context) : null;
+      const post =
+        thread.value && board?.value && target.kind === 'post'
+          ? await readPost(readers, threadId, target.id, context)
+          : null;
+      const selected = target.kind === 'post' ? post?.value : thread.value;
+      const status =
+        selected?.availability === 'erased'
+          ? 'erased'
+          : thread.value?.visibility === 'taken_down' || board?.value?.visibility === 'taken_down'
+            ? 'taken-down'
+            : selected?.availability === 'available' && board?.value?.availability === 'available'
+              ? 'available'
+              : 'unavailable';
+      if (status === 'available' && thread.value && board?.value) {
+        current = {
+          state: 'available',
+          value: target.kind === 'post' ? post?.value : thread.value,
+          destination: {
+            boardId: board.value.id,
+            threadId: thread.value.id,
+            ...(board.value.realmId ? { realmId: board.value.realmId } : {}),
+          },
+        };
+      } else current = { ...notAvailable, state: status };
+    }
+  } else {
+    const availability = await targetAvailability(dependencies, target, context);
+    current = { ...notAvailable, state: availability === 'available' ? 'available' : 'unavailable' };
+  }
+
+  return { current, reportedRevision };
+}
+
+/** Advice is a current read only; dismiss and takedown writers reauthorize the
+ * original report and target when their existing command is submitted. */
+export async function readReportActionAdvice(
+  dependencies: ReportDependencies,
+  report: ReportView,
+  current: ReportTargetInspection,
+  context: ReadContext,
+): Promise<Readonly<{ dismiss: boolean; takeDown: boolean }>> {
+  if (report.outcome !== null || current.state !== 'available' || context.actor.kind !== 'account')
+    return { dismiss: false, takeDown: false };
+  const target = report.target;
+  const targetResource =
+    target.kind === 'subject' ? globalContextAnchor.resource : { route: route(target.id), id: target.id };
+  const check = await accessCheck(dependencies.access, context.actor, 'moderation:takedown', targetResource, {
+    pool: dependencies.pool,
+    deadline: context.deadline,
+  });
+  const pointId = target.kind === 'subject' ? GLOBAL_CONTEXT : target.id;
+  const allowed = await snapshot(
+    dependencies,
+    pointId,
+    context.deadline,
+    async (client) => !!check && (await check(client)),
+  );
+  return {
+    dismiss: allowed.value,
+    takeDown: allowed.value && ['board', 'thread', 'post'].includes(target.kind),
+  };
+}
+
+/** Minimal current projection for an outcome notice owned by its reporter.
+ * It does not load report reason/evidence or inspect the target body. */
+export async function readReporterNoticeOutcome(
+  dependencies: ReportDependencies,
+  reportId: ReportId,
+  context: ReadContext,
+) {
+  if (context.actor.kind !== 'account') return null;
+  const owner = context.actor.accountId;
+  const before = await loadReport(dependencies, reportId, context, false, owner);
+  if (!before.value || !(await reporterCanReadOwnReport(dependencies, context.actor, owner, context))) return null;
+  const after = await loadReport(dependencies, reportId, context, false, owner);
+  if (
+    !after.value ||
+    !sameReportReference(before.value, after.value) ||
+    !(await reporterCanReadOwnReport(dependencies, context.actor, owner, context))
+  )
+    return null;
+  const report = after.value;
+  let threadId = report.target_kind === 'thread' ? report.target_id : null;
+  if (report.target_kind === 'post') {
+    const located = await snapshot(dependencies, report.target_id, context.deadline, (client) =>
+      readReportPostThread.run(client, { route: route(report.target_id), id: report.target_id }),
+    );
+    if (located.value && routeOf(located.value.thread_id) === route(report.target_id))
+      threadId = located.value.thread_id;
+  }
+  return {
+    anchor: after.anchor,
+    value: {
+      id: report.report_id,
+      target: { kind: report.target_kind, id: report.target_id },
+      threadId,
+      outcome: report.outcome,
+      resolvedAt: report.resolved_at,
+      reporterId: after.value.reporter_account_id,
+    },
+  };
+}
+
+/** Closed reporter projection, independent of the required moderator/list fields. */
+export function reportReadView(report: ReportView): ReportReadView {
+  if (!('targetAvailability' in report)) return report;
+  if (report.targetAvailability !== 'available' && report.targetAvailability !== 'unavailable')
+    throw new TypeError('Invalid reporter target availability');
+  return {
+    id: report.id,
+    target: report.target,
+    revisionId: report.revisionId,
+    reason: report.reason,
+    evidence: report.evidence,
+    reporterId: report.reporterId,
+    createdAt: report.createdAt,
+    outcome: report.outcome,
+    resolvedAt: report.resolvedAt,
+    targetAvailability: report.targetAvailability,
+  };
 }
 
 export async function listTargetReports(
@@ -442,20 +1030,73 @@ export async function listTargetReports(
   target: ReportTarget,
   context: ReadContext,
   cursor?: string,
-  limit = 100,
+  limit = target.kind === 'subject' ? CATALOGUE_REPORT_PAGE_LIMIT : 100,
 ): Promise<Page<ReportView>> {
-  validateTarget(target);
+  return listSelectedTargetReports(dependencies, target, context, cursor, limit);
+}
+
+/** Additive selection adapter; the original native list contract retains its defaults. */
+export async function listSelectedTargetReports(
+  dependencies: ReportDependencies,
+  target: ReportTarget,
+  context: ReadContext,
+  cursor?: string,
+  limit = target.kind === 'subject' ? CATALOGUE_REPORT_PAGE_LIMIT : 100,
+  selection: ReportSelection = {},
+): Promise<Page<ReportView>> {
+  return listReports(dependencies, target, context, cursor, limit, selection);
+}
+
+export function listCatalogueReports(
+  dependencies: ReportDependencies,
+  context: ReadContext,
+  cursor?: string,
+  limit = 20,
+  selection: ReportSelection = {},
+) {
+  return listReports(dependencies, { kind: 'catalogue', id: GLOBAL_CONTEXT }, context, cursor, limit, selection);
+}
+
+async function listReports(
+  dependencies: ReportDependencies,
+  target: ReportScope,
+  context: ReadContext,
+  cursor: string | undefined,
+  limit: number,
+  selection: ReportSelection,
+): Promise<Page<ReportView>> {
+  if (target.kind !== 'catalogue') validateTarget(target);
+  if ((target.kind === 'catalogue' || target.kind === 'subject') && limit > CATALOGUE_REPORT_PAGE_LIMIT)
+    throw new RangeError('Report limit must be 1 to 50');
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Report limit must be 1 to 100');
+  const status = selection.status ?? 'all';
+  const targetKind = selection.targetKind ?? 'all';
+  const order = selection.order ?? 'newest';
+  if (
+    !['all', 'pending', 'resolved'].includes(status) ||
+    !['all', 'board', 'thread', 'post', 'subject', 'space', 'realm'].includes(targetKind) ||
+    !['newest', 'oldest'].includes(order)
+  )
+    throw new TypeError('Invalid report selection');
   const initial = await inspect(dependencies, target, context);
   const empty = { entries: [], nextCursor: null, anchor: initial.anchor };
   if (!initial.value) return empty;
   const ring = tokens(dependencies);
   const binding: CursorBinding = {
-    operation: 'content.target-reports',
+    // Versioned binding deliberately refuses legacy cursors lacking selection/credential authority.
+    operation: target.kind === 'catalogue' ? 'catalogue_report.list' : 'content.target-reports.v2',
     parameters: {
       kind: target.kind,
       id: target.id,
       actor: context.actor.kind === 'account' ? context.actor.accountId : null,
+      client: context.actor.kind === 'account' ? context.actor.clientId : null,
+      requestedBy: context.actor.kind === 'account' ? context.actor.requestedBy : null,
+      authnEpoch: context.actor.kind === 'account' ? context.actor.authnEpoch : null,
+      scopes: context.actor.kind === 'account' ? JSON.stringify([...new Set(context.actor.scopes)].sort()) : null,
+      status,
+      targetKind,
+      order,
+      limit,
     },
   };
   let after: { at: string; id: string } | null = null;
@@ -477,15 +1118,31 @@ export async function listTargetReports(
   const candidates = await snapshot(dependencies, target.id, context.deadline, async (client) => {
     const parameters = {
       route: route(target.id),
-      target_kind: target.kind,
+      board_id: target.id,
+      target_kind: target.kind === 'catalogue' ? targetKind : target.kind,
       target_id: target.id,
-      created_at: after?.at ?? 'infinity',
+      created_at: after?.at ?? (order === 'oldest' ? '-infinity' : 'infinity'),
+      oldest: order === 'oldest',
       report_id: after?.id ?? '00000000-0000-0000-0000-000000000000',
       limit: limit + 1,
     };
-    const { rows } = await client.query<{ report_route: number; report_id: string; created_at: string }>(
-      page.sql,
-      page.params.map((name) => parameters[name as keyof typeof parameters]),
+    const statement =
+      target.kind === 'catalogue'
+        ? targetKind === 'all'
+          ? cataloguePage
+          : catalogueKindPage
+        : target.kind === 'board'
+          ? boardPage
+          : page;
+    const { rows } = await client.query<{
+      report_route: number;
+      report_id: string;
+      created_at: string;
+      target_kind: ReportTarget['kind'];
+      target_id: string;
+    }>(
+      statement.sql,
+      statement.params.map((name) => parameters[name as keyof typeof parameters]),
     );
     return rows;
   });
@@ -493,8 +1150,39 @@ export async function listTargetReports(
   const entries: ReportView[] = [];
   for (const candidate of selected) {
     if (route(candidate.report_id) !== candidate.report_route) throw new ReportUnavailableError();
-    const record = await readReport(dependencies, candidate.report_id, context);
-    if (record.value?.target.id === target.id && record.value.target.kind === target.kind) entries.push(record.value);
+    const candidateTarget: ReportTarget = { kind: candidate.target_kind, id: candidate.target_id };
+    if (targetKind !== 'all' && candidateTarget.kind !== targetKind) continue;
+    // Explicit inspection is required even when the viewer also owns the report.
+    if (!(await inspect(dependencies, candidateTarget, context)).value) continue;
+    if (
+      target.kind === 'board' &&
+      (
+        await snapshot(dependencies, candidateTarget.id, context.deadline, (client) =>
+          reportBoardPlacement(client, candidateTarget),
+        )
+      ).value !== target.id
+    )
+      continue;
+    const record = await inspectReport(dependencies, candidate.report_id, candidateTarget, context);
+    if (
+      !record.value ||
+      record.value.target.id !== candidateTarget.id ||
+      record.value.target.kind !== candidateTarget.kind
+    )
+      continue;
+    if (!(await inspect(dependencies, candidateTarget, context)).value) continue;
+    if (
+      target.kind === 'board' &&
+      (
+        await snapshot(dependencies, candidateTarget.id, context.deadline, (client) =>
+          reportBoardPlacement(client, candidateTarget),
+        )
+      ).value !== target.id
+    )
+      continue;
+    if (status === 'pending' && record.value.outcome !== null) continue;
+    if (status === 'resolved' && record.value.outcome === null) continue;
+    entries.push(record.value);
   }
   // No evidence or identifiers leave the adapter after revocation during hydration.
   const final = await inspect(dependencies, target, context);

@@ -1,16 +1,13 @@
 import { isIP } from 'node:net';
 import { ConfigError } from '../commerce/config.ts';
 import type { R2StorageOptions } from './r2-storage.ts';
+import { LOCAL_MEDIA_MAX_OBJECT_BYTES, LOCAL_MEDIA_ROOT } from './local-media.ts';
 
-export type ContentStorageConfig = Readonly<Omit<R2StorageOptions, 'fetch'>>;
+export type ContentStorageConfig =
+  | Readonly<{ kind: 'r2' } & Omit<R2StorageOptions, 'fetch'>>
+  | Readonly<{ kind: 'local'; root: string; maxObjectBytes: number }>;
 
-export type ContentConsentConfig = Readonly<{
-  url: string;
-  serviceTokenId: string;
-  serviceTokenSecret: string;
-}>;
-
-export type ContentWorkGroupName = 'storage' | 'sources' | 'consent';
+export type ContentWorkGroupName = 'storage' | 'sources';
 
 export type ContentWorkGroup = Readonly<{
   name: ContentWorkGroupName;
@@ -20,7 +17,6 @@ export type ContentWorkGroup = Readonly<{
 export type ContentWorkConfig = Readonly<{
   storage: ContentStorageConfig | null;
   sourceHosts: readonly string[];
-  consent: ContentConsentConfig | null;
   absentGroups: readonly ContentWorkGroup[];
 }>;
 
@@ -35,28 +31,19 @@ const STORAGE_VARIABLES = Object.freeze([
 
 const SOURCE_VARIABLES = Object.freeze(['CONTENT_SOURCE_HOSTS'] as const);
 
-const CONSENT_VARIABLES = Object.freeze([
-  'CONTENT_AUTH_CONSENT_URL',
-  'CF_ACCESS_CLIENT_ID',
-  'CF_ACCESS_CLIENT_SECRET',
-] as const);
-
 const NO_HOSTS = Object.freeze<readonly string[]>([]);
 
 /** Host configuration only. Each group is absent or complete. Errors name a variable, never its value. */
 export function readContentWorkConfig(env: Environment): ContentWorkConfig {
   const storage = readStorage(env);
   const sourceHosts = readSourceHosts(env);
-  const consent = readConsent(env);
   const absentGroups = [
     storage === null ? absentGroup('storage', STORAGE_VARIABLES) : null,
     sourceHosts === null ? absentGroup('sources', SOURCE_VARIABLES) : null,
-    consent === null ? absentGroup('consent', CONSENT_VARIABLES) : null,
   ].filter((group): group is ContentWorkGroup => group !== null);
   return Object.freeze({
     storage,
     sourceHosts: sourceHosts ?? NO_HOSTS,
-    consent,
     absentGroups: Object.freeze(absentGroups),
   });
 }
@@ -76,15 +63,21 @@ function storageValue(env: Environment, variable: string): string {
   return value;
 }
 
-/** Consent values keep the historical visible-ASCII bound. */
-function consentValue(env: Environment, variable: string): string {
-  const value = env[variable];
-  if (!value || !/^[\x21-\x7e]{1,1024}$/.test(value)) throw new ConfigError(variable);
-  return value;
+function readStorage(env: Environment): ContentStorageConfig | null {
+  const r2Configured = groupPresent(env, STORAGE_VARIABLES);
+  const localRoot = env.CONTENT_LOCAL_MEDIA_ROOT;
+  if (r2Configured) {
+    if (localRoot !== undefined) throw new ConfigError('CONTENT_LOCAL_MEDIA_ROOT');
+    return readR2Storage(env);
+  }
+  if (localRoot === undefined) return null;
+  if (env.NODE_ENV !== 'development') throw new ConfigError('CONTENT_LOCAL_MEDIA_ROOT');
+  if (storageValue(env, 'CONTENT_LOCAL_MEDIA_ROOT') !== LOCAL_MEDIA_ROOT)
+    throw new ConfigError('CONTENT_LOCAL_MEDIA_ROOT');
+  return Object.freeze({ kind: 'local', root: LOCAL_MEDIA_ROOT, maxObjectBytes: LOCAL_MEDIA_MAX_OBJECT_BYTES });
 }
 
-function readStorage(env: Environment): ContentStorageConfig | null {
-  if (!groupPresent(env, STORAGE_VARIABLES)) return null;
+function readR2Storage(env: Environment): ContentStorageConfig {
   const endpoint = storageValue(env, 'CONTENT_R2_ENDPOINT');
   let url: URL;
   try {
@@ -106,6 +99,7 @@ function readStorage(env: Environment): ContentStorageConfig | null {
   const bucket = storageValue(env, 'CONTENT_R2_BUCKET');
   if (!/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(bucket)) throw new ConfigError('CONTENT_R2_BUCKET');
   return Object.freeze({
+    kind: 'r2',
     endpoint: url.origin,
     bucket,
     accessKeyId: storageValue(env, 'CONTENT_R2_ACCESS_KEY_ID'),
@@ -132,30 +126,6 @@ function readSourceHosts(env: Environment): readonly string[] | null {
   )
     throw new ConfigError('CONTENT_SOURCE_HOSTS');
   return Object.freeze(hosts);
-}
-
-function readConsent(env: Environment): ContentConsentConfig | null {
-  if (!groupPresent(env, CONSENT_VARIABLES)) return null;
-  const url = consentValue(env, 'CONTENT_AUTH_CONSENT_URL');
-  try {
-    const parsed = new URL(url);
-    if (
-      parsed.protocol !== 'https:' ||
-      parsed.pathname !== '/internal/v1/consents:read' ||
-      parsed.username ||
-      parsed.password ||
-      parsed.search ||
-      parsed.hash
-    )
-      throw new Error();
-  } catch {
-    throw new ConfigError('CONTENT_AUTH_CONSENT_URL');
-  }
-  return Object.freeze({
-    url,
-    serviceTokenId: consentValue(env, 'CF_ACCESS_CLIENT_ID'),
-    serviceTokenSecret: consentValue(env, 'CF_ACCESS_CLIENT_SECRET'),
-  });
 }
 
 function canonicalDnsHost(host: string): boolean {

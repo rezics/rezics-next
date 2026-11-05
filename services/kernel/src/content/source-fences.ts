@@ -14,6 +14,8 @@ export type SourceFence = SourceFenceTuple &
   Readonly<{
     takenDown: boolean;
     securityRevision: string | null;
+    takenDownAt?: string;
+    takedownId?: string;
   }>;
 
 const sourcePattern = /^[a-z][a-z0-9_-]{0,31}$/;
@@ -89,6 +91,9 @@ export async function readFences(
       ...tuple,
       takenDown: row?.takenDown ?? false,
       securityRevision: row?.securityRevision ?? null,
+      ...(row?.takenDownAt != null && row.takedownId != null
+        ? { takenDownAt: row.takenDownAt, takedownId: row.takedownId }
+        : {}),
     };
   });
 }

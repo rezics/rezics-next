@@ -8,6 +8,7 @@ type Schema = {
   const?: unknown;
   anyOf?: Schema[];
   properties?: Record<string, Schema>;
+  required?: string[];
   additionalProperties?: unknown;
   patternProperties?: unknown;
   items?: Schema;
@@ -22,7 +23,7 @@ type Schema = {
 type EditorNode = {
   type: string;
   props: Record<string, unknown>;
-  _localizedScalars?: string[];
+  _localizedValues?: Record<string, unknown>;
   [key: string]: unknown;
 };
 
@@ -61,6 +62,10 @@ function href(schema: Schema): boolean {
   return schema['~kind'] === 'String' && schema['~safety'] === 'href';
 }
 
+function subjectId(schema: Schema): boolean {
+  return schema['~kind'] === 'String' && schema['~safety'] === 'subjectId';
+}
+
 function curieArray(schema: Schema): boolean {
   return schema['~kind'] === 'Array' && schema.items !== undefined && curie(schema.items);
 }
@@ -82,7 +87,25 @@ function displayName(locale: string): string {
   return new Intl.DisplayNames([locale], { type: 'language' }).of(locale) ?? locale;
 }
 
+function objectChoices(schema: Schema): boolean {
+  return schema['~kind'] === 'Union' && !!schema.anyOf?.length && schema.anyOf.every(closedObject);
+}
+
+function integerBounds(schema: Schema): { lower: number; upper: number } {
+  const lower = Math.max(
+    schema.minimum === undefined ? Number.NEGATIVE_INFINITY : Math.ceil(schema.minimum),
+    schema.exclusiveMinimum === undefined ? Number.NEGATIVE_INFINITY : Math.floor(schema.exclusiveMinimum) + 1,
+  );
+  const upper = Math.min(
+    schema.maximum === undefined ? Number.POSITIVE_INFINITY : Math.floor(schema.maximum),
+    schema.exclusiveMaximum === undefined ? Number.POSITIVE_INFINITY : Math.ceil(schema.exclusiveMaximum) - 1,
+  );
+  if (lower > upper) throw new TypeError('Integer schema has no valid default');
+  return { lower, upper };
+}
+
 function fieldFor(schema: Schema, component: string, prop: string, locale = 'en'): Record<string, unknown> {
+  if (schema['~kind'] === 'PublicFilter') return { type: 'textarea' };
   const values = enumeration(schema);
   if (values !== null) {
     return {
@@ -101,14 +124,17 @@ function fieldFor(schema: Schema, component: string, prop: string, locale = 'en'
   }
 
   if (schema['~kind'] === 'Integer') {
+    const { lower, upper } = integerBounds(schema);
     return {
       type: 'number',
-      ...(schema.minimum !== undefined ? { min: schema.minimum } : {}),
-      ...(schema.maximum !== undefined ? { max: schema.maximum } : {}),
+      ...(Number.isFinite(lower) ? { min: lower } : {}),
+      ...(Number.isFinite(upper) ? { max: upper } : {}),
+      step: 1,
     };
   }
 
-  if (curie(schema) || href(schema)) return { type: 'text' };
+  if (objectChoices(schema) || schema['~safety'] === 'plainText') return { type: 'textarea' };
+  if (curie(schema) || href(schema) || subjectId(schema)) return { type: 'text' };
 
   if (curieArray(schema)) {
     return {
@@ -150,17 +176,9 @@ function fieldFor(schema: Schema, component: string, prop: string, locale = 'en'
 }
 
 function integerDefault(schema: Schema): number {
-  const lower = Math.max(
-    schema.minimum === undefined ? Number.NEGATIVE_INFINITY : Math.ceil(schema.minimum),
-    schema.exclusiveMinimum === undefined ? Number.NEGATIVE_INFINITY : Math.floor(schema.exclusiveMinimum) + 1,
-  );
-  const upper = Math.min(
-    schema.maximum === undefined ? Number.POSITIVE_INFINITY : Math.floor(schema.maximum),
-    schema.exclusiveMaximum === undefined ? Number.POSITIVE_INFINITY : Math.ceil(schema.exclusiveMaximum) - 1,
-  );
-  const value = Number.isFinite(lower) ? lower : 0;
-  if (value > upper) throw new TypeError('Integer schema has no valid default');
-  return value;
+  const { lower, upper } = integerBounds(schema);
+  if (Number.isFinite(lower)) return lower;
+  return upper < 0 ? upper : 0;
 }
 
 function defaultFor(schema: Schema, component: string, prop: string, locale: string): unknown {
@@ -168,8 +186,11 @@ function defaultFor(schema: Schema, component: string, prop: string, locale: str
   if (values !== null) return values[0];
   if (localized(schema)) return { [UI_LOCALES.includes(locale as (typeof UI_LOCALES)[number]) ? locale : 'en']: '' };
   if (schema['~kind'] === 'Integer') return integerDefault(schema);
+  if (objectChoices(schema)) return JSON.stringify(defaultFor(schema.anyOf![0]!, component, prop, locale));
+  if (schema['~safety'] === 'plainText') return '';
   if (href(schema)) return '/';
   if (curie(schema)) return 'schema:name';
+  if (subjectId(schema)) return '00000000-0000-8000-8000-000000000000';
   if (curieArray(schema)) {
     const count = Math.max(0, schema.minItems ?? 0);
     if (schema.maxItems !== undefined && count > schema.maxItems) {
@@ -207,27 +228,66 @@ function registryComponents(registry: CompositionRegistry): Map<string, Registry
   return components;
 }
 
+function transformLocalized(
+  value: unknown,
+  direction: 'to' | 'from',
+  path: (string | number)[],
+  originals: Record<string, unknown>,
+): unknown {
+  const key = JSON.stringify(path);
+  if (direction === 'from') {
+    if (typeof value === 'string') {
+      originals[key] = value;
+      return { en: value };
+    }
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      originals[key] = { ...value };
+      return { ...value };
+    }
+    return value;
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+
+  const source = originals[key];
+  const sourceMap = typeof source === 'string' ? { en: source } : source;
+  // Keep authored key order for the draft comparison, and retain languages with no editor control.
+  const retained =
+    sourceMap !== null && typeof sourceMap === 'object' && !Array.isArray(sourceMap)
+      ? Object.fromEntries(
+          Object.entries(sourceMap).filter(
+            ([locale]) => Object.hasOwn(value, locale) || !UI_LOCALES.includes(locale as (typeof UI_LOCALES)[number]),
+          ),
+        )
+      : {};
+  // A blank existing locale is saved text; a blank newly visited control adds no translation.
+  const entries = Object.entries({ ...retained, ...value }).filter(
+    ([locale, text]) => text !== '' || Object.hasOwn(retained, locale),
+  );
+  if (typeof source === 'string' && entries.every(([locale]) => locale === 'en')) {
+    return entries.length === 0 ? '' : entries[0]![1];
+  }
+  return entries.length > 0 ? Object.fromEntries(entries) : { en: '' };
+}
+
 function transformValue(
   value: unknown,
   schema: Schema,
   direction: 'to' | 'from',
   path: (string | number)[],
-  scalarPaths: string[],
-  sourceScalarPaths: Set<string>,
+  localizedValues: Record<string, unknown>,
 ): unknown {
+  if (schema['~kind'] === 'PublicFilter' || objectChoices(schema)) {
+    if (direction === 'from') return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    if (schema['~kind'] === 'PublicFilter' && value === '') return undefined;
+    if (typeof value !== 'string') return value;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  }
   if (localized(schema)) {
-    if (direction === 'from' && typeof value === 'string') {
-      scalarPaths.push(JSON.stringify(path));
-      return { en: value };
-    }
-    if (direction === 'to' && value !== null && typeof value === 'object' && !Array.isArray(value)) {
-      const entries = Object.entries(value as Record<string, unknown>).filter(([, text]) => text !== '');
-      if (sourceScalarPaths.has(JSON.stringify(path)) && entries.length === 1 && entries[0]?.[0] === 'en') {
-        return entries[0][1];
-      }
-      return entries.length > 0 ? Object.fromEntries(entries) : { en: '' };
-    }
-    return value;
+    return transformLocalized(value, direction, path, localizedValues);
   }
 
   if (curieArray(schema) && Array.isArray(value)) {
@@ -245,7 +305,7 @@ function transformValue(
   if (closedObject(itemSchema) && Array.isArray(value)) {
     return value.map((item, index) =>
       item !== null && typeof item === 'object' && !Array.isArray(item)
-        ? transformValue(item, itemSchema, direction, [...path, index], scalarPaths, sourceScalarPaths)
+        ? transformValue(item, itemSchema, direction, [...path, index], localizedValues)
         : item,
     );
   }
@@ -254,14 +314,7 @@ function transformValue(
     const result = { ...(value as Record<string, unknown>) };
     for (const [prop, propSchema] of Object.entries(schemaProperties(schema))) {
       if (Object.hasOwn(result, prop)) {
-        result[prop] = transformValue(
-          result[prop],
-          propSchema,
-          direction,
-          [...path, prop],
-          scalarPaths,
-          sourceScalarPaths,
-        );
+        result[prop] = transformValue(result[prop], propSchema, direction, [...path, prop], localizedValues);
       }
     }
     return result;
@@ -279,13 +332,13 @@ function transformNode(
   const schema = definition?.schema;
   const slots = definition?.slots ?? [];
   const props: Record<string, unknown> = { ...node.props };
-  const localizedScalars: string[] = [];
-  const sourceScalarPaths = new Set(direction === 'to' ? (node._localizedScalars ?? []) : []);
+  const localizedValues = direction === 'to' ? (node._localizedValues ?? {}) : {};
 
   if (schema !== undefined) {
     for (const [prop, propSchema] of Object.entries(schemaProperties(schema))) {
       if (Object.hasOwn(props, prop)) {
-        props[prop] = transformValue(props[prop], propSchema, direction, [prop], localizedScalars, sourceScalarPaths);
+        props[prop] = transformValue(props[prop], propSchema, direction, [prop], localizedValues);
+        if (propSchema['~kind'] === 'PublicFilter' && props[prop] === undefined) delete props[prop];
       }
     }
   }
@@ -304,7 +357,7 @@ function transformNode(
   return {
     type: node.type,
     props,
-    ...(direction === 'from' && localizedScalars.length > 0 ? { _localizedScalars: localizedScalars } : {}),
+    ...(direction === 'from' && Object.keys(localizedValues).length > 0 ? { _localizedValues: localizedValues } : {}),
   };
 }
 
@@ -318,7 +371,8 @@ export function editorConfig(registry: CompositionRegistry, { locale }: { locale
 
     for (const [prop, propSchema] of Object.entries(schemaProperties(schema))) {
       fields[prop] = fieldFor(propSchema, component.type, prop, locale);
-      defaultProps[prop] = defaultFor(propSchema, component.type, prop, locale);
+      // An optional prop starts absent, so a new node does not carry a filter or type nobody chose.
+      if (schema.required?.includes(prop)) defaultProps[prop] = defaultFor(propSchema, component.type, prop, locale);
     }
     for (const slot of component.slots) {
       fields[slot] = { type: 'slot' };

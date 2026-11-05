@@ -1,0 +1,46 @@
+import { Meta, Canvas } from '@storybook/addon-docs/blocks';
+import * as Setup from './space-setup.stories';
+
+<Meta of={Setup} name="Journey" />
+
+# Community setup
+
+The served setup page uses this component inside the shared shell. Name and address, Realm settings,
+board organization and the first board appear progressively, with a compact summary of saved resources.
+Back keeps drafts. Cancel pauses the editor without undoing saved commands; Resume restores the draft on this page.
+Unsaved entries are not persisted across navigation. Every successful command retains the native returned identity.
+
+The Context selector offers name search, one-page continuation and current point resolution through the consumer's
+typed ContextChoiceSource. The installed Semantic client has no enumeration/search declaration yet, so its isolated
+default search reports unavailable and known-reference recovery uses the existing authenticated point reader.
+The saved Context pointer and the explicitly chosen replacement have separate current validity, with real labels and
+IDs after successful reads. The focused Context stories and full AppShell compositions are listed in the web README.
+
+Scheme and topic regions use reusable searchable choice controls consuming the exact `BoardChoiceSource` display
+interface. Until the native bounded SKOS list reader is installed, the default source returns typed unavailable and
+offers Retry. It never supplies an invented list or accepts a manually entered topic ID. Native commands remain
+responsible for current membership and authority. No default Realm, Context, owner, membership or Global grant is
+supplied. Journey stories supply explicit transport and display fixtures; they do not claim installed list
+availability. The Board Choices story group shows these controls in AppShell with selection, changed scheme, denial
+and uncertain retry states.
+
+An unconfirmed command locks editing and replays the exact body, key and expected head. A definite conflict or
+refusal requires an explicit current-state refresh before another write; entries remain available for review.
+A failed post-save refresh retains returned IDs and requires refresh rather than replaying a confirmed command.
+The addressed-home link uses the existing home, membership, lifecycle and removal regions. Caller admission and
+picker cancellation are scoped to the original session source and revision; see the [caller lifetime notes](../../../community/space-setup-lifetime.md).
+
+Use these same story IDs with phone390 and desktop1280, locale and theme globals. Native acceptance and Web
+visual review follow integration; component plays and local typing are not that proof.
+
+<Canvas of={Setup.Rest} />
+<Canvas of={Setup.EnteredData} />
+<Canvas of={Setup.Selection} />
+<Canvas of={Setup.Loading} />
+<Canvas of={Setup.Saving} />
+<Canvas of={Setup.RetryPreservesWork} />
+<Canvas of={Setup.HeadConflict} />
+<Canvas of={Setup.CurrentAuthorityRefused} />
+<Canvas of={Setup.SelectionUnavailable} />
+<Canvas of={Setup.Unavailable} />
+<Canvas of={Setup.Created} />

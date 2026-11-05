@@ -496,6 +496,9 @@
                 "$ref": "#/$defs/text_hardBreak"
               },
               {
+                "$ref": "#/$defs/text_mention"
+              },
+              {
                 "$ref": "#/$defs/text_ruby"
               }
             ]
@@ -607,6 +610,9 @@
               },
               {
                 "$ref": "#/$defs/text_hardBreak"
+              },
+              {
+                "$ref": "#/$defs/text_mention"
               },
               {
                 "$ref": "#/$defs/text_ruby"
@@ -1296,6 +1302,39 @@
         "type": {
           "type": "string",
           "const": "hardBreak"
+        },
+        "marks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/text_Mark"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "text_mention": {
+      "type": "object",
+      "required": [
+        "type",
+        "attrs"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "mention"
+        },
+        "attrs": {
+          "type": "object",
+          "required": [
+            "accountId"
+          ],
+          "properties": {
+            "accountId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          },
+          "additionalProperties": false
         },
         "marks": {
           "type": "array",

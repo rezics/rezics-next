@@ -4,13 +4,34 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { sqliteEvidence, type Entry } from '../../../specs/imports-vndb-tables-driver.ts';
-import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
+import { countedSample, countedViolations, type CountedCheck } from '../../kernel/test/support/growth-counters.ts';
 import { VndbTablesStore } from '../src/vndb-tables.ts';
 
 // Official COPY format evidence and hashes are recorded in the immutable driver above.
 const names = ['vn.header', 'vn', 'vn_titles.header', 'vn_titles', 'entry_meta.header', 'entry_meta'];
 const source = 'vndb';
 const encode = (value: string) => new TextEncoder().encode(value);
+type SqliteCounts = ReturnType<ReturnType<typeof sqliteEvidence>['finish']>;
+type Sample = { scale: number; counted: ReturnType<typeof countedSample> };
+const fixedCheck: CountedCheck = {
+  read: (value) => {
+    const raw = value as SqliteCounts;
+    return { 'sqlite returned rows': raw.rows, 'sqlite statements': raw.statements };
+  },
+  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
+  slack: {
+    'sqlite returned rows': { absolute: 2, relative: 0.1 },
+    'sqlite statements': { absolute: 0, relative: 0 },
+  },
+};
+const stageCheck: CountedCheck = {
+  ...fixedCheck,
+  bounds: { 'sqlite returned rows': 'linear', 'sqlite statements': 'linear' },
+};
+const payloadCheck: CountedCheck = {
+  ...fixedCheck,
+  bounds: { 'sqlite returned rows': 'linear', 'sqlite statements': 'constant' },
+};
 const text = (name: string) =>
   readFileSync(new URL(`../../../specs/fixtures/imports/vndb-tables/db/${name}`, import.meta.url), 'utf8');
 function entry(path: string, value: string | Uint8Array, chunk = 2): Entry {
@@ -74,7 +95,7 @@ function harness(options: ConstructorParameters<typeof VndbTablesStore>[1] = {})
       evidence.start();
       try {
         const value = await operation();
-        return { value, cost: { ...evidence.finish(), blocks: 0 } };
+        return { value, cost: evidence.finish() };
       } catch (error) {
         evidence.cancel();
         throw error;
@@ -127,7 +148,7 @@ test('real COPY tables materialize a bounded grouped VN after all headers valida
       key: 'v123',
       revision: 7,
       record: {
-        vn: { id: 'v123', olang: 'en' },
+        vn: { id: 'v123', olang: 'en', c_votecount: 2, c_average: 700, alias: 'Harbor Sentinel' },
         vn_titles: [
           { id: 'v123', lang: 'de', official: true, title: 'Harbor German Edition', latin: null },
           { id: 'v123', lang: 'en', official: true, title: 'Sentinel Harbor', latin: null },
@@ -338,9 +359,9 @@ function population(size: number, children = 2) {
 test('grouping fixed VN uses indexed seeks at three scales', async () => {
   const h = harness();
   try {
-    const pages: GrowthSample[] = [],
-      inspections: GrowthSample[] = [],
-      stages: GrowthSample[] = [];
+    const pages: Sample[] = [],
+      inspections: Sample[] = [],
+      stages: Sample[] = [];
     let seed = 0x512;
     for (const scale of [32, 128, 512]) {
       // One deterministic population grows prior runs and the hot run in the same source/tables.
@@ -350,29 +371,30 @@ test('grouping fixed VN uses indexed seeks at three scales', async () => {
       }
       const run = `hot-${scale}`;
       const staged = await h.measure(() => h.stage(run, population(scale)));
-      stages.push({ scale, cost: staged.cost });
+      stages.push({ scale, counted: countedSample([stageCheck.read(staged.cost, scale)]) });
       const measured = await h.measure(() => h.store.page(source, run, { after: null, limit: 1 }));
       expect(measured.value.records[0]!.key).toBe('v123');
       expect(measured.value.records[0]!.record.vn_titles).toHaveLength(2);
       expect(measured.cost.rows).toBeGreaterThanOrEqual(4);
       expect(measured.cost.rows).toBeLessThanOrEqual(12);
       expect(measured.cost.statements).toBeLessThanOrEqual(16);
-      pages.push({ scale, cost: measured.cost });
+      pages.push({ scale, counted: countedSample([fixedCheck.read(measured.cost, scale)]) });
       const inspected = await h.measure(() => h.store.inspect(source, run));
       expect(inspected.value.sourceRecords).toBe(scale + 1);
-      inspections.push({ scale, cost: inspected.cost });
+      inspections.push({ scale, counted: countedSample([fixedCheck.read(inspected.cost, scale)]) });
     }
-    assertGrowth(pages, { rows: 'constant', blocks: 'constant', statements: 'constant' });
-    assertGrowth(inspections, { rows: 'constant', blocks: 'constant', statements: 'constant' });
-    assertGrowth(stages, { rows: 'linear', blocks: 'constant', statements: 'linear' });
-    const payloads: GrowthSample[] = [];
+    expect(countedViolations(fixedCheck, pages)).toEqual([]);
+    expect(countedViolations(fixedCheck, inspections)).toEqual([]);
+    expect(countedViolations(stageCheck, stages)).toEqual([]);
+    const payloads: Sample[] = [];
     for (const children of [2, 4, 8]) {
       await h.stage(`payload-${children}`, population(32, children));
       const measured = await h.measure(() => h.store.page(source, `payload-${children}`, { after: null, limit: 1 }));
       expect(measured.value.records[0]!.record.vn_titles).toHaveLength(children);
-      payloads.push({ scale: children * children, cost: measured.cost });
+      const scale = children * children;
+      payloads.push({ scale, counted: countedSample([payloadCheck.read(measured.cost, scale)]) });
     }
-    assertGrowth(payloads, { rows: 'linear', blocks: 'constant', statements: 'constant' });
+    expect(countedViolations(payloadCheck, payloads)).toEqual([]);
   } finally {
     h.close();
   }

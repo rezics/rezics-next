@@ -22,6 +22,11 @@ classes:
       - image
       - name
       - sameAs
+    annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: []
+      cover_ratio: 5:7
   CreativeWork:
     abstract: true
     is_a: Thing
@@ -32,15 +37,50 @@ classes:
       - genre
       - keywords
       - partOfSeries
+      - follows
+      - partOfWork
+      - spinOffOf
+      - crossMediaCounterpart
+      - summaryOf
+      - sideStoryOf
+      - sameCharacters
+      - sameSetting
+      - alternativeSetting
+      - alternativeVersion
+      - collaborationWith
+      - bangumiRelatedTo
+      - artbookCounterpart
+      - editionCounterpart
+      - bangumiLegacyVersion
+      - expansionCounterpart
+      - storyArc
+    annotations:
+      cover_ratio: 5:7
+  StoryArc:
+    is_a: CreativeWork
+    class_uri: wd:Q2620972
+    description: >-
+      A named, ordered range of a work's episodes or chapters
+      (https://www.wikidata.org/wiki/Q2620972).
+    annotations:
+      facets: contributor genre keywords partOfSeries
+      schema_org_type: https://schema.org/CreativeWork
   Character:
     abstract: true
     is_a: Thing
     description: A character represented in a creative work.
+    annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: []
+      cover_ratio: 5:7
   CreativeWorkSeries:
     abstract: true
     is_a: CreativeWork
     class_uri: schema:CreativeWorkSeries
     description: A series of creative works.
+    slots:
+      - representativeEdition
   Person:
     is_a: Thing
     class_uri: schema:Person
@@ -48,20 +88,366 @@ classes:
     exact_mappings:
       - wd:Q5
     slots:
+      - penNameOf
       - birthDate
       - deathDate
+      - abstract
+      - occupation
+      - knowsLanguage
       - openLibraryId
       - bangumiPersonId
       - vndbId
+    annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:birthDate]
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/Person
   Organization:
     is_a: Thing
     slots:
+      - penNameOf
+      - abstract
+      - parentOrganization
+      - replaces
+      - replacedBy
       - vndbId
     class_uri: schema:Organization
     description: An organization.
     exact_mappings:
       - wd:Q43229
+  Place:
+    is_a: Thing
+    class_uri: schema:Place
+    description: A specific geographic or constructed place, identified independently from events held there.
+    slots:
+      - containedInPlace
+    annotations:
+      schema_org_type: https://schema.org/Place
+  AdministrativeArea:
+    is_a: Place
+    class_uri: schema:AdministrativeArea
+    description: A named administrative region represented as a place, distinct from a venue within it.
+    annotations:
+      schema_org_type: https://schema.org/AdministrativeArea
+  Event:
+    is_a: Thing
+    class_uri: schema:Event
+    description: A bounded occurrence with its own identity, distinct from its venue and participating people.
+    slots:
+      - location
+      - startDate
+      - endDate
+    annotations:
+      schema_org_type: https://schema.org/Event
+    annotations:
+      schema_org_type: https://schema.org/Organization
+  ReleaseGroup:
+    is_a: Organization
+    class_uri: rezics:ReleaseGroup
+    description: A source-identified group that releases or distributes related catalogue files.
+    annotations:
+      schema_org_type: https://schema.org/Organization
+  Food:
+    is_a: Thing
+    class_uri: wd:Q2095
+    description: A substance consumed to provide nutritional support for the body.
+    annotations:
+      schema_org_type: https://schema.org/Thing
+  SoftwareApplication:
+    is_a: Thing
+    class_uri: schema:SoftwareApplication
+    description: A software application.
+    exact_mappings:
+      - wd:Q166142
+    annotations:
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/SoftwareApplication
 slots:
+  madeFromMaterial:
+    slot_uri: wdt:P186
+    description: A material or prepared component used to make the subject.
+    any_of:
+      - range: Food
+      - range: Recipe
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: position quantity note listSection creditedAs sameAs
+      relation_group: derivation
+      relation_order: position
+      inverse: rezics:usedIn
+  quantity:
+    slot_uri: wdt:P1114
+    description: The exact quantity of the object used in a statement, optionally bounded by a range.
+    range: decimal
+    annotations:
+      datatype: quantity
+      units: '*'
+  containedInPlace:
+    slot_uri: schema:containedInPlace
+    description: The immediate containing place of this place, such as its administrative area.
+    range: Place
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: association
+      inverse: schema:containsPlace
+      relation_order: name
+  location:
+    slot_uri: schema:location
+    description: The place where this event occurs; it does not identify the event or an occurrence within it.
+    range: Place
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: association
+      inverse: none
+      relation_order: name
+  startDate:
+    slot_uri: schema:startDate
+    description: The stated beginning of the subject's time span, preserving the source's precision and calendar.
+    range: date
+    exact_mappings:
+      - wd:P580
+    annotations:
+      datatype: time
+  endDate:
+    slot_uri: schema:endDate
+    description: The stated end of the subject's time span, preserving the source's precision and calendar.
+    range: date
+    exact_mappings:
+      - wd:P582
+    annotations:
+      datatype: time
+  hashAlgorithm:
+    slot_uri: rezics:hashAlgorithm
+    description: The exact source code naming a checksum's algorithm.
+    annotations:
+      datatype: string
+  fileCodec:
+    slot_uri: rezics:codec
+    description: The codec code reported for a catalogue file.
+    annotations:
+      datatype: string
+  fileQuality:
+    slot_uri: rezics:fileQuality
+    description: The quality code reported for a catalogue file.
+    annotations:
+      datatype: string
+  checksum:
+    slot_uri: wdt:P4092
+    description: An exact checksum value with its algorithm stated separately.
+    multivalued: true
+    annotations:
+      datatype: string
+      qualifiers: hashAlgorithm
+  fileSize:
+    slot_uri: wdt:P3575
+    description: The exact file size as a quantity in its stated unit.
+    range: decimal
+    annotations:
+      datatype: quantity
+      units: wd:Q8799
+  releaseGroup:
+    slot_uri: rezics:releaseGroup
+    description: The independently identified source group associated with a catalogue file.
+    range: ReleaseGroup
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: association
+      inverse: rezics:groupFiles
+      relation_order: name
+  note:
+    slot_uri: rezics:note
+    description: A free-text note qualifying a statement.
+    annotations:
+      datatype: monolingualtext
+  listSection:
+    slot_uri: rezics:listSection
+    description: The section of an ordered list to which an item belongs.
+    annotations:
+      datatype: monolingualtext
+  storyArc:
+    slot_uri: rezics:storyArc
+    description: A story arc of this work, ordered by position with its first and last part numbers.
+    range: StoryArc
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: position firstPart lastPart
+      relation_group: membership
+      inverse: rezics:storyArcOf
+      relation_order: position
+      acyclic: true
+  firstPart:
+    slot_uri: rezics:firstPart
+    description: The first episode or chapter number in this arc, as numbered by the work.
+    annotations:
+      datatype: string
+  lastPart:
+    slot_uri: rezics:lastPart
+    description: The last episode or chapter number in this arc, as numbered by the work.
+    annotations:
+      datatype: string
+  appliesToPart:
+    slot_uri: wdt:P518
+    description: The story arc of the work to which this appearance or credit applies.
+    range: StoryArc
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: membership
+      inverse: none
+      relation_order: name
+  crossMediaCounterpart:
+    slot_uri: rezics:crossMediaCounterpart
+    description: >-
+      A work in the same franchise in another medium. This does not assert which work adapts the other;
+      Bangumi's Adaptation code is used on both records, including a game and its anime adaptation.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: derivation
+      relation_order: name
+  summaryOf:
+    slot_uri: rezics:summaryOf
+    description: The full narrative work condensed by this recap or summary work.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      inverse: rezics:summaryVersion
+      relation_group: derivation
+      relation_order: name
+      acyclic: true
+  sideStoryOf:
+    slot_uri: rezics:sideStoryOf
+    description: The main narrative work to which this supplementary side story belongs.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      inverse: rezics:sideStory
+      relation_group: order
+      relation_order: name
+      acyclic: true
+  sameCharacters:
+    slot_uri: rezics:sameCharacters
+    description: A work sharing characters with this work but telling an unrelated story.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: world
+      relation_order: name
+  sameSetting:
+    slot_uri: rezics:sameSetting
+    description: A work in the same world or timeline, with a different principal cast.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: world
+      relation_order: name
+  alternativeSetting:
+    slot_uri: rezics:alternativeSetting
+    description: A work with the same principal characters in a different world or timeline.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: world
+      relation_order: name
+  alternativeVersion:
+    slot_uri: rezics:alternativeVersion
+    description: A different telling with the same setting and characters.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: world
+      relation_order: name
+  collaborationWith:
+    slot_uri: rezics:collaborationWith
+    description: >-
+      A work connected by a character crossover collaboration. One or both works feature characters from the
+      other; this relation does not identify the guest character or which work hosts the crossover.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: world
+      relation_order: name
+  bangumiRelatedTo:
+    slot_uri: rezics:bangumiRelatedTo
+    description: >-
+      Bangumi explicitly links this work to the value work with its Other subject relation, without stating a
+      kind. Only Bangumi's catch-all assertion is expressed; other sources cannot use it for generic relatedness.
+      The source record holds the statement even when the archive has no reciprocal record.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      inverse: rezics:bangumiRelatedFrom
+      relation_group: association
+      relation_order: name
+  artbookCounterpart:
+    slot_uri: rezics:artbookCounterpart
+    description: >-
+      A work and its companion artbook, linked without asserting which endpoint is the artbook.
+      Bangumi's Album subject relation appears on both records, including the illustrated work's record.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: association
+      relation_order: name
+  editionCounterpart:
+    slot_uri: rezics:editionCounterpart
+    description: Another book version or edition, without asserting an original or a work-to-edition direction.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: derivation
+      relation_order: name
+  bangumiLegacyVersion:
+    slot_uri: rezics:bangumiLegacyVersion
+    description: >-
+      A pair linked by Bangumi's retired game Main Version code 4013. The pinned document comments out this code;
+      the archive uses it reciprocally for an original and a revised version, so it asserts no holder direction.
+      This preserves the retired assertion separately from the directed Version and Main Version codes 4016/4017.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: derivation
+      relation_order: name
+  expansionCounterpart:
+    slot_uri: rezics:expansionCounterpart
+    description: >-
+      A base game and an expansion linked without identifying which endpoint expands the other.
+      Bangumi's DLC code is used on both records. An independently identified add-on can additionally name its
+      base game through expansionOf when the source establishes that direction.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      symmetric: true
+      relation_group: derivation
+      relation_order: name
   alternateName:
     slot_uri: schema:alternateName
     description: An alternate name or alias, preserving its source language and spelling.
@@ -124,10 +510,14 @@ slots:
       - wd:P50
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole openLibraryId bangumiPersonId vndbId sameAs
+      qualifiers: creditedAs position detailedRole openLibraryId bangumiPersonId vndbId sameAs appliesToPart
+      relation_group: credit
+      inverse: rezics:authorOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
   position:
     slot_uri: schema:position
-    description: The one-based order of a credit or the ordinal of a member in a series.
+    description: The one-based order of an item in a list.
     pattern: '^[1-9][0-9]{0,3}$'
     exact_mappings:
       - wd:P1545
@@ -216,7 +606,11 @@ slots:
       - wd:P110
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
+      relation_group: credit
+      inverse: rezics:illustratorOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
   director:
     slot_uri: schema:director
     description: A person or organization credited with direction.
@@ -228,7 +622,11 @@ slots:
       - wd:P57
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
+      relation_group: credit
+      inverse: rezics:directorOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
   musicBy:
     slot_uri: schema:musicBy
     description: A person or organization credited with composing the music.
@@ -240,7 +638,11 @@ slots:
       - wd:P86
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
+      relation_group: credit
+      inverse: rezics:musicByOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
   producer:
     slot_uri: schema:producer
     description: A person or organization credited with production.
@@ -252,7 +654,11 @@ slots:
       - wd:P162
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
+      relation_group: credit
+      inverse: rezics:producerOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
   productionCompany:
     slot_uri: schema:productionCompany
     description: A person or organization credited as a production company.
@@ -264,7 +670,11 @@ slots:
       - wd:P272
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
+      relation_group: credit
+      inverse: rezics:productionCompanyOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
   screenwriter:
     slot_uri: wdt:P58
     description: A person or organization credited with writing the screenplay.
@@ -276,7 +686,11 @@ slots:
       - wd:P58
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
+      relation_group: credit
+      inverse: rezics:screenwriterOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
   developer:
     slot_uri: wdt:P178
     description: A person or organization credited with development.
@@ -288,7 +702,11 @@ slots:
       - wd:P178
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
+      relation_group: credit
+      inverse: rezics:developerOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
   voiceActor:
     slot_uri: wdt:P725
     description: A person or organization credited with a voice performance.
@@ -300,7 +718,12 @@ slots:
       - wd:P725
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole characterRole
+      qualifiers: creditedAs position detailedRole characterRole appliesToPart
+      relation_group: credit
+      inverse: rezics:voiceActorOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
+      relation_slot_key: wdt:P453
   contributor:
     slot_uri: schema:contributor
     description: A person or organization credited in any other job, specified by its detailed role.
@@ -312,10 +735,14 @@ slots:
       - wd:P767
     annotations:
       datatype: wikibase-item
-      qualifiers: creditedAs position detailedRole
+      qualifiers: creditedAs position detailedRole appliesToPart
+      relation_group: credit
+      inverse: rezics:contributorOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
   creditedAs:
     slot_uri: wdt:P1932
-    description: The name as it appears in the credit.
+    description: The wording naming the object of a statement in its source.
     annotations:
       datatype: string
   detailedRole:
@@ -324,12 +751,18 @@ slots:
     range: Concept
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: none
+      relation_order: name
   characterRole:
     slot_uri: wdt:P453
     description: The character portrayed in a voice performance.
     range: Character
     annotations:
       datatype: wikibase-item
+      relation_group: appearance
+      inverse: none
+      relation_order: name
   character:
     slot_uri: schema:character
     description: A character appearing in a creative work.
@@ -339,7 +772,24 @@ slots:
       - wd:P674
     annotations:
       datatype: wikibase-item
-      qualifiers: detailedRole creditedAs spoilerLevel
+      qualifiers: detailedRole creditedAs spoilerLevel appliesToPart appearanceAge
+      relation_group: appearance
+      inverse: rezics:appearsIn
+      relation_order: name
+      relation_filter: [wdt:P3831, wdt:P518]
+  appearanceAge:
+    slot_uri: wdt:P3629
+    description: >-
+      The character's stated age on this exact work appearance, with its unit. It stays on the appearance
+      statement with role, credited name, spoiler, part and references. A source-wide character age is not
+      this qualifier. Source and mapping: https://www.wikidata.org/wiki/Property:P3629.
+    range: integer
+    minimum_value: 0
+    exact_mappings:
+      - wd:P3629
+    annotations:
+      datatype: quantity
+      units: wd:Q577
   spoilerLevel:
     slot_uri: rezics:spoilerLevel
     description: Disclosure level from 0 (no spoiler) through 2 (major spoiler).
@@ -357,3 +807,100 @@ slots:
     annotations:
       datatype: wikibase-item
       qualifiers: position
+      relation_group: membership
+      inverse: rezics:seriesMember
+      relation_order: position
+      acyclic: true
+  representativeEdition:
+    slot_uri: rezics:representativeEdition
+    description: The edition or release chosen to represent this work in the qualified language, with one value per language.
+    any_of:
+      - range: Edition
+      - range: VideoGameRelease
+      - range: AnimeRelease
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: inLanguage
+      relation_group: derivation
+      inverse: none
+      relation_order: name
+
+  occupation:
+    slot_uri: wdt:P106
+    description: A Concept naming this person's occupation; credits on works do not supply it.
+    range: Concept
+    multivalued: true
+    exact_mappings:
+      - wd:P106
+    annotations:
+      datatype: wikibase-item
+      qualifiers: startDate endDate
+      relation_group: classification
+      inverse: none
+      relation_order: name
+  knowsLanguage:
+    slot_uri: schema:knowsLanguage
+    description: A language this person knows, as an admitted Concept, not spoken proficiency or a work's language.
+    range: Concept
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: classification
+      inverse: none
+      relation_order: name
+  parentOrganization:
+    slot_uri: wdt:P749
+    description: The parent organization of this producer; stored on the child with optional start and end dates.
+    range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P749
+    annotations:
+      datatype: wikibase-item
+      qualifiers: startDate endDate
+      relation_group: association
+      inverse: rezics:hasSubsidiary
+      relation_order: name
+      acyclic: true
+  replaces:
+    slot_uri: wdt:P1365
+    description: The organization this producer replaces; the value is the predecessor, not a generic neighbor.
+    range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P1365
+    annotations:
+      datatype: wikibase-item
+      qualifiers: startDate endDate
+      relation_group: order
+      inverse: rezics:replacedBy
+      relation_order: name
+      acyclic: true
+  replacedBy:
+    slot_uri: wdt:P1366
+    description: The organization that replaces this producer; the value is the successor, kept independent of replaces.
+    range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P1366
+    annotations:
+      datatype: wikibase-item
+      qualifiers: startDate endDate
+      relation_group: order
+      inverse: rezics:replaces
+      relation_order: name
+      acyclic: true
+  penNameOf:
+    slot_uri: rezics:penNameOf
+    description: The person or organization behind this pen name or collective name; credits remain on the named agent.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      disclosure: sourceOrConsent
+      relation_group: association
+      inverse: rezics:penNames
+      relation_order: name

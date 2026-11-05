@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import { DBOS } from '@dbos-inc/dbos-sdk';
@@ -6,6 +7,7 @@ import { testDatabase } from '../scripts/database.ts';
 import { createAuthService } from '../src/index.ts';
 import { createAccountWorkflows, type AccountWorkflowPorts } from '../src/workflows.ts';
 import { AUTH_MAINTENANCE_SCHEDULE, AUTH_SYSTEM_SCHEMA, registerAuthMaintenance } from '../src/maintenance.ts';
+import { WORKFLOW_RETENTION_SCHEDULE } from '../src/retention.ts';
 import { checkGrowth, openGrowthDatabase } from '../../kernel/test/support/growth.ts';
 
 if (process.argv.includes('--growth-child')) {
@@ -15,7 +17,10 @@ if (process.argv.includes('--growth-child')) {
     const fixture = testDatabase();
     try {
       const child = Bun.spawn([process.execPath, import.meta.path, '--growth-child'], {
-        env: { ...process.env, AUTH_SCHEDULE_GROWTH_URL: fixture.url },
+        env: {
+          ...process.env,
+          AUTH_SCHEDULE_GROWTH_URL: fixture.url,
+        },
         stdout: 'pipe',
         stderr: 'pipe',
         timeout: 170000,
@@ -26,6 +31,7 @@ if (process.argv.includes('--growth-child')) {
         child.exited,
       ]);
       if (code !== 0) throw new Error(`Native scheduled growth failed: ${output}\n${errors}`);
+      if (errors) process.stderr.write(errors);
       expect(output).toContain('one durable Auth tick');
     } finally {
       fixture.close();
@@ -64,9 +70,14 @@ async function runGrowth() {
     audience: 'https://api.test',
     secret: randomBytes(48).toString('hex'),
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: { readAccount: unused, authorizeProvisioning: unused },
+    trustedAccess: trustedAccessPorts({
+      readAccount: unused,
+      readFencedAccount: unused,
+      authorizeProvisioning: unused,
+    }),
   });
   let maintenance: ReturnType<typeof registerAuthMaintenance>;
+  let seedHistory: () => Promise<number>;
   const workflows = createAccountWorkflows({
     database: db.pool,
     systemDatabaseUrl: db.url,
@@ -77,14 +88,27 @@ async function runGrowth() {
     stagingKey: randomBytes(32),
     registerWorkflows: () => {
       maintenance = registerAuthMaintenance(auth);
+      const count = DBOS.registerStep(async () => 1, { name: 'growth.history.count' });
+      seedHistory = DBOS.registerWorkflow(async () => count(), { name: 'growth.history' });
     },
   });
   try {
     await workflows.start();
     await maintenance!.start('0 0 1 1 *');
+    await DBOS.pauseSchedule(AUTH_MAINTENANCE_SCHEDULE);
+    await DBOS.pauseSchedule(WORKFLOW_RETENTION_SCHEDULE);
+    // Finish fixture-owned runs already started before the pause so they cannot
+    // consume rows admitted for the measured tick. SDK results prove completion.
+    const started = (
+      await db.admin.query(`SELECT workflow_uuid FROM ${AUTH_SYSTEM_SCHEMA}.workflow_status WHERE queue_name=$1`, [
+        AUTH_MAINTENANCE_SCHEDULE,
+      ])
+    ).rows;
+    await Promise.all(started.map((row) => DBOS.retrieveWorkflow(String(row.workflow_uuid)).getResult()));
     await db.admin.query(`INSERT INTO auth_client VALUES ('growth-web',true,ARRAY['read']);
       INSERT INTO "user" (id,name,"emailVerified") SELECT 'fixed-'||i,'',false FROM generate_series(1,16) i`);
     const reports = [];
+    let seededHistory = 0;
     for (const dimension of ['unrelated', 'sessions', 'verifications', 'keys']) {
       const report = await checkGrowth(db, {
         name: `one durable Auth tick against ${dimension}`,
@@ -94,6 +118,25 @@ async function runGrowth() {
         // One native queue/schedule wake can overlap capture (at most six reads).
         slack: { statements: { absolute: 6, relative: 0 } },
         async grow(_, scale, previous) {
+          // Give both SDK tables production-shaped history before the first
+          // planner sample, then grow unrelated history in every dimension.
+          // Native runs persist status, step and workflow outputs together.
+          const historyCount = (seededHistory === 0 ? 2048 : 0) + (scale - previous) * 32;
+          for (let offset = 0; offset < historyCount; offset += 32) {
+            await Promise.all(
+              Array.from({ length: Math.min(32, historyCount - offset) }, async () => {
+                const handle = await DBOS.startWorkflow(seedHistory!)();
+                expect(await handle.getResult()).toBe(1);
+              }),
+            );
+          }
+          seededHistory += historyCount;
+          for (const table of ['workflow_status', 'workflow_output']) {
+            expect(
+              Number((await db.admin.query(`SELECT count(*) FROM ${AUTH_SYSTEM_SCHEMA}.${table}`)).rows[0].count),
+            ).toBeGreaterThanOrEqual(seededHistory);
+            await db.admin.query(`VACUUM ANALYZE ${AUTH_SYSTEM_SCHEMA}.${table}`);
+          }
           const from = previous * 2048 + 1;
           const to = scale * 2048;
           if (dimension === 'sessions' || dimension === 'unrelated') {
@@ -134,7 +177,15 @@ async function runGrowth() {
               `SELECT (SELECT count(*) FROM session)::int AS sessions,(SELECT count(*) FROM verification)::int AS verifications`,
             )
           ).rows[0];
-          const tick = await DBOS.triggerSchedule(AUTH_MAINTENANCE_SCHEDULE);
+          // Enqueue the installed scheduled workflow explicitly: the harness
+          // treats sched-* IDs (including triggerSchedule) as background work.
+          const schedule = await DBOS.getSchedule(AUTH_MAINTENANCE_SCHEDULE);
+          expect(schedule).not.toBeNull();
+          const tick = await DBOS.enqueueWorkflowWithOptions(
+            { workflowName: schedule!.workflowName, queueName: schedule!.queueName! },
+            new Date(),
+            null,
+          );
           await tick.getResult();
           const after = (
             await db.admin.query(
@@ -155,6 +206,15 @@ async function runGrowth() {
         },
       });
       expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
+      for (const sample of report.samples) {
+        for (const cost of sample.repetitions) {
+          for (const table of ['workflow_status', 'workflow_output']) {
+            const relation = cost.relations[`${AUTH_SYSTEM_SCHEMA}.${table}`];
+            expect(relation?.nodes).toBeGreaterThan(0);
+            expect(relation?.sequentialScans).toBe(0);
+          }
+        }
+      }
       expect(report.samples.every((sample) => sample.cost.statements > 3 && sample.cost.statements < 100)).toBe(true);
       expect(report.samples.every((sample) => (sample.cost.relations?.['public.session']?.rows ?? 0) >= 1000)).toBe(
         true,
@@ -175,6 +235,7 @@ async function runGrowth() {
             rows: sample.cost.rows,
             blocks: sample.cost.blocks,
             statements: sample.cost.statements,
+            relations: sample.cost.relations,
           })),
         })),
       }),

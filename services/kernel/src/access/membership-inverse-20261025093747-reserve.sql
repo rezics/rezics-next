@@ -47,6 +47,7 @@ WITH input AS NOT MATERIALIZED (
   INSERT INTO access.lifecycle_coordination
     (route, account_id, reservation_id, related_account_id, purpose, transaction_id)
   SELECT i.route, i.account_id, c.reservation_id, i.group_id, 'membership', c.transaction_id FROM chosen c, input i
+  WHERE i.kind <> 'realm' OR i.source_transaction_id IS NOT NULL
   ON CONFLICT (route, account_id, reservation_id) DO NOTHING
 )
 -- A duplicate key cannot bless a hold from another operation. The snapshot sees

@@ -2,6 +2,7 @@ import type { GrowthDatabase } from '../../support/growth.ts';
 import { routeOf } from '../../../src/route/route.ts';
 
 const ROWS_PER_SCALE = 1_024;
+const MAX_ORDINALS_PER_BATCH = 1_000;
 let nextOrdinal = 0;
 let populationNamespace = 0;
 
@@ -39,8 +40,24 @@ export async function seedCollectionGrowthPopulation(
   const count = scaleDelta * ROWS_PER_SCALE;
   const start = nextOrdinal;
   nextOrdinal += count;
-  const result = await database.admin.query<PopulationCounts>(
-    `WITH input AS MATERIALIZED (
+  const actual: PopulationCounts = {
+    accounts: 0,
+    collections: 0,
+    members: 0,
+    initializations: 0,
+    roleGrants: 0,
+    grants: 0,
+    denials: 0,
+    organizationMembers: 0,
+    inverseRows: 0,
+  };
+  let remaining = count;
+  let batchStart = start;
+  let batches = 0;
+  while (remaining > 0) {
+    const batchCount = Math.min(MAX_ORDINALS_PER_BATCH, remaining);
+    const result = await database.admin.query<PopulationCounts>(
+      `WITH input AS MATERIALIZED (
        SELECT $1::bigint AS start, $2::integer AS population_count, $3::integer AS curator_route,
               $4::uuid AS curator_id, $5::uuid AS subject_id, $6::integer AS namespace,
               transaction_timestamp() AS seeded_at
@@ -181,11 +198,18 @@ export async function seedCollectionGrowthPopulation(
        (SELECT count(*)::integer FROM inserted_denials) AS denials,
        (SELECT count(*)::integer FROM inserted_organization_members) AS "organizationMembers",
        (SELECT count(*)::integer FROM inserted_inverse) AS "inverseRows"`,
-    [start, count, curatorRoute, curatorId, subjectId, populationNamespace],
-  );
+      [batchStart, batchCount, curatorRoute, curatorId, subjectId, populationNamespace],
+    );
+    const batch = result.rows[0];
+    if (!batch) throw new Error('Collection growth population batch returned no counts');
+    for (const key of Object.keys(actual) as (keyof PopulationCounts)[]) actual[key] += batch[key];
+    remaining -= batchCount;
+    batchStart += batchCount;
+    batches += 1;
+  }
 
   const expected: PopulationCounts = {
-    accounts: count * 2 + 2,
+    accounts: count * 2 + batches * 2,
     collections: count * 2,
     members: count * 2,
     initializations: count * 2,
@@ -195,12 +219,8 @@ export async function seedCollectionGrowthPopulation(
     organizationMembers: count * 2,
     inverseRows: count * 2,
   };
-  const actual = result.rows[0];
-  if (!actual || Object.entries(expected).some(([key, value]) => actual[key as keyof PopulationCounts] !== value))
+  if (Object.entries(expected).some(([key, value]) => actual[key as keyof PopulationCounts] !== value))
     throw new Error(
       `Collection growth population was incomplete: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`,
     );
-
-  await database.admin.query('ANALYZE library.collection');
-  await database.admin.query('ANALYZE library.collection_member');
 }

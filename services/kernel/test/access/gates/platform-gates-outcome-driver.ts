@@ -1,10 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import { spyOn } from 'bun:test';
-import { Pool, type PoolClient } from 'pg';
+import { Client, Pool, type PoolClient } from 'pg';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
-import { testDatabase } from '../../../../auth/scripts/database.ts';
 import { GLOBAL_CONTEXT_ID } from '../../../../../specs/platform-gates-driver.ts';
 import type {
   Account,
@@ -21,11 +19,12 @@ import type {
   Viewer,
 } from '../../../../../specs/platform-gates-driver.ts';
 import type { GrowthDatabase, Population } from '../../support/growth.ts';
+import { createAuthDatabase } from '../../support/auth-database.ts';
 
 await import('reylo/register');
 
 const { createAuthBindings } = await import('../../../src/access/auth-bindings.ts');
-const { PLATFORM_RESOURCE } = await import('../../../src/access/bootstrap-governance.ts');
+const { bootstrapGovernance, PLATFORM_RESOURCE } = await import('../../../src/access/bootstrap-governance.ts');
 const { createRegistrationPorts } = await import('../../support/registration-ports.ts');
 const { createRegistrationProofBindings } = await import('../../../src/access/registration-proof.ts');
 const { resourceRoleCatalogue } = await import('../../../src/access/resource-roles.ts');
@@ -42,20 +41,6 @@ const { openGrowthDatabase, seed: seedGrowthData } = await import('../../support
 const password = 'native platform gates fixture password';
 const FIXTURE_GROUP = 'spec_fixture';
 const FIXTURE_TABLES = new Map<string, string>();
-let preparedAuthDatabase: ReturnType<typeof testDatabase> | undefined;
-
-/** Prepare the adapter's external database work under its own hook budget. */
-export function preparePlatformGatesAuthDatabase(): void {
-  if (preparedAuthDatabase) throw new Error('Previous platform gates Auth database was not claimed');
-  preparedAuthDatabase = testDatabase();
-}
-
-/** A failed driver initialization may leave the prepared database unclaimed. */
-export function closePreparedPlatformGatesAuthDatabase(): void {
-  const database = preparedAuthDatabase;
-  preparedAuthDatabase = undefined;
-  database?.close();
-}
 
 type FixtureRoute = {
   readonly path: string;
@@ -216,7 +201,7 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
   const signingKid = `platform-gates-${fixtureTag}`;
 
   let pool: Pool | undefined;
-  let authDatabase: ReturnType<typeof testDatabase> | undefined;
+  let authName: string | undefined;
   let authPool: Pool | undefined;
   let host: Awaited<ReturnType<typeof createAuthHost>> | undefined;
   let service: AuthService | undefined;
@@ -438,35 +423,28 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
   }
 
   async function bootstrapStaff(accountId: string): Promise<void> {
-    const root = new URL('../../../../../', import.meta.url).pathname;
-    const child = Bun.spawn(['bun', 'services/kernel/scripts/bootstrap-governance.ts', '--account', accountId], {
-      cwd: root,
-      env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const [code, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    if (code !== 0 || stdout !== '' || stderr !== '') {
-      throw new Error(`Platform governance bootstrap failed (${code}): ${stdout}${stderr}`);
+    // Bootstrapping is deployment-only authority; its own pool keeps it outside the fixture's statement counting.
+    const bootstrapPool = createPool(process.env.DATABASE_URL!);
+    try {
+      await bootstrapGovernance(bootstrapPool, accountId);
+    } catch (error) {
+      throw new Error(
+        `Platform governance bootstrap failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      await bootstrapPool.end();
     }
   }
 
-  function closeOwnedAuthDatabase(database: ReturnType<typeof testDatabase>): void {
+  async function dropAuthDatabase(name: string): Promise<void> {
+    const url = new URL(process.env.DATABASE_URL!);
+    url.pathname = '/postgres';
+    const owner = new Client({ connectionString: url.toString() });
+    await owner.connect();
     try {
-      database.close();
-    } catch (error) {
-      // Retry only this driver's container if Docker is busy with concurrent checks.
-      const retry = spawnSync('docker', ['rm', '-f', database.container], {
-        encoding: 'utf8',
-        timeout: 120_000,
-      });
-      if (retry.error || (retry.status !== 0 && !/No such container|No such object/i.test(retry.stderr))) {
-        throw error;
-      }
+      await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+    } finally {
+      await owner.end();
     }
   }
 
@@ -617,9 +595,9 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
     if (seeded) throw new Error('Platform gates fixture can only be seeded once');
     await initialize();
 
-    authDatabase = preparedAuthDatabase ?? testDatabase();
-    preparedAuthDatabase = undefined;
-    authPool = new Pool({ connectionString: authDatabase.url });
+    const name = `platform_gates_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+    authName = name;
+    authPool = new Pool({ connectionString: await createAuthDatabase(process.env.DATABASE_URL!, name) });
     const privateKey = await generateKeyPair('ES256', { extractable: true });
     signingKey = { ...(await exportJWK(privateKey.privateKey)), kid: signingKid };
     const registration = createRegistrationProofBindings({ pool: livePool(), referenceKeys: tokens });
@@ -709,6 +687,7 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
     let token = '';
     let actorId = '';
     const unrelatedAccountIds: string[] = [];
+    const rowsPerScaleUnit = 2_000;
     const growthTime = nextFixtureTime();
     const growthRouteKey = new Uint8Array(32).fill(121);
     const growthIssuer = `https://gate-growth-${growthTag}.auth.test`;
@@ -750,7 +729,50 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
           };
         },
       };
-      await seedGrowthData({ pool: database.pool, admin: database.admin }, population, { from: 0, to: 64 });
+      await seedGrowthData({ pool: database.pool, admin: database.admin }, population, {
+        from: 0,
+        to: 64 * rowsPerScaleUnit,
+      });
+      const grants: Population = {
+        name: `platform gate unrelated grants ${growthTag}`,
+        hotPartition: 0,
+        rows({ ordinal }) {
+          const id = unrelatedAccountIds[ordinal];
+          if (!id) throw new Error('Growth account seed is incomplete');
+          return {
+            'access.resource_grant': [
+              {
+                route: 0,
+                resource_id: GLOBAL_CONTEXT_ID,
+                subject_id: id,
+                action: 'gate:unrelated',
+                valid: '(,)',
+                transaction_id: Bun.randomUUIDv7(),
+              },
+            ],
+          };
+        },
+      };
+      const openings: Population = {
+        name: `platform gate unrelated openings ${growthTag}`,
+        hotPartition: 0,
+        rows({ ordinal }) {
+          return {
+            'access.exposure_opening': [
+              {
+                group: `other_${growthTag}_${alpha(ordinal)}`,
+                valid: ordinal % 2 === 0 ? '[2000-01-01,2001-01-01)' : '[2000-01-01,)',
+                transaction_id: Bun.randomUUIDv7(),
+              },
+            ],
+          };
+        },
+      };
+      // Keep the non-growing relation large enough for selective probes at the first scale too.
+      await seedGrowthData(database, axis === 'unrelated-grants' ? openings : grants, {
+        from: 0,
+        to: rowsPerScaleUnit,
+      });
 
       await database.admin.query(
         `INSERT INTO access.resource_grant
@@ -849,30 +871,10 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
       return {
         database,
         async grow(scale, previous) {
-          if (axis === 'unrelated-grants') {
-            const ids = unrelatedAccountIds.slice(previous, scale);
-            if (ids.length !== scale - previous) throw new Error('Growth account seed is incomplete');
-            await database.admin.query(
-              `INSERT INTO access.resource_grant
-                 (route, resource_id, subject_id, action, valid, transaction_id)
-               SELECT 0, $1::uuid, id, 'gate:unrelated', '(,)', $3::uuid
-               FROM unnest($2::uuid[]) AS id`,
-              [GLOBAL_CONTEXT_ID, ids, Bun.randomUUIDv7()],
-            );
-            await database.admin.query('ANALYZE access.resource_grant');
-          } else {
-            const groups = Array.from(
-              { length: scale - previous },
-              (_, index) => `other_${growthTag}_${alpha(previous + index)}`,
-            );
-            await database.admin.query(
-              `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
-               SELECT group_name, tstzrange('2000-01-01T00:00:00Z'::timestamptz, NULL, '[)'), $2::uuid
-               FROM unnest($1::text[]) AS group_name`,
-              [groups, Bun.randomUUIDv7()],
-            );
-            await database.admin.query('ANALYZE access.exposure_opening');
-          }
+          await seedGrowthData(database, axis === 'unrelated-grants' ? grants : openings, {
+            from: previous * rowsPerScaleUnit,
+            to: scale * rowsPerScaleUnit,
+          });
         },
         async request(_repetition) {
           return growthKernel!.handle(
@@ -953,9 +955,9 @@ export async function createPlatformGatesDriver(): Promise<PlatformGatesDriver> 
         failure ??= error;
       }
     }
-    if (authDatabase) {
+    if (authName) {
       try {
-        closeOwnedAuthDatabase(authDatabase);
+        await dropAuthDatabase(authName);
       } catch (error) {
         failure ??= error;
       }

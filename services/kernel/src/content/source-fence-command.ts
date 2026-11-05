@@ -2,15 +2,22 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import { resourceAuthorization } from '../access/resource-authorization.ts';
-import { principalCommandIdentity, runCommand, type CommandOutcome } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  currentCommand,
+  principalCommandIdentity,
+  runCommand,
+  type CommandOutcome,
+} from '../command/command.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { Access, Actor } from '../request/access.ts';
-import { partitionOf } from '../route/route.ts';
+import { newId, partitionOf } from '../route/route.ts';
 import readContext from '../semantic/read-context.sql';
 import { tupleRoute, type ImportedFieldGroup } from './imported-contract.ts';
 import type { RequestContext } from './model.ts';
 import type { SourceFenceEventData } from './source-fence-events.ts';
 import takedown from './takedown-source-fence.sql';
+import { recordPrivacyReduction } from '../semantic/public-filter-source.ts';
 
 export type SourceFenceDependencies = Readonly<{
   pool: Pool;
@@ -91,7 +98,7 @@ export async function takedownSourceFence(
           .digest(),
       },
     },
-    async (tx) => {
+    async (tx, command) => {
       // The compiled statement avoids periodic catalogue freshness queries in
       // this exact tuple write. PostgreSQL increments the bigint without JS loss.
       const result = await tx.query<(typeof takedown)['~reylo']['element']>(takedown.sql, [
@@ -99,15 +106,30 @@ export async function takedownSourceFence(
         source,
         external_id,
         field_group,
+        authoritativeTimeValue(command.time),
+        newId(route),
       ]);
       const row = result.rows[0];
       if (!row) throw new Error('Source fence upsert returned no security revision');
+      await recordPrivacyReduction(tx, {
+        partition,
+        transactionId: command.transactionId,
+        time: currentCommand(tx).time,
+        cause: 'sourceTuple',
+        affected: [{ kind: 'sourceTuple', tuple: { route, source, external_id, field_group } }],
+        impacts: [
+          { kind: 'dependency', locator: { kind: 'sourceTuple', tuple: { route, source, external_id, field_group } } },
+        ],
+      });
       const data: SourceFenceEventData<'com.rezics.content.source_fence.taken_down.v1'> = {
         route,
         source,
         external_id,
         field_group,
         securityRevision: row.securityRevision,
+        ...(row.takenDownAt !== null && row.takedownId !== null
+          ? { takenDownAt: row.takenDownAt, takedownId: row.takedownId }
+          : {}),
       };
       return {
         value: { securityRevision: row.securityRevision },

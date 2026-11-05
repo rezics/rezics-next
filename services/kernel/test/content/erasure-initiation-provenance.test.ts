@@ -1,12 +1,13 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { createAuthService, type AuthService } from '@rezics/auth';
 import { createCurrentConsentReader } from '../../../auth/src/current-consent.ts';
 import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import canonicalize from 'canonicalize';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createDelegationCommands, readAssignment } from '../../src/access/delegation-commands.ts';
@@ -21,6 +22,26 @@ import { runCommand } from '../../src/command/command.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import { capture, checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
+
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `erasure_initiati_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
 
 const cookies = new Map<string, string>();
 const privateBody = Buffer.from(serializeDocument(fromPlainText('private')));
@@ -28,7 +49,7 @@ const fixedBody = Buffer.from(serializeDocument(fromPlainText('fixed')));
 const fixedBodySha256 = createHash('sha256').update(fixedBody).digest();
 const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
 const db = await openGrowthDatabase();
-let authDatabase: ReturnType<typeof testDatabase>;
+let authDatabase: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let authPool: Pool;
 let auth: AuthService;
 let access: ReturnType<typeof createAccess>;
@@ -38,7 +59,7 @@ const issuer = 'https://operations.auth.test';
 const actions = ['post:erase', 'account:read', 'account:delegate'];
 afterAll(async () => {
   await authPool?.end();
-  authDatabase?.close();
+  await authDatabase?.close();
   await db.close();
 });
 const route = 0x6a31;
@@ -54,6 +75,37 @@ const context = (key = crypto.randomUUID()) => ({
   requestId: newId(route),
 });
 const input = { threadId, authorId };
+async function renew(accountId: string) {
+  for (const scopes of [actions, ['account:read']]) {
+    const response = await auth.handler(
+      new Request(`${issuer}/signin`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          account_id: accountId,
+          password: 'correct horse battery staple',
+          client_id: 'operations-test',
+          scope: scopes,
+        }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    const cookie = response.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; ');
+    if (scopes === actions) cookies.set(accountId, cookie);
+    const issued = await auth.handler(
+      new Request(`${issuer}/token`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json', cookie },
+        body: '{}',
+      }),
+    );
+    expect(issued.status).toBe(200);
+    tokens.set(`${accountId}:${scopes.join(' ')}`, ((await issued.json()) as { access_token: string }).access_token);
+  }
+}
 async function verified(accountId: string, scopes = actions) {
   return access.authenticate(tokens.get(`${accountId}:${scopes.join(' ')}`)!, {
     pool: db.pool,
@@ -109,7 +161,7 @@ async function post(name: string, author = authorId, at = '2020-01-01T00:00:00Z'
   return post;
 }
 beforeAll(async () => {
-  authDatabase = testDatabase();
+  authDatabase = await cloneAuthDatabase();
   authPool = new Pool({ connectionString: authDatabase.url });
   const pair = await generateKeyPair('ES256', { extractable: true });
   const key = { ...(await exportJWK(pair.privateKey)), kid: 'operations-fixture' };
@@ -120,7 +172,7 @@ beforeAll(async () => {
     audience: 'https://api.example.test',
     secret: 'operations-fixture-secret-with-at-least-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       readAssignment: (reference, actorId) => readAssignment(db.pool, reference, actorId),
       async readAccount(accountId) {
         const account = await readAccount(db.pool, routeOf(accountId)!, accountId);
@@ -139,7 +191,7 @@ beforeAll(async () => {
         if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'operations-test', firstParty: true, scopes: actions });
   access = createAccess({
@@ -159,30 +211,7 @@ beforeAll(async () => {
       accountId,
     ]);
     await grant(accountId, 'account:read', accountId);
-    for (const scopes of [actions, ['account:read']]) {
-      const response = await auth.handler(
-        new Request(`${issuer}/signin`, {
-          method: 'POST',
-          headers: { origin: issuer, 'content-type': 'application/json' },
-          body: JSON.stringify({ account_id: accountId, password, client_id: 'operations-test', scope: scopes }),
-        }),
-      );
-      expect(response.status).toBe(200);
-      const cookie = response.headers
-        .getSetCookie()
-        .map((value) => value.split(';')[0])
-        .join('; ');
-      if (scopes === actions) cookies.set(accountId, cookie);
-      const issued = await auth.handler(
-        new Request(`${issuer}/token`, {
-          method: 'POST',
-          headers: { origin: issuer, 'content-type': 'application/json', cookie },
-          body: '{}',
-        }),
-      );
-      expect(issued.status).toBe(200);
-      tokens.set(`${accountId}:${scopes.join(' ')}`, ((await issued.json()) as { access_token: string }).access_token);
-    }
+    await renew(accountId);
   }
   await db.admin.query(
     `INSERT INTO content.thread
@@ -664,15 +693,11 @@ test('initiation keeps its wire, admission and one-attempt cost; the growth chec
   await expect(beginAuthorErasure(deps, restricted, input, context())).rejects.toThrow();
   const key = context();
   await beginAuthorErasure(deps, actor, input, key);
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(authorId),
-    authorId,
-  ]);
+  await suspendAccount(db.admin, authorId);
   await expect(beginAuthorErasure(deps, actor, input, key)).rejects.toThrow();
-  await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-    routeOf(authorId),
-    authorId,
-  ]);
+  await reinstateAccount(db.admin, authorId);
+  await renew(authorId);
+  actor = await verified(authorId);
   const population: Population = {
     name: 'erasure-provenance-history',
     hotPartition: partitionOf(route),

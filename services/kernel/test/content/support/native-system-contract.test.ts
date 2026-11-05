@@ -32,7 +32,13 @@ test('ordinary actors retain account identity and scopes without website or Work
     readonly suspended: ContentCredential;
   }>();
   expectTypeOf<Extract<keyof NativeContentSystem['actors'], 'worker' | 'otherWorker'>>().toEqualTypeOf<never>();
-  expectTypeOf<keyof NativeContentSystem['auth']>().toEqualTypeOf<'ordinaryClient' | 'issue' | 'refresh'>();
+  expectTypeOf<keyof NativeContentSystem['auth']>().toEqualTypeOf<
+    'ordinaryClient' | 'ordinaryScopes' | 'issue' | 'refresh'
+  >();
+  expectTypeOf<NativeContentSystem['auth']['ordinaryScopes']>().toEqualTypeOf<readonly string[]>();
+  expectTypeOf<NativeContentSystem['auth']['ordinaryScopes']>().toEqualTypeOf<
+    ContentSystem['auth']['ordinaryScopes']
+  >();
   expectTypeOf<Extract<keyof NativeContentSystem['auth'], 'websiteClient'>>().toEqualTypeOf<never>();
   expectTypeOf<NativeContentSystem['actors']['author']['actor']>().toEqualTypeOf<AccountActor>();
   expectTypeOf<NativeContentSystem['actors']['author']['actor']['scopes']>().toEqualTypeOf<readonly string[]>();

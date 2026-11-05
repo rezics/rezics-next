@@ -1,8 +1,9 @@
+import { nativeProtocolClient } from './erasure-attribution.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { compactVerify, createLocalJWKSet, decodeProtectedHeader, errors, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { BetterAuthPlugin } from 'better-auth';
 import { APIError } from 'better-auth/api';
 import type { AuthServiceOptions, PublicJwks, SessionProof, WebsiteClientRegistration } from './index.ts';
@@ -129,7 +130,9 @@ interface NativePort {
 }
 export function websiteRoutes(input: {
   options: AuthServiceOptions;
+  scopeLimit: number;
   database: Pool;
+  materialize(accountId: string, clientId: string, scopes: string[], firstParty: boolean): Promise<void>;
   native: () => NativePort;
   withIssuance<T>(clientId: string, run: () => Promise<T>): Promise<T>;
   sessionProof(headers: Headers): Promise<SessionProof>;
@@ -144,8 +147,10 @@ export function websiteRoutes(input: {
       await database.query<Client>(
         `SELECT scopes,jwks,"redirectUris","postLogoutRedirectUris"
       FROM auth_client WHERE client_id=$1 AND first_party AND "tokenEndpointAuthMethod"='private_key_jwt'
-      AND NOT EXISTS (SELECT 1 FROM auth_client_reduction WHERE client_id=$1)`,
-        [WEBSITE_CLIENT_ID],
+      AND metadata IS NULL AND "referenceId" IS NULL
+      AND NOT EXISTS (SELECT 1 FROM auth_client_reduction WHERE client_id=$1)
+      AND EXISTS (SELECT 1 FROM "oauthResource" WHERE identifier=$2 AND "customClaims" IS NULL)`,
+        [WEBSITE_CLIENT_ID, options.audience],
       )
     ).rows[0];
     return row ?? deny('invalid_client');
@@ -164,7 +169,7 @@ export function websiteRoutes(input: {
       session.expiresAt <= new Date() ||
       !Number.isSafeInteger(session.authTime) ||
       session.authTime > Math.floor(Date.now() / 1000) ||
-      session.authMethods !== 'pwd'
+      !['pwd', 'pop'].includes(session.authMethods)
     )
       deny('invalid_grant');
     const registered = await client();
@@ -347,7 +352,7 @@ export function websiteRoutes(input: {
               get(target, key) {
                 if (key === 'create')
                   return async (data: Parameters<typeof adapter.create>[0]) => {
-                    const result = await adapter.create(data);
+                    const result = await nativeProtocolClient.run(WEBSITE_CLIENT_ID, () => adapter.create(data));
                     if (data.model === 'oauthClientAssertion') await assertionAdmission.getStore()?.();
                     return result;
                   };
@@ -389,10 +394,10 @@ export function websiteRoutes(input: {
         amr: selected.session.authMethods.split(' '),
       };
     },
-    async register(registration: WebsiteClientRegistration) {
+    async register(registration: WebsiteClientRegistration, suppliedConnection?: PoolClient) {
       const scopes = [...new Set(registration.scopes)].sort();
       if (
-        scopes.length > 100 ||
+        scopes.length > input.scopeLimit ||
         scopes.some((s) => typeof s !== 'string' || s.length > 128 || !/^[\x21\x23-\x5b\x5d-\x7e]+$/.test(s)) ||
         ![...protocolScopes, 'media:complete'].every((s) => scopes.includes(s))
       )
@@ -427,12 +432,15 @@ export function websiteRoutes(input: {
       }
       const redirects = uris(registration.redirectUris),
         logout = uris(registration.postLogoutRedirectUris);
-      const connection = await database.connect();
+      const connection = suppliedConnection ?? (await database.connect());
+      const ownsTransaction = suppliedConnection === undefined;
       try {
-        await connection.query('BEGIN');
-        await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
-          `auth-client:${WEBSITE_CLIENT_ID}`,
-        ]);
+        if (ownsTransaction) {
+          await connection.query('BEGIN');
+          await connection.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [
+            `auth-client:${WEBSITE_CLIENT_ID}`,
+          ]);
+        }
         if (
           (await connection.query('SELECT 1 FROM auth_client_reduction WHERE client_id=$1', [WEBSITE_CLIENT_ID]))
             .rowCount
@@ -444,10 +452,11 @@ export function websiteRoutes(input: {
           ])
         ).rows[0];
         if (prior?.scopes.some((s) => !scopes.includes(s))) deny('invalid_request');
+        await connection.query("SELECT set_config('auth.configuration_client',$1,true)", [WEBSITE_CLIENT_ID]);
         await connection.query(
           `INSERT INTO auth_client (client_id,first_party,scopes,jwks,"redirectUris","postLogoutRedirectUris","tokenEndpointAuthMethod","requirePKCE","enableEndSession","grantTypes","responseTypes","applicationType")
           VALUES ($1,true,$2,$3,$4,$5,'private_key_jwt',true,true,'["authorization_code","refresh_token"]'::jsonb,'["code"]'::jsonb,'web')
-          ON CONFLICT (client_id) DO UPDATE SET scopes=EXCLUDED.scopes,jwks=EXCLUDED.jwks,"redirectUris"=EXCLUDED."redirectUris","postLogoutRedirectUris"=EXCLUDED."postLogoutRedirectUris"`,
+          ON CONFLICT (client_id) DO UPDATE SET scopes=EXCLUDED.scopes,jwks=EXCLUDED.jwks,"redirectUris"=EXCLUDED."redirectUris","postLogoutRedirectUris"=EXCLUDED."postLogoutRedirectUris",metadata=NULL`,
           [
             WEBSITE_CLIENT_ID,
             scopes,
@@ -456,9 +465,18 @@ export function websiteRoutes(input: {
             JSON.stringify(logout),
           ],
         );
+        // This existing source command replaces the exact configured audience;
+        // the scrub itself never clears claims consumed by token issuance.
+        const resourceKey = await connection.query<{ id: string }>(
+          'SELECT id FROM "oauthResource" WHERE identifier=$1',
+          [options.audience],
+        );
+        await connection.query("SELECT set_config('auth.configuration_resource',$1,true)", [
+          resourceKey.rows[0]?.id ?? options.audience,
+        ]);
         await connection.query(
           `INSERT INTO "oauthResource" (id,identifier,name,"allowedScopes","accessTokenTtl") VALUES ($1,$1,'REZICS API',$2,300)
-          ON CONFLICT (identifier) DO UPDATE SET "allowedScopes"=EXCLUDED."allowedScopes","accessTokenTtl"=300`,
+          ON CONFLICT (identifier) DO UPDATE SET name='REZICS API',"allowedScopes"=EXCLUDED."allowedScopes","accessTokenTtl"=300,metadata=NULL,"customClaims"=NULL`,
           [options.audience, JSON.stringify(scopes)],
         );
         await connection.query(
@@ -469,12 +487,12 @@ export function websiteRoutes(input: {
           'INSERT INTO auth_client_coverage (client_id,ready,ready_after) VALUES ($1,true,CURRENT_TIMESTAMP) ON CONFLICT (client_id) DO NOTHING',
           [WEBSITE_CLIENT_ID],
         );
-        await connection.query('COMMIT');
+        if (ownsTransaction) await connection.query('COMMIT');
       } catch (error) {
-        await connection.query('ROLLBACK');
+        if (ownsTransaction) await connection.query('ROLLBACK');
         throw error;
       } finally {
-        connection.release();
+        if (ownsTransaction) connection.release();
       }
     },
     async handler(request: Request): Promise<Response | undefined> {
@@ -555,12 +573,16 @@ export function websiteRoutes(input: {
             const prompt = fields.get('prompt');
             fields.set('prompt', prompt ? `${prompt} login` : 'login');
           }
+          if (current && !stepUp) {
+            // Materialization commits after its issuance barrier is released.
+            // Complete that phase before requiring the actual consent row.
+            await input.withIssuance(WEBSITE_CLIENT_ID, () =>
+              input.materialize(current.session.userId, WEBSITE_CLIENT_ID, registered.scopes, true),
+            );
+          }
           return input.withIssuance(WEBSITE_CLIENT_ID, async () => {
             if (current && !stepUp) {
-              await database.query(
-                `INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ($1,$2,$3) ON CONFLICT (account_id,client_id) DO NOTHING`,
-                [current.session.userId, WEBSITE_CLIENT_ID, registered.scopes],
-              );
+              await input.sessionProof(request.headers);
               await proof(current.session, scopes);
             }
             const response = await input.native().handler(nativeRequest(request, '/oauth2/authorize', fields));

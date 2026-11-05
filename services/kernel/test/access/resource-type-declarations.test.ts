@@ -79,9 +79,9 @@ test('a mounted command that declares an unresolved resource type is refused', a
       { detail: declaredRoute('collection:create', ['library.collection']) },
       () => null,
     );
-    expect(() => assertDeclaredResourceTypes(app)).toThrow(Error);
+    expect(() => assertDeclaredResourceTypes(app, undefined, actionCatalogue(app))).toThrow(Error);
     try {
-      assertDeclaredResourceTypes(app);
+      assertDeclaredResourceTypes(app, undefined, actionCatalogue(app));
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       expect(message).toContain('library.collection');
@@ -103,7 +103,7 @@ test('a declared resource type that resolves builds', async () => {
       { detail: declaredRoute('fixture:declare', ['content.report']) },
       () => null,
     );
-    expect(() => assertDeclaredResourceTypes(app)).not.toThrow();
+    expect(() => assertDeclaredResourceTypes(app, undefined, actionCatalogue(app))).not.toThrow();
     expect(actionCatalogue(app).get('fixture:declare')?.['x-resource-types']).toEqual(['content.report']);
     expect(explainUnresolvedResourceType(actionCatalogue(app), 'content.report')).toBeUndefined();
   } finally {
@@ -119,7 +119,7 @@ test('a resource type no mounted command declares may stay unresolved', async ()
       { detail: declaredRoute('fixture:declare', ['content.report']) },
       () => null,
     );
-    expect(() => assertDeclaredResourceTypes(app)).not.toThrow();
+    expect(() => assertDeclaredResourceTypes(app, undefined, actionCatalogue(app))).not.toThrow();
     const actions = actionCatalogue(app);
     expect(declaredTypes(app)).not.toContain('library.collection');
     const unresolved = explainUnresolvedResourceType(actions, 'library.collection');

@@ -1,0 +1,874 @@
+[
+  {
+    "key": "source-scheme",
+    "schemeURI": "https://rezics.com/schemes/bangumi/public-tags",
+    "literalMember": "",
+    "type": "skos:ConceptScheme",
+    "labels": {
+      "en": "Bangumi public editor tags"
+    },
+    "metadata": {
+      "name": "REZICS reviewed Bangumi public-tag scheme",
+      "url": "https://rezics.com/schemes/bangumi/public-tags"
+    },
+    "facts": [
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/bangumi/public-tags",
+        "citations": [
+          "https://bgm.tv/subject/498",
+          "https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "canonical-scheme",
+    "schemeURI": "https://rezics.com/schemes/media-genres",
+    "literalMember": "",
+    "type": "skos:ConceptScheme",
+    "labels": {
+      "en": "Media genres"
+    },
+    "metadata": {
+      "name": "REZICS reviewed media genre scheme",
+      "url": "https://rezics.com/schemes/media-genres"
+    },
+    "facts": [
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/media-genres",
+        "citations": ["https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445"]
+      }
+    ]
+  },
+  {
+    "key": "canonical-harem",
+    "schemeURI": "https://rezics.com/schemes/media-genres",
+    "literalMember": "Q690342",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Harem (media genre)"
+    },
+    "metadata": {
+      "name": "Reviewed Wikidata media-harem meaning",
+      "url": "https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445",
+      "licence": {
+        "id": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "attribution": "Wikidata contributors; structured Q690342 meaning only"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "canonical-scheme",
+        "citations": ["https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445"]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "http://www.wikidata.org/entity/Q690342",
+        "citations": ["https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445"]
+      }
+    ]
+  },
+  {
+    "key": "source-harem",
+    "schemeURI": "https://rezics.com/schemes/bangumi/public-tags",
+    "literalMember": "后宫",
+    "type": "skos:Concept",
+    "labels": {
+      "zh": "后宫",
+      "en": "Harem (Bangumi public tag)"
+    },
+    "metadata": {
+      "name": "Reviewed Bangumi public editor tag 后宫",
+      "url": "https://bgm.tv/subject/498",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "attribution": "Bangumi contributors (https://bgm.tv/about/copyright); selected public meta_tags and authored correspondence; no endorsement"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "source-scheme",
+        "citations": [
+          "https://bgm.tv/subject/498",
+          "https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip"
+        ]
+      },
+      {
+        "property": "skos:closeMatch",
+        "target": "canonical-harem",
+        "citations": [
+          "https://bgm.tv/subject/498",
+          "https://github.com/bangumi/Archive/releases/download/archive/dump-2026-10-20.210332Z.zip",
+          "https://www.wikidata.org/w/index.php?title=Q690342&oldid=2554335445"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "vndb-development-status-scheme",
+    "schemeURI": "https://vndb.org/development-status",
+    "literalMember": "",
+    "type": "skos:ConceptScheme",
+    "labels": {
+      "en": "VNDB development status"
+    },
+    "metadata": {
+      "name": "REZICS reviewed VNDB development-status scheme",
+      "url": "https://vndb.org/development-status",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; selected development-status codes 0, 1 and 2 only"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://vndb.org/development-status",
+        "citations": ["https://api.vndb.org/kana"]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://vndb.org/development-status",
+        "citations": ["https://api.vndb.org/kana"]
+      }
+    ]
+  },
+  {
+    "key": "vndb-development-status-0",
+    "schemeURI": "https://vndb.org/development-status",
+    "literalMember": "0",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Finished"
+    },
+    "metadata": {
+      "name": "Reviewed VNDB development status 0 (Finished)",
+      "url": "https://vndb.org/development-status/0",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; selected development-status codes only"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "vndb-development-status-scheme",
+        "citations": ["https://api.vndb.org/kana"]
+      },
+      {
+        "property": "schema:url",
+        "value": "https://vndb.org/development-status/0",
+        "citations": ["https://api.vndb.org/kana"]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://vndb.org/development-status/0",
+        "citations": ["https://api.vndb.org/kana"]
+      }
+    ]
+  },
+  {
+    "key": "vndb-development-status-1",
+    "schemeURI": "https://vndb.org/development-status",
+    "literalMember": "1",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "In development"
+    },
+    "metadata": {
+      "name": "Reviewed VNDB development status 1 (In development)",
+      "url": "https://vndb.org/development-status/1",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; selected development-status codes only"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "vndb-development-status-scheme",
+        "citations": ["https://api.vndb.org/kana"]
+      },
+      {
+        "property": "schema:url",
+        "value": "https://vndb.org/development-status/1",
+        "citations": ["https://api.vndb.org/kana"]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://vndb.org/development-status/1",
+        "citations": ["https://api.vndb.org/kana"]
+      }
+    ]
+  },
+  {
+    "key": "vndb-development-status-2",
+    "schemeURI": "https://vndb.org/development-status",
+    "literalMember": "2",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Cancelled"
+    },
+    "metadata": {
+      "name": "Reviewed VNDB development status 2 (Cancelled)",
+      "url": "https://vndb.org/development-status/2",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; selected development-status codes only"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "vndb-development-status-scheme",
+        "citations": ["https://api.vndb.org/kana"]
+      },
+      {
+        "property": "schema:url",
+        "value": "https://vndb.org/development-status/2",
+        "citations": ["https://api.vndb.org/kana"]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://vndb.org/development-status/2",
+        "citations": ["https://api.vndb.org/kana"]
+      }
+    ]
+  },
+  {
+    "key": "vndb-release-types-scheme",
+    "schemeURI": "https://rezics.com/schemes/vndb/release-types",
+    "literalMember": "",
+    "type": "skos:ConceptScheme",
+    "labels": {
+      "en": "VNDB release completeness"
+    },
+    "metadata": {
+      "name": "REZICS reviewed VNDB release-type scheme",
+      "url": "https://rezics.com/schemes/vndb/release-types",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; selected release completeness codes complete, partial and trial only"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/release-types",
+        "citations": ["https://api.vndb.org/kana"]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/vndb/release-types",
+        "citations": ["https://api.vndb.org/kana"]
+      }
+    ]
+  },
+  {
+    "key": "vndb-release-type-complete",
+    "schemeURI": "https://rezics.com/schemes/vndb/release-types",
+    "literalMember": "complete",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Complete"
+    },
+    "metadata": {
+      "name": "Reviewed VNDB release completeness complete",
+      "url": "https://rezics.com/schemes/vndb/release-types/complete",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; selected release completeness codes only"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "vndb-release-types-scheme",
+        "citations": ["https://api.vndb.org/kana"]
+      },
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/release-types/complete",
+        "citations": ["https://api.vndb.org/kana"]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/vndb/release-types/complete",
+        "citations": ["https://api.vndb.org/kana"]
+      }
+    ]
+  },
+  {
+    "key": "vndb-release-type-partial",
+    "schemeURI": "https://rezics.com/schemes/vndb/release-types",
+    "literalMember": "partial",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Partial"
+    },
+    "metadata": {
+      "name": "Reviewed VNDB release completeness partial",
+      "url": "https://rezics.com/schemes/vndb/release-types/partial",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; selected release completeness codes only"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "vndb-release-types-scheme",
+        "citations": ["https://api.vndb.org/kana"]
+      },
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/release-types/partial",
+        "citations": ["https://api.vndb.org/kana"]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/vndb/release-types/partial",
+        "citations": ["https://api.vndb.org/kana"]
+      }
+    ]
+  },
+  {
+    "key": "vndb-release-type-trial",
+    "schemeURI": "https://rezics.com/schemes/vndb/release-types",
+    "literalMember": "trial",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Trial"
+    },
+    "metadata": {
+      "name": "Reviewed VNDB release completeness trial",
+      "url": "https://rezics.com/schemes/vndb/release-types/trial",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; selected release completeness codes only"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "vndb-release-types-scheme",
+        "citations": ["https://api.vndb.org/kana"]
+      },
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/release-types/trial",
+        "citations": ["https://api.vndb.org/kana"]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/vndb/release-types/trial",
+        "citations": ["https://api.vndb.org/kana"]
+      }
+    ]
+  },
+  {
+    "key": "bangumi-episode-types-scheme",
+    "schemeURI": "https://rezics.com/schemes/bangumi/episode-types",
+    "literalMember": "",
+    "type": "skos:ConceptScheme",
+    "labels": {
+      "en": "Bangumi episode types"
+    },
+    "metadata": {
+      "name": "REZICS reviewed Bangumi episode-type scheme",
+      "url": "https://rezics.com/schemes/bangumi/episode-types",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "attribution": "Bangumi contributors (https://bgm.tv/about/copyright); selected episode-type codes 0–6 only; no endorsement"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/bangumi/episode-types",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/bangumi/episode-types",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "bangumi-episode-type-0",
+    "schemeURI": "https://rezics.com/schemes/bangumi/episode-types",
+    "literalMember": "0",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Main story"
+    },
+    "metadata": {
+      "name": "Reviewed Bangumi episode type 0 (Main story)",
+      "url": "https://rezics.com/schemes/bangumi/episode-types/0",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "attribution": "Bangumi contributors (https://bgm.tv/about/copyright); selected episode-type codes only; no endorsement"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "bangumi-episode-types-scheme",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/bangumi/episode-types/0",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/bangumi/episode-types/0",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "bangumi-episode-type-1",
+    "schemeURI": "https://rezics.com/schemes/bangumi/episode-types",
+    "literalMember": "1",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Special"
+    },
+    "metadata": {
+      "name": "Reviewed Bangumi episode type 1 (Special)",
+      "url": "https://rezics.com/schemes/bangumi/episode-types/1",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "attribution": "Bangumi contributors (https://bgm.tv/about/copyright); selected episode-type codes only; no endorsement"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "bangumi-episode-types-scheme",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/bangumi/episode-types/1",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/bangumi/episode-types/1",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "bangumi-episode-type-2",
+    "schemeURI": "https://rezics.com/schemes/bangumi/episode-types",
+    "literalMember": "2",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Opening"
+    },
+    "metadata": {
+      "name": "Reviewed Bangumi episode type 2 (Opening)",
+      "url": "https://rezics.com/schemes/bangumi/episode-types/2",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "attribution": "Bangumi contributors (https://bgm.tv/about/copyright); selected episode-type codes only; no endorsement"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "bangumi-episode-types-scheme",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/bangumi/episode-types/2",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/bangumi/episode-types/2",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "bangumi-episode-type-3",
+    "schemeURI": "https://rezics.com/schemes/bangumi/episode-types",
+    "literalMember": "3",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Ending"
+    },
+    "metadata": {
+      "name": "Reviewed Bangumi episode type 3 (Ending)",
+      "url": "https://rezics.com/schemes/bangumi/episode-types/3",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "attribution": "Bangumi contributors (https://bgm.tv/about/copyright); selected episode-type codes only; no endorsement"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "bangumi-episode-types-scheme",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/bangumi/episode-types/3",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/bangumi/episode-types/3",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "bangumi-episode-type-4",
+    "schemeURI": "https://rezics.com/schemes/bangumi/episode-types",
+    "literalMember": "4",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Trailer / promotion / advertisement"
+    },
+    "metadata": {
+      "name": "Reviewed Bangumi episode type 4 (Trailer / promotion / advertisement)",
+      "url": "https://rezics.com/schemes/bangumi/episode-types/4",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "attribution": "Bangumi contributors (https://bgm.tv/about/copyright); selected episode-type codes only; no endorsement"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "bangumi-episode-types-scheme",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/bangumi/episode-types/4",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/bangumi/episode-types/4",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "bangumi-episode-type-5",
+    "schemeURI": "https://rezics.com/schemes/bangumi/episode-types",
+    "literalMember": "5",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "MAD"
+    },
+    "metadata": {
+      "name": "Reviewed Bangumi episode type 5 (MAD)",
+      "url": "https://rezics.com/schemes/bangumi/episode-types/5",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "attribution": "Bangumi contributors (https://bgm.tv/about/copyright); selected episode-type codes only; no endorsement"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "bangumi-episode-types-scheme",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/bangumi/episode-types/5",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/bangumi/episode-types/5",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "bangumi-episode-type-6",
+    "schemeURI": "https://rezics.com/schemes/bangumi/episode-types",
+    "literalMember": "6",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Other"
+    },
+    "metadata": {
+      "name": "Reviewed Bangumi episode type 6 (Other)",
+      "url": "https://rezics.com/schemes/bangumi/episode-types/6",
+      "licence": {
+        "id": "CC-BY-SA-3.0",
+        "url": "https://creativecommons.org/licenses/by-sa/3.0/"
+      },
+      "attribution": "Bangumi contributors (https://bgm.tv/about/copyright); selected episode-type codes only; no endorsement"
+    },
+    "facts": [
+      {
+        "property": "skos:inScheme",
+        "target": "bangumi-episode-types-scheme",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/bangumi/episode-types/6",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      },
+      {
+        "property": "schema:sameAs",
+        "value": "https://rezics.com/schemes/bangumi/episode-types/6",
+        "citations": [
+          "https://github.com/bangumi/api/blob/65d29cff2331e08c0110d30d515f7f1b6488f845/open-api/v0.yaml#/components/schemas/EpType"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "vndb-character-traits-scheme",
+    "schemeURI": "https://rezics.com/schemes/vndb/character-traits",
+    "literalMember": "",
+    "type": "skos:ConceptScheme",
+    "labels": {
+      "en": "VNDB character traits"
+    },
+    "metadata": {
+      "name": "VNDB character traits",
+      "url": "https://rezics.com/schemes/vndb/character-traits",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; finite reviewed dictionary metadata"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/character-traits",
+        "citations": ["https://vndb.org/d14"]
+      }
+    ]
+  },
+  {
+    "key": "vndb-character-traits-i23",
+    "schemeURI": "https://rezics.com/schemes/vndb/character-traits",
+    "literalMember": "i23",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Waist Length+"
+    },
+    "metadata": {
+      "name": "Waist Length+",
+      "url": "https://vndb.org/i23",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; finite reviewed dictionary metadata"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/character-traits/i23",
+        "citations": ["https://vndb.org/i23"]
+      },
+      {
+        "property": "skos:inScheme",
+        "target": "vndb-character-traits-scheme",
+        "citations": ["https://vndb.org/i23"]
+      }
+    ]
+  },
+  {
+    "key": "vndb-character-traits-i30",
+    "schemeURI": "https://rezics.com/schemes/vndb/character-traits",
+    "literalMember": "i30",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Straight"
+    },
+    "metadata": {
+      "name": "Straight",
+      "url": "https://vndb.org/i30",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; finite reviewed dictionary metadata"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/character-traits/i30",
+        "citations": ["https://vndb.org/i30"]
+      },
+      {
+        "property": "skos:inScheme",
+        "target": "vndb-character-traits-scheme",
+        "citations": ["https://vndb.org/i30"]
+      }
+    ]
+  },
+  {
+    "key": "vndb-public-tags-cont-scheme",
+    "schemeURI": "https://rezics.com/schemes/vndb/public-tags/cont",
+    "literalMember": "",
+    "type": "skos:ConceptScheme",
+    "labels": {
+      "en": "VNDB content tags"
+    },
+    "metadata": {
+      "name": "VNDB content tags",
+      "url": "https://rezics.com/schemes/vndb/public-tags/cont",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; finite reviewed dictionary metadata"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/public-tags/cont",
+        "citations": ["https://vndb.org/d14"]
+      }
+    ]
+  },
+  {
+    "key": "vndb-public-tags-cont-g105",
+    "schemeURI": "https://rezics.com/schemes/vndb/public-tags/cont",
+    "literalMember": "g105",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Science Fiction"
+    },
+    "metadata": {
+      "name": "Science Fiction",
+      "url": "https://vndb.org/g105",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; finite reviewed dictionary metadata"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/public-tags/cont/g105",
+        "citations": ["https://vndb.org/g105"]
+      },
+      {
+        "property": "skos:inScheme",
+        "target": "vndb-public-tags-cont-scheme",
+        "citations": ["https://vndb.org/g105"]
+      }
+    ]
+  },
+  {
+    "key": "vndb-public-tags-cont-g249",
+    "schemeURI": "https://rezics.com/schemes/vndb/public-tags/cont",
+    "literalMember": "g249",
+    "type": "skos:Concept",
+    "labels": {
+      "en": "Time Travel"
+    },
+    "metadata": {
+      "name": "Time Travel",
+      "url": "https://vndb.org/g249",
+      "licence": {
+        "id": "ODbL-1.0",
+        "url": "https://opendatacommons.org/licenses/odbl/1-0/"
+      },
+      "attribution": "VNDB contributors; finite reviewed dictionary metadata"
+    },
+    "facts": [
+      {
+        "property": "schema:url",
+        "value": "https://rezics.com/schemes/vndb/public-tags/cont/g249",
+        "citations": ["https://vndb.org/g249"]
+      },
+      {
+        "property": "skos:inScheme",
+        "target": "vndb-public-tags-cont-scheme",
+        "citations": ["https://vndb.org/g249"]
+      }
+    ]
+  }
+]

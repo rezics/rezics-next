@@ -1,4 +1,5 @@
-import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+import { accessClock } from './access-clock.ts';
+import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -13,6 +14,11 @@ import { partitionOf, routeOf } from '../route/route.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import { commandAccessContext, requireCommandAdmission } from './command-admission.ts';
 import { prepareGovernanceCheck } from './governance-reach.ts';
+import { deadlineClient } from './authenticate.ts';
+import { withConnection } from '../database/pool.ts';
+import { readPartition } from '../partition/partition.ts';
+import accountRead from './account-read.sql';
+import { lockZoneGrantWriterTarget } from './zone-grant-cleanup.ts';
 
 /** Only kernel-authenticated actor objects belong in this context; request JSON
  * supplies the command input, never this context or an authorization decision.
@@ -26,7 +32,11 @@ export function validActions(actions: readonly string[]): boolean {
     Array.isArray(actions) &&
     actions.length > 0 &&
     actions.length <= 1000 &&
-    actions.every((action) => typeof action === 'string' && /^[a-z][a-z_]*:[a-z][a-z_]*$/.test(action))
+    actions.every(
+      (action) =>
+        typeof action === 'string' &&
+        (/^[a-z][a-z_]*:[a-z][a-z_]*$/.test(action) || (action !== 'gate:any' && GATE_GROUP.test(action))),
+    )
   );
 }
 
@@ -59,6 +69,11 @@ export async function grantCommand<T>(
     key: string;
     input: unknown;
     denied: () => Error;
+    /** A transfer's new direct holder must be a real active native account.
+     * Checked on its source connection before target checkout, including replay. */
+    recipientAccountId?: string;
+    /** Exact Zone grant target and identity recipient, when the mutation writes grant rows. */
+    zoneGrantTarget?: Readonly<{ subjectAccountId?: string; addsGrant: boolean }>;
   },
   mutate: (tx: CommandTransaction, transactionId: string) => Promise<T>,
 ) {
@@ -85,6 +100,17 @@ export async function grantCommand<T>(
       try {
         const preparation = commandAccessContext(context, attempt);
         await requireCommandAdmission(config.access, actor, preparation);
+        if (options.recipientAccountId !== undefined) {
+          const route = routeOf(options.recipientAccountId);
+          if (route === null) throw options.denied();
+          await withConnection(config.pool, async (client) => {
+            const bounded = deadlineClient(client, context.deadline);
+            const home = await readPartition(bounded, partitionOf(route));
+            if (!home || home.writeState !== 'active') throw new AccessUnavailableError('overloaded');
+            const account = await accountRead.run(bounded, { route, account_id: options.recipientAccountId! });
+            if (!account || account.state !== 'active' || account.fenced) throw options.denied();
+          });
+        }
         if (options.consentedActions?.some((action) => !actor.scopes.includes(action))) throw options.denied();
         const actions = [...new Set(options.actions)];
         const checks: { action: string; evidence: unknown; check: AccessCheck }[] = [];
@@ -148,7 +174,7 @@ export async function grantCommand<T>(
         deadline: context.deadline,
         basis,
         authorization,
-        clock: config.clock,
+        clock: config.clock ?? accessClock(config.access),
         receipt: {
           actorAccountId: actor.accountId,
           kind: options.kind,
@@ -159,6 +185,17 @@ export async function grantCommand<T>(
       async (tx, { transactionId }) => {
         if (conflict !== undefined) throw conflict;
         requireAccessDeadline(context.deadline);
+        if (
+          options.zoneGrantTarget &&
+          !(await lockZoneGrantWriterTarget(tx, {
+            resource: options.resource,
+            ...('subjectAccountId' in options.zoneGrantTarget
+              ? { subjectAccountId: options.zoneGrantTarget.subjectAccountId }
+              : {}),
+            addsGrant: options.zoneGrantTarget.addsGrant,
+          }))
+        )
+          throw options.denied();
         const value = await mutate(tx, transactionId);
         requireAccessDeadline(context.deadline);
         return {

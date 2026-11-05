@@ -3,9 +3,14 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "resolveJsonModule": true,
-    "types": ["vite/client", "@cloudflare/workers-types"]
+    "paths": {
+      "@rezics/money": ["../../packages/money/src/index.ts"]
+    },
+    "types": ["bun", "vite/client", "@cloudflare/workers-types"]
   },
+  "contentMappers": [{ "package": "reylo", "extensions": [".sql"] }],
   "include": [
+    "tests/factories/**/*.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
     "scripts/**/*.ts",

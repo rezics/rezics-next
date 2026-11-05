@@ -10,7 +10,13 @@ import {
   registerContent,
 } from '../../src/content/register.ts';
 import { CONTENT_WORKFLOWS } from '../../src/content/work-contract.ts';
-import { CONTENT_BOARD_RANK_SCHEDULE, CONTENT_COLLECTION_SCHEDULE } from '../../src/content/work.ts';
+import {
+  CONTENT_BOARD_RANK_SCHEDULE,
+  BOARD_SLOW_RECOVERY_SCHEDULE,
+  BOARD_SLOW_RETENTION_SCHEDULE,
+  CONTENT_COLLECTION_SCHEDULE,
+  CONTENT_NOTICE_RETENTION_SCHEDULE,
+} from '../../src/content/work.ts';
 import { runCommand } from '../../src/command/command.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 import type { WorkClient } from '../../src/work/client.ts';
@@ -28,7 +34,7 @@ const contentEnv = {
   CONTENT_R2_ACCESS_KEY_ID: 'private-access-id',
   CONTENT_R2_SECRET_ACCESS_KEY: 'private-secret',
   CONTENT_SOURCE_HOSTS: 'images.example.org,covers.example.net',
-  CONTENT_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
+  KERNEL_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
   CF_ACCESS_CLIENT_ID: 'access-client-id',
   CF_ACCESS_CLIENT_SECRET: 'access-client-secret',
 };
@@ -176,23 +182,36 @@ if (process.argv.includes('--content-registration')) {
         CONTENT_WORKFLOWS.importFromUrl,
         'content.collect.partition',
         'content.board-rank.refresh',
+        'content.notice-retention',
+        'content.notice-retention.partition',
+        'content.board-slow.recovery',
+        'content.board-slow.retention',
         'content.erasePostRevisions',
       ]),
     );
     expect(registration.effects.map((effect) => effect.name)).toEqual([
       'content_post_erased',
       'content_reaction_count',
+      'content_subject_thread',
+      'content_author_item',
+      'content_report_reporter',
+      'content_party_locator',
       'content_board_thread',
       'content_report_target',
+      'content_report_outcome',
+      'content_moderation_decision',
       'content_media_image',
       'content_media_purge',
       'content_author_erasure',
       'content_url_import',
+      'content_subject_reaction_merge',
+      'content_mention_notice',
+      'content_reply_notice',
     ]);
     expect(absenceLines(output)).toEqual([
       'content storage group is absent: CONTENT_R2_ENDPOINT, CONTENT_R2_BUCKET, CONTENT_R2_ACCESS_KEY_ID, CONTENT_R2_SECRET_ACCESS_KEY',
       'content sources group is absent: CONTENT_SOURCE_HOSTS',
-      'content consent group is absent: CONTENT_AUTH_CONSENT_URL, CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET',
+      'content consent group is absent: KERNEL_AUTH_CONSENT_URL, CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET',
     ]);
     expect(output).not.toContain(canary);
     expect(output).not.toContain(routeKey);
@@ -227,6 +246,30 @@ if (process.argv.includes('--content-registration')) {
         cronTimezone: 'UTC',
         automaticBackfill: false,
       },
+      {
+        scheduleName: CONTENT_NOTICE_RETENTION_SCHEDULE,
+        workflowName: 'content.notice-retention',
+        schedule: '0 * * * *',
+        queueName: 'maintenance',
+        cronTimezone: 'UTC',
+        automaticBackfill: false,
+      },
+      {
+        scheduleName: BOARD_SLOW_RECOVERY_SCHEDULE,
+        workflowName: 'content.board-slow.recovery',
+        schedule: '* * * * *',
+        queueName: 'maintenance',
+        cronTimezone: 'UTC',
+        automaticBackfill: false,
+      },
+      {
+        scheduleName: BOARD_SLOW_RETENTION_SCHEDULE,
+        workflowName: 'content.board-slow.retention',
+        schedule: '0 2 * * *',
+        queueName: 'maintenance',
+        cronTimezone: 'UTC',
+        automaticBackfill: false,
+      },
     ]);
     expect(empty.registration.steps).toEqual(
       expect.arrayContaining([
@@ -235,6 +278,10 @@ if (process.argv.includes('--content-registration')) {
         'content.import.step',
         'content.authorErase.step',
         'content.collect.step',
+        'content.notice-retention.cutoff',
+        'content.notice-retention.page',
+        'content.board-slow.recovery.page',
+        'content.board-slow.retention.page',
       ]),
     );
     expect(absenceLines(full.output)).toEqual([]);
@@ -334,7 +381,7 @@ if (process.argv.includes('--content-registration')) {
 
       const dependencies = contentWorkDependencies({}, transport);
       expect(dependencies.config.storage).toBeNull();
-      expect(dependencies.config.consent).toBeNull();
+      expect(dependencies.absentGroups.map((group) => group.name)).toContain('consent');
       expect(dependencies.fetchConfig.allowedHosts).toEqual([]);
 
       const image = await createImageJob(pool, dependencies.storage)

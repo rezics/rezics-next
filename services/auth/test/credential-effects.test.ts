@@ -1,5 +1,7 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { credentialEffectResponseLimits } from '@rezics/auth-contract';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
@@ -43,6 +45,7 @@ export async function credentialFixture(suppliedPool?: Pool) {
   const openings = new Map<string, { stage: CredentialEffectBinding; spent: boolean; expiresAt: string }>();
   let allowed = true;
   let afterConsume = async () => {};
+  let revalidateProof = false;
   let service: AuthService;
   const options = {
     database: pool,
@@ -50,13 +53,14 @@ export async function credentialFixture(suppliedPool?: Pool) {
     audience: 'https://credential.api.test',
     secret: 'credential-effect-test-persistent-secret-32-bytes',
     signing: { activeKid: signing.kid, privateKeys: [signing] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       readAccount,
+      readFencedAccount: readAccount,
       authorizeProvisioning: async (accountId: string) => ({ accountId }),
       async approveCredentialEffect(input: { stage: CredentialEffectBinding; human: SessionProof }) {
         if (!allowed) throw new Error('Fixture authority revoked');
         expect(await service.internal.accessTokenForProof(input.human)).toBeString();
-        const reference = randomUUID();
+        const reference = `${'A'.repeat(credentialEffectResponseLimits.passwordApprovalReferenceUnits - 44)}.${'A'.repeat(43)}`;
         const expiresAt = new Date(Date.now() + 60000).toISOString();
         openings.set(reference, { stage: input.stage, spent: false, expiresAt });
         return { reference, expiresAt };
@@ -88,6 +92,7 @@ export async function credentialFixture(suppliedPool?: Pool) {
         },
       ) {
         if (!allowed) throw new Error('Fixture authority revoked');
+        if (revalidateProof) await service.internal.accessTokenForProof(input.human);
         if (input.replay) {
           expect(input.committedOpeningReceiptId).toBeString();
           if (!openings.get(input.authorization)?.spent || input.committedOpeningReceiptId !== input.authorization)
@@ -117,7 +122,7 @@ export async function credentialFixture(suppliedPool?: Pool) {
           fenced: false,
         };
       },
-    },
+    }),
   };
   service = await createAuthService(options);
   await service.internal.registerClient({ clientId: 'web', firstParty: true, scopes: ['account:manage'] });
@@ -165,6 +170,9 @@ export async function credentialFixture(suppliedPool?: Pool) {
     afterConsume(callback: () => Promise<void>) {
       afterConsume = callback;
     },
+    revalidateWithNativeProof() {
+      revalidateProof = true;
+    },
     async stage(
       credential: Parameters<AuthService['internal']['stageCredentialEffect']>[0]['credential'],
       subjectAccountId = 'robot',
@@ -210,6 +218,31 @@ test('Auth stage commits an immutable keyed commitment and rejects changed input
     ).rejects.toThrow();
     const rows = await f.pool.query('SELECT * FROM auth_effect_receipt WHERE operation_key=$1', [op.key]);
     expect(JSON.stringify(rows.rows)).not.toContain('candidate password');
+  } finally {
+    await f.close();
+  }
+}, 60000);
+
+test('credential revalidation signs a live proof under the credential transaction without rewriting current consent', async () => {
+  const f = await credentialFixture();
+  try {
+    // Bound a regression's self-deadlock, including reused and newly opened clients.
+    f.pool.options.max = 4;
+    const clients = await Promise.all(Array.from({ length: 4 }, () => f.pool.connect()));
+    for (const client of clients) {
+      await client.query("SET lock_timeout='1s'");
+      client.release();
+    }
+    const before = (
+      await f.pool.query('SELECT revision FROM auth_consent WHERE account_id=$1 AND client_id=$2', ['human', 'web'])
+    ).rows;
+    f.revalidateWithNativeProof();
+    const op = await f.stage({ kind: 'key', kid: 'new-key', publicJwk: f.publicJwk }, 'human');
+    expect((await f.apply(op)).replayed).toBe(false);
+    expect(
+      (await f.pool.query('SELECT revision FROM auth_consent WHERE account_id=$1 AND client_id=$2', ['human', 'web']))
+        .rows,
+    ).toEqual(before);
   } finally {
     await f.close();
   }
@@ -304,6 +337,11 @@ test('last interactive credential of a person cannot be removed', async () => {
     await expect(f.apply(op)).rejects.toMatchObject({ status: 409 });
     expect((await f.pool.query('SELECT password FROM account WHERE "userId"=\'human\'')).rows[0].password).toBeString();
     await f.pool.query("INSERT INTO auth_public_key VALUES ('human','retained',$1)", [f.publicJwk]);
+    await expect(f.apply(op)).rejects.toMatchObject({ status: 409 });
+    await f.pool.query(
+      `INSERT INTO passkey(id,"userId","credentialID","publicKey",counter,"deviceType","backedUp","createdAt")
+       VALUES ('retained-passkey','human','retained-credential','unit-public-key',0,'singleDevice',false,now())`,
+    );
     expect((await f.apply(op)).replayed).toBe(false);
   } finally {
     await f.close();
@@ -413,10 +451,14 @@ test('Auth host transports only closed credential commands and redacts every den
     const stageResponse = await request('stage', {
       key: randomUUID(),
       subjectId: 'robot',
-      credential: { kind: 'key', kid: 'new-key', publicJwk: f.publicJwk },
+      credential: { kind: 'password', password: 'candidate password long enough' },
     });
     expect(stageResponse.status).toBe(200);
     const op = await stageResponse.json();
+    expect(Object.keys(op).sort()).toEqual(['digest', 'effectRef', 'key', 'purpose', 'subjectId']);
+    expect(op).toMatchObject({ purpose: 'set-password', subjectId: 'robot' });
+    expect(op.effectRef).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(op.digest).toMatch(/^[a-f0-9]{64}$/);
     for (const body of [
       { ...op, purpose: 'session' },
       { ...op, digest: 'hostile' },
@@ -432,15 +474,25 @@ test('Auth host transports only closed credential commands and redacts every den
     const approvalResponse = await request('approve', op);
     expect(approvalResponse.status).toBe(200);
     const approval = await approvalResponse.json();
+    expect(Object.keys(approval).sort()).toEqual(['expiresAt', 'reference']);
+    expect(approval.reference).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/);
+    expect(approval.expiresAt).toBe(new Date(approval.expiresAt).toISOString());
     const result = await request('apply', { ...op, reference: approval.reference });
     expect(result.status).toBe(200);
-    expect(await result.json()).toEqual({ receiptId: expect.any(String), replayed: false });
+    const applied = await result.json();
+    expect(Object.keys(applied).sort()).toEqual(['receiptId', 'replayed']);
+    expect(applied).toMatchObject({ replayed: false });
+    expect(applied.receiptId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    const replay = await request('apply', { ...op, reference: approval.reference });
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toEqual({ ...applied, replayed: true });
     const unavailable = await createAuthService({
       ...f.options,
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
+        readFencedAccount: f.options.trustedAccess.readFencedAccount,
         readAccount: f.options.trustedAccess.readAccount,
         authorizeProvisioning: f.options.trustedAccess.authorizeProvisioning,
-      },
+      }),
     });
     await expect(
       unavailable.internal.approveCredentialEffect({ ...op, subjectAccountId: 'robot', headers: f.headers }),

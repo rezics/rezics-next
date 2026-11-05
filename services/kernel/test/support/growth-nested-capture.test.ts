@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { capture, openGrowthDatabase } from './growth-capture.ts';
 
-test("a nested capture counts each database's statements in its own capture as foreground", async () => {
+test('nested database captures retain each operation scope and its executed plans', async () => {
   const application = await openGrowthDatabase();
   try {
     const auth = await openGrowthDatabase();

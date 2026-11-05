@@ -1,0 +1,12 @@
+{
+  "name": "@rezics/search-text",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "bun check --no-script -p tsconfig.json"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

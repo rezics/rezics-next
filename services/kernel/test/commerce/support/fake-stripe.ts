@@ -99,7 +99,7 @@ function required<T>(map: ReadonlyMap<string, T>, id: string): T {
 }
 
 /** A local Stripe API fixture. Controls operate on provider objects, never commerce settlement or entitlements. */
-export function startFakeStripe() {
+export function startFakeStripe(rewriteRead?: (path: string, response: Response) => Promise<Response>) {
   const sessions = new Map<string, Session>();
   const intents = new Map<string, Intent>();
   const charges = new Map<string, Charge>();
@@ -432,12 +432,13 @@ export function startFakeStripe() {
         return new Response(body, { headers: { 'content-type': 'application/json' } });
       }
       if (req.method === 'GET') {
-        if (url.pathname === '/v1/checkout/sessions') return list(url.pathname, [...sessions.values()], params);
-        if (url.pathname === '/v1/refunds') return list(url.pathname, [...refunds.values()], params);
-        if (url.pathname === '/v1/disputes') return list(url.pathname, [...disputes.values()], params);
+        const reply = (response: Response) => (rewriteRead ? rewriteRead(url.pathname, response) : response);
+        if (url.pathname === '/v1/checkout/sessions') return reply(list(url.pathname, [...sessions.values()], params));
+        if (url.pathname === '/v1/refunds') return reply(list(url.pathname, [...refunds.values()], params));
+        if (url.pathname === '/v1/disputes') return reply(list(url.pathname, [...disputes.values()], params));
         const match = url.pathname.match(/^\/v1\/checkout\/sessions\/([^/]+)$/);
         const session = match?.[1] ? sessions.get(decodeURIComponent(match[1])) : undefined;
-        if (session) return Response.json(serialize(session, params.getAll('expand[]')));
+        if (session) return reply(Response.json(serialize(session, params.getAll('expand[]'))));
       }
       return error('invalid_request_error', 404, 'Unknown fake Stripe endpoint or object');
     },
@@ -567,6 +568,7 @@ export function startFakeStripe() {
           has_evidence: false,
           past_due: false,
           submission_count: 0,
+          submission_method: 'not_submitted',
         },
       } satisfies Dispute);
       charge.disputed = true;

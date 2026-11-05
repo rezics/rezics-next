@@ -1,0 +1,28 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as Stories from './realm-bans.stories';
+
+<Meta of={Stories} />
+
+# Realm bans
+
+`RealmBansControl` is the reusable management region on the Space home. A native current-ban page grants the
+controls; membership and cached role labels do not. Each request reads 20 current records with the native cursor.
+Refresh starts at the first page. Failed reads show their own state and never an invented empty list.
+
+A ban immediately denies joining, participation and protected reads. A queued membership removal remains
+unconfirmed after refresh because the list has no completion field. Unban allows later admission under current
+Realm rules without restoring membership or changing follows. Owner/moderator targets need genuine role removal
+first. An ambiguous response keeps the same request and key for retry; a native authority refusal removes controls.
+
+The current list uses shared content rows. Each record keeps its full reason, exact account identifier and original
+UTC timestamp together. The target preview is a non-link current identity record with an avatar fallback, handle and
+any moved-to annotation; selecting a target and confirming a ban remain separate actions. Ban and unban outcomes use
+the same shared case frame, while each row retains its own confirmation controls.
+
+The component stories exercise fields, full evidence, confirmation, cursor paging, pending removal and failure
+recovery through play functions. The Space page story reuses this region and the existing page peers within the
+shared shell. Interaction fixtures use native DTO shapes; native protected-read outcomes remain the later authority
+proof.
+
+Review the same story IDs with phone390 and desktop1280 viewport globals, locale and theme globals. Web review and
+Root screenshots are still required; this worker does not run a browser or capture campaign.

@@ -127,7 +127,7 @@ test('an appearance is a character statement qualified by its role and a voice a
     multivalued: true,
     targets: ['ex:Character', 'wd:Q95074'],
     mappings: ['wd:P674'],
-    qualifiers: ['rezics:spoilerLevel', 'wdt:P1932', 'wdt:P3831'],
+    qualifiers: ['rezics:spoilerLevel', 'wdt:P1932', 'wdt:P3629', 'wdt:P3831', 'wdt:P518'],
   });
   expect(release.properties['wdt:P453']).toMatchObject({
     datatype: 'wikibase-item',

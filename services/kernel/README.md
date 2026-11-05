@@ -1,15 +1,115 @@
 # Kernel
 
+createKernel composes the pure Progress, Continue and Feed operation declarations for API, worker
+and persona setup. The Elysia adapter binds their framework schemas and derives mounted security,
+exposure, action and rate metadata; domain handlers remain the owners of native behavior.
+
 The kernel workspace owns the database records and adapters used by the service.
+
+## Growth seed target identifiers
+
+Bulk growth-seed targets keep the lowercase `schema.table` grammar. The supported PostgreSQL server uses UTF-8 and a
+63-byte identifier limit; schema, table and quoted column identifiers are checked against it before the affected
+batch is submitted. Validation is bounded by that limit, rejects NUL and malformed UTF-16 column keys, and keeps the
+existing snapshot-based row and byte batch admission without a separate target-name charge.
+
+## Commands
+
+Run `bun run --cwd services/kernel typecheck` through the [compiler placement contract](../../docs/development/compiler-check-placement.md).
+The command runs TypeScript plus construct on an approved check host against one migrated compiler database.
+An explicit `DATABASE_URL` requires an already admitted physical run. Unavailable placement fails closed;
+TypeScript diagnostics and exit status are preserved.
+
+## Client declaration output placement
+
+`typecheck --emit-client` declares `KERNEL_CLIENT_OUTPUT` from
+[`scripts/check-output-tree.ts`](../../scripts/check-output-tree.ts): the closed `kernel-client-v1` profile owns exactly
+`packages/client/src/kernel`. Combined `--emit-schema=` also declares its existing schema file. The official generator
+runs once after physical admission, migration validation and prepared-source custody; compiler/database placement and
+exit codes retain the compiler contract. `.reylo` caches are never returned. External `REYLO_CONFIG` stays unsupported.
+
+Decision: emit source-checked declarations before the full workspace compiler and construct checks so tests can
+consume refreshed client types; all checks must pass before publication. The generated closure includes modules
+referenced by the public client entrypoint as well as mounted routes.
+
+Decision: publish the complete mounted and public-root declaration closure for every admitted Kernel input
+independently of future source candidates or unfinished consumers.
+
+Decision: Account client exports project mounted route types and add no parallel producer for account profile, avatar,
+managed-account navigation or unread data.
+
+The profile admits 512 regular members, 32 MiB decoded total, 2 MiB per member, 16 relative path components and
+1024 UTF-8 path bytes. Paths must be normalized NFC, collision-free under case folding, and free of traversal,
+backslashes, control characters and ambiguous trailing dots/spaces. Links, multiple hard links and special files,
+including symlink ancestors at capture, staging or destination, refuse the whole result. Empty directories are not
+members. Capture enumerates at most `1 + 512 * 16` directories.
+
+The deterministic uncompressed version 1 format is a 21-byte magic line, a JSON header line of at most 1024 bytes,
+at most 512 ordered JSON member lines of at most `6 * 1024 + 160 = 6304` bytes each, then the exact raw member bytes.
+Line bounds include newlines. Thus the complete manifest is at most 3,228,672 bytes and the complete transport at
+most 36,783,125 bytes. Count/encoded bounds precede catalogue parsing and content allocation; each member's size,
+SHA-256, aggregate size and the ordered catalogue SHA-256 must agree. Unknown versions/profiles refuse explicitly;
+there is no general archive extractor or arbitrary profile registration.
+
+The real transport file is `.temp/check-output-tree/kernel-client-v1.bin`. The ordinary `returns: string[]` API and
+schema 1 artifact/physical return manifests remain compatible, with their unchanged 64-file, 256-MiB and path bounds.
+`stack-run`, `remote-check` and `check-run` additionally accept `--output-tree kernel-client-v1`, which selects that
+exact transport declaration before admission. Frozen original invocations must declare the profile while freezing
+source. Nested official emitters using an ordinary physical artifact envelope reserve the same named transport before
+upload; the artifact envelope and bundle both pass normal inventory/hash validation. Combined emissions capture the
+schema alongside the bundle. A legacy artifact receiver only replays a bundle after the physical receiver has already
+published it, checking the retained publication receipt and every current member.
+
+`withKernelClientOutput` recognizes the actual confined process and reads its fixed host prepared-input receipt;
+`encodeOutputTree` binds host/run/source, profile/root and the full ordered catalogue. `currentCheckSourceManifest`
+uses check-run's existing exact source fingerprint/catalogue for direct placement, excluding only declared outputs
+and the profile's fixed staging area. The physical return receiver supplies `OutputTreeAuthority` from its own native
+receipt, prepared-source evidence and authenticated transport SHA-256. A bundle's claimed identity cannot supply this
+authority. `receiveOutputTrees` verifies all inventory and bytes, then `restoreOutputTree` publishes; original check-run
+terminal receiving and reconciliation repeat these checks against their frozen source and original physical result.
+`parseArtifactManifest(bytes, physicalRunId)` is the shared bounded schema 1 parser for ordinary and nested envelopes;
+old ordinary manifests may omit declarations/hashes, while a nested tree requires a complete declared, hashed catalogue.
+A source change, mixed source/attempt/profile, missing/incomplete bundle or nonzero command cannot publish or allow a
+successful downstream client/Web compiler continuation. Failed commands retain their native status and may return
+ordinary diagnostic artifacts. A zero-member replacement requires successful official completion and an authenticated
+complete empty bundle; a missing bundle never requests deletion.
+
+Publication stages validated bytes under the fixed owned sibling `packages/client/src/.kernel-output-tree` and takes
+an exclusive process-identity lock. It durably journals the exact source/run/bundle authority before staging, fsyncs
+files/directories, renames the prior owned tree to `backup`, then the candidate to `kernel`. Only this owned tree is
+replaced; obsolete members disappear and unrelated siblings remain intact. A successful publication receipt precedes
+backup cleanup. Validation failures leave the prior tree intact. An interruption between renames retains the prior
+backup; only receiving the same authenticated terminal result may recover it, finish publication and clean up. A
+published candidate is revalidated before completing interrupted cleanup. A live owner or a different interrupted
+result refuses concurrent receiving. Missing/malformed lock custody fails closed. Repeating the same terminal result
+checks the receipt and entire current catalogue without replacing it. The original foreground command, cancellation,
+parent-group closure, receiving fence and cleanup retain their existing lifetime; this profile adds no retry/launcher.
 
 ## Development database
 
 Run `bun run db up` from `services/kernel` to create or start the local PostgreSQL database, apply migrations, and write
 its connection string to `.env`. Use `bun run db down` to stop it while keeping its volume, `bun run db reset` to remove
-and recreate the database, and `bun run db dump` to update the committed schema dump. Dumps run `pg_dump` inside the
-running database container, using its PostgreSQL version. The check command uses its disposable database container;
-the development dump command uses the local development container. Callers that do not set `KERNEL_DATABASE_CONTAINER`
-retain the `docker run` fallback.
+and recreate the database, and `bun run db dump` to update the committed schema dumps from that mutable development
+database. Dumps run `pg_dump` inside the running database container, using its PostgreSQL version. The check command
+uses its disposable database container; the development dump command uses the local development container. Callers that
+do not set `KERNEL_DATABASE_CONTAINER` retain the `docker run` fallback.
+
+CI and the controller run `bun run derived schema` from this workspace (`bun run --cwd services/kernel derived schema`).
+It checks migration versions, migrates a throwaway PostgreSQL container, and writes `db/schema.sql` plus every module
+dump `db/<module>/schema.sql`, using all current migrations, the pinned PostgreSQL image and the same dump
+normalization as database checks. The command uses that container's `DATABASE_URL` and `KERNEL_DATABASE_CONTAINER`,
+so an inherited development URL or container is ignored. It does not construct the kernel, read Auth or runtime secrets,
+write the OpenAPI document or client, or touch the development database. Any other argument is rejected before a
+database starts.
+
+Derived generation keeps one throwaway database per checkout in a container labeled with that checkout's cache key.
+It reuses the container only while the pinned PostgreSQL image and migration fingerprint match, and recreates only that
+owned container after a migration change. The container uses temporary storage and is separate from the development
+database. Its metadata and the compiler caches live under the repository's `.temp/` and can be deleted.
+
+The client declaration cache is keyed by checkout and source file inventory under `.temp/`, so content edits reuse
+incremental TypeScript state while file additions or removals get a clean output tree. OpenAPI generation is skipped
+only when the kernel and workspace-package source fingerprint and the current generated contract hash both match.
 
 ## Development search node
 
@@ -18,9 +118,48 @@ to `.env`. `KERNEL_SEARCH_PREFIX` optionally selects the index prefix and defaul
 `bun run search down` to stop it while keeping its volume, or `bun run search reset` to remove and recreate it. The
 check command starts its own disposable OpenSearch node.
 
+Use the workspace command's pinned image, built from
+[`db/search/opensearch/Dockerfile`](db/search/opensearch/Dockerfile), for the released Search analyzer.
+It installs `analysis-icu`; an unmodified upstream image lacks that plugin. Keep the retained development
+volume when recovering a running catalogue: start the existing node with `up`, then run the ordinary
+worker and rebuild command below. Analyzer definitions and script/alias projection remain owned by
+the released Search text implementation; recovery preserves their mapping metadata.
+
 ## Rebuilding the search index
 
+The configured server installs `createDefaultDiscoverySearch` from
+[`search/default-discovery.ts`](src/search/default-discovery.ts) after Kernel Access is available.
+Its `{ search, close }` result exposes the existing `DiscoverySearch` callable: pass a principal,
+`MixedDiscoveryRequest` and current `DiscoveryReadContext` (Actor and deadline). The home feed can consume its
+bounded owner/kind/route/id keys, current owner summaries, signed `next` and `as_of` through that same callable.
+This candidate family covers the public catalogue and eligible Accounts; `id`, `name` and `relevance` retain
+their search meanings.
+
+The default assembly pins the active definition release and language preferences, selects the actual active
+`discovery-g` allocation, and reopens the native retained consumer for continuation. It uses the existing production
+kind metadata and the queried mixed consumer's checkpoint for freshness. Preparation jobs use the existing durable
+public-preparation store and default worker; API requests never launch an indexing worker. Shutdown drains requests
+and closes the discovery runtime before the shared database pool.
+
+Mixed repair dispatch uses `createDiscoveryProjection` for both native owner families, including keyed old-kind
+removal. Its receipt is distinct from a Subject writer receipt: custody rechecks the actual allocation incarnation,
+engine UUID, tagged actions, exact-version native responses, refresh-visible winners and retained native
+writer enrollment/settlement. It uses the existing writer custody rows and Source repair-step/receipt verifiers;
+`discovery_copy.settled` never supplies repair closure. Native own-home Source actions are retained before dispatch;
+interrupted dispatch replays those exact actions through the same mixed writer. The keyed copy window is at most 100; no population or kind census supplies
+repair targets.
+
+Native Source projection and reduction proof remains a prerequisite. The current `publicFilterSource` export in
+[`semantic/public-filter-source.ts`](src/semantic/public-filter-source.ts) still returns typed `metadata_missing`
+readiness from its projection-page and reduction readers. Default wiring preserves that result as
+`index_not_ready` with `retry-after`; current returned-row hydration cannot certify the missing population proof.
+The focused default-server regression requires a positive native response and is deferred in minimal verification
+mode. Workspace typing does not establish native readiness.
+
 Run `bun run search rebuild` from this workspace to build the next subject generation and switch the alias to it.
+Set `DATABASE_URL`, `OPENSEARCH_URL`, and the deployment's `KERNEL_ROUTE_KEY` (canonical unpadded base64url encoding
+of exactly 32 bytes). Rebuild validates the route key before opening the database pool and supplies it to the source
+for imported-source fence checks. Other server credentials are not required; `up`, `down`, and `reset` need no route key.
 The worker replays the log into the new generation. A failed rebuild reports one of `timeout`, `mismatch`, `busy`,
 `running`, or `limit`. The previous generation is deleted 15 minutes after the switch.
 
@@ -31,7 +170,9 @@ Run `bun run db up`, then `bun run dev` from this workspace to serve the API loc
 `KERNEL_HOSTNAME` defaults to `127.0.0.1` and `KERNEL_PORT` defaults to `4100`. `db up` generates the development
 secrets once and keeps them in `.env` across restarts. `KERNEL_POOL_ACQUIRE_TIMEOUT_MS` defaults to 200 ms and accepts
 whole millisecond values from 50 through 10,000; other values fail startup. Before serving requests, the server opens
-all 10 PostgreSQL pool connections and keeps them open while idle.
+all 10 PostgreSQL pool connections and keeps them open while idle. The worker also requires
+`KERNEL_RATING_COUNTER_SECRET`, a canonical base64url value containing at least 32 bytes, shared by every worker
+instance so controller counts remain stable.
 
 Commerce settings are optional and all or nothing: `STRIPE_SECRET_KEY`, `STRIPE_MANAGED_PAYMENTS`,
 `CHECKOUT_SUCCESS_URL` and `CHECKOUT_CANCEL_URL` are required when enabled; the API also requires
@@ -97,6 +238,14 @@ A no-op or refusal reads the marker and writes no receipt, grant, fence or event
 native index buffers are `O(log R)`. Role expansion is bounded by the explicit action data at composition and
 creates no per-action governance rows. There is no account scan or cross-partition transaction.
 
+Growth SQL control classification skips leading whitespace and nested comments, rejects empty or comment-only entries
+and unterminated comments in the command prefix, and keeps `ROLLBACK TO [WORK|TRANSACTION]` inside the current attempt.
+A control prefix cannot classify a wire message that still has further executable commands after that first statement.
+Semicolons inside quoted identifiers, ordinary or escape strings, dollar-quoted bodies and nested comments remain in
+that command, as do ordinary trailing terminators and comments. Control-prefixed batches are refused at classification,
+so statement costs and the attempt ledger cannot treat them as one control; native capture still records one wire
+occurrence. Application-only batches stay one statement. Production query APIs are unchanged.
+
 The shared 1x/8x/64x growth checks grow accounts, community contexts, same-Global unrelated grants, unrelated
 receipts, same-account receipt history and outbox history at fixed actions. Warm native attempts use 5 statements
 for first installation and 3 for no-op/refusal; cold exact CLI processes use 9 and 5 respectively, including Reylo's
@@ -105,6 +254,50 @@ buffers using native `auto_explain`, without wall-clock bounds or planner forcin
 hotspot beyond the fixed platform resource's intentional one-time installation.
 
 ## Durable work
+
+### Shared-history erasure
+
+The `shared-history` participant registers command receipts, outbox events and durable work as typed artifacts.
+Receipt skeletons preserve receipt identity, principal and command identity, request digest, transaction and observed
+log position, plus the versioned keyed-hash token used for idempotency replay. The raw caller key is never stored;
+the key ring must remain available for as long as receipts can be looked up. Outbox skeletons preserve partition,
+position, event sequence, event type and schema version. Locators are producer-declared typed account references,
+written in the artifact's physical partition in the same transaction as the artifact. Erasure seeks the account's
+prefix in each of the fixed 4,096 partitions, one per step, and never scans account-wide JSON or names. This is fixed
+discovery work at erasure, with no cross-partition locator write on the hot command path.
+
+The default native `shared_history` module extends the existing recorder, seals and minimizers. Erasure progress
+stays outside DBOS. Receipt and outbox producers keep same-home atomic custody; the scoped work adapter commits its
+origin intent before releasing that checkout, then guards and enqueues in the fixed kernel DBOS destination on the
+same SDK client. Auth remains a separate service/database. No second executor is launched.
+
+Scoped history retirement checks the adopted limits: 64 function/operation outputs, 8 current event keys, 64 event
+history rows, 64 KiB per payload, 4 KiB metadata and at most 139 rows / less than 10 MiB per execution. Exact native
+probes count serialized bytes and include orphan-prone SDK input/output/operation tables; unsupported messages and
+streams prevent a bounded certificate. These cleanup checks do not certify unconverted producers' future outputs.
+The ordinary bounded-job limits below continue to govern their existing surfaces.
+
+Current owner registrations permit preference and mechanical Library entry-purge receipt minimization, plus exact
+Library purge outbox minimization after real consumers settle. Missing owner conversions, Search projection inventory,
+native execution budget/scope admission, historical coverage and aggregate routing invalidation keep complete
+coverage pending. Exact receiving receipt capabilities are available; owner aggregate coverage and final ACK remain
+unavailable. See
+[Access readiness](src/access/README.md#delivered-preference-history-coverage). No native acceptance result or full
+participant readiness is implied by registration or typing.
+
+### Bounded job steps
+
+| Limit                                    | Maximum                                                                           |
+| ---------------------------------------- | --------------------------------------------------------------------------------- |
+| Raw rows per page                        | 100 rows                                                                          |
+| Pages per durable workflow segment       | 100 pages                                                                         |
+| Native command deadline                  | 5000 ms; a shorter caller deadline wins                                           |
+| Continuation (keyset cursor or frontier) | 8 scalars and 2048 UTF-8 JSON bytes, including full unique tie keys; never OFFSET |
+| Workflow arguments and results           | 4096 UTF-8 JSON bytes each, independent of population and input size              |
+
+These limits make every step constant, and a job's total work follows its finite input. A contract may adopt smaller
+limits but never larger ones; a larger limit is a performance decision. The deadline bounds waiting, not work, so each
+step still needs its own growth check on rows, blocks and statements.
 
 Run `bun run worker` for the kernel's single durable-work process. It requires `DATABASE_URL` and accepts
 `KERNEL_EXECUTOR_ID`, falling back to `NOMAD_JOB_NAME` plus `NOMAD_ALLOC_INDEX` when configured, or the SDK's local
@@ -119,9 +312,28 @@ in `src/work/modules.ts`, just as its HTTP routes register in `createKernel`. Re
 options and work client. Duplicate module names and registration after launch are refused. Modules never launch
 DBOS or create their own worker. The list is empty until modules add their work.
 
+Every test that starts the shared kernel worker takes its environment from `workerTestEnv(overrides)` in
+`test/support/worker-env.ts`. Use `overrides` for optional all-or-nothing groups such as commerce's Stripe settings.
+Add a fixture there whenever a module adds a required worker variable; `test/support/worker-env.test.ts` fails when a
+module's required variable has no fixture.
+
 API processes use `createWorkClient(databaseUrl)` from `src/work/client.ts` to enqueue by workflow and queue name,
 pass that client to modules, and call `close()` on shutdown. Enqueueing needs no running worker; the next worker
-runs the persisted work. Reuse a workflow ID for idempotency.
+runs the persisted work. A workflow ID provides idempotency only while its workflow row is retained; never reuse an ID
+for idempotency after retention may have deleted that row, because DBOS will treat it as a new workflow.
+
+The retention module collects only `SUCCESS`, `ERROR`, `CANCELLED` and `MAX_RECOVERY_ATTEMPTS_EXCEEDED` workflows
+whose `completed_at` is older than the configured period. Scheduled selection uses the repository partial index
+`workflow_retention_selector` on `(application_name, completed_at, workflow_uuid)` with that terminal predicate, exact
+application, exclusive cutoff, `ORDER BY completed_at, workflow_uuid` and `LIMIT 1000`. Examined keys are the returned
+batch plus logarithmic index descent. Unrelated applications, nonterminal rows, recent completions and later long-lived
+terminals stay outside that range. SDK `deleteWorkflows(ids, false)` is charged separately. See
+[Work cleanup and replay](src/work/README.md#installed-queue-controls-and-cleanup-replay).
+`KERNEL_WORKFLOW_RETENTION_DAYS` defaults to 30 and accepts whole numbers from 7 through 365. A UTC schedule runs every
+10 minutes; each run deletes at most 60 batches of 1,000 workflows, oldest first, with each batch committed by the DBOS
+SDK in its own transaction and checkpointed as a durable step. Recovery preserves the invocation's original time and
+retention configuration and skips checkpointed batches. Children are retained independently. Rows kept are about workflow rate × (retention period
+plus 10 minutes), provided the rate stays below the sweep capacity of 8.64 million workflows per day.
 
 ### Membership workflows
 
@@ -177,9 +389,16 @@ Run `bun run check` from this workspace. It starts a disposable PostgreSQL datab
 schema dump, runs TypeScript, lint and formatting checks, then runs each test file on its own copy of the migrated
 database. A plain `bun test` shares one database across files, so run a single file when not running the check. The test
 database is removed at the end.
+The check starts its OpenSearch container after TypeScript, lint and formatting checks only when the plan is full or a selected test's static relative imports reach code that reads `OPENSEARCH_URL`.
 Every test file's processes read Reylo's SQL analyses from one analysis database cloned from the template once, named by
 `REYLO_CONFIG`, so no file re-analyses the statements it imports against its own copy.
 Each test file gets `KERNEL_POOL_ACQUIRE_TIMEOUT_MS=2000` so cold connections have more time to establish on a loaded check host.
+The timing record keeps per-file clone and drop time, test-process wall time, JUnit case totals, outside-test time and
+module import time measured from the timing preload through the first `beforeAll` hook. Fixtures that emit explicit
+database, Auth or worker boundaries retain those phases separately; an unreported fixture phase is unmeasured. Its
+run record separates the compiler, lint/format, test lane and remaining check-pipeline time from database startup
+through test completion; remote placement and final container teardown are outside that interval. A missing import
+marker is unmeasured.
 
 New kernel tests compose their app, Access and kernel through `test/support/test-kernel.ts`. `testKernel` mirrors the
 production route catalogue, Realm role reader and write-rate stage, substituting its supplied test pool, local Auth/JWKS
@@ -192,64 +411,58 @@ When a task changes a kernel-wide contract, run the full kernel check and fix ev
 
 Run `bun run check <path>...` to check named files and run any named test files; paths are relative to this workspace.
 The full `bun run check` is what the gate runs.
-A failed test file is rerun alone once under a stack slot when any failure or unhandled error has a recognized load signal
-or a `GrowthBoundError`, even if other failures occurred in the file. If it passes alone, its growth-bound failures
-appear under load-sensitive growth checks, other failures appear under load-sensitive tests, and failures without their
-own signal are marked `(cascade)`. After reruns, the check prints the number of files rerun, their total time alone, and
-how many passed alone.
+A failed test file is rerun alone once under a stack slot when any failed test or unhandled error carries a recognized load
+signal; growth checks remain eligible when every failure is a `GrowthBoundError`. The alone run
+decides the outcome; failures without their own signal in a load-eligible file are marked `(cascade)`, and a passing file is
+reported under load-sensitive tests or growth checks. After reruns, the check prints
+`Load reruns: <files> files, <seconds> s alone (<passed> passed alone)`.
+
+Affected mode, `bun run check --affected <rev>` or `KERNEL_CHECK_AFFECTED=<rev>` (the flag wins), considers test files
+that import a path changed since `<rev>` (committed, staged, unstaged or untracked). It selects at most
+`KERNEL_CHECK_AFFECTED_MAX` files, which defaults to 60 and must be a positive integer. When the reachable set is larger,
+tests rank by shortest import distance from a changed file (a direct importer has distance 1), then by shorter recorded
+wall time in `latest.json`, then by path. Tests reached only through an opaque computed-import walk rank after every
+test with a distance. A change the selector cannot place, including a whole-suite name, forced prefix, unknown path or
+stale reach entry, selects no test file, prints `Affected mode: unverified, 0 of <total> test files selected (<reason>)`
+and exits 0; the merge train records it as unverified. The full run stays the gate for promotion, and named files ignore
+affected mode.
+
+| Item | Bound                                                                                      |
+| ---- | ------------------------------------------------------------------------------------------ |
+| Cost | Selection is linear in the import graph, and at most the configured cap of test files run. |
+
+The default cap follows the observed check load: at about 20 kernel landings an hour, 60 files at 7.5 seconds each cost
+at most 7.5 slot-minutes per landing, or 150 slot-minutes an hour (about 2.5 of the 12 check slots on hosts a and b).
+The cap still covers all observed narrow changes, which selected 37 to 56 files.
+
+A computed dynamic import hides what it loads from the selector. `scripts/affected-reach.ts` lists, for each such site,
+the files it can load; a site listed there depends on those files, and an unlisted computed import still runs its tests
+on every non-test code or data change. An entry that no longer matches the code makes the selection unverified.
+
+Each check run writes every test file's wall, database create and drop, and per-test times to
+`.temp/kernel-check/timings/<UTC timestamp>.json` in the main checkout (`KERNEL_CHECK_TIMINGS` overrides the directory)
+and replaces `latest.json` there. Files run longest first by `latest.json`, files without a recorded time first;
+`KERNEL_CHECK_ORDER=name` restores name order.
 
 | Resource          | Per check run                                                                                        | Per test file                                                                                               | Bound                                                                                                                                                                                                                 |
 | ----------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Containers        | One PostgreSQL and one search container, both labelled `rezics.kernel.check.pid` and removed at exit | Reuses the run's containers                                                                                 | Each has a 1 GiB data tmpfs; search has a 512 MiB JVM heap. Stale cleanup reads one `docker ps` listing and does linear work only in labelled containers.                                                             |
 | Database copies   | Migrated `rezics` template plus at most one live `kernel_test_*` copy                                | Created from the template, dropped in `finally` after the file                                              | Disk is the template plus one copy and the largest file's writes, rather than all files' copies. `check-resources.test.ts` guards one live copy and a template of at most 256 MiB, a quarter of the PostgreSQL tmpfs. |
-| Connections       | Files run sequentially; no pool is retained between files                                            | The file closes its pools                                                                                   | Each pool has a fixed connection limit. `GrowthDatabase.close()` closes its instrumented pool (max 10) and admin pool (max 2).                                                                                        |
+| Connections       | Files run sequentially; no pool is retained between files                                            | The file closes its pools                                                                                   | Each pool has a fixed connection limit. `GrowthDatabase.close()` closes its instrumented pool (max 10), admin pool (max 2) and every pool created by `openPool()`.                                                    |
 | Growth-check data | Lives in the current file's database copy                                                            | Each population uses at most the largest scale times its declared per-unit ordinals, times rows per ordinal | Checks declare scales (default largest 64), populations and operation writes; reset data between checks. Seeding batches at most 1,000 ordinals or uses at most four concurrent production writes.                    |
+| Cost              | Captures request and response payload bytes for each measured statement                              | Recording adds two numbers per captured statement and scans each returned field once                        | Added recording work is linear in the statements and fields returned; stored byte totals are linear in captured statements.                                                                                           |
 
 Findings: the sorted test-file list and total execution work grow with the number of files. Stale-cleanup listing
 memory and work grow with labelled containers, including concurrent checks and interrupted runs; live checks keep
 their containers. Growth checks do not automatically reset populations between checks, so distinct populations and
-operation writes can accumulate within a file unless it resets them. Capture memory grows with statements and plans
-in one operation. `GrowthDatabase` currently has no `openPool` API; if added, its pools must also be closed by
-`close()`.
+operation writes can accumulate within a file unless it resets them. Capture memory grows with statements, byte totals
+and plans in one operation. `openPool()` creates an instrumented pool that `GrowthDatabase.close()` also closes.
+Shutdown waits for every registered pool and reports all cleanup failures; setup errors remain primary with cleanup
+failures attached. Close is terminal and repeatable, and pool acquisition is rejected as soon as shutdown starts.
 
 ## Growth checks
 
-A growth check proves that the cost of one operation stays within a declared bound as its data grows; it counts rows,
-shared blocks and statements, never time. Use `checkGrowth` from `test/support/growth.ts` with `seed` in `grow` to
-add rows between scales. Grow both the total data and hot partition, while keeping the operation's own neighbourhood
-fixed. Seed through production writes or bulk rows of identical shape. The bounds are `constant`, `logarithmic` and
-`linear`; default slack is 2 rows or 10%, 4 blocks or 50%, and no statement slack. Other modules import the public
-API from `test/support/growth.ts`. Each measured session in the instrumented `pool` and `openPool` connections pins
-`max_parallel_workers_per_gather = 0` and `jit = off`, then sets `work_mem = 4MB`, `random_page_cost = 4`,
-`effective_cache_size = 4GB`, `effective_io_concurrency = 16` and `default_statistics_target = 100` explicitly. The
-fixed defaults keep container configuration from changing a query plan; disabling per-query parallel workers also
-keeps shared worker availability from changing the work counted by a capture. `admin` connections are for setup and
-assertions and are not measured. A test can still use `SET LOCAL` for a planner option inside its transaction.
-
-Catalog-only statements are counted apart, with at most one allowed per distinct query text in a measured run; a
-statement that also reads data counts in full.
-
-Statements in the operation's async context count toward its cost, as do statements issued by a DBOS workflow while a
-capture runs; loops started outside both are reported as background work. Background statement counts follow measured
-wall time, while rows and blocks per background statement must stay within the default constant-cost slack as data
-grows when the statement reads an application relation. Statements reading only DBOS system relations remain
-reported, but their row and block growth is not bounded because `grow` does not seed DBOS history; that history's
-growth is a production retention question, not a growth check result. A scale with no applicable background statement
-is skipped for that bound.
-
-Seed every relation the operation reads, including receipts, outbox, write basis and the Access rows its authorization
-reads, to thousands of rows at the smallest scale; for example, use 500 x scale bulk rows of the production shape per
-relation. Otherwise, the planner scans small relations and the check fails on rows that production would reach through
-an index.
-
-Every scale is measured warm. Keep the default `warmups`. When the operation uses up the state it measures, pass
-`warmup`, which runs the same code path on spare state (another probe, a fresh key) so the measured run is not the
-backend's first. `warmups: 0` measures a cold first sample: a false failure under `logarithmic` and `linear` bounds,
-and a hidden growth under `constant` ones. `checkGrowth` runs `VACUUM (ANALYZE)` on the test database after each scale's
-`grow` to refresh planner statistics. It also vacuums `dbos.workflow_status` before each measured repetition: DBOS's
-idempotent enqueue updates an existing status row, and pruning that tuple chain between repetitions keeps its buffer
-cost from depending on maintenance timing. Seed in `grow`, not `operation`, since the database vacuum runs after
-`grow`; do not analyze or vacuum the checked database by hand in `grow`.
+See the [Kernel performance contract](performance-contract.md#growth-checks) for the shared harness.
 
 ## HTTP contract
 
@@ -258,11 +471,31 @@ refused for numeric or boolean fields, as are numbers for string fields, with `4
 JSON pointer. The app composition compiles each route's body check once and runs it before Elysia's coercing
 validation. Query and path parameters retain type coercion because their values arrive as strings.
 
+Shared `ProblemError` identity initializes in a dependency-free HTTP module so native command and Realm imports
+cannot prevent media admission or contract construction from loading. Error mapping and concealment use that
+identity; unrelated errors propagate.
+
+The shared bounded JSON wire parser rejects repeated decoded member names within any one object, including
+escaped equivalents and objects nested in arrays, with `400 invalid_request` before schema checks or route effects.
+Names compare exactly as native JSON strings, without case folding or Unicode normalization; separate object
+scopes may reuse names. Native JSON syntax and fatal UTF-8 decoding remain authoritative. Raw bodies retain
+their exact bytes; absent bodies remain absent and a present empty JSON body is invalid.
+
 A request's deadline is fixed at arrival from `requestDeadlineMs`. Code reached by a route takes its deadline from the
 route's `job.deadline` or `deadlineFor(budgetMs)`, never from `Date.now() + N` or the kernel clock, which is business
 time and tests move. Durable work gets `Date.now() + budgetMs` from the same `deadlineFor`. A deadline crossing the
 Auth service boundary still travels explicitly through the Auth contract. This costs one async context scope per
 request and one O(1) store read per `deadlineFor` call, with no database statements.
+
+A `503 deadline_exceeded` writes one JSON line to stderr beside `internal_error` diagnostics, with
+`event: "deadline_exceeded"`, `request_id`, `method`, the route template, `elapsed_ms`, `phases_ms`,
+`dominant_phase`, and `contention_retries`. Monotonic phase durations partition the request's elapsed time:
+`before_command` includes parsing, validation, digest, authentication and request admission; `time_mint`
+includes its connection checkout; `access_prepare`, `gate_wait`, `transaction_pool_wait`, `transaction_body`
+(including authorization, receipt/fence writes and rollback), `commit`, `writable_wait`, `contention_pause`,
+`command_overhead`, and `request_completion` cover the remaining time across all attempts. Contention pauses
+are summed and retries counted. No request body is logged. Success adds no log, database statement or row;
+recording costs constant space and O(phases + retries) clock reads, with retries bounded by the deadline.
 
 When the HTTP contract changes, regenerate both `contracts/openapi.json` with `bun run openapi` and the client
 declarations with `bun run client` while the development database is up. Tests fail while either generated contract is
@@ -278,6 +511,18 @@ Internal `/$` paths return `404 not_found`. OpenAPI uses the public AIP paths. E
 `client.media({ id }).$complete.post(body)` or `client.subjects.$merge.post(body)` and the client fetcher sends
 them to their public AIP paths.
 
+## Deployment
+
+The build runs `bun run analyse`. It starts a disposable PostgreSQL, applies the migrations, has Reylo analyse every
+`.sql` statement under `src` against it, and writes the result to `dist/reylo` (or to the directory given as its
+argument). It then imports every `.sql` file with no database connection and fails naming each file that has no entry.
+The release carries `dist/reylo` and the same lockfile as the build, because an entry is keyed by Reylo's engine
+version.
+
+Every production server and worker process sets `REYLO_CONFIG` to `dist/reylo/.reylo.yaml`. Boot then reads every
+analysis from the release, never describes a statement against the production database, and writes nothing under the
+package root. A missing entry is a build defect that `analyse` reports; production does not repair it.
+
 ## Database changes
 
 Kernel-owned migrations live in `db/migrations/` and their dump lives in `db/schema.sql`. Each module has its code and
@@ -288,7 +533,8 @@ schema with the module's name. The module owner edits `src/<module>/`, `db/<modu
 Migration versions use UTC timestamps in `YYYYMMDDHHMMSS_<name>.sql` form and are unique across all migration
 directories. `0001_core_partition.sql` keeps its name and sorts first. Dbmate applies pending migrations from every
 directory in version order, so a module migration may merge behind a newer migration from another directory. Once a
-migration is merged, never rename or edit it. Run `bun run db dump` to update and commit every schema dump.
+migration is merged, never rename or edit it. Run `bun run derived schema` to regenerate every committed schema dump
+from a fresh database, or `bun run db dump` to refresh those files from the local development database.
 
 Only kernel migrations create PostgreSQL extensions. A module that needs an extension asks the kernel to install it;
 module migrations may use extensions but must not create them.
@@ -314,42 +560,226 @@ and time. Missing or unavailable anchors and changes to state, fence, authentica
 and receipt disclosure against the immutable authenticated snapshot, even when token epoch exceeds a changed floor.
 Anonymous commands add no acting-account read and retain the generic eligibility formula.
 
+## Opaque list cursors
+
+A keyset cursor can carry the position of an item the reader cannot see, so a list cursor must be opaque, not only
+signed. `src/tokens/list-cursor.ts` encrypts every list cursor with authenticated encryption:
+
+```ts
+encodeListCursor(ring, { route, viewer, query }, { epoch, after }, now): Promise<string>
+decodeListCursor(ring, { route, viewer, query }, token, now): Promise<{ ok: true; epoch; after } | { ok: false; reason: 'expired' | 'invalid' }>
+```
+
+Both functions accept an optional final `{ profile?: ListCursorProfile }` argument. The exported profile type is
+`'default' | 'search'`; omitting it selects the default behavior described below.
+
+- `route` is the list's method and path template, or a feed's fixed name. `viewer` is the acting account's lowercase
+  UUID, or `null` for an anonymous viewer; the two never match. `query` holds every parameter that shapes the list
+  (filters, sort, page size). A cursor decodes only for the route, viewer and query it was issued for.
+- Anonymous cursors (`viewer: null`) are deterministic: the same route, canonical query and position under the same
+  current key produce the same token at any time. This gives each public page one stable URL for pagination and
+  indexing. Their plaintext has no issue time and they never expire by time.
+- Account cursors use a fresh random salt and carry an issue time on every encode. `now` is the kernel clock's time
+  and is required for both kinds. An account cursor issued more than 60 s after `now` is `invalid`; one older than
+  15 minutes is `expired`. Every other failure (tamper, another viewer, route or query, unknown key id) answers
+  `invalid`, and `decodeListCursor` never throws.
+- Caps: each string after-key at most 256 UTF-8 bytes, at most 8 after-keys, `route` at most 256 bytes, canonical
+  query at most 2,048 bytes, token at most 4,096 characters. Encoding above a cap throws `TypeError`; decoding an
+  oversized token answers `invalid` before any decryption.
+- Construction: WebCrypto HKDF-SHA-256 and AES-256-GCM with a 128-bit tag. The 16-byte salt derives the encryption
+  key and IV with HKDF info `rezics/list-cursor/v1`, so the raw ring key never encrypts and the HMAC seal, session
+  tokens and list cursors share no key material. The route, viewer kind and id, canonical query, version and key id
+  are authenticated associated data and do not travel in the token. For anonymous cursors, the salt is synthetic,
+  as in AES-SIV (RFC 5297): the first 16 bytes of HMAC-SHA-256 over the associated data followed by the canonical
+  position plaintext. Its separate HMAC key is derived from the ring key by HKDF-SHA-256 with an empty salt and info
+  `rezics/list-cursor/v1/siv`. Decoding recomputes this salt from the decrypted plaintext and associated data;
+  a mismatch answers `invalid`. Account cursors retain the random salt. Both kinds retain the same token format.
+- The `search` profile allows at most 8 after-keys, each string at most 2,560 UTF-8 bytes and all strings together at
+  most 3,072 bytes; integer keys must remain safe integers. Serialized position plaintext is capped at 3,584 bytes,
+  and tokens at 4,864 characters. The frozen `LIST_CURSOR_BOUNDS` export publishes both profiles' limits.
+  Encoding above any bound throws `TypeError`; decoding answers `invalid`. Both anonymous and account search
+  cursors carry the passed issue time and a fresh random salt, expire when older than 15 minutes and are `invalid`
+  if issued more than 60 s ahead. Adding `'search'` to the authenticated associated data separates the profiles:
+  neither decodes the other's tokens. Route and query caps stay unchanged, and oversized tokens are refused before
+  decryption; default tokens keep their existing bytes, bounds, plaintext and salt rules.
+
+Keys come from the same `tokens` ring as the other tokens, read from `KERNEL_SESSION_KEYS`; there is no separate
+variable and no fallback. Rotate by prepending a new `kid:base64url` entry: it becomes current, and older entries
+still decrypt. Retire a key by removing its entry, which makes every cursor issued under it `invalid` at once,
+including public cursors, so a client restarts from the first page. Key retirement is the only invalidation of an
+otherwise valid anonymous cursor for its original binding. Keep a previous key at least 15 minutes, the account
+cursor lifetime, before retiring it; public cursors also reset when that key is retired.
+
+Every new list uses `encodeListCursor`. An existing list moves when its owner next touches it. `encodeCursor` stays
+only for lists that have not yet moved.
+
+## HTTP ingress body bounds
+
+The shared reader enforces a 1 MiB default wire limit before JSON parsing and schema validation. Route owners keep
+canonical validity limits (such as the 4 MiB canonical definition release limit); HTTP wire limits cover the bytes
+that carry those canonical values. Definition publish allows `RELEASE_LIMITS.bytes + 65,536` bytes for its compact
+JSON envelope. `Bun.serve` uses the largest route limit as a final transport backstop.
+
+The ingress reservation budget is derived as `(ADMISSION_LIMITS.permits + ADMISSION_LIMITS.queue) * default limit +
+2 * largest route limit`. Each request reserves its declared length capped at its route limit, or the route limit
+when no length is declared. Reservations release after the response.
+
+| Mounted body route / family                     | Wire limit                       | Reader       |
+| ----------------------------------------------- | -------------------------------- | ------------ |
+| All body routes without `x-body-limit`          | 1 MiB                            | shared JSON  |
+| `POST /v1/definitions/releases`                 | canonical release limit + 64 KiB | shared JSON  |
+| `POST /v1/boards`, `/v1/realms/:realmId/boards` | existing bounded content parser  | route parser |
+| `POST /v1/threads`, `/v1/threads/:id/posts`     | existing bounded content parser  | route parser |
+| `POST /v1/posts/:id/revisions`                  | existing bounded content parser  | route parser |
+| `POST /v1/reports`                              | existing bounded report parser   | route parser |
+| `POST /v1/media/:id/$takeDown`                  | 8 KiB                            | route parser |
+| `POST /v1/sourceFences/$takedown`               | 16 KiB                           | route parser |
+| `POST /v1/webhooks/stripe`                      | 256 KiB                          | route parser |
+
+Every module README keeps one such table, checked by `test/support/growth-cost-table.ts`.
+
+## Native growth capture memory
+
+The [Kernel performance contract](performance-contract.md#native-growth-capture-memory) owns these limits.
+
 ## Cost
 
 Every read, write, check, authorization, projection and erasure must touch a bounded neighbourhood: an anchor plus bounded hops and results, costing roughly changes × log N, independent of engine speed or machine size.
 Here N and P mean rows of the relevant kind in the database and anchor partition, H is that partition's outbox history, C is consumer checkpoints, k is the command event count capped at 1,000 by `MAX_COMMAND_EVENTS` (the maximum per envelope for a batch), b ≤ 64 is envelopes, and j ≤ 32 is session components; grow subjects and histories, users' content over time (U × t), and media (M) independently.
 The table derives indexed access shapes from `src/`, `db/migrations/` and `db/schema.sql` (DBOS persistence from the installed SDK's own migrations): R/W count examined/written relation rows, shared-block bounds count B-tree probes as logarithmic blocks and constant rows, A counts application SQL separately from transaction control T, writes also maintain the fixed schema indexes, and callback costs and payload bytes are additional, with fixed bytes, callbacks and configuration unless stated otherwise.
 
-| Operation                  | Touches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Bound                                                                                                                                                                                                                                                                                                                                                                                                             | Growth check                                                                                                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Worker concurrency         | Queue configuration bounds in-flight workflows per worker process to the sum of configured `workerConcurrency` values (18); the `workflows` queue remains unbounded until its sleeping checkout workflows are removed. This bounds in-flight command attempts by configuration, not burst size. Durable steps issuing commands use `COMMAND_STEP_RETRIES` to retry transient command refusals.                                                                                                                                                                                                                                                                                                                           | Up to 18 workflows across bounded queues, plus workflows on the unbounded `workflows` queue. A durable command step retries `overloaded`, `contention`, `deadline` and `fenced` refusals with one-second initial interval, 2× backoff and at most 8 attempts; other errors are not retried by this policy.                                                                                                        | `test/work-queues.test.ts`: “every work queue except workflows bounds its per-process concurrency”; “command step retries retry transient command unavailability only” |
-| New command                | `time.sql`: no relation; authorization before receipt; `core.receipt` R 0/1 via `receipt_pkey`; `fence.sql`: `core.partition` R/W 1 via `partition_pkey`, `core.outbox` W k via `outbox_pkey`, `editorial.write_basis` W 1 via `write_basis_pkey` and `write_basis_partition_no_position_key`, receipt W 1; each inserted child also probes the partition FK. `MAX_COMMAND_EVENTS` enforces k ≤ 1,000 after the body, before fence writes; excess events roll back with `too_many_events`. Grow total N and anchor P/H histories, then k; fix receipt/basis bytes and callbacks. Registered types and stored JSON data are checked in memory after the cap, before finalization and fence.                               | R/W O(k+1), shared blocks O((k+1) log N), A = 3 + authorization/body SQL; T = 5 (BEGIN, three SET LOCAL, COMMIT). No core scan; accepted commands have k ≤ 1,000, with JSON/event work linear in k and bytes. The cap is checked after the body, so body work is additional even on rejection. Validation: O(total event data bytes) CPU, one lookup and precompiled check/event, no SQL, k ≤ MAX_COMMAND_EVENTS. | `test/growth-command.test.ts`: “New command stays within its bound as N grows”; `test/command-event-cap.test.ts`: “New command stays within its bound as k grows”      |
-| Idempotent replay          | Time plus authorization, then receipt R 1 by the full `receipt_pkey`; no fence, body, basis or outbox write. Grow total and anchor receipts/history; fix key, response bytes and authorization.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | R O(1), W 0, shared blocks O(log N), A = 2 + authorization SQL; T = 4 (BEGIN, two SET LOCAL, COMMIT). Digest mismatch substitutes ROLLBACK.                                                                                                                                                                                                                                                                       | `test/growth-command.test.ts`: “Idempotent replay stays within its bound as N grows”                                                                                   |
-| Denied replay              | Time plus authorization; rejection before receipt means no receipt read or write; `receipt-only` may read 0/1 receipt by `receipt_pkey`, and denies on a miss (a matching receipt is an allowed replay). Grow total and anchor receipts/history; fix denial path and authorization.                                                                                                                                                                                                                                                                                                                                                                                                                                      | Core R 0/1, W 0, shared blocks O(1)/O(log N); A = 1/2 + authorization SQL, T = 4 ending in ROLLBACK.                                                                                                                                                                                                                                                                                                              | `test/growth-command.test.ts`: “Denied replay stays within its bound as N grows”                                                                                       |
-| One contention retry       | Repeat time, fresh authorization/evidence, receipt and body after 40001/40P01/55P03; same relations/indexes as new command, failed writes roll back. Grow total and anchor N/P/H; fix k and exactly one injected conflict, excluding fence polling.                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | The check injects one conflict and makes two attempts: at most twice new-command R/W and blocks, A ≤ 6 + twice callback SQL, T ≤ 10 (ROLLBACK then COMMIT). Production retries contention with capped exponential backoff until the deadline; per-attempt work remains logarithmic in N and linear in k.                                                                                                          | `test/growth-command.test.ts`: “One contention retry stays within its bound as N grows”                                                                                |
-| Same-partition concurrency | `runCommand` queues same-partition serializable attempts by `(pool, partition)` in FIFO order; queued attempts hold no connection, and each pool admits at most 64 waiters. Grow concurrent new commands in one anchor partition at scales 2, 8 and 32 while growing the seeded population.                                                                                                                                                                                                                                                                                                                                                                                                                              | For c concurrent commands, R/W O(c), shared blocks O(c log N), A/T O(c); the gate permits exactly one serializable transaction per command, so contention attempts do not grow with c within one pool. Each command retains the new-command cost.                                                                                                                                                                 | `test/growth-command.test.ts`: “Concurrent commands in one partition stay within their bound as concurrency grows”                                                     |
-| Partition state            | `readPartition`: `core.partition` R 0/1 through `partition_pkey`, W 0. Grow total and anchor content/history while fixing partition key; grow partition rows where representable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | R O(1), shared blocks O(log N), A = 1, T = 0 standalone; `boundedRead` adds T = 3 (BEGIN, SET LOCAL, COMMIT/ROLLBACK).                                                                                                                                                                                                                                                                                            | `test/growth-command.test.ts`: “Partition state stays within its bound as N grows”                                                                                     |
-| Batch checkpoints          | Ensure outside explicit transaction: `core.consumer_checkpoint` W 0/1, partition FK R 1 on insert; lock R 0/1 with SKIP LOCKED, advance W 1 only after nonempty apply; all checkpoint probes use `consumer_checkpoint_pkey`, FK uses `partition_pkey`. Grow total C and consumers in the anchor partition; fix consumer, b and apply.                                                                                                                                                                                                                                                                                                                                                                                    | R/W O(1), shared blocks O(log C + log N); A = 2 busy, 3 empty/stopped before apply, 4 after nonempty apply including log read; T = 2 (BEGIN, COMMIT/ROLLBACK); apply SQL is extra. Ensure can wait on an uncommitted insert despite SKIP LOCKED.                                                                                                                                                                  | `test/growth-events.test.ts`: “Batch checkpoints stays within its bound as C grows”                                                                                    |
-| Batch log                  | `read-log.sql`: partition head R 1 by `partition_pkey`; generate at most b positions, left join outbox by `(partition_no, position)` prefix of `outbox_pkey`, R ≤ bk events (at most 64 × 1,000 = 64,000 per batch), with one placeholder instead at each missing position (or one head row when empty), W 0. Grow total outbox and anchor H, both before and after the checkpoint; fix b, k and payloads.                                                                                                                                                                                                                                                                                                               | Indexed R O(1+bk), shared blocks O(log N + b log N + bk), A = 1 within checkpoint totals, T = 0 additional; sort/validation operates on returned rows (sort CPU O(bk log(bk))). With b ≤ 64 and enforced k ≤ 1,000, returned event rows are bounded independently of H.                                                                                                                                           | `test/growth-events.test.ts`: “Batch log stays within its bound as H grows”                                                                                            |
-| Relay discovery            | `startWorker` runs the effects relay through `startRelays`; each tick runs `scan-partitions.sql` per relay: scan the fixed 4,096 `core.partition` rows and join the consumer checkpoint by `consumer_checkpoint_pkey`, returning at most 4,096 partitions ahead of their checkpoint without reading outbox history. Grow N, U × t, M and anchor H; fix relay count and concurrency (default 4).                                                                                                                                                                                                                                                                                                                          | Discovery R O(4,096), W 0, indexed shared blocks O(4,096 × (1 + log C)), A = 1 per relay, T = 0; row work is constant in N, U × t and M. Add checkpoint/log/enqueue costs for each batch started. At most configured concurrency runs at once across all relays, one run per relay/partition; each run drains batches until busy, empty or stopped, so total batch work grows with backlog.                       | `test/relay-effects.test.ts`: `effects relay discovery stays within its bound as outbox history grows`                                                                 |
-| Effect enqueue             | `registerEffects` scans every effect and its type list per event; each match starts deterministic `fx:epoch:partition:position:seq:name` workflow with `queuePartitionKey: String(partition_no)`. Jobs are sorted by position then event sequence (registration order breaks ties) and enqueued sequentially within each partition, concurrently across partitions. Installed DBOS upserts R/W 1 `dbos.workflow_status` by `workflow_status_pkey` and inserts W 0/1 `dbos.workflow_input` by `workflow_input_pkey`, even on reuse (rolled back). Grow total DBOS history and anchor events; fix b/k, effect/type lists, matches and bytes, then separately grow registrations.                                           | Per match R/W O(1), shared blocks O(log N), A = 2, T = 2 (BEGIN, COMMIT for new / ROLLBACK for existing); multiply by matches across bk events. Per event, CPU and SQL fan-out is linear in matching registrations, a constant for each deployment, so it does not exceed the criterion. Sorting m matched jobs in a partition costs O(m log m); enqueue concurrency is bounded by input partitions, not matches. | `test/growth-effects.test.ts`: “Effect enqueue stays within its bound as N grows”                                                                                      |
-| Effect persistence         | `effects` uses `queuePartitionKey: String(partition_no)` and `partitionConcurrency: 1`: one effect executes at a time within each partition, following enqueue order; other partitions can progress independently. Per matched event's normal workflow execution, DBOS reads 0/1 status/input/output rows per keyed probe using `workflow_status_pkey`, `workflow_input_pkey` and `operation_outputs_pkey`; step completion locks status R 1 and upserts `dbos.operation_outputs` W 1 by `(workflow_uuid, function_id)` PK; terminal completion updates status W 1 and upserts `dbos.workflow_output` W 1 by `workflow_output_pkey`. Grow total and anchor workflow history; fix one execution, matches and effect body. | Each keyed read R O(1), blocks O(log N), A = 1, T = 0 standalone (step replay check reads status plus step output: A = 2); step recording A = 2/T = 2, terminal recording A = 2/T = 2, each R/W O(1), blocks O(log N). Queue claiming/polling, recovery, cancellation polling and effect body are additional; step body retries ≤ 10, not a lifetime recovery cap.                                                | `test/growth-effects.test.ts`: “Effect persistence stays within its bound as N grows”                                                                                  |
-| Admission                  | `app.ts` uses reserved admission for bearer authentication/health and normal admission for prepare; `Admission` scans/splices its in-memory queue (default ≤ 32, capacities 8 normal + 2 reserved), no relation/index. Grow total and anchor data/history and request arrivals; fix configured limits and job.                                                                                                                                                                                                                                                                                                                                                                                                           | Own DB R/W, shared blocks, A/T = 0; CPU O(1) in N/P at fixed queue cap (drain can be quadratic in configured queue length); admitted job costs are extra, not limited by permits.                                                                                                                                                                                                                                 | `test/growth-request.test.ts`: “Admission stays within its bound as N grows”                                                                                           |
-| Request access dispatch    | `actorOf` calls injected authenticate once for bearer, zero for anonymous; access is lazily built from route catalogue, and each permission dispatch uses route-array find; prepare and authorize delegate to Access (including command checks before receipts). No wrapper relation/index; `/health` alone sends relation-free SELECT 1. Grow total and anchor data/history; fix routes and Access implementation, separately audit callback anchors.                                                                                                                                                                                                                                                                   | Wrapper DB R/W and blocks 0, A/T = 0 (health A = 1/T = 0); CPU linear in configured routes, constant in N/P. Authentication, authorization and prepare have their own relation, index, statement and hop bounds; this wrapper imposes none.                                                                                                                                                                       | `test/growth-request.test.ts`: “Request access dispatch stays within its bound as N grows”                                                                             |
-| Command actor admission    | `readAccount` uses `access.account` primary key `(route, account_id)` independently before resource checkout, once per live attempt shared across action checks. Grow R = N + U × t + M, unrelated accounts and the same actor receipts/history; fix K <= 1000. Authentication retains its one account point read; anonymous commands add none.                                                                                                                                                                                                                                                                                                                                                                          | Per authenticated command attempt: additional R = 1, W = 0, A = 1, T = 0, examined rows O(1), indexed blocks O(log R); connection released before resource checkout. Existing O((1 + K) log G + matches) authorization and actual k log R command changes are unchanged.                                                                                                                                          | `test/access/growth-command-admission.test.ts`: three scales; `test/access/command-admission.test.ts`: retry reads.                                                    |
-| Session header             | Decode once per request; record merges then encodes. No relations/indexes; validate distinct partitions, find/filter/copy j components and retain last 32; HMAC uses one key-ID map lookup. Grow total and anchor content/history, then j; fix scope/key/payload widths and records per request.                                                                                                                                                                                                                                                                                                                                                                                                                         | DB R/W, shared blocks, A/T = 0; CPU O(j), constant N/P; unseal rejects tokens over 4096 characters before decoding, j ≤ 32 on HTTP path. Direct merge accepts longer input and seal has no output-length cap.                                                                                                                                                                                                     | `test/growth-request.test.ts`: “Session header stays within its bound as j grows”                                                                                      |
-| Cursors and seal           | Encode/decode have no relations/indexes; canonicalize binding by sorting parameter keys, validate ≤ 8 after-keys, HMAC SHA-256, canonical base64url and constant-time MAC comparison; expiry uses local time, not SQL. Grow total and anchor content/history; fix binding, key/scope and cursor byte lengths, then grow parameter count/bytes separately.                                                                                                                                                                                                                                                                                                                                                                | DB R/W, shared blocks, A/T = 0; constant N/P with fixed inputs; CPU linear in token/scope bytes plus parameter sorting (count × log count). Decode token ≤ 4096 characters; encode, binding parameters and string after-keys have no byte cap, so input work is not universally constant.                                                                                                                         | `test/growth-request.test.ts`: `Cursors and seal stays within its bound as N grows`                                                                                    |
+Growth repetition aggregation requires matching optional telemetry across repetitions that executed SQL; a repetition with no SQL contributes zero, while mixed coverage among executed repetitions fails with the field and repetition indexes. `medianCost` returns an owned copy of the representative repetition's relation map and each nested relation value, copying only the public `RelationCost` fields, so later mutation of retained raw repetitions cannot change the aggregate.
 
-Effect registration has no fan-out cap, so a fixed event can create an unbounded number of independently persisted workflows.
-The core callback interfaces do not establish bounds for authorization, mutation, projection or erasure; those bounds require the supplied implementations' SQL and cannot be inferred from these adapters.
-Session and cursor input caps do not cap all encoding or binding work; constant request CPU assumes fixed byte widths and configuration.
-All core relations are ordinary PostgreSQL tables rather than physical per-route partitions, so a logarithmic B-tree shape is available but not forced by SQL; follow-up checks must reject history/table scans and account for planner choice, MVCC dead tuples and maintenance rather than treating returned rows as examined rows.
-The partition position update serializes writes within one partition, not through a global sequence, and fence writes join only that partition's outbox, basis and receipt.
-Same-partition writers from one process queue in the gate without holding a connection; writers in other processes conflict at the fence and retry, so expected attempts grow with the number of processes writing that partition at once, not with data totals.
-SERIALIZABLE predicate locks and conflicts on shared physical tables/index pages can span logical partitions, so partition predicates alone do not prove independent machines or conflict domains.
-Preparation may read a separately anchored parent before the resource transaction (minting time adds a separate bounded-read transaction, T +3 with the same one time statement), while arbitrary callbacks can still introduce cross-partition joins or transactions.
-DBOS uses shared system tables; logical queue partitioning does not establish physical per-core-partition placement, and separate enqueue transactions do not establish atomicity with the checkpoint transaction.
-Fence waiting adds a partition read with A = 1/T = 3 after rollback and on each 25 ms poll until the deadline; the default two-second deadline bounds waiting in time, but configurable deadlines are not a fixed statement-count cap.
+| Operation                         | Touches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Bound                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Growth check                                                                                                                                                                                                                           |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HTTP ingress                      | One request's capped wire bytes, decoded JSON text and object member-name scopes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Per-request time and memory are linear in the request wire limit; iterative duplicate guard without a depth cap; reserved total at most the ingress budget                                                                                                                                                                                                                                                                                                               | `test/http/body-limit.test.ts`, `test/http/strict-json.test.ts`                                                                                                                                                                        |
+| Worker concurrency                | Queue configuration bounds in-flight workflows per worker process to the sum of configured `workerConcurrency` values (18); the `workflows` queue remains unbounded until its sleeping checkout workflows are removed. This bounds in-flight command attempts by configuration, not burst size. Durable steps issuing commands use `COMMAND_STEP_RETRIES` to retry transient command refusals.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Configured concurrency is constant at up to 18 workflows across bounded queues, plus workflows on the unbounded `workflows` queue. A durable command step retries `overloaded`, `contention`, `deadline` and `fenced` refusals with one-second initial interval, 2× backoff and at most 8 attempts; other errors are not retried by this policy.                                                                                                                         | `test/work-queues.test.ts`: “every work queue except workflows bounds its per-process concurrency”; “command step retries retry transient command unavailability only”                                                                 |
+| Workflow retention                | Production selection is `createWorkflowRetentionSelector` against `dbos.workflow_status` using partial index `workflow_retention_selector` on `(application_name, completed_at, workflow_uuid)` for SUCCESS/ERROR/CANCELLED/MAX_RECOVERY_ATTEMPTS_EXCEEDED. The query binds exact application, exclusive `completed_at` cutoff and LIMIT 1000, ordered by `completed_at, workflow_uuid`. Growth fixtures keep selected work fixed while unrelated applications, nonterminal rows, recent completions and later long-lived terminals grow, and separately grow selected-application eligible backlog with the returned batch fixed at 1,000. SDK `deleteWorkflows(ids, false)` is four exact-ID DELETEs plus owned payload/cascade rows.                                                                                                                                                                                                                                                                                                                                                                                                  | Selector work is the returned batch plus logarithmic index descent. Empty/short/full batches have constant statements and rows (0, 10 or 1,000) and logarithmic blocks. Eligible backlog beyond LIMIT 1000 is unvisited. Deletion is a separate six-statement transaction plus payload/cascade rows, which follow owned payloads rather than unrelated history. Up to 1,000 workflows per batch and 60 batches per run.                                                  | `test/work/growth-retention.test.ts`: empty, short and full unrelated-history series; eligible-backlog series with a fixed 1,000-row batch                                                                                             |
+| New command                       | `time.sql`: no relation; authorization before receipt; `core.receipt` R 0/1 by `receipt_pkey`; `fence.sql`: `core.partition` R/W 1 via `partition_pkey`, `core.outbox` W k via `outbox_pkey`, `editorial.write_basis` W 1 via `write_basis_pkey` and `write_basis_partition_no_position_key`, receipt W 1; each inserted child also probes the partition FK. The fixture preloads 4,096 full-shape receipts, outbox rows and write bases before the first scale, then grows all three histories while keeping the command anchor fixed; captured plans assert the receipt point lookup and one-row partition fence. `MAX_COMMAND_EVENTS` enforces k ≤ 1,000 after the body, before fence writes; excess events roll back with `too_many_events`. Registered types and stored JSON data are checked in memory after the cap, before finalization and fence.                                                                                                                                                                                                                                                                               | R/W O(k+1), shared blocks O((k+1) log N), A = 3 + authorization/body SQL; T = 5 (BEGIN, three SET LOCAL, COMMIT). No core scan; accepted commands have k ≤ 1,000, with JSON/event work linear in k and bytes. The cap is checked after the body, so body work is additional even on rejection. Validation: O(total event data bytes) CPU, one lookup and precompiled check/event, no SQL, k ≤ MAX_COMMAND_EVENTS.                                                        | `test/growth-command.test.ts`: “New command stays within its bound as N grows”; `test/command-event-cap.test.ts`: “New command stays within its bound as k grows”                                                                      |
+| No-effect command                 | The command body and authorization finalizer run as for a new command. Then `no-effect-fence.sql`: with a receipt, `core.partition` R 1 via `partition_pkey` (`FOR SHARE`) and `core.receipt` W 1 via `receipt_pkey`, plus its partition FK probe; no outbox, write basis or partition write. Without a receipt, the same statement reads only the partition row.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Constant rows and statements, with logarithmic blocks in the receipt index. The bounded command body and authorization callback costs are additional.                                                                                                                                                                                                                                                                                                                    | `test/growth-command-wait.test.ts`: “No-effect command stays within its bound as receipt and partition history grows”                                                                                                                  |
+| Write wait probe                  | `waitForWritable` sleeps without a held connection, then runs `boundedRead`: `BEGIN`, `SET LOCAL statement_timeout`, one `core.partition` primary-key read, and `COMMIT`. A released command uses a fixed three probes. Each probe reads one row and writes none; grow partition and receipt history while keeping the deadline and poll count fixed, then account for deadline-dependent polls separately.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Per probe: constant rows and one application statement, logarithmic blocks, plus three transaction-control statements. For deadline D, at most ceil(D / 25 ms) probes add linear-in-D rows/statements; D is independent of history and configurable, so lifetime statement count has no fixed cap.                                                                                                                                                                       | `test/growth-command-wait.test.ts`: “Write wait probe stays within its bound as partition and receipt history grows”                                                                                                                   |
+| Idempotent replay                 | Time plus authorization, then receipt R 1 by the full `receipt_pkey`; no fence, body, basis or outbox write. Grow total and anchor receipts/history; fix key, response bytes and authorization.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Constant R (one receipt) and W (zero), logarithmic shared blocks in N, A = 2 + authorization SQL; T = 4 (BEGIN, two SET LOCAL, COMMIT). Digest mismatch substitutes ROLLBACK.                                                                                                                                                                                                                                                                                            | `test/growth-command.test.ts`: “Idempotent replay stays within its bound as N grows”                                                                                                                                                   |
+| Denied replay                     | Time plus authorization; rejection before receipt means no receipt read or write; `receipt-only` may read 0/1 receipt by `receipt_pkey`, and denies on a miss (a matching receipt is an allowed replay). Grow total and anchor receipts/history; fix denial path and authorization.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Constant core R (0/1) and W (zero), constant or logarithmic shared blocks in N; A = 1/2 + authorization SQL, T = 4 ending in ROLLBACK.                                                                                                                                                                                                                                                                                                                                   | `test/growth-command.test.ts`: “Denied replay stays within its bound as N grows”                                                                                                                                                       |
+| One contention retry              | Repeat time, fresh authorization/evidence, receipt and body after module or Access-reported 40001/40P01/55P03; same relations/indexes as new command, failed writes roll back. Grow total and anchor N/P/H; fix k and exactly one injected conflict, excluding fence polling.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | The check injects one conflict and makes two attempts: at most twice new-command R/W and blocks, A ≤ 6 + twice callback SQL, T ≤ 10 (ROLLBACK then COMMIT). Production retries contention with capped exponential backoff until the deadline; per-attempt work remains logarithmic in N and linear in k.                                                                                                                                                                 | `test/growth-command.test.ts`: “One contention retry stays within its bound as N grows”                                                                                                                                                |
+| Same-partition concurrency        | `runCommand` queues same-partition serializable attempts by `(pool, partition)` in FIFO order; queued attempts hold no connection, and each pool admits at most 64 waiters. Grow concurrent new commands in one anchor partition at scales 2, 8 and 32 while growing the seeded population.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | For c concurrent commands, rows, writes and statements are linear in c, while shared blocks are linear in c and logarithmic in N per command (O(c log N)); the gate permits exactly one serializable transaction per command, so contention attempts do not grow with c within one pool. Each command retains the new-command cost.                                                                                                                                      | `test/growth-command.test.ts`: “Concurrent commands in one partition stay within their bound as concurrency grows”                                                                                                                     |
+| Partition state                   | `readPartition`: `core.partition` R 0/1 through `partition_pkey`, W 0. Grow total and anchor content/history while fixing partition key; grow partition rows where representable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Constant R (0/1), logarithmic shared blocks in N, A = 1, T = 0 standalone; `boundedRead` adds T = 3 (BEGIN, SET LOCAL, COMMIT/ROLLBACK).                                                                                                                                                                                                                                                                                                                                 | `test/growth-command.test.ts`: “Partition state stays within its bound as N grows”                                                                                                                                                     |
+| Batch checkpoints                 | Ensure outside explicit transaction: `core.consumer_checkpoint` W 0/1, partition FK R 1 on insert; lock R 0/1 with SKIP LOCKED, advance W 1 only after nonempty apply; all checkpoint probes use `consumer_checkpoint_pkey`, FK uses `partition_pkey`. Grow total C and consumers in the anchor partition; fix consumer, b and apply. Other `readBatch` callers retain this transaction/lock path. The effect relay uses `projectBatch`: a short snapshot read releases its connection before enqueue; a separate compare-and-set advances the checkpoint only from the observed position.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Constant R/W, logarithmic shared blocks in C and N; A = 2 busy, 3 empty/stopped before apply, 4 after nonempty apply including log read; T = 2 (BEGIN, COMMIT/ROLLBACK); apply SQL is extra. Ensure can wait on an uncommitted insert despite SKIP LOCKED.                                                                                                                                                                                                               | `test/growth-events.test.ts`: “Batch checkpoints stays within its bound as C grows”                                                                                                                                                    |
+| Batch log                         | `read-log.sql`: partition head R 1 by `partition_pkey`; generate at most b positions, left join outbox by `(partition_no, position)` prefix of `outbox_pkey`, R ≤ bk events (at most 64 × 1,000 = 64,000 per batch), with one placeholder instead at each missing position (or one head row when empty), W 0. Grow total outbox and anchor H, both before and after the checkpoint; fix b, k and payloads.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Rows are linear in fixed input b × k (O(1+bk)); shared blocks are logarithmic in N plus linear in b log N and b × k (O(log N + b log N + bk)); A = 1 within checkpoint totals, T = 0 additional; sort/validation operates on returned rows (sort CPU O(bk log(bk))). With b ≤ 64 and enforced k ≤ 1,000, returned event rows are bounded independently of H.                                                                                                             | `test/growth-events.test.ts`: “Batch log stays within its bound as H grows”                                                                                                                                                            |
+| Empty relay and resumable prefix  | `projectBatch` uses the full `(partition_no, consumer)` checkpoint key for ensure, lock and compare-and-set; `read-log.sql` reads one partition head and at most `b ≤ 64` positions, each with at most `k ≤ 1,000` outbox rows. Parsing stops at the first gap, wrong epoch or invalid payload. Deterministic workflow IDs make partial enqueue replayable. Empty batches enqueue and compare nothing; failed enqueue leaves the checkpoint unchanged; successful retry advances only to the last validated envelope.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Each attempt has constant checkpoint/head statements and at most `b × k ≤ 64,000` event rows; callback/enqueue work is bounded by `b × k` with fixed registered effect/type lists and matches. Full-key checkpoint and outbox seeks keep work independent of older `H`. Empty and failed attempts omit checkpoint CAS.                                                                                                                                                   | `test/growth-relay-continuation.test.ts`: “empty relay and failed apply stay bounded and resume only through the validated prefix” at 1×/8×/64× seeded history                                                                         |
+| Relay discovery                   | `startWorker` runs the effects relay through `startRelays`; each tick runs `scan-partitions.sql` per relay: scan the fixed 4,096 `core.partition` rows, left join the consumer's full, fixed 4,096-row checkpoint map by `consumer_checkpoint_pkey`, and for each of the `A` partitions ahead of its checkpoint probe `outbox_pkey` once at `(partition_no, checkpoint + 1, 0)` for the first pending envelope's `recorded_at`, then sort the `A` rows oldest first (partition number breaks ties; a missing envelope sorts first). It returns at most 4,096 partitions and scans no outbox history. The growth check keeps the full checkpoint map fixed and grows only outbox history; it captures the production discovery plan and asserts the next-envelope `outbox_pkey` probe. Fix relay count and concurrency (default 4).                                                                                                                                                                                                                                                                                                       | Discovery R O(4,096 + A) with A ≤ 4,096, W 0, indexed shared blocks O(4,096 × (1 + log C) + A × log H), A = 1 per relay, T = 0; row work is constant in outbox history H, N, U × t and M, and the sort is O(A log A). Add checkpoint/log/enqueue costs for each batch started. At most configured concurrency runs at once across all relays, one run per relay/partition; each run drains batches until busy, empty or stopped, so total batch work grows with backlog. | `test/relay-effects.test.ts`: `effects relay discovery stays within its bound as outbox history grows`                                                                                                                                 |
+| Effect enqueue                    | `registerEffects` scans every effect and its type list per event; each match starts deterministic `fx:epoch:partition:position:seq:name` workflow with `queuePartitionKey: ${effect.name}:${partition_no}`. Jobs are sorted by position then event sequence (registration order breaks ties) and enqueued sequentially within each partition, concurrently across partitions. Installed DBOS upserts R/W 1 `dbos.workflow_status` by `workflow_status_pkey` and inserts W 0/1 `dbos.workflow_input` by `workflow_input_pkey`, even on reuse (rolled back). Grow total DBOS history and anchor events; fix b/k, effect/type lists, matches and bytes, then separately grow registrations. Relay snapshot reads hold no connection during SDK enqueue; checkpoint advancement uses compare-and-set afterward. A lost compare-and-set returns busy and replay uses deterministic `fx` workflow IDs to deduplicate already enqueued effects while retaining per-partition order.                                                                                                                                                             | Per match R/W O(1), shared blocks O(log N), A = 2, T = 2 (BEGIN, COMMIT for new / ROLLBACK for existing); multiply by matches across bk events. Per event, CPU and SQL fan-out is linear in matching registrations, a constant for each deployment, so it does not exceed the criterion. Sorting m matched jobs in a partition costs O(m log m); enqueue concurrency is bounded by input partitions, not matches.                                                        | `test/growth-effects.test.ts`: “Effect enqueue stays within its bound as N grows”                                                                                                                                                      |
+| Effect persistence                | `effects` uses `queuePartitionKey: ${effect.name}:${partition_no}` and `partitionConcurrency: 1`: one effect executes at a time for each effect/partition pair, in enqueue order; a failing effect delays only its later events, while other effects and partitions can progress independently. Each partitioned dequeue sweep walks distinct keys with ENQUEUED workflows using an indexed loose scan (one seek and pending-owner check per active key, so work is bounded by queued workflows rather than keys used historically), then head-probes and claims at most the worker budget or 8,192 workflows, whichever is lower. Per matched event's normal workflow execution, DBOS reads 0/1 status/input/output rows per keyed probe using `workflow_status_pkey`, `workflow_input_pkey` and `operation_outputs_pkey`; step completion locks status R 1 and upserts `dbos.operation_outputs` W 1 by `(workflow_uuid, function_id)` PK; terminal completion updates status W 1 and upserts `dbos.workflow_output` W 1 by `workflow_output_pkey`. Grow total and anchor workflow history; fix one execution, matches and effect body. | Each keyed read has constant rows (R = 0/1) and logarithmic blocks in N, A = 1, T = 0 standalone (step replay check reads status plus step output: A = 2); step recording A = 2/T = 2, terminal recording A = 2/T = 2, each with constant R/W and logarithmic blocks in N. Queue recovery, cancellation polling and effect body are additional; step body retries ≤ 10, not a lifetime recovery cap.                                                                     | `test/growth-effects.test.ts`: “Effect persistence stays within its bound as N grows”                                                                                                                                                  |
+| Admission                         | `app.ts` uses reserved admission for bearer authentication/health and normal admission for prepare; `Admission` scans/splices its in-memory queue (default ≤ 32, capacities 8 normal + 2 reserved), no relation/index. Grow total and anchor data/history and request arrivals; fix configured limits and job.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Constant own DB R/W = 0, shared blocks = 0, and A/T = 0; CPU O(1) in N/P at fixed queue cap (drain can be quadratic in configured queue length); admitted job costs are extra, not limited by permits.                                                                                                                                                                                                                                                                   | `test/growth-request.test.ts`: “Admission stays within its bound as N grows”                                                                                                                                                           |
+| Request access dispatch           | `actorOf` calls injected authenticate once for bearer, zero for anonymous; access is lazily built from route catalogue, and each permission dispatch uses route-array find; prepare and authorize delegate to Access (including command checks before receipts). No wrapper relation/index; `/health` alone sends relation-free SELECT 1. Grow total and anchor data/history; fix routes and Access implementation, separately audit callback anchors.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Wrapper DB R/W and blocks 0, A/T = 0 (health A = 1/T = 0); CPU linear in configured routes, constant in N/P. Authentication, authorization and prepare have their own relation, index, statement and hop bounds; this wrapper imposes none.                                                                                                                                                                                                                              | `test/growth-request.test.ts`: “Request access dispatch stays within its bound as N grows”                                                                                                                                             |
+| Command actor admission           | `readAccount` uses `access.account` primary key `(route, account_id)` independently before resource checkout, once per live attempt shared across action checks. Grow R = N + U × t + M, unrelated accounts and the same actor receipts/history; fix K <= 1000. Authentication retains its one account point read; anonymous commands add none.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Per authenticated command attempt: constant additional R = 1, W = 0, A = 1, T = 0, examined rows, and logarithmic indexed blocks in R; connection released before resource checkout. Existing O((1 + K) log G + matches) authorization and actual k log R command changes are unchanged.                                                                                                                                                                                 | `test/access/growth-command-admission.test.ts`: “${mode} command admission adds one account seek per attempt at all three growth scales”                                                                                               |
+| Session header                    | Decode once per request; record merges then encodes. No relations/indexes; validate distinct partitions, find/filter/copy j components and retain last 32; HMAC uses one key-ID map lookup. Grow total and anchor content/history, then j; fix scope/key/payload widths and records per request.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | DB R/W, shared blocks, A/T = 0; CPU O(j), constant N/P; unseal rejects tokens over 4096 characters before decoding, j ≤ 32 on HTTP path. Direct merge accepts longer input and seal has no output-length cap.                                                                                                                                                                                                                                                            | `test/growth-request.test.ts`: “Session header stays within its bound as j grows”                                                                                                                                                      |
+| Cursors and seal                  | Encode/decode have no relations/indexes; canonicalize binding by sorting parameter keys, validate ≤ 8 after-keys, HMAC SHA-256, canonical base64url and constant-time MAC comparison; expiry uses local time, not SQL. Grow total and anchor content/history; fix binding, key/scope and cursor byte lengths, then grow parameter count/bytes separately.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | DB R/W, shared blocks, A/T = 0; constant N/P with fixed inputs; CPU linear in token/scope bytes plus parameter sorting (count × log count). Decode token ≤ 4096 characters; encode, binding parameters and string after-keys have no byte cap, so input work is not universally constant.                                                                                                                                                                                | `test/growth-request.test.ts`: `Cursors and seal stays within its bound as N grows`                                                                                                                                                    |
+| Opaque list cursors               | Encode/decode have no relations/indexes and take no pool. Canonicalize the query by sorting parameter keys, validate ≤ 8 after-keys of ≤ 256 bytes, route ≤ 256 bytes and canonical query ≤ 2,048 bytes; one encryption HKDF-SHA-256 derivation and one AES-256-GCM operation per token, with imported ring keys cached. Default anonymous cursors add one HMAC-SHA-256 over associated data and plaintext using a separately derived, cached key; decode also verifies the synthetic salt. Decode checks the profile's token length cap and canonical base64url before decryption. Default account cursors and all search cursors expire using the passed clock, not SQL. The search profile permits keys of ≤ 2,560 UTF-8 bytes, ≤ 3,072 total string bytes, ≤ 3,584 plaintext bytes and ≤ 4,864 token characters, uses random salts for both viewer kinds and adds no HMAC or data access.                                                                                                                                                                                                                                            | DB R/W, shared blocks, A/T = 0; constant N/P and constant CPU: one encryption derivation and one AES-GCM pass over bounded plaintext (at most 3,584 bytes for search); default anonymous cursors add one HMAC over bounded associated data and plaintext, independent of list size and position.                                                                                                                                                                         | `test/tokens/list-cursor.test.ts`: `oversized inputs are refused` (maximal token stays within 4,096 characters)                                                                                                                        |
+| Work-client status and step reads | `getWorkflow` point-reads workflow status; ordinary `listWorkflowSteps` reads keyed workflow status/input and step outputs for a fixed page limit. The legacy leave fallback joins workflow input/status rows, filters parent and child JSON IDs, orders parent history, then applies `LIMIT 1`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Ordinary status and step-list reads have constant rows/statements and logarithmic blocks at a fixed page limit. The legacy fallback examines work linear in workflow history before its limit, with constant statements; the bound includes this history-dependent scan.                                                                                                                                                                                                 | `test/work/growth-work-client.test.ts`: “Work client status and step reads stay within their bound as workflow history grows”; “Workflow step listing with the legacy leave fallback stays within its bound as workflow history grows” |
+
+Import identity history: `test/imports/identity-growth.test.ts`, “fixed public bulk grant changes and reduced-scope native Auth/Access remain bounded across actual history growth”, at [1, 8, 64].
+
+Effect registrations have no deployment-wide count cap; `registerEffects` currently rejects more than 32 consumers for one event type. A fixed event's fan-out is the number of registrations matching that type, and each matching effect creates one independently persisted workflow. The core callback interfaces do not establish bounds for authorization, mutation, projection or erasure; those bounds require the supplied implementations' SQL. Session and cursor input caps do not cap all encoding or binding work; constant request CPU assumes fixed byte widths and configuration. Ordinary PostgreSQL relations provide logarithmic B-tree access shapes, while application budgets count visible SQL, authorization and native work but exclude invisible engine MVCC housekeeping. Same-partition writers serialize at the partition position; same-process attempts queue without holding a connection, while other processes can retry contention until the deadline. Preparation may read a separately anchored parent, and arbitrary callbacks can add cross-partition work. DBOS uses shared system tables; logical queue partitioning does not prove physical partition placement or atomicity between enqueue and checkpoint transactions.
+
+### Effect registration expansion
+
+Touches: For `R` registered effects with `L` types each, direct enqueue first checks each registration for identity-original preparation, then evaluates `effect.types.includes(event.type)` once per registration and event. With the one-type registrations in the growth fixture, `b` envelopes containing `k` events make `b × k × R` type comparisons; `m` matching registrations create `m` jobs, sorted within each partition. Each new job uses the DBOS workflow-status key and inserts its workflow input. Unmatched registrations add comparisons but no jobs.
+
+Bound: Registration validation is O(R × L). Enqueue matching and ordering cost O(b × k × R × L + Σₚ mₚ log mₚ); each of the `m` matching jobs adds constant relation rows and logarithmic shared blocks in DBOS history. This records the existing per-event-type validation limit without introducing a deployment-wide registration cap.
+
+Growth check: `test/growth-effects.test.ts`: “Effect enqueue stays within its bound as N grows”; `test/growth-effect-expansion.test.ts`: “Effect registration expansion, deterministic enqueue replay and failed ordered progress retain derived native bounds”. The expansion test fixes event count and bytes, varies matching and nonmatching registrations at 1×, 2× and 4×, and independently measures DBOS histories at 256, 1,024 and 4,096 rows. It checks keyed status/input persistence, deterministic replay, and retry followed by ordered progress; SDK recovery and polling are reported as background work.
+
+### Partition subject keyset continuation
+
+- Touches: `pageSubjects` reads one `core.partition` primary key, then seeks
+  `semantic.subject` by its `(route, subject_id)` primary key within that partition's route range. The materialized
+  page admits at most `size + 1` subjects, including the discarded lookahead. Each admitted subject probes
+  `semantic.term_head` and `semantic.fact` through `current_term_fact` to assemble labels; the lookahead also pays
+  that expansion. Obtaining a deep cursor by walking earlier pages is setup, charged separately from resuming it.
+- Bound: two application statements in one read-only repeatable-read transaction. With page size `s`, examined term-head
+  count `h` per subject (including filtered heads) and surviving fact revisions `f` per head, examined rows are bounded by
+  `1 + (s + 1) * (1 + h + h * f)`, with logarithmic index buffers per probe and local label sorting/aggregation
+  proportional to admitted term rows. There is no offset or scan of subjects before the full cursor key.
+  `s` is capped at 100; this helper does not cap `h`, so its label expansion is not universally constant.
+  The label-empty fixture fixes `s = 2`, `h = 0`: at most four examined rows, five index descents and one discarded
+  subject for a deep page; empty exhaustion reads only the partition row and seeks beyond the last subject.
+  History and unrelated subjects grow independently from 512 to 1,024/4,608/33,280 rows; all selected history uses
+  the same route and sorts before a fixed tail. Empty setup removes the outstanding, fact-free lookahead after
+  normal pagination issued its cursor. This measures native continuation SQL, not removal cost or eligibility.
+  Native plan rows include filter/recheck discards; every repetition checks the ceiling and subject access path.
+  Token-only decode is measured separately with zero SQL/plans/rows/buffers. Token CPU follows the Cursors and seal
+  derivation above; native SQL measurements do not measure CPU or a callback's Access cost.
+- Growth check: `test/growth-keyset-continuation.test.ts`:
+  “Deep keyset continuation stays bounded as selected history grows”;
+  “Deep keyset continuation stays bounded as unrelated population grows”;
+  “Empty keyset continuation stays bounded as selected history grows”;
+  “Empty keyset continuation stays bounded as unrelated population grows”.
+
+Production continuation: `createContextDirectory.list` is the owner-supported viewer/query-bound pagination
+boundary. Its opaque cursor binds the original viewer, normalized query, page size, deleted selection, authority and
+directory epoch. A request selects at most 100 raw candidates, including rejected candidates and lookahead; for
+`k <= 100` raw rows, at most `k` unique Context IDs reach one `authorizedContextMetadata` call and its fixed three
+Access actions. Native Context metadata, owner-grant/account anchors and final eligibility revalidation remain
+bounded by those IDs and their homes. Candidate rejection still pays that Access work. Each emitted Context expands
+its admitted labels within the existing 64 KiB response bound.
+
+Growth check: `test/growth-keyset-continuation.test.ts`, “Viewer/query-bound deep and empty production continuation
+retains bounded native SQL and Access work at three independent history and unrelated scales”. The mounted route
+issues every cursor and resumes it with the same viewer and full query. At fixed `limit = 100`, the deep suffix
+examines 100 candidate rows, admits two bilingual Contexts and denies 98; the resulting cursor examines the last
+three denied rows and reaches empty exhaustion. Selected matching history and nonmatching unrelated Contexts each
+grow independently through 100, 200 and 400 rows. Native measurements assert candidate and Access relation rows,
+plan rows, statements and buffers; cursor CPU is outside those SQL/Access measurements.
+
+Decision: retain `pageSubjects`' partition-only cursor boundary for the raw SQL proof and use the production Context
+directory for viewer/query-bound eligibility. The helper has no viewer or Access argument, binds only the partition
+and returns no cursor on its terminal page; its disappearing-lookahead fixture remains SQL evidence only. No runtime
+pagination or cursor binding changed.
+
+### Replay authorization and aborted commands
+
+Measure revoked replay and aborted attempts separately from successful commands; trusted authorization fixtures
+isolate executor work while the owning Access checks retain their callback bounds.
+Measure native SQL statement aborts alongside thrown callback failures.
+
+- Touches: each attempt mints time and authorizes before the full partition/principal/kind/key receipt seek.
+  Revoked account and anonymous authorization reads no receipt, even when the key has a committed outcome.
+  Anonymous `receipt-only` authorization also refuses before receipt access. Account `receipt-only` reads the
+  matching outcome or reports a digest conflict, without running the body or finalizer. Failed bodies, SQL-aborted
+  bodies and failed finalizers seek a fresh receipt key, update one `core.partition` row by `partition_pkey`, then roll
+  back. The finalizer-failure fixture updates that same row twice. No failed attempt advances the partition or stores a receipt.
+  The SQL-aborted fixture adds one relation-free division-by-zero statement and preserves PostgreSQL error `22012`.
+  Separate account and anonymous sequences retry the aborted key successfully and replay that committed result;
+  the failed mutation, rollback, successful retry and replay all remain inside the measured operation.
+- Bound: constant statements and examined rows, logarithmic receipt-index buffers. The fixtures grow 512, 4,096 and
+  32,768 same-principal receipts distributed across the anchor and unrelated partitions, holding the replay key,
+  response bytes and callback work fixed. Rollback work includes the attempted updates; application callback work
+  remains additional in real commands. No history scan, runtime funding protocol or invisible MVCC charge is added.
+- Growth check: `test/growth-command-edges.test.ts`: “account revoked command stays bounded as receipt history grows”;
+  “anonymous revoked command stays bounded as receipt history grows”; “account receipt-only command stays bounded as
+  receipt history grows”; “anonymous receipt-only command stays bounded as receipt history grows”; “account conflict
+  command stays bounded as receipt history grows”; “account body-failed command stays bounded as receipt history
+  grows”; “anonymous body-failed command stays bounded as receipt history grows”; “account sql-aborted command stays
+  bounded as receipt history grows”; “anonymous sql-aborted command stays bounded as receipt history grows”;
+  “account finalizer-failed command
+  stays bounded as receipt history grows”; “anonymous finalizer-failed command stays bounded as receipt history grows”.
+  Same-key retry checks in that file: “account SQL-aborted key accepts a fresh retry as receipt history grows”;
+  “anonymous SQL-aborted key accepts a fresh retry as receipt history grows”. Each fixes one abort, one successful
+  one-event command and one replay, adding their constant rows/statements and logarithmic index buffers.
+
+### Write wait deadline refusal
+
+Decision: the three-scale deadline-refusal fixture advances the test clock after two native fenced probes so the
+poll count stays fixed while history grows; the existing real-time deadline outcome remains covered separately.
+
+- Touches: one time mint, receipt miss, failed fence and partition-state read, followed by two native bounded
+  partition reads. The partition stays fenced; no receipt or outbox event is retained. Seed receipt, outbox and
+  write-basis histories at 2,048, 8,192 and 32,768 rows, holding the command key width and authorization fixed.
+- Bound: four fixed application statements plus two probe statements; constant examined rows and statements,
+  logarithmic index buffers. Transaction control and the failed fence remain captured. In production the probe
+  term is linear in the independent deadline budget, as derived in Write wait probe above.
+- Growth check: `test/growth-command-wait.test.ts`: “Write wait deadline refusal stays bounded at three receipt
+  history scales”.
 
 ## Write rate deployment configuration
 
@@ -363,7 +793,8 @@ Never log the key, bearer tokens or client IP addresses.
 `KERNEL_WRITE_RATE_OVERRIDES` optionally contains strict partial budget JSON, for example
 `{"anonymous":{"write":{"maximum":10,"seconds":60}}}`. Unknown classes, families or fields,
 noninteger values, maximum outside 1–1000000, and seconds outside 1–86400 fail startup validation.
-The default is the versioned `RATE_LIMIT_V1` catalogue. Report and provider capacity have separate
+The default is the versioned `RATE_LIMIT_V1` catalogue. The development database setup writes new-account and member
+write overrides of 100,000 commands per minute for local dataset imports, preserving explicit existing overrides. Report and provider capacity have separate
 family keys from ordinary writes. Imports and semantic batches spend the total command count once,
 up to 100, before any command runs; a denied batch spends no units.
 
@@ -389,6 +820,20 @@ The route-led expiry index supports a separately registered cleanup job restrict
 local route and at most 1000 expired rows per tick, with a 48-hour retention bound. Limiter admission
 grants capacity only; normal Access and command receipt ordering still apply. Turnstile and front
 controls remain independent.
+
+## Receipt storage configuration
+
+The HTTP server and worker require the same dedicated `KERNEL_RECEIPT_KEYS` ring: current
+`version:base64url` entry first, one to four retained versions (0–255), each with at least
+32 random bytes and no reuse of token-sealing key bytes. Trusted `createKernel` composition
+passes `receiptKeys` explicitly. Missing keys fail startup; ephemeral token defaults never
+supply permanent receipt keys. Normal and no-effect writers persist only current versioned
+HMAC tokens. Central replay and every native completion reader accept original caller keys
+through at most four retained tokens plus a pre-cutover raw lookup candidate. Checkout
+count uses its exact two numbered outcomes. There is no production backfill or raw-writer
+transition. Retiring a version requires re-keying all its receipts first. See the
+[command configuration and retention rule](src/command/README.md#receipt-storage-keys).
+This does not complete the remaining shared-history erasure work.
 
 ## Anonymous command receipts
 
@@ -486,12 +931,18 @@ with Cloudflare Siteverify. Set both together; partial or malformed configuratio
 secret. If both are absent, public reads and authenticated reports continue, while anonymous reports fail closed with
 the same not-found response used for ineligible targets. `CONTENT_SOURCE_HOSTS` is an optional comma-separated list
 of exact lowercase DNS hosts for URL-import requests. The API uses its existing `KERNEL_SESSION_KEYS` ring for content
-cursors and does not need media storage credentials. Content worker settings are optional and all or nothing.
+cursors and does not need media storage credentials. Content worker storage is optional and selects exactly one
+complete backend: the strict production R2 group below, or the explicit development-only local root. The local root
+is accepted only with `NODE_ENV=development`, must be the repository's `.temp/local-stack/content-media`, and is
+limited to the same 20 MiB per object as R2. The local adapter validates canonical
+`m/<media UUID>/<original or normalized variant>` keys, writes by atomic replacement, and confines prefix deletion
+to one media UUID. It never serves files directly; downloads still use native Media authorization and disclosure.
+R2 and local storage cannot be configured together.
 
 The content registration in `src/content/register.ts` uses the shared kernel worker and its
 queues, database pool, enqueue client and shutdown. It does not start a separate process or relay.
-Storage, sources and consent are independent groups. Registration installs the same workflows, queues,
-schedules and effects with or without them. An absent storage port or consent reader fails closed with
+Content owns the storage and sources groups; Access owns the shared Auth consent group. Registration installs
+the same workflows, queues, schedules and effects with or without them. An absent storage port or consent reader fails closed with
 `dependency_unavailable` on every call, and an absent sources group leaves the source allowlist empty.
 A partial group fails startup and names its first missing or invalid variable. Errors and logs name the
 variable, never a value. Startup logs one line for each absent group.
@@ -502,9 +953,15 @@ variable, never a value. Startup logs one line for each absent group.
 | `CONTENT_R2_BUCKET`            | Media bucket name, 3–63 lowercase letters, digits and hyphens.                                                                                                      |
 | `CONTENT_R2_ACCESS_KEY_ID`     | Private host-side R2 access key with media read/write/delete permission.                                                                                            |
 | `CONTENT_R2_SECRET_ACCESS_KEY` | Corresponding private secret.                                                                                                                                       |
+| `CONTENT_LOCAL_MEDIA_ROOT`     | Development only: exact repository path `.temp/local-stack/content-media`, with `NODE_ENV=development`; mutually exclusive with all R2 settings.                    |
 | `CONTENT_SOURCE_HOSTS`         | Comma-separated exact lowercase DNS source hosts, at most 100, for trusted HTTPS source imports. No schemes, ports, wildcard suffixes, IP literals or whitespace.   |
 
-The consent group is optional and all or nothing: `CONTENT_AUTH_CONSENT_URL` is the exact private HTTPS
+Decision: the documented local stack selects a confined file-backed `MediaStorage` at `.temp/local-stack/content-media`
+and adds only the selected Bangumi media host `lain.bgm.tv`; production continues to require the complete validated
+R2 group.
+
+Access reads the shared consent group with `readAuthConsentConfig(env)`. It is optional and all or nothing:
+`KERNEL_AUTH_CONSENT_URL` is the exact private HTTPS
 `/internal/v1/consents:read` endpoint, together with `CF_ACCESS_CLIENT_ID` and `CF_ACCESS_CLIENT_SECRET`
 for its Cloudflare Access service token. The shared `KERNEL_ROUTE_KEY` binds imported source tuples.
 
@@ -522,3 +979,9 @@ Collection jobs obtain authoritative command time; the schedule timestamp cannot
 `CONTENT_TEST_COLLECTION_PARTITIONS` optionally restricts collection to a comma-separated list of distinct
 partition numbers from 0 through 4095 for worker fixtures. Leave it unset in deployment so collection visits
 all partitions.
+
+Explicit native bulk status uses `POST /v1/libraryOperations` to preview up to 1,000 canonical subjects within a
+64 KiB command. `POST /v1/libraryOperations/:id:confirm` executes the stored manifest; GET operation/outcomes
+recovers authorized progress and results, and `POST /v1/libraryOperations/:id:cancel` stops remaining targets.
+Changed or missing entries skip individually. Query selections remain unavailable. See the
+[bulk contract](src/library/bulk-contract.md) for execution, result retention and worker bounds.

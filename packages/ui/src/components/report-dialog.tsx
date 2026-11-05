@@ -1,7 +1,20 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Button } from './button.tsx';
-import { Dialog, DialogBody, DialogClose, DialogContent, DialogFooter, DialogHeader } from './dialog.tsx';
-import { Textarea } from './textarea.tsx';
+import { LoaderCircleIcon } from 'lucide-react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { Button } from '@rezics/ui/shadcn/button';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@rezics/ui/shadcn/dialog';
+import { Field, FieldContent, FieldDescription, FieldLabel } from '@rezics/ui/shadcn/field';
+import { RadioGroup, RadioGroupItem } from '@rezics/ui/shadcn/radio-group';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
+
+const useClientLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 export const reportDialogLabels = {
   title: 'Report this content',
@@ -57,7 +70,10 @@ const reasons: { value: ReportReason; label: keyof ReportDialogLabels; descripti
   { value: 'other', label: 'other', description: 'otherDescription' },
 ];
 
-/** A focused report form. The host supplies the verification widget and its verified state. */
+/**
+ * A focused report form. shadcn has no report form; this composes `dialog`, `radio-group`, `field` and `textarea`.
+ * The host supplies the verification widget and its verified state.
+ */
 export function ReportDialog({
   open,
   onOpenChange,
@@ -75,16 +91,37 @@ export function ReportDialog({
   const [success, setSuccess] = useState(false);
   const [failure, setFailure] = useState('');
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const incarnation = useRef(0);
+  const mounted = useRef(false);
+  const openRef = useRef(open);
+  const pendingRef = useRef(false);
+  const successRef = useRef(false);
+  const operationRef = useRef<object | null>(null);
+  const onOpenChangeRef = useRef(onOpenChange);
+  const failureLabelRef = useRef(labels.failure);
   const id = useId().replaceAll(':', '');
   const requiresDetails = reason === 'illegal' || reason === 'other';
   const hasRequiredDetails = !requiresDetails || details.trim().length > 0;
-  const canSubmit = Boolean(reason) && verified && hasRequiredDetails && !pending && !success;
+  const withinDetailsLimit = details.length <= detailsLimit;
+  const canSubmit = Boolean(reason) && verified && hasRequiredDetails && withinDetailsLimit && !pending && !success;
   const detailsId = `${id}-details`;
   const detailsHintId = `${id}-details-hint`;
   const characterCountId = `${id}-character-count`;
   const reasonsLabelId = `${id}-reasons-label`;
 
-  useEffect(() => {
+  useClientLayoutEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+    failureLabelRef.current = labels.failure;
+  });
+
+  useClientLayoutEffect(() => {
+    mounted.current = true;
+    openRef.current = open;
+    incarnation.current += 1;
+    operationRef.current = null;
+    pendingRef.current = false;
+    successRef.current = false;
+
     if (open) {
       setReason('');
       setDetails('');
@@ -94,26 +131,67 @@ export function ReportDialog({
     }
 
     return () => {
-      if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+      mounted.current = false;
+      openRef.current = false;
+      incarnation.current += 1;
+      operationRef.current = null;
+      pendingRef.current = false;
+      successRef.current = false;
+      if (closeTimer.current !== null) {
+        clearTimeout(closeTimer.current);
+        closeTimer.current = null;
+      }
     };
   }, [open]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canSubmit || !reason) return;
+    if (
+      !openRef.current ||
+      !mounted.current ||
+      pendingRef.current ||
+      successRef.current ||
+      !reason ||
+      !verified ||
+      !hasRequiredDetails ||
+      !withinDetailsLimit
+    )
+      return;
 
+    const operation = {};
+    const operationIncarnation = incarnation.current;
+    operationRef.current = operation;
+    pendingRef.current = true;
     setPending(true);
     setFailure('');
+    const isCurrent = () =>
+      mounted.current &&
+      openRef.current &&
+      incarnation.current === operationIncarnation &&
+      operationRef.current === operation;
 
     try {
       await onSubmit({ reason, details });
+      if (!isCurrent()) return;
+
+      successRef.current = true;
       setSuccess(true);
-      closeTimer.current = setTimeout(() => onOpenChange(false), 900);
+      if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+      closeTimer.current = setTimeout(() => {
+        closeTimer.current = null;
+        if (mounted.current && openRef.current && incarnation.current === operationIncarnation && successRef.current)
+          onOpenChangeRef.current(false);
+      }, 900);
     } catch (error) {
+      if (!isCurrent()) return;
       const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
-      setFailure(message || labels.failure);
+      setFailure(message || failureLabelRef.current);
     } finally {
-      setPending(false);
+      if (isCurrent()) {
+        operationRef.current = null;
+        pendingRef.current = false;
+        setPending(false);
+      }
     }
   };
 
@@ -123,111 +201,119 @@ export function ReportDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={({ open: nextOpen }) => onOpenChange(nextOpen)} pending={pending}>
-      <DialogContent aria-label={labels.title} size="md">
-        <DialogHeader description={labels.description} title={labels.title} />
-        <DialogBody>
-          {success ? (
-            <div aria-label={labels.success} className="flex flex-col gap-2" role="status">
-              <p className="font-medium">{labels.success}</p>
-              <p className="text-muted-foreground text-sm">{labels.successDescription}</p>
-            </div>
-          ) : (
-            <form className="flex flex-col gap-5" onSubmit={submit}>
-              <div aria-labelledby={reasonsLabelId} className="flex flex-col gap-3" role="radiogroup">
-                <p className="font-medium text-sm" id={reasonsLabelId}>
-                  {labels.reasons}
-                </p>
+    <Dialog
+      onOpenChange={(next, details) => {
+        // A report in flight finishes before the dialog may close.
+        if (!next && pendingRef.current) details.cancel();
+        else onOpenChangeRef.current(next);
+      }}
+      open={open}
+    >
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg" showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>{labels.title}</DialogTitle>
+          <DialogDescription>{labels.description}</DialogDescription>
+        </DialogHeader>
+        {success ? (
+          <div aria-label={labels.success} className="flex flex-col gap-2" role="status">
+            <p className="font-medium">{labels.success}</p>
+            <p className="text-muted-foreground text-sm">{labels.successDescription}</p>
+          </div>
+        ) : (
+          <form className="flex min-w-0 flex-col gap-5" onSubmit={submit}>
+            <div className="flex flex-col gap-3">
+              <p className="font-medium text-sm" id={reasonsLabelId}>
+                {labels.reasons}
+              </p>
+              <RadioGroup
+                aria-labelledby={reasonsLabelId}
+                className="gap-3"
+                disabled={pending}
+                name="report-reason"
+                onValueChange={(next) => {
+                  setReason(next as ReportReason);
+                  setFailure('');
+                }}
+                value={reason}
+              >
                 {reasons.map(({ value, label, description }) => {
-                  const reasonLabel = labels[label];
-                  const descriptionId = `${id}-reason-${value}-description`;
+                  const radioId = `${id}-reason-${value}`;
+                  const descriptionId = `${radioId}-description`;
 
                   return (
-                    <label className="inline-flex items-start gap-2" key={value}>
-                      <input
+                    <Field key={value} orientation="horizontal">
+                      <RadioGroupItem
                         aria-describedby={descriptionId}
-                        aria-label={reasonLabel}
-                        checked={reason === value}
-                        className="mt-0.5 size-5 shrink-0 accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                        disabled={pending}
-                        name="report-reason"
-                        onChange={() => {
-                          setReason(value);
-                          setFailure('');
-                        }}
-                        type="radio"
+                        aria-labelledby={`${radioId}-label`}
+                        id={radioId}
                         value={value}
                       />
-                      <span className="flex min-w-0 flex-col gap-0.5">
-                        <span className="font-medium text-sm">{reasonLabel}</span>
-                        <span className="text-muted-foreground text-sm" id={descriptionId}>
-                          {labels[description]}
-                        </span>
-                      </span>
-                    </label>
+                      <FieldContent className="min-w-0">
+                        <FieldLabel htmlFor={radioId} id={`${radioId}-label`}>
+                          {labels[label]}
+                        </FieldLabel>
+                        <FieldDescription id={descriptionId}>{labels[description]}</FieldDescription>
+                      </FieldContent>
+                    </Field>
                   );
                 })}
-              </div>
+              </RadioGroup>
+            </div>
 
-              <div className="flex flex-col gap-2">
-                <label className="font-medium text-sm" htmlFor={detailsId}>
-                  {labels.details}
-                  {requiresDetails ? <span aria-hidden="true"> *</span> : null}
-                </label>
-                <Textarea
-                  aria-describedby={`${detailsHintId} ${characterCountId}`}
-                  aria-required={requiresDetails}
-                  disabled={pending}
-                  id={detailsId}
-                  maxLength={detailsLimit}
-                  onChange={(event) => updateDetails(event.currentTarget.value)}
-                  required={requiresDetails}
-                  value={details}
-                />
-                <p className="text-muted-foreground text-sm" id={detailsHintId}>
-                  {labels.detailsRequiredHint}
-                </p>
-                <p
-                  aria-label={labels.characterCount}
-                  aria-live="polite"
-                  className="text-end text-muted-foreground text-sm"
-                  id={characterCountId}
-                  role="status"
-                >
-                  {labels.characterCountText
-                    .replace('{count}', String(details.length))
-                    .replace('{max}', String(detailsLimit))}
-                </p>
-              </div>
+            <div className="flex flex-col gap-2">
+              <FieldLabel htmlFor={detailsId}>
+                {labels.details}
+                {requiresDetails ? <span aria-hidden="true"> *</span> : null}
+              </FieldLabel>
+              <Textarea
+                aria-describedby={`${detailsHintId} ${characterCountId}`}
+                aria-required={requiresDetails}
+                className="min-h-24 resize-y"
+                disabled={pending}
+                id={detailsId}
+                maxLength={detailsLimit}
+                onChange={(event) => updateDetails(event.currentTarget.value)}
+                required={requiresDetails}
+                value={details}
+              />
+              <FieldDescription id={detailsHintId}>{labels.detailsRequiredHint}</FieldDescription>
+              <p
+                aria-label={labels.characterCount}
+                aria-live="polite"
+                className="text-end text-muted-foreground text-sm tabular-nums"
+                id={characterCountId}
+                role="status"
+              >
+                {labels.characterCountText
+                  .replace('{count}', String(details.length))
+                  .replace('{max}', String(detailsLimit))}
+              </p>
+            </div>
 
-              {verification ? (
-                <div aria-label={labels.verification} data-slot="report-verification" role="group">
-                  {verification}
-                </div>
-              ) : null}
-              {pending ? (
-                <p aria-live="polite" className="sr-only" role="status">
-                  {labels.submitting}
-                </p>
-              ) : null}
-              {failure ? (
-                <p className="text-sm" role="alert">
-                  {failure}
-                </p>
-              ) : null}
-              <DialogFooter className="-mx-(--space) -mb-1 px-0 pb-0">
-                <DialogClose asChild>
-                  <Button disabled={pending} variant="outline">
-                    {labels.cancel}
-                  </Button>
-                </DialogClose>
-                <Button disabled={!canSubmit} isLoading={pending} type="submit">
-                  {labels.submit}
-                </Button>
-              </DialogFooter>
-            </form>
-          )}
-        </DialogBody>
+            {verification ? (
+              <div aria-label={labels.verification} data-slot="report-verification" role="group">
+                {verification}
+              </div>
+            ) : null}
+            {pending ? (
+              <p aria-live="polite" className="sr-only" role="status">
+                {labels.submitting}
+              </p>
+            ) : null}
+            {failure ? (
+              <p className="text-destructive text-sm" role="alert">
+                {failure}
+              </p>
+            ) : null}
+            <DialogFooter>
+              <DialogClose render={<Button disabled={pending} variant="outline" />}>{labels.cancel}</DialogClose>
+              <Button aria-busy={pending} disabled={!canSubmit} type="submit">
+                {pending ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : null}
+                {labels.submit}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );

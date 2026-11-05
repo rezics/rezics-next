@@ -4,60 +4,71 @@ The immutable definition catalogue release format stored by the kernel. This pac
 exports the release types, the JSON Schema 2020-12 document at
 `@rezics/definitions/schema/release.json`, and pure validation and digest functions.
 
-Use `validateRelease(input)` before storing a release. An empty array means valid;
-otherwise violations carry RFC 6901 pointers and `invalid`, `unsafe_pattern`, or
-`limit` codes. Results are sorted, deduplicated by pointer, and capped at 64.
-Validation checks references, CURIE expansion, sorted unique lists, type bases and
-facets, datatype-specific members, fixed value schemas, context defaults, saved
-filters, and regular-expression safety. A facet is an item, a time, a quantity, or
-a code: a `string` whose release definition has a `pattern`. Pattern checks use
-one shared structural admission policy and recheck 4.5.0's in-process synchronous
-entry point in an isolated VM context. The pinned browser checker's `performance.now`
-is a private counter, with a budget of 8,192 native cancellation checkpoints
-per expression; it never reads or patches the host clock. This also bounds DFA
-construction, which has no native size cap. Safety verdicts have no wall-clock deadline. Admission permits at most
-256 source characters, 16 nested groups, repetition endpoints of 64, a sum of 128
-repetition endpoints, and 128 expanded structural units (including group and
-quantifier overhead). Nested repetitions multiply their costs before analysis.
-Backreferences, named groups, Unicode properties, lookbehind, and lookahead of
-more than one character atom are refused. All shipped value schemas fit this profile.
-The checker caps graph construction at 1,024 transitions and accepts only an
-`automaton` safe verdict. Its `auto` selection is used because the pinned version
-bypasses graph limits in explicit `automaton` mode; a synchronous diagnostic guard
-refuses limit failures and fuzz fallback before seeding or matching. Recall attack
-execution is disabled. Invalid, unsupported, over-budget, and inconclusive patterns
-fail validation. Proof results are cached only within each release/compiler call.
+The root export's `browser` condition provides release types, constants, `valueSchema`,
+the pure `languageRanges`/`chooseLabel` policy and the synchronous `releaseDigest`, with the same canonical UTF-8 SHA-256 identity as
+the native entry. The `/bundled` browser export provides the compiled `bundledRelease`
+and `bundledDigest` without reading source files. `/validate`, `/bulk`, `/media-import`
+and `/slug` also support browser use. Publication validation/admission (`validateRelease`,
+`releaseAdmission`, `publicationLimits`, `PUBLICATION_LIMITS`), `/compile`, `/extension`
+and `bundledSources` remain native operations; they are not exposed by the browser
+root or bundled entry. Browser publication callers use the ordinary Definitions API
+so the native validator retains its isolated checker and exact analysis limits.
 
-Releases allow at most 1,024 types, 4,096 properties, 64 properties and 16 facets per
-type, 256 context settings, 64 defaults per settings, 1,024 saved filters, 64 per
-group, and 4 MiB of canonical UTF-8 JSON. Collection and size limits precede schema
-and pattern checks.
-A property may name at most 1,024 targets. Compilation allows at most 256 schema files.
+## Semantic language selection
 
-The launch grain is three types and twelve properties in one schema file. The bundled
-catalogue has 17 types, 68 properties and 12 schema files. One hundred such verticals
-add 300 types, 1,200 properties and 100 schema files: 317 types, 1,268 properties and
-112 schema files, 874,688 canonical bytes. `foaf:focus` ranges over `Thing`, so its
-target is `schema:Thing`; a later type matches through its `bases`.
-`schema:exampleOfWork` ranges over `CreativeWork`, so its target stays
-`schema:CreativeWork` when a vertical adds a creative-work subtype. Adding a
-vertical never changes another vertical's properties. The previous caps of 256
-types, 1,024 properties and 64 schema files do not fit that grain. The measured
-body is 874,688 bytes, so the previous 1 MiB cap still holds it. The new caps multiply those limits by four: 1,024
-types, 4,096 properties, 256 schema files and 4 MiB. Targets are the exception: every
-target is a type, so the target cap equals the type cap. That is about three times the
-measured type and property counts. Per-type caps stay 64 properties and 16 facets,
-because a request touches one type.
+The existing root and browser entries export the same pure `languageRanges` and `chooseLabel` implementation from
+`src/language.ts`. It orders valid RFC language ranges by quality, caps preferences at 16, truncates ranges according
+to RFC 4647, maximizes likely scripts, then tries the original language, English and a deterministic sorted fallback.
+`chooseLabel` returns the selected label with its actual stored language tag. It performs no I/O and adds no runtime
+dependency.
 
-A release is validated once per digest per process. Later requests read the subject's
-type and the properties on its facts from that cached release. The limits bound
-publishing and the cold read. A cold read is linear in the release's canonical bytes
-and happens once per digest per process. It does not bound request cost after that.
-Inputs are parsed JSON, without cycles. Validation does not mutate them.
+The joint contract lives in [Collection presentation and editor](../../docs/collection-presentation.md).
+This package delivers its optional Type list-presentation data through the compiler, release schema,
+bundled catalogue and both normal definitions recordings. Collection runtime and Web rendering have separate owners.
 
-`valueSchema(datatype, options)` builds the fixed Wikibase value-content schema.
-`releaseDigest(release)` returns `sha256:` followed by the SHA-256 digest of its
-RFC 8785 canonical JSON. Validate first: the digest function does not validate.
+## Type list presentation
+
+`TypeDefinition.listPresentation?: { imageAspect: 'portrait' | 'landscape' | 'square'; keyFacts: string[] }`
+is a closed inert object. Frames mean 5:7, 16:9 and 1:1 respectively. `keyFacts` preserves author order,
+contains 0–4 unique effective property CURIEs, and admits only existing Search Fact projections:
+`wikibase-item`, `time`, `quantity`, or a `string` with an admitted pattern. Documents, media, free text,
+external IDs, executable formatters, JSON paths and private Library fields cannot supply these hints.
+Localized property/value labels and unit metadata retain their existing meaning in all eight locales.
+
+Author exactly that object as `classes.<name>.annotations.list_presentation`, including on abstract bases.
+The nearest explicit declaration replaces the whole object; `keyFacts: []` clears inherited facts.
+Compilation emits the effective object on each applicable Type. Unknown fields, missing members, invalid
+frames, nonarrays, duplicates, over-four lists and unknown, out-of-Type or unrepresentable properties fail
+with source pointers. Release validation enforces the same closure and references with release pointers.
+Only this custom object and the existing library mapping are removed before ordinary LinkML induction;
+all other annotations and LinkML validation remain intact. Older releases may omit hints entirely.
+
+The published inventory in `catalogue/` gives every Type a portrait 5:7 cover frame and portrait list aspect,
+including generic Types through Thing, book/edition/manga, anime/film/series/episode, game, album, recipe, quotation, person and
+character. Current `coverRatio` annotations agree with that list aspect. Explicit landscape/square configuration and
+any valid ratio remain supported by the schema. The compiled release version comes from `catalogue/rezics.yaml` and
+is immutable: 1.0.9 is current, while release 1.0.0 through 1.0.8 bytes and their digests remain loadable for existing pins. Book
+selects author/datePublished/wordCount; Movie selects director/datePublished/duration; Recipe selects
+cookTime/suitableForDiet; MusicAlbum selects datePublished/genre; MusicRelease selects datePublished/distribution format;
+MusicRecording selects duration/datePublished. These ordered factual hints, media dimensions,
+source authority, membership, LibraryProfileSource and accepted profile pins retain their meaning. Hints convey
+no authority or fact values.
+
+Regenerate `release/rezics.json` with `bun run --cwd packages/definitions release`, then regenerate both
+`apps/web/src/kernel/recorded/definitions-active.json` and `definitions-release.json` in the same change with
+`bun apps/web/scripts/record.ts definitions-active definitions-release`. This exact two-recording selection uses the recorder's bundled-release path without a runtime; all other
+recordings retain their normal stack placement and artifact boundary; generated release identity and recording bodies must agree.
+
+### Cost
+
+- Touches: existing bounded type/property collections, at most four property references per hinted Type,
+  one effective inert object per emitted Type, and the existing immutable definitions response/recordings.
+- Bound: linear in admitted catalogue bytes/types/properties with memoized hint inheritance; the existing
+  4 MiB release and construction caps stay exact. No SQL, request branch, deployment or authorization path
+  is added. Whole-release bytes, ETag and publication permissions retain their existing rules.
+- Growth check: `type-list-presentation.test.ts` and `type-list-presentation-expansion.test.ts` exercise
+  real 10/100 manifests, inheritance, clearing, invalid references, immutable pins, source exclusion and
+  bundle/recording parity. Original expansion and historical archive construction controls run unchanged.
 
 ## Bundled catalogue
 
@@ -69,6 +80,66 @@ catalogue, presentation, context-settings, and saved-filter YAML files for
 compilation. Each type release records its structural `bases` as CURIEs, nearest
 first, and its registered `facets` in display order. Each vertical declares its own
 facets.
+
+An item property may compile a `relation` with a group, exactly one of an inverse
+CURIE, `inverse: "none"`, or `symmetric: true`, optional acyclicity, an order key
+(default `name`), a filter naming one or a list of at most two distinct item qualifiers, and an optional `slotKey`.
+The `slotKey` names an admitted item qualifier whose value distinguishes repeated
+relations to the same target. For a voice credit, `wdt:P725` has a Person or Organization as its main value; `wdt:P453` is its Character qualifier and slot key. An appearance is instead a `schema:character` statement whose main value is the Character; its appearance role is a separate qualifier. A standard inverse is export and
+mapping metadata; it cannot also be a property in the release. Directed inverses
+also carry `relation.inverseLabels`, supplied under `inverseProperties` in the
+presentation group for the schema file that defines the property. Types may carry
+`coverRatio` as `W:H`, where each positive integer is at most 64; compilation
+inherits the nearest annotated base's ratio when a type has no annotation of its
+own. A type may also carry `schemaOrgType`, a full `https://schema.org/Type` IRI
+that a generic consumer can use as the JSON-LD `@type`; a release without it
+stays valid, and the release defines no default. Each consumer chooses its own
+fallback for missing metadata. The reviewed profile mappings are listed in
+[Schema.org subject types](#schemaorg-subject-types), with research evidence in
+the [mapping report](../../docs/research/catalogue-schema-org-mapping.md).
+
+Bundled values are presentation correspondences for JSON-LD. They do not replace
+native type IRIs, bases or mappings; they do not assert ontology equivalence or
+guarantee Schema.org rich-result eligibility. In particular, book works and editions retain separate native identities even though both serialize as `Book`. Album work, MusicRelease, MusicMedium and MusicRecording are separate grains; a recording or release does not imply a medium or the reverse.
+
+The relation groups are `order`, `derivation`, `world`, `membership`, and
+`association` for the Relations view; `credit` for staff and cast in Credits and
+Works; `appearance` for characters in Characters and Appearances; and
+`classification` for concept-valued facts such as genre, tags, platform, gender,
+and form. Every bundled item property declares a relation, including item
+qualifiers. Qualifier-only role properties use `inverse: none`; they do not
+create standalone inbound relations.
+
+Bundled facts are stored on the later work (`wdt:P155`), derived work
+(`wdt:P144`, `rezics:spinOffOf`, `wdt:P8646`), edition
+(`schema:exampleOfWork`), member (`wdt:P179`), contained work
+(`wdt:P361`, `schema:isPartOf`, `wdt:P1433`), or credited work
+(credits and `schema:character`). Their reverse terms and inverse labels are metadata, never additional properties or admitted property aliases. `wdt:P1889` is symmetric. Credits admit credited-as,
+position and detailed role, sort by position, and filter by `[wdt:P3831, wdt:P518]`;
+appearances filter by either that role or a story arc and sort by name. `schema:character` admits
+the appearance-age qualifier `wdt:P3629` (years, `wd:Q577`) on that exact work statement; a source-wide
+character age is not this qualifier. Character-to-character identity is `rezics:relatedCharacterIdentity`
+(VNDB `chars.main`), distinct from the appearance role concept `main`. Spouse, sibling, father, mother,
+partner and rival are association relations targeting Character; unknown Bangumi relation codes stay
+omitted. Series members sort by
+position; follows and edition-of reads sort by date. Other bundled relations
+sort by name without inventing a source ordinal. Episode, edition and release
+profiles admit the credit properties with the same qualifiers as works.
+
+Source inventory mappings may declare `inverse: true`: `term` names the
+canonical bundled property, and the related subject holds the statement whose
+value is the source subject. Without that field, the source subject holds it.
+The external `mapping` or `wikidata`, meaning and citations retain the source
+direction. In a vocabulary map keyed by a source term, an explicit `term`
+overrides that key as the canonical property. Omitted mappings remain omitted.
+Reverse terms without a standard equivalent use `rezics:` with labels in all
+eight locales; `rezics:spinOffOf` is the canonical reverse of `wdt:P2512`.
+
+Work profiles admit multivalued `rezics:representativeEdition`, targeting the
+book edition and software release classes that hold `schema:exampleOfWork`.
+Its `schema:inLanguage` qualifier distinguishes the chosen edition for each
+language. It is a holder-only derivation relation: a cover read follows that
+choice directly rather than scanning editions.
 
 `schema:inLanguage` is the BCP 47 language tag of the resource. The catalogue stores
 the canonical case of the subtags it uses: a lowercase language, an optional
@@ -83,10 +154,170 @@ to the imports in `catalogue/rezics.yaml`, and add one label file per locale at
 each term's labels in the group named for the schema file that defines that term.
 Profiles with no current terms can contain only metadata and an import of `core`.
 
+The music-context catalogue keeps `schema:Place` and `schema:Event` as concrete
+generic identities, with `schema:MusicVenue` and `schema:MusicEvent` as their
+music-specific refinements. `schema:AdministrativeArea` is a Place. The
+instrument identity is Wikidata `wd:Q34379`; `wdt:P1303` qualifies the exact
+`schema:performer` statement that records its use. No Schema.org
+`MusicInstrument` Type is defined. Shared `schema:startDate` and `schema:endDate`
+are owned by `core` and preserve source precision and calendar for events and
+other supported subjects.
+
+### Type interface words and descriptions
+
+A type label is a short interface word that is true for every subject of that
+type's catalogue contract. A label can be more specific than its external mapping:
+`schema:TVSeries` here means an animated television series, so its Chinese labels
+are `TV 动画` and `TV 動畫`, and its Japanese label is `TVアニメ`. Book editions and
+software releases both use the neutral Chinese word `版本`; their separate type
+identities and properties distinguish them. Manga labels omit the old Japanese
+origin restriction. General series labels also cover nonfiction and different
+media; they do not imply a finite multipart work. Game add-ons include independently
+referable DLC as well as expansions, so their labels use broad store terms such as
+`add-on`, `追加内容` and `追加コンテンツ`, rather than expansion-pack terminology.
+The catalogue still determines which add-ons have their own work identity.
+
+Presentation files accept `typeDescriptions` and `propertyDescriptions` maps from
+CURIE to explanatory text, alongside the existing label maps. Compilation emits
+`types[curie].descriptions[locale]` and `properties[curie].descriptions[locale]`.
+The current bundled catalogue supplies useful descriptions for every released Type
+and property in all eight UI locales: `en`, `de`, `es`, `fr`, `ja`, `ko`, `zh-Hans`
+and `zh-Hant`. Each term has one owning presentation group, following its defining
+schema; shared terms are described there rather than copied into each consumer.
+
+Descriptions explain the native grain and accepted values, including work versus
+edition, publication, episode and character, document-valued authored summaries,
+Concept-valued roles and classification, and identifiers without page URLs. Quantity
+guidance uses each property's existing units: cooking time is actual cooking duration
+in whole minutes, running time is in seconds, and servings are a unitless count.
+Identifier examples follow the admitted forms: ISBN-13 may include hyphens;
+GTIN is an 8-, 12-, 13- or 14-digit string.
+Source-record revisions are not edition names. Labels and catalogue constraints
+remain unchanged. The compiler has no special case for any vertical.
+
+Descriptions use the same BCP 47 locale keys as labels and allow one to 1,500 Unicode
+code points. The format still permits missing descriptions and no English entry,
+so historical releases and their immutable pins remain valid. Old interface glosses
+are superseded by useful explanations where they were too broad or misleading;
+they are not an additional source of native meaning. Catalogue class and slot
+declarations retain authority over semantics, attribution and disclosure.
+
+Regenerate the bundled release and both normal definitions recordings with the
+commands above. The focused default-composition regression is
+`services/kernel/test/semantic/definition-guide-meanings.test.ts`: it reads the
+mounted active/release routes from ordinary bundled setup, checks the guide-shaped
+localized read and source/recording parity, and retains an actual historical pin
+through authorized publication, activation and subsequent bootstrap. It does not
+supply substitute meanings from a fixture or change a deployed active release.
+
+#### Read Type and field guidance cost
+
+- Touches: existing immutable Type/property descriptions and guide constraints;
+  the same eight localized presentation inputs at compile time.
+- Bound: existing bounded description maps with 1–1,500-code-point strings; no
+  additional runtime request, table, permission decision or backend path.
+- Growth check: one focused bundled-producer regression; existing expansion and
+  historical release obligations remain unchanged, with no additional campaign.
+
+The following Chinese and Japanese labels are pinned by `test/type-labels.test.ts`;
+ordinary names in the other locales remain unchanged. The technical SKOS labels
+identify classification resources rather than works.
+
+| Type                       | zh-Hans  | zh-Hant  | ja                   |
+| -------------------------- | -------- | -------- | -------------------- |
+| `schema:Episode`           | 集       | 集       | エピソード           |
+| `schema:Movie`             | 电影     | 電影     | 映画                 |
+| `schema:TVSeason`          | 季       | 季       | シーズン             |
+| `schema:TVSeries`          | TV 动画  | TV 動畫  | TVアニメ             |
+| `bf:Instance`              | 版本     | 版本     | 版                   |
+| `schema:Book`              | 书籍     | 書籍     | 書籍                 |
+| `wd:Q95074`                | 角色     | 角色     | キャラクター         |
+| `skos:Concept`             | 概念     | 概念     | 概念                 |
+| `skos:ConceptScheme`       | 概念体系 | 概念體系 | 概念体系             |
+| `schema:Organization`      | 组织     | 組織     | 組織                 |
+| `schema:Person`            | 人物     | 人物     | 人物                 |
+| `schema:VideoGame`         | 电子游戏 | 電子遊戲 | コンピュータゲーム   |
+| `wd:Q209163`               | 追加内容 | 追加內容 | 追加コンテンツ       |
+| `wd:Q20631656`             | 版本     | 版本     | リリース             |
+| `schema:PublicationVolume` | 卷       | 卷       | 巻                   |
+| `schema:ComicSeries`       | 漫画     | 漫畫     | 漫画                 |
+| `schema:Recipe`            | 食谱     | 食譜     | レシピ               |
+| `schema:BookSeries`        | 丛书     | 叢書     | 叢書                 |
+| `wd:Q7725310`              | 系列     | 系列     | シリーズ             |
+| `wd:Q689445`               | 视觉小说 | 視覺小說 | ビジュアルノベル     |
+| `schema:MusicAlbum`        | 音乐专辑 | 音樂專輯 | アルバム             |
+| `schema:MusicRelease`      | 音乐发行 | 音樂發行 | リリース             |
+| `schema:MusicRecording`    | 录音     | 錄音     | 録音                 |
+| `schema:MediaObject`       | 媒体对象 | 媒體物件 | メディアオブジェクト |
+| `schema:Quotation`         | 引文     | 引文     | 引用                 |
+| `rezics:ReleaseGroup`      | 发布组   | 發佈組   | リリースグループ     |
+
+Each changed label below was written by hand. References establish the usage of
+the word in its language; choosing it for a catalogue type is an editorial decision
+from that type's contract. No translation service or character conversion was used.
+For Chinese TV labels, the space separates the Latin abbreviation from the Chinese
+word. Wikipedia's Chinese pages are cited as references, not used to convert labels.
+
+| Type                 | Locale  | Interface label | Usage reference                                                                                                        |
+| -------------------- | ------- | --------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `schema:TVSeries`    | zh-Hans | TV 动画         | [Wikipedia: Digimon series, TV animation usage](https://zh.wikipedia.org/wiki/数码宝贝系列)                            |
+| `schema:TVSeries`    | zh-Hant | TV 動畫         | [Bahamut animation interface and news](https://acg.gamer.com.tw/news.php?p=anime)                                      |
+| `schema:TVSeries`    | ja      | TVアニメ        | [Wikipedia: television anime](https://ja.wikipedia.org/wiki/テレビアニメ)                                              |
+| `schema:TVSeason`    | zh-Hans | 季              | [Wikipedia: Happy Heroes season list](https://zh.wikipedia.org/wiki/开心宝贝)                                          |
+| `schema:TVSeason`    | zh-Hant | 季              | [Wikipedia: Is the Order a Rabbit? animation seasons](<https://zh.wikipedia.org/wiki/請問您今天要來點兔子嗎？_(動畫)>) |
+| `schema:TVSeason`    | en      | season          | [Wikipedia: television seasons](<https://en.wikipedia.org/wiki/Season_(television)>)                                   |
+| `schema:TVSeason`    | es      | temporada       | [Wikipedia: Temporada](<https://es.wikipedia.org/wiki/Temporada_(televisión)>)                                         |
+| `schema:TVSeason`    | fr      | saison          | [Wikipedia: Saison](<https://fr.wikipedia.org/wiki/Saison_(télévision)>)                                               |
+| `schema:Book`        | zh-Hans | 书籍            | [Bangumi book browser](https://bgm.tv/book/browser)                                                                    |
+| `schema:Book`        | de      | Buch            | [Wikipedia: Buch](https://de.wikipedia.org/wiki/Buch)                                                                  |
+| `schema:Book`        | es      | libro           | [Wikipedia: Libro](https://es.wikipedia.org/wiki/Libro)                                                                |
+| `schema:Book`        | fr      | livre           | [Wikipedia: Livre](<https://fr.wikipedia.org/wiki/Livre_(document)>)                                                   |
+| `schema:Book`        | ko      | 책              | [Wikipedia: 책](https://ko.wikipedia.org/wiki/책)                                                                      |
+| `bf:Instance`        | zh-Hans | 版本            | [Wikipedia: book versions](https://zh.wikipedia.org/wiki/版本)                                                         |
+| `bf:Instance`        | de      | Ausgabe         | [Wikipedia: Ausgabe of a work](https://de.wikipedia.org/wiki/Ausgabe)                                                  |
+| `bf:Instance`        | es      | edición         | [Wikipedia: Edición de libros](https://es.wikipedia.org/wiki/Edición_de_libros)                                        |
+| `bf:Instance`        | fr      | édition         | [Wikipedia: Édition](<https://fr.wikipedia.org/wiki/Édition_(activité)>)                                               |
+| `schema:Person`      | zh-Hans | 人物            | [Bangumi people navigation](https://bgm.tv/character)                                                                  |
+| `schema:Person`      | de      | Person          | [Wikipedia: Person](https://de.wikipedia.org/wiki/Person)                                                              |
+| `schema:Person`      | es      | persona         | [Wikipedia: Persona](https://es.wikipedia.org/wiki/Persona)                                                            |
+| `schema:Person`      | fr      | personne        | [Wikipedia: Personne](https://fr.wikipedia.org/wiki/Personne)                                                          |
+| `wd:Q95074`          | zh-Hans | 角色            | [Wikipedia: 角色](https://zh.wikipedia.org/wiki/角色)                                                                  |
+| `wd:Q95074`          | zh-Hant | 角色            | [Wikipedia: 角色](https://zh.wikipedia.org/wiki/角色)                                                                  |
+| `wd:Q95074`          | ja      | キャラクター    | [Wikipedia: キャラクター](https://ja.wikipedia.org/wiki/キャラクター)                                                  |
+| `wd:Q95074`          | de      | Figur           | [Wikipedia: Figur in fiction](<https://de.wikipedia.org/wiki/Figur_(Fiktion)>)                                         |
+| `wd:Q95074`          | fr      | personnage      | [Wikipedia: Personnage de fiction](https://fr.wikipedia.org/wiki/Personnage_de_fiction)                                |
+| `wd:Q95074`          | ko      | 캐릭터          | [Wikipedia: character terminology](https://ko.wikipedia.org/wiki/캐릭터)                                               |
+| `schema:ComicSeries` | zh-Hans | 漫画            | [Wikipedia: 漫畫](https://zh.wikipedia.org/wiki/漫畫)                                                                  |
+| `schema:ComicSeries` | zh-Hant | 漫畫            | [Wikipedia: 漫畫](https://zh.wikipedia.org/wiki/漫畫)                                                                  |
+| `schema:ComicSeries` | ja      | 漫画            | [Wikipedia: 漫画](https://ja.wikipedia.org/wiki/漫画)                                                                  |
+| `schema:ComicSeries` | ko      | 만화            | [Wikipedia: 만화](https://ko.wikipedia.org/wiki/만화)                                                                  |
+| `wd:Q7725310`        | zh-Hans | 系列            | [Wikipedia: series of works](https://zh.wikipedia.org/wiki/系列)                                                       |
+| `wd:Q7725310`        | zh-Hant | 系列            | [Wikipedia: series of works](https://zh.wikipedia.org/wiki/系列)                                                       |
+| `wd:Q7725310`        | en      | series          | [Wikipedia: Series fiction](https://en.wikipedia.org/wiki/Series_fiction)                                              |
+| `wd:Q7725310`        | de      | Reihe           | [Wikipedia: Reihe, publication uses](https://de.wikipedia.org/wiki/Reihe)                                              |
+| `wd:Q7725310`        | es      | serie           | [Wikipedia: Serie, cultural uses](https://es.wikipedia.org/wiki/Serie)                                                 |
+| `wd:Q7725310`        | fr      | série           | [Wikipedia: Série, works in different media](https://fr.wikipedia.org/wiki/Série)                                      |
+| `wd:Q20631656`       | zh-Hans | 版本            | [Wikipedia: software and other versions](https://zh.wikipedia.org/wiki/版本)                                           |
+| `wd:Q20631656`       | zh-Hant | 版本            | [Wikipedia: software and other versions](https://zh.wikipedia.org/wiki/版本)                                           |
+| `wd:Q20631656`       | en      | release         | [GitHub: releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)                |
+| `wd:Q20631656`       | de      | Release         | [GitHub: Releases](https://docs.github.com/de/repositories/releasing-projects-on-github/about-releases)                |
+| `wd:Q20631656`       | es      | versión         | [GitHub: version details](https://docs.github.com/es/repositories/releasing-projects-on-github/about-releases)         |
+| `wd:Q20631656`       | fr      | version         | [GitHub: versions](https://docs.github.com/fr/repositories/releasing-projects-on-github/about-releases)                |
+| `wd:Q20631656`       | ja      | リリース        | [GitHub: リリース](https://docs.github.com/ja/repositories/releasing-projects-on-github/about-releases)                |
+| `wd:Q20631656`       | ko      | 릴리스          | [GitHub: 릴리스](https://docs.github.com/ko/repositories/releasing-projects-on-github/about-releases)                  |
+| `wd:Q209163`         | zh-Hans | 追加内容        | [PlayStation: add-on types](https://www.playstation.com/zh-hans-cn/support/games/add-on-dlc-in-game-currency-support/) |
+| `wd:Q209163`         | zh-Hant | 追加內容        | [PlayStation: add-on types](https://www.playstation.com/zh-hant-hk/support/games/add-on-dlc-in-game-currency-support/) |
+| `wd:Q209163`         | en      | add-on          | [PlayStation: add-on types](https://www.playstation.com/en-us/support/games/add-on-dlc-in-game-currency-support/)      |
+| `wd:Q209163`         | de      | Add-on          | [PlayStation: Add-on types](https://www.playstation.com/de-de/support/games/add-on-dlc-in-game-currency-support/)      |
+| `wd:Q209163`         | es      | complemento     | [PlayStation: complementos](https://www.playstation.com/es-es/support/games/add-on-dlc-in-game-currency-support/)      |
+| `wd:Q209163`         | fr      | extension       | [PlayStation: extensions](https://www.playstation.com/fr-fr/support/games/add-on-dlc-in-game-currency-support/)        |
+| `wd:Q209163`         | ja      | 追加コンテンツ  | [PlayStation: add-on types](https://www.playstation.com/ja-jp/support/games/add-on-dlc-in-game-currency-support/)      |
+| `wd:Q209163`         | ko      | 추가 콘텐츠     | [PlayStation: add-on types](https://www.playstation.com/ko-kr/support/games/add-on-dlc-in-game-currency-support/)      |
+
 Context settings are the defaults a community Context created for that vertical
 starts with. Add them beside the vertical layout as `contexts/<id>.yaml`. The id
-matches `^[a-z][a-z0-9-]{0,63}$`. Presentation keys stay label files only. The
-document has `labels` and `defaults` only. `labels` maps a locale tag to the
+matches `^[a-z][a-z0-9-]{0,63}$`. Presentation files hold labels and type descriptions
+only. The settings document has `labels` and `defaults` only. `labels` maps a locale tag to the
 Context's name under the rules for type labels: a BCP 47 tag, nonempty text of at
 most 256 characters, and an `en` label. `defaults` maps a property CURIE to
 `inherit` or `suppress`. A default must name a property in the release. `replace`
@@ -123,6 +354,275 @@ changes, add a new term instead of editing the existing one.
 
 Run `bun run --cwd packages/definitions check` from the repository root.
 
+### Schema.org subject types
+
+For each concrete catalogue profile, select the narrowest Schema.org class
+that is true of its entire admitted scope. The following 29 mappings are the
+reviewed choices for subject JSON-LD; the source research and supporting
+rationales are in [the Schema.org mapping report](../../docs/research/catalogue-schema-org-mapping.md).
+The corresponding `annotations.schema_org_type` values are a separate profile
+annotation task. Do not infer them from class names, exact mappings or bases,
+and do not assert ontology equivalence. The generic profile lookup needs no
+backend type switch. This mapping changes neither native identity nor exact
+mappings or property semantics.
+
+| Concrete release type / profile                    | Selected Schema.org class                |
+| -------------------------------------------------- | ---------------------------------------- |
+| `schema:Book` / book Work                          | `https://schema.org/Book`                |
+| `bf:Instance` / book Edition                       | `https://schema.org/Book`                |
+| `schema:VideoGame` / BangumiVideoGame              | `https://schema.org/VideoGame`           |
+| `wd:Q689445` / VisualNovel                         | `https://schema.org/VideoGame`           |
+| `wd:Q20631656` / VideoGameRelease                  | `https://schema.org/CreativeWork`        |
+| `wd:Q209163` / GameAddOn                           | `https://schema.org/CreativeWork`        |
+| `schema:TVSeries` / TVSeries                       | `https://schema.org/TVSeries`            |
+| `schema:Movie` / Movie                             | `https://schema.org/Movie`               |
+| `schema:TVSeason` / TVSeason                       | `https://schema.org/TVSeason`            |
+| `schema:Episode` / Episode                         | `https://schema.org/Episode`             |
+| `schema:ComicSeries` / MangaWork                   | `https://schema.org/ComicSeries`         |
+| `schema:PublicationVolume` / MangaVolume           | `https://schema.org/PublicationVolume`   |
+| `wd:Q95074` / FictionalCharacter                   | `https://schema.org/Thing`               |
+| `wd:Q2620972` / StoryArc                           | `https://schema.org/CreativeWork`        |
+| `wd:Q7725310` / Series                             | `https://schema.org/CreativeWorkSeries`  |
+| `schema:BookSeries` / BookSeries                   | `https://schema.org/BookSeries`          |
+| `schema:Person` / Person                           | `https://schema.org/Person`              |
+| `schema:Organization` / Organization               | `https://schema.org/Organization`        |
+| `schema:SoftwareApplication` / SoftwareApplication | `https://schema.org/SoftwareApplication` |
+| `skos:Concept` / Concept                           | `https://schema.org/DefinedTerm`         |
+| `skos:ConceptScheme` / ConceptScheme               | `https://schema.org/DefinedTermSet`      |
+| `wd:Q2095` / Food                                  | `https://schema.org/Thing`               |
+| `schema:Recipe` / Recipe                           | `https://schema.org/Recipe`              |
+| `schema:MusicAlbum` / MusicAlbum                   | `https://schema.org/MusicAlbum`          |
+| `schema:MusicRelease` / MusicRelease               | `https://schema.org/MusicRelease`        |
+| `schema:MusicRecording` / MusicRecording           | `https://schema.org/MusicRecording`      |
+| `schema:MediaObject` / catalogue file              | `https://schema.org/MediaObject`         |
+| `rezics:ReleaseGroup` / file release group         | `https://schema.org/Organization`        |
+| `schema:Quotation` / Quotation                     | `https://schema.org/Quotation`           |
+
+Book work and its book-specific edition both use `Book` while keeping distinct
+native identities. Broad fictional characters and Food use `Thing`; broad game
+releases, add-ons and story arcs use `CreativeWork`. `DefinedTerm` and
+`DefinedTermSet` apply to the classification profiles only. The remaining rows
+select the explicit native-profile classes for games, anime and manga, series,
+people, organizations, applications, recipes, music, catalogue files and quotations.
+
+### Public classification and genuine measurements
+
+These are adopted meanings and required released-data obligations. The
+[catalogue filter mapping report](../../docs/research/catalogue-filter-data-mappings.md)
+records reviewed source revisions and evidence; it does not create native data.
+
+`schema:Book` remains a work independent of `bf:Instance` editions and translations.
+Light novel is a work-form Concept scoped to the Japanese literary form represented
+by Q747381, not a Book subtype. Only that deliberately matching meaning has exact
+external identity with Q747381. Reuse `workFormat` / `wdt:P7937`, with exact external
+property mapping P7937: its declaration must move from anime to classification and
+Book admission must follow through the normal released-data producer. Do not duplicate
+it or infer light novel from novel, language, publisher, title, length or popularity.
+
+First-scope public harem classification uses `schema:keywords` and the source-scoped
+Bangumi editor metadata-tag 后宫 Concept in the reviewed public-tag scheme, whose
+external key is `https://rezics.com/schemes/bangumi/public-tags`. Correspondence to the
+canonical media-harem Concept represented by Q690342 stays **close** until actual
+category boundaries and reverse-harem equivalence are reconciled. Source and canonical
+Concepts remain distinct despite matching labels. The public harem filter must name
+the adopted source scope and actual Concept explicitly; labels and close mappings
+never supply implicit equality or expansion. Existing exact P136 genre mapping stays
+distinct from keywords; P921 is only a close inventory correspondence, with no
+executable exact mapping or automatic double-emission.
+
+The Bangumi key is public subject `meta_tags`, exact member `后宫`, maintained by wiki
+editors. An explicitly configured trusted source alias may bind it; alias spelling
+alone establishes no identity. Ordinary tags, popularity/votes, personal or private
+Collection tags, arbitrary infobox strings and novel platform supply neither public
+harem nor light-novel facts. No fuzzy spelling or fallback is allowed when metadata
+is missing, empty or withheld. Bangumi has no demonstrated explicit light-novel public
+category. Wikidata P7937=Q747381 or a trusted explicit cited assertion can supply that
+form only after actual holder and Concept bindings exist. Personal-library import
+remains outside first scope.
+
+Concepts and schemes are ordinary native subjects. Create or resolve them through
+existing APIs and external claims, propose and adopt their scheme membership and
+reviewed correspondence, and record returned real IDs and receipts before conversion.
+External QIDs, scheme keys and research evidence are not native IDs. Never derive
+UUIDs from QIDs or labels, assume label equality, or make release YAML a second
+Concept authority. Use actual `record-bindings` and `resolvedReferences`; the importer's
+optional identifier lookup is not evidence of CLI wiring or already adopted bindings.
+
+`schema:wordCount` has exact P6570 correspondence for **words**. A separately named
+local character-count property has no invented external exact mapping. For either
+property, the count-specific contract requires an exact NONNEGATIVE INTEGER amount,
+unit `1`; reject negative/fractional amounts, uncertainty and incompatible units.
+The generic exact primitive remains decimal/unit-flexible. Exact quantity structure means only a fixed amount and unit with no lower or
+upper uncertainty bound. It does not establish the counted holder, scope, producer,
+method or eligibility for discovery. Portable/native amount storage and admissible
+filter evidence remain distinct.
+
+The next versioned measurement definitions adopt **multivalued** `schema:wordCount`
+and distinct `rezics:characterCount`, using the existing generic selected-candidate
+mechanism. One holder can simultaneously select en/v1/1000000 and ja/v2/1000001;
+each value, qualifiers and references remain one association. No latest, maximum,
+sum or cross-candidate qualifier donation is implied. Historical pinned releases
+keep their cardinality and bytes; old scalar facts remain valid. The current bundled
+wordCount is still singular until a real future versioned data producer changes it.
+The [association contract](../../services/kernel/src/semantic/measured-text-contract.md)
+owns the corrected source-input/native proposal; exact freeze, trusted admission,
+query conformance and all six consumer cells await actual current owner bindings.
+
+Word-count discovery evidence comes only from an **admitted producer input** that
+machine-readably declares complete whole-holder coverage, exact holder identity,
+language and version. When text is supplied, the input also carries that text's digest;
+a digest is not fabricated for a source-reported number. This producer may report its
+own declared total for a whole work or serial, including a reviewed web-novel
+platform's 字数 convention or a publisher's stated length. Such a reported total is
+usable without ingesting or hosting the text when that actual producer declaration
+meets the same coverage, holder, language and version requirements. Do not infer any
+of them from a platform name, alias, title, genre or excerpt.
+
+Partial, unknown or unsupported multilingual coverage omits word-count discovery
+evidence. Missing evidence remains unknown; it cannot be treated as false absence or
+as positive exclusion under `NOT`. A summary field measures only that summary and
+never establishes whole-book coverage. This rule is generic: it does not add a
+Book-specific backend, holder-type switch or per-property heuristic. Free English
+scope prose, a source label, a copied count, an exact amount schema or property
+mapping alone cannot establish eligibility. Generic string-qualifier support is a
+separate primitive and does not decide eligibility.
+
+Counts preserve their stated values and precision. A character counter remains
+`characterCount` with its own meaning; never estimate or convert characters, reading
+time, pages or title length into `wordCount`. A reviewed source-reported word-total
+convention is not such a conversion. Zero is a count only when explicitly reported or
+measured; absence, withheld, unavailable and unmeasured remain unknown. Do not guess a
+native revision or date. For unversioned sources, preserve `record_revision: unversioned`
+and the source's actual SHA-256 digest; do not substitute a fabricated revision or digest.
+
+Do not infer holder, language, coverage or method from metadata. A true word threshold
+therefore requires admitted evidence for the whole relevant holder: a value over
+1,000,000 qualifies, exactly 1,000,000 does not, and an absent or ineligible value
+cannot qualify or support exclusion. Edition-only facts do not transfer to a work,
+translation, language or version, combine into a series total, or inherit through
+`representativeEdition`. Existing `appliesToPart` / P518 StoryArc semantics stay
+unchanged.
+
+On source handoff, preserve every actual measurement qualifier losslessly on the same
+statement through reviewed bindings and admitted schema. If any actual qualifier
+would be skipped, unsupported, unresolved or semantically narrowed, withhold the
+entire measurement. Never strip language, method or part scope into an unqualified
+count. Qualified P6570 cannot pass through current no-qualifier property admission by
+dropping its qualifiers. Bare controlled shared-fixture quantities and automatically mapped
+Wikidata P6570 do not prove a genuine scoped measurement producer; released property
+admission alone does not provide provider support. No guessed method/scope vocabulary,
+SourceRegistration option or new identity is introduced here.
+
+The exact producer representation, schema/signature and native receipts remain future
+work in the existing native measurement specification. No rule here requires full-text
+ingestion or grants permission to fetch or upload text. These meanings add no runtime,
+YAML, provider adapter, new schema or API.
+
+Reviewed meaning/binding, released property admission, actual native Concept adoption
+receipts, executable converter/importer support, adopted measurements, complete
+projection and admitted indexed execution are separate statuses. At the report pin
+there is no delivered harem `meta_tags` converter, explicit light-novel producer,
+qualifying native million-word Book batch or genuine character producer. This owner
+adoption does not change those implementation statuses.
+
+Future definition acceptance must preserve all existing anime uses when moving
+`workFormat`, all eight locales, full package acceptance, and the sole normal release
+producer with matching immutable consumer pins. Native data acceptance must create,
+resolve and adopt actual schemes/Concepts and prove replay returns the same ID.
+Characters alone cannot match words, novel alone cannot match light-novel form, and
+private/personal/withheld tags cannot become public classification. Qualification
+stays with its own count and correct language/text/holder.
+
+The [shared filtered-list matrix](../../docs/filtered-lists.md#shared-acceptance-matrix)
+requires these predicates separately and together in public Zones/Collections and
+one's library without and with state, including mounted Zones and configured TypeLists.
+Native projection, compiler, privacy, preparation and growth remain separate required
+producers; grammar expressibility and this adoption prove none of them.
+
+### Anime publication releases
+
+`rezics:AnimeRelease` (`https://rezics.com/vocab/AnimeRelease`) is the adopted native
+publication-release grain under `schema:CreativeWork`. This narrow ADR-0031 local
+domain-term exception is necessary because no evaluated standard class fits the grain
+without altering an existing native class; it grants no blanket local vocabulary
+permission. The [anime release grain report](../../docs/research/anime-release-profile-grain.md)
+records that comparison and source evidence. There is no exact Wikidata mapping;
+`schemaOrgType: https://schema.org/CreativeWork` is presentation only. Existing Movie
+is a work, `bf:Instance` is Book edition and Q20631656 is software release. Do not
+generalize, reparent or alias them, or inherit their profiles.
+
+An AnimeRelease is an independently referable, identified published/distributed anime
+version. Language/format differences do not create a Cartesian product of subjects;
+no filler subject, playback file, personal Copy or event supplies its identity.
+Single-work embodiment links through existing `schema:exampleOfWork` to the actual
+anime work (series, film, season or episode). Anthologies use standard `bf:hasPart`
+with inverse metadata `bf:partOf`, retaining each included work's identity. The
+standard `marcrel:fds` film-distributor credit uses qualified credits as described in
+the report, only when actually asserted. Existing language, date, format and credits
+retain their actual scope, source precision and qualifiers; do not copy work facts
+onto releases. Source-record `schema:version` is never a cut/edition label.
+
+For first public release, this catalogue subject appears in its **work page's
+releases/editions view** and can be curated in Collections. AnimeRelease has **no
+library profile**; typed tracking stays on the anime work. The existing eleven
+profile contracts remain unchanged. There is no Book/game/movie fallback or runtime
+inference. A release-level profile is a later separately specified addition. Generic
+label/curation capability retains existing owner rules and invents no automatic
+state, session or holding. The capability manifest must explain inapplicable release
+typed-state cells explicitly while retaining catalogue, page, curated, mounted and
+TypeList coverage and the rest of the anime vertical.
+
+Before subsequent release implementation, register the required native API/grain case:
+actual released type and labels in all eight locales, saved filters, Context defaults
+and Zone starter; native create/propose/accept/adopt/read using returned IDs; independent
+work/season/episode/release and anthology cases; generic operation at ten and one
+hundred manifests with no backend/table/DDL/deployment/code path changes; and the
+original anonymous, editor, Context-acceptor and suspended personas. Required does
+not mean implemented. No provider, QID, Source ID or source binding may be guessed;
+report evidence alone supplies none. No new runtime/configuration or library-profile
+expansion follows from this adoption.
+
+### Catalogue files and release groups
+
+Anime files use the single standard `schema:MediaObject` Type. AniDB source groups use the separate
+`rezics:ReleaseGroup` Type, a source-grain child of `schema:Organization`; neither is an AnimeRelease,
+work identity or personal Copy. `wd:Q55327` is not a release-group class. `wdt:P4092` stores each exact
+checksum string and `rezics:hashAlgorithm` retains its source algorithm code as a qualifier. Hashes are
+catalogue data: equal strings do not identify or merge files. `wdt:P3575` stores file size as an exact
+quantity in bytes. `rezics:codec` and `rezics:fileQuality` keep source codes as reported, including
+unknown codes for review; language remains `schema:inLanguage`. Directed `schema:encodesCreativeWork`,
+`schema:associatedMedia` and `rezics:releaseGroup` relations keep file, episode, publication release and
+group identities separate and retain their source references. None proves possession, download rights,
+playback availability, entitlement or watched progress.
+
+### Recipe diet and cooking time
+
+Adopt `schema:suitableForDiet` as the required released Concept-valued Recipe
+classification and a reviewed native VegetarianDiet Concept explicitly corresponding
+to `https://schema.org/VegetarianDiet`. Obtain its actual ID through ordinary
+create/resolve and adoption. No guessed Wikidata mapping, private label or
+ingredient-name heuristic supplies dietary suitability.
+
+Existing `schema:cookTime` is a nonnegative integer **minute** quantity, distinct from
+total preparation/rest duration. `MINUTE` in fixture/filter notation stands for the
+current released unit `wd:Q7727` as admitted by the filter DTO; canonical expanded
+storage is `http://www.wikidata.org/entity/Q7727`. Do not send the placeholder as a
+new unit or silently mix CURIE and expanded storage spellings. Publication converts
+25 minutes to `PT25M` at the Schema.org boundary. No new kernel duration parser or
+recipe-specific filtering branch is needed. Unknown diet/time stays unknown; absent
+quantity is not zero. Public reads and filtering never borrow private cooking facts.
+Native cases must distinguish vegetarian cookTime 25/30/31 minutes, nonvegetarian and
+unknown-diet controls, and one's own versus another account's completed cooking.
+
+The [API acceptance gap report](../../docs/research/api-acceptance-gaps.md#definitions-and-fixtures-the-missing-cases-require)
+records fixture and Semantic cases. Adopt its ordering: actual native released-data
+fixtures/API cases and a complete capability manifest are required **before** later
+data implementation. The shared fixture builder's output must be reviewed and frozen
+and the actual data producer registered. This document proves neither new YAML data
+nor native API bindings. Completed-session/not-cooked interpretation and the concrete
+owner-query wire remain Commerce's prerequisite; `state != cooked`, public NOT and
+private-index inference cannot supply it.
+
 ### Shared terms
 
 `CreativeWork`, `Character` and `CreativeWorkSeries` are abstract anchors. Book
@@ -144,7 +644,7 @@ credit properties and character appearances to the types that use them.
 An appearance is a `schema:character` statement, qualified by an appearance role
 concept (main, supporting, and so on), its credited name and spoiler level. The
 custom `rezics:spoilerLevel` quantity uses unit `1`, from 0 (no spoiler) through
-2 (major spoiler). This disclosure mechanism has no standard vocabulary term.
+2 (major spoiler). This disclosure mechanism has no standard vocabulary term. Imported `spoil_gender` values retain the released enumeration, exact source value and uncertainty; they are not normalized or inferred.
 
 Genres, tags and detailed roles are SKOS concepts. A concept and its scheme are
 subjects, created and adopted like any other subject; a Realm's board scheme is
@@ -160,9 +660,11 @@ runtime path changes.
 The following list cites the vocabulary terms and Wikidata mappings used here.
 SKOS and FOAF terms cite their publishing vocabularies. New terms have labels in
 `en`, `zh-Hant`, `zh-Hans`, `ja`, `ko`, `de`, `fr` and `es`, in their respective
-presentation groups. Labels use Wikidata's language-specific labels where available
-or the vocabulary's English label; missing labels are authored locally without a
-translation service. Existing terms retain their current labels.
+presentation groups. Type labels follow the interface-word policy above;
+descriptions explain the catalogue meaning rather than retaining obsolete glosses.
+Property labels use the
+vocabulary's language-specific labels where appropriate. Labels and descriptions are authored
+locally without a translation service.
 
 | Term                        | Source and meaning                                                                                                                                         |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -183,6 +685,17 @@ translation service. Existing terms retain their current labels.
 | `wdt:P178`                  | [developer](https://www.wikidata.org/wiki/Property:P178)                                                                                                   |
 | `wdt:P725`                  | [voice actor](https://www.wikidata.org/wiki/Property:P725)                                                                                                 |
 | `schema:contributor`        | [contributor](https://schema.org/contributor), mapped to [contributor to the creative work or subject (P767)](https://www.wikidata.org/wiki/Property:P767) |
+| `schema:Quotation`          | [Quotation](https://schema.org/Quotation), an authored quotation of a work                                                                                 |
+| `schema:text`               | [text](https://schema.org/text), the exact authored quotation document                                                                                     |
+| `schema:spokenByCharacter`  | [spokenByCharacter](https://schema.org/spokenByCharacter), the fictional speaker                                                                           |
+| `schema:about`              | [about](https://schema.org/about), the cited work; a substring match never creates this relationship                                                       |
+| `schema:creator`            | [creator](https://schema.org/creator), a credited person or organization, never the fictional speaker                                                      |
+| `schema:actor`              | [actor](https://schema.org/actor), an optional performing voice; a speaker never infers a voice actor                                                      |
+| `wdt:P106`                  | [occupation](https://www.wikidata.org/wiki/Property:P106), a Concept classifying a person                                                                  |
+| `schema:knowsLanguage`      | [knowsLanguage](https://schema.org/knowsLanguage), languages a person knows as Concepts, not proficiency or a work's language                              |
+| `wdt:P749`                  | [parent organization](https://www.wikidata.org/wiki/Property:P749), stored on the child with optional start and end dates                                  |
+| `wdt:P1365`                 | [replaces](https://www.wikidata.org/wiki/Property:P1365), the predecessor organization, independent of successor                                           |
+| `wdt:P1366`                 | [replaced by](https://www.wikidata.org/wiki/Property:P1366), the successor organization, independent of predecessor                                        |
 | `wdt:P1932`                 | [object of statement named as](https://www.wikidata.org/wiki/Property:P1932), the name as credited                                                         |
 | `schema:position`           | [position](https://schema.org/position), mapped to [series ordinal (P1545)](https://www.wikidata.org/wiki/Property:P1545)                                  |
 | `wdt:P3831`                 | [object of statement has role](https://www.wikidata.org/wiki/Property:P3831), a detailed role concept                                                      |
@@ -226,7 +739,18 @@ Source conventions:
   Every concrete class needs an explicit `class_uri` CURIE and becomes a type.
   LinkML derives its properties through `is_a` and `slot_usage`; each type has at
   most 64.
-- A class may set `annotations.facets` to a space-separated list of slot names.
+- A class may set `annotations.facets` to a space-separated list of slot names and
+  `annotations.cover_ratio` to a `W:H` ratio with positive integer sides from 1 to 64. A type compiles its own ratio or the first annotated base's ratio, nearest
+  first; absent ratios stay absent for consumers to default.
+- A class may set `annotations.schema_org_type` to `https://schema.org/` plus one
+  term of ASCII letters, digits, underscores or hyphens (a term may start with a digit, as in
+  `3DModel`). The compiler copies the value to that type's `schemaOrgType` and rejects anything else
+  (other origins, queries, fragments, extra path segments, nonstrings); nothing is fetched. The
+  transport is explicit only: no value is inferred from class names, Wikidata ids, mappings or
+  ancestors, and subclasses do not inherit it. Older releases and types without the annotation omit
+  the field; consumers choose their own fallback. The web consumer's current fallback chain is
+  `schemaOrgType`, then its existing `schema:` mapping, then `Thing`, as specified in
+  [SEO](../../docs/seo.md#structured-data).
   A type inherits its ancestors' declarations from root to leaf, retaining that
   display order. Each facet must be one of the type's properties. Its datatype is
   `wikibase-item`, `time`, or `quantity`, or `string` with a `pattern` in the
@@ -246,25 +770,37 @@ Source conventions:
   Class and slot keys must each be unique. Prefix expansions must be consistent
   across files. Different induced contracts for the same property cannot be
   represented in one release and are refused.
-- Slot `annotations` permits only `datatype`, `units`, and `qualifiers`. `datatype`
-  is required: `wikibase-item` needs a class range or `any_of` class ranges; `string`,
-  `external-id`, `monolingualtext`, `document`, and `media` need `string`;
+- Slot `annotations` permits `datatype`, `units`, `exact`, `qualifiers`, `relation_group`,
+  `inverse`, `symmetric`, `acyclic`, `relation_order`, `relation_filter`, and
+  `relation_slot_key`. The last annotation compiles to `relation.slotKey` and must
+  name an admitted item qualifier.
+  `datatype` is required: `wikibase-item` needs a class range or `any_of` class
+  ranges; `string`, `external-id`, `monolingualtext`, `document`, and `media` need `string`;
   `url` needs `uri`; `quantity` needs `integer` or `decimal`; `time` needs `date`.
   An omitted range uses the source schema's default, otherwise `string`.
 - `external-id` requires exactly one exact mapping, matching `wd:P<digits>`.
   Exact mappings become release mappings; close mappings are accepted as source
   metadata. Quantity requires `units`, a space-separated string of `1` or
-  CURIEs, expanded to IRIs, and alone permits minimum and maximum bounds.
+  CURIEs, expanded to IRIs, or `'*'` alone for any unit (`1` or an absolute IRI).
+  Quantities alone permit minimum and maximum bounds. Amounts and optional
+  `lowerBound` and `upperBound` are signed decimal strings; bounds enclose
+  the amount and obey the property's limits. `exact: true` forbids both bounds
+  through the [exact quantity variant](#exact-quantities). APIs preserve those strings.
   `qualifiers` is a space-separated string of existing slot names.
 - Patterns are allowed only on `string`, `external-id`, and `monolingualtext`.
   Every source pattern must compile with JavaScript's `u` flag, contain at most
-  256 characters, and receive `safe` from recheck's synchronous checker.
+  256 characters, and be proved safe by the shared pattern policy above.
 - Each presentation entry uses a BCP 47 language tag or `<group>/<tag>`, where
   group matches `^[a-z][a-z0-9-]{0,63}$`, and contains a YAML object with optional
-  `types` and `properties` maps, keyed by release CURIE. Files with the same tag
-  merge; a term can be labelled only once per tag. Labels must be nonempty strings
+  `types`, `properties`, `inverseProperties`, `typeDescriptions`, and
+  `propertyDescriptions` maps, keyed by release CURIE.
+  Inverse-property labels belong to the group of the schema file that defines the
+  property. Files with the same tag merge; a term can be labelled only once per
+  tag. Labels must be nonempty strings
   of at most 256 characters. Unknown terms and other keys are refused. Every
   emitted type and property requires an `en` label; other locales may be partial.
+  Type and property descriptions are optional strings of one to 1,500 characters,
+  with at most one per term per tag and no required English entry.
 - Optional `contexts` supplies Context settings YAML keyed by id. Each id matches
   `^[a-z][a-z0-9-]{0,63}$`. The document allows only `labels` and `defaults`.
   Defaults name properties in the release and use `inherit` or `suppress`. There
@@ -308,6 +844,82 @@ is reported at `/filters/<group>`. Codes are `unsupported`, `invalid`, `limit`,
 checked with `validateRelease`; a failure at that point throws a plain `Error`
 because it indicates a compiler defect.
 
+## Library profiles
+
+The compiler implements the [agreed library profile format](src/library-profile-design.md).
+`Release.libraryProfiles?: Record<string, LibraryProfile>` is the canonical registry;
+`TypeDefinition.library?: { profileId: string }` is its closed, same-release reference.
+The package exports `LibraryProfile`, `LibraryProfileReference`, `LibraryLabels`,
+`LibraryProgressMode`, `LibraryProgressUnit`, `LibraryCountForms`, `LibraryUnitCountForms`, `LibraryProfileSource` and the
+`LibraryProfilePin` provenance union. Pins describe consumer data; this package
+does not infer accepting types, authorize writes or execute migrations.
+
+Declare a native `annotations.library` mapping on a class, with an `id` and optional
+`entryStateSet`, `progress`, `copies` and `importSources`. The nearest whole source
+declaration wins during compilation, including absent capabilities and empty lists.
+Abstract declarations without a class URI contribute registry data. Repeated IDs
+must have identical fully labelled bodies. `legacy-fixed-v1` can only be declared
+on an abstract class without a URI or descendants; accepting types cannot reference it.
+Releases without annotations omit `libraryProfiles`, retaining their previous bytes
+and installing no defaults. Validation also accepts an explicit empty registry and
+an id-only profile, which enables no capabilities.
+
+Labels belong to `presentation/<declaring-schema-group>/<locale>` under
+`libraryProfiles[profileId]`, using only `states[stateId]`,
+`units[mode][unitId]`, `copyKinds[kindId]` and
+`copyStatuses[kindId][statusId]`. Every leaf needs English; the eight supported
+locales and 1–80 Unicode code point bound apply recursively. Source labels,
+foreign homes, duplicate contributions and unknown members reject.
+
+Unit leaves also accept the closed object `{ label, countForms }`. `label` retains the
+singular label; `countForms` requires `other` and optionally supplies `zero`, `one`,
+`two`, `few` and `many`, each using the same 1–80 code point bound. The binder emits
+`LibraryProgressUnit.countForms?: Partial<Record<keyof LibraryLabels, LibraryCountForms>>`.
+Locales are independent: no English requirement or cross-locale fallback applies to
+forms. Old string leaves and releases without forms remain valid. Both labels and
+count forms are excluded recursively from source declarations. Consumers select
+forms only beside the selected label language, using that language's plural rules
+and localized numeric wrapper; absent locale/category metadata falls back to the
+singular label. Percent rendering and all numeric/identity descriptors are unchanged.
+
+The three modes are `scalar_amount`, `cursor_position` and `completed_units`.
+Units are bounded data IDs with per-pair decimal string bounds, optional precision
+and total policy. Bounds compare exactly; absent precision retains twelve integer
+and six fractional digits, including fractional counts. Identity is `none` for
+scalar/cursor and `session_local` for opaque sparse completed sets; structure is
+`none`. Import declarations are inert data, never executable adapters.
+
+Compilation traverses supplied source, memoized ancestry and presentation data;
+each canonical registry entry is charged once, plus each type reference. Consumers
+use a type reference and one registry lookup. Validation retains the complete
+4 MiB/1,024 type/4,096 property bounds and the profile cardinalities in the linked
+format, with no extra per-profile byte cap. The two library acceptance files cover
+closure, exact bounds, provenance, full cardinalities and 10/100 manifest growth.
+
+These compiler/registry, nearest-whole-reference and immutable-pin contracts do not
+establish delivered launch-profile YAML/data. The capability manifest and shared
+released-fixture/native API cases must prove those bindings through the normal sole
+release producer and matching consumer pins; owner prose does not implement them.
+
+## Term extensions
+
+`@rezics/definitions/extension` holds the format of a Context's custom relation types: an immutable body
+(`format` `https://rezics.com/definitions/extension/1`, the Context's `context` id and its `terms`) addressed by
+`extensionDigest`. A term is a relation property in the Context's namespace: its CURIE is `c<context id as 32 hex>:<localName>`,
+its IRI `https://rezics.com/contexts/<context id>/terms/<localName>`. It carries a `description`, `labels`, `domain`,
+`targets`, `multivalued`, optional `qualifiers` and `mappings`, and a `relation` (group `order`, `derivation`, `world`,
+`membership` or `association`, one of `inverse` or `symmetric`, optional `acyclic` and `order`), and may be deprecated with
+`deprecated.replacedBy`.
+
+- `validateExtension(value, release, { context, sources })` returns the violations of a body against the release it extends
+  (RFC 6901 pointers, at most 64 terms). A term with no description, domain or targets is refused with its field named. Only
+  Global's extension may name terms of other Contexts, and only as copies of the term in `sources`.
+- `checkExtensionUpdate(previous, next)` returns the violations of replacing an active extension: a term keeps its
+  description, domain, targets, multiplicity, group, acyclicity and direction, is not dropped and does not lose its deprecation.
+- `applyExtension(release, extension)` returns the release as the Context sees it, a pure function of both bodies that
+  stays valid under `validateRelease` and quietly omits terms whose types the release no longer has. Its digest is the
+  digest of the composed release.
+
 ## Portable input validation
 
 `@rezics/definitions/validate` exports `Violation`, `ItemTarget`,
@@ -327,13 +939,20 @@ a target or its type's `bases` contains a target. The compiler emits the declare
 range, so adding a subtype matches through `bases` and does not change `targets`.
 Expanded lists of concrete type keys remain valid.
 
+The released relation-direction index treats type keys and declared `bases` as
+its known range anchors. It keeps an abstract target in the resolved descriptor
+and refuses targets absent from both sets.
+
 Structural limits apply to every release: decimal strings have at most 127
 characters and a time's year has at most 16 digits. An oversized value reports
 `out_of_range` at its decimal member or `/time`, without further value checks.
 The release value schemas retain their Wikibase shapes. Document and media
-values are portable. Single-subject writes and single-statement routes still
-reject document and media contents as `unsupported`. A sourced bulk command
-can carry them, because that command has the provenance and rights the values need.
+values are portable. Single-subject writes and single-statement routes accept
+text-only document snapshots as `{ document, licence, language }`. The licence
+must be an SPDX identifier or `LicenseRef-` identifier; language must be BCP 47.
+Content stores the body and licence, and semantic stores `{ language, document: id, digest }`.
+Media contents remain `unsupported` on these routes. Sourced bulk summaries and
+covers retain their separate provenance and rights contracts.
 
 ## Bulk subject writes
 
@@ -439,10 +1058,23 @@ so its source-candidate key can track refresh and retraction.
 Every group supports `propose` and `retract`, and a retraction carries no rights. The following
 commands share this setup:
 
-Each imported record fact cites the exact source record with its URL, its
-catalogued source identifier property, its source revision in `schema:version`,
-and its last-modified date in `schema:dateModified`. For example, an Open Library
-work can use one reference with these four parts:
+Each imported record fact cites the exact source URL and catalogued source identifier.
+Include the native upstream revision in `schema:version` and last-modified date in
+`schema:dateModified` **when available**, preserving native date precision. Missing
+dates stay absent: ingestion time, the current clock and publication time are never
+substitutes. Missing upstream revision means Source `record_revision: unversioned`
+plus the actual SHA-256 input digest, never a fabricated revision. Converter revision
+and native REZICS revision remain separate. Available VNDB `lastmod` must be retained;
+Imports owns its converter correction. Existing direct fixtures and Bangumi records
+without dates remain valid; this changes no converter, validation or source policy.
+
+Source name/URL/licence attribution is separate from facts-rights. The general
+source-record metadata producer/read admission is not delivered; this policy invents
+no registry or licence inference. Facts-rights rejection and separately scoped summary
+and cover rights remain unchanged.
+
+For example, an Open Library work with available revision and last-modified data can
+use one reference with these four parts; this is not mandatory on every fact:
 
 ```ts
 const openLibraryReference = {
@@ -622,7 +1254,7 @@ const cover: BatchCommand = {
 requires `rights`: an SPDX licence identifier or `LicenseRef-` identifier of at
 most 80 characters, zero to four distinct CC REL requirements (`cc:Attribution`,
 `cc:ShareAlike`, `cc:Notice`, `cc:SourceCode`), and attribution of 1–500 characters.
-Its document uses the `text` profile accepted by `@rezics/document`, with a
+Its document uses a `text` or `blocks` profile accepted by `@rezics/document`, with a
 `serializeDocument` representation of at most 32,768 UTF-8 bytes. The document
 has its own licence and its body is stored by content. `schema:abstract` is
 multivalued, with one summary per language by convention.
@@ -633,8 +1265,8 @@ unsupported. Field/property compatibility belongs to release validation: summari
 use `document` properties, covers use `media`, and facts use neither. The bulk
 route serves summary and cover through content's hooks. Semantic stores the
 document id and digest, or the media id, and never the summary body, a licence
-of its own, or a fence. Single-subject writes still reject document and media
-contents as `unsupported`.
+of its own, or a fence. Single-subject writes accept authored documents with
+an explicit licence and language; media contents remain `unsupported`.
 
 The launch profiles include books, editions, recipes, television series, albums,
 video games and visual novels. Identifier labels follow their Wikidata properties
@@ -644,3 +1276,257 @@ video games and visual novels. Identifier labels follow their Wikidata propertie
 [VNDB](https://www.wikidata.org/wiki/Property:P3180)); the summary and cover terms
 follow [schema:abstract](https://schema.org/abstract) and
 [schema:image](https://schema.org/image).
+
+Story arcs are subjects of type `StoryArc` (`wd:Q2620972`, verified against
+[Wikidata](https://www.wikidata.org/wiki/Q2620972)). CreativeWork and its series
+profiles hold `rezics:storyArc`, an
+acyclic membership relation ordered by `schema:position`. Its `rezics:firstPart`
+and `rezics:lastPart` string qualifiers preserve the work's episode or chapter
+numbering. The inverse page names the work. Appearance and credit statements
+admit `wdt:P518` to name the arcs they apply to. A relation page still selects one
+subject id with `filter`; values across both declared qualifiers share the same
+index range and are deduplicated per statement. Changing a declared filter list
+requires rebuilding the relation projections as described in the kernel's semantic README.
+
+## How-to documents
+
+Any `document` property can carry how-to content. Its steps form one top-level
+`orderedList`, starting at 1; each `listItem` is one step, in document order.
+Use the `blocks` profile when a step contains extensions. A duration is an
+`extensionInline` with definition `http://schema.org/timeRequired`, version `1`,
+an ISO 8601 duration string as its `payload` (for example `"PT30M"`), and readable
+`fallback` text (for example `"30 minutes"`). A tip is an `extensionBlock` with
+definition `http://schema.org/HowToTip`, version `1`, an empty object payload,
+and the tip text as `fallback`. These are document components, not statement
+qualifiers. Content owns their representation; semantic stores a document reference.
+
+The bulk `summary` field group accepts any catalogue property with datatype
+`document`, including instructions, with the same rights and source evidence.
+Single-subject writes use `{ document, licence, language }` for those properties.
+Both routes accept Text and Blocks snapshots. Existing content restrictions on
+image and media nodes still apply to these field writes.
+
+Recipes declare structured materials through the general `wdt:P186` relation.
+Each target has its own slot. `schema:position` orders the list; `wdt:P1114`
+qualifies it with an exact quantity, `rezics:note` with preparation wording and
+`rezics:listSection` with a section heading. An unresolved object uses `somevalue`
+with `wdt:P1932` preserving its source wording and `schema:sameAs` when an external
+IRI is known. Without an IRI, it uses the single property-level slot.
+The food type uses Wikidata's [food item, Q2095](https://www.wikidata.org/wiki/Q2095)
+as its class URI, verified against that item's English label and definition.
+
+A page uses the structured materials list whenever `wdt:P186` statements exist;
+otherwise `schema:recipeIngredient` preserves unstructured source wording.
+`schema:recipeYield` gives the base servings. Clients multiply the structured
+amount and any bounds by `servings / recipeYield` with decimal arithmetic; the
+API returns amounts exactly as stored and never rounds or scales them.
+
+## URL slug
+
+`slug(label)` is the canonical URL slug of a display label. Subjects and threads share
+it; `subjectSlug` is the identical function. Import it from the browser-portable entry
+`@rezics/definitions/slug`, which maps directly to `src/slug.ts`; the module imports
+nothing and uses no runtime globals.
+
+The label is NFKC-normalized and lowercased with `String.prototype.toLowerCase`, never
+a locale-sensitive form. Each run of characters other than Unicode letters, marks and
+numbers becomes one hyphen, and hyphens are trimmed from both ends. CJK stays actual
+Unicode: nothing is transliterated, romanized, percent-encoded or stripped of marks.
+The result holds at most 60 Unicode code points, never UTF-16 units. When the text is
+longer, it is cut at the last hyphen inside the first 60 code points if there is one,
+otherwise at 60 code points, then trimmed again. An empty result is `subject`. The URL
+builder, not this helper, serializes the slug into a URL. An unchanged label gives an
+unchanged slug, and a slug is its own slug.
+
+Cost: the helper touches only the supplied string in memory, with no database, network
+or locale-catalogue access. Work is O(label code points) and the output is at most 60
+code points, independent of subjects, manifests and history.
+
+## Statement disclosure
+
+A property may declare `disclosure: sourceOrConsent` in a release. Catalogue slots use the same annotation. Omission retains ordinary statement rules; every other value is invalid. This is an authorization contract for semantic writes, not an editor preference: a reference makes the statement eligible for ordinary public review; without one, only the account linked to the target agent can state it, and it stays private until that account discloses it.
+
+`rezics:penNameOf` is a multivalued association from a person or organization representing a pen name or collective name to each person or organization behind it. Its inverse is `rezics:penNames`, labelled “pen names”. The named agent retains its own credits. Each core presentation locale supplies its property label, inverse label and `propertyDescriptions` entry. Optional `propertyDescriptions` maps compile to `properties[curie].descriptions`, using the same locale, length and duplicate rules as type descriptions.
+
+### Cost
+
+- Touches: one optional enum on each property and optional localized descriptions; validation and compilation traverse the existing bounded property and presentation collections.
+- Bound: disclosure adds no lookup or data-dependent traversal to definitions reads. Definitions tests cover valid and invalid release values, compiler annotations, localized descriptions and unsourced input validation in `test/disclosure.test.ts`.
+- Growth check: semantic's public-read check is `test/semantic/growth-private-statements.test.ts`: `public inverse rows stay flat with 64, 512 and 4096 private pen-name links`, scales `[64, 512, 4096]`, one warm-up per scale.
+
+## Reviewed classification correspondence
+
+`skos:closeMatch` is a standard Concept item relation in the classification
+compiler, with eight locale labels and inverse display data. It connects distinct
+source/canonical meanings without equivalence, merge or filter expansion;
+`schema:sameAs` external identity and exact mapping retain their own meanings.
+No measurement, cardinality or existing Book/anime/filter profile changes follow.
+`src/reviewed-vocabulary.json` is the finite authored seed input consumed by the
+explicit Importer operator tool; it contains citations and explicit metadata
+rights, not native IDs or publication authority. Released data and both web
+definition recordings are generated through the normal release/record scripts.
+The reviewed inventory includes the VNDB development-status scheme
+(`https://vndb.org/development-status`, codes 0/1/2), the VNDB release-completeness
+scheme (`https://rezics.com/schemes/vndb/release-types`, complete/partial/trial;
+the importer does not publish a scheme URI for `releases_vn.rtype`, so this
+platform scheme URI is the reversible binding used by native seed/adoption), and
+the Bangumi episode-type scheme (`https://rezics.com/schemes/bangumi/episode-types`,
+codes 0–6), plus the VNDB character-trait scheme with i23/i30 and the VNDB public
+content-tag scheme with g105/g249. The six VNDB entries carry ODbL-1.0 metadata
+and cite the VNDB dictionary. Seeds carry `schema:url` for importer bindings and `schema:sameAs` for
+the existing correspondence pattern. Unreviewed provider codes are not published.
+
+`schema:creativeWorkStatus` is admitted only on `schema:VideoGame` (and thus
+`wd:Q689445`), `wd:Q20631656`, `rezics:AnimeRelease` and `bf:Instance`. It is a
+Concept classification, never a date and never a CreativeWork-wide property.
+Completeness of a particular software release for its work is `wdt:P31` on
+`schema:exampleOfWork`. `wdt:P155` may target a `VideoGameRelease` as well as a
+`CreativeWork`; `VideoGameRelease` is not a `CreativeWork`. Unresolved follow
+targets keep their source code on the existing `schema:sameAs` qualifier.
+
+`rezics:releaseSupersedes` points from the current software release to the exact
+release it replaces. It is a separate directed relation from P155/P156 sequence
+chronology and from P1365/P1366, whose released target remains Organization.
+VNDB `releases_supersedes.id` targets `rid` through `rezics:releaseSupersedes`. P155/P156 retain work chronology; P749 retains child-to-parent organization relations; P1365/P1366 retain Organization replacement. Unresolved provider codes are not turned into native assertions.
+
+## Versioned catalogue distribution
+
+`Release1` remains an immutable, complete, bounded release. The separate catalogue
+command distributes any finite number of those releases and exact-Type Kind declarations
+through a content-addressed directory. It never raises the Release1 limits, compiles
+input code, fetches URIs or activates native configuration.
+
+Author a local JSON manifest, for example:
+
+```json
+{
+  "releases": ["releases/books.json", "releases/music.json"],
+  "declarations": ["kinds/featured-book.json"],
+  "compatibility": "all"
+}
+```
+
+`releases` is a required nonempty array of explicit immutable Release1 JSON file paths.
+`declarations` is an optional array of explicit Kind JSON paths. Paths are relative to
+the manifest (absolute local paths also work). `compatibility` is optional: omit it
+for no generated declarations, use `"all"` for one declaration per released Type,
+or supply exact `[{"releaseDigest":"sha256:<64 lowercase hex>","typeId":"schema:Book"}]`
+pins to select Types. Each generated declaration uses the Type ID, labels and optional
+descriptions, `eligible: true`, precedence zero and that exact Type for condition and
+presentation. Repeated typed directory keys reject, including overlapping generated
+and explicit Kind IDs. With shared Types in several releases, select one exact release
+pin per compatibility Kind instead of `"all"`.
+
+```sh
+bun run --cwd packages/definitions catalogue build --input inputs.json --output catalogue
+bun run --cwd packages/definitions catalogue verify --root catalogue/root.json
+bun run --cwd packages/definitions catalogue lookup --root catalogue/root.json --id schema:Book
+```
+
+Build prints one `KindCataloguePin`. Verify prints that pin and complete reachable
+node/release/declaration counts. Lookup prints either a `found` result retaining the
+canonical catalogue pin, declaration digest/body and exact condition/presentation
+Type descriptors, or `not-found`. Exit status is zero on success, two for a missing
+Kind ID, and one with a useful stderr diagnostic for invalid input, incomplete closure,
+corruption or I/O failure. A missing Kind differs from missing addressed bytes.
+
+The output is `root.json` (one closed pinned root) and `objects/<64 lowercase hex>.json`
+(canonical UTF-8 objects addressed by `sha256:<hex>`). The addressed catalogue/2 root
+contains only `format`, `kindSpec`, `reduction` and `directoryDigest`. Directory nodes
+use the catalogue-node/1 schema: ordered, disjoint branch ranges or typed leaf entries.
+Leaf keys are `declaration:<exact Kind ID>` and `release:<full sha256 digest>`; comparison
+is exact JavaScript string order, never locale order or case folding. Root, pin, Kind
+and node versions are closed; duplicate JSON object names, escaped duplicate names,
+accessors, unknown fields and noncanonical stored bytes reject. Author files may use
+ordinary JSON whitespace/key ordering: their admitted canonical content sets identity.
+
+Build order does not affect identity. Sorted entries are packed greedily into nodes
+with at most 256 members AND 256 KiB canonical bytes. Branch levels repeat until a
+single directory root remains; there is no total Kind, Release or node count limit.
+Existing object paths are reused only after exact byte comparison. Writes use fsynced
+staging files and atomic links without overwriting object paths. The visible root is
+atomically renamed only after full verification and object durability. An interrupted
+build can leave unreachable objects or `.pending` files, but cannot expose a partial
+root or replace a previous complete root with an incomplete one. Concurrent complete
+builders can each publish a complete root; this offline pointer is not a native head CAS.
+
+Verification checks every reachable node and artifact, exact child range coverage,
+ordering, cycles/repeated subtrees, duplicate typed keys, release/declaration identities,
+closed versions, original Release validation and all exact condition/presentation/profile
+closure. Repeated release catalogue ID/version must retain identical content. Shared
+Type, property and profile IDs across member releases must have identical complete
+bodies; conflicting identities reject rather than choosing a winner. Historical
+Release1 artifacts use the original validator and digests, including historical
+construction compatibility, without applying new-publication-only construction caps.
+
+`@rezics/definitions` and the server `@rezics/definitions/catalogue` entry expose
+`buildCatalogue`, `verifyCatalogue`, `lookupCatalogueKind`, `compatibilityKind` and
+`readCatalogueArtifact`. Builders accept an inert `CatalogueArtifactStore` with
+`read(digest)`/`put(digest, bytes)`; lookup and verification accept only an inert
+`CatalogueArtifactReader.read(digest)` returning bytes or `undefined`. These are byte
+storage interfaces, not permission, Source evidence, network or capability callbacks.
+`@rezics/definitions/catalogue/files` supplies the explicit local file adapter and
+atomic root publication/read helpers. The browser root and browser `/catalogue` entry
+expose only portable types, canonical-byte/digest helpers and closed data parsers;
+they import no filesystem, native release checker, VM or release compiler.
+
+Selected lookup descends addressed nodes to the exact declaration, then separately
+addresses the accepting Release for each exact Type pin. It reads at most two complete
+bounded original releases, retaining their original digest and full body. Presentation
+includes the exact Type's inert `listPresentation`, and either its exact same-release
+profile and existing `LibraryProfilePin` ABI or `null` (unknown). Missing references
+reject; absence never fabricates a legacy/no-profile pin. Condition Type, presentation
+Type and an item's actual Type remain distinct. Exact-Type membership means equality
+to the current admitted canonical item's actual Type ID; its subject release need not
+match the vocabulary pin. Subtypes, labels and `FilterDocument.type.in` expansion do
+not implement this test. This package performs no native item admission or voting.
+
+Schemas ship at `/schema/kind.json`, `/schema/catalogue.json` and
+`/schema/catalogue-node.json`. `parseKindDeclaration` uses the **original** shared
+FilterDocument parser for generic inert document data and retains its complete
+32-leaf/depth-4/or-16/in-64/qualifier-4 bounds. Public stored meaning excludes owner,
+Discovery/Resource and unexpanded saved leaves. Generic filter catalogue construction
+always rejects, including when `auto.eligible` is false: the actual native predicate
+producer has not been composed. `CATALOGUE_CONDITION_OPERATORS`, `KIND_FORMAT` and
+`KIND_REDUCTION` expose the exact offline construction inventory implemented by
+`requireConstructibleKind`: Kind/1 exact-type only. Parser success and this inventory
+do not attest native readiness, native Source authority or consumer currentness.
+
+### Build and verify cost
+
+- Touches: only explicitly supplied local inputs and their reachable content-addressed objects; each Release retains its original admission bounds, each declaration is at most 64 KiB with 256 vocabulary references, and each directory node is at most 256 entries/256 KiB.
+- Bound: finite authoring work proportional to actual artifact bytes plus sorting N typed keys, O(B + N log N) with a fixed at-most-256-member packing factor. Build/verify retain O(B + N) working data, and perform bounded artifact/node operations. They have no total population cap. File reads check regular-file size and bound reading before decoding. Verification is exhaustive authoring work, never a per-request registry build.
+- Growth check: the authored `test/catalogue-artifacts.test.ts` compiles three real bounded shards containing 1,152 distinct Types, retains a historical v1 release, and exercises the actual package build/verify/lookup commands, reproducibility, atomic-root refusal and representative version/digest/closure/identity corruption. This regression has not been executed as native or growth evidence.
+
+### Exact lookup cost
+
+- Touches: one pinned root, bounded addressed directory paths, one selected declaration and at most two exact complete Release/profile closures. Missing IDs read only their addressed directory path. No unrelated declaration or Release artifact is read, hashed or sorted.
+- Bound: O(H * 256 KiB + selected bounded artifacts), with H the directory height. For 200,000 Kinds and 196 bounded Release members, keys of at most 256 UTF-8 bytes fit count-based packing: 200,196 entries need 783 leaves, four parent nodes and one directory root, totaling 788 nodes and height three. Selected lookup needs at most three such paths (declaration and two releases); one shared release uses two paths. Longer keys reduce per-node occupancy within the same byte bound, without a total-node ceiling. This is a source-level derivation, not a benchmark or runtime/native proof.
+- Growth check: the same authored journey selects the noninitial `scale:T1151`, records reader requests, bounds path reads and refuses reads of unrelated releases. Native indexed lookup, activation, authority, config/currentness fencing, automatic voting, consumer integration and original whole-Goal acceptance remain the native owners' obligations.
+
+### Current Type directory consumption
+
+Contributors use Kernel's `GET /v1/definitionTypes` (literal label prefix or exact
+Type ID, at most 20 results) and `GET /v1/definitionTypes/{typeId}` for the selected
+released descriptor. They do not download the catalogue or its Releases. Results
+carry the immutable Release digest, selected label/language, parents and short
+localized guidance; descriptors retain released property value forms, facets and
+presentation. The 1,024-Type/4 MiB Release caps remain unchanged. Feed/discovery
+Kind selection keeps Search's existing directory.
+
+Decision: the derived directory materializes the eight UI reader locales with
+shared `pickText` fallback; publication continues accepting its original label
+languages. A shared Type chooses the smallest member Release digest as its stable
+current descriptor pin. Locale additions rebuild the derived index, not Releases.
+
+#### Current Type directory cost
+
+Publication does not enlarge the Release contract. Kernel stages immutable,
+root-keyed directory entries in resumable pages of at most 64 Type members, reading
+at most 65, then switches the head after completion. Label-prefix reads use bounded
+128-byte radix-edge B-tree ranges (21-key lookahead); exact descriptors use one
+Type point and at most 64 property points. The full admitted-ID depth and composed
+read/write ceilings are derived in [Semantic's directory Cost section](../../services/kernel/src/semantic/README.md#type-directory-read-and-lifecycle-cost).
+Neither read enumerates Release membership or transfers whole Releases; a lifecycle
+step never rewrites the entire catalogue. Historical Releases and stored pins retain
+their original meaning.

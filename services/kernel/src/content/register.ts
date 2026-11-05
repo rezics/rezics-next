@@ -1,29 +1,59 @@
+import { registerModerationDirectoryWork } from './moderation-directory-work.ts';
 import { createAccess } from '../access/index.ts';
 import resourceRoles from '../access/resource-roles.json';
 import { readMembershipRouteKey } from '../access/membership-work-config.ts';
-import { createAuthConsentReader, type CurrentConsentReader } from '../access/auth-consent.ts';
+import {
+  AUTH_CONSENT_VARIABLES,
+  createAuthConsentReader,
+  readAuthConsentConfig,
+  type CurrentConsentReader,
+} from '../access/auth-consent.ts';
 import type { KernelClock } from '../clock.ts';
-import { contentEffects } from './relays.ts';
+import type { Pool } from 'pg';
+import type { AccessRealmRoleReader } from '../request/access.ts';
+import { createRealmMembership } from '../community/membership.ts';
+import { contentEffects, contentNoticeEffects } from './relays.ts';
 import type { WorkModule } from '../work/registry.ts';
 import type { MediaStorage } from './media-storage.ts';
 import type { MediaImportFetchConfig } from './media-import.ts';
 import { R2Storage } from './r2-storage.ts';
+import { LocalMediaStorage } from './local-media.ts';
 import { createContentWork } from './work.ts';
 import { readContentWorkConfig, type ContentWorkConfig } from './work-config.ts';
+import { registerFeedWork } from './feed-work.ts';
+import { registerReportLocatorWork } from './report-locator-work.ts';
+import { createConversationActivityEffect } from './conversation-activity.ts';
 
-/** Resolve the shared role catalogue in full; a partial action catalogue would
- * disable owner roles containing actions in addition to post:erase. This private
- * worker Access instance restores native initiators, never HTTP credentials.
+/** Standalone fixture/caller Access with the shared role catalogue. Default
+ * production registration uses WorkContext's fully mounted authorization instead.
  * Reads outside a command bind this kernel clock. */
-export function createContentWorkAccess(clock: KernelClock) {
-  return createAccess({
+export function createContentWorkAccess(clock: KernelClock, pool?: Pool) {
+  let access: ReturnType<typeof createAccess> | undefined;
+  let membership: ReturnType<typeof createRealmMembership> | undefined;
+  const roles = () =>
+    access && pool ? (membership ??= createRealmMembership({ pool, access, clock })).roleReader : undefined;
+  const realmRoleReader: AccessRealmRoleReader = Object.assign(
+    ((client, input) => roles()!(client, input)) as AccessRealmRoleReader,
+    { batch: ((client, input) => roles()!.batch!(client, input)) as NonNullable<AccessRealmRoleReader['batch']> },
+  );
+  // Resolve the original producers only when Access asks for them, after its
+  // own factory returned. Forwarding the producer itself preserves callback
+  // context/result identity and never constructs another role mirror.
+  Object.defineProperties(realmRoleReader, {
+    work: { get: () => roles()?.work },
+    batchWork: { get: () => roles()?.batchWork },
+  });
+  const publicReads = new Set(['subject:read', 'board:read', 'thread:read', 'post:read', 'realm:read', 'space:read']);
+  access = createAccess({
     actions: new Map(
       Object.values(resourceRoles.roles)
         .flat()
-        .map((action) => [action, { anonymous: false }]),
+        .map((action) => [action, { anonymous: publicReads.has(action) }]),
     ),
     clock,
+    ...(pool ? { realmRoleReader } : {}),
   });
+  return access;
 }
 
 /** A configured dependency is absent. The call touches no storage, network or operation state. */
@@ -37,6 +67,7 @@ export class ContentDependencyUnavailableError extends Error {
 
 export type ContentWorkDependencies = Readonly<{
   config: ContentWorkConfig;
+  absentGroups: readonly Readonly<{ name: string; variables: readonly string[] }>[];
   storage: MediaStorage;
   readConsent: CurrentConsentReader;
   fetchConfig: MediaImportFetchConfig;
@@ -61,17 +92,30 @@ export function contentWorkDependencies(
   fetchImpl: (request: Request) => Promise<Response>,
 ): ContentWorkDependencies {
   const config = readContentWorkConfig(env);
+  const consent = readAuthConsentConfig(env);
   return Object.freeze({
     config,
-    storage: config.storage === null ? unavailableStorage() : new R2Storage({ ...config.storage, fetch: fetchImpl }),
-    readConsent:
-      config.consent === null
-        ? unavailableConsent()
-        : createAuthConsentReader({
-            url: config.consent.url,
-            serviceTokenId: config.consent.serviceTokenId,
-            serviceTokenSecret: config.consent.serviceTokenSecret,
-          }),
+    absentGroups: Object.freeze([
+      ...config.absentGroups,
+      ...(consent === null ? [Object.freeze({ name: 'consent', variables: AUTH_CONSENT_VARIABLES })] : []),
+    ]),
+    storage:
+      config.storage === null
+        ? unavailableStorage()
+        : config.storage.kind === 'r2'
+          ? new R2Storage({
+              endpoint: config.storage.endpoint,
+              bucket: config.storage.bucket,
+              accessKeyId: config.storage.accessKeyId,
+              secretAccessKey: config.storage.secretAccessKey,
+              maxObjectBytes: config.storage.maxObjectBytes,
+              ...(config.storage.requestTimeoutMs === undefined
+                ? {}
+                : { requestTimeoutMs: config.storage.requestTimeoutMs }),
+              fetch: fetchImpl,
+            })
+          : new LocalMediaStorage(config.storage),
+    readConsent: consent === null ? unavailableConsent() : createAuthConsentReader(consent),
     fetchConfig: Object.freeze({ allowedHosts: config.sourceHosts }),
   });
 }
@@ -102,17 +146,25 @@ export const registerContent: WorkModule = {
   async register(context) {
     const dependencies = contentWorkDependencies(context.env, fetch);
     const collectionPartitions = testCollectionPartitions(context.env);
-    for (const group of dependencies.config.absentGroups) {
+    for (const group of dependencies.absentGroups) {
       console.info(`content ${group.name} group is absent: ${group.variables.join(', ')}`);
     }
+    const { access, readConsent } = context.getAuthorization();
     await createContentWork({
       storage: dependencies.storage,
-      access: createContentWorkAccess(context.clock),
-      readConsent: dependencies.readConsent,
+      access,
+      readConsent,
       routeKey: readMembershipRouteKey(context.env),
       fetchConfig: dependencies.fetchConfig,
       ...(collectionPartitions === undefined ? {} : { collectionPartitions }),
     }).register(context);
-    context.addEffects(contentEffects(context.pool, context.client));
+    registerReportLocatorWork(context);
+    registerModerationDirectoryWork(context);
+    context.addEffects([
+      createConversationActivityEffect(context.pool),
+      ...contentEffects(context.pool, context.client),
+      ...contentNoticeEffects(context.pool, access),
+    ]);
+    await registerFeedWork(context);
   },
 };

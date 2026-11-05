@@ -1,7 +1,17 @@
+import { memoizedValue } from '../../memoized.ts';
+import {
+  createContextDirectory,
+  ContextDirectoryEntrySchema,
+  ContextDirectoryPreparingError,
+} from '../context-directory.ts';
+import type { KeyRing } from '../../tokens/seal.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { definitionRoutes } from './definitions.ts';
 import { AuthenticationError, type AccountActor, type Resource } from '../../request/access.ts';
+import { customMethod } from '../../http/custom-method.ts';
+import { changeContextLifecycle, ContextLifecycleConflictError } from '../context-lifecycle.ts';
+import { ContextNotFoundError } from '../context.ts';
 import { routeOf } from '../../route/route.ts';
 import { SubjectInputError } from '../item.ts';
 import {
@@ -41,13 +51,126 @@ const ContextSchema = t.Object(
   { additionalProperties: false },
 );
 const contextResponse = t.Object({ context: ContextSchema }, { additionalProperties: false });
-const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
+function unauthorized() {
+  return memoizedValue(unauthorized, () => problemSchema('authentication_required', 'invalid_credentials'));
+}
+
+const emptyBody = t.Object({}, { additionalProperties: false });
+const lifecycleResponse = t.Object(
+  {
+    context: t.Object(
+      {
+        id: t.String({ format: 'uuid' }),
+        state: t.Union([t.Literal('deleted'), t.Literal('active')]),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+function lifecycleResponses() {
+  return memoizedValue(lifecycleResponses, () => ({
+    200: withHeaders(lifecycleResponse, { [SESSION_HEADER]: t.String() }),
+    400: problemSchema('invalid_request'),
+    401: unauthorized(),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+  }));
+}
+function lifecycleProblem(error: unknown): never {
+  if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+  if (error instanceof ContextNotFoundError) throw new ProblemError('not_found');
+  if (error instanceof ContextLifecycleConflictError) throw new ProblemError('conflict');
+  throw error;
+}
 
 function contextRoutes(
   app: ReturnType<typeof definitionRoutes>,
-  dependencies: { pool: import('pg').Pool; routeKey: Uint8Array; access: () => Access; clock: () => Date },
+  dependencies: {
+    pool: import('pg').Pool;
+    routeKey: Uint8Array;
+    access: () => Access;
+    clock: () => Date;
+    tokens: KeyRing;
+  },
 ) {
+  const directory = () => createContextDirectory({ ...dependencies, access: dependencies.access() });
+  const readResponses = {
+    400: problemSchema('invalid_request'),
+    401: unauthorized(),
+    404: problemSchema('not_found'),
+    503: problemSchema('semantic_not_ready', 'overloaded', 'partition_unavailable', 'deadline_exceeded'),
+  };
   return app
+    .get(
+      '/v1/contexts',
+      {
+        query: t.Object(
+          {
+            query: t.Optional(t.String({ maxLength: 256 })),
+            limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+            deleted: t.Optional(t.Boolean({ default: false })),
+          },
+          { additionalProperties: false },
+        ),
+        response: {
+          ...readResponses,
+          200: t.Object(
+            { contexts: t.Array(ContextDirectoryEntrySchema), next: t.Union([t.String(), t.Null()]) },
+            { additionalProperties: false },
+          ),
+        },
+        detail: {
+          operationId: 'context.list',
+          'x-exposure': 'public',
+          'x-action': 'context:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ query, actor, admission, job }) => {
+        try {
+          return await admission.run('normal', job, () =>
+            directory().list({ ...query, actor, deadline: job.deadline }),
+          );
+        } catch (error) {
+          if (error instanceof ContextDirectoryPreparingError) throw new ProblemError('semantic_not_ready');
+          throw error;
+        }
+      },
+    )
+    .get(
+      '/v1/contexts/:id/lifecycle',
+      {
+        params: t.Object({ id: t.String() }),
+        response: {
+          ...readResponses,
+          200: t.Object({ context: ContextDirectoryEntrySchema }, { additionalProperties: false }),
+        },
+        detail: {
+          operationId: 'context.lifecycle',
+          'x-exposure': 'public',
+          'x-action': 'context:read',
+          'x-resource-types': ['semantic.context'],
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, actor, admission, job }) => {
+        try {
+          const context = await admission.run('normal', job, () =>
+            directory().lifecycle({ id: params.id, actor, deadline: job.deadline }),
+          );
+          if (!context) throw new ProblemError('not_found');
+          return { context };
+        } catch (error) {
+          if (error instanceof ContextDirectoryPreparingError) throw new ProblemError('semantic_not_ready');
+          throw error;
+        }
+      },
+    )
     .post(
       '/v1/contexts',
       {
@@ -56,7 +179,7 @@ function contextRoutes(
         response: {
           201: withHeaders(contextResponse, { [SESSION_HEADER]: t.String(), location: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           422: problemSchema('idempotency_conflict'),
           503: problemSchema(
@@ -72,6 +195,8 @@ function contextRoutes(
           'x-exposure': 'public',
           'x-action': 'context:create',
           'x-resource-types': ['semantic.context'],
+          'x-authority-resource-types': ['semantic.context'],
+          'x-authority-resource-id': globalContextAnchor.resource.id,
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },
@@ -142,13 +267,91 @@ function contextRoutes(
         }
       },
     )
+    .delete(
+      '/v1/contexts/:id',
+      {
+        params: t.Object({ id: t.String() }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: t.Optional(emptyBody),
+        response: lifecycleResponses(),
+        detail: {
+          operationId: 'context.delete',
+          'x-exposure': 'public',
+          'x-action': 'context:delete',
+          'x-resource-types': ['semantic.context'],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          const result = await admission.run('normal', job, () =>
+            changeContextLifecycle(dependencies.pool, {
+              context: params.id,
+              state: 'deleted',
+              actor,
+              access: dependencies.access(),
+              idempotencyKey: key,
+              digest: requestDigest('context.delete', actor, { params, body: {} }),
+              deadline: job.deadline,
+              clock: dependencies.clock,
+            }),
+          );
+          session.record(result.component);
+          return { context: result.context };
+        } catch (error) {
+          return lifecycleProblem(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/contexts/:id', 'restore'),
+      {
+        params: t.Object({ id: t.String() }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: emptyBody,
+        response: lifecycleResponses(),
+        detail: {
+          operationId: 'context.restore',
+          'x-exposure': 'public',
+          'x-action': 'context:restore',
+          'x-resource-types': ['semantic.context'],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          const result = await admission.run('normal', job, () =>
+            changeContextLifecycle(dependencies.pool, {
+              context: params.id,
+              state: 'active',
+              actor,
+              access: dependencies.access(),
+              idempotencyKey: key,
+              digest: requestDigest('context.restore', actor, { params, body: {} }),
+              deadline: job.deadline,
+              clock: dependencies.clock,
+            }),
+          );
+          session.record(result.component);
+          return { context: result.context };
+        } catch (error) {
+          return lifecycleProblem(error);
+        }
+      },
+    )
     .get(
       '/v1/contexts/:id',
       {
         params: t.Object({ id: t.String() }),
         response: {
           200: withHeaders(contextResponse, { [SESSION_HEADER]: t.String() }),
-          401: unauthorized,
+          401: unauthorized(),
           404: problemSchema('not_found'),
           503: problemSchema('overloaded', 'deadline_exceeded'),
         },

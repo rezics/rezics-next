@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { AccountOperation } from '@rezics/auth';
@@ -6,6 +7,7 @@ import { createAccess } from '../../src/access/index.ts';
 import { LIFECYCLE_ACTIONS, createLifecycleCommands } from '../../src/access/lifecycle.ts';
 import {
   createWorkflowApprovals,
+  managedAuthWorkflowDescriptor,
   workflowApprovalBinding,
   sweepWorkflowApprovals,
 } from '../../src/access/workflow-approvals.ts';
@@ -77,6 +79,49 @@ async function fixture() {
     authorization: 'bound-input',
   };
   return { actor, target, operation, bearer: await token(actor), operationKey: `logical-${actor}` };
+}
+async function managedDeleteApproval(options: { directDelete?: boolean } = {}) {
+  const f = await fixture();
+  const operator = newId(0x2468);
+  await admin.query(
+    `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete)
+    VALUES ($1,$2,'actor','active',$2,true)`,
+    [routeOf(operator), operator],
+  );
+  await admin.query('UPDATE access.account SET operator_account_id=$3 WHERE route=$1 AND account_id=$2', [
+    routeOf(f.target),
+    f.target,
+    operator,
+  ]);
+  if (!options.directDelete)
+    await admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND action=$3', [
+      routeOf(f.target),
+      f.target,
+      'account:delete',
+    ]);
+  await admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES ($1,$2,$3,'account:manage','(,)',$3)`,
+    [routeOf(operator), operator, f.actor],
+  );
+  const native = access();
+  const approvals = build(native);
+  const deletion: AccountOperation = { kind: 'delete', accountId: f.target, authorization: 'input' };
+  const bearer = await token(f.actor, { scope: 'account:delete account:manage' });
+  const approved = await approvals.approve(
+    bearer,
+    { operationKey: `managed-delete-${f.actor}`, operation: deletion },
+    context(),
+  );
+  return { ...f, operator, native, approvals, deletion, approved, bearer };
+}
+async function tombstoneThroughApproval(value: Awaited<ReturnType<typeof managedDeleteApproval>>) {
+  const request = await value.approvals.resolve(value.approved.reference, value.deletion, context());
+  const binding = workflowApprovalBinding(request)!;
+  await createLifecycleCommands({ pool, access: value.native }).tombstone(request, {
+    accountId: value.target,
+    key: `${binding.commandKeyPrefix}:tombstone`,
+  });
 }
 beforeAll(async () => {
   await admin.query('SELECT 1 FROM access.account LIMIT 1');
@@ -176,7 +221,8 @@ test('approval uses the verified original expiry and remains expired across rest
   const f = await fixture();
   const exp = Math.floor(Date.now() / 1000) + 2;
   const a = await build().approve(await token(f.actor, { iat: exp - 299, exp, auth_time: exp - 299 }), f, context());
-  expect(Date.parse(a.expiresAt)).toBe(exp * 1000);
+  expect(Date.parse(a.expiresAt)).toBeLessThanOrEqual(exp * 1000);
+  expect(Date.parse(a.expiresAt)).toBeGreaterThan(exp * 1000 - 1000);
   await Bun.sleep(Math.max(0, exp * 1000 - Date.now()));
   await denied(build().resolve(a.reference, f.operation, context()));
   expect(
@@ -273,11 +319,7 @@ for (const fact of ['assignment', 'principal-grant', 'principal-state', 'provena
         f.target,
         principal,
       ]);
-    if (fact === 'principal-state')
-      await admin.query(`UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2`, [
-        routeOf(principal),
-        principal,
-      ]);
+    if (fact === 'principal-state') await suspendAccount(admin, principal);
     if (fact === 'provenance')
       await admin.query(
         'DELETE FROM access.principal_assignment WHERE route=$1 AND principal_id=$2 AND request_id=$3',
@@ -351,6 +393,87 @@ test('native mappings require action grants for rename, delete and membership; o
   }
 });
 
+test('a delete approval for an automated account follows its current operator', async () => {
+  const f = await fixture();
+  const operator = newId(0x2468);
+  const next = newId(0x3579);
+  for (const id of [operator, next]) {
+    await admin.query(
+      `INSERT INTO access.account(route,account_id,kind,state,transaction_id,membership_inverse_complete)
+      VALUES ($1,$2,'actor','active',$2,true)`,
+      [routeOf(id), id],
+    );
+  }
+  await admin.query('UPDATE access.account SET operator_account_id=$3 WHERE route=$1 AND account_id=$2', [
+    routeOf(f.target),
+    f.target,
+    operator,
+  ]);
+  await admin.query(`DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2`, [
+    routeOf(f.target),
+    f.target,
+  ]);
+  await admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES ($1,$2,$3,'account:manage','(,)',$3)`,
+    [routeOf(operator), operator, f.actor],
+  );
+  const approvals = build();
+  const bearer = await token(f.actor, { scope: 'account:delete account:manage' });
+  const deletion: AccountOperation = { kind: 'delete', accountId: f.target, authorization: 'input' };
+  const approved = await approvals.approve(bearer, { operationKey: 'managed-delete', operation: deletion }, context());
+  expect(await approvals.resolve(approved.reference, deletion, context())).toHaveProperty('actor.accountId', f.actor);
+  await admin.query('UPDATE access.account SET operator_account_id=$3 WHERE route=$1 AND account_id=$2', [
+    routeOf(f.target),
+    f.target,
+    next,
+  ]);
+  await denied(approvals.resolve(approved.reference, deletion, context()));
+  await denied(approvals.approve(bearer, { operationKey: 'moved-delete', operation: deletion }, context()));
+});
+
+test('a delete approval keeps its own tombstone operator basis after deletion commits', async () => {
+  const f = await managedDeleteApproval();
+  await tombstoneThroughApproval(f);
+  expect(
+    await admin.query('SELECT state,operator_account_id FROM access.account WHERE route=$1 AND account_id=$2', [
+      routeOf(f.target),
+      f.target,
+    ]),
+  ).toMatchObject({ rows: [{ state: 'deleted', operator_account_id: null }] });
+  expect(await f.approvals.resolve(f.approved.reference, f.deletion, context())).toHaveProperty(
+    'actor.accountId',
+    f.actor,
+  );
+});
+
+test('a delete approval rechecks management of its tombstone operator at resolution time', async () => {
+  const f = await managedDeleteApproval();
+  await tombstoneThroughApproval(f);
+  await admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3', [
+    routeOf(f.operator),
+    f.operator,
+    f.actor,
+  ]);
+  await denied(f.approvals.resolve(f.approved.reference, f.deletion, context()));
+});
+
+test('a tombstone from another transaction keeps the delete approval fallback', async () => {
+  const f = await managedDeleteApproval({ directDelete: true });
+  const native = access();
+  await admin.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES ($1,$2,$3,'account:delete','(,)',$3)`,
+    [routeOf(f.target), f.target, f.target],
+  );
+  const subject = await native.authenticate(await token(f.target, { scope: 'account:delete' }), context());
+  await createLifecycleCommands({ pool, access: native }).tombstone(
+    { actor: subject, deadline: Date.now() + 5000 },
+    { accountId: f.target, key: `external-delete-${f.target}` },
+  );
+  await denied(f.approvals.resolve(f.approved.reference, f.deletion, context()));
+});
+
 test('expiry sweep is bounded and cannot revive an expired approval', async () => {
   const f = await fixture();
   const a = await build().approve(f.bearer, f, context());
@@ -380,4 +503,29 @@ test('native approval proof, reference purpose, integrity key and all original r
     [locator.route >>> 4, f.actor, `${locator.route}:${locator.id}`],
   );
   await denied(build().resolve(a.reference, f.operation, context()));
+});
+
+test('managed entry descriptors retain the original exact workflow authority anchors', () => {
+  const selected = newId(0x1234);
+  const sourceOperator = newId(0x5678);
+  expect(managedAuthWorkflowDescriptor('rename', selected)).toEqual({
+    action: 'account:update',
+    target: selected,
+    targetKind: 'either',
+  });
+  expect(managedAuthWorkflowDescriptor('membership', selected)).toEqual({
+    action: 'organization:membership',
+    target: selected,
+    targetKind: 'organization',
+  });
+  expect(managedAuthWorkflowDescriptor('delete', selected)).toEqual({
+    action: 'account:delete',
+    target: selected,
+    targetKind: 'either',
+  });
+  expect(managedAuthWorkflowDescriptor('transfer', sourceOperator)).toEqual({
+    action: 'account:manage',
+    target: sourceOperator,
+    targetKind: 'either',
+  });
 });

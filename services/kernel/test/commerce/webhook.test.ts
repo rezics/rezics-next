@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { DBOSClient } from '@dbos-inc/dbos-sdk';
 import Stripe from 'stripe';
 import { createCommerceWork } from '../../src/commerce/enqueue.ts';
@@ -253,4 +253,59 @@ test('verification normalizes failures and refuses an empty secret list', async 
   await expect(
     verifyStripeEvent(new TextEncoder().encode(invalidJson), await sign(invalidJson), [secret], now * 1000),
   ).rejects.toBeInstanceOf(WebhookSignatureError);
+});
+
+test('Oversized signature input and excessive configured verification secrets are rejected without durable or payment effects', async () => {
+  const input = event('checkout.session.completed');
+  const payload = JSON.stringify(input);
+  const header = `${await sign(payload)},v0=`;
+  const paddingBytes = 8193 - Buffer.byteLength(header, 'utf8');
+  const signatures = [
+    header + 'x'.repeat(paddingBytes),
+    header + 'é'.repeat(Math.floor(paddingBytes / 2)) + 'x'.repeat(paddingBytes % 2),
+  ];
+  const excessive = makeApp(undefined, [secret, 'whsec_two', 'whsec_three', 'whsec_four', 'whsec_five']);
+  const validHeader = await sign(payload);
+  const verifier = spyOn(Stripe.webhooks, 'constructEventAsync');
+  try {
+    for (const oversized of signatures) {
+      expect(Buffer.byteLength(oversized, 'utf8')).toBe(8193);
+      const result = await deliver(payload, oversized);
+      expect(result.response.status).toBe(400);
+      expect(result.response.headers.get('content-type')).toBe('application/problem+json');
+      expect(result.body).toMatchObject({ code: 'invalid_signature', retryable: false });
+    }
+    const result = await deliver(payload, validHeader, excessive);
+    expect(result.response.status).toBe(400);
+    expect(result.body.code).toBe('invalid_signature');
+    expect(verifier).not.toHaveBeenCalled();
+  } finally {
+    verifier.mockRestore();
+  }
+  expect(await rows(input.id)).toHaveLength(0);
+});
+
+test('Valid bounded overlapping signatures retain raw-body verification rotation dedupe and durable acknowledgement', async () => {
+  const input = event('checkout.session.completed');
+  const payload = JSON.stringify(input, null, 2) + '\n';
+  const previous = 'whsec_previous';
+  const target = makeApp(undefined, [previous, 'whsec_inactiveOne', 'whsec_inactiveTwo', secret]);
+  const oldHeader = await sign(payload, previous);
+  const currentHeader = await sign(payload);
+  const overlap = `${oldHeader},v1=${'0'.repeat(64)},${currentHeader.split(',')[1]}`;
+  for (const [index, signed] of [oldHeader, currentHeader, overlap].entries()) {
+    const prefix = `${signed},v0=`;
+    const paddingBytes = 8192 - Buffer.byteLength(prefix, 'utf8');
+    const header =
+      prefix +
+      (index === 1
+        ? 'é'.repeat(Math.floor(paddingBytes / 2)) + 'x'.repeat(paddingBytes % 2)
+        : 'x'.repeat(paddingBytes));
+    expect(Buffer.byteLength(header, 'utf8')).toBe(8192);
+    const result = await deliver(payload, header, target);
+    expect(result.response.status).toBe(200);
+    expect(result.body).toEqual({ received: true });
+    expect(await rows(input.id)).toHaveLength(1);
+    expect((await client.getWorkflow(`stripe:${input.id}`))?.status).toBe('ENQUEUED');
+  }
 });

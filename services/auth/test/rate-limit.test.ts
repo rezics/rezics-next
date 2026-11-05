@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -6,6 +7,7 @@ import { betterAuth } from 'better-auth';
 import { betterAuthOptions } from '../src/better-auth.ts';
 import { nativeAttemptRequest, pruneAuthAttempts, withAuthTransport } from '../src/rate-limit.ts';
 import { testDatabase } from '../scripts/database.ts';
+import { runPlacedTests } from '../scripts/placed-tests.ts';
 import {
   createAuthService,
   createRecoveryEstablishmentVerifier,
@@ -18,13 +20,12 @@ import {
 // keeps Better Auth's native test-mode defaults.
 if (process.env.AUTH_ATTEMPT_TEST_CHILD !== '1') {
   test('production native attempt limits and cost on a real Auth database', async () => {
-    const child = Bun.spawn(['bun', 'test', 'test/rate-limit.test.ts', 'test/rate-limit-cost.test.ts'], {
+    const child = await runPlacedTests(['bun', 'test', 'test/rate-limit.test.ts', 'test/rate-limit-cost.test.ts'], {
       cwd: import.meta.dir + '/..',
       env: { ...process.env, NODE_ENV: 'production', AUTH_ATTEMPT_TEST_CHILD: '1' },
-      stdout: 'inherit',
-      stderr: 'inherit',
     });
-    expect(await child.exited).toBe(0);
+    if (child.output) console.info(child.output);
+    expect(child.code).toBe(0);
   }, 120000);
 } else {
   let fixture: Awaited<ReturnType<typeof attemptFixture>>;
@@ -56,12 +57,13 @@ if (process.env.AUTH_ATTEMPT_TEST_CHILD !== '1') {
     const workerSource = `
       import { createAuthService } from ${JSON.stringify(new URL('../src/index.ts', import.meta.url).href)};
       import { withAuthTransport } from ${JSON.stringify(new URL('../src/rate-limit.ts', import.meta.url).href)};
+      import { trustedAccessPorts } from ${JSON.stringify(new URL('./support/trusted-access.ts', import.meta.url).href)};
       import { Pool } from 'pg';
       const input = await Bun.stdin.json();
       const pool = new Pool({ connectionString: input.url });
       const service = await createAuthService({ ...input.options, database: pool,
-        trustedAccess: { async readAccount() { return input.account; },
-          async authorizeProvisioning() { throw new Error('Not provisioning'); } } });
+        trustedAccess: trustedAccessPorts({ async readAccount() { return input.account; },
+          async authorizeProvisioning() { throw new Error('Not provisioning'); } }) });
       const statuses = await Promise.all(Array.from({ length: 8 }, () => withAuthTransport(input.peer,
         () => service.handler(new Request(input.options.issuer + '/signin', {
           method: 'POST', headers: { origin: input.options.issuer, 'content-type': 'application/json' },
@@ -451,7 +453,10 @@ export async function attemptFixture() {
     audience: 'https://attempt.api.test',
     secret: 'attempt-only-persistent-secret-with-at-least-32-bytes',
     signing: { activeKid: jwk.kid, privateKeys: [jwk] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+      },
       async readAccount(id) {
         return id === account.accountId ? account : null;
       },
@@ -471,7 +476,7 @@ export async function attemptFixture() {
         expect(evidence?.accountId).toBe(account.accountId);
         expect(evidence?.authnEpoch).toBe(account.authnEpoch);
       },
-    },
+    }),
     recoveryDelivery: {
       async deliver({ token }) {
         deliveries.push(token);

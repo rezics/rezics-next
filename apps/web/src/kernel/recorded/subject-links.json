@@ -1,0 +1,188 @@
+{
+  "status": 200,
+  "links": [
+    {
+      "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0010",
+      "property": "wdt:P155",
+      "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0110",
+      "type": "schema:Book",
+      "label": "The Pilot Returns",
+      "summary": {
+        "id": "01a17a3b-0884-721b-91ef-d7ffd7bb0010",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": {
+          "value": "The Pilot Returns",
+          "language": "en"
+        },
+        "creativeWork": true,
+        "cover": {
+          "media": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0",
+          "width": 480,
+          "height": 720,
+          "placeholder": {
+            "thumbhash": "YSkKLQQ4h496qHdol4qHeDiMj8P4",
+            "color": "#7d7a68"
+          },
+          "variants": [
+            {
+              "format": "webp",
+              "width": 240
+            },
+            {
+              "format": "webp",
+              "width": 480
+            }
+          ],
+          "focalPoint": null,
+          "credit": {
+            "rightsHolder": "REZICS fixtures",
+            "via": {
+              "name": "Generated artwork",
+              "url": "https://rezics.com/"
+            },
+            "license": "CC0 1.0",
+            "obligations": []
+          }
+        }
+      },
+      "date": "2012-05"
+    },
+    {
+      "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0011",
+      "property": "wdt:P155",
+      "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0111",
+      "type": "schema:Book",
+      "label": "Letters to the Rose",
+      "summary": {
+        "id": "01a17a3b-0884-721b-91ef-d7ffd7bb0011",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "Letters to the Rose", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      },
+      "date": "2015"
+    },
+    {
+      "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0020",
+      "property": "wdt:P144",
+      "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0120",
+      "type": "schema:Book",
+      "label": "The Little Prince on Stage",
+      "summary": {
+        "id": "01a17a3b-0884-721b-91ef-d7ffd7bb0020",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": {
+          "value": "The Little Prince on Stage",
+          "language": "en"
+        },
+        "creativeWork": true,
+        "cover": {
+          "media": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0",
+          "width": 480,
+          "height": 720,
+          "placeholder": {
+            "thumbhash": "YSkKLQQ4h496qHdol4qHeDiMj8P4",
+            "color": "#7d7a68"
+          },
+          "variants": [
+            {
+              "format": "webp",
+              "width": 240
+            },
+            {
+              "format": "webp",
+              "width": 480
+            }
+          ],
+          "focalPoint": null,
+          "credit": {
+            "rightsHolder": "REZICS fixtures",
+            "via": {
+              "name": "Generated artwork",
+              "url": "https://rezics.com/"
+            },
+            "license": "CC0 1.0",
+            "obligations": []
+          }
+        }
+      },
+      "date": "2019-03"
+    },
+    {
+      "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0021",
+      "property": "wdt:P144",
+      "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0121",
+      "type": "schema:Book",
+      "label": "Little Prince, an Opera",
+      "summary": {
+        "id": "01a17a3b-0884-721b-91ef-d7ffd7bb0021",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": { "value": "Little Prince, an Opera", "language": "en" },
+        "creativeWork": true,
+        "cover": null
+      },
+      "date": "2008"
+    },
+    {
+      "subject": "01a17a3b-0884-721b-91ef-d7ffd7bb0030",
+      "property": "rezics:sameSetting",
+      "statement": "01a17a3b-0884-721b-91ef-d7ffd7bb0130",
+      "type": "schema:Book",
+      "label": "Stories from Asteroid B-612",
+      "summary": {
+        "id": "01a17a3b-0884-721b-91ef-d7ffd7bb0030",
+        "type": "schema:Book",
+        "types": ["schema:Book", "schema:CreativeWork", "schema:Thing"],
+        "label": {
+          "value": "Stories from Asteroid B-612",
+          "language": "en"
+        },
+        "creativeWork": true,
+        "cover": {
+          "media": "01a17a3b-0884-721b-91ef-d7ffd7bb58f0",
+          "width": 480,
+          "height": 720,
+          "placeholder": {
+            "thumbhash": "YSkKLQQ4h496qHdol4qHeDiMj8P4",
+            "color": "#7d7a68"
+          },
+          "variants": [
+            {
+              "format": "webp",
+              "width": 240
+            },
+            {
+              "format": "webp",
+              "width": 480
+            }
+          ],
+          "focalPoint": null,
+          "credit": {
+            "rightsHolder": "REZICS fixtures",
+            "via": {
+              "name": "Generated artwork",
+              "url": "https://rezics.com/"
+            },
+            "license": "CC0 1.0",
+            "obligations": []
+          }
+        }
+      },
+      "date": "2021"
+    }
+  ],
+  "count": {
+    "value": 5,
+    "exact": true
+  },
+  "freshness": {
+    "consistency": "eventual",
+    "target_seconds": 10,
+    "caught_up": true
+  },
+  "next": null
+}

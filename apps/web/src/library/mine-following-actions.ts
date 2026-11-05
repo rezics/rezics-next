@@ -1,29 +1,68 @@
+import { followingKind, type FollowingKind } from './following-kind-navigation/address';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
-import { kernelClient } from '../kernel/client';
+import { nameSubjectTypes } from '../subject/definitions';
+import { kernelClient, requestLocale } from '../kernel/client';
 import { isPlatformClosedError } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
+import { sessionSubject } from '../session/request';
 import { loadMineFollowingPage, type MineFollowingPage, unfollowFollow } from './mine-following';
+import { PERSONAL_DIRECTORY_CURSOR_LIMITS, personalDirectoryAddress } from './personal-directory-address';
 
-function validateInput(input: unknown): { cursor?: string } {
-  if (
-    !input ||
-    typeof input !== 'object' ||
-    ('cursor' in input &&
-      input.cursor !== undefined &&
-      (typeof input.cursor !== 'string' || input.cursor.length > 2048))
-  )
-    throw new Error('Invalid follows cursor');
-  return 'cursor' in input && typeof input.cursor === 'string' && input.cursor ? { cursor: input.cursor } : {};
+type MineFollowingInput = { cursor?: string; invalidAddress?: true; kind?: FollowingKind };
+
+function validateInput(input: unknown): MineFollowingInput {
+  if (!input || typeof input !== 'object') throw new Error('Invalid follows cursor');
+  const address = personalDirectoryAddress(
+    'cursor' in input ? input.cursor : undefined,
+    PERSONAL_DIRECTORY_CURSOR_LIMITS.following,
+  );
+  const kind = followingKind('kind' in input ? input.kind : undefined);
+  const filter = kind ? { kind } : { invalidAddress: true as const };
+  return address.valid
+    ? address.cursor
+      ? { ...filter, cursor: address.cursor }
+      : filter
+    : { ...filter, ...(typeof address.cursor === 'string' ? { cursor: address.cursor } : {}), invalidAddress: true };
+}
+
+export type MineFollowingRead = {
+  subject: string | null;
+  /** The original requested cursor, even when the reader retries a stale cursor at the first page. */
+  cursor: string | null;
+  locale: string;
+  kind?: FollowingKind;
+  page: MineFollowingPage;
+};
+
+async function readFollowingRequest(data: MineFollowingInput): Promise<MineFollowingRead> {
+  setResponseHeader('cache-control', 'private, no-store');
+  const request = getRequest();
+  const loaded = await loadMineFollowingPage(kernelClient(), request, env as Partial<SessionEnv>, data);
+  // Only a successful reader preparation authorizes this Request's recorded subject. A refused
+  // preparation can leave older WeakMap entries behind, so never stamp those around a signed-out page.
+  const subject = loaded.signedIn ? (sessionSubject(request) ?? null) : null;
+  const page = subject ? loaded : { signedIn: false, follows: [], next: null };
+  if (!page.addressInvalid && !page.forbidden)
+    await nameSubjectTypes(page.follows.map((follow) => (follow.targetType === 'subject' ? follow.target : null)));
+  return {
+    subject,
+    kind: data.kind ?? 'all',
+    cursor: data.cursor ?? null,
+    locale: requestLocale(request) ?? 'en',
+    page,
+  };
 }
 
 export const readMineFollowingPage = createServerFn({ method: 'GET' })
   .validator(validateInput)
-  .handler(async ({ data }): Promise<MineFollowingPage> => {
-    setResponseHeader('cache-control', 'private, no-store');
-    return loadMineFollowingPage(kernelClient(), getRequest(), env as Partial<SessionEnv>, data);
-  });
+  .handler(async ({ data }): Promise<MineFollowingPage> => (await readFollowingRequest(data)).page);
+
+/** Provenance comes from the same actual request and preparation that produced the private page. */
+export const readMineFollowingForViewer = createServerFn({ method: 'GET' })
+  .validator(validateInput)
+  .handler(async ({ data }): Promise<MineFollowingRead> => readFollowingRequest(data));
 
 function validateUnfollow(input: unknown): { targetId: string; idempotencyKey: string } {
   if (

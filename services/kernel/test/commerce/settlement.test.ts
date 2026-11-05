@@ -1,11 +1,12 @@
 import { expect, test } from 'bun:test';
+import { StripeUnavailableError } from '../../src/commerce/model.ts';
 import type {
   CheckoutDecision,
   CheckoutSnapshot,
   SettlementState,
   StripeTransaction,
 } from '../../src/commerce/model.ts';
-import { CheckoutMismatchError, decideCheckout } from '../../src/commerce/settlement.ts';
+import { CheckoutMismatchError, decideCheckout, MovementIntegrityError } from '../../src/commerce/settlement.ts';
 
 const time = (second: number) => `2026-10-25T00:00:${String(second).padStart(2, '0')}.000Z`;
 
@@ -33,6 +34,7 @@ function initial(): SettlementState {
     },
     entitlement: null,
     transactionIds: [],
+    retainedTransactions: [],
   };
 }
 
@@ -82,6 +84,10 @@ function apply(state: SettlementState, decision: CheckoutDecision): SettlementSt
   next.order.settlement = decision.settlement;
   next.order.observedAt = decision.observedAt;
   next.transactionIds = [...state.transactionIds, ...decision.newTransactions.map(({ id }) => id)];
+  next.retainedTransactions = [
+    ...state.retainedTransactions,
+    ...decision.newTransactions.map((transaction) => ({ ...transaction, orderId: state.order.id })),
+  ];
   switch (decision.entitlement.kind) {
     case 'grant':
       next.entitlement = {
@@ -243,8 +249,6 @@ const refundCases = [
   { status: 'failed', amount: 1100, revoked: false },
   // https://docs.stripe.com/api/refunds/object.md — canceled.
   { status: 'canceled', amount: 1100, revoked: false },
-  // https://docs.stripe.com/api/refunds/object.md — unknown status extension.
-  { status: 'future_status', amount: 1100, revoked: false },
   // https://docs.stripe.com/api/refunds/object.md — amount is the refunded amount.
   { status: 'succeeded', amount: 1000, revoked: false },
 ];
@@ -292,6 +296,9 @@ const disputeCases = [
   { status: 'needs_response', revokes: true },
   // https://docs.stripe.com/api/disputes/object.md — under_review.
   { status: 'under_review', revokes: true },
+  // Stripe 23.1.0 / 2026-10-28.endive: an appeal is still an unresolved adverse outcome.
+  { status: 'appeal_needs_response', revokes: true },
+  { status: 'appeal_under_review', revokes: true },
   // https://docs.stripe.com/api/disputes/object.md — lost.
   { status: 'lost', revokes: true },
   // https://docs.stripe.com/api/disputes/object.md — won.
@@ -304,8 +311,6 @@ const disputeCases = [
   { status: 'warning_closed', revokes: false },
   // https://docs.stripe.com/api/disputes/object.md — prevented.
   { status: 'prevented', revokes: false },
-  // https://docs.stripe.com/api/disputes/object.md — unknown status extension fails closed.
-  { status: 'future_status', revokes: true },
 ];
 
 for (const row of disputeCases) {
@@ -347,6 +352,7 @@ test('stale snapshots are ignored and applying the same snapshot twice is idempo
 test('new transactions alone change the decision, retain order and exclude recorded IDs', () => {
   const state = paid();
   state.transactionIds = ['txn_old'];
+  state.retainedTransactions = [{ ...transaction('txn_old'), orderId: state.order.id }];
   const current = snapshot({ transactions: [transaction('txn_two'), transaction('txn_old'), transaction('txn_one')] });
   const decision = decideCheckout(state, current);
   expect(decision).toMatchObject({
@@ -404,4 +410,155 @@ test('generated histories and every subsequence ending at the latest snapshot co
       expect(outcome(state)).toEqual(expected);
     }
   }
+});
+
+test('immutable movement replay normalizes fee order and ignores mutable descriptions', () => {
+  const movement = {
+    ...transaction('txn_replay'),
+    feeDetails: [
+      { type: 'stripe_fee', amountMinor: 40, description: 'old' },
+      { type: 'tax', amountMinor: 10, description: null },
+    ],
+  };
+  const state = apply(initial(), decideCheckout(initial(), snapshot({ transactions: [movement] })));
+  const replay = {
+    ...movement,
+    feeDetails: [...movement.feeDetails].reverse().map((fee) => ({ ...fee, description: 'new' })),
+  };
+  expect(decideCheckout(state, snapshot({ transactions: [replay], observedAt: '2026-11-25T00:00:00Z' }))).toEqual({
+    changed: false,
+  });
+  expect(state.retainedTransactions).toEqual([{ ...movement, orderId: state.order.id }]);
+});
+
+test('retained movement economics and association conflicts fail without changing settlement state', () => {
+  const movement = transaction('txn_integrity');
+  const state = apply(initial(), decideCheckout(initial(), snapshot({ transactions: [movement] })));
+  const before = structuredClone(state);
+  const conflicts: Partial<StripeTransaction>[] = [
+    { amountMinor: 1101, netMinor: 1051 },
+    { currency: 'eur' },
+    { sourceId: 'ch_other' },
+    { feeMinor: 51, netMinor: 1049 },
+    { netMinor: 1051 },
+    { exchangeRate: 1.1 },
+    { created: time(2) },
+    { kind: 'refund' },
+    { feeDetails: [{ type: 'withheld_tax', amountMinor: 50, description: null }] },
+  ];
+  for (const conflict of conflicts) {
+    // Old observation time cannot conceal a contradiction of retained financial evidence.
+    expect(() =>
+      decideCheckout(state, snapshot({ transactions: [{ ...movement, ...conflict }], observedAt: time(0) })),
+    ).toThrow(MovementIntegrityError);
+    expect(state).toEqual(before);
+  }
+  expect(() =>
+    decideCheckout(
+      { ...state, order: { ...state.order, id: 'another_order' } },
+      snapshot({ transactions: [movement] }),
+    ),
+  ).toThrow(MovementIntegrityError);
+});
+
+test('repeated keys in one snapshot have one effect and conflicting copies fail', () => {
+  const movement = transaction('txn_batch');
+  expect(decideCheckout(initial(), snapshot({ transactions: [movement, structuredClone(movement)] }))).toMatchObject({
+    changed: true,
+    newTransactions: [movement],
+  });
+  expect(() =>
+    decideCheckout(initial(), snapshot({ transactions: [movement, { ...movement, sourceId: 'ch_other' }] })),
+  ).toThrow(MovementIntegrityError);
+});
+
+test('unsupported adverse statuses are unavailable and preserve both active and revoked entitlements', () => {
+  const active = paid();
+  const revoked = apply(
+    active,
+    decideCheckout(
+      active,
+      snapshot({
+        observedAt: time(2),
+        disputes: [{ id: 'du_one', status: 'lost', amountMinor: 1100 }],
+      }),
+    ),
+  );
+  for (const state of [initial(), active, revoked]) {
+    for (const patch of [
+      { refunds: [{ id: 're_one', status: 'future_status', amountMinor: 1100 }] },
+      { disputes: [{ id: 'du_one', status: 'future_status', amountMinor: 1100 }] },
+    ]) {
+      const before = structuredClone(state);
+      expect(() => decideCheckout(state, snapshot({ observedAt: time(3), ...patch }))).toThrow(StripeUnavailableError);
+      expect(state).toEqual(before);
+    }
+  }
+});
+
+test('Previously revoked paid order is never restored when required current payment associations or adverse evidence are missing', () => {
+  const active = paid();
+  const revoked = apply(
+    active,
+    decideCheckout(
+      active,
+      snapshot({
+        observedAt: time(2),
+        refunds: [{ id: 're_one', status: 'pending', amountMinor: 1100 }],
+      }),
+    ),
+  );
+  for (const patch of [
+    { paymentIntentId: null, paymentIntentStatus: null, chargeId: null, chargeAmountMinor: null },
+    { chargeId: null, chargeAmountMinor: null },
+    { chargeAmountMinor: null },
+    { paymentIntentStatus: 'processing', paymentStatus: 'unpaid' as const },
+    { status: 'expired' as const, paymentStatus: 'unpaid' as const },
+    { refunds: [{ id: 're_one', status: 'unknown', amountMinor: 1100 }] },
+    { refunds: Array.from({ length: 101 }, (_, n) => ({ id: `re_${n}`, status: 'failed', amountMinor: 1 })) },
+  ]) {
+    const before = structuredClone(revoked);
+    expect(() => decideCheckout(revoked, snapshot({ observedAt: time(3), ...patch }))).toThrow(StripeUnavailableError);
+    expect(revoked).toEqual(before);
+    expect(revoked.order.settlement).toBe('paid');
+    expect(revoked.entitlement?.revokedAt).not.toBeNull();
+  }
+});
+
+test('Complete paid evidence with no balance availability still permits the correct entitlement decision', () => {
+  const current = snapshot({ transactions: [] });
+  const decision = decideCheckout(initial(), current);
+  expect(decision).toMatchObject({ settlement: 'paid', entitlement: { kind: 'grant' }, newTransactions: [] });
+  const active = apply(initial(), decision);
+  const revoked = apply(
+    active,
+    decideCheckout(
+      active,
+      snapshot({
+        observedAt: time(2),
+        disputes: [{ id: 'du_one', status: 'lost', amountMinor: 1100 }],
+      }),
+    ),
+  );
+  const won = snapshot({ observedAt: time(3), disputes: [{ id: 'du_one', status: 'won', amountMinor: 1100 }] });
+  const restored = apply(revoked, decideCheckout(revoked, won));
+  expect(restored.entitlement?.id).toBe(revoked.entitlement?.id);
+  expect(restored.entitlement?.revokedAt).toBeNull();
+  expect(restored.transactionIds).toEqual([]);
+  const full = { id: 're_one', status: 'requires_action', amountMinor: 1100 };
+  expect(decideCheckout(revoked, { ...won, refunds: [full] })).toMatchObject({
+    entitlement: { kind: 'reason', reason: 'refund' },
+    newTransactions: [],
+  });
+  expect(decideCheckout(revoked, { ...won, refunds: [{ ...full, status: 'failed' }] })).toMatchObject({
+    entitlement: { kind: 'restore' },
+    newTransactions: [],
+  });
+  expect(
+    decideCheckout(revoked, {
+      ...won,
+      refunds: [{ ...full, status: 'failed' }],
+      disputes: [...won.disputes, { id: 'du_two', status: 'under_review', amountMinor: 1 }],
+    }),
+  ).toEqual({ changed: false });
 });

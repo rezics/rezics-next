@@ -1,0 +1,307 @@
+# Search interface
+
+AppShell mounts one ShellSearch. At desktop widths of at least 64rem, equal side tracks reserve 21rem each for
+navigation and the bounded language, theme and account controls; the middle track grows to 40rem. This centres
+global search on the viewport regardless of navigation width or sidebar state. Account labels truncate within
+their existing control. Below 64rem, search rests as a compact trigger and opens the same input in a full-screen
+search surface.
+
+The expanded composer inherits the panel's `background` surface in both themes. Expanded chrome uses the panel's top
+rounding only, so the rest pill does not remain as a second card. Its separator divides entry from discovery.
+Keyboard focus outlines the actual input or action using a solid `foreground` outline; the composer has no enclosing focus ring.
+Keyboard-activated suggestion Retry
+restores that input when loading removes the action; the intent retires on close,
+unmount, owner change, or a reader who has moved. Shared Aura tokens and danger styling retain their existing meaning.
+
+The phone surface contains focus, returns it on Back/Escape, retains the draft and locks background scrolling.
+Safe-area padding and the active visual viewport bound the surface while its discovery/results region scrolls.
+Viewport listeners exist only for the active search owner, with cleanup on dismissal; no result gains requests
+or listeners. Crossing the compact breakpoint while editing preserves the input and query.
+
+Result-kind traversal is keyed by the query, locale and initial discovery checkpoint (`as_of`); a changed checkpoint
+starts a fresh traversal. Mixed DiscoveryResults copy (unnamed-account fallback, verified-as text, empty and recovery
+messages, and recovery actions) uses the region's supplied locale. DiscoveryKinds chrome, labels, progress and failure
+text use the region's supplied locale. Authored Type labels keep their own language. Generated Search chrome and
+invalid-input recovery copy follow the supplied page locale, with English as the fallback for an unsupported tag.
+Global search accepts drafts up to 512 UTF-8 bytes; scoped inputs keep their existing 256 UTF-16-unit cap, and
+typeahead keeps its independent 64-code-point prefix bound.
+
+Native suggestion pages are admitted whole before BFF truncation or type-label enrichment; invalid native data is
+dependency-unavailable, with no partial ready page. Header suggestion ownership follows query, locale, the full value of
+the supplied SearchScope, the active loader and session observation; equivalent scope objects retain ownership. Locale,
+scope or loader changes hide old results during render and retire their requests before selection. An unsettled session
+or a change to its state, subject or
+CSRF observation also retires results; a settled session reloads the retained draft, while isolated presenters without
+a session observation use anonymous identity. Trending and header-suggestion retries stay manual: native Retry-After
+disables retry until its minimum delay, without polling; session observations (including CSRF changes) and locale
+changes retire prior suggestions and pending requests.
+A successful manual retry keeps keyboard focus on Retry when that control remains, otherwise the first term or the named
+trending region, using the request's currentness callback and without stealing focus if the reader moved away.
+A keyboard Search result Retry that disappears while loading restores focus to that action when it remains, otherwise
+the named results region of the same committed search, locale and session (unknown omitted as null; signed-out and
+admitted subjects stay distinct; CSRF is not this owner), and leaves focus where the reader moved. The Search route
+observes the mounted browser session for that owner. Committed identity is SearchPage's existing stateKey (Type, kinds,
+facets, ranges, ordered languages, condition, sort, cursor and Realm browsing); unfinished Filters drafts are not that
+identity.
+
+Native Trending may repeat a query when distinct sources share a public label; `literalQuery` is the quoted display,
+so a repeated query repeats that display, and each delivered `{query, display}` occurrence keeps its own row identity.
+Response admission copies that escaping and the 256 UTF-8-byte label bound on the closed `{trendingSearches, next:null}`
+envelope; it does not reimplement parseText, and a malformed page is unavailable as a whole.
+
+## Filters and condition authoring
+
+Filters stays at the left of the composer's second row. `HeaderSearchFilterProvider` and
+`useRegisterHeaderSearchFilters` connect it to the current route's actual editor and active count. Search owns
+result filters; Collection's dialog remains a separate delivery slice. No new filter state or backend operation
+is introduced here. Opening or closing Filters restores keyboard focus only for the current surface transition,
+to a still-connected captured owner. Reopen, desktop/phone replacement, a new committed search, unmount, and a
+reader who has moved retire the request. Desktop entry and Escape/Close use that rule; the phone sheet keeps
+BottomSheet's own focus lifecycle. The header retains the scoped filter through Search submission. Scoped suggestions
+remain unavailable until a native scoped suggestion loader exists; the missing loader never changes the scoped Search
+action into a Global request.
+
+Decision: condition entity label reads settle independently per exact UUID. Transient unavailable and preparing
+outcomes, withheld values and invalid values stay attached to their operand; credentials or release restart retire all
+labels for that current operand owner. Explicit retry reads only the affected unresolved UUIDs.
+
+Filters edits title display-language preferences as an ordered list of at most eight: add from the interface locale
+list or enter any valid BCP 47 tag admitted by the current API, preserve existing valid authored tags, remove or move
+individual entries, and use the page-language default only when the user clears the list. These preferences order
+title and description labels; interface copy follows the page locale.
+
+Resource language is a separate Search condition over the released `schema:inLanguage` statement. It uses the
+existing typed `subjects.$facets` client and one count-free size-10 page from the current query with only its own
+selected facet omitted. Decision: resource-language options omit only their own selected facet, retaining the
+complete remaining query, Boolean tree, type/kind/scope and display-language chain. Search keeps the selected codes
+in the ordinary statement `in` filter, so several values
+form an OR within that dimension while authored Boolean conditions, type, exact kinds and scope stay intact. The
+native release controls applicability and currentness; the UI keeps selected absent or malformed codes removable,
+uses up to the existing 64 continuations, and preserves the actual `lang` attached to a localized option label.
+This does not change title display preferences or the interface locale.
+
+The Revert edits action appears at the bottom of Filters only when condition or ordered-language drafts differ from
+the committed search; it restores those drafts, clears draft validation, and focuses a status announcement in the
+active surface.
+
+Condition-tree edits recover keyboard focus for the initiating action after the changed DOM commits, using that
+session's draft-node identity. A later recovery, external replacement, disablement, unmount, or a focus move away from
+the initiating control retires the queued handoff; the live status still announces the edit.
+
+Released filter selection consumes only public definition labels and filters through the existing bounded metadata
+projection (at most 1024 released filters). Decision: choosing a candidate stages it for an explicit Add or Replace;
+Apply remains the execution boundary. Names use the existing language fallback and retain their language tags;
+references remain identity, appear beside names, and survive URL reload and Back without expansion into authored state.
+Missing names use the reference. Private Library filters never enter this catalogue.
+
+The picker examines at most 1024 names per narrowing operation, accepts 128 characters of narrowing text, and shows
+12 candidates per window plus a retained selection. Only the selected reference can open an inspection. Each
+catalogue owns a shared filter-construction snapshot; inspection uses its admitted expansion inside the request's
+outer AND, with the same cycle, depth and leaf limits. It grants no execution permission. Full-tree admission still
+checks Add, Replace and Apply. An unavailable reference remains explicitly repairable or removable.
+
+The optional current-definition preview uses the existing predicate presenter, showing at most 16 expression nodes,
+six operands per leaf, two qualifiers per statement, and 160 characters per displayed metadata label. Omitted
+structure and operands say the preview is shortened; range endpoints retain their precision and direction stays
+visible. It never reads matching subjects or opens operand lookups. Coverage describes the committed references,
+independently of the draft. Locale, public reader/address observation, accepted release replacement, external document
+replacement and node replacement/deletion retire inspection and picker state and pending tree-edit focus. Equivalent
+renders preserve deliberate edits. Existing saved-reference sharing refusal remains authoritative.
+
+Range controls show a localized Remove range link only for a committed property range; lower/upper strings and units
+stay local to the SearchPage committed-state identity across Filters dismissal and desktop/phone changes, and blank
+bounds remain invalid on Apply. The condition/language Revert action does not reset range drafts.
+Decision: quantity controls use the shared subject unit symbols, keep exact IDs inspectable in control titles and
+retained options, label unitless `1` as a count, and ask before changing a unit when a magnitude is present. Search's
+released unit roster has no related unit-label projection, so other unavailable labels keep the exact ID in the
+display message and control title. A declared `*` remains a marker, not a physical unit.
+The current quantity matcher requires exact unit identity and applies present `gte` and `lte` bounds inclusively;
+omitting either endpoint leaves that side open. Display labels do not convert values or change admission.
+
+Property changes preserve values only when released datatypes and value definitions match, ranges only when both
+definitions support the selected unit, and statement qualifiers only when both properties allow the same released
+qualifier; incompatible nonempty operands require confirmation before reset to a fresh draft.
+
+Advanced time conditions offer numeric year bounds and explicit Gregorian calendar bounds. Decision: switching
+modes always confirms replacement of bounds and unfinished edits, because numeric year projection and calendar
+precision overlap are not assumed equivalent. The selected mode never changes on mount or metadata arrival.
+Calendar text retains exact signed/extended years and year/month/day precision; `@rezics/filter` alone validates
+endpoints and inclusive interval ordering. Empty text opens one endpoint, never both. Invalid or incomplete raw
+edits remain on their occurrence and block form Apply without publishing a replacement predicate. Occurrence edits
+survive Boolean wrapping and equivalent renders; property/mode, external request and reader replacement retire
+obsolete repair state. Coverage describes committed endpoints, precision and possible overlap, excluding missing
+dates, independently of raw edits. No date normalization, browser storage or second calendar authority is used.
+
+Refinement property lookup searches case-insensitive substrings of the current localized name or exact case-sensitive
+identifiers; options with colliding names include their property IDs.
+
+Decision: Concept tag controls come from current released classification properties targeting `skos:Concept`; suggestion and detail reads stay closed for scoped and reader-bound Search until a matching native scoped loader exists.
+
+Facet More replaces the visible ten-value window while pending and failed reads retain the accepted window. Refinement
+keeps windows and cursor progress only for the eight shown properties, then offers a restart after 64 successful
+continuations for one property. Explicit Load, More and Retry keep focus on a surviving usable control; a removed
+control or a disabled fieldset recovers to Retry or that property or status region, and never steals focus if the
+reader moved away. Picker, Load, More and Retry share one native facet-read admission: a current refusal or restart and
+a future Retry-After deadline withhold every read; expiry only enables an explicit Retry of the failed facets and
+cursor, never a queued request. Local property lookup and shown-set selection stay available during those states. A new
+query identity starts a fresh admitted state.
+
+## Route, query recovery and navigation
+
+Native GET sort submission uses an empty `sort` value for Relevance, parsed as the default; `rating` is the only
+explicit sort value.
+
+Search Realm discovery owns the rendered window, continuation callbacks and request lifetime by the actual reader,
+locale, sort and QueryClient; a replacement hides old rows during render, injected readers keep a private cache
+identity, and disposing one anonymous consumer does not cancel another.
+A focused Retry or terminal More recovers onto a still-present current action with the same label, otherwise the named
+discovery region, only for the current owner and only while the reader has not moved; unactivated loads do not take
+focus.
+
+The public Search route is `/{locale}/search`. Realm and Collection scope use the existing `filter` tree as one
+request-only native leaf: `{realm:{id:UUID}}` or `{collection:{id:UUID}}`; for example,
+`/en/search?q=maps&filter=%7B%22realm%22%3A%7B%22id%22%3A%225a522c45-d94f-4d36-8b2a-3af80d988cff%22%7D%7D`.
+Search URLs use the existing filter grammar's
+single resource leaf for scope; display labels never enter native authority. The ID is the only operand sent to
+`POST /v1/subjects:search` with `representation: "discovery-v1"`. Result, kind and facet reads keep the same filter;
+refinement carries that filter through its existing request bridge. Removing scope removes its one leaf, retains
+sibling predicates, clears the cursor and begins a fresh traversal. GET scope is authored intent, not access proof.
+The route keeps public Search anonymous and server-prefetched. Resource membership and a selected `ratingPopulation`
+use a browser-owned personal query instead: the route does not prefetch or dehydrate those responses. The browser's
+reader string is only a cache identity hint. Each protected Search, kind and facet server function calls
+`readScopedSearchReader`, which prepares the current cookie session, compares the current subject with that hint,
+uses its current viewer credential for the Kernel BFF call, and sets `Cache-Control: private, no-store`. Missing,
+changed or uncertain authority yields an explicit session/unavailable state; it never retries as anonymous Global.
+
+The Search page is the wiring owner for request-only resource admission in ConditionEditor, population-aware GET order
+in SearchSort, scoped refinement continuations in Refinement, and the expanded response union in DiscoveryResults.
+Decision: relation direction names the source and target; direct uses each result as source, inverse uses each selected
+operand as source, and both descriptions name the released property and selected operand labels.
+GET submission, the shell/header form, refinements, retry/restart links, result-kind navigation and browser history
+carry Realm or Collection membership and `ratingPopulation` separately. Changing either basis or order drops the hit
+cursor. Removing a membership leaf retains sibling predicates; removing `ratingPopulation` selects Global. Blank or
+absent `ratingPopulation` means Global, while malformed nonempty input remains correctable.
+
+The protected Content complete-order adapter for Realm rating figures is not installed in this Web contract yet.
+When a Realm population is selected with Rating order, Search keeps it selected and reports unavailable; it does not
+send a Global rating request or rerank a loaded preview. The existing native retry/refusal/restart surface remains
+available for installed membership reads. The recorded Search stories demonstrate page wiring and response states;
+they are not native execution evidence.
+
+Local Recent keeps exact query text within global Search's 512 UTF-8 bytes or native Recent's 256 UTF-16-unit bound,
+never truncates, and leaves longer valid global queries local-only so they cannot block native synchronization.
+Recent history reads at most two 20-row pages for its 32-row view; each nonterminal page must contain 20 rows, and
+malformed continuations keep accepted local history and pending changes until a fresh traversal succeeds. A native
+page is admitted only when every row matches the kernel entry, revision, date, identity and display contract; a present
+query destination is that row's own scope path with the authored query and language parameters, never another route,
+identity or origin, and never a reconstructed label or followed URL. Failed
+local writes remain in the memory fallback until a write succeeds; observed durable removals and
+`localStorage.clear()` invalidate cached durable buckets, including inactive ones, while account labels remain
+native-hydrated. Keyboard removal focuses the next available row action, including one newly shown at the 5/32-row
+limit, then the previous action, and falls back to the labeled history region; explicit clear focuses that region and
+announces completion.
+Recent server functions admit only native command discriminants and fields before dispatch; unknown kinds and unresolved
+`pending:` remove ids fail validation with no native call. Extra adapter journal fields on a pending envelope are stripped.
+Native Recent Retry-After is an in-memory, adapter-scoped minimum delay: sync, refresh and retry refuse native I/O
+until that instant without polling or persisting a deadline; local remember, remove and clear continue, and an explicit
+retry after the delay resends the same attempted command.
+A focused Reload recovers onto a surviving current reload action or the named Recent region after the action
+disappears, only while the same history owner remains current, and never if the reader moved away; account or
+session replacement, Header unmount and a superseded retry drop the request. Header Reload stays while failure remains
+even if sync is pending; clearing failure during pending is the existing hide path.
+
+Decision: About these results uses only the executed SearchLoaderDeps and current response labels; private owner leaves are category-only, and an unresolved filter context is never described as Global.
+
+Search text repair follows [the Search text contract](../../../../services/kernel/src/search/text-query-repair.md):
+localized bounded diagnostics, retained original text, explicit Apply, request-preserving navigation and focus
+limited to a current failing submission. The pure Search text core is shared with native admission.
+
+Native result-window navigation retains at most 12 admitted opaque cursors for the active complete request, plus its
+first-page address (at most 131,072 characters). Each cursor is at most 4,864 characters. The address list is carried
+only by this visit's browser-history entry, bound to the reader observation and locale; it contains no result DTOs,
+labels, totals, credentials or viewer advice. When the ceiling drops an older window, Previous traverses the retained
+suffix and First window deliberately starts at the first address. A direct cursor link has no invented predecessor
+or absolute window number. An ancestor token cannot become a forward continuation. Return and browser traversal
+re-read one native address with no-store; a restart/refusal never replays the chain or falls back to Global. Opening
+an existing native result route uses normal browser return, which restores only addresses and re-reads current data.
+Query, ordered languages, predicates, scope and rating population remain in every window address. Activated page
+navigation owns one request-keyed focus handoff to surviving navigation/recovery or the named result region; reader,
+locale or request replacement, cancellation, leaving Search and a reader's focus move retire that handoff.
+
+A failed forward read retains its last admitted return address; uncertain authority clears rows and labels, and
+Previous re-reads that address rather than restoring its prior render. Refusal and restart keep explicit recovery.
+
+## Query sharing
+
+Query sharing prepares the last executed request through the installed native portable-query projection. Draft
+edits are explained separately and never disable an otherwise allowed executed link. Native advice keeps private,
+unsupported, oversized and unavailable states distinct; filter detail is the bounded native document, not a second
+predicate presenter. Links use only the same-origin Search route and its current recipient admission and repair.
+
+The share visit retains Search's request/locale/session key and consumes Web's public retiring reader observation,
+including equal-principal replacement. Preparation and clipboard dispatch each capture synchronous ownership;
+preparation receives an AbortSignal, and close or replacement rejects completions even if cancellation is ignored.
+Decision: retry retains the current preview while preparing, and clipboard refusal offers deliberate link selection
+without automatic focus movement. Preparation waits for an issued clipboard command to settle. Copy captures the
+current allowed URL immediately before writing; an issued external write cannot be recalled. Opening focuses the
+panel only while its activation still owns focus; close/Escape restores the surviving trigger only from that panel.
+Prepared documents, labels and links remain in the mounted visit and never enter browser storage.
+
+## Result traversal and native windows
+
+Composed Members replaces its single accepted native page only after successful explicit More (at most the planned limit, capped at 12 rows with facts when paged, or 24 in previews); sparse pages stay sparse, failures retry the same cursor, and cycles offer a fresh restart with at most 12 recent cursors plus one cycle checkpoint and two bounded counters per node. Outer or selected-leaf Retry-After is admitted as delay text on that list's failure; the list captures one absolute deadline when it accepts the failure, and expiry only enables an explicit retry of the same request.
+A malformed or over-limit native Members page is a 422 failed page before projection or cursor progress, not a sliced or filtered prefix. Retry-After delay text stays on outer and selected-leaf refusals; it is not attached to a 422 admission failure.
+
+### Release child windows
+
+The released-edition journey consumes native grouped responses without reconstructing groups or cursors. Each work
+starts collapsed with its native preview (at most three children); rendering and expanding never read a continuation.
+An explicit Continue captures one request synchronously per work. Different works can read independently. The first
+successful ready child read replaces the preview; each later ready read replaces the accepted window, including an
+empty sparse window. Preparing retains the preview or last accepted window and exposes explicit Retry using the
+native next token. Unavailable reads retain the same accepted rows and requested token; denial, invalid input,
+unsupported input and native restart withhold them. No child data or cursor is stored in browser storage.
+
+At most 20 top-level groups render. With W work groups and S standalone releases (W + S <= 20), retained result
+rows are bounded by W * (1 work + 3 preview + 20 accepted children) + S <= 480; displayed rows are bounded by
+W * (1 work + max(3, 20) children) + S <= 420. The native page keeps its previews, but the UI never appends earlier
+accepted windows. Over-limit responses fail the installed native parser; they are never sliced. Preview size is not
+a release total. Current-window announcements include sparse windows and use the supplied locale.
+
+Decision: each work retains at most 12 distinct successful requested cursors plus the current next token, then offers First window rather than
+continuing; a ready response pointing to any retained token also requires restart. A preparing response can lawfully
+retry its own token. First window deliberately navigates to the same exact released form without the group-page
+cursor; it does not replay the child chain. This is a reversible visit-local ceiling, not a native expiry policy.
+
+The child owner includes exact form values, ordered operands, locale and the initial native group page/checkpoint.
+The route supplies Web's public reader origin, composing browserObservation, useReaderAddress and
+useReaderResponseOrigin; its lifetime changes on actual observation or response replacement even for an equal
+principal or equal response values. Search consumes addressLease/readLease through session/index; it has no session
+registry or replacement detector. An owner change hides old windows during render, aborts pending requests and
+rejects late completions even if cancellation is ignored. Equivalent renders retain expansion and independent work
+state. Focus intent belongs only to an activated current action: completion keeps the surviving action or named
+work region, while closing, replacement, disposal or moving focus cancels recovery.
+
+## Release criteria authoring
+
+Decision: Draft release criteria against the current native-admitted controls, retain incompatible operands for explicit correction, and apply only a valid GET that starts a fresh result traversal. Display-language preferences reuse Search's bounded ordered-language control; release-language conditions remain separate, and header suggestions are labelled but not role-restricted, so native validation remains final.
+
+## Personal entry and score recovery
+
+Entry and score settlement retires private facts immediately after successful or uncertain delivery, then waits for
+already-dispatched independent command families before one complete aggregate read. Failed or unavailable reads
+retain only still-lawful public summaries and expose a deliberate read retry under the same executed request. Retry
+never replays a write. Native restart/refusal replaces the old page; ready and empty pages install native evidence
+and a fresh command lifetime together. Reader, credential, exposure, locale or source replacement permanently retires
+reads and focus intent. Only a deliberate command or read retry can hand focus to its current settlement.
+The pure personal-recovery entry owns read settlement; the mounted host supplies native reads and cancellation.
+
+## Canonical stories and verification limits
+
+The [canonical stories](../stories/header-search/README.md) cover resting, focused discovery, suggestions,
+filter entry and phone interaction. Header story suggestion loaders project recorded search subjects onto the
+admitted suggestion page (identity, type, labels and a nullable summary). `tests/header-search-composition.test.tsx` exercises the existing routed
+Search page and default shell across desktop/phone, English/Simplified Chinese and light/dark. It protects actual
+geometry, surface paint, focused controls, registered filter entry and retained phone drafts. Execution of that
+acceptance and native/browser evidence is deferred under the current delivery policy; workspace typing alone
+does not establish those outcomes.

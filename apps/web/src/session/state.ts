@@ -31,8 +31,8 @@ async function resolveSessionIdentity(request: Request, env: Partial<SessionEnv>
         }
       : { state: 'signed-out', csrfToken: null };
   } catch {
-    // A page remains usable when the local session cannot be read.
-    return { state: 'signed-out', csrfToken: null };
+    // Protected pages must show an error instead of starting a sign-in loop.
+    return { state: 'unavailable', csrfToken: null };
   }
 }
 

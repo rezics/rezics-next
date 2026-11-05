@@ -1,0 +1,17 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as MixedResultsStories from './search-discovery.stories';
+
+<Meta of={MixedResultsStories} />
+
+# Mixed discovery results
+
+The live generic Search page uses this same region. Person and Account remain separate rows even with the same
+ID, name and verification target. Account display names come from the current summary; a missing current handle
+leaves the name readable without a profile link. Verification links use only a disclosed current Subject target.
+
+Review the same story IDs at phone390 and desktop1280 using the locale and theme toolbar globals. Mixed includes
+keyboard movement between the account and verification links. CurrentLinkRefusal shows the native summary after
+handle and verification withdrawal. Empty, unavailable, preparing and loading remain distinct.
+
+These are explicit UI fixtures of the adopted opt-in wire, not native recordings. Postintegration acceptance and
+Root screenshot review remain pending; typing does not establish either outcome.

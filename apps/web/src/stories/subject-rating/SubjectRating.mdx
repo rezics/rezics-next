@@ -1,0 +1,52 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as SubjectRatingStories from './subject-rating.stories';
+
+<Meta of={SubjectRatingStories} />
+
+# Subject Rating
+
+Subject pages reuse RatingsView and its question-driven control. Search rows independently reuse PublicRatingFigure; this pattern shows the Subject result once.
+Ready, pending, below-threshold, empty and published-zero states render the same published DTO on both surfaces.
+A ready snapshot remains ready while native publication works; private vote changes never replace public numbers.
+The headline mean and the Bayesian ordering measure have separate explanations. Imported statistics retain their
+own scale, count, date, licence and attribution.
+
+Save clear zero uses keyboard Home, Save and Clear to distinguish a vote of zero from no vote. Save failure
+announces the error and keeps the stored vote unchanged. These interactions cover the view; command behavior is
+covered by the focused rating-figures outcome cases using the typed client.
+
+Review each story with the same ID using phone390/desktop1280, locale and theme globals. Web visual review,
+Root screenshots and postintegration acceptance are separate from local workspace typing.
+
+The primary published score/count/state and existing own-rating action precede secondary information. Global is
+explicit and separate from selected Realm populations. Imported statistics keep their genuine source/scale/date/
+licence/attribution. Question, public headline, Global aggregate and imported sources have independent outcomes and
+public cache keys. Each retry touches only its source; private votes and unrelated drafts are never replayed.
+
+Population chooser and Sparse population page enter the actual Subject route, contexts, BFF and generated native
+client against declared DTO fixtures. The directory makes one bounded page request, resolves at most twenty current
+Realm labels, preserves sparse-with-next and pages only on explicit Next/restart/retry. Select up to twenty Realm
+populations across pages; Global uses its own call. Exact selected aggregates and bounded current Realm reads run
+concurrently. Masked zero never establishes Realm readability. Selection removal hides its comparison immediately,
+places focus at the field legend and rejects delayed responses. Refused identities/counts stay concealed until a
+fresh matching private read. There is no text search, membership scan, automatic refill or history aggregation.
+
+Independent sources preserves the actual public figure, distribution and private vote control while statistics
+fail. Source retry retains those mounted controls. The mounted reader subscribes before work; actual prepared
+reader envelopes and monotonically retired session/Query/visit/page/selection ownership prevent stale publication
+and queued actions, including equal committed success and ABA restoration. Ordinary cache notifications retain useful
+work. Healthy same-subject null-CSRF reads remain available; native vote command authority is unchanged.
+
+The retained Many supplied contexts and Context states examples illustrate supplied presentation only. They do not
+supply membership or reader authority. Their local five-row reveal remains a bounded presentation adapter for old
+fixture callers; the production journey uses the genuine population chooser. Missing figures stay unavailable,
+zero stays empty, suppression keeps its remainder, and updating withholds stale means. Distribution uses the real
+question step and supplied buckets. An eligible headline, when present, must match the aggregate count. Without a
+headline response the healthy Global aggregate still needs its own privacy threshold and valid mean/buckets.
+
+Review Population chooser, Sparse population page and Independent sources, plus the existing display and vote IDs,
+with phone390/desktop1280, both themes and en/de/es/fr/ja/ko/zh-Hans/zh-Hant locale globals. Their play functions
+author keyboard Space, field labels, removal focus, continuation focus, target sizes and wrapping checks. New
+connected route/native-wire/lifetime assertions are in subject-rating-populations.test.tsx. **All are UNRUN** in
+this delivery. Workspace typing is not browser, native privacy/growth, physical cost or integration proof. The
+fixtures do not establish private first-render/SSR production or unobserved credential changes across caches.

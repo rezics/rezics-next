@@ -1,21 +1,165 @@
+import { progressDecimalPattern as decimal } from './progress-decimal-input';
+import { progressAddressIssue, ProgressAddressError, type ProgressAddressField } from './progress-address';
+import type { ProgressChoices, ProgressInputRules as ProfileProgressInputRules } from './progress-profile';
+import type { ProgressLabelInput } from './progress-label';
 import type { KernelClient } from '@rezics/client';
+import { isNotFound } from '@tanstack/react-router';
 import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, viewerCredential } from '../session/request';
-import { libraryFullQuery, libraryListQuery, readLibraryResult, StaleCursorError, type LibrarySubject } from './reads';
+import {
+  libraryFullQuery,
+  libraryListQuery,
+  LibraryReadForbiddenError,
+  readLibraryResult,
+  StaleCursorError,
+  subjectOf as presentSubject,
+  type LibraryLabel,
+  type LibrarySubject,
+} from './reads';
 
 export const PROGRESS_BATCH_LIMIT = 100;
+/** Installed producer cap (`MAX_PROGRESS_MEASURES`); Web never fabricates extra units to fill it. */
+export const PROGRESS_MEASURE_CAP = 8;
 
 const routeId = /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const idempotencyKeyPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const decimal = /^(?:0|[1-9][0-9]{0,11})(?:\.[0-9]{1,6})?$/;
 const unitIdPattern = /^[A-Za-z0-9._:~-]{1,128}$/;
 const modes = new Set(['scalar_amount', 'cursor_position', 'completed_units']);
-const unitNames = new Set(['page', 'chapter', 'episode', 'volume', 'minute', 'percent']);
 
 export type ProgressMode = 'scalar_amount' | 'cursor_position' | 'completed_units';
-export type ProgressUnit = 'page' | 'chapter' | 'episode' | 'volume' | 'minute' | 'percent';
 export type ProgressState = 'active' | 'completed' | 'abandoned';
+
+export type NativeProgressSession = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['progressSessions']>['get']>>['data']
+>['progressSession'];
+/** The current page has no retired-session state; never relabel native retirement as active. */
+export function supportedProgressState(state: NativeProgressSession['state']): ProgressState {
+  if (state === 'retired') throw new Error('Retired progress sessions are unavailable in this consumer');
+  return state;
+}
+export type NativeProgressPresentation = NonNullable<NativeProgressSession['presentation']>;
+type NativeProgressInputRules = Extract<NativeProgressPresentation['recording'], { state: 'supported' }>['inputRules'];
+type ProgressInputRules = ProfileProgressInputRules | NativeProgressInputRules;
+type NativeDetailOptions = NonNullable<Parameters<ReturnType<KernelClient['progressSessions']>['get']>[0]>;
+type NativeDetailQuery = NonNullable<NativeDetailOptions['query']>;
+type NativePresentationQuery = NonNullable<NativeDetailQuery['presentation']>;
+/** Opt in on the existing owner point read, independently of current subject summaries. */
+export function nativeProgressPresentationQuery(): { presentation: NativePresentationQuery } {
+  return { presentation: 'FULL' };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function onlyKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  return Object.keys(value).every((key) => keys.includes(key));
+}
+
+function isLabelLanguage(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (typeof value !== 'string') return false;
+  try {
+    // The label's own language selects its plural form, so malformed tags must not reach Intl.
+    return Intl.getCanonicalLocales(value).length === 1;
+  } catch {
+    return false;
+  }
+}
+
+function isCountForms(value: unknown): value is NonNullable<NativeProgressPresentation['unitCountForms']> {
+  return (
+    isRecord(value) &&
+    onlyKeys(value, ['other', 'zero', 'one', 'two', 'few', 'many']) &&
+    typeof value.other === 'string' &&
+    Object.values(value).every((form) => typeof form === 'string')
+  );
+}
+
+function isInputRules(value: unknown): value is NativeProgressInputRules {
+  return (
+    isRecord(value) &&
+    onlyKeys(value, ['min', 'max', 'step', 'total']) &&
+    (value.min === undefined || typeof value.min === 'string') &&
+    (value.max === undefined || typeof value.max === 'string') &&
+    typeof value.step === 'string' &&
+    (value.total === 'optional' || value.total === 'required' || value.total === 'forbidden')
+  );
+}
+
+function isRecording(value: unknown): value is NativeProgressPresentation['recording'] {
+  if (!isRecord(value)) return false;
+  if (value.state === 'unsupported' || value.state === 'unavailable') return onlyKeys(value, ['state']);
+  return value.state === 'supported' && onlyKeys(value, ['state', 'inputRules']) && isInputRules(value.inputRules);
+}
+
+function isPresentation(value: unknown): value is NativeProgressPresentation {
+  return (
+    isRecord(value) &&
+    onlyKeys(value, [
+      'meaning',
+      'unitLabel',
+      'unitLabelLanguage',
+      'unitCountForms',
+      'dimension',
+      'structure',
+      'recording',
+    ]) &&
+    (value.meaning === 'known' || value.meaning === 'unknown' || value.meaning === 'unavailable') &&
+    (value.unitLabel === undefined || typeof value.unitLabel === 'string') &&
+    isLabelLanguage(value.unitLabelLanguage) &&
+    (value.unitCountForms === undefined || isCountForms(value.unitCountForms)) &&
+    (value.dimension === undefined || typeof value.dimension === 'string') &&
+    value.structure === 'unverified' &&
+    isRecording(value.recording)
+  );
+}
+
+/** Decode only the closed native DTO; neither an accepting pin nor an undeclared extension is presentation. */
+export function nativeProgressPresentation(session: NativeProgressSession): NativeProgressPresentation | undefined {
+  const presentation: unknown = session.presentation;
+  return isPresentation(presentation) ? presentation : undefined;
+}
+
+const unavailablePresentation = {
+  meaning: 'unavailable',
+  structure: 'unverified',
+  recording: { state: 'unavailable' },
+} as const;
+
+function presentationFields(
+  presentation: NativeProgressPresentation,
+): Pick<
+  ProgressSessionCore,
+  'meaning' | 'recordingState' | 'unitLabel' | 'unitLabelLanguage' | 'unitCountForms' | 'dimension' | 'inputRules'
+> {
+  const { meaning, recording } = presentation;
+  return {
+    meaning,
+    recordingState: recording.state,
+    ...(meaning !== 'known'
+      ? {}
+      : {
+          ...(presentation.unitLabel === undefined ? {} : { unitLabel: presentation.unitLabel }),
+          ...(presentation.unitLabelLanguage === undefined
+            ? {}
+            : { unitLabelLanguage: presentation.unitLabelLanguage }),
+          ...(presentation.unitCountForms === undefined ? {} : { unitCountForms: presentation.unitCountForms }),
+          ...(presentation.dimension === undefined ? {} : { dimension: presentation.dimension }),
+        }),
+    ...(recording.state !== 'supported'
+      ? {}
+      : {
+          inputRules: {
+            ...(recording.inputRules.min === undefined ? {} : { min: recording.inputRules.min }),
+            ...(recording.inputRules.max === undefined ? {} : { max: recording.inputRules.max }),
+            step: recording.inputRules.step,
+            total: recording.inputRules.total,
+          },
+        }),
+  };
+}
 
 export type ProgressChange = {
   id: string;
@@ -27,14 +171,36 @@ export type ProgressChange = {
   position: string | null;
   add: string[];
   remove: string[];
+  measureId?: string;
+  cleared?: true;
 };
 
-export type ProgressSessionCore = {
+export type ProgressMeasureView = {
+  unit: string;
+  amount: string | null;
+  total: string | null;
+  primary: boolean;
+  meaning?: 'known' | 'unknown' | 'unavailable';
+  recordingState?: 'supported' | 'unsupported' | 'unavailable';
+  unitLabel?: string;
+  unitLabelLanguage?: string;
+  unitCountForms?: NativeProgressPresentation['unitCountForms'];
+  dimension?: string;
+  inputRules?: ProgressInputRules;
+};
+
+export type ProgressSessionCore = Pick<
+  ProgressLabelInput,
+  'unitLabel' | 'unitLabelLanguage' | 'unitCountForms' | 'dimension'
+> & {
   id: string;
   subjectId: string;
   versionSubjectId: string | null;
   mode: ProgressMode;
-  unit: ProgressUnit;
+  unit: string;
+  inputRules?: ProgressInputRules;
+  meaning?: 'known' | 'unknown' | 'unavailable';
+  recordingState?: 'supported' | 'unsupported' | 'unavailable';
   total: string | null;
   amount: string | null;
   locator: string | null;
@@ -46,11 +212,31 @@ export type ProgressSessionCore = {
   completedAt: string | null;
   subject: LibrarySubject | null;
   versionSubject: LibrarySubject | null;
+  measures?: ProgressMeasureView[];
+  allowedActions?: {
+    open: { allowed: boolean; reason: 'session_not_active' | 'not_authorized' | null };
+    edit: { allowed: boolean; reason: 'session_not_active' | 'not_authorized' | null };
+    complete: { allowed: boolean; reason: 'session_not_active' | 'not_authorized' | null };
+    abandon: { allowed: boolean; reason: 'session_not_active' | 'not_authorized' | null };
+  };
 };
 
 export type ProgressIndex = {
   signedIn: boolean;
+  viewerState?: 'signed_in' | 'signed_out' | 'account_retired' | 'forbidden' | 'unavailable';
+  addressIssue?: ProgressAddressField;
   subjectId: string;
+  state?: string;
+  mode?: string;
+  profileId?: string;
+  emptyKind?: 'owner-empty' | 'filtered-empty';
+  staleContinuation?: boolean;
+  /** The coordinate that produced this page. It can differ from the requested cursor after stale recovery. */
+  admittedCursor?: string | null;
+  cursorRestarted?: boolean;
+  selectedSubject: LibrarySubject | null;
+  progressChoices?: ProgressChoices;
+  choicesUnavailable?: boolean;
   sessions: ProgressSessionCore[];
   next: string | null;
   idempotencyKey: string;
@@ -75,7 +261,8 @@ export type ProgressSessionPage =
 
 export type ProgressFailure = {
   ok: false;
-  reason: 'conflict' | 'invalid' | 'closed' | 'forbidden' | 'unavailable';
+  reason: 'conflict' | 'invalid' | 'unsupported_library_profile' | 'closed' | 'forbidden' | 'unavailable';
+  field?: string;
 };
 
 export type ProgressSnapshot = {
@@ -88,21 +275,41 @@ export type ProgressSnapshot = {
   state: ProgressState;
   completedAt: string | null;
   total: string | null;
+  measures?: readonly { unit: string; amount: string | null; total: string | null }[];
 };
+
+export function applyProgressSnapshot<T extends ProgressSessionCore>(current: T, snapshot: ProgressSnapshot): T {
+  const { measures: recorded, ...rest } = snapshot;
+  const measures = current.measures?.map((measure) => {
+    const next = recorded?.find((item) => item.unit === measure.unit);
+    return next ? { ...measure, amount: next.amount, total: next.total } : measure;
+  });
+  return { ...current, ...rest, ...(measures ? { measures } : {}) };
+}
 
 export type ProgressStarted = { ok: true; id: string };
 export type ProgressRecorded = { ok: true; session: ProgressSnapshot };
 
-type RawSubject = { id: string; type: string; label: string } | null;
+type RawSubject = {
+  id: string;
+  type: string;
+  types?: readonly string[];
+  label: LibraryLabel;
+  cover?: unknown;
+} | null;
 type RawIntent =
-  | { amount: string }
+  | { amount: string; measureId?: string }
+  | { measureId: string; clear: true }
+  | { clear: true }
   | { locator: string; position: string }
   | { add: string[]; remove?: string[] }
   | { remove: string[]; add?: string[] }
   | { action: 'complete' | 'abandon' };
-type RawSession = Omit<ProgressSessionCore, 'subject' | 'versionSubject'> & {
+type RawSession = Omit<ProgressSessionCore, 'subject' | 'versionSubject' | 'measures' | 'state'> & {
+  state: NativeProgressSession['state'];
   subject?: RawSubject;
   versionSubject?: RawSubject;
+  measures?: unknown;
 };
 type RawChange = { id: string; revision: number; intent: RawIntent; createdAt: string };
 type LibraryCall = { data?: unknown; error?: unknown; status?: number };
@@ -111,33 +318,86 @@ function isMode(value: string): value is ProgressMode {
   return modes.has(value);
 }
 
-function isUnit(value: string): value is ProgressUnit {
-  return unitNames.has(value);
+function isWritableUnit(value: string): boolean {
+  return unitIdPattern.test(value);
+}
+
+function isScalarAmount(value: unknown): value is string {
+  return typeof value === 'string' && decimal.test(value);
+}
+
+function isNativeMeasure(value: unknown): value is {
+  unit: string;
+  amount: string | null;
+  total: string | null;
+  presentation?: NativeProgressPresentation;
+} {
+  return (
+    isRecord(value) &&
+    onlyKeys(value, ['unit', 'amount', 'total', 'presentation']) &&
+    typeof value.unit === 'string' &&
+    isWritableUnit(value.unit) &&
+    (value.amount === null || isScalarAmount(value.amount)) &&
+    (value.total === null || isScalarAmount(value.total)) &&
+    (value.presentation === undefined || isPresentation(value.presentation))
+  );
+}
+
+function presentMeasures(raw: unknown, primaryUnit: string): ProgressMeasureView[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const measures: ProgressMeasureView[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (measures.length >= PROGRESS_MEASURE_CAP || !isNativeMeasure(item) || seen.has(item.unit)) continue;
+    seen.add(item.unit);
+    measures.push({
+      unit: item.unit,
+      amount: item.amount,
+      total: item.total,
+      primary: measures.length === 0,
+      ...(item.presentation ? presentationFields(item.presentation) : {}),
+    });
+  }
+  if (measures.length === 0) return undefined;
+  if (measures[0]) measures[0].primary = measures[0].unit === primaryUnit;
+  return measures;
 }
 
 function subjectOf(subject: RawSubject | undefined): LibrarySubject | null {
-  if (!subject) return null;
-  return { id: subject.id, type: subject.type, label: subject.label };
+  return presentSubject(subject);
 }
 
-function presentSession(session: RawSession): ProgressSessionCore {
+function presentSession(
+  session: RawSession,
+  presentation?: NativeProgressPresentation | typeof unavailablePresentation,
+): ProgressSessionCore {
+  const measures = presentMeasures(session.measures, session.unit);
   return {
     id: session.id,
     subjectId: session.subjectId,
     versionSubjectId: session.versionSubjectId,
     mode: session.mode,
     unit: session.unit,
+    ...(presentation
+      ? presentationFields(presentation)
+      : {
+          ...(session.unitLabel === undefined ? {} : { unitLabel: session.unitLabel }),
+          ...(session.unitLabelLanguage === undefined ? {} : { unitLabelLanguage: session.unitLabelLanguage }),
+          ...(session.unitCountForms === undefined ? {} : { unitCountForms: session.unitCountForms }),
+          ...(session.dimension === undefined ? {} : { dimension: session.dimension }),
+        }),
     total: session.total,
     amount: session.amount,
     locator: session.locator,
     position: session.position,
     completedUnitCount: session.completedUnitCount,
-    state: session.state,
+    state: supportedProgressState(session.state),
     revision: session.revision,
     startedAt: session.startedAt,
     completedAt: session.completedAt,
     subject: subjectOf(session.subject),
     versionSubject: subjectOf(session.versionSubject),
+    ...(measures ? { measures } : {}),
   };
 }
 
@@ -153,10 +413,13 @@ function presentChange(change: RawChange): ProgressChange {
     position: 'position' in intent ? intent.position : null,
     add: 'add' in intent && intent.add ? [...intent.add] : [],
     remove: 'remove' in intent && intent.remove ? [...intent.remove] : [],
+    ...('measureId' in intent && typeof intent.measureId === 'string' ? { measureId: intent.measureId } : {}),
+    ...('clear' in intent && intent.clear === true ? { cleared: true as const } : {}),
   };
 }
 
 function snapshotOf(session: RawSession): ProgressSnapshot {
+  const measures = presentMeasures(session.measures, session.unit);
   return {
     id: session.id,
     revision: session.revision,
@@ -164,9 +427,12 @@ function snapshotOf(session: RawSession): ProgressSnapshot {
     locator: session.locator,
     position: session.position,
     completedUnitCount: session.completedUnitCount,
-    state: session.state,
+    state: supportedProgressState(session.state),
     completedAt: session.completedAt,
     total: session.total,
+    ...(measures
+      ? { measures: measures.map((measure) => ({ unit: measure.unit, amount: measure.amount, total: measure.total })) }
+      : {}),
   };
 }
 
@@ -186,14 +452,41 @@ function callBody(error: unknown): unknown {
 
 function failure(status: number, body: unknown): ProgressFailure {
   if (isPlatformClosedProblem(status, body)) return { ok: false, reason: 'closed' };
+  if (
+    status === 422 &&
+    typeof body === 'object' &&
+    body !== null &&
+    'code' in body &&
+    body.code === 'unsupported_library_profile'
+  )
+    return { ok: false, reason: 'unsupported_library_profile' };
   if (status === 409) return { ok: false, reason: 'conflict' };
-  if (status === 400 || status === 422) return { ok: false, reason: 'invalid' };
+  if (status === 400 || status === 422) {
+    const field =
+      typeof body === 'object' && body !== null && 'field' in body && typeof body.field === 'string'
+        ? body.field
+        : undefined;
+    return { ok: false, reason: 'invalid', ...(field === undefined ? {} : { field }) };
+  }
   if (status === 401 || status === 403 || status === 404) return { ok: false, reason: 'forbidden' };
   return { ok: false, reason: 'unavailable' };
 }
 
 function writeHeaders(authorization: string, key: string): { 'idempotency-key': string } {
-  return { authorization, 'idempotency-key': key } as { 'idempotency-key': string };
+  return { authorization, 'idempotency-key': JSON.stringify(key) } as { 'idempotency-key': string };
+}
+
+function readAddressData<T>(result: LibraryCall, field: ProgressAddressField): T {
+  const problem = callBody(result.error);
+  if (
+    callStatus(result) === 400 &&
+    typeof problem === 'object' &&
+    problem !== null &&
+    'code' in problem &&
+    problem.code === 'invalid_cursor'
+  )
+    throw new ProgressAddressError(field);
+  return readData<T>(result);
 }
 
 function readData<T>(result: LibraryCall): T {
@@ -216,7 +509,7 @@ export function parseUnitBatch(
 }
 
 async function bearer(request: Request, env: Partial<SessionEnv>): Promise<string | null> {
-  await prepareSession(request, env);
+  if (await prepareSession(request, env)) return null;
   return viewerCredential(request);
 }
 
@@ -224,60 +517,170 @@ async function readList(client: KernelClient, subjectId: string, authorization: 
   const result = await client.progressSessions.get({
     query: { ...libraryListQuery(cursor), subjectId },
     headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
   });
-  return readData<{ progressSessions: RawSession[]; next: string | null }>(result);
+  const page = readAddressData<{ progressSessions: RawSession[]; next: string | null }>(result, 'cursor');
+  if (page.next !== null && progressAddressIssue({ cursor: page.next }))
+    throw new Error('Native progress index returned an invalid cursor');
+  return page;
+}
+
+async function readIndexList(client: KernelClient, subjectId: string, authorization: string, cursor?: string) {
+  try {
+    return {
+      page: await readList(client, subjectId, authorization, cursor),
+      admittedCursor: cursor ?? null,
+      restarted: false,
+    };
+  } catch (error) {
+    if (!(error instanceof StaleCursorError) || !cursor) throw error;
+  }
+  return {
+    page: await readList(client, subjectId, authorization),
+    admittedCursor: null,
+    restarted: true,
+  };
+}
+
+/** Resolve the one subject named by the page when no listed session embeds it. */
+async function readSelectedSubject(client: KernelClient, subjectId: string, authorization: string) {
+  const result = await client.subjects({ id: subjectId }).get({
+    headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
+  });
+  const status = callStatus(result);
+  const problem = callBody(result.error);
+  if (
+    status === 404 &&
+    typeof problem === 'object' &&
+    problem !== null &&
+    'code' in problem &&
+    problem.code === 'not_found'
+  )
+    return null;
+  const body = readData<{
+    subject: { id: string; type: string };
+    summary?: { id: string; type: string; types?: readonly string[]; label?: LibraryLabel; cover?: unknown } | null;
+  }>(result);
+  const summary = body.summary;
+  return presentSubject({
+    id: summary?.id ?? body.subject.id,
+    type: summary?.type ?? body.subject.type,
+    ...(summary?.types === undefined ? {} : { types: summary.types }),
+    label: summary?.label ?? null,
+    cover: summary?.cover ?? null,
+  });
 }
 
 async function readOne(client: KernelClient, sessionId: string, authorization: string) {
+  const query = { ...libraryFullQuery(), ...nativeProgressPresentationQuery() };
   const result = await client.progressSessions({ sessionId }).get({
-    query: libraryFullQuery(),
+    query,
     headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
   });
-  return readData<{ progressSession: RawSession }>(result).progressSession;
+  return readLibraryResult(result).progressSession;
 }
 
 async function readChanges(client: KernelClient, sessionId: string, authorization: string, cursor?: string) {
   const result = await client.progressSessions({ sessionId }).changes.get({
     query: libraryListQuery(cursor),
     headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
   });
-  return readData<{ changes: RawChange[]; next: string | null }>(result);
+  return readAddressData<{ changes: RawChange[]; next: string | null }>(result, 'changes');
 }
 
 async function readUnits(client: KernelClient, sessionId: string, authorization: string, cursor?: string) {
   const result = await client.progressSessions({ sessionId }).completedUnits.get({
     query: libraryListQuery(cursor),
     headers: { authorization },
+    fetch: { cache: 'no-store', redirect: 'manual' },
   });
-  return readData<{ completedUnits: string[]; next: string | null }>(result);
+  return readAddressData<{ completedUnits: string[]; next: string | null }>(result, 'units');
 }
 
-/** The person's sessions for one subject. A missing subject id reads nothing; a closed gate stays closed. */
+/** Subject-only readers retain their installed route; owner discovery awaits Content's generated client publication. */
 export async function loadProgressIndex(
   client: KernelClient,
   request: Request,
   env: Partial<SessionEnv>,
-  input: { subjectId?: string; cursor?: string },
+  input: { subjectId?: string; state?: string; mode?: string; profileId?: string; cursor?: string },
 ): Promise<ProgressIndex> {
   const authorization = await bearer(request, env);
   const idempotencyKey = crypto.randomUUID();
   const subjectId = input.subjectId ?? '';
-  if (!authorization || !routeId.test(subjectId)) {
-    return { signedIn: authorization !== null, subjectId, sessions: [], next: null, idempotencyKey };
+  const addressIssue = progressAddressIssue(input);
+  if (!authorization || addressIssue) {
+    return {
+      signedIn: authorization !== null,
+      viewerState: authorization ? 'signed_in' : 'signed_out',
+      ...(addressIssue ? { addressIssue } : {}),
+      subjectId,
+      ...(input.state === undefined ? {} : { state: input.state }),
+      ...(input.mode === undefined ? {} : { mode: input.mode }),
+      ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
+      selectedSubject: null,
+      sessions: [],
+      next: null,
+      ...(addressIssue ? { emptyKind: 'filtered-empty' as const } : {}),
+      idempotencyKey,
+    };
   }
-  const load = (cursor?: string) => readList(client, subjectId, authorization, cursor);
-  let page: { progressSessions: RawSession[]; next: string | null };
+  const typedFilter = input.state !== undefined || input.mode !== undefined || input.profileId !== undefined;
+  if (!subjectId || typedFilter) {
+    return {
+      signedIn: true,
+      viewerState: 'unavailable',
+      subjectId,
+      ...(input.state === undefined ? {} : { state: input.state }),
+      ...(input.mode === undefined ? {} : { mode: input.mode }),
+      ...(input.profileId === undefined ? {} : { profileId: input.profileId }),
+      selectedSubject: null,
+      sessions: [],
+      next: null,
+      idempotencyKey,
+    };
+  }
+  let index: Awaited<ReturnType<typeof readIndexList>>;
   try {
-    page = await load(input.cursor);
+    index = await readIndexList(client, subjectId, authorization, input.cursor);
   } catch (error) {
-    if (!(error instanceof StaleCursorError) || !input.cursor) throw error;
-    page = await load();
+    if (error instanceof LibraryReadForbiddenError)
+      return {
+        signedIn: true,
+        viewerState: 'forbidden',
+        subjectId,
+        selectedSubject: null,
+        sessions: [],
+        next: null,
+        idempotencyKey,
+      };
+    if (error instanceof ProgressAddressError || isNotFound(error))
+      return {
+        signedIn: true,
+        subjectId,
+        addressIssue: error instanceof ProgressAddressError ? error.field : 'subjectId',
+        selectedSubject: null,
+        sessions: [],
+        next: null,
+        idempotencyKey,
+      };
+    throw error;
   }
+  const { page } = index;
+  const sessions = page.progressSessions.map((session) => presentSession(session));
+  const selectedSubject =
+    sessions.find((session) => session.subjectId === subjectId)?.subject ??
+    (subjectId ? await readSelectedSubject(client, subjectId, authorization) : null);
   return {
     signedIn: true,
     subjectId,
-    sessions: page.progressSessions.map(presentSession),
+    selectedSubject,
+    sessions,
     next: page.next,
+    admittedCursor: index.admittedCursor,
+    cursorRestarted: index.restarted,
     idempotencyKey,
   };
 }
@@ -289,6 +692,8 @@ export async function loadProgressSession(
   env: Partial<SessionEnv>,
   input: { id: string; changes?: string; units?: string },
 ): Promise<ProgressSessionPage> {
+  const issue = progressAddressIssue(input);
+  if (issue) throw new ProgressAddressError(issue);
   const authorization = await bearer(request, env);
   const idempotencyKey = crypto.randomUUID();
   if (!authorization) return { signedIn: false, idempotencyKey };
@@ -317,7 +722,7 @@ export async function loadProgressSession(
     ...(input.changes && !changesResult.stale ? { changesCursor: input.changes } : {}),
     ...(input.units && !unitsResult.stale ? { unitsCursor: input.units } : {}),
     session: {
-      ...presentSession(session),
+      ...presentSession(session, nativeProgressPresentation(session) ?? unavailablePresentation),
       changes: changes.changes.map(presentChange),
       changesNext: changes.next,
       units: units.completedUnits,
@@ -326,15 +731,34 @@ export async function loadProgressSession(
   };
 }
 
+export type ProgressMeasureDraft = { unit: string; total?: string };
+
+function additionalMeasureBody(input: ProgressStartInput): { unit: string; total?: string }[] | false {
+  if (input.additionalMeasures === undefined) return [];
+  if (input.mode !== 'scalar_amount') return false;
+  if (input.additionalMeasures.length === 0 || input.additionalMeasures.length > PROGRESS_MEASURE_CAP - 1) return false;
+  const seen = new Set<string>([input.unit]);
+  const measures: { unit: string; total?: string }[] = [];
+  for (const measure of input.additionalMeasures) {
+    const total = measure.total?.trim() ?? '';
+    if (!isWritableUnit(measure.unit) || seen.has(measure.unit) || (total !== '' && !decimal.test(total))) return false;
+    seen.add(measure.unit);
+    measures.push(total ? { unit: measure.unit, total } : { unit: measure.unit });
+  }
+  return measures;
+}
+
 export type ProgressStartInput = {
   subjectId: string;
+  versionSubjectId?: string;
   mode: string;
   unit: string;
   total?: string;
+  additionalMeasures?: ProgressMeasureDraft[];
   idempotencyKey: string;
 };
 
-/** Starts one session. Total belongs only to an amount, and only when the person gave one. */
+/** Starts one session; the kernel validates the pair and its total policy against the current profile. */
 export async function startProgress(
   client: KernelClient,
   request: Request,
@@ -344,17 +768,27 @@ export async function startProgress(
   const authorization = await bearer(request, env);
   if (!authorization) return { ok: false, reason: 'forbidden' };
   const total = input.total?.trim() ?? '';
+  const additional = additionalMeasureBody(input);
   if (
     !routeId.test(input.subjectId) ||
+    (input.versionSubjectId !== undefined && !routeId.test(input.versionSubjectId)) ||
     !isMode(input.mode) ||
-    !isUnit(input.unit) ||
+    !isWritableUnit(input.unit) ||
     !idempotencyKeyPattern.test(input.idempotencyKey) ||
-    (total !== '' && (input.mode !== 'scalar_amount' || !decimal.test(total)))
+    (total !== '' && !decimal.test(total)) ||
+    additional === false
   )
     return { ok: false, reason: 'invalid' };
   try {
     const result = await client.progressSessions.post(
-      { subjectId: input.subjectId, mode: input.mode, unit: input.unit, ...(total ? { total } : {}) },
+      {
+        subjectId: input.subjectId,
+        ...(input.versionSubjectId === undefined ? {} : { versionSubjectId: input.versionSubjectId }),
+        mode: input.mode,
+        unit: input.unit,
+        ...(total ? { total } : {}),
+        ...(additional && additional.length ? { additionalMeasures: additional } : {}),
+      },
       { headers: writeHeaders(authorization, input.idempotencyKey) },
     );
     const status = callStatus(result);
@@ -370,6 +804,8 @@ export type ProgressRecordInput = {
   sessionId: string;
   revision: number;
   idempotencyKey: string;
+  measureId?: string;
+  clear?: true;
   amount?: string;
   locator?: string;
   position?: string;
@@ -378,22 +814,36 @@ export type ProgressRecordInput = {
 };
 
 type RecordBody =
-  | { revision: number; amount: string }
+  | { revision: number; measureId?: string; clear: true }
+  | { revision: number; measureId?: string; amount: string }
   | { revision: number; locator: string; position: string }
   | { revision: number; add: string[] }
   | { revision: number; remove: string[] };
 
+function addressed(input: ProgressRecordInput): { measureId: string } | Record<string, never> | null {
+  if (input.measureId === undefined) return {};
+  return isWritableUnit(input.measureId) ? { measureId: input.measureId } : null;
+}
+
 function recordBody(input: ProgressRecordInput): RecordBody | null {
   if (!routeId.test(input.sessionId) || !Number.isSafeInteger(input.revision) || input.revision < 0) return null;
   if (!idempotencyKeyPattern.test(input.idempotencyKey)) return null;
+  const target = addressed(input);
+  if (!target) return null;
+  const clear = input.clear !== undefined;
   const amount = input.amount !== undefined;
   const cursor = input.locator !== undefined || input.position !== undefined;
   const batch = input.add !== undefined || input.remove !== undefined;
-  if ([amount, cursor, batch].filter(Boolean).length !== 1 || (input.add !== undefined && input.remove !== undefined))
+  if (
+    [clear, amount, cursor, batch].filter(Boolean).length !== 1 ||
+    (input.add !== undefined && input.remove !== undefined)
+  )
     return null;
+  if (input.measureId !== undefined && (cursor || batch)) return null;
+  if (clear) return input.clear === true ? { revision: input.revision, ...target, clear: true } : null;
   if (input.amount !== undefined) {
     if (!decimal.test(input.amount)) return null;
-    return { revision: input.revision, amount: input.amount };
+    return { revision: input.revision, ...target, amount: input.amount };
   }
   if (cursor) {
     if (

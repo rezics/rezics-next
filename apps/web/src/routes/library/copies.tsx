@@ -1,25 +1,52 @@
+import { env } from 'cloudflare:workers';
+import { kernelClient } from '../../kernel/client';
+import { postCopyForm } from '../../library/copies-form-action';
+import type { SessionEnv } from '../../session/client';
+import { requireSignedIn } from '../../session/guard';
+import { pageHead } from '../../shell/head';
+import { pageHeadContext } from '../../shell/head-context';
 import { createFileRoute } from '@tanstack/react-router';
-import { CopiesPage } from '../../library/copies-page';
-import { readCopiesPage } from '../../library/copies-actions';
-import { copiesSubjectId } from '../../library/copies-query';
+import { CopiesCurrent } from '../../library/copies-current';
+import { getLocale } from '../../paraglide/runtime.js';
+import { readCopiesCurrent } from '../../library/copies-actions';
+import { copiesQuery } from '../../library/copies-query';
 import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/library/copies')({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        const result = await postCopyForm(kernelClient(), request, env as Partial<SessionEnv>);
+        const url = new URL(request.url);
+        if (!result.ok) url.searchParams.set('copyFailure', result.reason);
+        else url.searchParams.delete('copyFailure');
+        return new Response(null, {
+          status: 303,
+          headers: { location: url.pathname + url.search, 'cache-control': 'private, no-store' },
+        });
+      },
+    },
+  },
+  beforeLoad: requireSignedIn,
   validateSearch: (search: Record<string, unknown>) => {
-    const subjectId = copiesSubjectId(search.subjectId);
     return {
-      ...(subjectId ? { subjectId } : {}),
-      ...(typeof search.cursor === 'string' && search.cursor.length > 0 && search.cursor.length <= 2048
-        ? { cursor: search.cursor }
-        : {}),
+      ...(typeof search.copyFailure === 'string' ? { copyFailure: search.copyFailure } : {}),
+      ...copiesQuery(search),
     };
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ deps }) => readCopiesPage({ data: deps }),
-  head: () => ({ meta: [{ title: m.library_copy_heading() }] }),
+  loader: ({ deps }) => readCopiesCurrent({ data: deps }),
+  // Cursor and filter moves use the private current reader; route entry alone needs loader data.
+  shouldReload: ({ cause }) => cause === 'enter',
+  staleTime: 0,
+  head: ({ match }) =>
+    pageHead({ title: m.library_copy_heading(), robots: 'noindex, nofollow' }, pageHeadContext(match.pathname)),
   component: CopiesRoute,
 });
 
 function CopiesRoute() {
-  return <CopiesPage page={Route.useLoaderData()} />;
+  const search = Route.useSearch();
+  return (
+    <CopiesCurrent initial={Route.useLoaderData()} search={search} locale={getLocale()} failure={search.copyFailure} />
+  );
 }

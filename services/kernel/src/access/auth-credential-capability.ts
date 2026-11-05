@@ -1,5 +1,6 @@
+import { accessClock } from './access-clock.ts';
 import { commandAccessContext } from './command-admission.ts';
-import type { CommandAttempt } from '../command/command.ts';
+import { authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
 import credentialFloorRead from './auth-barriers-credential-read.sql';
 import canonicalize from 'canonicalize';
 import { routeOf } from '../route/route.ts';
@@ -11,16 +12,21 @@ import consumedWorkflow from './auth-credential-capability-workflow-read.sql';
 import reservationRead from './operator-reservation.sql';
 import memberRead from './operator-member.sql';
 import { createCredentialFloorHook } from './auth-barriers.ts';
+import { requireAccessDeadline } from './unavailable.ts';
 import type {
   AuthSessionPort,
-  CredentialAuthorizationInput,
+  CredentialApprovalPorts,
+  CredentialFloorAuthorizationInput,
+  CredentialEffectBinding as OperatorCredentialBinding,
+  CredentialFloorPurpose,
   CredentialEffectAuthorization,
-  CredentialEffectBinding,
-  CredentialEffectVerifier,
+  CredentialFloorBinding,
+  CredentialEffectExpectation,
   CredentialFloorPort,
   CredentialFloorReceipt,
   TrustedAccessPorts,
 } from '@rezics/auth-contract';
+import { credentialRequestDeadline } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, Resource } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
@@ -32,14 +38,17 @@ import { credentialWorkflowApprovals, type createWorkflowApprovals } from './wor
  * References are locators only, never proof of current authority. Own-human and
  * automated paths use their real native owners; never fake a self-operator row.
  */
-export type CredentialOpeningLocator = Pick<
-  CredentialEffectBinding,
+type OpeningBinding<Binding> = Pick<
+  Binding & CredentialFloorBinding,
   'operationKey' | 'effectReference' | 'effectDigest' | 'subjectAccountId' | 'purpose'
-> &
-  (
-    | { kind: 'workflow-approval'; reference: string }
-    | { kind: 'operator-opening'; operatorAccountId: string; receiptId: string }
-  );
+>;
+export type CredentialOpeningLocator =
+  | (OpeningBinding<CredentialFloorBinding> & { kind: 'workflow-approval'; reference: string })
+  | (OpeningBinding<OperatorCredentialBinding> & {
+      kind: 'operator-opening';
+      operatorAccountId: string;
+      receiptId: string;
+    });
 
 /** Trusted Auth-host composition, with installed Access and real native commands.
  * Auth retains its database, secrets, signing keys and runtime. referenceKeys are
@@ -56,7 +65,10 @@ export type CredentialCapabilityConfig = {
   workflowApprovals: ReturnType<typeof createWorkflowApprovals>;
   referenceKeys: KeyRing;
   accessTokenForProof: AuthSessionPort['internal']['accessTokenForProof'];
-  verifyCredentialEffect: CredentialEffectVerifier;
+  verifyCredentialEffect(
+    reference: string,
+    expected: CredentialEffectExpectation<CredentialFloorPurpose>,
+  ): Promise<CredentialFloorBinding>;
 };
 
 type CredentialRevalidationInput = Parameters<NonNullable<TrustedAccessPorts['revalidateCredentialEffect']>>[0] & {
@@ -64,7 +76,9 @@ type CredentialRevalidationInput = Parameters<NonNullable<TrustedAccessPorts['re
   committedOpeningReceiptId?: string;
 };
 
-export type CredentialCapability = Required<Pick<TrustedAccessPorts, 'approveCredentialEffect'>> & {
+export type CredentialCapability = Required<
+  Pick<CredentialApprovalPorts<CredentialFloorPurpose>, 'approveCredentialEffect'>
+> & {
   revalidateCredentialEffect(input: CredentialRevalidationInput): Promise<void>;
   /** Seal only a verified native exact opening locator; no caller approval minting.
    */
@@ -74,9 +88,11 @@ export type CredentialCapability = Required<Pick<TrustedAccessPorts, 'approveCre
    * exact purpose/key/reference/digest/subject must match the narrowed native row
    * and returned CredentialEffectAuthorization before Auth writes.
    */
-  consumeAuthAuthorization(
-    input: CredentialAuthorizationInput,
-  ): Promise<AuthAuthorizationReceipt & { authorization: CredentialEffectAuthorization }>;
+  consumeAuthAuthorization<Purpose extends CredentialFloorPurpose>(
+    input: Omit<CredentialFloorAuthorizationInput, 'purpose'> & { purpose: Purpose },
+  ): Promise<
+    Omit<AuthAuthorizationReceipt, 'authorization'> & { authorization: CredentialEffectAuthorization<Purpose> }
+  >;
   /** Credential-only committed floor hook; never consent/recovery relabelling.
    */
   advanceCredentialFloor: CredentialFloorPort;
@@ -84,6 +100,13 @@ export type CredentialCapability = Required<Pick<TrustedAccessPorts, 'approveCre
 
 function configured(value: unknown): asserts value {
   if (!value) throw new TypeError('Invalid credential capability configuration');
+}
+
+function requestDeadline(deadline: number | undefined): number {
+  if (typeof deadline !== 'number' || !Number.isFinite(deadline))
+    throw new AuthBindingUnavailableError('consumeAuthAuthorization');
+  requireAccessDeadline(deadline);
+  return deadline;
 }
 
 /** Native exact credential capability. Configuration is validated synchronously
@@ -103,8 +126,8 @@ function configured(value: unknown): asserts value {
  * credential binding columns; a broad opening alone fails. Four separate purposes
  * never substitute for each other, sessions or devices in either direction.
  *
- * Operator opening expiry is min(native created T + 60s, verified bearer expiry),
- * checked against command T AND database time. The evidence read window bounds
+ * Operator opening expiry is min(native created T + 60s, bearer expiry carried
+ * into kernel time), checked against command T. The evidence read window bounds
  * creation reads, not the opening lifetime. Retention never renews rows. Every
  * consume/retry re-runs the SAME formula, current state, fences, floors and operator
  * checks, including before disclosure of an exact saved Auth result.
@@ -152,7 +175,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
     current: ring.current,
     keys: new Map([...ring.keys].map(([id, key]) => [id, new Uint8Array(key)])),
   };
-  async function stage(reference: ReturnType<typeof pick>, actor: AccountActor): Promise<CredentialEffectBinding> {
+  async function stage(reference: ReturnType<typeof pick>, actor: AccountActor): Promise<CredentialFloorBinding> {
     const expected = {
       operationKey: reference.operationKey,
       subjectAccountId: reference.subjectAccountId,
@@ -187,6 +210,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
     attempt?: CommandAttempt,
     selected?: NativeConsumed,
   ) {
+    const deadline = requestDeadline(input.deadline);
     const { stage: binding, consumedOpening: opening, expectedPreviousFloor: previous } = input;
     allowed(
       opening &&
@@ -211,11 +235,16 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
     const row = selected
       ? { data: selected }
       : opening.operatorAccountId === null
-        ? await consumedWorkflow.run(pool, { route: routeOf(opening.receiptId)!, receipt_id: opening.receiptId })
+        ? await consumedWorkflow.run(pool, {
+            route: routeOf(opening.receiptId)!,
+            receipt_id: opening.receiptId,
+            at: accessClock(access)().toISOString(),
+          })
         : await consumedOperator.run(pool, {
             route: routeOf(opening.operatorAccountId)!,
             operator_id: opening.operatorAccountId,
             receipt_id: opening.receiptId,
+            at: accessClock(access)().toISOString(),
           });
     allowed(row && row.data && typeof row.data === 'object');
     const native = row.data as unknown as NativeConsumed;
@@ -238,7 +267,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
         (own ? native.actor_id : native.acting_human_id) === opening.actingHumanId &&
         Number(own ? native.authn_epoch : native.human_authn_epoch) === opening.humanEpoch &&
         Date.parse(native.expires_at) === Date.parse(opening.expiresAt) &&
-        Date.parse(native.expires_at) > Date.now() &&
+        Date.parse(native.expires_at) > accessClock(access)().getTime() &&
         Number(own ? native.operation?.subjectEpoch : native.subject_epoch_floor) === previous,
     );
     if (prior)
@@ -288,6 +317,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
     allowed(same(verified, binding));
     let resource: Resource = { route: routeOf(subject.accountId)!, id: subject.accountId };
     if (!own) {
+      operatorBinding(binding);
       allowed(
         native.purpose === 'credential-management' &&
           native.action === 'account:manage' &&
@@ -317,12 +347,13 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
           route: routeOf(operator.accountId)!,
           organization_id: operator.accountId,
           human_id: human.accountId,
+          at: attempt ? authoritativeTimeValue(attempt.time) : accessClock(access)().toISOString(),
         });
         allowed(membership.length === 1);
       } else allowed(operator.kind === 'actor' && operator.accountId === human.accountId);
       resource = { route: routeOf(operator.accountId)!, id: operator.accountId };
     } else allowed(subject.accountId === human.accountId);
-    const boundary = { pool, deadline: Math.min(Date.now() + 1000, Date.parse(opening.expiresAt)) };
+    const boundary = { pool, deadline };
     const context = attempt ? commandAccessContext(boundary, attempt) : boundary;
     const proof = Object.freeze({}) as CredentialFloorIdentity;
     floorIdentities.set(proof, { actor, account: human, pool });
@@ -332,9 +363,12 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
       floorIdentities.delete(proof);
     }
   }
-  const advanceCredentialFloor = createCredentialFloorHook({ pool, validate: validateNative });
-  async function authenticate(human: Parameters<CredentialCapability['approveCredentialEffect']>[0]['human']) {
-    const actor = await access.authenticate(await accessTokenForProof(human), { pool, deadline: Date.now() + 3000 });
+  const advanceCredentialFloor = createCredentialFloorHook({ pool, access, validate: validateNative });
+  async function authenticate(
+    human: Parameters<CredentialCapability['approveCredentialEffect']>[0]['human'],
+    deadline: number,
+  ) {
+    const actor = await access.authenticate(await accessTokenForProof(human), { pool, deadline });
     allowed(
       actor.accountId === human.account_id &&
         actor.clientId === human.client_id &&
@@ -345,12 +379,13 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
     return actor;
   }
   return {
-    async approveCredentialEffect({ stage: binding, human }) {
-      const actor = await authenticate(human);
+    async approveCredentialEffect({ stage: binding, human, deadline: suppliedDeadline }) {
+      const deadline = requestDeadline(suppliedDeadline ?? credentialRequestDeadline(human));
+      const actor = await authenticate(human, deadline);
       allowed(same(await stage(binding, actor), binding));
       const subject = await readAccount(pool, routeOf(binding.subjectAccountId)!, binding.subjectAccountId);
       allowed(subject && subject.kind === 'actor' && subject.state === 'active' && !subject.fenced);
-      const context = { pool, deadline: Date.now() + 3000 };
+      const context = { pool, deadline };
       let opening: CredentialOpeningLocator;
       let expiresAt: string;
       if (subject.operatorAccountId === null) {
@@ -363,6 +398,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
         opening = { ...pick(binding), kind: 'workflow-approval', reference: approved.reference };
         expiresAt = approved.expiresAt;
       } else {
+        operatorBinding(binding);
         const account = await readAccount(pool, routeOf(actor.accountId)!, actor.accountId);
         const approved = await operators.authorizeOpening(
           { actor, account, deadline: context.deadline },
@@ -385,6 +421,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
       return { reference: seal(referenceKeys, SCOPE, locator(opening)), expiresAt };
     },
     async revalidateCredentialEffect(input) {
+      const deadline = requestDeadline(input.deadline ?? credentialRequestDeadline(input.human));
       const reference = locator(unseal(referenceKeys, SCOPE, input.authorization));
       allowed(same(pick(reference), pick(input.stage)));
       const own = reference.kind === 'workflow-approval';
@@ -392,17 +429,18 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
         reference.kind === 'workflow-approval'
           ? await credentialWorkflowApprovals(workflowApprovals).readConsumedCredential(reference.reference, {
               pool,
-              deadline: Date.now() + 3000,
+              deadline,
             })
           : await consumedOperator.run(pool, {
               route: routeOf(reference.operatorAccountId)!,
               operator_id: reference.operatorAccountId,
               receipt_id: reference.receiptId,
+              at: accessClock(access)().toISOString(),
             });
       allowed(row?.data);
       const native = row.data as unknown as NativeConsumed;
       const receiptId = reference.kind === 'workflow-approval' ? native.approval_id : reference.receiptId;
-      const opening: CredentialEffectAuthorization = {
+      const opening: CredentialEffectAuthorization<CredentialFloorPurpose> = {
         ...pick(input.stage),
         receiptId,
         operatorAccountId: reference.kind === 'workflow-approval' ? null : reference.operatorAccountId,
@@ -428,6 +466,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
           !input.replay &&
             (input.stage.purpose === 'remove-password' ||
               input.stage.purpose === 'remove-key' ||
+              input.stage.purpose === 'remove-passkey' ||
               (input.stage.purpose === 'set-password' && input.stage.credentialRowId !== null)),
         );
         const committed = await credentialFloorRead.run(pool, {
@@ -446,9 +485,10 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
       }
       // After an own-human barrier Auth's source session is revoked. Only the
       // exact committed native receipt can continue this one in-flight callback.
-      if (!(own && prior)) await authenticate(input.human);
+      if (!(own && prior)) await authenticate(input.human, deadline);
       await validateNative(
         {
+          deadline,
           stage: input.stage,
           consumedOpening: opening,
           expectedPreviousFloor: opening.subjectEpoch,
@@ -474,6 +514,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
         !input.effectReference
       )
         throw new AuthBindingUnavailableError('consumeAuthAuthorization');
+      const deadline = requestDeadline(input.deadline ?? credentialRequestDeadline(input.human));
       const reference = locator(unseal(referenceKeys, SCOPE, input.authorization));
       allowed(
         reference.subjectAccountId === input.subjectAccountId &&
@@ -481,7 +522,6 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
           reference.operationKey === input.operationKey &&
           reference.effectReference === input.effectReference,
       );
-      const deadline = Date.now() + 3000;
       const actor = await access.authenticate(await accessTokenForProof(input.human), { pool, deadline });
       allowed(
         actor.accountId === input.human.account_id &&
@@ -522,6 +562,7 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
         allowed(consumed.subjectEpoch === Number(subject.minimumAuthnEpoch));
       } else {
         allowed(reference.kind === 'operator-opening' && reference.operatorAccountId === subject.operatorAccountId);
+        operatorBinding(binding);
         const account = await readAccount(pool, routeOf(actor.accountId)!, actor.accountId);
         const consumed = await operators.consumeOpening(
           { actor, account, deadline },
@@ -552,12 +593,13 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
           after.version === subject.version &&
           after.reservationId === subject.reservationId &&
           after.minimumAuthnEpoch === subject.minimumAuthnEpoch &&
-          Date.parse(expiresAt) > Date.now(),
+          Date.parse(expiresAt) > accessClock(access)().getTime(),
       );
       return {
         operatorOpening,
         authorization: {
           ...pick(binding),
+          purpose: input.purpose,
           receiptId,
           actingHumanId: actor.accountId,
           operatorAccountId: subject.operatorAccountId,
@@ -573,15 +615,21 @@ export function createCredentialCapability(config: CredentialCapabilityConfig): 
   };
 }
 
+export type { PasskeyPurpose, CredentialFloorPurpose } from '@rezics/auth-contract';
+
+function operatorBinding(binding: CredentialFloorBinding): asserts binding is OperatorCredentialBinding {
+  allowed(binding.purpose !== 'add-passkey' && binding.purpose !== 'remove-passkey');
+}
+
 const SCOPE = 'access.credential-opening.v1';
-const purposes = ['set-password', 'remove-password', 'add-key', 'remove-key'];
+const purposes = ['set-password', 'remove-password', 'add-key', 'remove-key', 'add-passkey', 'remove-passkey'];
 function allowed(value: unknown): asserts value {
   if (!value) throw new AuthBindingDeniedError();
 }
 const same = (a: unknown, b: unknown) => canonicalize(a) === canonicalize(b);
-function pick(
+function pick<Purpose extends CredentialFloorPurpose>(
   value: Pick<
-    CredentialEffectBinding,
+    OperatorCredentialBinding<Purpose>,
     'operationKey' | 'effectReference' | 'effectDigest' | 'subjectAccountId' | 'purpose'
   >,
 ) {
@@ -622,6 +670,7 @@ function locator(value: unknown): CredentialOpeningLocator {
   else
     allowed(
       row.kind === 'operator-opening' &&
+        !['add-passkey', 'remove-passkey'].includes(row.purpose) &&
         routeOf(row.operatorAccountId) !== null &&
         routeOf(row.receiptId) !== null &&
         row.operatorAccountId !== row.subjectAccountId,
@@ -631,13 +680,13 @@ function locator(value: unknown): CredentialOpeningLocator {
 type NativeConsumed = {
   approval_id: string;
   operation?: Pick<
-    CredentialEffectBinding,
+    CredentialFloorBinding,
     'operationKey' | 'effectReference' | 'effectDigest' | 'subjectAccountId' | 'purpose'
   > & { subjectEpoch: number };
   credential_operation_key: string;
   credential_effect_reference: string;
   credential_effect_digest: string;
-  credential_purpose: CredentialEffectBinding['purpose'];
+  credential_purpose: OperatorCredentialBinding['purpose'];
   subject_account_id: string;
   client_id: string;
   scopes: string[];

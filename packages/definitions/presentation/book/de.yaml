@@ -1,9 +1,168 @@
 types:
-  schema:Book: Schrifttum
-  bf:Instance: Ausgabe oder Version
+  schema:Book: 'Buch'
+  bf:Instance: 'Ausgabe'
 properties:
+  schema:wordCount: 'Wortanzahl'
   schema:exampleOfWork: Ausgabe oder Übersetzung von
   schema:isbn: ISBN-13
   schema:publisher: Verlag
   schema:numberOfPages: Anzahl der Seiten
   schema:translator: Übersetzer
+inverseProperties:
+  schema:exampleOfWork: 'Ausgaben'
+  schema:publisher: 'Veröffentlichte Werke'
+  schema:translator: 'Übersetzte Werke'
+typeDescriptions:
+  schema:Book: 'Ein Buch als Werk, unabhängig von einer bestimmten Ausgabe, Übersetzung oder einem persönlichen Exemplar.'
+  bf:Instance: 'Eine identifizierte veröffentlichte Buchausgabe, etwa eine bestimmte Übersetzung; getrennt vom persönlichen Exemplar.'
+libraryProfiles:
+  book.reading:
+    states:
+      planned: 'Geplant'
+      in_progress: 'In Arbeit'
+      completed: 'Abgeschlossen'
+      paused: 'Pausiert'
+      dropped: 'Abgebrochen'
+    units:
+      scalar_amount:
+        page:
+          label: 'Seite'
+          countForms:
+            one: 'Seite'
+            other: 'Seiten'
+    copyKinds:
+      physical: 'Physisch'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Im Besitz'
+        disposed: 'Abgegeben'
+      digital:
+        owned: 'Im Besitz'
+  book.edition:
+    states:
+      planned: 'Geplant'
+      in_progress: 'In Arbeit'
+      completed: 'Abgeschlossen'
+      paused: 'Pausiert'
+      dropped: 'Abgebrochen'
+    units:
+      scalar_amount:
+        page:
+          label: 'Seite'
+          countForms:
+            one: 'Seite'
+            other: 'Seiten'
+    copyKinds:
+      physical: 'Physisch'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Im Besitz'
+        disposed: 'Abgegeben'
+      digital:
+        owned: 'Im Besitz'
+  legacy-fixed-v1:
+    states:
+      planned: 'Geplant'
+      in_progress: 'In Arbeit'
+      completed: 'Abgeschlossen'
+      paused: 'Pausiert'
+      dropped: 'Abgebrochen'
+    units:
+      scalar_amount:
+        page:
+          label: 'Seite'
+          countForms:
+            one: 'Seite'
+            other: 'Seiten'
+        chapter:
+          label: 'Kapitel'
+          countForms:
+            one: 'Kapitel'
+            other: 'Kapitel'
+        episode:
+          label: 'Folge'
+          countForms:
+            one: 'Folge'
+            other: 'Folgen'
+        minute:
+          label: 'Minute'
+          countForms:
+            one: 'Minute'
+            other: 'Minuten'
+        volume:
+          label: 'Band'
+          countForms:
+            one: 'Band'
+            other: 'Bände'
+        percent: 'Prozent'
+      cursor_position:
+        page:
+          label: 'Seite'
+          countForms:
+            one: 'Seite'
+            other: 'Seiten'
+        chapter:
+          label: 'Kapitel'
+          countForms:
+            one: 'Kapitel'
+            other: 'Kapitel'
+        episode:
+          label: 'Folge'
+          countForms:
+            one: 'Folge'
+            other: 'Folgen'
+        minute:
+          label: 'Minute'
+          countForms:
+            one: 'Minute'
+            other: 'Minuten'
+        volume:
+          label: 'Band'
+          countForms:
+            one: 'Band'
+            other: 'Bände'
+        percent: 'Prozent'
+      completed_units:
+        page:
+          label: 'Seite'
+          countForms:
+            one: 'Seite'
+            other: 'Seiten'
+        chapter:
+          label: 'Kapitel'
+          countForms:
+            one: 'Kapitel'
+            other: 'Kapitel'
+        episode:
+          label: 'Folge'
+          countForms:
+            one: 'Folge'
+            other: 'Folgen'
+        minute:
+          label: 'Minute'
+          countForms:
+            one: 'Minute'
+            other: 'Minuten'
+        volume:
+          label: 'Band'
+          countForms:
+            one: 'Band'
+            other: 'Bände'
+        percent: 'Prozent'
+    copyKinds:
+      legacy-unspecified: 'Nicht näher bestimmt'
+    copyStatuses:
+      legacy-unspecified:
+        ordered: 'Bestellt'
+        owned: 'Im Besitz'
+        lent: 'Verliehen'
+        disposed: 'Abgegeben'
+propertyDescriptions:
+  schema:wordCount: 'Exakte Wortzahl des Buchwerks als einheitenlose ganze Zahl; weder Zeichenanzahl noch Seitenzahl einer Ausgabe.'
+  schema:exampleOfWork: 'Das Werk, das diese Ausgabe oder Veröffentlichung verkörpert; das Werk selbst verknüpfen, kein persönliches Exemplar.'
+  schema:isbn: 'Die ISBN-13 der Ausgabe beginnt mit 978 oder 979; Bindestriche sind optional, etwa 9780140328721 oder 978-0-14-032872-1.'
+  schema:publisher: 'Eine Person oder Organisation, die als Herausgeber oder Verlag dieser Ausgabe oder Veröffentlichung genannt wird.'
+  schema:numberOfPages: 'Die Seitenzahl der Ausgabe als einheitenlose ganzzahlige Menge von mindestens 1.'
+  schema:translator: 'Eine Person oder Organisation, die für die Übersetzung dieser Ausgabe oder Veröffentlichung genannt wird.'

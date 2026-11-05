@@ -13,6 +13,7 @@ import { AccessUnavailableError, createAccess } from '../../src/access/index.ts'
 import * as initiatorCapture from '../../src/access/durable-initiator-capture.ts';
 import { GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { enqueueRealmJoin } from '../../src/community/join.ts';
+import { realmMembershipWorkflowId } from '../../src/community/work.ts';
 import { problemResponse } from '../../src/http/problem.ts';
 import { createRegistrationPorts } from '../support/registration-ports.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
@@ -23,6 +24,7 @@ import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createWorkClient, type WorkClient } from '../../src/work/client.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
+import { workerTestEnv } from '../support/worker-env.ts';
 
 const issuer = 'https://realm-join.auth.test';
 const audience = 'https://realm-join.api.test';
@@ -59,11 +61,7 @@ function workerStream(stream: ReadableStream<Uint8Array> | number | undefined): 
 
 /** Auth and the kernel worker each launch DBOS. The worker runs in its own process. */
 async function startKernelWorker(env: Record<string, string>): Promise<Bun.Subprocess> {
-  const childEnv: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (typeof value === 'string') childEnv[key] = value;
-  }
-  Object.assign(childEnv, env);
+  const childEnv = workerTestEnv({ ...process.env, ...env });
   const child = Bun.spawn(['bun', 'src/worker.ts'], {
     cwd: resolve(import.meta.dir, '../..'),
     env: childEnv,
@@ -341,47 +339,91 @@ afterAll(async () => {
   await admin?.end();
 });
 
-async function captureFailure(failure: Error) {
+async function captureFailure(
+  failure: Error,
+  options: { deadlineMs?: number; retry?: boolean; persistent?: boolean } = {},
+) {
   const space = await createSpace('Capture failure host');
   const realm = await createRealm(space.spaceId, 'public', 'Capture failure Realm');
-  const deadline = Date.now() + 10_000;
+  const deadline = Date.now() + (options.deadlineMs ?? 10_000);
   const actor = await access.authenticate(owner.bearer, { pool, deadline });
   const idempotencyKey = crypto.randomUUID();
   const before = await footprint();
-  const capture = spyOn(initiatorCapture, 'captureDurableInitiator').mockRejectedValueOnce(failure);
+  const receiptCountBefore = (
+    await admin.query(
+      "SELECT count(*)::int AS count FROM core.receipt WHERE command_kind='community.realm.join' AND principal_id=$1",
+      [actor.accountId],
+    )
+  ).rows[0]!.count as number;
+  const capture = spyOn(initiatorCapture, 'captureDurableInitiator');
+  if (options.persistent) capture.mockRejectedValue(failure);
+  else capture.mockRejectedValueOnce(failure);
   let error: unknown;
   try {
     error = await enqueueRealmJoin(
       { pool, access, tokens, client: work },
       { actor, ...realm, memberAccountId: actor.accountId, idempotencyKey, deadline },
     ).catch((error: unknown) => error);
-    expect(capture).toHaveBeenCalledTimes(1);
+    if (options.retry) expect(capture).toHaveBeenCalledTimes(2);
+    else if (options.persistent) expect(capture.mock.calls.length).toBeGreaterThan(1);
+    else expect(capture).toHaveBeenCalledTimes(1);
   } finally {
     capture.mockRestore();
+  }
+  if (options.retry) {
+    expect(error).toMatchObject({ workflowId: expect.stringMatching(/^community\.join:/) });
+    await settle((error as { workflowId: string }).workflowId);
+    expect(
+      (await admin.query('SELECT 1 FROM community.realm_membership_operation WHERE realm_id=$1', [realm.realmId])).rows,
+    ).toHaveLength(1);
+    const receiptCountAfter = (
+      await admin.query(
+        "SELECT count(*)::int AS count FROM core.receipt WHERE command_kind='community.realm.join' AND principal_id=$1",
+        [actor.accountId],
+      )
+    ).rows[0]!.count as number;
+    expect(receiptCountAfter).toBe(receiptCountBefore + 1);
+    return error;
   }
   expect(await footprint()).toEqual(before);
   expect(
     (await admin.query('SELECT 1 FROM community.realm_membership_operation WHERE realm_id=$1', [realm.realmId])).rows,
   ).toEqual([]);
-  expect(
-    (
-      await admin.query("SELECT 1 FROM core.receipt WHERE command_kind='community.realm.join' AND principal_id=$1", [
-        actor.accountId,
-      ])
-    ).rows,
-  ).toEqual([]);
+  const receiptCountAfter = (
+    await admin.query(
+      "SELECT count(*)::int AS count FROM core.receipt WHERE command_kind='community.realm.join' AND principal_id=$1",
+      [actor.accountId],
+    )
+  ).rows[0]!.count as number;
+  expect(receiptCountAfter).toBe(receiptCountBefore);
   return error;
 }
 
 test.serial(
-  'Access unavailability during Realm join capture reaches the caller unchanged as 503 without writes',
+  'Access deadline and overload during Realm join capture reach the caller unchanged as 503 without writes',
   async () => {
-    for (const reason of ['deadline', 'overloaded', 'contention'] as const) {
+    for (const reason of ['deadline', 'overloaded'] as const) {
       const unavailable = new AccessUnavailableError(reason);
       const error = await captureFailure(unavailable);
       expect(error).toBe(unavailable);
       expect(problemResponse(error, { method: 'POST', id: crypto.randomUUID() }).status).toBe(503);
     }
+  },
+);
+
+test.serial('Realm join retries one Access contention during capture and admits the join', async () => {
+  const unavailable = new AccessUnavailableError('contention');
+  const error = await captureFailure(unavailable, { retry: true });
+  expect(error).toMatchObject({ workflowId: expect.stringMatching(/^community\.join:/) });
+});
+
+test.serial(
+  'persistent Access contention during Realm join capture reaches the caller unchanged as 503 without writes',
+  async () => {
+    const unavailable = new AccessUnavailableError('contention');
+    const error = await captureFailure(unavailable, { deadlineMs: 300, persistent: true });
+    expect(error).toBe(unavailable);
+    expect(problemResponse(error, { method: 'POST', id: crypto.randomUUID() }).status).toBe(503);
   },
 );
 
@@ -482,7 +524,7 @@ test.serial(
     const leaveWorkflowId = left.value.workflowId as string;
     await settle(leaveWorkflowId);
     const leaveSteps =
-      (await work.listWorkflowSteps(`realm:leave:${protectedRealm.realmId}:${member.accountId}`))?.map(
+      (await work.listWorkflowSteps(realmMembershipWorkflowId(leaveWorkflowId, 'leave.membership')))?.map(
         (step) => step.name,
       ) ?? [];
     const publishedAt = leaveSteps.indexOf('accounts.membership.publish');

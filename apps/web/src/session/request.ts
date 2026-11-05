@@ -1,4 +1,5 @@
-import { dependencyUnavailable, problem } from '../media/kernel.ts';
+import { problem } from '../media/kernel.ts';
+import { assertPublicCacheReadAllowed } from '../security/page-cache.ts';
 import { configured, type SessionEnv } from './client.ts';
 import { cookie, SESSION_COOKIE, validId } from './cookies.ts';
 import {
@@ -8,13 +9,20 @@ import {
   isAllowedSiteOrigin,
   isUnsafeRequest,
 } from './csrf.ts';
+import { SESSION_UNAVAILABLE_CODE } from './unavailable';
 
 const credentials = new WeakMap<Request, string>();
 const subjects = new WeakMap<Request, string>();
+const csrfTokens = new WeakMap<Request, string>();
 
 // Credential-using routes resolve before their first kernel call, outside any error
 // concealment. Page requests need no lookup. The boolean clears stale cookies.
-export async function prepareSession(request: Request, env: Partial<SessionEnv>): Promise<boolean> {
+export async function prepareSession(
+  request: Request,
+  env: Partial<SessionEnv>,
+  options: { refresh?: boolean } = {},
+): Promise<boolean> {
+  assertPublicCacheReadAllowed(request, 'session');
   const id = cookie(request, SESSION_COOKIE);
   if (id === undefined) return false;
   const requireCsrf = isUnsafeRequest(request) && carriesSession(request);
@@ -40,23 +48,36 @@ export async function prepareSession(request: Request, env: Partial<SessionEnv>)
     return false;
   }
 
-  const result = await env.SESSIONS.get(env.SESSIONS.idFromName(id)).credential();
+  const store = env.SESSIONS.get(env.SESSIONS.idFromName(id));
+  const result = options.refresh === false ? await store.credentialIfFresh() : await store.credential();
   if (requireCsrf) {
     const csrfToken = result.status === 'active' || result.status === 'unavailable' ? result.csrfToken : undefined;
     if (result.status === 'absent' || !csrfTokenMatches(csrfToken, await csrfTokenFromRequest(request)))
       throw problem(403, 'forbidden', 'Forbidden');
   }
-  if (result.status === 'unavailable') throw dependencyUnavailable();
+  if (result.status === 'unavailable') {
+    const error = problem(502, SESSION_UNAVAILABLE_CODE, 'Session Unavailable');
+    error.name = 'SessionUnavailableError';
+    throw error;
+  }
   if (result.status === 'absent') return true;
   credentials.set(request, `Bearer ${result.accessToken}`);
   subjects.set(request, result.subject);
+  csrfTokens.set(request, result.csrfToken);
   return false;
 }
 
 export function sessionSubject(request: Request): string | undefined {
+  assertPublicCacheReadAllowed(request, 'session');
   return subjects.get(request);
 }
 
 export function viewerCredential(request: Request): string | null {
+  assertPublicCacheReadAllowed(request, 'session credential');
   return request.headers.get('authorization') ?? credentials.get(request) ?? null;
+}
+
+export function requestCsrfToken(request: Request): string | null {
+  assertPublicCacheReadAllowed(request, 'session CSRF token');
+  return csrfTokens.get(request) ?? null;
 }

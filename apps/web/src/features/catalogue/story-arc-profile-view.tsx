@@ -1,0 +1,561 @@
+import {
+  CatalogueCurrentReading,
+  catalogueEditor,
+  useEditorLifetime,
+  useEditorWorkspaceLifetime,
+} from './editor-lifetime';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
+import { useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { EntityPicker, type EntityPickerSearch } from '@rezics/ui/entity-picker';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { m } from '../../paraglide/messages.js';
+import { coverSrc } from '../../media/cover-src';
+import { subjectHref } from '../../subject/subject-href';
+import type { CandidateTransport } from '../../subject/candidate-review';
+import type { RelationTransport } from '../../subject/relation-candidates';
+import { pageText } from '../pages/data';
+import { ViewHeadingActions } from '../pages/view-heading';
+import type { CreateResult } from './create-subject';
+import { StoryArcCreate } from './story-arc-create';
+import { EditorFailure } from './statement-editor-view';
+import { SubjectFacts } from './subject-facts-view';
+import type { FactsTransport } from './subject-facts';
+import { StoryArcClassificationReview } from './story-arc-classification-review-view';
+import {
+  applyStoryArcClassificationObservation,
+  storyArcClassificationCurrent,
+} from './story-arc-classification-review';
+import { RelationEditor } from './relation-editor';
+import { FictionalReferenceDetails, FictionalWorkReference } from './fictional-work-reference';
+import { storyArcEntry } from './story-arc-profile-entry';
+import {
+  storyArcFacts,
+  storyArcRelations,
+  storyArcType,
+  storyArcWork,
+  type StoryArcAddress,
+  type StoryArcRead,
+  type StoryArcTransport,
+} from './story-arc-profile';
+
+const callerActionClass =
+  'inline-flex h-auto min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal break-words py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:h-8 md:pointer-fine:min-h-8 md:pointer-fine:min-w-8 md:pointer-fine:py-1';
+const callerTextActionClass =
+  'inline-flex min-h-11 min-w-11 max-w-full items-center whitespace-normal py-2 [overflow-wrap:anywhere] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring md:pointer-fine:min-h-8 md:pointer-fine:min-w-8 md:pointer-fine:py-0';
+const callerPickerClass =
+  '[&_[data-slot=input-group]]:h-auto [&_[data-slot=input-group]]:min-h-11 [&_[data-slot=input-group-control]]:h-auto [&_[data-slot=input-group-control]]:min-h-11 md:pointer-fine:[&_[data-slot=input-group]]:h-8 md:pointer-fine:[&_[data-slot=input-group]]:min-h-8 md:pointer-fine:[&_[data-slot=input-group-control]]:h-8 md:pointer-fine:[&_[data-slot=input-group-control]]:min-h-8';
+
+export type StoryArcProfileProps = StoryArcAddress & {
+  locale: string;
+  /** Outer Subject visit intent; never passed to the native StoryArc address or writer. */
+  context?: string | undefined;
+  realm?: string | undefined;
+  definition?: string | undefined;
+  via?: string | undefined;
+  address?: string | undefined;
+  session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
+  transport: StoryArcTransport;
+  search: EntityPickerSearch;
+  facts: (id: string) => FactsTransport;
+  review: (id: string, property: string, session?: string) => CandidateTransport;
+  relations: (id: string) => RelationTransport;
+  classificationHandoffToken?: string;
+  handoffReader?: string;
+  handoffReaderLive?: () => boolean;
+};
+
+/** Composition of the ordinary creation, scalar and exact-slot relationship workspaces. */
+export const StoryArcProfile = catalogueEditor(StoryArcProfileWorkspace);
+
+export function StoryArcProfileContextNotice({
+  locale,
+  via,
+  globalChoiceHref,
+}: {
+  locale: string;
+  via?: string;
+  globalChoiceHref: string;
+}) {
+  const o = { locale: locale as never };
+  return (
+    <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
+      <h1 className="font-sans text-2xl font-semibold">{m.story_arc_title({}, o)}</h1>
+      <p role="status">{m.story_arc_context_unsupported({}, o)}</p>
+      <div className="flex flex-wrap gap-3">
+        {via && (
+          <a className={buttonVariants({ variant: 'outline', className: callerActionClass })} href={via}>
+            {m.story_arc_return_public({}, o)}
+          </a>
+        )}
+        <a className={buttonVariants({ variant: 'outline', className: callerActionClass })} href={globalChoiceHref}>
+          {m.story_arc_choose_global({}, o)}
+        </a>
+      </div>
+    </article>
+  );
+}
+
+function StoryArcProfileWorkspace(props: StoryArcProfileProps) {
+  return (
+    <AuthoringDepartureBoundary sessionBound={false}>
+      <StoryArcProfileLive {...props} />
+    </AuthoringDepartureBoundary>
+  );
+}
+
+/** Child state supplies the decision even when its current public reading is hidden. */
+function StoryArcDraftDeparture({ dirty, pending }: { dirty: boolean; pending: boolean }) {
+  const holder = useEditorWorkspaceLifetime();
+  useAuthoringDeparture(
+    () => holder.active() && (dirty || pending),
+    pending,
+    String(holder.generation),
+    undefined,
+    holder.retire,
+  );
+  return null;
+}
+
+function StoryArcProfileLive({
+  id: initialId,
+  work: initialWork,
+  locale,
+  context,
+  realm,
+  definition,
+  via,
+  address: outerAddress,
+  session,
+  transport,
+  search,
+  facts,
+  review,
+  relations,
+  classificationHandoffToken,
+  handoffReader,
+  handoffReaderLive,
+}: StoryArcProfileProps) {
+  const lifetime = useEditorLifetime();
+  const client = useQueryClient();
+  const o = { locale: locale as never };
+  const [id, setId] = useState(initialId);
+  const [work, setWork] = useState(initialWork);
+  const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
+  const queryKey = [...['story-arc-profile', id, work, locale, session], lifetime.generation];
+  const query = useQuery({
+    queryKey,
+    queryFn: () => transport.load({ id, work }),
+    retry: false,
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const observedDefinition = query.data?.ok ? query.data.release.digest : undefined;
+  const selection = JSON.stringify([
+    id,
+    work,
+    locale,
+    context,
+    realm,
+    definition,
+    via,
+    outerAddress,
+    observedDefinition,
+  ]);
+  const [reloadAttempt, setReloadAttempt] = useState<{ selection: string; sequence: number }>();
+  const reloadSequence = useRef(0);
+  const reloading = reloadAttempt?.selection === selection;
+  const focusScope = JSON.stringify([selection, locale, session, lifetime.generation]);
+  const recoveryFocus = useRef<
+    | {
+        scope: string;
+        opener: HTMLButtonElement;
+        result?: Awaited<ReturnType<typeof query.refetch>>;
+        cancel: () => void;
+      }
+    | undefined
+  >(undefined);
+  const resultBoundary = useRef<HTMLElement>(null);
+  const workBoundary = useRef<HTMLElement>(null);
+  const failureBoundary = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => () => recoveryFocus.current?.cancel(), []);
+  const retained = useRef<
+    | {
+        selection: string;
+        read: Extract<StoryArcRead, { ok: true }>;
+      }
+    | undefined
+  >(undefined);
+  // Retained data supplies private holders only; public markup uses the current read.
+  if (retained.current?.selection !== selection) retained.current = undefined;
+  if (query.data?.ok) retained.current = { selection, read: query.data };
+  const readable = !reloading && !query.isError && query.data?.ok === true;
+  const current = readable && query.data?.ok ? query.data : undefined;
+  const privateRead = retained.current?.read;
+  const classification = privateRead ? storyArcClassificationCurrent(privateRead) : undefined;
+  const arc = current?.arc;
+  const label = pageText(arc?.subject.labels, locale);
+  const href = arc ? subjectHref({ id: arc.subject.id, label: label.text }, locale).href : undefined;
+  const signInAddress = storyArcEntry({
+    id: readable ? id : undefined,
+    work: readable ? work : undefined,
+    label: label.text,
+    context,
+    realm,
+    definition,
+    via,
+    locale,
+  }).href;
+  const editable = session === 'signed-in' && readable;
+  // Only the completed explicit keyboard attempt may orient a reader whose opener lost focus.
+  useLayoutEffect(() => {
+    const intent = recoveryFocus.current;
+    if (!intent) return;
+    if (intent.scope !== focusScope || !lifetime.active()) return intent.cancel();
+    const result = intent.result;
+    if (
+      reloading ||
+      query.isFetching ||
+      !result ||
+      result.data !== query.data ||
+      result.error !== query.error ||
+      result.dataUpdatedAt !== query.dataUpdatedAt ||
+      result.errorUpdatedAt !== query.errorUpdatedAt
+    )
+      return;
+    const document = intent.opener.ownerDocument;
+    const active = document.activeElement;
+    intent.cancel();
+    if (active === intent.opener && intent.opener.isConnected && !intent.opener.disabled) return;
+    if (active && active !== document.body) return;
+    (readable
+      ? arc || !current?.work
+        ? resultBoundary.current
+        : workBoundary.current
+      : failureBoundary.current
+    )?.focus();
+  });
+  const observation = useRef({ readable, selection, token: {} });
+  if (observation.current.readable !== readable || observation.current.selection !== selection)
+    observation.current = { readable, selection, token: {} };
+  const token = observation.current.token;
+  const { requestNavigation } = useAuthoringDeparture(false, false, selection);
+  const choose = (destination: { id: string | undefined } | { work: string | undefined }) => {
+    if (!lifetime.active() || observation.current.token !== token) return;
+    if ('id' in destination ? destination.id === id : destination.work === work) return;
+    recoveryFocus.current?.cancel();
+    requestNavigation(() => {
+      // A read may recover while the decision is open; the captured selection still owns the choice.
+      if (!lifetime.active() || observation.current.selection !== selection) return;
+      // Retire selection callbacks synchronously, before React commits the replacement holders.
+      observation.current = { readable: false, selection, token: {} };
+      if ('id' in destination) {
+        setCreated(undefined);
+        setId(destination.id);
+      } else setWork(destination.work);
+    });
+  };
+  const canEdit = () => lifetime.active() && editable && observation.current.token === token;
+  const reload = (event: MouseEvent<HTMLButtonElement>) => {
+    if (!lifetime.active() || observation.current.token !== token || query.isFetching || reloading) return;
+    recoveryFocus.current?.cancel();
+    const opener = event.currentTarget;
+    const document = opener.ownerDocument;
+    if (event.detail === 0 && document.activeElement === opener) {
+      const cancel = () => {
+        document.removeEventListener('focusin', moved, true);
+        document.removeEventListener('pointerdown', cancel, true);
+        document.removeEventListener('keydown', tabbed, true);
+        if (recoveryFocus.current?.cancel === cancel) recoveryFocus.current = undefined;
+      };
+      const moved = (event: FocusEvent) => {
+        if (event.target !== opener) cancel();
+      };
+      const tabbed = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') cancel();
+      };
+      recoveryFocus.current = { scope: focusScope, opener, cancel };
+      document.addEventListener('focusin', moved, true);
+      document.addEventListener('pointerdown', cancel, true);
+      document.addEventListener('keydown', tabbed, true);
+    }
+    const intent = recoveryFocus.current;
+    const sequence = ++reloadSequence.current;
+    observation.current = { readable: false, selection, token: {} };
+    setReloadAttempt({ selection, sequence });
+    void query
+      .refetch()
+      .then((result) => {
+        if (intent && recoveryFocus.current === intent) intent.result = result;
+      })
+      .finally(() => {
+        setReloadAttempt((active) => (active?.sequence === sequence ? undefined : active));
+      });
+  };
+  return (
+    <article key={selection} className="mx-auto w-full max-w-4xl space-y-8 px-4 py-8 sm:px-6">
+      <ViewHeadingActions
+        label={id ? m.story_arc_title({}, o) : m.story_arc_create({}, o)}
+        headingClassName="font-sans"
+        actions={
+          href &&
+          readable && (
+            <a href={href} className={buttonVariants({ variant: 'outline', className: callerActionClass })}>
+              {m.candidate_view_public({}, o)}
+            </a>
+          )
+        }
+      />
+      <p className="text-muted-foreground">{id ? m.story_arc_intro({}, o) : m.story_arc_creation_help({}, o)}</p>
+      {via && (
+        <a className={`${callerTextActionClass} underline`} href={via}>
+          {m.story_arc_return_public({}, o)}
+        </a>
+      )}
+      {(query.isPending || reloading) && <p role="status">{m.candidate_loading({}, o)}</p>}
+      {!reloading && (query.isError || (query.data && !query.data.ok)) && (
+        <div ref={failureBoundary} tabIndex={-1}>
+          <EditorFailure locale={locale} reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'} />
+        </div>
+      )}
+      <Button variant="outline" className={callerActionClass} disabled={query.isFetching} onClick={reload}>
+        {m.correction_reload({}, o)}
+      </Button>
+      {session === 'signed-in' && !readable && (id || work) && (
+        <div className="flex flex-wrap gap-3">
+          {id && (
+            <Button
+              variant="outline"
+              className={callerActionClass}
+              onClick={() => {
+                choose({ id: undefined });
+              }}
+            >
+              {m.story_arc_choose_existing({}, o)}
+            </Button>
+          )}
+          {!readable && work && (
+            <Button variant="outline" className={callerActionClass} onClick={() => choose({ work: undefined })}>
+              {m.story_arc_choose_work({}, o)}
+            </Button>
+          )}
+        </div>
+      )}
+      {session === 'unavailable' ? (
+        <p role="status">{m.catalogue_create_unavailable({}, o)}</p>
+      ) : (
+        session !== 'signed-in' &&
+        (!!id || !transport.creation.eligibility) && (
+          <p role="status">
+            {session === 'signed-out' ? m.catalogue_create_signed_out({}, o) : m.candidate_loading({}, o)}{' '}
+            {session === 'signed-out' && (
+              <a
+                className={`${callerTextActionClass} underline`}
+                href={`/auth/sign-in?return_to=${encodeURIComponent(signInAddress)}`}
+              >
+                {m.account_sign_in({}, o)}
+              </a>
+            )}
+          </p>
+        )
+      )}
+      <div className="space-y-8">
+        <section
+          ref={resultBoundary}
+          tabIndex={-1}
+          aria-label={arc ? m.story_arc_identity({}, o) : m.story_arc_create({}, o)}
+          className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-6"
+        >
+          {current && arc ? (
+            <>
+              <h2 className="text-xl font-semibold">{m.story_arc_identity({}, o)}</h2>
+              <p lang={label.lang} className="text-lg font-medium">
+                {label.text || m.subject_value_unlabelled({}, o)}
+              </p>
+              <p lang={pageText(current.release.types[storyArcType]!.labels, locale).lang}>
+                {pageText(current.release.types[storyArcType]!.labels, locale).text}
+              </p>
+              {href && (
+                <nav className="flex flex-wrap gap-3" aria-label={m.facts_other_editors({}, o)}>
+                  <a href={`${href}/terms`} className={`${callerTextActionClass} underline`}>
+                    {m.catalogue_terms_title({}, o)}
+                  </a>
+                  <a
+                    href={`${href}/context-review?${new URLSearchParams({ context: arc.subject.context })}`}
+                    className={`${callerTextActionClass} underline`}
+                  >
+                    {m.context_title({}, o)}
+                  </a>
+                </nav>
+              )}
+              {readable && <FictionalReferenceDetails id={arc.subject.id} type={storyArcType} locale={locale} />}
+              {editable && (
+                <Button
+                  variant="outline"
+                  className={callerActionClass}
+                  onClick={() => {
+                    if (!canEdit()) return;
+                    choose({ id: undefined });
+                  }}
+                >
+                  {m.story_arc_choose_existing({}, o)}
+                </Button>
+              )}
+            </>
+          ) : null}
+          {!id && privateRead && (session === 'signed-in' || !!transport.creation.eligibility) && (
+            <div className="space-y-6">
+              <EntityPicker
+                disabled={!editable}
+                label={m.story_arc_choose_existing({}, o)}
+                className={callerPickerClass}
+                value={[]}
+                src={coverSrc}
+                search={async (text, signal) =>
+                  (await search(text, signal)).filter((entry) => entry.types.includes(storyArcType))
+                }
+                onValueChange={(items) => {
+                  if (canEdit() && items[0]) choose({ id: items[0].id });
+                }}
+              />
+              <StoryArcCreate
+                locale={locale}
+                session={session}
+                transport={transport}
+                release={privateRead.release}
+                {...(work ? { work } : {})}
+                href={address}
+                onCreated={setCreated}
+                navigation={({ dirty, pending, confirmed }) => (
+                  <StoryArcDraftDeparture dirty={!confirmed && dirty} pending={!confirmed && pending} />
+                )}
+              />
+              {created?.reader.state === 'ready' && (
+                <a
+                  href={`${created.reader.href}/story-arc${current?.work ? `?work=${encodeURIComponent(current.work.subject.id)}` : ''}`}
+                  onClick={(event) => {
+                    // Keep ordinary authored href navigation for new tabs and modified clicks.
+                    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                    event.preventDefault();
+                    choose({ id: created.id });
+                  }}
+                  className={buttonVariants({ className: callerActionClass })}
+                >
+                  {m.story_arc_continue({}, o)}
+                </a>
+              )}
+            </div>
+          )}
+        </section>
+        {privateRead?.arc && (
+          <CatalogueCurrentReading visible={editable} ready={editable} revision={selection}>
+            <div>
+              <SubjectFacts
+                key={privateRead.arc.subject.id}
+                initial={storyArcFacts(privateRead)}
+                locale={locale}
+                transport={facts(privateRead.arc.subject.id)}
+                review={(property, token) => review(privateRead.arc!.subject.id, property, token)}
+              />
+              {classification?.ok && (
+                <AuthoringDepartureBoundary>
+                  <StoryArcClassificationReview
+                    key={privateRead.arc.subject.id}
+                    read={classification}
+                    locale={locale}
+                    search={search}
+                    transport={facts(privateRead.arc.subject.id)}
+                    review={(field, token) => review(privateRead.arc!.subject.id, field, token)}
+                    {...(classificationHandoffToken ? { handoffToken: classificationHandoffToken } : {})}
+                    {...(handoffReader ? { handoffReader } : {})}
+                    {...(handoffReaderLive ? { handoffReaderLive } : {})}
+                    observe={(next) => {
+                      if (!lifetime.active() || observation.current.token !== token) return;
+                      client.setQueryData<StoryArcRead>(
+                        queryKey,
+                        applyStoryArcClassificationObservation(privateRead, next),
+                      );
+                    }}
+                  />
+                </AuthoringDepartureBoundary>
+              )}
+              {editable && (
+                <section className="space-y-4">
+                  <h2 className="text-xl font-semibold">{m.story_arc_relations({}, o)}</h2>
+                  <p className="text-sm text-muted-foreground">{m.story_arc_relations_help({}, o)}</p>
+                  <a
+                    href={`${href}/relation-edit`}
+                    className={buttonVariants({ variant: 'outline', className: callerActionClass })}
+                  >
+                    {m.relation_title({}, o)}
+                  </a>
+                </section>
+              )}
+            </div>
+          </CatalogueCurrentReading>
+        )}
+        <section
+          ref={workBoundary}
+          tabIndex={-1}
+          aria-label={m.story_arc_work({}, o)}
+          className="space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6"
+        >
+          <h2 className="text-xl font-semibold">{m.story_arc_work({}, o)}</h2>
+          <p>{m.story_arc_work_help({}, o)}</p>
+          {current?.work && (
+            <FictionalWorkReference
+              subject={current.work.subject}
+              locale={locale}
+              onChooseAnother={
+                editable
+                  ? () => {
+                      if (canEdit()) choose({ work: undefined });
+                    }
+                  : undefined
+              }
+            />
+          )}
+          {privateRead?.work && (
+            <CatalogueCurrentReading visible={editable} ready={editable} revision={selection}>
+              <RelationEditor
+                key={`work:${privateRead.work.subject.id}`}
+                id={privateRead.work.subject.id}
+                navigation={(state) => <StoryArcDraftDeparture {...state} />}
+                locale={locale}
+                search={search}
+                transport={{
+                  ...relations(privateRead.work.subject.id),
+                  read: async (...args) =>
+                    storyArcRelations(
+                      await relations(privateRead.work!.subject.id).read(...args),
+                      privateRead.release,
+                      true,
+                    ),
+                }}
+              />
+            </CatalogueCurrentReading>
+          )}
+          {!current?.work && (
+            <EntityPicker
+              label={m.story_arc_choose_work({}, o)}
+              className={callerPickerClass}
+              value={[]}
+              src={coverSrc}
+              disabled={!editable}
+              search={async (text, signal) =>
+                (await search(text, signal)).filter((entry) =>
+                  entry.types.some((type) => !!current && storyArcWork(current.release, type)),
+                )
+              }
+              onValueChange={(items) => {
+                if (canEdit() && items[0]) choose({ work: items[0].id });
+              }}
+            />
+          )}
+        </section>
+      </div>
+    </article>
+  );
+}

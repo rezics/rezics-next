@@ -1,3 +1,7 @@
+import { registerCurrentResourceRolesWork } from './current-resource-roles-work.ts';
+import { registerAccountDiscoveryWork } from './account-discovery-work.ts';
+import { registerRealmMembershipReconciliation } from './realm-membership-transition-legacy.ts';
+import { registerOrganizationCloseWork } from './organization-close-work.ts';
 import { registerOperatorFenceWork } from './operator-fence-work.ts';
 import type { MembershipWorkInput, MembershipWorkResult, MembershipWorkflowPorts } from '@rezics/auth-contract';
 import {
@@ -15,20 +19,24 @@ import {
   type RealmMembershipAuthority,
   type MembershipReservation,
 } from './membership-inverse.ts';
+import { createRealmMembershipTransitions, type RealmMembershipTransition } from './realm-membership-transition.ts';
 import { createAccess as trustedPermissionAccess } from './permission.ts';
 import { createAccess, createWorkflowApprovals } from './index.ts';
 import {
+  MEMBERSHIP_WORK_DEADLINE_MS,
   readMembershipRouteKey,
   readMembershipWorkConfig,
   type MembershipWorkConfig,
 } from './membership-work-config.ts';
 import type { Access } from '../request/access.ts';
+import { createAccountAgentEffect } from './account-agent-effect.ts';
 import {
   createLifecycleCommands,
   createLifecycleInternals,
   LIFECYCLE_ACTIONS,
   type LifecycleRequest,
 } from './lifecycle.ts';
+import { deadlineFor } from '../request/deadline.ts';
 
 export class MembershipWorkConflictError extends Error {
   readonly code = 'membership_work_conflict';
@@ -52,6 +60,8 @@ export type MembershipAuthorization = (reference: string, input: MembershipWorkI
 /** Installed by the owning Realm module. Following a Realm has no operation here. */
 export type RealmMembershipCommands = {
   authority: RealmMembershipAuthority;
+  cancel?(reservation: RealmMembershipTransition, key: string): Promise<unknown>;
+  certifyLegacy?(reservation: RealmMembershipTransition, key: string): Promise<'published' | 'cancelled'>;
   /** Enqueue check and later step resolution for a Realm principal. */
   authorize(reference: string, input: MembershipWorkInput): Promise<LifecycleRequest>;
   publish(
@@ -139,7 +149,7 @@ function membershipWorkPorts(
           ...(input.reservationId === undefined ? {} : { reservationId: input.reservationId }),
           authorization: reference,
         },
-        { pool: context.pool, deadline: Date.now() + 30_000 },
+        { pool: context.pool, deadline: deadlineFor(MEMBERSHIP_WORK_DEADLINE_MS) },
       );
     },
     actorAccountId: (request) => request.actor.accountId,
@@ -173,6 +183,31 @@ function membershipWorkPorts(
         key,
       });
     },
+    async recover(held, key) {
+      if (held.principal.kind !== 'realm' || !held.transition || !realm().authority.readTransition)
+        throw new RealmMembershipUnavailableError();
+      const transitions = createRealmMembershipTransitions({
+        pool: context.pool,
+        authority: { readTransition: realm().authority.readTransition! },
+      });
+      const proof = await transitions.proof(held as RealmMembershipTransition);
+      if (!proof) return false;
+      await transitions.consume({ ...(held as RealmMembershipTransition), key });
+      if (proof.outcome !== 'published') throw new MembershipAuthorizationUnavailableError();
+      return true;
+    },
+    async finalize(held, key) {
+      if (held.principal.kind !== 'realm' || !held.transition || !realm().authority.readTransition)
+        throw new RealmMembershipUnavailableError();
+      return createRealmMembershipTransitions({
+        pool: context.pool,
+        authority: { readTransition: realm().authority.readTransition! },
+      }).consume({ ...(held as RealmMembershipTransition), key });
+    },
+    async cancel(held, key) {
+      if (!held.transition || !realm().cancel) throw new RealmMembershipUnavailableError();
+      return realm().cancel!(held as RealmMembershipTransition, key);
+    },
     async terminalize(held, key) {
       if (held.principal.kind === 'realm') return realm().terminalize(held, key);
       return internal.terminalizeMembership({
@@ -200,8 +235,15 @@ export function createAccountsWorkModule(options: Options = {}): WorkModule {
     name: 'accounts',
     async register(context) {
       const config = options.authorize ? undefined : readMembershipWorkConfig(context.env);
+      const { registerAgentVerificationWork } = await import('./agent-verification-work.ts');
+      registerAgentVerificationWork(context);
+      registerAccountDiscoveryWork(context);
+      registerCurrentResourceRolesWork(context);
       registerAccounts(context, membershipWorkPorts(context, options, config));
+      if (options.realm && config) registerRealmMembershipReconciliation(context, options.realm, config.referenceKeys);
+      context.addEffects([createAccountAgentEffect(context.pool)]);
       if (config) registerOperatorFenceWork(context, config.referenceKeys);
+      registerOrganizationCloseWork(context);
       await writeRateExpiryWorkModule.register(context);
     },
   };

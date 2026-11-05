@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { createHash, randomBytes } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -51,7 +52,10 @@ beforeAll(async () => {
       privateKeys: [{ ...(await exportJWK(signingKey.privateKey)), kid: 'issuer', alg: 'ES256' }],
     },
     siteActions: new Map(scopes.filter((s) => s.includes(':')).map((s) => [s, { anonymous: false }])),
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount(id) {
         if (++accessReads >= accessFailureAt) throw new Error('Access unavailable: private detail');
         return accounts.get(id) ?? null;
@@ -65,7 +69,7 @@ beforeAll(async () => {
         account.authnEpoch = Math.max(account.authnEpoch, previousEpoch) + 1;
         return { accountId, minimumAuthnEpoch: account.authnEpoch, receiptId: `floor-${account.authnEpoch}` };
       },
-    },
+    }),
   };
   service = await createAuthService(options);
   await register();

@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "definitions": {
+    "source": "bundled activated release",
+    "required": [
+      "schema:Book",
+      "schema:Recipe",
+      "schema:wordCount",
+      "schema:keywords",
+      "Book library profile",
+      "Recipe library profile"
+    ],
+    "wordCountUnit": "1",
+    "choices": "Resolve state, holding and progress choices from the released profiles; never invent fallback IDs"
+  },
+  "accounts": ["alice", "bob", "newcomer", "steward", "seller", "moderator", "independent-grantor"],
+  "concepts": [
+    {
+      "key": "harem",
+      "type": "skos:Concept",
+      "label": "Harem",
+      "scheme": "fixture-tags",
+      "attribution": "Controlled fixture classification"
+    }
+  ],
+  "subjects": [
+    { "key": "B-long", "type": "schema:Book", "title": "The Lantern Archive", "wordCount": 1200001, "tags": ["harem"] },
+    { "key": "B-edge", "type": "schema:Book", "title": "The Millionth Word", "wordCount": 1000000, "tags": ["harem"] },
+    { "key": "B-short", "type": "schema:Book", "title": "A Shorter Journey", "wordCount": 999999, "tags": ["harem"] },
+    { "key": "B-unknown", "type": "schema:Book", "title": "An Uncounted Story", "tags": ["harem"] },
+    {
+      "key": "B-characters",
+      "type": "schema:Book",
+      "title": "Characters Are Not Words",
+      "characterCount": 1400000,
+      "tags": ["harem"]
+    },
+    { "key": "B-untagged", "type": "schema:Book", "title": "The Untagged Epic", "wordCount": 1500000, "tags": [] },
+    {
+      "key": "R-quick",
+      "type": "schema:Recipe",
+      "title": "Weeknight Lentils",
+      "cookTime": { "value": 25, "unit": "wd:Q7727" },
+      "ingredients": ["lentils", "water"],
+      "instructions": ["Simmer until tender"],
+      "tags": []
+    }
+  ],
+  "personal": {
+    "initial": "No personal facts for Alice, Bob or newcomer",
+    "book": "B-long",
+    "recipe": "R-quick",
+    "privateLabel": "Alice private try-next",
+    "copyNote": "Alice private paper copy",
+    "progressNote": "Alice private chapter note",
+    "progressValue": 17,
+    "bobLabel": "Bob private shelf"
+  },
+  "members": {
+    "keys": ["B-long", "B-edge", "B-short", "B-unknown", "B-characters", "B-untagged", "R-quick"],
+    "pageLimit": 2,
+    "maxPages": 16,
+    "maxPreparingPolls": 8,
+    "collection": { "title": "Alice curated reading and cooking", "initialVisibility": "private", "curator": "alice" },
+    "zone": {
+      "title": "Lantern reading room",
+      "visibility": "public",
+      "mount": "a separate public Collection with exactly the same keys"
+    }
+  },
+  "filter": { "type": "schema:Book", "wordCountGreaterThan": 1000000, "tag": "harem", "expectedKeys": ["B-long"] },
+  "media": { "private": true, "container": "protected Realm thread", "body": "Alice attached image" },
+  "ban": {
+    "realmVisibility": "protected",
+    "member": "alice",
+    "independentGrant": "read only; active before the ban; not revoked by fixture setup",
+    "reply": "This banned reply must not be stored"
+  },
+  "commerce": {
+    "seller": "seller",
+    "subject": "B-long",
+    "title": "Lantern digital edition",
+    "currency": "USD",
+    "unitAmountMinor": 499,
+    "quantity": 1,
+    "automaticSettlement": false
+  }
+}

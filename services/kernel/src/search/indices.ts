@@ -1,14 +1,27 @@
 import { readFileSync } from 'node:fs';
-import { OpenSearchError, type OpenSearch } from './opensearch.ts';
+import { isDeepStrictEqual } from 'node:util';
+import { OpenSearchError, SearchUnavailableError, type OpenSearch, type SearchRequestWork } from './opensearch.ts';
+import {
+  mixedCalendarDiscoveryIndexDefinition as nativeDiscoveryDefinition,
+  mixedDiscoveryDocumentCodec,
+  type MixedDiscoveryDocumentCodec,
+} from './discovery-documents.ts';
+import { calendarIndexDefinition, hasCalendarIndexFormat } from './release-search-calendar.ts';
+import { creditSearchIndexDefinition } from './credit-search-mapping.ts';
+import { MAX_SUBJECT_GENERATIONS } from './generation-limit.ts';
 
 const PREFIX_PATTERN = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const definitionUrl = new URL('../../db/search/indices/subjects.json', import.meta.url);
 
+export const SUBJECT_SORT_FORMAT = 1;
+export const DISCOVERY_INDEX_FORMAT = 1;
+export { MAX_SUBJECT_GENERATIONS };
+
 type SubjectIndexDefinition = Record<string, unknown>;
-type ResolveIndexResponse = {
-  indices: { name: string }[];
-  aliases: { name: string; indices: string[] }[];
-};
+
+function record(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
 
 let definition: SubjectIndexDefinition | undefined;
 
@@ -18,6 +31,34 @@ function validatePrefix(prefix: string): void {
 
 function validateGeneration(generation: number): void {
   if (!Number.isSafeInteger(generation) || generation <= 0) throw new RangeError('Invalid subject index generation');
+}
+
+/** A write is never retried: only a fresh bounded native observation can resolve its effect. */
+export async function observedWrite(
+  write: () => Promise<unknown>,
+  observe: () => Promise<boolean>,
+  message: string,
+): Promise<void> {
+  let failure: unknown;
+  try {
+    const response = await write();
+    if (
+      !record(response) ||
+      response.status !== 200 ||
+      !record(response.body) ||
+      response.body.acknowledged !== true ||
+      Object.hasOwn(response.body, 'error')
+    )
+      failure = new SearchUnavailableError(message);
+  } catch (error) {
+    failure = error;
+  }
+  try {
+    if (await observe()) return;
+  } catch (error) {
+    failure = error;
+  }
+  throw new SearchUnavailableError(message, { cause: failure });
 }
 
 export function subjectIndexName(prefix: string, generation: number): string {
@@ -38,41 +79,477 @@ export function subjectIndexDefinition(): SubjectIndexDefinition {
   return definition;
 }
 
-export async function createSubjectIndex(search: OpenSearch, prefix: string, generation: number): Promise<void> {
+export async function createSubjectIndex(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+  calendarFormat?: 1,
+): Promise<void> {
+  const calendar = calendarFormat === 1 ? calendarIndexDefinition(subjectIndexDefinition()) : subjectIndexDefinition();
+  return createIndex(search, prefix, generation, creditSearchIndexDefinition(calendar));
+}
+
+/** Successor mapping in the same physical family; legacy Subject generations keep their format. */
+export function discoveryIndexDefinition(): SubjectIndexDefinition {
+  const result = structuredClone(subjectIndexDefinition());
+  if (!record(result.mappings) || !record(result.mappings.properties) || !record(result.mappings._meta))
+    throw new TypeError('Invalid base Search index definition');
+  result.mappings._meta.discovery_format = DISCOVERY_INDEX_FORMAT;
+  Object.assign(result.mappings.properties, {
+    family: { type: 'keyword' },
+    kind: { type: 'keyword' },
+    identity: { type: 'keyword' },
+    account_revision: { type: 'keyword' },
+    active_handle: { type: 'keyword' },
+  });
+  return result;
+}
+
+/** Allocation only; source exhaustion, replay, exact-key reconciliation and custody precede activation. */
+export async function createDiscoveryIndex(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+  incarnation?: string,
+): Promise<void> {
+  const index = discoveryIndexName(prefix, generation);
+  const definition = nativeDiscoveryDefinition();
+  const response = await search.request<{ acknowledged?: boolean }>('PUT', `/${index}`, {
+    ...definition,
+    mappings: { ...definition.mappings, _meta: { ...definition.mappings._meta, incarnation } },
+    aliases: { [`${index}-write`]: { is_write_index: true } },
+  });
+  if (response.body.acknowledged !== true)
+    throw new SearchUnavailableError('Discovery allocation was not acknowledged');
+}
+
+/** Read the codec from one physical mapping; callers bind it to their persisted UUID separately. */
+export async function readDiscoveryDocumentCodec(
+  search: OpenSearch,
+  index: string,
+): Promise<MixedDiscoveryDocumentCodec> {
+  const response = await search.request('GET', `/${index}/_mapping`);
+  const body = response.body;
+  const entry = record(body) ? body[index] : undefined;
+  const mappings = record(entry) ? entry.mappings : undefined;
+  const codec = mixedDiscoveryDocumentCodec(mappings);
+  if (response.status !== 200 || !record(body) || Object.keys(body).length !== 1 || codec === undefined)
+    throw new SearchUnavailableError('Discovery physical mapping has no supported projection codec');
+  return codec;
+}
+
+export function discoveryIndexName(prefix: string, generation: number): string {
+  validatePrefix(prefix);
+  validateGeneration(generation);
+  return `${prefix}discovery-g${generation}`;
+}
+
+export function discoveryAlias(prefix: string): string {
+  validatePrefix(prefix);
+  return `${prefix}discovery`;
+}
+
+export async function discoveryIndexUuid(search: OpenSearch, index: string, work?: SearchRequestWork): Promise<string> {
+  const response = await search.request<unknown>('GET', `/${index}/_settings`, undefined, work ? { work } : undefined);
+  const entry = record(response.body) ? response.body[index] : undefined;
+  const settings = record(entry) ? entry.settings : undefined;
+  const native = record(settings) ? settings.index : undefined;
+  if (response.status !== 200 || !record(native) || typeof native.uuid !== 'string' || !native.uuid)
+    throw new SearchUnavailableError('Discovery physical incarnation is missing');
+  return native.uuid;
+}
+
+async function createIndex(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+  body: SubjectIndexDefinition,
+): Promise<void> {
   const index = subjectIndexName(prefix, generation);
+  const before = await readSubjectGenerationInventory(search, prefix);
+  if (before.generations.includes(generation)) return;
+
+  // Allocated atomically with the physical index; never recreate this alias on another incarnation.
+  const writeAlias = `${index}-writer-${crypto.randomUUID().replaceAll('-', '')}`;
+  let alreadyAllocated = false;
+  await observedWrite(
+    async () => {
+      try {
+        return await search.request('PUT', `/${index}`, {
+          ...body,
+          aliases: { [writeAlias]: { is_write_index: true } },
+        });
+      } catch (error) {
+        if (error instanceof OpenSearchError && error.type === 'resource_already_exists_exception') {
+          alreadyAllocated = true;
+          return { status: 200, body: { acknowledged: true } };
+        }
+        throw error;
+      }
+    },
+    async () => {
+      const observed = await readSubjectGenerationInventory(search, prefix);
+      return (
+        observed.generations.includes(generation) &&
+        (alreadyAllocated || observed.writerAliases.get(generation) === writeAlias)
+      );
+    },
+    'Subject generation allocation could not be established',
+  );
+}
+
+/** Read the bounded name-sort writer format from one physical generation's native mapping metadata. */
+export async function readSubjectSortFormat(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<number | null> {
+  return (await readSubjectMapping(search, prefix, generation)).sortFormat;
+}
+
+type SubjectMappingObservation = {
+  metadata: Record<string, unknown>;
+  sortFormat: number | null;
+  calendarFormat: 1 | null;
+  activatedAt: string | null;
+  ratingCompatible: boolean;
+};
+
+async function readSubjectMapping(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<SubjectMappingObservation> {
+  const index = subjectIndexName(prefix, generation);
+  let response: { status: number; body: unknown };
   try {
-    await search.request('PUT', `/${index}`, subjectIndexDefinition());
+    response = await search.request('GET', `/${index}/_mapping`);
   } catch (error) {
-    if (error instanceof OpenSearchError && error.type === 'resource_already_exists_exception') return;
+    if (error instanceof OpenSearchError)
+      throw new SearchUnavailableError('Subject generation mapping is unavailable', { cause: error });
     throw error;
   }
+
+  const unavailable = () => new SearchUnavailableError('Subject generation mapping is missing or malformed');
+  if (!record(response) || response.status !== 200 || !record(response.body)) throw unavailable();
+  const names = Object.keys(response.body);
+  if (names.length !== 1 || names[0] !== index) throw unavailable();
+  const indexMapping = response.body[index];
+  if (!record(indexMapping) || !record(indexMapping.mappings) || !record(indexMapping.mappings.properties))
+    throw unavailable();
+  const mappings = indexMapping.mappings;
+  let metadata: Record<string, unknown> = {};
+  if (Object.hasOwn(mappings, '_meta')) {
+    if (!record(mappings._meta)) throw unavailable();
+    metadata = mappings._meta;
+  }
+
+  const calendarFormat = hasCalendarIndexFormat(mappings) ? 1 : null;
+
+  let sortFormat: number | null = null;
+  if (Object.hasOwn(metadata, 'name_sort_format')) {
+    const format = metadata.name_sort_format;
+    if (typeof format !== 'number' || !Number.isSafeInteger(format) || format < 0) throw unavailable();
+    if (format === SUBJECT_SORT_FORMAT) sortFormat = SUBJECT_SORT_FORMAT;
+  }
+
+  let activatedAt: string | null = null;
+  if (Object.hasOwn(metadata, 'activated_at')) {
+    const value = metadata.activated_at;
+    if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) throw unavailable();
+    activatedAt = value;
+  }
+
+  const properties = mappings.properties as Record<string, unknown>;
+  const compatible = (value: unknown, type: string) =>
+    record(value) && value.type === type && value.coerce === false && value.doc_values !== false;
+  return {
+    metadata,
+    sortFormat,
+    calendarFormat,
+    activatedAt,
+    ratingCompatible:
+      compatible(properties.rating_score, 'double') && compatible(properties.rating_prior_epoch, 'long'),
+  };
+}
+
+/** Calendar writes follow the actual target mapping, including while it is still being populated. */
+export async function readSubjectCalendarMappingFormat(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<1 | null> {
+  return (await readSubjectMapping(search, prefix, generation)).calendarFormat;
+}
+
+export async function readSubjectCalendarMappingFormatForIndex(search: OpenSearch, index: string): Promise<1 | null> {
+  const match = /^([a-z0-9][a-z0-9-]{0,47})subjects-g([1-9][0-9]*)$/.exec(index);
+  const generation = Number(match?.[2]);
+  if (!match || !Number.isSafeInteger(generation))
+    throw new SearchUnavailableError('Subject generation name is invalid');
+  return readSubjectCalendarMappingFormat(search, match[1]!, generation);
+}
+
+/** A calendar projection is searchable only after full population marked the exact physical UUID ready. */
+export async function readSubjectCalendarFormat(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<1 | null> {
+  const observed = await readSubjectMapping(search, prefix, generation);
+  if (
+    observed.calendarFormat !== 1 ||
+    observed.metadata.calendar_range_ready !== 1 ||
+    typeof observed.metadata.calendar_range_incarnation !== 'string'
+  )
+    return null;
+  const incarnation = await readSubjectIndexUuid(search, prefix, generation);
+  return incarnation === observed.metadata.calendar_range_incarnation ? 1 : null;
+}
+
+/** Called only after the generation owner has proved complete population and reconciliation. */
+export async function markSubjectCalendarReady(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<string> {
+  const index = subjectIndexName(prefix, generation);
+  const before = await readSubjectMapping(search, prefix, generation);
+  if (before.calendarFormat !== 1)
+    throw new SearchUnavailableError('Subject generation does not have the calendar projection');
+  const incarnation = await readSubjectIndexUuid(search, prefix, generation);
+  const metadata = {
+    ...before.metadata,
+    calendar_range_format: 1,
+    calendar_range_ready: 1,
+    calendar_range_incarnation: incarnation,
+  };
+  await observedWrite(
+    () => search.request('PUT', `/${index}/_mapping`, { _meta: metadata }),
+    async () => {
+      const observed = await readSubjectMapping(search, prefix, generation);
+      return (
+        observed.calendarFormat === 1 &&
+        observed.metadata.calendar_range_ready === 1 &&
+        observed.metadata.calendar_range_incarnation === incarnation &&
+        (await readSubjectIndexUuid(search, prefix, generation)) === incarnation
+      );
+    },
+    'Subject calendar readiness could not be established',
+  );
+  return incarnation;
+}
+
+/** Read the UUID of one immutable physical generation, never through its mutable alias. */
+export async function readSubjectIndexUuid(search: OpenSearch, prefix: string, generation: number): Promise<string> {
+  const index = subjectIndexName(prefix, generation);
+  let response: { status: number; body: unknown };
+  try {
+    response = await search.request('GET', `/${index}/_settings`);
+  } catch (error) {
+    if (error instanceof OpenSearchError)
+      throw new SearchUnavailableError('Subject generation incarnation is unavailable', { cause: error });
+    throw error;
+  }
+  const entry = record(response.body) ? response.body[index] : undefined;
+  const settings = record(entry) ? entry.settings : undefined;
+  const native = record(settings) ? settings.index : undefined;
+  if (response.status !== 200 || !record(native) || typeof native.uuid !== 'string' || !native.uuid)
+    throw new SearchUnavailableError('Subject generation incarnation is missing or malformed');
+  return native.uuid;
+}
+
+export async function readSubjectActivationTime(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<number | null> {
+  const activatedAt = (await readSubjectMapping(search, prefix, generation)).activatedAt;
+  return activatedAt === null ? null : Date.parse(activatedAt);
+}
+
+/** Set activation metadata once and admit it only after the exact complete mapping is observed. */
+export async function ensureSubjectActivationMetadata(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<number> {
+  const before = await readSubjectMapping(search, prefix, generation);
+  if (before.activatedAt !== null) return Date.parse(before.activatedAt);
+
+  const activatedAt = new Date().toISOString();
+  const metadata = { ...before.metadata, activated_at: activatedAt };
+  await observedWrite(
+    () => search.request('PUT', `/${subjectIndexName(prefix, generation)}/_mapping`, { _meta: metadata }),
+    async () => {
+      const observed = await readSubjectMapping(search, prefix, generation);
+      return observed.ratingCompatible && isDeepStrictEqual(observed.metadata, metadata);
+    },
+    'Subject generation activation mapping could not be established',
+  );
+  return Date.parse(activatedAt);
+}
+
+/** Add rating sort fields to an existing generation without changing its analyzers or sort-key bounds. */
+export async function ensureSubjectRatingMapping(
+  search: OpenSearch,
+  prefix: string,
+  generation: number,
+): Promise<void> {
+  const index = subjectIndexName(prefix, generation);
+  await observedWrite(
+    () =>
+      search.request('PUT', `/${index}/_mapping`, {
+        properties: {
+          rating_score: { type: 'double', doc_values: true, coerce: false },
+          rating_prior_epoch: { type: 'long', doc_values: true, coerce: false },
+        },
+      }),
+    async () => (await readSubjectMapping(search, prefix, generation)).ratingCompatible,
+    'Subject rating mapping could not be established',
+  );
+}
+
+type SubjectGenerationInventory = { generations: number[]; active: number | null; writerAliases: Map<number, string> };
+
+async function readSubjectGenerationInventory(
+  search: OpenSearch,
+  prefix: string,
+  work?: SearchRequestWork,
+): Promise<SubjectGenerationInventory> {
+  validatePrefix(prefix);
+  const alias = subjectAlias(prefix);
+  const unavailable = () => new SearchUnavailableError('Subject generation metadata is missing or malformed');
+  let response: { status: number; body: unknown };
+  try {
+    response = await search.request('GET', `/_resolve/index/${prefix}subjects*`, undefined, {
+      query: { expand_wildcards: 'all' },
+      ...(work ? { work } : {}),
+    });
+  } catch (error) {
+    if (error instanceof OpenSearchError)
+      throw new SearchUnavailableError('Subject generation metadata is unavailable', { cause: error });
+    throw error;
+  }
+  if (!record(response) || response.status !== 200 || !record(response.body)) throw unavailable();
+  if (Object.hasOwn(response.body, 'error')) throw unavailable();
+  const { indices, aliases, data_streams: streams } = response.body;
+  // Check cardinality before visiting records. The generation limit also bounds
+  // duplicate/foreign receipts; deduplication must never hide an oversized set.
+  // One public alias plus one allocator writer alias per observed generation.
+  if (
+    !Array.isArray(indices) ||
+    indices.length > MAX_SUBJECT_GENERATIONS ||
+    !Array.isArray(aliases) ||
+    aliases.length > MAX_SUBJECT_GENERATIONS + 1 ||
+    !Array.isArray(streams) ||
+    streams.length !== 0
+  )
+    throw unavailable();
+  const generationPattern = new RegExp(`^${prefix}subjects-g([1-9][0-9]*)$`);
+  const writerPattern = new RegExp(`^${prefix}subjects-g([1-9][0-9]*)-writer-([a-f0-9]{32})$`);
+  function generationOf(name: unknown): number {
+    if (typeof name !== 'string' || name.length > alias.length + 2 + 16) throw unavailable();
+    const match = generationPattern.exec(name);
+    // `$` can match before a final line terminator; identity requires the whole name.
+    if (!match?.[1] || match[0] !== name) throw unavailable();
+    const generation = Number(match[1]);
+    if (!Number.isSafeInteger(generation) || generation <= 0) throw unavailable();
+    return generation;
+  }
+  function writerIndex(name: unknown): string | null {
+    if (typeof name !== 'string' || name.length > alias.length + 2 + 16 + 8 + 32) return null;
+    const match = writerPattern.exec(name);
+    if (!match?.[1] || match[0] !== name) return null;
+    const generation = Number(match[1]);
+    if (!Number.isSafeInteger(generation) || generation <= 0) return null;
+    return `${alias}-g${generation}`;
+  }
+  const generations = new Map<string, number>();
+  const publicMembers = new Set<string>();
+  const writerMembers = new Map<string, string>();
+  for (const index of indices) {
+    if (!record(index)) throw unavailable();
+    const generation = generationOf(index.name);
+    const name = index.name as string;
+    if (generations.has(name)) throw unavailable();
+    generations.set(name, generation);
+    // OpenSearch emits attributes even when it omits an empty aliases field.
+    // Hidden open indices remain readable; closed/frozen/data-stream indices
+    // are not subject generations supported by this writer/query lifecycle.
+    const attributes = index.attributes;
+    if (
+      !Array.isArray(attributes) ||
+      attributes.length < 1 ||
+      attributes.length > 2 ||
+      !attributes.includes('open') ||
+      (attributes.length === 2 && !attributes.includes('hidden')) ||
+      Object.hasOwn(index, 'data_stream')
+    )
+      throw unavailable();
+    if (Object.hasOwn(index, 'aliases')) {
+      if (!Array.isArray(index.aliases) || index.aliases.length > 2) throw unavailable();
+      const seen = new Set<string>();
+      for (const entry of index.aliases) {
+        if (typeof entry !== 'string' || seen.has(entry)) throw unavailable();
+        seen.add(entry);
+        if (entry === alias) {
+          publicMembers.add(name);
+          continue;
+        }
+        if (writerIndex(entry) === name && !writerMembers.has(name)) {
+          writerMembers.set(name, entry);
+          continue;
+        }
+        throw unavailable();
+      }
+    }
+  }
+
+  let active: number | null = null;
+  const publicReceipts = new Set<string>();
+  const writerReceipts = new Map<string, string>();
+  const seenAliasNames = new Set<string>();
+  for (const entry of aliases) {
+    if (!record(entry) || typeof entry.name !== 'string' || seenAliasNames.has(entry.name)) throw unavailable();
+    if (!Array.isArray(entry.indices) || entry.indices.length !== 1) throw unavailable();
+    seenAliasNames.add(entry.name);
+    const target: unknown = entry.indices[0];
+    if (typeof target !== 'string' || !generations.has(target)) throw unavailable();
+    if (entry.name === alias) {
+      publicReceipts.add(target);
+      continue;
+    }
+    if (writerIndex(entry.name) === target && writerMembers.get(target) === entry.name && !writerReceipts.has(target)) {
+      writerReceipts.set(target, entry.name);
+      continue;
+    }
+    throw unavailable();
+  }
+  if (publicReceipts.size !== publicMembers.size) throw unavailable();
+  if (publicReceipts.size === 1) {
+    const [target] = publicReceipts;
+    if (!target || !publicMembers.has(target)) throw unavailable();
+    active = generations.get(target)!;
+  }
+  if (writerReceipts.size !== writerMembers.size) throw unavailable();
+  for (const [name, writer] of writerMembers) {
+    if (writerReceipts.get(name) !== writer) throw unavailable();
+  }
+
+  const writerAliases = new Map<number, string>();
+  for (const [name, writer] of writerMembers) {
+    const generation = generations.get(name);
+    if (generation !== undefined) writerAliases.set(generation, writer);
+  }
+  return { generations: [...generations.values()].sort((a, b) => a - b), active, writerAliases };
 }
 
 export async function subjectGenerations(
   search: OpenSearch,
   prefix: string,
+  work?: SearchRequestWork,
 ): Promise<{ generations: number[]; active: number | null }> {
-  validatePrefix(prefix);
-  const alias = subjectAlias(prefix);
-  const response = await search.request<ResolveIndexResponse>('GET', `/_resolve/index/${prefix}subjects*`, undefined, {
-    query: { expand_wildcards: 'all' },
-  });
-  const generationPattern = new RegExp(`^${prefix}subjects-g([1-9][0-9]*)$`);
-  const generations = new Set<number>();
-  for (const index of response.body.indices) {
-    const match = generationPattern.exec(index.name);
-    if (!match?.[1]) continue;
-    const generation = Number(match[1]);
-    if (Number.isSafeInteger(generation)) generations.add(generation);
-  }
-
-  const activeAlias = response.body.aliases.find((item) => item.name === alias);
-  let active: number | null = null;
-  if (activeAlias?.indices.length === 1) {
-    const match = generationPattern.exec(activeAlias.indices[0] ?? '');
-    const generation = match?.[1] ? Number(match[1]) : NaN;
-    if (Number.isSafeInteger(generation)) active = generation;
-  }
-
-  return { generations: [...generations].sort((a, b) => a - b), active };
+  const { generations, active } = await readSubjectGenerationInventory(search, prefix, work);
+  return { generations, active };
 }

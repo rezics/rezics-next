@@ -13,6 +13,7 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const issuer = 'https://space-address.auth.test';
@@ -133,7 +134,7 @@ beforeAll(async () => {
     audience,
     secret: 'space-address-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(admin, routeOf(id)!, id);
         return (
@@ -150,7 +151,7 @@ beforeAll(async () => {
         if (!approved.delete(reference)) throw new Error('Unknown fixture provisioning reference');
         return { accountId: reference };
       },
-    },
+    }),
   });
   const writeRate = createWriteRateLimiter({
     secret: 'space-address-private-write-rate-secret-32bytes',
@@ -247,6 +248,7 @@ test.serial('a Space owner claims, resolves and changes an address while the old
   const initial = await claim(String(first.space.spaceId), first.etag, creator, address);
   expect(initial.response.status).toBe(200);
   expect((initial.value.space as Record<string, unknown>).address).toBe(address);
+  expect((initial.value.space as Record<string, unknown>).realmId).toBeNull();
 
   const resolved = await call('GET', `/v1/spaceAddresses/${address}`);
   expect(resolved.response.status).toBe(200);

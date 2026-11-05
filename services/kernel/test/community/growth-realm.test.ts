@@ -11,6 +11,7 @@ import { readAccount } from '../../src/access/account-data.ts';
 import { type AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const routeKey = new Uint8Array(32).fill(37);
@@ -54,7 +55,7 @@ async function fixture(pool: Pool, admin: Pool) {
     audience: 'https://community.api.test',
     secret: 'community-test-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(admin, routeOf(id)!, id);
         return (
@@ -71,7 +72,7 @@ async function fixture(pool: Pool, admin: Pool) {
         if (!approvals.delete(reference)) throw new Error('Unknown fixture provisioning reference');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'community-test', firstParty: true, scopes: actions });
   const access = createAccess({
@@ -138,7 +139,9 @@ let db: GrowthDatabase;
 let f: Awaited<ReturnType<typeof fixture>>;
 let space: typeof import('../../src/community/space.ts');
 let realm: typeof import('../../src/community/realm.ts');
-const scales: [number, number, number] = [256, 2048, 16384];
+const scales: [number, number, number] = [256, 1024, 4096];
+// Keep 2,048 seeded rows per relation at the smallest growth scale.
+const populationMultiplier = 8;
 const bounds = { rows: 'constant', blocks: 'logarithmic', statements: 'constant' } as const;
 beforeAll(async () => {
   db = await openGrowthDatabase();
@@ -156,7 +159,7 @@ afterAll(async () => {
 const deps = () => ({ pool: db.pool, access: f.access, routeKey });
 
 for (const operation of ['create', 'read', 'public-read', 'update'] as const)
-  test(`Realm ${operation} stays bounded at 256, 2048 and 16384 Realms and revisions`, async () => {
+  test(`Realm ${operation} stays bounded across growth scales ${scales.join(', ')}`, async () => {
     await db.admin.query(
       'TRUNCATE community.realm, community.realm_revision, community.space, community.space_revision, access.resource_initialization, access.resource_role_grant, core.receipt, core.outbox, editorial.write_basis CASCADE',
     );
@@ -314,7 +317,10 @@ for (const operation of ['create', 'read', 'public-read', 'update'] as const)
       bounds,
       async grow(_, scale, previous) {
         // Other identities grow; the probe is never replaced or lengthened by seeding.
-        await seed({ pool: db.pool, admin: db.admin }, population, { from: previous, to: scale });
+        await seed({ pool: db.pool, admin: db.admin }, population, {
+          from: previous * populationMultiplier,
+          to: scale * populationMultiplier,
+        });
         if (operation === 'create') {
           slots.length = 0;
           for (let i = 0; i < 6; i++) {

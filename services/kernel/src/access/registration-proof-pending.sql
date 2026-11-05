@@ -6,7 +6,7 @@ WHERE route = :route AND account_id = :account_id
   AND minimum_authn_epoch = 1
   AND handle = :handle AND registration_id = :reservation_id
   AND registration_expires_at = :expires_at::timestamptz
-  AND registration_expires_at > statement_timestamp()
+  AND registration_expires_at > :at::timestamptz
   AND transaction_id = :transaction_id
   AND operator_account_id IS NOT DISTINCT FROM NULLIF(:operator_id::text, '')::uuid
   AND operator_reservation_id IS NOT DISTINCT FROM NULLIF(:operator_reservation_id::text, '')::uuid

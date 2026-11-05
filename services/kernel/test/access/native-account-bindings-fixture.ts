@@ -1,17 +1,40 @@
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
 import {
   createAuthHost,
   createBarrierProofVerifier,
   createProvisioningEvidenceVerifier,
   createNativeWorkflowProofPorts,
   type AuthService,
+  type AccountOperationAccess,
 } from '@rezics/auth';
 import { exportJWK, generateKeyPair, type JWK } from 'jose';
-import { Pool } from 'pg';
-import { testDatabase } from '../../../auth/scripts/database.ts';
-import { createAccess } from '../../src/access/index.ts';
+import { Client, Pool } from 'pg';
+import { createAuthDatabase } from '../support/auth-database.ts';
+import { createAccess, INTERNAL_ACTIONS } from '../../src/access/index.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
+import { createAccountManagementReadAccess } from '../../src/access/management-source.ts';
 import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
 import { LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
+import { admitGroup, PlatformClosedError } from '../../src/access/gates/admission.ts';
+
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `native_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
 
 export const issuer = 'https://ordinary.auth.test';
 export const password = 'ordinary native registration password';
@@ -23,6 +46,16 @@ export const scopes = [
   'account:manage',
   'access:grant',
 ];
+
+export function actionDeclarations(actions: readonly string[]) {
+  return new Map(
+    actions.map(
+      (action) =>
+        [action, INTERNAL_ACTIONS.get(action) ?? LIFECYCLE_ACTIONS.get(action) ?? { anonymous: false }] as const,
+    ),
+  );
+}
+
 export const cookies = (response: Response) =>
   new Headers({
     cookie: response.headers
@@ -35,12 +68,13 @@ export async function nativeFixture(
   pool: Pool,
   openAuthPool?: () => Pool,
   existing?: {
-    database: ReturnType<typeof testDatabase>;
+    database: { url: string; container?: string; close(): void | Promise<void> };
     privateKey: JWK & { kid: string };
     actions?: ReadonlyMap<string, { anonymous: boolean }>;
   },
 ) {
-  const database = existing?.database ?? testDatabase();
+  configureTestReceiptKeys(pool);
+  const database = existing?.database ?? (await cloneAuthDatabase());
   const pair = existing ? undefined : await generateKeyPair('ES256', { extractable: true });
   const privateKey = existing?.privateKey ?? { ...(await exportJWK(pair!.privateKey)), kid: 'ordinary-native' };
   let service: AuthService;
@@ -50,7 +84,8 @@ export async function nativeFixture(
   let authPool: Pool;
   const actions = new Map([
     ...LIFECYCLE_ACTIONS,
-    ...scopes.map((scope) => [scope, { anonymous: false }] as const),
+    ...INTERNAL_ACTIONS,
+    ...actionDeclarations(scopes),
     ...(existing?.actions ?? []),
   ]);
   const access = createAccess({
@@ -95,6 +130,43 @@ export async function nativeFixture(
       signing: { activeKid: privateKey.kid, privateKeys: [privateKey] },
       trustedAccess: bindings.trustedAccess,
       access: bindings.workflowPorts,
+      accountOperations: (() => {
+        const workflowApprovals = createWorkflowApprovals({
+          pool,
+          access,
+          actions,
+          referenceKeys,
+          creationBinding: (input: { registrationId: string; operationKey: string }) => proofs.creationBinding(input),
+        });
+        const context = () => ({ pool, deadline: Date.now() + 10000 });
+        const ports: AccountOperationAccess = {
+          context,
+          readOperatorTransferState: createAccountManagementReadAccess({ pool, access }).readOperatorTransferState,
+          approve: (token, input, ctx) => workflowApprovals.approve(token, input as never, ctx as never),
+          resolveForCaller: (token, reference, operation, ctx) =>
+            workflowApprovals.resolveForCaller(token, reference, operation as never, ctx as never),
+          async admitGroup(token, group, ctx) {
+            const bounded = ctx as ReturnType<typeof context>;
+            const actor = await access.authenticate(token, bounded);
+            try {
+              await admitGroup({
+                pool,
+                access: () => access,
+                actor,
+                group,
+                clientAction: 'organization:create',
+                deadline: bounded.deadline,
+                clock: () => new Date(),
+              });
+              return true;
+            } catch (error) {
+              if (error instanceof PlatformClosedError) return false;
+              throw error;
+            }
+          },
+        };
+        return ports;
+      })(),
       stagingKey: new Uint8Array(32).fill(93),
       maintenanceSchedule: '0 0 1 1 *',
       executorId: 'ordinary-native-executor',
@@ -158,7 +230,7 @@ export async function nativeFixture(
       try {
         await host.stop();
       } finally {
-        database.close();
+        await database.close();
       }
     },
     async person(key: string) {

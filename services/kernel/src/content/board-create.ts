@@ -7,6 +7,7 @@ import { accessCommandAttempt } from '../access/command-admission.ts';
 import { deadlineClient, within } from '../access/authenticate.ts';
 import { deriveAccess } from '../access/derived-access.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { requireAccessDeadline } from '../access/unavailable.ts';
 import { permissionEvidenceDeadline } from '../access/permission.ts';
 import {
   authoritativeTimeValue,
@@ -17,30 +18,39 @@ import {
 } from '../command/command.ts';
 import type { Access, Actor, Resource } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
+import { globalContextAnchor } from '../semantic/context.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
-import { readSubject } from '../semantic/subject.ts';
-import type { Item } from '../semantic/item.ts';
-import type { RealmParticipationCheck } from '../community/participation.ts';
+import { readItemTypes } from '../semantic/subject.ts';
+import { withReadTransaction } from '../semantic/read.ts';
+import { readItemIdentityVersion } from '../semantic/item-identity.ts';
+import { SubjectRedirectError } from '../semantic/merges.ts';
+import { readConceptSchemeReference } from '../semantic/concept-scheme-reference.ts';
+import { realmGovernanceAuthorization } from '../community/realm-continuity.ts';
+import { realmReadEligibility } from '../community/realm.ts';
+import { mediaParentSnapshot } from './media-parent.ts';
+import { realmParticipationAnchor, type RealmParticipationCheck } from '../community/participation.ts';
 import readBoardScheme from '../community/board-scheme-read.sql';
 import insertBoard from './board-create.sql';
 import readBoard from './board-created.sql';
-import { prepareRealmParticipation, realmParticipationMatches, type RealmParticipationProof } from './media-parent.ts';
+import { realmParticipationMatches, type RealmParticipationProof } from './media-parent.ts';
 
 export type BoardCreationDependencies = Readonly<{
   pool: Pool;
   access: Access;
+  routeKey?: Uint8Array;
   realmParticipation?: RealmParticipationCheck;
   clock?: () => Date;
 }>;
 
 export type BoardCreationContext = Readonly<{ idempotencyKey: string; deadline: number }>;
 export type BoardCreationInput = Readonly<{
-  realmId: string;
+  realmId: string | null;
   conceptId: string;
   title: string;
   visibility: 'published' | 'protected' | 'draft';
+  purpose?: 'discussion' | 'reviews';
 }>;
-export type BoardCreationValue = Readonly<{ boardId: string; realmId: string; conceptId: string }>;
+export type BoardCreationValue = Readonly<{ boardId: string; realmId: string | null; conceptId: string }>;
 
 export class BoardCreationInputError extends Error {
   constructor() {
@@ -62,13 +72,7 @@ function postgresCode(error: unknown): string | undefined {
     : undefined;
 }
 
-function belongsToScheme(subject: Item, schemeId: string): boolean {
-  return (subject.statements['skos:inScheme'] ?? []).some(
-    (statement) => statement.value.type === 'value' && statement.value.content === schemeId,
-  );
-}
-
-/** Creates one concept board in its Realm partition and initializes its grants
+/** Creates a board in its Realm partition, or its concept partition for Global, and initializes its grants
  * in the same command transaction. Semantic supplies the readable Concept. */
 export async function createBoard(
   dependencies: BoardCreationDependencies,
@@ -82,56 +86,149 @@ export async function createBoard(
     input.title.trim().length === 0 ||
     [...input.title].length > 1024 ||
     input.title.includes('\0') ||
-    !['published', 'protected', 'draft'].includes(input.visibility)
+    !['published', 'protected', 'draft'].includes(input.visibility) ||
+    (input.purpose !== undefined && input.purpose !== 'discussion' && input.purpose !== 'reviews') ||
+    (input.realmId === null && input.visibility === 'draft')
   )
     throw new BoardCreationInputError();
 
-  const realmRoute = routeOf(input.realmId);
   const conceptRoute = routeOf(input.conceptId);
-  if (realmRoute === null || conceptRoute === null) throw new BoardCreationInputError();
+  const boardRoute = input.realmId === null ? conceptRoute : routeOf(input.realmId);
+  if (boardRoute === null || conceptRoute === null) throw new BoardCreationInputError();
+  const parentResource: Resource =
+    input.realmId === null ? globalContextAnchor.resource : { route: boardRoute, id: input.realmId };
 
   const body = {
     realmId: input.realmId,
     conceptId: input.conceptId,
     title: input.title,
     visibility: input.visibility,
+    purpose: input.purpose ?? 'discussion',
   };
-  const resource: Resource = { route: realmRoute, id: newId(realmRoute) };
+  const resource: Resource = { route: boardRoute, id: newId(boardRoute) };
   const conceptResource: Resource = {
     route: conceptRoute,
     id: input.conceptId,
     eligibility: subjectReadEligibility({ route: conceptRoute, id: input.conceptId }),
   };
-  const concepts = new WeakMap<AuthoritativeTime, { subject: Item; deadline: number }>();
+  const concepts = new WeakMap<
+    AuthoritativeTime,
+    {
+      deadline: number;
+      schemeId?: string;
+      realmHead?: string;
+      realmEvidence?: unknown;
+      participationEvidence?: unknown;
+    }
+  >();
+  const realmResource: Resource = { ...parentResource, eligibility: realmReadEligibility(parentResource) };
+  const participationResource = realmParticipationAnchor(parentResource).resource;
   const access = deriveAccess(dependencies.access, {
     async prepare(principal, action, target, preparation) {
       const attempt = accessCommandAttempt(preparation);
-      if (!attempt || action !== 'board:create' || target.id !== input.realmId || target.route !== realmRoute)
+      if (
+        !attempt ||
+        action !== 'board:create' ||
+        target.id !== parentResource.id ||
+        target.route !== parentResource.route
+      )
         throw new GrantDeniedError();
 
       const primary = await dependencies.access.prepare?.(principal, action, target, preparation);
       const evidence = await dependencies.access.prepare?.(principal, 'subject:read', conceptResource, preparation);
-      const deadline = Math.min(
+      let deadline = Math.min(
         preparation.deadline,
         permissionEvidenceDeadline(primary) ?? -Infinity,
         permissionEvidenceDeadline(evidence) ?? -Infinity,
       );
       if (Date.now() >= deadline) throw new GrantDeniedError();
 
-      const result = await within(deadline, () =>
-        readSubject(dependencies.pool, input.conceptId, (client) =>
-          dependencies.access.authorize(
-            deadlineClient(client, deadline),
-            principal,
-            'subject:read',
-            conceptResource,
-            evidence,
-            attempt.time,
-          ),
-        ),
+      if (input.realmId === null) {
+        // Global has no scheme: only the Concept's current type and read authority
+        // are needed, independently of the subject page's link projections.
+        const valid = await within(deadline, () =>
+          withReadTransaction(dependencies.pool, async (client) => {
+            const bounded = deadlineClient(client, deadline);
+            const types = await readItemTypes(bounded, [input.conceptId]);
+            if (
+              types.get(input.conceptId) !== 'skos:Concept' ||
+              !(await dependencies.access.authorize(
+                bounded,
+                principal,
+                'subject:read',
+                conceptResource,
+                evidence,
+                attempt.time,
+              ))
+            )
+              return false;
+            const identity = await readItemIdentityVersion(bounded, input.conceptId);
+            if (identity?.redirect) throw new SubjectRedirectError(input.conceptId, identity.redirect);
+            return identity !== null;
+          }),
+        );
+        if (!valid || Date.now() >= deadline) throw new GrantDeniedError();
+        concepts.set(attempt.time, { deadline });
+        return primary;
+      }
+
+      const participationEvidence = await dependencies.access.prepare?.(
+        principal,
+        'realm:participate',
+        participationResource,
+        preparation,
       );
-      if (result?.subject.type !== 'skos:Concept' || Date.now() >= deadline) throw new GrantDeniedError();
-      concepts.set(attempt.time, { subject: result.subject, deadline });
+      deadline = Math.min(deadline, permissionEvidenceDeadline(participationEvidence) ?? -Infinity);
+      const realmEvidence = await dependencies.access.prepare?.(principal, 'realm:read', realmResource, preparation);
+      deadline = Math.min(deadline, permissionEvidenceDeadline(realmEvidence) ?? -Infinity);
+      if (Date.now() >= deadline) throw new GrantDeniedError();
+      const realm = await mediaParentSnapshot(dependencies.pool, boardRoute, deadline, async (client) => {
+        const row = await readBoardScheme.run(client, {
+          route: boardRoute,
+          id: input.realmId!,
+          at: authoritativeTimeValue(attempt.time),
+        });
+        if (
+          !row?.board_scheme_id ||
+          !(await dependencies.access.authorize(
+            client,
+            principal,
+            'realm:read',
+            realmResource,
+            realmEvidence,
+            attempt.time,
+          ))
+        )
+          throw new GrantDeniedError();
+        return row;
+      });
+      const scheme: Resource = {
+        route: routeOf(realm.board_scheme_id!)!,
+        id: realm.board_scheme_id!,
+        eligibility: subjectReadEligibility({ route: routeOf(realm.board_scheme_id!)!, id: realm.board_scheme_id! }),
+      };
+      const schemeEvidence = await dependencies.access.prepare?.(principal, 'subject:read', scheme, preparation);
+      deadline = Math.min(deadline, permissionEvidenceDeadline(schemeEvidence) ?? -Infinity);
+      if (
+        Date.now() >= deadline ||
+        !(await readConceptSchemeReference(dependencies.pool, {
+          access: dependencies.access,
+          actor: principal,
+          routeKey: dependencies.routeKey,
+          nativeT: attempt.time,
+          deadline,
+          concept: { resource: conceptResource, evidence },
+          scheme: { resource: scheme, evidence: schemeEvidence },
+        }))
+      )
+        throw new GrantDeniedError();
+      concepts.set(attempt.time, {
+        deadline,
+        schemeId: realm.board_scheme_id!,
+        realmHead: realm.head_revision_id,
+        realmEvidence,
+        participationEvidence,
+      });
       return primary;
     },
   });
@@ -145,18 +242,43 @@ export async function createBoard(
     actor,
     action: 'board:create',
     parent: {
-      resource: { route: realmRoute, id: input.realmId },
+      resource: parentResource,
       async validate(client, time) {
-        if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), input.realmId))
+        if (
+          input.realmId !== null &&
+          dependencies.realmParticipation &&
+          !realmParticipationMatches(participation.get(time), input.realmId)
+        )
           throw new GrantDeniedError();
         const concept = concepts.get(time);
-        if (!concept || Date.now() >= concept.deadline || concept.subject.type !== 'skos:Concept') return false;
+        if (!concept || Date.now() >= concept.deadline) return false;
+        if (input.realmId === null) return globalContextAnchor.validate(client, time);
         const realm = await readBoardScheme.run(client, {
-          route: realmRoute,
+          route: boardRoute,
           id: input.realmId,
           at: authoritativeTimeValue(time),
         });
-        return !!realm?.board_scheme_id && belongsToScheme(concept.subject, realm.board_scheme_id);
+        if (!realm || realm.board_scheme_id !== concept.schemeId || realm.head_revision_id !== concept.realmHead)
+          return false;
+        const bounded = deadlineClient(client, concept.deadline);
+        return (
+          (await dependencies.access.authorize(
+            bounded,
+            actor,
+            'realm:read',
+            realmResource,
+            concept.realmEvidence,
+            time,
+          )) &&
+          (await dependencies.access.authorize(
+            bounded,
+            actor,
+            'realm:participate',
+            participationResource,
+            concept.participationEvidence,
+            time,
+          ))
+        );
       },
     },
     context: {
@@ -181,16 +303,30 @@ export async function createBoard(
   });
   const preparedAuthorization = {
     ...authorization,
+    async authorize(tx: CommandTransaction, attempt: Parameters<typeof authorization.authorize>[1], proof: unknown) {
+      const prepared = concepts.get(attempt.time);
+      if (!prepared) throw new GrantDeniedError();
+      requireAccessDeadline(prepared.deadline);
+      return authorization.authorize(tx, attempt, proof);
+    },
+    async finalize(tx: CommandTransaction, attempt: Parameters<typeof authorization.authorize>[1], proof: unknown) {
+      const prepared = concepts.get(attempt.time);
+      if (!prepared) throw new GrantDeniedError();
+      requireAccessDeadline(prepared.deadline);
+      return authorization.finalize?.(tx, attempt, proof);
+    },
     async prepare(attempt: Parameters<NonNullable<typeof authorization.prepare>>[0]) {
-      if (dependencies.realmParticipation) {
-        const proof = await prepareRealmParticipation(
-          dependencies.pool,
-          dependencies.realmParticipation,
-          actor,
-          input.realmId,
-          attempt.time,
-          context.deadline,
+      if (input.realmId !== null && dependencies.realmParticipation) {
+        // The participation reader prepares native Access before issuing its
+        // point queries. A lazy pool transport holds no checkout during preparation.
+        const allowed = await within(context.deadline, () =>
+          dependencies.realmParticipation!(
+            deadlineClient(dependencies.pool, context.deadline),
+            { realmId: input.realmId!, actor },
+            attempt.time,
+          ),
         );
+        const proof = { realmId: input.realmId, allowed };
         if (!proof.allowed) throw new GrantDeniedError();
         participation.set(attempt.time, proof);
       }
@@ -205,7 +341,7 @@ export async function createBoard(
       dependencies.pool,
       {
         ...identity,
-        partition: partitionOf(realmRoute),
+        partition: partitionOf(boardRoute),
         deadline: context.deadline,
         clock: dependencies.clock,
         receipt: {
@@ -215,16 +351,20 @@ export async function createBoard(
             .update(canonicalize([identity, kind, body])!)
             .digest(),
         },
-        authorization: preparedAuthorization,
+        authorization:
+          input.realmId === null
+            ? preparedAuthorization
+            : realmGovernanceAuthorization(preparedAuthorization, { route: boardRoute, id: input.realmId }),
       },
       async (tx, { transactionId, time }) => {
         await insertBoard.run(tx, {
-          route: realmRoute,
+          route: boardRoute,
           board_id: resource.id,
           realm_id: input.realmId,
           subject_id: input.conceptId,
           title: input.title,
           visibility: input.visibility,
+          purpose: input.purpose ?? 'discussion',
           transaction_id: transactionId,
           at: authoritativeTimeValue(time),
         });

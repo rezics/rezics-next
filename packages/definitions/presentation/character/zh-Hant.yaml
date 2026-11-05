@@ -1,8 +1,36 @@
 types:
-  wd:Q95074: '虛構角色'
+  wd:Q95074: '角色'
 properties:
   schema:gender: 性別
   schema:height: 高度
   schema:weight: 質量
   wdt:P1853: 血型
   wdt:P6296: Bangumi角色識別碼
+  rezics:relatedCharacterIdentity: 相關角色同一性
+  wdt:P26: 配偶
+  wdt:P3373: 兄弟姊妹
+  wdt:P22: 父親
+  wdt:P25: 母親
+  wdt:P451: 戀人
+  rezics:characterRival: 對手
+inverseProperties:
+  schema:gender: '此性別的主體'
+  wdt:P1853: '此血型的主體'
+  rezics:relatedCharacterIdentity: 具有此同一性的角色
+  wdt:P22: 其父親
+  wdt:P25: 其母親
+typeDescriptions:
+  wd:Q95074: '可獨立識別的虛構角色，也包含虛構機器、船艦或組織；登場與配音署名記錄在作品上。'
+propertyDescriptions:
+  schema:gender: '來源明確描述的虛構角色性別，以概念表示，不推斷生理性別。'
+  schema:height: '角色明確記載的身高，以非負數量保留來源單位：公分（wd:Q174728）或公尺（wd:Q11573）。'
+  schema:weight: '角色明確記載的體重，以非負數量保留來源單位：公斤（wd:Q11570）或公克（wd:Q41803）。'
+  wdt:P1853: '明確記載的血型概念，例如 A 型；未知值維持未知。'
+  wdt:P6296: 'Bangumi 角色的正整數識別碼，不是條目或人物識別碼，也不是頁面 URL。'
+  rezics:relatedCharacterIdentity: '與此同一性關聯的另一角色；不是合併、重新導向、類別實例、合併傳記，也不是登場角色 main。'
+  wdt:P26: '被記載為配偶的另一角色，可附劇透等級。'
+  wdt:P3373: '被記載為兄弟姊妹的另一角色，可附劇透等級。'
+  wdt:P22: '被記載為父親的角色，可附劇透等級。'
+  wdt:P25: '被記載為母親的角色，可附劇透等級。'
+  wdt:P451: '被記載為戀人或伴侶的另一角色，可附劇透等級。'
+  rezics:characterRival: '被記載為對手或敵人的另一角色；不是作品登場角色。'

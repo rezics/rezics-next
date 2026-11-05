@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import { createAccess } from '../../src/access/index.ts';
 import { processImportedMedia } from '../../src/content/media-import-job.ts';
 import { R2Storage } from '../../src/content/r2-storage.ts';
+import { assertGrowthPointPlans } from './support/media-fixtures.ts';
 import { newId, partitionOf } from '../../src/route/route.ts';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -668,7 +669,7 @@ test('actual Sharp pipeline strips metadata after imported original, with measur
 });
 
 test('checkGrowth bounds native import rows, statements and buffers independently of catalogue size', async () => {
-  const { checkGrowth, openGrowthDatabase, seed } = await import('../support/growth.ts');
+  const { capture, checkGrowth, openGrowthDatabase, seed } = await import('../support/growth.ts');
   const { tupleRoute } = await import('../../src/content/imported-contract.ts');
   const sourceRoute = tupleRoute(routeKey, 'catalogue', 'growth-source');
   const db = await openGrowthDatabase(process.env.DATABASE_URL!);
@@ -676,8 +677,15 @@ test('checkGrowth bounds native import rows, statements and buffers independentl
   const http = await fixture(() => new Response(bytes));
   const targets: Awaited<ReturnType<typeof reserve>>[] = [];
   try {
+    const operation = async () => {
+      const target = targets.shift()!;
+      expect(await processImportedMedia(deps(http.storage, db.pool), target.mediaId)).toMatchObject({
+        state: 'uploaded',
+      });
+    };
     const report = await checkGrowth(db, {
       name: 'exact imported media work',
+      rule: 'series',
       scales: [32, 256, 2048],
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       grow: async (_db, scale, previous) => {
@@ -725,14 +733,16 @@ test('checkGrowth bounds native import rows, statements and buffers independentl
               };
             },
           },
-          { from: previous, to: scale },
+          { from: previous * 32, to: scale * 32 },
         );
         for (let i = 0; i < 6; i++) targets.push(await reserve(db.admin, { external_id: 'growth-source' }));
       },
-      operation: async () => {
-        const target = targets.shift()!;
-        expect(await processImportedMedia(deps(http.storage, db.pool), target.mediaId)).toMatchObject({
-          state: 'uploaded',
+      operation,
+      async warmup() {
+        const measured = await capture(db, operation);
+        assertGrowthPointPlans(measured.capture, {
+          'content.media': ['route', 'media_id'],
+          'content.source_fences': ['route', 'source', 'external_id', 'field_group'],
         });
       },
     });

@@ -1,0 +1,118 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { createCollectionRulesFixture, type CollectionRulesFixture } from './support/collection-rules-fixture.ts';
+
+let f: CollectionRulesFixture;
+beforeAll(async () => {
+  f = await createCollectionRulesFixture();
+}, 120_000);
+afterAll(async () => {
+  await f?.close();
+});
+
+const draft = {
+  membershipKind: 'dynamic',
+  title: 'A private definition',
+  visibility: 'private',
+  rule: { filter: { owner: { presence: true } }, sort: 'id' },
+};
+
+test('saving a supported native rule admits the definition without claiming a completed result', async () => {
+  const key = randomUUID();
+  const created = await f.send('POST', '/v1/collections', draft, f.owner, key);
+  expect(created.status).toBe(201);
+  const body = await created.json();
+  expect(body.collection).toMatchObject({ membershipKind: 'dynamic', visibility: 'private', revision: 1 });
+  for (const field of ['members', 'next', 'preparing', 'publication', 'rule', 'filter', 'pins', 'memberCount'])
+    expect(body).not.toHaveProperty(field);
+  const definition = await f.send('GET', `/v1/collections/${body.collection.id}/rule`);
+  expect(definition.status).toBe(200);
+  expect((await definition.json()).rule).toMatchObject(draft.rule);
+  expect((await f.send('POST', '/v1/collections', draft, f.reduced, key)).status).toBe(403);
+  expect((await f.send('POST', '/v1/collections', { ...draft, rule: { ...draft.rule, sort: 'ordinal' } })).status).toBe(
+    422,
+  );
+}, 120_000);
+
+test('a catalogue source is retained and executes through current Search membership without Library facts', async () => {
+  const source = { kind: 'catalogue' } as const;
+  const catalogueBook = await f.subject('Catalogue book without a Library entry');
+  const libraryMovie = await f.subject('Nonmatching Library movie', 'schema:Movie');
+  await f.entry(libraryMovie, 'schema:Movie');
+  const created = await f.send('POST', '/v1/collections', {
+    ...draft,
+    rule: { filter: { type: { in: ['schema:Book'] } }, sort: 'id', source },
+  });
+  expect(created.status).toBe(201);
+  const { collection } = await created.json();
+  const saved = await f.send('GET', `/v1/collections/${collection.id}/rule`);
+  expect(saved.status).toBe(200);
+  expect(await saved.json()).toMatchObject({
+    rule: { filter: { type: { in: ['schema:Book'] } }, sort: 'id', source, revision: 1 },
+  });
+
+  const members = await f.send('GET', `/v1/collections/${collection.id}/members`);
+  expect(members.status).toBe(200);
+  const firstPage = await members.json();
+  expect(firstPage.members).toContainEqual({ kind: 'dynamic', subjectId: catalogueBook });
+  expect(firstPage.members).not.toContainEqual({ kind: 'dynamic', subjectId: libraryMovie });
+
+  const update = {
+    revision: collection.revision,
+    filter: { not: { type: { in: ['schema:Book'] } } },
+    sort: 'id',
+    source,
+  };
+  const key = randomUUID();
+  const edited = await f.send('PUT', `/v1/collections/${collection.id}/rule`, update, f.owner, key);
+  expect(edited.status).toBe(200);
+  expect((await edited.json()).collection.revision).toBe(2);
+  expect((await f.send('PUT', `/v1/collections/${collection.id}/rule`, update, f.owner, key)).status).toBe(200);
+  const reopened = await f.send('GET', `/v1/collections/${collection.id}/rule`);
+  expect(await reopened.json()).toMatchObject({
+    rule: { filter: { not: { type: { in: ['schema:Book'] } } }, source, revision: 2, collectionRevision: 2 },
+  });
+
+  const notBooks = await f.send('GET', `/v1/collections/${collection.id}/members`);
+  expect(notBooks.status).toBe(200);
+  const secondPage = await notBooks.json();
+  expect(secondPage.members).toContainEqual({ kind: 'dynamic', subjectId: libraryMovie });
+  expect(secondPage.members).not.toContainEqual({ kind: 'dynamic', subjectId: catalogueBook });
+}, 120_000);
+
+test('Saved dynamic definitions use actual shared admission while current dynamic readers distinguish private execution from explicit public output', async () => {
+  const selected = await f.subject('Selected output');
+  const matching = await f.subject('Matching private result outside the selection');
+  await f.entry(selected);
+  await f.entry(matching);
+  const created = await f.send('POST', '/v1/collections', draft);
+  expect(created.status).toBe(201);
+  const { collection } = await created.json();
+  expect((await f.page(collection.id)).members).toContainEqual({ kind: 'dynamic', subjectId: matching });
+  expect((await f.send('GET', `/v1/collections/${collection.id}/members`, undefined, f.other)).status).toBe(404);
+  const published = await f.send('POST', `/v1/collections/${collection.id}:publishSelected`, {
+    revision: collection.revision,
+    subjectIds: [selected],
+  });
+  expect(published.status).toBe(200);
+  for (const bearer of [null, f.other]) {
+    const response = await f.send('GET', `/v1/collections/${collection.id}/members`, undefined, bearer);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ members: [{ kind: 'dynamic', subjectId: selected }], next: null });
+    const full = await f.send('GET', `/v1/collections/${collection.id}/members?view=FULL`, undefined, bearer);
+    expect(full.status).toBe(200);
+    expect((await full.json()).members).toMatchObject([{ kind: 'dynamic', subjectId: selected }]);
+    expect((await f.send('GET', `/v1/collections/${collection.id}/rule`, undefined, bearer)).status).toBe(
+      bearer === null ? 401 : 404,
+    );
+  }
+  const changed = await f.send('PUT', `/v1/collections/${collection.id}/rule`, {
+    revision: (await published.json()).collection.revision,
+    filter: { not: { owner: { presence: true } } },
+  });
+  expect(changed.status).toBe(200);
+  // The old COMPLETE selection belongs to its old source fence, not the edited definition.
+  const unavailable = await f.send('GET', `/v1/collections/${collection.id}/members`, undefined, null);
+  expect(unavailable.status).toBe(503);
+  expect(await unavailable.json()).toMatchObject({ code: 'dependency_unavailable' });
+}, 120_000);

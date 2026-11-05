@@ -10,6 +10,7 @@ import { COMMERCE_EVENTS } from '../../src/commerce/events.ts';
 import type { CheckoutSnapshot, Order, StripePort, StripeTransaction } from '../../src/commerce/model.ts';
 import { statementPeriod, statementTotals, royaltyLines } from '../../src/commerce/royalty.ts';
 import { readOrder } from '../../src/commerce/store.ts';
+import { MovementIntegrityError } from '../../src/commerce/settlement.ts';
 import { createCommerceWork } from '../../src/commerce/work.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
@@ -194,7 +195,7 @@ function transaction(
     created: '2025-12-01T00:00:00.000Z',
   };
 }
-async function order(rate = 9000, unitAmountMinor = 1000) {
+async function order(rate = 9000, unitAmountMinor = 1000, buyerAccountId = buyer) {
   const commands = createCommerceCommands({ pool, access, royaltyBasisPoints: rate });
   const offer = (
     await commands.createOffer(
@@ -203,7 +204,7 @@ async function order(rate = 9000, unitAmountMinor = 1000) {
       key(),
     )
   ).value;
-  const result = (await commands.createOrder(await actor(buyer), offer.id, key())).value;
+  const result = (await commands.createOrder(await actor(buyerAccountId), offer.id, offer.revision, key())).value;
   await commands.recordCheckout(result.id, {
     session: {
       id: `cs_test_${key().replaceAll('-', '')}`,
@@ -211,7 +212,7 @@ async function order(rate = 9000, unitAmountMinor = 1000) {
       expiresAt: '2026-01-20T14:00:00Z',
     },
   });
-  return (await readOrder(pool, routeOf(buyer)!, result.id))!;
+  return (await readOrder(pool, routeOf(buyerAccountId)!, result.id))!;
 }
 // Checkout subtotal excludes tax; amount_tax is in the Session's integration currency:
 // https://docs.stripe.com/api/checkout/sessions/object?query=total_details
@@ -289,6 +290,57 @@ async function detail(id: string) {
   return (await response.json()).statement;
 }
 
+test('royalty recording grants creator route access atomically and repeated recordings add no owner grant', async () => {
+  const o = await order();
+  const charge = transaction('charge', 1200, 50);
+  const refund = transaction('refund', -100);
+  await settle(o, [charge, refund]);
+  const ownerGrants = async () =>
+    (
+      await pool.query(
+        `SELECT subject_kind, subject_id, subject_role, grant_role, valid::text, transaction_id
+         FROM access.resource_role_grant
+         WHERE route=$1 AND resource_id=$2 AND grant_role='commerce.payout.owner'`,
+        [routeOf(creator), creator],
+      )
+    ).rows;
+  expect(await ownerGrants()).toEqual([]);
+  const commandKey = key();
+  await payouts.recordTransactions(o.id, [charge.id], commandKey);
+  const [statement] = await statements();
+  expect((await detail(statement!.id)).id).toBe(statement!.id);
+  const response = await request(`/${statement!.id}/lines`);
+  expect(response.status).toBe(200);
+  expect((await response.json()).lines).toMatchObject([{ balanceTransactionId: charge.id }]);
+  expect(
+    (
+      await pool.query(
+        `SELECT g.xmin=s.xmin AND g.xmin=l.xmin AS same_transaction,
+                lower(g.valid)=l.recorded_at AS starts_at_recording, upper_inf(g.valid) AS open
+         FROM access.resource_role_grant g
+         JOIN commerce.payout_statement s ON s.route=g.route AND s.creator_account_id=g.resource_id
+         JOIN commerce.royalty_line l ON l.route=s.route AND l.statement_id=s.statement_id
+         WHERE g.route=$1 AND g.resource_id=$2 AND g.grant_role='commerce.payout.owner'`,
+        [routeOf(creator), creator],
+      )
+    ).rows,
+  ).toEqual([{ same_transaction: true, starts_at_recording: true, open: true }]);
+  for (const path of ['', `/${statement!.id}`, `/${statement!.id}/lines`])
+    expect((await request(path, otherCreator)).status).toBe(404);
+  const before = await ownerGrants();
+  expect(before).toHaveLength(1);
+  expect(before[0]).toMatchObject({
+    subject_kind: 'identity',
+    subject_id: creator,
+    subject_role: '',
+    grant_role: 'commerce.payout.owner',
+  });
+  await payouts.recordTransactions(o.id, [charge.id], commandKey);
+  await payouts.recordTransactions(o.id, [charge.id], key());
+  await payouts.recordTransactions(o.id, [refund.id], key());
+  expect(await ownerGrants()).toEqual(before);
+});
+
 test('legacy worked example runs through fulfilment, real royalty worker, exact creator statement and closed events', async () => {
   // legacy-final:docs/legal/creator-distribution-agreement-outline.md §4:
   // $12 received, $2 tax, $0.50 actual processing fee, $1 refund => $8.50 net, $7.65 creator.
@@ -331,7 +383,7 @@ test('legacy worked example runs through fulfilment, real royalty worker, exact 
     await pool.query("SELECT type,data FROM core.outbox WHERE type LIKE 'com.rezics.commerce.payout_statement.%'")
   ).rows) {
     const schema = COMMERCE_EVENTS[row.type as keyof typeof COMMERCE_EVENTS];
-    expect(EVENT_TYPES[row.type as keyof typeof EVENT_TYPES]).toBe(schema);
+    expect(EVENT_TYPES()[row.type as keyof ReturnType<typeof EVENT_TYPES>]).toBe(schema);
     expect(Value.Check(schema, row.data)).toBe(true);
     expect(Object.keys(row.data)).toEqual(['statementId']);
     expect(Value.Check(schema, { ...row.data, amount: 850 })).toBe(false);
@@ -594,4 +646,145 @@ test('statement and line pages use stable keyset cursors without duplicates', as
   const second = await (await request(`/${id}/lines?limit=1&cursor=${encodeURIComponent(first.next)}`)).json();
   expect(second.next).toBeNull();
   expect(second.lines[0].balanceTransactionId).not.toBe(first.lines[0].balanceTransactionId);
+});
+
+async function financialRows() {
+  return (
+    await pool.query(`SELECT
+    (SELECT jsonb_agg(o ORDER BY order_id) FROM commerce.purchase_order o) orders,
+    (SELECT jsonb_agg(t ORDER BY route,balance_transaction_id) FROM commerce.order_transaction t) transactions,
+    (SELECT jsonb_agg(e ORDER BY entitlement_id) FROM commerce.entitlement e) entitlements,
+    (SELECT jsonb_agg(l ORDER BY route,balance_transaction_id) FROM commerce.royalty_line l) lines,
+    (SELECT jsonb_agg(s ORDER BY statement_id) FROM commerce.payout_statement s) statements,
+    (SELECT count(*)::int FROM core.receipt) receipts,
+    (SELECT count(*)::int FROM core.outbox) events`)
+  ).rows;
+}
+
+test('Exact repeated immutable movement produces one buyer transaction and one creator line without another statement', async () => {
+  const o = await order();
+  const charge = transaction('charge', 1200, 50);
+  charge.feeDetails = [
+    { type: 'stripe_fee', amountMinor: 40, description: 'original' },
+    { type: 'tax', amountMinor: 10, description: null },
+  ];
+  await Promise.all([settle(o, [charge]), settle(o, [charge])]);
+  await Promise.all([
+    payouts.recordTransactions(o.id, [charge.id], key()),
+    payouts.recordTransactions(o.id, [charge.id], key()),
+  ]);
+  const before = await financialRows();
+  expect(before[0]).toMatchObject({
+    transactions: [expect.objectContaining({ balance_transaction_id: charge.id })],
+    lines: [expect.objectContaining({ balance_transaction_id: charge.id })],
+    statements: [expect.objectContaining({ period: '2026-01', net_receipts_minor: 950 })],
+  });
+  now = new Date('2026-02-20T12:00:00Z');
+  const replay = {
+    ...charge,
+    feeDetails: [...charge.feeDetails].reverse().map((fee) => ({ ...fee, description: 'updated' })),
+  };
+  expect(await settle(o, [replay])).toMatchObject({ changed: false });
+  expect(await payouts.recordTransactions(o.id, [charge.id], key())).toEqual({ changed: false });
+  expect(await financialRows()).toEqual(before);
+});
+
+test('Conflicting economics or source association for a retained movement ID cannot silently deduplicate or mutate earnings', async () => {
+  const o = await order();
+  const charge = transaction('charge', 1200, 50);
+  await settle(o, [charge]);
+  await payouts.recordTransactions(o.id, [charge.id], key());
+  const before = await financialRows();
+  for (const change of [
+    { amountMinor: 1201, netMinor: 1151 },
+    { currency: 'eur' },
+    { sourceId: 'ch_other' },
+    { feeDetails: [{ type: 'withheld_tax', amountMinor: 50, description: null }] },
+  ]) {
+    await expect(settle(o, [{ ...charge, ...change }])).rejects.toBeInstanceOf(MovementIntegrityError);
+    expect(await financialRows()).toEqual(before);
+  }
+  const other = await order();
+  await settle(other, []);
+  const beforeAssociation = await financialRows();
+  await expect(settle(other, [charge])).rejects.toBeInstanceOf(MovementIntegrityError);
+  await expect(payouts.recordTransactions(other.id, [charge.id], key())).rejects.toBeInstanceOf(MovementIntegrityError);
+  expect(await financialRows()).toEqual(beforeAssociation);
+});
+
+test('concurrent conflicting buyer deliveries retain exactly the winning movement and report the conflict', async () => {
+  const o = await order();
+  const charge = transaction('charge', 1200, 50);
+  const conflicting = { ...charge, amountMinor: 1300, netMinor: 1250 };
+  const results = await Promise.allSettled([settle(o, [charge]), settle(o, [conflicting])]);
+  expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+  const failure = results.find((result) => result.status === 'rejected');
+  expect(failure?.status === 'rejected' && failure.reason).toBeInstanceOf(MovementIntegrityError);
+  const winner = results[0]!.status === 'fulfilled' ? charge : conflicting;
+  await Promise.all([
+    payouts.recordTransactions(o.id, [charge.id], key()),
+    payouts.recordTransactions(o.id, [charge.id], key()),
+  ]);
+  const rows = await financialRows();
+  expect(rows[0]).toMatchObject({
+    transactions: [expect.objectContaining({ amount_minor: winner.amountMinor })],
+    lines: [expect.objectContaining({ gross_minor: winner.amountMinor })],
+    statements: [expect.objectContaining({ net_receipts_minor: winner.netMinor - 200 })],
+  });
+});
+
+test('creator recording rechecks named retained associations after concurrent commands from different buyer partitions', async () => {
+  const first = await order();
+  const second = await order(9000, 1000, otherCreator);
+  const charge = transaction('charge', 1200, 50);
+  // Movement uniqueness is partition-local. The creator must reject the second attribution independently.
+  await Promise.all([settle(first, [charge]), settle(second, [charge])]);
+  const results = await Promise.allSettled([
+    payouts.recordTransactions(first.id, [charge.id], key()),
+    payouts.recordTransactions(second.id, [charge.id], key()),
+  ]);
+  expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+  const failure = results.find((result) => result.status === 'rejected');
+  expect(failure?.status === 'rejected' && failure.reason).toBeInstanceOf(MovementIntegrityError);
+  const winningOrder = results[0]!.status === 'fulfilled' ? first : second;
+  const losingOrder = winningOrder === first ? second : first;
+  const before = await financialRows();
+  expect(before[0]).toMatchObject({
+    lines: [expect.objectContaining({ order_id: winningOrder.id })],
+    statements: [expect.objectContaining({ net_receipts_minor: 950 })],
+  });
+  now = new Date('2026-02-20T12:00:00Z');
+  await expect(payouts.recordTransactions(losingOrder.id, [charge.id], key())).rejects.toBeInstanceOf(
+    MovementIntegrityError,
+  );
+  expect(await financialRows()).toEqual(before);
+});
+
+test('retained creator economics are compared before adding any fresh lines or statement totals', async () => {
+  const o = await order();
+  const charge = transaction('charge', 1200, 50);
+  const fresh = transaction('refund', -100);
+  await settle(o, [charge, fresh]);
+  // Retained fixture with a conflicting captured royalty rate; no mutation of an immutable native row.
+  await pool.query(
+    `INSERT INTO commerce.royalty_line
+    (route,balance_transaction_id,creator_account_id,order_id,offer_id,kind,currency,gross_minor,tax_minor,
+     fee_minor,dispute_fee_minor,net_receipts_minor,royalty_basis_points,period,statement_id,stripe_created,recorded_at)
+    VALUES ($1,$2,$3,$4,$5,'charge','usd',1200,200,50,0,950,8000,'2026-01',$6,$7,$8)`,
+    [
+      routeOf(creator),
+      charge.id,
+      creator,
+      o.id,
+      o.offerId,
+      newId(routeOf(creator)!),
+      charge.created,
+      now.toISOString(),
+    ],
+  );
+  const before = await financialRows();
+  await expect(payouts.recordTransactions(o.id, [charge.id, fresh.id], key())).rejects.toBeInstanceOf(
+    MovementIntegrityError,
+  );
+  expect(await financialRows()).toEqual(before);
 });

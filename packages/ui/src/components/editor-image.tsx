@@ -1,10 +1,11 @@
 'use client';
 
+import { Button } from '@rezics/ui/shadcn/button';
+import { Field, FieldGroup, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
 import type { Editor, Extensions, Node } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
-import { useEffect, useId, useRef, useState } from 'react';
-import { Button } from './button.tsx';
-import { Input } from './input.tsx';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 import { imageTypes, trackPosition } from './editor-uploads.ts';
 
@@ -14,7 +15,10 @@ function ImageView({ node, editor, updateAttributes, labels }: NodeViewProps & {
   const [alt, setAlt] = useState('');
   const field = useId();
   return (
-    <NodeViewWrapper contentEditable={false} className="rounded-xl border border-border p-3">
+    <NodeViewWrapper
+      contentEditable={false}
+      className="flex flex-col gap-2 rounded-2xl border border-border p-3 font-sans text-sm"
+    >
       <span role="img" aria-label={node.attrs.alt || labels.image}>
         {labels.image}: {node.attrs.alt}
       </span>
@@ -27,16 +31,26 @@ function ImageView({ node, editor, updateAttributes, labels }: NodeViewProps & {
               setEditing(false);
             }}
           >
-            <label htmlFor={field}>{labels.imageAlt}</label>
-            <Input id={field} autoFocus value={alt} onChange={(event) => setAlt(event.target.value)} />
-            <Button type="submit">{labels.apply}</Button>
-            <Button type="button" onClick={() => setEditing(false)}>
-              {labels.cancel}
-            </Button>
+            <FieldGroup className="gap-2">
+              <Field>
+                <FieldLabel htmlFor={field}>{labels.imageAlt}</FieldLabel>
+                <Input id={field} autoFocus value={alt} onChange={(event) => setAlt(event.target.value)} />
+              </Field>
+              <Field orientation="horizontal">
+                <Button type="submit" variant="secondary">
+                  {labels.apply}
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
+                  {labels.cancel}
+                </Button>
+              </Field>
+            </FieldGroup>
           </form>
         ) : (
           <Button
             type="button"
+            variant="outline"
+            className="self-start"
             onClick={() => {
               setAlt(node.attrs.alt ?? '');
               setEditing(true);
@@ -62,7 +76,10 @@ export function withImageView(extensions: Extensions, labels: () => RichTextEdit
   );
 }
 
-/** Choose a file, then describe it before starting its upload. */
+/**
+ * Choose a file, then describe it before starting its upload. The panel stays in the editor's flow rather than in a
+ * popover portal, so the file chooser and the description belong to the editor that asked for them.
+ */
 export function ImageInsert({
   editor,
   position,
@@ -80,7 +97,7 @@ export function ImageInsert({
   const [alt, setAlt] = useState('');
   const tracked = useRef<ReturnType<typeof trackPosition> | null>(null);
   const field = useId();
-  useEffect(() => {
+  useLayoutEffect(() => {
     tracked.current = trackPosition(editor, position);
     return () => {
       tracked.current?.stop();
@@ -90,7 +107,7 @@ export function ImageInsert({
     <div
       role="dialog"
       aria-label={labels.image}
-      className="mt-2 rounded-xl border border-border bg-popover p-3"
+      className="mt-2 rounded-2xl bg-popover p-3 text-popover-foreground shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.preventDefault();
@@ -100,37 +117,45 @@ export function ImageInsert({
       }}
     >
       <form
-        className="grid gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          if (file) {
+          if (file && editor.isEditable) {
             onInsert([file], tracked.current?.get() ?? position, alt);
             onClose();
           }
         }}
       >
-        <label htmlFor={`${field}-file`}>{labels.uploadFile}</label>
-        <input
-          id={`${field}-file`}
-          autoFocus
-          type="file"
-          accept={imageTypes.join(',')}
-          onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)}
-        />
-        <label htmlFor={field}>{labels.imageAlt}</label>
-        <Input id={field} value={alt} onChange={(event) => setAlt(event.target.value)} />
-        <Button type="submit" disabled={!file}>
-          {labels.insertImage}
-        </Button>
-        <Button
-          type="button"
-          onClick={() => {
-            onClose();
-            editor.commands.focus();
-          }}
-        >
-          {labels.cancel}
-        </Button>
+        <FieldGroup className="gap-3">
+          <Field>
+            <FieldLabel htmlFor={`${field}-file`}>{labels.uploadFile}</FieldLabel>
+            <Input
+              id={`${field}-file`}
+              autoFocus
+              type="file"
+              accept={imageTypes.join(',')}
+              onChange={(event) => setFile(event.currentTarget.files?.[0] ?? null)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor={field}>{labels.imageAlt}</FieldLabel>
+            <Input id={field} value={alt} onChange={(event) => setAlt(event.target.value)} />
+          </Field>
+          <Field orientation="horizontal">
+            <Button type="submit" disabled={!file || !editor.isEditable}>
+              {labels.insertImage}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                onClose();
+                editor.commands.focus();
+              }}
+            >
+              {labels.cancel}
+            </Button>
+          </Field>
+        </FieldGroup>
       </form>
     </div>
   );

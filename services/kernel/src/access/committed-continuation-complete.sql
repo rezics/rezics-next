@@ -1,6 +1,4 @@
-UPDATE access.committed_continuation
-SET completions = completions || jsonb_build_array(jsonb_build_object(
-  'step', :step::text, 'target', :target::text, 'key', :key::text, 'digest', :digest::text, 'receiptId', :receipt_id::text
-))
-WHERE route = :route AND continuation_id = :continuation_id AND expires_at > :at::timestamptz
-RETURNING continuation_id AS "continuationId";
+INSERT INTO access.committed_continuation_completion
+  (route, continuation_id, step, target, key, digest, receipt_id, receipt_key, receipt_digest)
+VALUES (:route, :continuation_id, :step, :target, :key, :digest, :receipt_id, :receipt_key, :receipt_digest)
+ON CONFLICT (route, continuation_id, step, target, key) DO NOTHING;

@@ -1,12 +1,15 @@
+import { approvalIdentityBridges, approvalIdentityProofs } from './identity-bridge-maps.ts';
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
+import { carryExpiry, identityExpired, type IdentityExpiry } from './identity-expiry.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
-import type { Access, AccessContext, AccountActor } from '../request/access.ts';
+import { AuthenticationError, type Access, type AccessContext, type AccountActor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import { unseal, type KeyRing } from '../tokens/seal.ts';
 import receiptRead from '../command/read-receipt.sql';
 import approvalRead from './workflow-approvals-read.sql';
 import { accessRoot } from './derived-access.ts';
-import { systemClock, type KernelClock } from '../clock.ts';
+import { accessClock } from './access-clock.ts';
 
 export class ApprovalIdentityDeniedError extends Error {
   readonly status = 403;
@@ -31,42 +34,49 @@ declare const approvedIdentity: unique symbol;
 /** Internal opaque evidence. Only a verified native row can mint this brand. */
 export type ApprovedIdentity = { readonly [approvedIdentity]: true };
 type Claims = { actor: AccountActor; expires: number; scope: object; pool: AccessContext['pool'] };
-const proofs = new WeakMap<ApprovedIdentity, Claims>();
 type Bridge = {
   scope: object;
-  clock?: KernelClock;
-  expiry(actor: AccountActor, context: AccessContext): number | undefined;
+  expiry(actor: AccountActor, context: AccessContext): IdentityExpiry | undefined;
   restore(proof: ApprovedIdentity, context: AccessContext): Promise<AccountActor>;
 };
-const bridges = new WeakMap<Access, Bridge>();
-
-/** The factory supplies its root clock with the identity bridge. Keeping this
- * lookup here avoids importing the factory and its standalone Access during setup. */
-export function approvalClock(access: Access): KernelClock {
-  return bridges.get(accessRoot(access))?.clock ?? systemClock;
+function proofs(): WeakMap<ApprovedIdentity, Claims> {
+  return approvalIdentityProofs as WeakMap<ApprovedIdentity, Claims>;
+}
+function bridges(): WeakMap<Access, Bridge> {
+  return approvalIdentityBridges as WeakMap<Access, Bridge>;
 }
 
 /** Factory composition only; no actor JSON registration or public bearer port. */
 export function installApprovalIdentityBridge(access: Access, bridge: Bridge): void {
   const root = accessRoot(access);
   if (root !== access) throw new Error('Cannot install approval identity bridge on derived Access');
-  if (bridges.has(root)) throw new Error('Approval identity bridge already installed');
-  bridges.set(root, Object.freeze(bridge));
+  if (bridges().has(root)) throw new Error('Approval identity bridge already installed');
+  bridges().set(root, Object.freeze(bridge));
 }
 export function approvedIdentityClaims(
   proof: ApprovedIdentity,
   scope: object,
   pool: AccessContext['pool'],
 ): Claims | undefined {
-  const facts = proofs.get(proof);
+  const facts = proofs().get(proof);
   return facts?.scope === scope && facts.pool === pool ? facts : undefined;
 }
-export function verifiedBearerExpiry(access: Access, actor: AccountActor, context: AccessContext): number {
-  const bridge = bridges.get(accessRoot(access));
+function verifiedExpiry(access: Access, actor: AccountActor, context: AccessContext): IdentityExpiry {
+  const bridge = bridges().get(accessRoot(access));
   if (!bridge) throw new ApprovalIdentityUnavailableError();
   const expires = bridge.expiry(actor, context);
-  if (expires === undefined || approvalClock(access)().getTime() >= expires) throw new ApprovalIdentityDeniedError();
+  if (expires === undefined || identityExpired(expires, accessClock(access))) throw new ApprovalIdentityDeniedError();
   return expires;
+}
+/** The original verified instant, checked on the clock that issued the identity. */
+export function verifiedBearerExpiry(access: Access, actor: AccountActor, context: AccessContext): number {
+  return verifiedExpiry(access, actor, context).expires;
+}
+
+/** Kernel rows retain kernel instants, including caps inherited from a bearer. */
+export function verifiedKernelExpiry(access: Access, actor: AccountActor, context: AccessContext): number {
+  const expiry = verifiedExpiry(access, actor, context);
+  return expiry.expiryClock === 'kernel' ? expiry.expires : carryExpiry(expiry.expires, accessClock(access), 'kernel');
 }
 /** Bind every immutable column, including original scope ceiling and JWT expiry. */
 export function approvalRowDigest(row: ApprovalRow): string {
@@ -83,7 +93,7 @@ export async function readApprovedIdentity(
   reference: string,
   context: AccessContext,
 ): Promise<{ row: ApprovalRow; actor: AccountActor }> {
-  const bridge = bridges.get(accessRoot(access));
+  const bridge = bridges().get(accessRoot(access));
   if (!bridge) throw new ApprovalIdentityUnavailableError();
   if (typeof reference !== 'string' || reference.length > 4096) throw new ApprovalIdentityDeniedError();
   const locator = unseal(keys, APPROVAL_REFERENCE_PURPOSE, reference) as
@@ -96,7 +106,7 @@ export async function readApprovedIdentity(
     typeof locator.binding !== 'string'
   )
     throw new ApprovalIdentityDeniedError();
-  const at = approvalClock(access)();
+  const at = accessClock(access)();
   const row = await approvalRead.run(context.pool, {
     route: locator.route as number,
     approval_id: locator.id,
@@ -112,7 +122,12 @@ export async function readApprovedIdentity(
     principal_kind: 'account',
     principal_id: row.actorId,
     command_kind: 'access.workflow-approval.create',
-    idempotency_key: `${row.route}:${row.approvalId}`,
+    idempotency_keys: nativeReceiptKeyCandidates(
+      context.pool,
+      'access.workflow-approval.create',
+      row.actorId,
+      `${row.route}:${row.approvalId}`,
+    ),
   });
   const response = receipt?.response as { reference?: unknown; expiresAt?: unknown } | undefined;
   if (
@@ -134,10 +149,13 @@ export async function readApprovedIdentity(
     authnEpoch: Number(row.authnEpoch),
   });
   const proof = Object.freeze({}) as ApprovedIdentity;
-  proofs.set(proof, { actor, expires, scope: bridge.scope, pool: context.pool });
+  proofs().set(proof, { actor, expires, scope: bridge.scope, pool: context.pool });
   try {
     return { row: Object.freeze(row), actor: await bridge.restore(proof, context) };
+  } catch (error) {
+    if (error instanceof AuthenticationError) throw new ApprovalIdentityDeniedError();
+    throw error;
   } finally {
-    proofs.delete(proof);
+    proofs().delete(proof);
   }
 }

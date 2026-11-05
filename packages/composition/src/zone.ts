@@ -18,6 +18,40 @@ export type ZoneStarter = {
   scope: string[];
 };
 
+/** Saved Zones add naming metadata without changing inert starter or composition labels. */
+export type ZoneLanguage = (typeof UI_LOCALES)[number];
+export type ZoneConfiguration = Omit<ZoneStarter, 'labels'> & {
+  labels: Partial<Record<ZoneLanguage, string>>;
+  primaryLanguage?: ZoneLanguage;
+};
+
+/** Legacy order is explicit and independent of object insertion order or interface language. */
+export function zonePrimaryLanguage(
+  zone: Pick<ZoneConfiguration, 'labels' | 'primaryLanguage'>,
+): ZoneLanguage | undefined {
+  return zone.primaryLanguage ?? UI_LOCALES.find((language) => !!zone.labels[language]?.trim());
+}
+
+/** Consume only the caller's readable map; this function cannot recover withheld names. */
+export function pickZoneName(
+  zone: Pick<ZoneConfiguration, 'labels' | 'primaryLanguage'>,
+  requested: string,
+): { text: string; lang?: string } {
+  const language =
+    UI_LOCALES.find((language) => language === requested && !!zone.labels[language]?.trim()) ??
+    (zone.primaryLanguage && zone.labels[zone.primaryLanguage]?.trim() ? zone.primaryLanguage : undefined) ??
+    (zone.primaryLanguage === undefined ? UI_LOCALES.find((language) => !!zone.labels[language]?.trim()) : undefined);
+  return language ? { text: zone.labels[language]!, lang: language } : { text: '' };
+}
+
+export function validateZoneConfiguration(
+  registry: CompositionRegistry,
+  value: unknown,
+  options: { filters: ReadonlySet<string> },
+): CompositionViolation[] {
+  return validateZoneEnvelope(registry, value, options, true);
+}
+
 const STARTER_KEYS = new Set(['labels', 'pages', 'scope']);
 const LOCALE_KEYS = new Set<string>(UI_LOCALES);
 const ROUTE = /^(?:[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)*)?(?![\s\S])/u;
@@ -71,6 +105,15 @@ export function validateZoneStarter(
   value: unknown,
   options: { filters: ReadonlySet<string> },
 ): CompositionViolation[] {
+  return validateZoneEnvelope(registry, value, options, false);
+}
+
+function validateZoneEnvelope(
+  registry: CompositionRegistry,
+  value: unknown,
+  options: { filters: ReadonlySet<string> },
+  saved: boolean,
+): CompositionViolation[] {
   try {
     if (!isPlainObject(value)) return [{ pointer: '', code: 'invalid' }];
 
@@ -78,7 +121,7 @@ export function validateZoneStarter(
     const add: Add = (pointer, code) => addViolation(found, pointer, code);
 
     for (const key of Object.keys(value)) {
-      if (!STARTER_KEYS.has(key)) add(join('', key), 'invalid');
+      if (!STARTER_KEYS.has(key) && !(saved && key === 'primaryLanguage')) add(join('', key), 'invalid');
     }
     for (const key of STARTER_KEYS) {
       if (!Object.hasOwn(value, key)) add(join('', key), 'invalid');
@@ -91,6 +134,9 @@ export function validateZoneStarter(
     if (pagesOverLimit) add('/pages', 'limit');
     if (scopeOverLimit) add('/scope', 'limit');
 
+    const primary = saved ? value.primaryLanguage : undefined;
+    if (primary !== undefined && (typeof primary !== 'string' || !LOCALE_KEYS.has(primary)))
+      add('/primaryLanguage', 'invalid');
     const labels = value.labels;
     if (!isPlainObject(labels)) {
       add('/labels', 'invalid');
@@ -101,7 +147,7 @@ export function validateZoneStarter(
       for (const locale of UI_LOCALES) {
         const pointer = join('/labels', locale);
         if (!Object.hasOwn(labels, locale)) {
-          add(pointer, 'invalid');
+          if (primary === undefined || primary === locale) add(pointer, 'invalid');
           continue;
         }
         const label = labels[locale];
@@ -109,7 +155,7 @@ export function validateZoneStarter(
           add(pointer, 'invalid');
         } else if (!PLAIN_TEXT.test(label)) {
           add(pointer, 'unsafe');
-        } else if (label.length === 0 || codePointLength(label) > 80) {
+        } else if ((saved ? !label.trim() : label.length === 0) || codePointLength(label) > 80) {
           add(pointer, 'invalid');
         }
       }

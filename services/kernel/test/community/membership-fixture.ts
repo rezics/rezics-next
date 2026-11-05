@@ -6,6 +6,7 @@ import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { Pool } from 'pg';
 import { createAccess } from '../../src/access/index.ts';
 import type { Access, AccessConfig, AccountActor } from '../../src/request/access.ts';
+import { productionActions } from '../support/production-actions.ts';
 
 const issuer = 'https://membership.auth.test';
 const audience = 'https://membership.api.test';
@@ -27,9 +28,10 @@ export async function createProductionAccess(
 ): Promise<ProductionAccess> {
   const pair = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...(await exportJWK(pair.publicKey)), kid: 'membership', alg: 'ES256', use: 'sig' };
+  const catalogue = productionActions();
   const access = createAccess({
     ...config,
-    actions: new Map(config.actions.map((action) => [action, { anonymous: false }])),
+    actions: new Map(config.actions.map((action) => [action, catalogue.get(action) ?? { anonymous: false }])),
     auth: {
       issuer,
       audience,
@@ -74,8 +76,8 @@ export type ConsentServer = {
  * certificate. The worker trusts that certificate through NODE_EXTRA_CA_CERTS, so its real
  * `createAuthConsentReader` runs unchanged; the answer callback decides each restoration.
  */
-export async function startConsentServer(answer: ConsentAnswer): Promise<ConsentServer> {
-  const directory = mkdtempSync(join(tmpdir(), 'membership-consent-'));
+export async function startConsentServer(answer: ConsentAnswer, directoryRoot = tmpdir()): Promise<ConsentServer> {
+  const directory = mkdtempSync(join(directoryRoot, 'membership-consent-'));
   const key = join(directory, 'key.pem');
   const certificate = join(directory, 'certificate.pem');
   const generated = spawnSync(
@@ -128,7 +130,7 @@ export async function startConsentServer(answer: ConsentAnswer): Promise<Consent
   });
   return {
     env: {
-      CONTENT_AUTH_CONSENT_URL: `https://localhost:${server.port}/internal/v1/consents:read`,
+      KERNEL_AUTH_CONSENT_URL: `https://localhost:${server.port}/internal/v1/consents:read`,
       CF_ACCESS_CLIENT_ID: tokenId,
       CF_ACCESS_CLIENT_SECRET: tokenSecret,
       NODE_EXTRA_CA_CERTS: certificate,

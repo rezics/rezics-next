@@ -3,6 +3,7 @@ name: game
 version: 1.0.0
 description: Video game works, platform and language releases, and independently referable add-ons.
 prefixes:
+  rezics: https://rezics.com/vocab/
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
@@ -25,6 +26,35 @@ classes:
       Sources: https://schema.org/VideoGame and https://www.wikidata.org/wiki/Q7889.
     slots:
       - alternateName
+      - creativeWorkStatus
+    annotations:
+      library:
+        id: game.playing
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: minute
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
+      cover_ratio: 5:7
   VideoGameRelease:
     class_uri: wd:Q20631656
     description: >-
@@ -34,6 +64,16 @@ classes:
       Platform and language distinguish releases when the source identifies them; a work's lists of
       platforms and languages do not imply a Cartesian product of releases.
     slots:
+      - translator
+      - contributor
+      - voiceActor
+      - screenwriter
+      - productionCompany
+      - producer
+      - musicBy
+      - director
+      - illustrator
+      - author
       - alternateName
       - datePublished
       - developer
@@ -50,8 +90,42 @@ classes:
       - releaseType
       - distributionFormat
       - vndbId
+      - follows
+      - releaseSupersedes
+      - creativeWorkStatus
     annotations:
-      facets: gamePlatform datePublished ageRating distributionFormat releaseType exampleOfWork developer publisher inLanguage
+      library:
+        id: game.release
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: minute
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: []
+      facets: gamePlatform datePublished ageRating distributionFormat releaseType exampleOfWork developer publisher inLanguage author director illustrator musicBy screenwriter voiceActor contributor
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/CreativeWork
   BangumiVideoGame:
     is_a: VideoGame
     class_uri: schema:VideoGame
@@ -82,6 +156,7 @@ classes:
       - numberOfPlayers
     annotations:
       facets: gamePlatform genre keywords datePublished softwareEngine numberOfPlayers author director musicBy producer productionCompany developer voiceActor publisher character partOfSeries
+      schema_org_type: https://schema.org/VideoGame
   GameAddOn:
     is_a: LaunchWork
     class_uri: wd:Q209163
@@ -114,7 +189,35 @@ classes:
       - numberOfPlayers
       - expansionOf
     annotations:
+      library:
+        id: game.addon
+        entryStateSet:
+          id: legacy-five
+          states:
+            - { id: planned, role: planned }
+            - { id: in_progress, role: active }
+            - { id: completed, role: completed }
+            - { id: paused, role: paused }
+            - { id: dropped, role: dropped }
+        progress:
+          allowed:
+            - mode: scalar_amount
+              units:
+                - id: minute
+                  minimum: '0'
+                  totalPolicy: optional
+                  identity: { kind: none }
+                  structure: { kind: none }
+        copies:
+          kinds:
+            - id: physical
+              statuses: [{ id: owned }, { id: disposed }]
+            - id: digital
+              statuses: [{ id: owned }]
+        importSources: []
       facets: gamePlatform genre keywords datePublished softwareEngine numberOfPlayers expansionOf author director musicBy producer productionCompany developer publisher character partOfSeries
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/CreativeWork
 slots:
   gamePlatform:
     slot_uri: schema:gamePlatform
@@ -125,6 +228,10 @@ slots:
       - wd:P400
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:gameOnPlatform
+      relation_order: name
+      qualifiers: inLanguage
   gtin:
     slot_uri: schema:gtin
     description: Global Trade Item Number for the release.
@@ -153,6 +260,9 @@ slots:
       - wd:P31
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:releaseOfType
+      relation_order: name
   distributionFormat:
     slot_uri: wdt:P437
     description: A distribution format or physical medium for the release.
@@ -162,15 +272,40 @@ slots:
       - wd:P437
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:releaseInFormat
+      relation_order: name
   follows:
     slot_uri: wdt:P155
     description: A prior work or release that this work or release follows.
-    range: CreativeWork
+    any_of:
+      - range: CreativeWork
+      - range: VideoGameRelease
     multivalued: true
     exact_mappings:
       - wd:P155
     annotations:
       datatype: wikibase-item
+      relation_group: order
+      inverse: wdt:P156
+      relation_order: date
+      acyclic: true
+      qualifiers: sameAs
+  releaseSupersedes:
+    slot_uri: rezics:releaseSupersedes
+    description: >-
+      The exact software release that this release replaces. This directed replacement relation is independent of
+      chronological order (wdt:P155) and organization replacement (wdt:P1365).
+      Source meaning: https://g.blicky.net/vndb.git/tree/sql/schema.sql?id=3ffec03b6b7cb8967d920ec9b8fd90f78bd8ec41.
+    range: VideoGameRelease
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: order
+      inverse: rezics:releaseSupersededBy
+      relation_order: date
+      acyclic: true
+      qualifiers: sameAs
   softwareEngine:
     slot_uri: wdt:P408
     description: >-
@@ -182,6 +317,9 @@ slots:
       - wd:P408
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:gameUsingEngine
+      relation_order: name
   numberOfPlayers:
     slot_uri: schema:numberOfPlayers
     description: >-
@@ -221,3 +359,6 @@ slots:
       - wd:P8646
     annotations:
       datatype: wikibase-item
+      relation_group: derivation
+      inverse: rezics:expansion
+      relation_order: name

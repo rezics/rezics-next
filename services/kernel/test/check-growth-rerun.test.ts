@@ -1,185 +1,266 @@
 import { expect, test } from 'bun:test';
-import { rerunGrowthFailures, scheduleFiles } from '../scripts/check.ts';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { runLaneSuite } from '../../../scripts/test-lanes.ts';
 
-type Outcome = Awaited<ReturnType<typeof scheduleFiles<string>>>[number];
+const projectRoot = resolve(import.meta.dir, '../../..');
 
-const growth = (title: string, message: string): string =>
-  [
-    `1 | test(${JSON.stringify(title)}, () => {`,
-    'GrowthBoundError: ' + message,
-    '      at <anonymous> (growth.ts:1:1)',
-    `(fail) ${title} [4.00ms]`,
-  ].join('\n');
-const expectFailure = (title: string): string =>
-  [
-    'error: expect(received).toBe(expected)',
-    '',
-    'Expected: 2',
-    'Received: 1',
-    '      at <anonymous> (x.test.ts:4:33)',
-    `(fail) ${title} [1.00ms]`,
-  ].join('\n');
-const summary = (failures: number): string =>
-  `\n 0 pass\n ${failures} fail\nRan ${failures} tests across 1 file. [9.00ms]`;
-
-function failed(file: string, ...blocks: string[]): Outcome {
-  const output = `${blocks.join('\n')}${summary(blocks.length)}`;
-  return { file, database: 'kernel_test_1', error: new Error(`bun test ./${file} failed:\n${output}`) };
+async function withDirectory(use: (directory: string) => Promise<void>): Promise<void> {
+  const temporaryRoot = resolve(projectRoot, '.temp');
+  mkdirSync(temporaryRoot, { recursive: true });
+  const directory = mkdtempSync(resolve(temporaryRoot, 'kernel-growth-rerun-'));
+  try {
+    await use(directory);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 
-/** Records create, run, drop and lease events in order; `results` gives each rerun's output or failure. */
-function fakes(results: Record<string, string | Error>) {
-  const events: string[] = [];
-  let held = 0;
-  const log: string[] = [];
-  const runner = {
-    create: (file: string) => void events.push(`create ${file} held=${held}`),
-    run: async (file: string) => {
-      events.push(`run ${file} held=${held}`);
-      await Bun.sleep(5);
-      const result = results[file] ?? 'ok';
-      if (result instanceof Error) throw result;
-      return result;
-    },
-    drop: (file: string) => void events.push(`drop ${file} held=${held}`),
+function writeTests(module: string, files: Record<string, string>): void {
+  for (const [file, source] of Object.entries(files)) {
+    const path = resolve(module, file);
+    mkdirSync(resolve(path, '..'), { recursive: true });
+    writeFileSync(path, source);
+  }
+}
+
+function laneEnvironment(directory: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    FIXTURE_CHECK_TIMINGS: resolve(directory, 'timings'),
+    FIXTURE_CHECK_CONCURRENCY: '1',
+    FIXTURE_CHECK_ORDER: 'name',
+    REZICS_STACK_LEASE_DIR: resolve(directory, 'lease'),
+    REZICS_STACK_SLOTS: '1',
   };
-  const lease = async <T>(label: string, run: (env: Record<string, string>) => Promise<T>): Promise<T> => {
-    events.push(`lease ${label}`);
-    held++;
-    try {
-      return await run({ REZICS_STACK_SLOT: '0/1' });
-    } finally {
-      held--;
-      events.push('release');
-    }
-  };
-  return { events, log, runner, lease, write: (text: string) => void log.push(text) };
+  delete env.REZICS_STACK_SLOT;
+  delete env.REZICS_STACK_LEASE;
+  return env;
+}
+
+function growthTest(title: string, message: string, condition = 'true'): string {
+  return [
+    "import { test } from 'bun:test';",
+    'class GrowthBoundError extends Error {',
+    '  constructor(message: string) { super(message); this.name = "GrowthBoundError"; }',
+    '}',
+    `test(${JSON.stringify(title)}, () => { if (${condition}) throw new GrowthBoundError(${JSON.stringify(message)}); });`,
+    '',
+  ].join('\n');
 }
 
 test('a file whose only failures are growth bound errors is rerun alone under a stack slot and, passing, is reported as load-sensitive without failing the run', async () => {
-  const { events, log, runner, lease, write } = fakes({});
-  const suiteEvents: string[] = [];
-  const suite = await scheduleFiles(['test/a.test.ts', 'test/b.test.ts', 'test/c.test.ts'], 3, {
-    create: () => {},
-    run: async (file) => {
-      suiteEvents.push(`suite ${file}`);
-      await Bun.sleep(5);
-      return file === 'test/c.test.ts' ? 'ok' : `${growth('first', `rows ${file}\nsecond line`)}${summary(1)}`;
-    },
-    drop: () => {},
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    const env = laneEnvironment(directory);
+    const events: string[] = [];
+    let runs = 0;
+    writeTests(module, {
+      'test/a.test.ts': growthTest(
+        'first growth check',
+        'rows for a on first run\nextra detail',
+        'Number(process.env.ATTEMPT) < 4',
+      ),
+      'test/b.test.ts': growthTest(
+        'second growth check',
+        'rows for b on first run\nextra detail',
+        'Number(process.env.ATTEMPT) < 4',
+      ),
+      'test/c.test.ts': "import { expect, test } from 'bun:test';\ntest('passes', () => expect(true).toBe(true));\n",
+    });
+    let output = '';
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stderr.write;
+    let result;
+    try {
+      result = await runLaneSuite({
+        service: 'fixture',
+        directory: module,
+        files: ['test/a.test.ts', 'test/b.test.ts', 'test/c.test.ts'],
+        partial: false,
+        createDatabase: async (database) => void events.push(`create ${database}`),
+        dropDatabase: async (database) => void events.push(`drop ${database}`),
+        environment: (database) => {
+          runs++;
+          events.push(`run ${database} ${runs}`);
+          return { ...env, ATTEMPT: String(runs) };
+        },
+        env,
+      });
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+
+    expect(result).toEqual({ failed: [], concurrency: 1 });
+    expect(events).toEqual([
+      'create fixture_test_1',
+      'run fixture_test_1 1',
+      'drop fixture_test_1',
+      'create fixture_test_2',
+      'run fixture_test_2 2',
+      'drop fixture_test_2',
+      'create fixture_test_3',
+      'run fixture_test_3 3',
+      'drop fixture_test_3',
+      'create fixture_growth_1_test_1',
+      'run fixture_growth_1_test_1 4',
+      'drop fixture_growth_1_test_1',
+      'create fixture_growth_2_test_1',
+      'run fixture_growth_2_test_1 5',
+      'drop fixture_growth_2_test_1',
+    ]);
+    expect(output).toContain('Load-sensitive growth checks (passed alone): 2\n');
+    expect(output).toContain(
+      'load-sensitive growth check: test/a.test.ts :: first growth check :: rows for a on first run',
+    );
+    expect(output).toContain(
+      'load-sensitive growth check: test/b.test.ts :: second growth check :: rows for b on first run',
+    );
+    expect(output.slice(output.indexOf('Load-sensitive growth checks'))).not.toContain('extra detail');
   });
-  // The suite reports a growth failure as a failed run; build the outcomes the way main sees them.
-  const outcomes = suite.map((outcome) =>
-    outcome.output?.includes('(fail)')
-      ? { file: outcome.file, database: outcome.database, error: new Error(`bun test failed:\n${outcome.output}`) }
-      : outcome,
-  );
-
-  const result = await rerunGrowthFailures(outcomes, runner, lease, write);
-
-  expect(result.failed).toEqual([]);
-  // Only the failed files are rerun, one at a time and each under its own lease, after the whole suite.
-  expect(events).toEqual([
-    'lease kernel growth rerun',
-    'create test/a.test.ts held=1',
-    'run test/a.test.ts held=1',
-    'drop test/a.test.ts held=1',
-    'release',
-    'lease kernel growth rerun',
-    'create test/b.test.ts held=1',
-    'run test/b.test.ts held=1',
-    'drop test/b.test.ts held=1',
-    'release',
-  ]);
-  expect(suiteEvents).toHaveLength(3);
-  const text = log.join('');
-  expect(text).toContain('load-sensitive growth check: test/a.test.ts :: first :: rows test/a.test.ts\n');
-  expect(text).toContain('load-sensitive growth check: test/b.test.ts :: first :: rows test/b.test.ts\n');
-  expect(text).not.toContain('second line');
-  expect(text).toContain('Load-sensitive growth checks (passed alone): 2\n');
-  expect(text.indexOf('Load-sensitive growth checks')).toBeLessThan(text.indexOf('load-sensitive growth check:'));
 });
 
 test('a growth file that fails again alone fails the run', async () => {
-  const { events, log, runner, lease, write } = fakes({
-    'test/a.test.ts': new Error(`bun test ./test/a.test.ts failed:\n${growth('first', 'rows again')}${summary(1)}`),
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    const env = laneEnvironment(directory);
+    const events: string[] = [];
+    writeTests(module, {
+      'test/always-fails.test.ts': [
+        "import { test } from 'bun:test';",
+        "test('persistent growth', () => {",
+        '  if (!process.env.REZICS_STACK_SLOT) throw new Error("rerun did not have a stack slot");',
+        '  const error = new Error("rows still exceed the limit"); error.name = "GrowthBoundError"; throw error;',
+        '});',
+        '',
+      ].join('\n'),
+    });
+    let runs = 0;
+    let output = '';
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stderr.write;
+    let result;
+    try {
+      result = await runLaneSuite({
+        service: 'fixture',
+        directory: module,
+        files: ['test/always-fails.test.ts'],
+        partial: false,
+        createDatabase: async (database) => void events.push(`create ${database}`),
+        dropDatabase: async (database) => void events.push(`drop ${database}`),
+        environment: (database) => {
+          runs++;
+          events.push(`run ${database}`);
+          return { ...env };
+        },
+        env,
+      });
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+
+    expect(result).toEqual({ failed: ['test/always-fails.test.ts'], concurrency: 1 });
+    expect(events).toEqual([
+      'create fixture_test_1',
+      'run fixture_test_1',
+      'drop fixture_test_1',
+      'create fixture_growth_1_test_1',
+      'run fixture_growth_1_test_1',
+      'drop fixture_growth_1_test_1',
+    ]);
+    expect(runs).toBe(2);
+    expect(output).toContain('failed again alone');
+    expect(output).not.toContain('Load-sensitive growth checks (passed alone)');
   });
-  const outcomes = [
-    failed('test/a.test.ts', growth('first', 'rows once')),
-    failed('test/b.test.ts', growth('second', 'x')),
-  ];
-
-  const result = await rerunGrowthFailures(outcomes, runner, lease, write);
-
-  expect(result.failed.map((outcome) => outcome.file)).toEqual(['test/a.test.ts']);
-  expect(events.filter((event) => event.startsWith('run'))).toEqual([
-    'run test/a.test.ts held=1',
-    'run test/b.test.ts held=1',
-  ]);
-  const text = log.join('');
-  // Both outputs of the file that failed twice are printed.
-  expect(text).toContain('rows once');
-  expect(text).toContain('rows again');
-  expect(text).toContain('Load-sensitive growth checks (passed alone): 1\n');
-  expect(text).not.toContain('load-sensitive growth check: test/a.test.ts');
 });
 
-test('growth failures keep a file eligible despite cascades while files without growth or load signals stay failed', async () => {
-  const { events, log, runner, lease, write } = fakes({});
-  const unhandled = ['error: unhandled late', '      at <anonymous> (x.test.ts:5:1)', '(fail) late [5.00ms]'].join(
-    '\n',
-  );
-  const beforeAll = ['error: setup failed', '(fail) (unnamed) [0.20ms]'].join('\n');
-  const timeout = `${growth('first', 'rows')}\n(fail) slow [60000.00ms]\n  ^ this test timed out after 60000ms.`;
-  const outcomes: Outcome[] = [
-    failed('test/mixed.test.ts', growth('first', 'rows'), expectFailure('second')),
-    failed('test/unhandled.test.ts', growth('first', 'rows'), unhandled),
-    failed('test/before.test.ts', beforeAll),
-    {
-      file: 'test/timeout.test.ts',
-      database: 'kernel_test_1',
-      error: new Error(`bun test ./test/timeout.test.ts failed:\n${timeout}${summary(2)}`),
-    },
-    {
-      file: 'test/exit.test.ts',
-      database: 'kernel_test_1',
-      error: new Error('bun test ./test/exit.test.ts failed:\nerror: Cannot find module "./missing"\n'),
-    },
-    {
-      file: 'test/cleanup.test.ts',
-      database: 'kernel_test_1',
-      output: `${growth('first', 'rows')}${summary(1)}`,
-      error: new Error(
-        `bun test failed:\n${growth('first', 'rows')}${summary(1)}\nDatabase cleanup failed: drop refused`,
-      ),
-    },
-    { file: 'test/create.test.ts', database: 'kernel_test_1', error: new Error('psql -c CREATE DATABASE failed') },
-    { file: 'test/passed.test.ts', database: 'kernel_test_1', output: 'ok' },
-  ];
+test('a file whose only failures are growth evidence errors is rerun alone', async () => {
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    const env = laneEnvironment(directory);
+    const events: string[] = [];
+    writeTests(module, {
+      'test/evidence.test.ts': [
+        "import { test } from 'bun:test';",
+        'test("uncertain growth", () => { if (Number(process.env.ATTEMPT) < 2) { const error = new Error("not enough repetitions"); error.name = "GrowthEvidenceError"; throw error; } });',
+        '',
+      ].join('\n'),
+    });
+    let runs = 0;
+    const result = await runLaneSuite({
+      service: 'fixture',
+      directory: module,
+      files: ['test/evidence.test.ts'],
+      partial: false,
+      createDatabase: async (database) => void events.push(`create ${database}`),
+      dropDatabase: async (database) => void events.push(`drop ${database}`),
+      environment: () => ({ ...env, ATTEMPT: String(++runs) }),
+      env,
+    });
+    expect(result).toEqual({ failed: [], concurrency: 1 });
+    expect(events).toEqual([
+      'create fixture_test_1',
+      'drop fixture_test_1',
+      'create fixture_growth_1_test_1',
+      'drop fixture_growth_1_test_1',
+    ]);
+  });
+});
 
-  const result = await rerunGrowthFailures(outcomes, runner, lease, write);
+test('a file with any failure other than a growth bound error is not rerun and fails the run', async () => {
+  await withDirectory(async (directory) => {
+    const module = resolve(directory, 'module');
+    const env = laneEnvironment(directory);
+    const events: string[] = [];
+    writeTests(module, {
+      'test/mixed.test.ts': [
+        "import { expect, test } from 'bun:test';",
+        'class GrowthBoundError extends Error { constructor() { super("rows exceed the limit"); this.name = "GrowthBoundError"; } }',
+        "test('growth check', () => { throw new GrowthBoundError(); });",
+        "test('ordinary check', () => expect(1).toBe(2));",
+        '',
+      ].join('\n'),
+      'test/cleanup.test.ts': growthTest('growth before cleanup failure', 'rows exceed before cleanup'),
+    });
+    let output = '';
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      output += String(chunk);
+      return true;
+    }) as typeof process.stderr.write;
+    let result;
+    try {
+      result = await runLaneSuite({
+        service: 'fixture',
+        directory: module,
+        files: ['test/mixed.test.ts', 'test/cleanup.test.ts'],
+        partial: false,
+        createDatabase: async (database) => void events.push(`create ${database}`),
+        dropDatabase: async (database) => {
+          events.push(`drop ${database}`);
+          if (database === 'fixture_test_1') throw new Error('drop refused');
+        },
+        environment: () => ({ ...env }),
+        env,
+      });
+    } finally {
+      process.stderr.write = originalWrite;
+    }
 
-  expect(events.filter((event) => event.startsWith('run'))).toEqual([
-    'run test/mixed.test.ts held=1',
-    'run test/unhandled.test.ts held=1',
-    'run test/timeout.test.ts held=1',
-  ]);
-  expect(result.failed.map((outcome) => outcome.file)).toEqual([
-    'test/before.test.ts',
-    'test/exit.test.ts',
-    'test/cleanup.test.ts',
-    'test/create.test.ts',
-  ]);
-  expect(log.join('')).toContain(
-    'load-sensitive test: test/mixed.test.ts :: second (cascade) :: error: expect(received).toBe(expected)',
-  );
-  expect(log.join('')).toContain(
-    'load-sensitive test: test/unhandled.test.ts :: late (cascade) :: error: unhandled late',
-  );
-  expect(log.join('')).toContain(
-    'load-sensitive test: test/timeout.test.ts :: slow :: this test timed out after 60000ms.',
-  );
-  expect(log.join('')).toContain('Load-sensitive growth checks (passed alone):');
-  expect(log.join('')).toContain('Load reruns: 3 files, ');
-  expect(log.join('')).toContain('(3 passed alone)');
+    expect(result).toEqual({ failed: ['test/cleanup.test.ts', 'test/mixed.test.ts'], concurrency: 1 });
+    expect(events).toEqual([
+      'create fixture_test_1',
+      'drop fixture_test_1',
+      'create fixture_test_2',
+      'drop fixture_test_2',
+    ]);
+    expect(output).not.toContain('failed again alone');
+    expect(output).not.toContain('Load-sensitive growth checks (passed alone)');
+  });
 });

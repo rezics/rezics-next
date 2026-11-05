@@ -1,0 +1,1342 @@
+import { candidateContext } from '../../subject/candidates';
+import { subjectHref } from '../../subject/subject-href';
+import { mangaGlobalVisitHref, type MangaPublicVisit } from './manga-public-visit';
+import { catalogueEditor, useEditorLifetime } from './editor-lifetime';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, useRouter } from '@tanstack/react-router';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { documentText, hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
+import { pickText } from '@rezics/composition';
+import { ContentItemFrame, ContentItemHeading } from '@rezics/ui/content-item';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Input } from '@rezics/ui/shadcn/input';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
+import { NativeSelect, NativeSelectOption } from '@rezics/ui/shadcn/native-select';
+import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
+import { m } from '../../paraglide/messages.js';
+import { AuthoringDepartureBoundary, useAuthoringDeparture } from '../../threads/authoring-departure';
+import { ViewHeadingActions } from '../pages/view-heading';
+import { definitionText } from './definition-guide';
+import { DefinitionGuideLink } from './definition-guide-view';
+import type { CreateFailure, CreateResult, TermDraft } from './create-subject';
+import {
+  identityIntentKey,
+  isAllowedCreateAuthority,
+  observedCreateAuthority,
+  type CreateAuthority,
+  type IdentityIntakeInput,
+} from './identity-intake';
+import { CreateAuthorityStatus, IdentityIntakePanel } from './identity-intake-view';
+import { readIdentityIntake } from './identity-intake';
+import { CreateSubjectLanguageRemove } from './create-subject-language-remove';
+import { useSpecialistLanguageAddFocus } from './specialist-language-add-focus';
+import { EditorFailure } from './statement-editor-view';
+import { MangaInitialField, MangaRowRemove, type MangaRow } from './manga-profile-field';
+import { mangaCreateFeedback } from './manga-create-feedback';
+import { MangaCorrections, type MangaCorrectionPorts } from './manga-profile-corrections';
+import {
+  blankMangaStatement,
+  mangaDraft,
+  mangaGroups,
+  isMangaType,
+  mangaTypes,
+  type MangaCommand,
+  type MangaItem,
+  type MangaRead,
+  type MangaTransport,
+  type MangaType,
+} from './manga-profile';
+
+export type MangaReady = Extract<MangaRead, { ok: true }>;
+type MangaTermDraft = TermDraft & { id: number };
+type MangaViewerState = 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
+type MangaIdentityIntake = {
+  viewerKey: string;
+  viewerState: MangaViewerState;
+  read?: typeof readIdentityIntake;
+};
+type MangaReview = {
+  fingerprint: string;
+  identityKey: string;
+  releaseDigest: string;
+  item: MangaItem;
+  independent: boolean;
+  rows: MangaRow[];
+};
+type MangaAddFocusIntent = {
+  row: MangaRow;
+  type: MangaType;
+  activation: number;
+  read: MangaReady;
+  trigger: HTMLButtonElement;
+};
+
+export function mangaGroupLabels(locale: string) {
+  const o = { locale: locale as never };
+  return {
+    membership: m.manga_membership({}, o),
+    creators: m.manga_creators({}, o),
+    publication: m.manga_publication({}, o),
+    classification: m.manga_classification({}, o),
+    writing: m.authored_title({}, o),
+  };
+}
+
+export const MangaProfileEditor = catalogueEditor(MangaProfileEditorLive);
+
+function MangaProfileEditorLive({
+  id,
+  locale,
+  session,
+  transport,
+  search,
+  correction,
+  retrySession,
+  identityIntake,
+  visit,
+}: {
+  id?: string | undefined;
+  visit?: MangaPublicVisit | undefined;
+  address?: string | undefined;
+  locale: string;
+  session: string;
+  transport: MangaTransport;
+  search: EntityPickerSearch;
+  correction?: MangaCorrectionPorts | undefined;
+  retrySession?: (() => Promise<unknown>) | undefined;
+  identityIntake?: MangaIdentityIntake | undefined;
+}) {
+  const lifetime = useEditorLifetime();
+  const o = { locale: locale as never };
+  const query = useQuery({
+    queryKey: [...['manga-profile', id, locale], lifetime.generation],
+    queryFn: transport.load,
+    retry: false,
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const candidate = query.data?.ok ? query.data : undefined;
+  const subject = candidate?.public?.subject;
+  const originalType = useRef<string | undefined>(undefined);
+  if (id && subject?.id === id && isMangaType(subject.type)) originalType.current ??= subject.type;
+  const observed = visit?.kind === 'origin' ? visit.origin : undefined;
+  const originMatches =
+    !observed ||
+    (subject?.id === observed.subject &&
+      subject?.type === observed.type &&
+      subject?.context === candidateContext &&
+      (!observed.definition || candidate?.releaseDigest === observed.definition));
+  const matches = !id || (subject?.id === id && subject?.type === originalType.current && originMatches);
+  const read = !query.isError && (!id || !query.isFetching) && matches ? candidate : undefined;
+  const failed = !!(query.isError || (query.data && !query.data.ok) || (candidate && !matches));
+  const boundary = useRef<HTMLDivElement>(null);
+  const running = useRef(false);
+  const [retrying, setRetrying] = useState(false);
+  const [completion, setCompletion] = useState<Awaited<ReturnType<typeof query.refetch>>>();
+  // An observed read transition retires callbacks from its previous failure shell.
+  const origin = useMemo(() => ({}), [query.dataUpdatedAt, query.errorUpdatedAt, query.fetchStatus]);
+  const currentOrigin = useRef(origin);
+  currentOrigin.current = origin;
+  async function retryRead() {
+    if (!lifetime.active() || currentOrigin.current !== origin || !failed || query.isFetching || running.current)
+      return;
+    running.current = true;
+    setRetrying(true);
+    setCompletion(undefined);
+    const result = await query.refetch({ cancelRefetch: false });
+    if (!lifetime.active()) return;
+    running.current = false;
+    setRetrying(false);
+    setCompletion(result);
+  }
+  useLayoutEffect(() => {
+    if (
+      !completion ||
+      query.isFetching ||
+      completion.data !== query.data ||
+      completion.error !== query.error ||
+      completion.dataUpdatedAt !== query.dataUpdatedAt ||
+      completion.errorUpdatedAt !== query.errorUpdatedAt
+    )
+      return;
+    setCompletion(undefined);
+    if (lifetime.active() && (failed || (read && (!id || (session === 'signed-in' && read.public)))))
+      boundary.current?.focus();
+  }, [completion, query, lifetime, failed, read, id, session]);
+  const pending = retrying || (failed && query.isFetching);
+  return (
+    <article className="mx-auto w-full max-w-4xl space-y-6 px-4 py-8 sm:px-6">
+      <ViewHeadingActions headingClassName="font-sans" label={id ? m.manga_edit({}, o) : m.manga_title({}, o)} />
+      <p className="max-w-prose text-muted-foreground">{m.manga_intro({}, o)}</p>
+      {id && visit && (
+        <MangaPublicVisitNotice id={id} locale={locale} visit={visit} changed={!!candidate && !originMatches} />
+      )}
+      {session !== 'signed-in' &&
+        (session === 'unavailable' ? (
+          <div className="space-y-3">
+            <p role="alert">{m.catalogue_create_unavailable({}, o)}</p>
+            <Button onClick={() => void retrySession?.()} disabled={!retrySession}>
+              {m.erasure_retry_session({}, o)}
+            </Button>
+          </div>
+        ) : (
+          <p role="status">
+            {session === 'signed-out' ? m.catalogue_create_signed_out({}, o) : m.candidate_loading({}, o)}
+          </p>
+        ))}
+      <div
+        ref={boundary}
+        tabIndex={-1}
+        aria-label={id ? m.manga_edit({}, o) : m.manga_title({}, o)}
+        aria-busy={pending}
+        className="space-y-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      >
+        {(query.isPending || pending) && <p role="status">{m.candidate_loading({}, o)}</p>}
+        {read && !mangaTypes.some((type) => read.release.types[type]) && (
+          <p role="status">{m.catalogue_create_empty({}, o)}</p>
+        )}
+        {failed && (
+          <div className="space-y-3">
+            {query.data && !query.data.ok && query.data.reason === 'concealed' ? (
+              <p role="alert">{m.catalogue_create_concealed({}, o)}</p>
+            ) : (
+              <EditorFailure
+                locale={locale}
+                reason={query.data && !query.data.ok ? query.data.reason : 'unavailable'}
+              />
+            )}
+            <Button onClick={() => void retryRead()} disabled={pending}>
+              {pending ? m.candidate_loading({}, o) : m.correction_reload({}, o)}
+            </Button>
+          </div>
+        )}
+        {id ? (
+          <MangaCorrections
+            read={read}
+            revision={String(query.dataUpdatedAt)}
+            locale={locale}
+            disabled={session !== 'signed-in'}
+            ports={correction}
+            search={search}
+            reload={() => query.refetch()}
+          />
+        ) : (
+          <AuthoringDepartureBoundary>
+            <MangaCreate
+              read={read}
+              locale={locale}
+              session={session}
+              transport={transport}
+              search={search}
+              refresh={() => query.refetch()}
+              identityIntake={identityIntake}
+            />
+          </AuthoringDepartureBoundary>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function MangaCreate({
+  read,
+  locale,
+  session,
+  transport,
+  search,
+  refresh,
+  identityIntake,
+}: {
+  read: MangaReady | undefined;
+  locale: string;
+  session: string;
+  transport: MangaTransport;
+  search: EntityPickerSearch;
+  refresh: () => Promise<unknown>;
+  identityIntake?: MangaIdentityIntake | undefined;
+}) {
+  const lifetime = useEditorLifetime();
+  const client = useQueryClient();
+  const o = { locale: locale as never };
+  const viewerKey = JSON.stringify([identityIntake?.viewerKey ?? '', lifetime.generation]);
+  const eligibilityKey = ['catalogue-create', 'eligibility', locale, String(lifetime.generation), viewerKey, session];
+  const eligibilityQuery = useQuery({
+    queryKey: eligibilityKey,
+    queryFn: async (): Promise<CreateAuthority> => {
+      if (session === 'signed-out') return { state: 'guest' };
+      if (!transport.eligibility) return { state: 'unknown', reason: 'unavailable' };
+      return observedCreateAuthority(await transport.eligibility());
+    },
+    enabled: !!transport.eligibility && session !== 'unknown' && session !== 'unavailable' && session !== 'signed-out',
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+  const observedAuthority: CreateAuthority | null =
+    session === 'signed-out'
+      ? { state: 'guest' }
+      : session === 'unknown' || session === 'unavailable'
+        ? { state: 'unknown', reason: 'unavailable' }
+        : !transport.eligibility
+          ? { state: 'unknown', reason: 'unavailable' }
+          : eligibilityQuery.data
+            ? observedCreateAuthority(eligibilityQuery.data)
+            : eligibilityQuery.isError
+              ? { state: 'unknown', reason: 'unavailable' }
+              : null;
+  async function refreshCreateEligibility(): Promise<CreateAuthority> {
+    if (session === 'signed-out') return { state: 'guest' };
+    if (session !== 'signed-in' || !transport.eligibility) return { state: 'unknown', reason: 'unavailable' };
+    try {
+      return observedCreateAuthority(
+        await client.fetchQuery({
+          queryKey: eligibilityKey,
+          queryFn: () => transport.eligibility!(),
+          staleTime: 0,
+          retry: false,
+        }),
+      );
+    } catch {
+      const next: CreateAuthority = { state: 'unknown', reason: 'unavailable' };
+      client.setQueryData(eligibilityKey, next);
+      return next;
+    }
+  }
+  const termsId = useId();
+  const nextTermId = useRef(1);
+  const focusAddedLanguage = useSpecialistLanguageAddFocus();
+  const [type, setType] = useState<MangaType>('schema:ComicSeries');
+  const [terms, setTerms] = useState<MangaTermDraft[]>([
+    { id: 0, language: locale, label: '', description: '', aliases: '' },
+  ]);
+  const termsHolder = useRef(terms);
+  termsHolder.current = terms;
+  const [drafts, setDrafts] = useState<Record<MangaType, MangaRow[]>>({
+    'schema:ComicSeries': [],
+    'schema:PublicationVolume': [],
+  });
+  const latestDrafts = useRef(drafts);
+  const currentType = useRef(type);
+  const typeActivation = useRef(0);
+  const addFocusIntent = useRef<MangaAddFocusIntent | null>(null);
+  const [independent, setIndependent] = useState(false);
+  const [identityRevision, setIdentityRevision] = useState(0);
+  const [identityConfirmation, setIdentityConfirmation] = useState<{ key: string; unverified: boolean } | null>(null);
+  const [review, setReview] = useState<MangaReview>();
+  const [failure, setFailure] = useState<CreateFailure>();
+  const [created, setCreated] = useState<Extract<CreateResult, { ok: true }>>();
+  const [busy, setBusy] = useState(false);
+  const request = useRef<MangaCommand | null>(null);
+  const requestIdentity = useRef<string | null>(null);
+  const running = useRef(false);
+  const [retired, setRetired] = useState(false);
+  const reviewBoundary = useRef<HTMLElement>(null);
+  // Both native Type holders belong to this workspace, including hidden authored values.
+  // Inspect state only: preparing a command can validate or publish submission feedback.
+  const dirty =
+    type !== 'schema:ComicSeries' ||
+    independent ||
+    terms.some(
+      (term, index) =>
+        !!(term.label || term.description || term.aliases) || term.language !== (index === 0 ? locale : ''),
+    ) ||
+    Object.values(drafts).some((holder) => holder.length > 0);
+  const departure = useAuthoringDeparture(
+    () => lifetime.active() && !created && (dirty || running.current || !!request.current),
+    () => running.current || !!request.current,
+    String(lifetime.generation),
+    undefined,
+    () => {
+      // A sent native command may still finish. Retire only this local caller and recovery.
+      lifetime.retire();
+      request.current = null;
+      running.current = false;
+      setRetired(true);
+    },
+    undefined,
+    {
+      title: m.thread_authoring_leave_title({}, o),
+      unsaved: m.thread_authoring_leave_unsaved({}, o),
+      pending: m.thread_authoring_leave_pending({}, o),
+    },
+  );
+  const latestTermWorkspace = useRef({ read, created });
+  latestTermWorkspace.current = { read, created };
+  const rows = drafts[type];
+  const identityInput: IdentityIntakeInput | null =
+    identityIntake && read?.releaseDigest && read.release.types[type]
+      ? {
+          q: terms[0]?.label ?? '',
+          language: terms[0]?.language ?? '',
+          typeId: type,
+          releaseDigest: read.releaseDigest,
+          locale,
+        }
+      : null;
+  const identityKey = identityIntentKey(identityInput, identityRevision, viewerKey);
+  const identityKeyRef = useRef(identityKey);
+  identityKeyRef.current = identityKey;
+  const identityConfirmed = !!identityKey && identityConfirmation?.key === identityKey;
+  const currentReview =
+    review &&
+    review.releaseDigest === read?.releaseDigest &&
+    review.identityKey === identityKey &&
+    review.item.type === type &&
+    review.independent === independent
+      ? review
+      : undefined;
+  const locked = busy || !!request.current || !!created || !read;
+  const activeTypeActivation = typeActivation.current;
+  const groups = read ? mangaGroups(read.release, type, locale) : undefined;
+  const labels = mangaGroupLabels(locale);
+  const feedback = mangaCreateFeedback(failure?.errors ?? [], rows, terms, read, locale, termsId, type);
+  useEffect(() => {
+    if (review && !currentReview) setReview(undefined);
+  }, [review, currentReview]);
+  useEffect(() => {
+    if (request.current && requestIdentity.current !== identityKey) {
+      request.current = null;
+      requestIdentity.current = null;
+      running.current = false;
+      setBusy(false);
+      setRetired(true);
+    }
+  }, [identityKey]);
+  useLayoutEffect(() => {
+    if (currentReview) reviewBoundary.current?.focus();
+  }, [currentReview]);
+  const removalEpoch = useRef(0);
+  const epoch = removalEpoch.current;
+  const currentLocked = useRef(locked);
+  currentLocked.current = locked;
+  const removalAllowed = () =>
+    lifetime.active() &&
+    epoch === removalEpoch.current &&
+    !currentLocked.current &&
+    !running.current &&
+    !request.current;
+  useLayoutEffect(() => {
+    const intent = addFocusIntent.current;
+    if (!intent) return;
+    addFocusIntent.current = null;
+    const target = document.getElementById(`manga-row-${intent.row.id}`);
+    const focusStayedOnTrigger =
+      document.activeElement === intent.trigger ||
+      (intent.trigger.disabled && document.activeElement === document.body);
+    if (
+      !lifetime.active() ||
+      !removalAllowed() ||
+      intent.type !== currentType.current ||
+      intent.activation !== typeActivation.current ||
+      intent.read !== latestTermWorkspace.current.read ||
+      latestTermWorkspace.current.created ||
+      !latestDrafts.current[intent.type].includes(intent.row) ||
+      !target?.isConnected ||
+      !focusStayedOnTrigger
+    )
+      return;
+    target.focus();
+  });
+  const currentTermEdit = (holder: MangaTermDraft[], expectedType: MangaType, activation: number) => {
+    const latest = latestTermWorkspace.current;
+    return (
+      holder === termsHolder.current &&
+      expectedType === currentType.current &&
+      activation === typeActivation.current &&
+      latest.read === read &&
+      !!latest.read &&
+      !latest.created &&
+      removalAllowed()
+    );
+  };
+  const changeTerms = (holder: MangaTermDraft[], update: (previous: MangaTermDraft[]) => MangaTermDraft[]) => {
+    if (!currentTermEdit(holder, type, activeTypeActivation)) return false;
+    const next = update(termsHolder.current);
+    termsHolder.current = next;
+    setTerms(next);
+    setFailure(undefined);
+    setReview(undefined);
+    return true;
+  };
+  function editAllowed(expectedType: MangaType, activation: number) {
+    return expectedType === currentType.current && activation === typeActivation.current && removalAllowed();
+  }
+  function updateRows(expectedType: MangaType, activation: number, update: (rows: MangaRow[]) => MangaRow[]): boolean {
+    if (!editAllowed(expectedType, activation)) return false;
+    const current = latestDrafts.current;
+    const currentRows = current[expectedType];
+    const nextRows = update(currentRows);
+    if (nextRows === currentRows) return false;
+    const next = { ...current, [expectedType]: nextRows };
+    latestDrafts.current = next;
+    setDrafts(next);
+    setFailure(undefined);
+    setReview(undefined);
+    return true;
+  }
+  function changeRow(expectedType: MangaType, activation: number, row: MangaRow, next: MangaRow) {
+    updateRows(expectedType, activation, (current) => {
+      const index = current.indexOf(row);
+      if (index < 0) return current;
+      const rows = current.slice();
+      rows[index] = next;
+      return rows;
+    });
+  }
+  function removeRow(expectedType: MangaType, activation: number, row: MangaRow) {
+    updateRows(expectedType, activation, (current) => {
+      const index = current.indexOf(row);
+      return index < 0 ? current : current.filter((_, at) => at !== index);
+    });
+  }
+  function addRow(expectedType: MangaType, activation: number, expectedRead: MangaReady, row: MangaRow): boolean {
+    if (latestTermWorkspace.current.read !== expectedRead || latestTermWorkspace.current.created) return false;
+    return updateRows(expectedType, activation, (current) =>
+      current.some((item) => item.id === row.id) ||
+      (!expectedRead.release.properties[row.statement.property.id]?.multivalued &&
+        current.some((item) => item.statement.property.id === row.statement.property.id))
+        ? current
+        : [...current, row],
+    );
+  }
+  async function submit() {
+    if (!lifetime.active() || running.current || created || failure?.reason === 'conflict' || !read) return;
+    if (!request.current) {
+      if (!identityKey || !identityConfirmed) return;
+      const draft = mangaDraft(
+        read.release,
+        type,
+        locale,
+        termsHolder.current,
+        rows.map((row) => row.statement),
+      );
+      if (type === 'schema:PublicationVolume' && !independent)
+        draft.errors.push({ pointer: '/independent', code: 'required' });
+      for (const row of rows)
+        if (read.release.properties[row.statement.property.id]?.datatype === 'document' && !row.original)
+          draft.errors.push({
+            pointer: `/statements/${row.statement.property.id}/${rows.filter((item) => item.statement.property.id === row.statement.property.id).indexOf(row)}/original`,
+            code: 'required',
+          });
+      if (draft.errors.length) {
+        setFailure({ ok: false, reason: 'invalid', errors: draft.errors });
+        setReview(undefined);
+        return;
+      }
+      const fingerprint = JSON.stringify([identityKey, read.releaseDigest, draft.item, independent]);
+      if (!currentReview || currentReview.fingerprint !== fingerprint) {
+        setReview({
+          fingerprint,
+          identityKey,
+          releaseDigest: read.releaseDigest,
+          item: structuredClone(draft.item),
+          independent,
+          rows: structuredClone(rows),
+        });
+        setFailure(undefined);
+        return;
+      }
+    }
+    if (session !== 'signed-in' || (request.current && requestIdentity.current !== identityKey)) return;
+    removalEpoch.current++;
+    running.current = true;
+    setBusy(true);
+    setFailure(undefined);
+    try {
+      if (!request.current) {
+        const expectedIdentityKey = identityKey;
+        const authority = await refreshCreateEligibility();
+        if (!lifetime.active() || identityKeyRef.current !== expectedIdentityKey) return;
+        if (!isAllowedCreateAuthority(authority) || !currentReview) return;
+        request.current = {
+          key: crypto.randomUUID(),
+          item: structuredClone(currentReview.item),
+          independent: currentReview.independent,
+        };
+        requestIdentity.current = expectedIdentityKey;
+      }
+      const result = await transport.create(request.current);
+      if (!lifetime.active() || requestIdentity.current !== identityKeyRef.current) return;
+      if (result.ok) {
+        departure.release();
+        setCreated(result);
+        request.current = null;
+        requestIdentity.current = null;
+      } else {
+        setFailure(result);
+        if (!['unavailable', 'conflict'].includes(result.reason)) {
+          request.current = null;
+          requestIdentity.current = null;
+        }
+        if (result.reason === 'invalid') setReview(undefined);
+        if (result.reason === 'denied') void refreshCreateEligibility();
+        if (result.refreshDefinitions) await refresh();
+        if (!lifetime.active() || requestIdentity.current !== identityKeyRef.current) return;
+      }
+    } catch {
+      if (!lifetime.active() || requestIdentity.current !== identityKeyRef.current) return;
+      setFailure({ ok: false, reason: 'unavailable' });
+    } finally {
+      if (!lifetime.active()) return;
+      running.current = false;
+      setBusy(false);
+    }
+  }
+  if (retired) return null;
+  if (created)
+    return (
+      <section className="min-w-0 [overflow-wrap:anywhere]">
+        <ContentItemFrame as="div" className="min-w-0 space-y-4 py-4">
+          <ContentItemHeading className="font-sans text-xl font-semibold">
+            <span role="status">{m.manga_created({}, o)}</span>
+          </ContentItemHeading>
+          <p className="break-all font-mono text-sm">{created.id}</p>
+          {created.reader.state === 'ready' ? (
+            <MangaNavigationLink
+              className={buttonVariants({ className: 'h-auto min-h-11 max-w-full whitespace-normal text-start' })}
+              href={created.reader.href}
+            >
+              {m.candidate_view_public({}, o)}
+            </MangaNavigationLink>
+          ) : (
+            <>
+              <p>
+                {created.reader.state === 'concealed'
+                  ? m.catalogue_create_concealed({}, o)
+                  : m.catalogue_create_reader_unavailable({}, o)}
+              </p>
+              <Button
+                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                disabled={busy}
+                onClick={async () => {
+                  if (!lifetime.active()) return;
+                  if (running.current) return;
+                  running.current = true;
+                  setBusy(true);
+                  try {
+                    const reader = await transport.read(created.id);
+                    if (!lifetime.active()) return;
+                    setCreated({ ...created, reader });
+                  } catch {
+                    if (!lifetime.active()) return;
+                    setCreated({ ...created, reader: { state: 'unavailable' } });
+                  } finally {
+                    if (!lifetime.active()) return;
+                    running.current = false;
+                    setBusy(false);
+                  }
+                }}
+              >
+                {m.correction_retry({}, o)}
+              </Button>
+            </>
+          )}
+        </ContentItemFrame>
+      </section>
+    );
+  return (
+    <>
+      <MangaNavigationLink
+        className={buttonVariants({
+          variant: 'outline',
+          className:
+            'h-auto min-h-11 max-w-full whitespace-normal text-start focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+        })}
+        href={`/${locale}/search${terms[0]?.label.trim() ? `?q=${encodeURIComponent(terms[0].label.trim())}` : ''}`}
+      >
+        {m.catalogue_create_search({}, o)}
+      </MangaNavigationLink>
+      <form
+        className="min-w-0 space-y-8 [overflow-wrap:anywhere] [&_label]:whitespace-normal [&_label]:text-start [&_input]:min-w-0 [&_textarea]:min-w-0"
+        onBlurCapture={(event) => {
+          const intent = addFocusIntent.current;
+          if (!intent || event.nativeEvent.target !== intent.trigger) return;
+          const automaticDisabledBlur =
+            intent.trigger.disabled && (event.relatedTarget === null || event.relatedTarget === document.body);
+          if (!automaticDisabledBlur) addFocusIntent.current = null;
+        }}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+        aria-busy={busy}
+      >
+        {identityInput && identityIntake ? (
+          <IdentityIntakePanel
+            locale={locale}
+            intent={identityInput}
+            version={identityRevision}
+            viewerKey={viewerKey}
+            viewerState={identityIntake.viewerState}
+            hasType={!!read?.release.types[type]}
+            {...(read?.release.types[type]
+              ? { typeLabel: definitionText(read.release.types[type]!.labels, locale).text }
+              : {})}
+            typeCurrent={!!read?.release.types[type] && !!read.releaseDigest}
+            disabled={locked}
+            confirmed={identityConfirmed}
+            confirmedUnverified={identityConfirmation?.unverified === true && identityConfirmed}
+            onContinue={(key, unverified) => {
+              setIdentityConfirmation({ key, unverified });
+              setReview(undefined);
+            }}
+            onClear={() => {
+              setIdentityConfirmation(null);
+              setReview(undefined);
+            }}
+            onRefreshType={() => {
+              setIdentityConfirmation(null);
+              setReview(undefined);
+              void refresh();
+            }}
+            inputId={`${termsId}-label-0`}
+            {...(identityIntake.read ? { read: identityIntake.read } : {})}
+            authority={observedAuthority}
+            onAuthority={(next) => {
+              if (lifetime.active()) client.setQueryData(eligibilityKey, observedCreateAuthority(next));
+            }}
+            onRefreshAuthority={() => {
+              void refreshCreateEligibility();
+            }}
+            {...(eligibilityQuery.isPending || eligibilityQuery.isFetching ? { authorityPending: true } : {})}
+            createHref={`/${locale}/catalogue/manga`}
+          />
+        ) : (
+          <CreateAuthorityStatus
+            locale={locale}
+            authority={observedAuthority ?? { state: 'unknown', reason: 'unavailable' }}
+            pending={eligibilityQuery.isPending || eligibilityQuery.isFetching}
+            href={`/${locale}/catalogue/manga`}
+            onRetry={() => {
+              void refreshCreateEligibility();
+            }}
+          />
+        )}
+        <fieldset disabled={locked} className="min-w-0 space-y-4">
+          <legend className="mb-3 max-w-full">
+            <ContentItemHeading className="font-sans text-xl font-semibold">{m.manga_grain({}, o)}</ContentItemHeading>
+          </legend>
+          <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
+            <Field className="min-w-0">
+              <FieldLabel htmlFor="manga-type">{m.manga_grain({}, o)}</FieldLabel>
+              <NativeSelect
+                className="w-full min-w-0"
+                id="manga-type"
+                value={type}
+                onChange={(event) => {
+                  const nextType = event.target.value as MangaType;
+                  addFocusIntent.current = null;
+                  if (nextType !== currentType.current) typeActivation.current++;
+                  currentType.current = nextType;
+                  setType(nextType);
+                  setIdentityRevision((current) => current + 1);
+                  setIdentityConfirmation(null);
+                  setReview(undefined);
+                  setFailure(undefined);
+                }}
+              >
+                {!read?.release.types[type] && (
+                  <NativeSelectOption value="" disabled>
+                    {m.correction_choose({}, o)}
+                  </NativeSelectOption>
+                )}
+                {mangaTypes
+                  .filter((id) => read?.release.types[id])
+                  .map((id) => {
+                    const text = definitionText(read!.release.types[id]!.labels, locale);
+                    return (
+                      <NativeSelectOption key={id} value={id} lang={text.lang ?? undefined}>
+                        {text.text}
+                      </NativeSelectOption>
+                    );
+                  })}
+              </NativeSelect>
+            </Field>
+            <p className="text-sm text-muted-foreground">{m.manga_grain_help({}, o)}</p>
+            {read?.release.types[type] && (
+              <DefinitionGuideLink locale={locale} address={{ type, returnTo: `/${locale}/catalogue/manga` }} />
+            )}
+            {type === 'schema:PublicationVolume' && (
+              <Field orientation="horizontal">
+                <Checkbox
+                  id="manga-independent"
+                  checked={independent}
+                  aria-invalid={feedback.some((error) => error.target === 'manga-independent') || undefined}
+                  aria-describedby={
+                    feedback
+                      .filter((error) => error.target === 'manga-independent')
+                      .map((error) => error.id)
+                      .join(' ') || undefined
+                  }
+                  onCheckedChange={(value) => {
+                    setIndependent(value === true);
+                    setReview(undefined);
+                    setFailure(undefined);
+                  }}
+                />
+                <FieldLabel htmlFor="manga-independent">{m.manga_independent({}, o)}</FieldLabel>
+              </Field>
+            )}
+          </ContentItemFrame>
+        </fieldset>
+        <fieldset disabled={locked} className="min-w-0 space-y-5">
+          <legend className="mb-3 max-w-full">
+            <ContentItemHeading className="font-sans text-xl font-semibold">
+              {m.catalogue_create_terms({}, o)}
+            </ContentItemHeading>
+          </legend>
+          {terms.map((term, index) => (
+            <ContentItemFrame
+              as="div"
+              key={term.id}
+              id={`${termsId}-row-${term.id}`}
+              className="grid min-w-0 gap-4 py-3 sm:grid-cols-2 sm:py-4"
+            >
+              {(['language', 'label', 'description', 'aliases'] as const).map((field) => {
+                const label = {
+                  language: m.catalogue_create_language({}, o),
+                  label: m.catalogue_create_label({}, o),
+                  description: m.catalogue_create_description({}, o),
+                  aliases: m.catalogue_create_aliases({}, o),
+                }[field];
+                const props = {
+                  id: `${termsId}-${field}-${term.id}`,
+                  value: term[field],
+                  'aria-invalid':
+                    feedback.some((error) => error.target === `${termsId}-${field}-${term.id}`) || undefined,
+                  'aria-describedby':
+                    feedback
+                      .filter((error) => error.target === `${termsId}-${field}-${term.id}`)
+                      .map((error) => error.id)
+                      .join(' ') || undefined,
+                  onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+                    const changed = changeTerms(terms, (previous) =>
+                      previous.map((item) => (item.id === term.id ? { ...item, [field]: event.target.value } : item)),
+                    );
+                    if (changed && term.id === 0 && (field === 'label' || field === 'language')) {
+                      setIdentityRevision((current) => current + 1);
+                      setIdentityConfirmation(null);
+                    }
+                  },
+                };
+                return (
+                  <Field key={field} className="min-w-0">
+                    <FieldLabel htmlFor={props.id}>{label}</FieldLabel>
+                    {field === 'aliases' ? <Textarea {...props} /> : <Input {...props} />}
+                  </Field>
+                );
+              })}
+              {index > 0 && (
+                <CreateSubjectLanguageRemove
+                  locale={locale}
+                  populated={!!(term.language || term.label || term.description || term.aliases)}
+                  rowId={`${termsId}-row-${term.id}`}
+                  focusId={terms[index + 1] ? `${termsId}-language-${terms[index + 1]!.id}` : `${termsId}-add-language`}
+                  disabled={locked}
+                  onRemove={() => {
+                    return changeTerms(terms, (previous) => previous.filter((row) => row.id !== term.id));
+                  }}
+                />
+              )}
+            </ContentItemFrame>
+          ))}
+          <Button
+            className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+            id={`${termsId}-add-language`}
+            type="button"
+            variant="outline"
+            disabled={locked}
+            onClick={(event) => {
+              if (!currentTermEdit(terms, type, activeTypeActivation)) return;
+              const id = nextTermId.current++;
+              const next = [...termsHolder.current, { id, language: '', label: '', description: '', aliases: '' }];
+              termsHolder.current = next;
+              setTerms(next);
+              focusAddedLanguage(event, `${termsId}-language-${id}`, () =>
+                currentTermEdit(next, type, activeTypeActivation),
+              );
+            }}
+          >
+            {m.catalogue_create_add_language({}, o)}
+          </Button>
+        </fieldset>
+        <div
+          id="manga-fields"
+          tabIndex={-1}
+          className="min-w-0 space-y-8 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {read &&
+            groups &&
+            Object.entries(groups)
+              .filter(([, fields]) => fields.length)
+              .map(([group, fields]) => (
+                <section key={group} className="min-w-0">
+                  <ContentItemFrame as="div" className="min-w-0 space-y-4 py-3 sm:py-4">
+                    <ContentItemHeading className="font-sans text-xl font-semibold">
+                      {labels[group as keyof typeof labels]}
+                    </ContentItemHeading>
+                    <div data-content-item-slot="preview" className="min-w-0 space-y-4">
+                      {group === 'membership' && (
+                        <p className="text-sm text-muted-foreground">{m.manga_order_help({}, o)}</p>
+                      )}
+                      {rows
+                        .filter((row) => fields.includes(row.statement.property.id))
+                        .map((row) => (
+                          <MangaInitialField
+                            key={row.id}
+                            row={row}
+                            read={read}
+                            type={type}
+                            locale={locale}
+                            search={search}
+                            disabled={locked}
+                            removalAllowed={removalAllowed}
+                            feedback={{
+                              id: `manga-row-${row.id}`,
+                              errors: feedback,
+                            }}
+                            onChange={(next) => changeRow(type, activeTypeActivation, row, next)}
+                            onRemove={() => removeRow(type, activeTypeActivation, row)}
+                          />
+                        ))}
+                      <AddField
+                        label={labels[group as keyof typeof labels]}
+                        disabled={locked}
+                        fields={fields.filter(
+                          (id) =>
+                            read.release.properties[id]!.multivalued ||
+                            !rows.some((row) => row.statement.property.id === id),
+                        )}
+                        name={(id) => pickText(read.release.properties[id]!.labels, locale)}
+                        onAdd={(property, event) => {
+                          addFocusIntent.current = null;
+                          const row: MangaRow = {
+                            id: crypto.randomUUID(),
+                            statement: blankMangaStatement(property),
+                            label: pickText(read.release.properties[property]!.labels, locale),
+                          };
+                          if (!addRow(type, activeTypeActivation, read, row) || event.detail !== 0) return;
+                          addFocusIntent.current = {
+                            row,
+                            type,
+                            activation: activeTypeActivation,
+                            read,
+                            trigger: event.currentTarget,
+                          };
+                        }}
+                        locale={locale}
+                      />
+                    </div>
+                  </ContentItemFrame>
+                </section>
+              ))}
+          {read &&
+            groups &&
+            rows
+              .filter((row) => !Object.values(groups).flat().includes(row.statement.property.id))
+              .map((row) => (
+                <section
+                  key={row.id}
+                  id={`manga-row-${row.id}`}
+                  tabIndex={-1}
+                  className="min-w-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  <ContentItemFrame as="div" className="min-w-0 space-y-3 py-3 sm:py-4">
+                    <ContentItemHeading
+                      level={3}
+                      className="font-sans text-lg font-semibold"
+                      lang={row.label?.lang ?? undefined}
+                    >
+                      {row.label?.text || m.correction_invalid_part({}, o)}
+                    </ContentItemHeading>
+                    <p role="alert">{m.correction_stale({}, o)}</p>
+                    <details>
+                      <summary className="cursor-pointer">{m.catalogue_creation_technical_details({}, o)}</summary>
+                      <pre className="mt-2 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-3 font-mono text-xs">
+                        {mangaRetiredAssertionSnapshot(row)}
+                      </pre>
+                    </details>
+                    <MangaRowRemove
+                      row={row}
+                      locale={locale}
+                      disabled={locked}
+                      populated={retiredMangaRowPopulated(row)}
+                      removalAllowed={removalAllowed}
+                      onRemove={() => removeRow(type, activeTypeActivation, row)}
+                    />
+                  </ContentItemFrame>
+                </section>
+              ))}
+        </div>
+        {currentReview && read && (
+          <MangaCreateReviewView review={currentReview} read={read} locale={locale} boundaryRef={reviewBoundary} />
+        )}
+        {failure && (
+          <ContentItemFrame
+            as="div"
+            className="min-w-0 space-y-3 py-4 [&_a]:inline-flex [&_a]:min-h-11 [&_a]:items-center [&_a]:focus-visible:outline-2 [&_a]:focus-visible:outline-offset-2 [&_a]:focus-visible:outline-ring"
+          >
+            <EditorFailure locale={locale} reason={failure.reason} />
+            {!!failure.errors?.length && (
+              <ul className="list-disc ps-5">
+                {feedback.map((error, index) => (
+                  <li key={error.id} id={error.id}>
+                    <a
+                      className="underline"
+                      href={`#${error.target}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        const target = event.currentTarget
+                          .closest('form')
+                          ?.querySelector<HTMLElement>(`[id="${CSS.escape(error.target)}"]`);
+                        const control = target?.hasAttribute('data-manga-picker')
+                          ? (target.querySelector<HTMLElement>('[role="combobox"]') ?? target)
+                          : target;
+                        control?.focus();
+                      }}
+                    >
+                      {error.label}
+                    </a>
+                    <p>{error.instruction}</p>
+                    {error.instruction.includes(m.correction_error_uneditable({}, o)) && (
+                      <details>
+                        <summary>{m.catalogue_creation_technical_details({}, o)}</summary>
+                        <code>{failure.errors![index]!.pointer}</code>
+                      </details>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {failure.reason === 'conflict' && (
+              <Button
+                className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  request.current = null;
+                  requestIdentity.current = null;
+                  setReview(undefined);
+                  setFailure(undefined);
+                }}
+              >
+                {m.catalogue_create_review_new({}, o)}
+              </Button>
+            )}
+          </ContentItemFrame>
+        )}
+        <Button
+          id="create-subject-submit"
+          className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+          type="submit"
+          disabled={
+            busy ||
+            !read?.release.types[type] ||
+            failure?.reason === 'conflict' ||
+            (request.current
+              ? session !== 'signed-in' || requestIdentity.current !== identityKey
+              : currentReview
+                ? session !== 'signed-in' || !isAllowedCreateAuthority(observedAuthority)
+                : !identityConfirmed)
+          }
+        >
+          {busy
+            ? m.catalogue_create_saving({}, o)
+            : request.current
+              ? m.correction_retry({}, o)
+              : currentReview
+                ? m.manga_title({}, o)
+                : m.manga_create_review({}, o)}
+        </Button>
+      </form>
+    </>
+  );
+}
+
+function MangaCreateReviewView({
+  review,
+  read,
+  locale,
+  boundaryRef,
+}: {
+  review: MangaReview;
+  read: MangaReady;
+  locale: string;
+  boundaryRef: RefObject<HTMLElement | null>;
+}) {
+  const o = { locale: locale as never };
+  return (
+    <section
+      ref={boundaryRef}
+      data-manga-create-review
+      tabIndex={-1}
+      aria-label={m.catalogue_create_review_title({}, o)}
+      className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:p-5"
+    >
+      <ContentItemHeading className="font-sans text-xl font-semibold">
+        {m.catalogue_create_review_title({}, o)}
+      </ContentItemHeading>
+      <div className="space-y-2">
+        <h3 className="font-semibold">{m.manga_grain({}, o)}</h3>
+        <p lang={definitionText(read.release.types[review.item.type]!.labels, locale).lang ?? undefined}>
+          {definitionText(read.release.types[review.item.type]!.labels, locale).text}
+        </p>
+        {review.item.type === 'schema:PublicationVolume' && (
+          <p>
+            {m.manga_independent({}, o)}: {review.independent ? '✓' : '—'}
+          </p>
+        )}
+      </div>
+      <div className="space-y-2">
+        <h3 className="font-semibold">{m.catalogue_create_terms({}, o)}</h3>
+        <ul className="min-w-0 space-y-3">
+          {Object.entries(review.item.labels).map(([language, label]) => (
+            <li key={language} className="min-w-0 break-words">
+              <p className="text-xs font-medium text-muted-foreground">
+                {m.catalogue_create_language({}, o)}: <code>{language}</code>
+              </p>
+              <p lang={language}>{label}</p>
+              {(review.item.descriptions ?? {})[language] && (
+                <p className="text-sm text-muted-foreground" lang={language}>
+                  {(review.item.descriptions ?? {})[language]}
+                </p>
+              )}
+              {(review.item.aliases ?? {})[language]?.length ? (
+                <p className="text-sm text-muted-foreground" lang={language}>
+                  {(review.item.aliases ?? {})[language]!.join(' · ')}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="space-y-3">
+        <h3 className="font-semibold">{m.manga_review_facts({}, o)}</h3>
+        {Object.entries(review.item.statements).flatMap(([propertyId, statements]) =>
+          statements.map((statement, index) => {
+            const property = read.release.properties[propertyId];
+            const propertyLabel = pickText(property?.labels ?? {}, locale);
+            const row = review.rows.filter((candidate) => candidate.statement.property.id === propertyId)[index];
+            const targets = row?.targets?.[propertyId] ?? [];
+            const content = statement.value.type === 'value' ? statement.value.content : null;
+            const authored = content && typeof content === 'object' ? (content as Record<string, unknown>) : null;
+            return (
+              <article key={`${propertyId}-${index}`} className="min-w-0 space-y-2">
+                <h4 className="font-medium" lang={propertyLabel.lang ?? undefined}>
+                  {propertyLabel.text || propertyId}
+                </h4>
+                {targets.length > 0 && (
+                  <div className="space-y-1">
+                    <h5 className="text-sm font-medium">{m.manga_review_target({}, o)}</h5>
+                    <ul className="space-y-1 text-sm">
+                      {targets.map((target) => (
+                        <li key={target.id} className="break-all">
+                          <span>{target.title}</span> <code className="font-mono text-xs">{target.id}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {property?.datatype === 'document' && authored && (
+                  <div className="space-y-2">
+                    <dl className="grid min-w-0 gap-1 text-sm sm:grid-cols-[max-content_1fr] sm:gap-x-3">
+                      {typeof authored.language === 'string' && (
+                        <>
+                          <dt className="font-medium">{m.authored_language({}, o)}</dt>
+                          <dd lang={authored.language}>{authored.language}</dd>
+                        </>
+                      )}
+                      {typeof authored.licence === 'string' && (
+                        <>
+                          <dt className="font-medium">{m.authored_licence({}, o)}</dt>
+                          <dd className="break-all">{authored.licence}</dd>
+                        </>
+                      )}
+                      <dt className="font-medium">{m.authored_original({}, o)}</dt>
+                      <dd>{row?.original ? '✓' : '—'}</dd>
+                    </dl>
+                    {!!authored.document && typeof authored.document === 'object' && (
+                      <p className="whitespace-pre-wrap break-words" lang={String(authored.language ?? '')}>
+                        {documentText(authored.document as DocumentSnapshot)}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {property?.datatype !== 'document' && statement.value.type === 'value' && (
+                  <p className="break-all text-sm">
+                    {typeof statement.value.content === 'string'
+                      ? statement.value.content
+                      : JSON.stringify(statement.value.content)}
+                  </p>
+                )}
+                <details open>
+                  <summary className="min-h-11 cursor-pointer content-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring">
+                    {m.catalogue_creation_technical_details({}, o)}
+                  </summary>
+                  <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-3 font-mono text-xs">
+                    {JSON.stringify(statement, null, 2)}
+                  </pre>
+                </details>
+              </article>
+            );
+          }),
+        )}
+        {!Object.keys(review.item.statements).length && (
+          <p className="text-sm text-muted-foreground">{m.catalogue_create_review_terms_only({}, o)}</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+export function mangaRetiredAssertionSnapshot(row: MangaRow): string {
+  return JSON.stringify(row.statement, null, 2);
+}
+
+export function retiredMangaRowPopulated(row: MangaRow): boolean {
+  const hasValue = (value: unknown): boolean => {
+    if (typeof value === 'string') return !!value.trim();
+    if (value === null || value === undefined) return false;
+    if (typeof value === 'object') return Object.values(value).some(hasValue);
+    return true;
+  };
+  return (
+    row.statement.value.type !== 'value' ||
+    (row.authored
+      ? hasDocumentContent(row.authored.document) || !!row.authored.language.trim() || !!row.authored.licence.trim()
+      : hasValue(row.statement.value.content)) ||
+    !!row.original ||
+    !!row.statement.qualifiers?.length ||
+    !!row.statement.references?.some((reference) => reference.parts.length) ||
+    !!Object.values(row.targets ?? {}).some((targets) => targets.length)
+  );
+}
+
+/** Use router navigation in the page and ordinary links in isolated editor compositions. */
+function MangaNavigationLink({ href, children, className }: { href: string; children: ReactNode; className: string }) {
+  const router = useRouter({ warn: false });
+  return router ? (
+    <Link to={href} className={className}>
+      {children}
+    </Link>
+  ) : (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  );
+}
+
+function AddField({
+  label,
+  fields,
+  name,
+  onAdd,
+  disabled,
+  locale,
+}: {
+  label: string;
+  fields: string[];
+  name: (id: string) => ReturnType<typeof pickText>;
+  onAdd: (id: string, event: React.MouseEvent<HTMLButtonElement>) => void;
+  disabled: boolean;
+  locale: string;
+}) {
+  const [property, setProperty] = useState('');
+  const selectId = useId();
+  const o = { locale: locale as never };
+  return (
+    <div className="flex min-w-0 flex-wrap items-end gap-3">
+      <Field className="min-w-0 basis-full sm:basis-48 sm:flex-1">
+        <FieldLabel htmlFor={selectId} className="whitespace-normal [overflow-wrap:anywhere]">
+          {label}
+        </FieldLabel>
+        <NativeSelect
+          id={selectId}
+          className="w-full min-w-0"
+          aria-label={label}
+          value={fields.includes(property) ? property : ''}
+          disabled={disabled}
+          onChange={(event) => setProperty(event.target.value)}
+        >
+          <NativeSelectOption value="">{m.correction_choose({}, o)}</NativeSelectOption>
+          {fields.map((id) => (
+            <NativeSelectOption key={id} value={id} lang={name(id).lang ?? undefined}>
+              {name(id).text}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </Field>
+      <Button
+        className="h-auto min-h-11 max-w-full whitespace-normal text-start"
+        type="button"
+        variant="outline"
+        disabled={disabled || !fields.includes(property)}
+        onClick={(event) => {
+          onAdd(property, event);
+          setProperty('');
+        }}
+      >
+        {m.correction_add({}, o)}
+      </Button>
+    </div>
+  );
+}
+
+/** Outer navigation only. Original reader admission and focus run at the destination. */
+export function MangaPublicVisitNotice({
+  id,
+  locale,
+  visit,
+  changed = false,
+}: {
+  id: string;
+  locale: string;
+  visit?: MangaPublicVisit | undefined;
+  changed?: boolean;
+}) {
+  const o = { locale: locale as never };
+  const origin = visit?.kind === 'origin' ? visit.origin : undefined;
+  const returnHref = origin?.returnHref ?? (visit?.kind === 'global' ? visit.returnHref : undefined);
+  const unsupported = !!origin && (origin.context !== candidateContext || !!origin.realm);
+  const link =
+    'inline-flex min-h-11 items-center rounded-sm text-primary underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  return (
+    <section className="space-y-3 p-4" aria-label={m.manga_edit({}, o)}>
+      {(visit?.kind === 'invalid' || unsupported || changed) && (
+        <p role="alert">
+          {visit?.kind === 'invalid'
+            ? m.manga_origin_invalid({}, o)
+            : changed
+              ? m.manga_origin_changed({}, o)
+              : m.manga_origin_unsupported({}, o)}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-4">
+        {returnHref && (
+          <a className={link} href={returnHref}>
+            {m.manga_origin_return({}, o)}
+          </a>
+        )}
+        {origin && !returnHref && (
+          <>
+            <p>{m.manga_origin_no_exact_return({}, o)}</p>
+            <a className={link} href={subjectHref({ id, label: '' }, locale).href}>
+              {m.manga_origin_general({}, o)}
+            </a>
+          </>
+        )}
+        {(unsupported || changed || visit?.kind === 'invalid') && (
+          <a className={link} href={mangaGlobalVisitHref(id, locale, returnHref)}>
+            {m.manga_origin_global({}, o)}
+          </a>
+        )}
+      </div>
+    </section>
+  );
+}

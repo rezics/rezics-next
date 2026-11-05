@@ -9,15 +9,17 @@
     "./schema/*.json": "./schema/*.json"
   },
   "scripts": {
-    "check": "oxfmt --check . && tsc --noEmit -p tsconfig.json && bun test && bun scripts/schema.ts --check"
+    "check": "oxfmt --check . && bun check --no-script -p tsconfig.json && bun test && bun scripts/schema.ts --check",
+    "typecheck": "bun check --no-script -p tsconfig.json"
   },
   "dependencies": {
     "@noble/hashes": "2.4.0",
     "typebox": "1.4.3",
-    "canonicalize": "5.1.0"
+    "canonicalize": "5.1.0",
+    "@rezics/filter": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",
-    "oxfmt": "0.74.0"
+    "oxfmt": "0.75.0"
   }
 }

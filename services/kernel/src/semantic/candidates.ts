@@ -1,9 +1,21 @@
+import {
+  beginSemanticRecordSourceSet,
+  collectSemanticRecordFacts,
+  sealSemanticRecordSourceSet,
+} from './record-source-set.ts';
+import { collectSemanticCandidateSource } from './record-source-set.ts';
+import { retainSubjectPageSource } from './subject-page-publication-store.ts';
+import { subjectPageSlot, recordSubjectPageDiff } from './subject-page-publication-native.ts';
+import { disclosureAccount, keepStatementPrivate, statementAudience } from './statement-disclosure.ts';
+import { withReadTransaction } from './read.ts';
+import { readConsentTarget, type ConsentIdentity, type ConsentIdentityReader } from './candidate-consent-identity.ts';
 import { checkStatementInput } from '@rezics/definitions/validate';
 import type { Source, BatchReference } from '@rezics/definitions/bulk';
 import type { Release } from '@rezics/definitions';
 import type { Pool, PoolClient } from 'pg';
-import { runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
-import { discardConnection, withConnection } from '../database/pool.ts';
+import { currentCommand, runCommand, type CommandAuthorization, type CommandTransaction } from '../command/command.ts';
+import { declareCommandHistory } from '../history/record.ts';
+
 import { fencedIds } from './fences.ts';
 import { readPartition } from '../partition/partition.ts';
 import type { AccountActor } from '../request/access.ts';
@@ -11,13 +23,28 @@ import { derivedId, partitionOf, routeOf } from '../route/route.ts';
 import { decodeCursor, encodeCursor, type CursorBinding, type CursorKey } from '../tokens/cursor.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { redirectOf, SubjectRedirectError } from './merges.ts';
-import { GLOBAL_CONTEXT, readRelease } from './definitions.ts';
-import { LINKS_CHANGED } from './events.ts';
+import { initializeRevisionAuthorship, revisionResource, StaleRevisionAuthorshipError } from './authorship.ts';
+import { creationDeclares } from '../access/index.ts';
+import { activeRelease, GLOBAL_CONTEXT, readRelease } from './definitions.ts';
+import { baseOf, layeredRelease } from './extensions.ts';
+import { termContext } from '@rezics/definitions/extension';
+import { LINK_KEYS_CHANGED, LINKS_CHANGED } from './events.ts';
 import { SUBJECT_REVISED } from './events.ts';
-import { factDataTypes, itemFacts, resolveItem, SubjectInputError, type Statement, type Violation } from './item.ts';
-import { linkChanges } from './link-changes.ts';
+import { recordPrivacyReduction } from './public-filter-source.ts';
+import {
+  factDataTypes,
+  itemFacts,
+  isRelationProperty,
+  resolveItem,
+  SubjectInputError,
+  type Statement,
+  type Violation,
+} from './item.ts';
+import { holderFacts } from './link-keys.ts';
+import { contextLinkChanges, linkChanges } from './link-changes.ts';
 import { PageCursorError } from './page.ts';
-import { rejectContent } from './rules.ts';
+import { rejectBulkContent, rejectContent } from './rules.ts';
+import { authoredAuthorization, installAuthoredStatement, type ProposalInstall } from './authored.ts';
 import {
   candidateFact,
   currentAcceptance,
@@ -31,8 +58,16 @@ import {
   type Adoption,
   type Candidate,
 } from './slots.ts';
-import { readItemTypes } from './subject.ts';
+import {
+  accountSource,
+  assertAgentStatementAccess,
+  readItemDetails,
+  readLabels,
+  type AgentSelfSource,
+} from './subject.ts';
 import { contextSnapshot } from './context.ts';
+import registerRelationContext from './relation-context-register.sql';
+import listRelationContexts from './relation-context-list.sql';
 import { matchesTarget } from './targets.ts';
 import changeCurrentFacts from './change-current-facts.sql';
 import insertCandidate from './candidates-insert-candidate.sql';
@@ -40,6 +75,7 @@ import insertEditorialRevision from './candidates-insert-editorial-revision.sql'
 import insertProposalRevision from './candidates-insert-proposal-revision.sql';
 import readAdoptionSubject from './candidates-read-adoption-subject.sql';
 import readCandidatePage from './candidates-read-candidate-page.sql';
+import readCandidateLifecycle from './candidates-read-lifecycle.sql';
 import readCompactCandidate from './candidates-read-compact-candidate.sql';
 import readDecisionCandidate from './candidates-read-decision-candidate.sql';
 import readHidden from './candidates-read-hidden.sql';
@@ -49,6 +85,7 @@ import readRevisions from './candidates-read-revisions.sql';
 import readSlotCandidate from './candidates-read-slot-candidate.sql';
 import readSubjectRevision from './candidates-read-subject-revision.sql';
 import readCandidateVisibility from './candidates-read-visibility.sql';
+import readCandidateOwners from './candidates-read-owners.sql';
 import updateSubjectRelease from './update-subject-release.sql';
 
 export class SubjectNotFoundError extends Error {}
@@ -69,6 +106,7 @@ function validatedStatement(
   release: { digest: string; release: Release },
   raw: unknown,
   allowContent = false,
+  authoredDocuments = true,
 ) {
   const property = record(raw) && record(raw.property) && typeof raw.property.id === 'string' ? raw.property.id : '';
   const definition = Object.hasOwn(release.release.types, type) ? release.release.types[type] : undefined;
@@ -80,13 +118,41 @@ function validatedStatement(
   const checked = checkStatementInput(
     raw,
     subjectErrors.length ? undefined : release.release,
-    allowContent ? {} : { rejectContent },
+    allowContent ? {} : { rejectContent: authoredDocuments ? rejectContent : rejectBulkContent, authoredDocuments },
   );
   const violations = [...subjectErrors, ...checked.violations];
   if (violations.length) throw new SubjectInputError(violations);
   const input = { type, labels: { en: 'Validation' }, statements: { [property]: [raw] } };
-  const facts = itemFacts(subject, input, type);
+  const facts = itemFacts(subject, input, type, release.release);
   return { property, fact: facts.find((fact) => fact.kind === 'statement')!, items: checked.targets };
+}
+
+/** Only authored values are checked before the receipt; other proposal errors retain receipt ordering. */
+function checkAuthoredValues(statement: unknown, release: Release) {
+  const snaks: [unknown, string][] = [[statement, '/statement']];
+  if (record(statement)) {
+    if (Array.isArray(statement.qualifiers))
+      statement.qualifiers.forEach((snak, i) => snaks.push([snak, `/statement/qualifiers/${i}`]));
+    if (Array.isArray(statement.references))
+      statement.references.forEach((reference, i) => {
+        if (record(reference) && Array.isArray(reference.parts))
+          reference.parts.forEach((snak, j) => snaks.push([snak, `/statement/references/${i}/parts/${j}`]));
+      });
+  }
+  const paths = snaks.flatMap(([snak, path]) =>
+    record(snak) &&
+    record(snak.property) &&
+    typeof snak.property.id === 'string' &&
+    release.properties[snak.property.id]?.datatype === 'document'
+      ? [`${path}/value/content`]
+      : [],
+  );
+  if (!paths.length) return;
+  const checked = checkStatementInput(statement, release, { rejectContent, authoredDocuments: true });
+  const errors = checked.violations.filter((error) =>
+    paths.some((path) => error.pointer === path || error.pointer.startsWith(`${path}/`)),
+  );
+  if (errors.length) throw new SubjectInputError(errors);
 }
 
 export async function proposeStatement(
@@ -101,10 +167,15 @@ export async function proposeStatement(
     authorization: CommandAuthorization;
     deadline: number;
     clock?: () => Date;
+    routeKey?: Uint8Array;
+    /** Server declaration only; allocation remains inside the native body. */
+    expectedRevision?: number;
   },
 ) {
   const route = routeOf(options.subject);
   if (route === null) throw new SubjectNotFoundError();
+  const statement = structuredClone(options.statement);
+  checkAuthoredValues(statement, options.release.release);
   const command = await runCommand(
     pool,
     {
@@ -121,11 +192,16 @@ export async function proposeStatement(
         clientId: options.actor.clientId,
         requestedBy: options.actor.requestedBy,
       },
-      authorization: options.authorization,
+      authorization: authoredAuthorization(options.authorization, { route, id: options.subject }),
       clock: options.clock,
     },
     async (tx, { transactionId }) => {
-      return writeProposal(tx, transactionId, options);
+      const result = await writeProposal(tx, transactionId, { ...options, statement });
+      await declareCommandHistory(tx, 'subject.propose', {
+        response: { artifactType: 'command-receipt/v1', accounts: [] },
+        events: result.events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+      });
+      return result;
     },
   );
   return {
@@ -139,16 +215,21 @@ export async function writeProposal(
   tx: CommandTransaction,
   transactionId: string,
   options: Pick<Parameters<typeof proposeStatement>[1], 'subject' | 'statement' | 'release'> & {
-    source?: Source;
+    expectedRevision?: number;
+    source?: Source | AgentSelfSource;
+    routeKey?: Uint8Array;
     /** Sourced bulk summary and cover store content's reference instead of rejecting the datatype. */
     allowContent?: boolean;
     /** Runs after the candidate id and revision are allocated and before the candidate row is inserted. */
-    install?: (allocated: { candidate: string; revision: number; body: unknown }) => Promise<unknown | undefined>;
+    install?: ProposalInstall;
   },
 ) {
+  const sourceSet = await beginSemanticRecordSourceSet(tx);
   const route = routeOf(options.subject)!;
   const subject = listed(await readSubjectRevision.run(tx, { route, subject_id: options.subject }))[0];
   if (!subject) throw new SubjectNotFoundError();
+  if (options.expectedRevision !== undefined && subject.revision + 1 !== options.expectedRevision)
+    throw new StaleRevisionAuthorshipError();
   const redirect = await redirectOf(tx, options.subject);
   if (redirect) throw new SubjectRedirectError(options.subject, redirect);
   const input = validatedStatement(
@@ -157,13 +238,28 @@ export async function writeProposal(
     options.release,
     options.statement,
     options.allowContent === true,
+    options.source === undefined,
   );
-  const types = await readItemTypes(
+  const details = await readItemDetails(tx, [options.subject, ...input.items.map((item) => item.id)]);
+  const privateAccount = await disclosureAccount(tx, options.release.release, input.property, input.fact.body);
+  assertAgentStatementAccess(
     tx,
-    input.items.map((item) => item.id),
+    [
+      options.subject,
+      ...input.items
+        .filter(
+          (item) =>
+            !(
+              options.release.release.properties[input.property]?.disclosure === 'sourceOrConsent' &&
+              item.pointer === '/statement/value/content'
+            ),
+        )
+        .map((item) => item.id),
+    ],
+    details,
   );
   const errors = input.items.flatMap((item) =>
-    matchesTarget(options.release.release, types.get(item.id) ?? '', item.targets)
+    matchesTarget(options.release.release, details.get(item.id)?.type ?? '', item.targets)
       ? []
       : [{ pointer: item.pointer, code: 'out_of_range' as const }],
   );
@@ -172,7 +268,7 @@ export async function writeProposal(
   const candidate = derivedId(CANDIDATE_NS, `${options.subject}\n${revision}`, route);
   const body = structuredClone(input.fact.body);
   const replacement = options.install ? await options.install({ candidate, revision, body }) : undefined;
-  const factBody =
+  let factBody =
     replacement === undefined
       ? body
       : {
@@ -182,30 +278,52 @@ export async function writeProposal(
             content: replacement,
           },
         };
+  const authoredEvents: { type: string; subject: string; data: unknown }[] = [];
+  if (!options.allowContent && options.source === undefined) {
+    const installed = await installAuthoredStatement(
+      tx,
+      options.subject,
+      options.release.release,
+      { candidate, revision, body: factBody },
+      input.property,
+    );
+    factBody = installed.body;
+    authoredEvents.push(...installed.events);
+  }
   try {
-    await expandSlot(tx, options.subject, input.property, transactionId);
+    await expandSlot(
+      tx,
+      options.subject,
+      input.property,
+      transactionId,
+      input.fact.slot_id,
+      isRelationProperty(options.release.release, input.property),
+    );
     await insertProposalRevision.run(tx, {
       route,
       subject_id: options.subject,
       revision,
-      release: options.release.digest,
+      release: baseOf(options.release.digest),
       transaction_id: transactionId,
-      source: options.source ?? null,
+      source: options.source ?? accountSource(tx, [options.subject, ...input.items.map((item) => item.id)]),
     });
+    if (options.source === undefined && creationDeclares(tx, revisionResource(options.subject, revision)))
+      await initializeRevisionAuthorship(tx, { subject: options.subject, revision });
     await updateSubjectRelease.run(tx, {
       route,
       subject_id: options.subject,
-      release: options.release.digest,
+      release: baseOf(options.release.digest),
     });
     await insertCandidate.run(tx, {
       route,
       subject_id: options.subject,
       candidate_id: candidate,
-      slot_id: slotId(options.subject, input.property),
+      slot_id: input.fact.slot_id,
       property: input.property,
       rank: (input.fact.body as { rank: string }).rank,
       statement: factBody,
       release: options.release.digest,
+      relation: isRelationProperty(options.release.release, input.property),
       revision,
     });
   } catch (error) {
@@ -219,6 +337,31 @@ export async function writeProposal(
     }
     throw error;
   }
+  await collectSemanticRecordFacts(
+    tx,
+    options.subject,
+    [{ ...input.fact, statement_id: candidate, body: factBody }],
+    revision,
+  );
+  if (options.source && 'source' in options.source && options.routeKey)
+    await retainSubjectPageSource(tx, {
+      subject: { route, id: options.subject },
+      candidates: [candidate],
+      source: options.source,
+      routeKey: options.routeKey,
+    });
+  if (privateAccount)
+    await keepStatementPrivate(tx, {
+      subject: options.subject,
+      candidate,
+      slot: input.fact.slot_id,
+      property: input.property,
+      body: factBody,
+      account: privateAccount,
+      revision,
+      release: options.release.release,
+    });
+  await sealSemanticRecordSourceSet(tx, sourceSet);
   return {
     value: { candidate, revision },
     events: [
@@ -228,6 +371,7 @@ export async function writeProposal(
         data: { id: options.subject, revision, kind: 'propose' },
       },
       { type: 'com.rezics.statement.proposed.v1', subject: options.subject, data: { candidate, revision } },
+      ...authoredEvents,
     ],
   };
 }
@@ -240,6 +384,7 @@ type EditorialWriteOptions = {
   authorization: CommandAuthorization;
   deadline: number;
   clock?: () => Date;
+  routeKey?: Uint8Array;
 };
 
 async function appendEditorialRevision(
@@ -258,13 +403,13 @@ async function appendEditorialRevision(
     subject_id: input.subject,
     revision: input.revision,
     kind: input.kind,
-    release: input.release,
+    release: baseOf(input.release),
     transaction_id: input.transactionId,
   });
   await updateSubjectRelease.run(tx, {
     route: input.route,
     subject_id: input.subject,
-    release: input.release,
+    release: baseOf(input.release),
   });
 }
 
@@ -288,6 +433,8 @@ export async function decideCandidate(
 ) {
   const route = routeOf(options.subject);
   if (route === null) throw new SubjectNotFoundError();
+  const defaults =
+    options.context === GLOBAL_CONTEXT ? {} : ((await contextSnapshot(pool, options.context))?.defaults ?? {});
   const command = await runCommand(
     pool,
     {
@@ -308,12 +455,14 @@ export async function decideCandidate(
       clock: options.clock,
     },
     async (tx, { transactionId }) => {
+      const sourceSet = await beginSemanticRecordSourceSet(tx);
       type CandidateRow = {
         revision: number;
         release: string;
         candidate_id: string;
         property: string;
         slot_id: string;
+        relation: boolean;
       };
       const found = listed(
         await readDecisionCandidate.run(tx, {
@@ -333,6 +482,7 @@ export async function decideCandidate(
         )[0] as CandidateRow | undefined;
       }
       if (!candidate) throw new SubjectNotFoundError();
+      await collectSemanticCandidateSource(tx, options.subject, options.candidate);
       const concealed = await readHidden.run(tx, {
         route,
         subject_id: options.subject,
@@ -340,10 +490,50 @@ export async function decideCandidate(
       });
       if (listed(concealed).length > 0) throw new SubjectNotFoundError();
       if (await redirectOf(tx, options.subject)) throw new EditorialConflictError();
+      // A Context's relation type is unknown elsewhere until Global adopts it.
+      if (termContext(candidate.property) !== null) {
+        const active = await activeRelease(tx);
+        const visible = active && (await layeredRelease(tx, active, options.context)).release;
+        if (!visible?.properties[candidate.property])
+          throw new SubjectInputError([{ pointer: '/candidate', code: 'unsupported' }]);
+      }
 
-      await expandSlot(tx, options.subject, candidate.property, transactionId);
+      const publicationRelease = await readRelease(tx, candidate.release);
+      if (!publicationRelease) throw new Error('Candidate release is missing');
+      const publicationBefore =
+        options.context === GLOBAL_CONTEXT
+          ? await subjectPageSlot(
+              tx,
+              options.subject,
+              candidate.property,
+              candidate.slot_id,
+              publicationRelease,
+              options.routeKey,
+            )
+          : null;
+      const release = candidate.relation ? publicationRelease : null;
+      const before = release
+        ? (await slotView(tx, options.subject, candidate.property, options.context, defaults, candidate.slot_id)).facts
+        : [];
+      const global = release
+        ? (await slotView(tx, options.subject, candidate.property, GLOBAL_CONTEXT, {}, candidate.slot_id)).facts
+        : [];
+      if (release && options.context !== GLOBAL_CONTEXT)
+        await registerRelationContext.run(tx, {
+          route,
+          subject_id: options.subject,
+          slot_id: candidate.slot_id,
+          context_id: options.context,
+        });
+      await expandSlot(tx, options.subject, candidate.property, transactionId, candidate.slot_id, candidate.relation);
       if (options.decision === 'reject') {
-        const adoption = await latestAdoption(tx, options.subject, candidate.property, options.context);
+        const adoption = await latestAdoption(
+          tx,
+          options.subject,
+          candidate.property,
+          options.context,
+          candidate.slot_id,
+        );
         if (adoption?.mode === 'replace' && adoption.selection.some((entry) => entry.candidate === options.candidate))
           throw new EditorialConflictError();
       }
@@ -368,6 +558,67 @@ export async function decideCandidate(
           revision,
           candidate.slot_id,
         );
+        const linkEvents: { type: string; subject: string; data: unknown }[] = [];
+        if (publicationBefore)
+          await recordSubjectPageDiff(
+            tx,
+            options.subject,
+            transactionId,
+            publicationBefore,
+            await subjectPageSlot(
+              tx,
+              options.subject,
+              candidate.property,
+              candidate.slot_id,
+              publicationRelease,
+              options.routeKey,
+            ),
+            linkEvents,
+          );
+        if (release) {
+          const subject = await readAdoptionSubject.run(tx, { route, subject_id: options.subject });
+          if (!subject) throw new SubjectNotFoundError();
+          const after = (
+            await slotView(tx, options.subject, candidate.property, options.context, defaults, candidate.slot_id)
+          ).facts;
+          const identity = await holderFacts(tx, options.subject, release);
+          const metadata = { subject: options.subject, release, type: identity.type, identityFacts: identity.facts };
+          const dataTypes = factDataTypes(release, [...global, ...before, ...after]);
+          const changes =
+            options.context === GLOBAL_CONTEXT
+              ? linkChanges(before, after, dataTypes, metadata)
+              : contextLinkChanges(global, before, after, dataTypes, metadata, options.context);
+          if (changes.length)
+            linkEvents.push({
+              type: LINKS_CHANGED,
+              subject: options.subject,
+              data: {
+                subject: options.subject,
+                revision,
+                security_revision: Number(subject.security_revision),
+                changes,
+              },
+            });
+        }
+        await sealSemanticRecordSourceSet(tx, sourceSet);
+        const events = [
+          ...linkEvents,
+          {
+            type: SUBJECT_REVISED,
+            subject: options.subject,
+            data: { id: options.subject, revision, kind: options.decision },
+          },
+          {
+            type:
+              options.decision === 'accept' ? 'com.rezics.statement.accepted.v1' : 'com.rezics.statement.rejected.v1',
+            subject: options.subject,
+            data: { candidate: options.candidate, context: options.context, revision, head },
+          },
+        ];
+        await declareCommandHistory(tx, 'subject.decide', {
+          response: { artifactType: 'command-receipt/v1', accounts: [] },
+          events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+        });
         return {
           value: {
             acceptance: {
@@ -378,19 +629,7 @@ export async function decideCandidate(
             },
             revision,
           },
-          events: [
-            {
-              type: SUBJECT_REVISED,
-              subject: options.subject,
-              data: { id: options.subject, revision, kind: options.decision },
-            },
-            {
-              type:
-                options.decision === 'accept' ? 'com.rezics.statement.accepted.v1' : 'com.rezics.statement.rejected.v1',
-              subject: options.subject,
-              data: { candidate: options.candidate, context: options.context, revision, head },
-            },
-          ],
+          events,
         };
       } catch (error) {
         retryEditorialUniqueness(error);
@@ -409,6 +648,7 @@ export async function adoptCandidates(
   options: EditorialWriteOptions & {
     context: string;
     property: string;
+    slot?: string;
     mode: Adoption['mode'];
     selection: { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' }[];
     expectedHead: number | null;
@@ -417,6 +657,8 @@ export async function adoptCandidates(
 ) {
   const route = routeOf(options.subject);
   if (route === null) throw new SubjectNotFoundError();
+  const defaults =
+    options.context === GLOBAL_CONTEXT ? {} : ((await contextSnapshot(pool, options.context))?.defaults ?? {});
   const command = await runCommand(
     pool,
     {
@@ -437,6 +679,7 @@ export async function adoptCandidates(
       clock: options.clock,
     },
     async (tx, { transactionId }) => {
+      const sourceSet = await beginSemanticRecordSourceSet(tx);
       const subject = listed(await readAdoptionSubject.run(tx, { route, subject_id: options.subject }))[0];
       if (!subject) throw new SubjectNotFoundError();
       if (await redirectOf(tx, options.subject)) throw new EditorialConflictError();
@@ -449,6 +692,7 @@ export async function adoptCandidates(
       const definition = options.release.release.properties[options.property];
       if (!type || !type.properties.includes(options.property) || !definition)
         throw new SubjectInputError([{ pointer: '/property', code: 'unsupported' }]);
+      const slot = options.slot ?? slotId(options.subject, options.property);
 
       if (options.selection.length > 32) throw new SubjectInputError([{ pointer: '/selection', code: 'out_of_range' }]);
       const hiddenCandidates = new Set<string>();
@@ -460,10 +704,12 @@ export async function adoptCandidates(
           route,
           subject_id: options.subject,
           candidate_ids: hiddenIds,
+          viewer_account: '00000000-0000-0000-0000-000000000000',
+          viewer_moderator: false,
         });
         for (const row of listed(concealed)) hiddenCandidates.add(row.candidate_id);
       }
-      const state = await resolveSlot(tx, options.subject, options.property, options.context);
+      const state = await resolveSlot(tx, options.subject, options.property, options.context, slot);
       const compact = new Set(state.compact.map((candidate) => candidate.candidate_id));
       for (const [index, entry] of options.selection.entries()) {
         let supported = compact.has(entry.candidate);
@@ -471,7 +717,7 @@ export async function adoptCandidates(
           const result = await readSlotCandidate.run(tx, {
             route,
             subject_id: options.subject,
-            slot_id: slotId(options.subject, options.property),
+            slot_id: slot,
             candidate_id: entry.candidate,
           });
           supported = listed(result).length > 0;
@@ -479,6 +725,7 @@ export async function adoptCandidates(
         if (routeOf(entry.candidate) !== route || !supported || hiddenCandidates.has(entry.candidate))
           throw new SubjectInputError([{ pointer: `/selection/${index}/candidate`, code: 'unsupported' }]);
       }
+      for (const entry of options.selection) await collectSemanticCandidateSource(tx, options.subject, entry.candidate);
       const seen = new Set<string>();
       for (const [index, entry] of options.selection.entries()) {
         if (seen.has(entry.candidate))
@@ -491,21 +738,60 @@ export async function adoptCandidates(
       if (!definition.multivalued && options.selection.length > 1)
         throw new SubjectInputError([{ pointer: '/selection', code: 'out_of_range' }]);
 
-      const beforeLinks =
-        options.context === GLOBAL_CONTEXT ? (await slotView(tx, options.subject, options.property)).facts : null;
+      const publicationBefore =
+        options.context === GLOBAL_CONTEXT
+          ? await subjectPageSlot(
+              tx,
+              options.subject,
+              options.property,
+              slot,
+              options.release.release,
+              options.routeKey,
+            )
+          : null;
+      const beforeFacts = (await slotView(tx, options.subject, options.property, options.context, defaults, slot))
+        .facts;
+      const globalFacts =
+        options.context === GLOBAL_CONTEXT
+          ? beforeFacts
+          : (await slotView(tx, options.subject, options.property, GLOBAL_CONTEXT, {}, slot)).facts;
+      const identity = await holderFacts(tx, options.subject, options.release.release);
+      const contextViews = new Map<string, typeof beforeFacts>();
+      if (isRelationProperty(options.release.release, options.property)) {
+        if (options.context !== GLOBAL_CONTEXT)
+          await registerRelationContext.run(tx, {
+            route,
+            subject_id: options.subject,
+            slot_id: slot,
+            context_id: options.context,
+          });
+        else
+          for (const row of await listRelationContexts.run(tx, { route, subject_id: options.subject, slot_id: slot }))
+            contextViews.set(
+              row.context_id,
+              (await slotView(tx, options.subject, options.property, row.context_id, {}, slot)).facts,
+            );
+      }
       let oldGlobalCount = 0;
       if (options.context === GLOBAL_CONTEXT) {
-        const global = await resolveSlot(tx, options.subject, options.property, GLOBAL_CONTEXT);
+        const global = await resolveSlot(tx, options.subject, options.property, GLOBAL_CONTEXT, slot);
         oldGlobalCount = global.expanded
           ? global.adoption?.mode === 'replace'
             ? global.adoption.selection.length
             : 0
           : global.compact.length;
       }
-      await expandSlot(tx, options.subject, options.property, transactionId);
+      await expandSlot(
+        tx,
+        options.subject,
+        options.property,
+        transactionId,
+        slot,
+        isRelationProperty(options.release.release, options.property),
+      );
       const revision = subject.revision + 1;
       const selection = options.selection as Adoption['selection'];
-      if (options.context === GLOBAL_CONTEXT) {
+      if (options.context === GLOBAL_CONTEXT && !isRelationProperty(options.release.release, options.property)) {
         const newGlobalCount = options.mode === 'replace' ? selection.length : 0;
         const updated = await changeCurrentFacts.run(tx, {
           route,
@@ -532,7 +818,39 @@ export async function adoptCandidates(
           options.mode,
           selection,
           revision,
+          slot,
         );
+        if (options.context === GLOBAL_CONTEXT) {
+          const previous = state.expanded
+            ? state.adoption?.mode === 'replace'
+              ? state.adoption.selection
+              : []
+            : state.compact.map((candidate) => ({ candidate: candidate.candidate_id, rank: candidate.rank }));
+          const nextRanks = new Map(options.selection.map(({ candidate, rank }) => [candidate, rank]));
+          const removed = previous.filter((entry) => nextRanks.get(entry.candidate) !== entry.rank);
+          if (removed.length)
+            await recordPrivacyReduction(tx, {
+              partition: partitionOf(route),
+              transactionId,
+              time: currentCommand(tx).time,
+              cause: 'selection',
+              affected: removed.map((entry) => ({
+                kind: 'selection' as const,
+                route,
+                subject: options.subject,
+                slot,
+                candidate: entry.candidate,
+              })),
+              impacts: [
+                {
+                  kind: 'keys',
+                  route,
+                  subject: options.subject,
+                  keys: [{ kind: 'property', property: options.property }],
+                },
+              ],
+            });
+        }
         for (const entry of selection) {
           const local = await currentAcceptance(tx, options.subject, entry.candidate, options.context);
           const effective =
@@ -549,13 +867,50 @@ export async function adoptCandidates(
             data: { id: options.subject, revision, kind: 'adopt' },
           },
         ];
-        if (beforeLinks) {
-          const afterFacts = (await slotView(tx, options.subject, options.property)).facts;
-          const changes = linkChanges(
-            beforeLinks,
-            afterFacts,
-            factDataTypes(options.release.release, [...beforeLinks, ...afterFacts]),
+        if (publicationBefore)
+          await recordSubjectPageDiff(
+            tx,
+            options.subject,
+            transactionId,
+            publicationBefore,
+            await subjectPageSlot(
+              tx,
+              options.subject,
+              options.property,
+              slot,
+              options.release.release,
+              options.routeKey,
+            ),
+            events,
           );
+        if (beforeFacts) {
+          const afterFacts = (await slotView(tx, options.subject, options.property, options.context, defaults, slot))
+            .facts;
+          const metadata = {
+            subject: options.subject,
+            release: options.release.release,
+            type: subject.type,
+            ...(identity?.facts === undefined ? {} : { identityFacts: identity.facts }),
+          };
+          const dataTypes = factDataTypes(options.release.release, [...globalFacts, ...beforeFacts, ...afterFacts]);
+          const changes =
+            options.context === GLOBAL_CONTEXT
+              ? linkChanges(beforeFacts, afterFacts, dataTypes, metadata)
+              : contextLinkChanges(globalFacts, beforeFacts, afterFacts, dataTypes, metadata, options.context);
+          for (const [context, before] of contextViews) {
+            const after = (await slotView(tx, options.subject, options.property, context, {}, slot)).facts;
+            changes.push(
+              ...contextLinkChanges(
+                globalFacts,
+                before,
+                after,
+                factDataTypes(options.release.release, [...globalFacts, ...afterFacts, ...before, ...after]),
+                metadata,
+                context,
+                afterFacts,
+              ),
+            );
+          }
           if (changes.length > 0) {
             events.push({
               type: LINKS_CHANGED,
@@ -568,7 +923,26 @@ export async function adoptCandidates(
               },
             });
           }
+          if (options.context === GLOBAL_CONTEXT && options.property === 'schema:datePublished') {
+            for (const direction of ['holder', 'target'] as const)
+              events.push({
+                type: LINK_KEYS_CHANGED,
+                subject: options.subject,
+                data: {
+                  subject: options.subject,
+                  direction,
+                  revision,
+                  security_revision: Number(subject.security_revision),
+                  cursor: [],
+                },
+              });
+          }
         }
+        await sealSemanticRecordSourceSet(tx, sourceSet);
+        await declareCommandHistory(tx, 'subject.adopt', {
+          response: { artifactType: 'command-receipt/v1', accounts: [] },
+          events: events.map(() => ({ artifactType: 'outbox-event/v1', accounts: [] })),
+        });
         return {
           value: {
             adoption: {
@@ -617,30 +991,18 @@ async function page<T>(
     if (!validAfter(decoded.after)) throw new PageCursorError('invalid');
     cursor = decoded;
   }
-  return withConnection(pool, async (client) => {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    try {
-      await client.query("SET LOCAL statement_timeout = '300ms'");
-      const partition = await readPartition(client, partitionOf(route));
-      const subject = listed(await readCandidateVisibility.run(client, { route, subject_id: options.subject }))[0];
-      if (!partition || subject?.visibility !== 'visible' || !(await options.authorize(client)))
-        throw new SubjectNotFoundError();
-      if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
-      const result = await read(client, cursor?.after ?? null);
-      await client.query('COMMIT');
-      return {
-        ...result.value,
-        next: result.after ? encodeCursor(ring, binding, { epoch: partition.epoch, after: result.after }) : null,
-        component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
-      };
-    } catch (error) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        discardConnection(client, rollbackError as Error);
-      }
-      throw error;
-    }
+  return withReadTransaction(pool, async (client) => {
+    const partition = await readPartition(client, partitionOf(route));
+    const subject = listed(await readCandidateVisibility.run(client, { route, subject_id: options.subject }))[0];
+    if (!partition || subject?.visibility !== 'visible' || !(await options.authorize(client)))
+      throw new SubjectNotFoundError();
+    if (cursor && cursor.epoch !== partition.epoch) throw new PageCursorError('stale');
+    const result = await read(client, cursor?.after ?? null);
+    return {
+      ...result.value,
+      next: result.after ? encodeCursor(ring, binding, { epoch: partition.epoch, after: result.after }) : null,
+      component: { partition: partition.partitionNo, epoch: partition.epoch, position: partition.position },
+    };
   });
 }
 
@@ -666,11 +1028,7 @@ export function listRevisions(pool: Pool, ring: KeyRing, options: PageOptions) {
   );
 }
 
-export async function listCandidates(
-  pool: Pool,
-  ring: KeyRing,
-  options: PageOptions & { property: string; context: string; routeKey?: Uint8Array },
-) {
+async function candidatePage(pool: Pool, ring: KeyRing, options: CandidatePageOptions) {
   const contextRecord = options.context === GLOBAL_CONTEXT ? null : await contextSnapshot(pool, options.context);
   if (options.context !== GLOBAL_CONTEXT && !contextRecord) throw new SubjectNotFoundError();
   const defaults = contextRecord?.defaults ?? {};
@@ -683,6 +1041,7 @@ export async function listCandidates(
       parameters: {
         subject: options.subject,
         property: options.property,
+        slot: options.slot ?? slotId(options.subject, options.property),
         context: options.context,
       },
     },
@@ -696,7 +1055,11 @@ export async function listCandidates(
       typeof after[2] === 'string' &&
       routeOf(after[2]) === routeOf(options.subject),
     async (client, after) => {
-      const state = await resolveSlot(client, options.subject, options.property, options.context);
+      const identityAdmitted =
+        options.identity?.actor.kind === 'account' &&
+        (await readPartition(client, partitionOf(routeOf(options.subject)!)))?.writeState === 'active';
+      const slot = options.slot ?? slotId(options.subject, options.property);
+      const state = await resolveSlot(client, options.subject, options.property, options.context, slot);
       type Decided = Candidate & { verdict: 'accept' | 'reject' | 'abstain' | null; head: number | null };
       let rows: Decided[];
       if (state.expanded) {
@@ -704,7 +1067,7 @@ export async function listCandidates(
           await readCandidatePage.run(client, {
             route: routeOf(options.subject)!,
             subject_id: options.subject,
-            slot_id: slotId(options.subject, options.property),
+            slot_id: slot,
             context_id: options.context,
             after_revision: Number(after?.[0] ?? 0),
             after_view_order: Number(after?.[1] ?? 0),
@@ -729,43 +1092,83 @@ export async function listCandidates(
           }));
       }
       const window = rows.slice(0, options.limit);
+      const lifecycleRows = window.length
+        ? listed(
+            await readCandidateLifecycle.run(client, {
+              route: routeOf(options.subject)!,
+              subject_id: options.subject,
+              candidate_ids: window.map((row) => row.candidate_id),
+            }),
+          )
+        : [];
+      const lifecycle = new Map(lifecycleRows.map((row) => [row.candidate_id, row.state]));
       const hidden = new Set<string>();
       if (window.length) {
+        const owners = listed(
+          await readCandidateOwners.run(client, {
+            route: routeOf(options.subject)!,
+            subject_id: options.subject,
+            candidate_ids: window.map((row) => row.candidate_id),
+          }),
+        ) as {
+          candidate_id: string;
+          principal_kind: 'account' | 'anonymous' | 'erased';
+          principal_id: string;
+          account_state: string | null;
+          account_fenced: boolean | null;
+        }[];
+        const located = new Set(owners.map((owner) => owner.candidate_id));
+        for (const row of window) if (!located.has(row.candidate_id)) hidden.add(row.candidate_id);
+        for (const owner of owners) {
+          if (
+            owner.principal_kind === 'account' &&
+            (owner.account_state !== 'active' || owner.account_fenced !== false)
+          )
+            hidden.add(owner.candidate_id);
+        }
         const concealed = await readHiddenIds.run(client, {
           route: routeOf(options.subject)!,
           subject_id: options.subject,
           candidate_ids: window.map((row) => row.candidate_id),
+          ...(await statementAudience(client)),
         });
         for (const row of listed(concealed)) hidden.add(row.candidate_id);
       }
       // Hidden rows leave this page short. next stays set until the candidate sequence ends.
       const shown = window.filter((row) => !hidden.has(row.candidate_id));
       const releases = new Map<string, Release>();
-      for (const row of shown) {
+      for (const row of shown.filter(
+        (row) => !['deleted', 'purging', 'purged'].includes(lifecycle.get(row.candidate_id) ?? 'active'),
+      )) {
         if (releases.has(row.release)) continue;
         const release = await readRelease(client, row.release);
         if (!release) throw new Error('Candidate release is missing');
         releases.set(row.release, release);
       }
-      const view = await slotView(client, options.subject, options.property, options.context, defaults);
+      const view = await slotView(client, options.subject, options.property, options.context, defaults, slot);
       const ranks = new Map(
         view.facts.map((fact) => [
           fact.statement_id!,
           (fact.body as { rank?: 'normal' | 'preferred' | 'deprecated' }).rank ?? null,
         ]),
       );
-      let candidates: {
-        source: Source | null;
-        retracted: number | null;
-        retraction: { source: Source; references: BatchReference[] } | null;
-        id: string;
-        statement: Statement;
-        release: string;
-        revision: number;
-        decision: 'accepted' | 'rejected' | null;
-        head: number | null;
-        rank: 'normal' | 'preferred' | 'deprecated' | null;
-      }[] = [];
+      let subjectIdentity: ConsentIdentity['subject'] | undefined;
+      let candidates: (
+        | { id: string; deleted: true }
+        | {
+            consentIdentity?: ConsentIdentity;
+            source: Source | null;
+            retracted: number | null;
+            retraction: { source: Source; references: BatchReference[] } | null;
+            id: string;
+            statement: Statement;
+            release: string;
+            revision: number;
+            decision: 'accepted' | 'rejected' | 'abstained' | null;
+            head: number | null;
+            rank: 'normal' | 'preferred' | 'deprecated' | null;
+          }
+      )[] = [];
       for (const row of shown) {
         const provenance = listed(
           await readProvenance.run(client, {
@@ -781,6 +1184,16 @@ export async function listCandidates(
               retraction: { source: Source; references: BatchReference[] } | null;
             }
           | undefined;
+        if (['deleted', 'purging', 'purged'].includes(lifecycle.get(row.candidate_id) ?? 'active')) {
+          if (options.routeKey && provenance?.source) {
+            const fenced = await fencedIds(client, options.routeKey, [
+              { id: row.candidate_id, source: provenance.source },
+            ]);
+            if (fenced.has(row.candidate_id)) continue;
+          }
+          candidates.push({ id: row.candidate_id, deleted: true });
+          continue;
+        }
         const fact = candidateFact(options.property, row);
         const dataTypes = factDataTypes(releases.get(row.release)!, [fact]);
         const statement = resolveItem(options.subject, [fact], '', dataTypes, {
@@ -788,14 +1201,36 @@ export async function listCandidates(
           release: row.release,
           context: options.context,
         }).statements[options.property]![0]!;
+        let identity: ConsentIdentity | undefined;
+        if (
+          identityAdmitted &&
+          provenance?.retracted === null &&
+          releases.get(row.release)?.properties[options.property]?.disclosure === 'sourceOrConsent' &&
+          statement.property.data_type === 'wikibase-item' &&
+          statement.value.type === 'value' &&
+          typeof statement.value.content === 'string'
+        ) {
+          subjectIdentity ??= {
+            id: options.subject,
+            labels: (await readLabels(client, [options.subject])).get(options.subject) ?? {},
+          };
+          identity = { subject: subjectIdentity, target: null };
+        }
         candidates.push({
           ...provenance!,
+          ...(identity ? { consentIdentity: identity } : {}),
           id: row.candidate_id,
           statement,
           release: row.release,
           revision: row.revision,
           decision:
-            row.verdict === 'accept' ? ('accepted' as const) : row.verdict === 'reject' ? ('rejected' as const) : null,
+            row.verdict === 'accept'
+              ? 'accepted'
+              : row.verdict === 'reject'
+                ? 'rejected'
+                : row.verdict === 'abstain'
+                  ? 'abstained'
+                  : null,
           head: row.head,
           rank: ranks.get(row.candidate_id) ?? null,
         });
@@ -804,9 +1239,9 @@ export async function listCandidates(
         const gone = await fencedIds(
           client,
           options.routeKey,
-          candidates.map((row) => ({ id: row.id, source: row.source })),
+          candidates.flatMap((row) => ('deleted' in row ? [] : [{ id: row.id, source: row.source }])),
         );
-        candidates = candidates.filter((row) => !gone.has(row.id));
+        candidates = candidates.filter((row) => 'deleted' in row || !gone.has(row.id));
       }
       const last = window.at(-1);
       return {
@@ -818,4 +1253,55 @@ export async function listCandidates(
       };
     },
   );
+}
+
+type CandidatePageOptions = PageOptions & {
+  property: string;
+  context: string;
+  slot?: string;
+  routeKey?: Uint8Array;
+  identity?: ConsentIdentityReader & {
+    prepareSource: () => Promise<PageOptions['authorize']>;
+    refreshAudience: () => Promise<void>;
+  };
+};
+
+/** Stage only the page's admitted main item targets, then re-read source admission,
+ * audience, disclosure, candidate lifecycle and tuple fences before disclosing labels.
+ */
+export async function listCandidates(pool: Pool, ring: KeyRing, options: CandidatePageOptions) {
+  const first = await candidatePage(pool, ring, options);
+  if (
+    !options.identity ||
+    !first.candidates.some((candidate) => 'consentIdentity' in candidate && candidate.consentIdentity)
+  )
+    return first;
+  const targets = new Map<string, ConsentIdentity['target']>();
+  for (const candidate of first.candidates) {
+    if ('deleted' in candidate || !candidate.consentIdentity) continue;
+    if (candidate.statement.value.type !== 'value' || typeof candidate.statement.value.content !== 'string') continue;
+    const target = candidate.statement.value.content;
+    if (!targets.has(target)) targets.set(target, await readConsentTarget(pool, options.identity, target));
+  }
+  await options.identity.refreshAudience();
+  const authorize = await options.identity.prepareSource();
+  const current = await candidatePage(pool, ring, { ...options, authorize });
+  for (const candidate of current.candidates) {
+    if ('deleted' in candidate || !candidate.consentIdentity) continue;
+    const prior = first.candidates.find((row) => row.id === candidate.id);
+    if (
+      !prior ||
+      'deleted' in prior ||
+      prior.release !== candidate.release ||
+      JSON.stringify(prior.statement) !== JSON.stringify(candidate.statement)
+    ) {
+      delete candidate.consentIdentity;
+      continue;
+    }
+    candidate.consentIdentity.target =
+      candidate.statement.value.type === 'value' && typeof candidate.statement.value.content === 'string'
+        ? (targets.get(candidate.statement.value.content) ?? null)
+        : null;
+  }
+  return current;
 }

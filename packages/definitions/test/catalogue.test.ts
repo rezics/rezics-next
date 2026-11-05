@@ -25,11 +25,27 @@ test('the committed bundled release is the compilation of the bundled catalogue'
 
 test('book work, edition and recipe are profiles of the catalogue', () => {
   const { types, properties } = bundledRelease;
-  expect(bundledRelease.catalogue).toEqual({ id: 'https://rezics.com/catalogue/rezics', version: '1.0.0' });
+  expect(bundledRelease.catalogue).toEqual({ id: 'https://rezics.com/catalogue/rezics', version: '1.0.5' });
   expect(Object.keys(types)).toEqual(expect.arrayContaining(['bf:Instance', 'schema:Book', 'schema:Recipe']));
   expect(types['schema:Book']).toMatchObject({
     mappings: ['wd:Q47461344'],
     properties: [
+      'rezics:alternativeSetting',
+      'rezics:alternativeVersion',
+      'rezics:artbookCounterpart',
+      'rezics:bangumiLegacyVersion',
+      'rezics:bangumiRelatedTo',
+      'rezics:collaborationWith',
+      'rezics:crossMediaCounterpart',
+      'rezics:editionCounterpart',
+      'rezics:expansionCounterpart',
+      'rezics:representativeEdition',
+      'rezics:sameCharacters',
+      'rezics:sameSetting',
+      'rezics:sideStoryOf',
+      'rezics:spinOffOf',
+      'rezics:storyArc',
+      'rezics:summaryOf',
       'schema:abstract',
       'schema:author',
       'schema:contributor',
@@ -41,32 +57,62 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
       'schema:name',
       'schema:sameAs',
       'schema:url',
+      'schema:wordCount',
+      'wdt:P155',
       'wdt:P179',
+      'wdt:P361',
       'wdt:P5732',
       'wdt:P648',
+      'wdt:P7937',
     ],
   });
   expect(types['bf:Instance']).toMatchObject({
     iri: 'http://id.loc.gov/ontologies/bibframe/Instance',
     mappings: ['wd:Q3331189'],
     properties: [
+      'rezics:alternativeSetting',
+      'rezics:alternativeVersion',
+      'rezics:artbookCounterpart',
+      'rezics:bangumiLegacyVersion',
+      'rezics:bangumiRelatedTo',
+      'rezics:collaborationWith',
+      'rezics:crossMediaCounterpart',
+      'rezics:editionCounterpart',
+      'rezics:expansionCounterpart',
+      'rezics:sameCharacters',
+      'rezics:sameSetting',
+      'rezics:sideStoryOf',
+      'rezics:spinOffOf',
+      'rezics:storyArc',
+      'rezics:summaryOf',
       'schema:author',
       'schema:contributor',
+      'schema:creativeWorkStatus',
       'schema:datePublished',
+      'schema:director',
       'schema:exampleOfWork',
       'schema:genre',
+      'schema:illustrator',
       'schema:image',
       'schema:inLanguage',
       'schema:isbn',
       'schema:keywords',
+      'schema:musicBy',
       'schema:name',
       'schema:numberOfPages',
+      'schema:producer',
+      'schema:productionCompany',
       'schema:publisher',
       'schema:sameAs',
       'schema:translator',
       'schema:url',
+      'wdt:P155',
+      'wdt:P178',
       'wdt:P179',
+      'wdt:P361',
+      'wdt:P58',
       'wdt:P648',
+      'wdt:P725',
     ],
   });
   expect(types['schema:Recipe']!.properties).toEqual([
@@ -78,15 +124,27 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
     'schema:keywords',
     'schema:name',
     'schema:recipeIngredient',
+    'schema:recipeInstructions',
     'schema:recipeYield',
     'schema:sameAs',
+    'schema:suitableForDiet',
     'schema:url',
+    'wdt:P186',
   ]);
   expect(properties['schema:author']).toMatchObject({
     datatype: 'wikibase-item',
     multivalued: true,
     targets: ['schema:Organization', 'schema:Person'],
-    qualifiers: ['schema:position', 'schema:sameAs', 'wdt:P1932', 'wdt:P3180', 'wdt:P3831', 'wdt:P6298', 'wdt:P648'],
+    qualifiers: [
+      'schema:position',
+      'schema:sameAs',
+      'wdt:P1932',
+      'wdt:P3180',
+      'wdt:P3831',
+      'wdt:P518',
+      'wdt:P6298',
+      'wdt:P648',
+    ],
     mappings: ['wd:P50'],
   });
   expect(properties['schema:exampleOfWork']).toMatchObject({
@@ -94,6 +152,7 @@ test('book work, edition and recipe are profiles of the catalogue', () => {
     multivalued: false,
     targets: ['schema:CreativeWork'],
     mappings: ['wd:P629'],
+    qualifiers: ['schema:sameAs', 'wdt:P31', 'wdt:P648'],
   });
   expect(properties['schema:isbn']).toMatchObject({
     datatype: 'external-id',
@@ -160,6 +219,35 @@ ${prefixes}imports:
   );
   expect(release.properties['schema:composer']).toMatchObject({ targets: ['schema:Person'], multivalued: true });
   expect(release.properties['schema:isbn']).toEqual(bundledRelease.properties['schema:isbn']!);
+});
+
+test('Person biography and Organization history admit sourced descriptors', () => {
+  const { types, properties } = bundledRelease;
+  expect(types['schema:Person']?.properties).toEqual(
+    expect.arrayContaining(['schema:abstract', 'wdt:P106', 'schema:knowsLanguage']),
+  );
+  expect(properties['wdt:P106']).toMatchObject({
+    targets: ['skos:Concept'],
+    relation: { group: 'classification', inverse: 'none' },
+  });
+  expect(properties['schema:knowsLanguage']).toMatchObject({ targets: ['skos:Concept'] });
+  expect(properties['schema:hasOccupation']).toBeUndefined();
+  expect(properties['schema:occupation']).toBeUndefined();
+  expect(types['schema:Organization']?.properties).toEqual(
+    expect.arrayContaining(['schema:abstract', 'wdt:P749', 'wdt:P1365', 'wdt:P1366']),
+  );
+  expect(properties['wdt:P749']).toMatchObject({
+    targets: ['schema:Organization'],
+    relation: { group: 'association', inverse: 'rezics:hasSubsidiary' },
+  });
+  expect(properties['wdt:P1365']).toMatchObject({
+    targets: ['schema:Organization'],
+    relation: { group: 'order', inverse: 'rezics:replacedBy' },
+  });
+  expect(properties['wdt:P1366']).toMatchObject({
+    targets: ['schema:Organization'],
+    relation: { group: 'order', inverse: 'rezics:replaces' },
+  });
 });
 
 test('every bundled term carries labels in all eight UI locales', () => {

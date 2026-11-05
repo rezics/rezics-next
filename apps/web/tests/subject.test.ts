@@ -5,6 +5,7 @@ import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
 import { createKernelClient, type KernelClient } from '@rezics/client';
+import { slug } from '@rezics/definitions/slug';
 import { createFakeKernelFetch } from '../src/kernel/fake.ts';
 import fixtures from '../src/kernel/fixtures.json';
 
@@ -22,6 +23,8 @@ type Snak = Subject['statements'][string][number]['qualifiers'][number];
 const subjects = fixtures.subjects as Subject[];
 const [kokoro, soseki, taketori, novel, shortStory] = subjects as [Subject, Subject, Subject, Subject, Subject];
 const property = (id: string) => fixtures.properties.find((entry) => entry.id === id)!;
+const localKernel = createFakeKernelFetch(fixtures);
+const kernel = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: localKernel });
 // The kernel stores only books today, so the author and genres are books too; the page never reads the type.
 // The kernel does not check reference targets on write, so a value may name a subject nobody can label.
 const dangling = '0192f3a0-6c1e-7b2a-9d4e-1a2b3c4d5e09';
@@ -56,10 +59,27 @@ function site(): Promise<string> {
     const keep = (chunk: Buffer) => {
       output = (output + chunk.toString()).slice(-8000);
     };
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      KERNEL_ORIGIN: kernel.url.origin,
+      PUBLIC_ORIGIN: `http://127.0.0.1:${port}`,
+      REZICS_TEST_RUNTIME: '1',
+    };
+    for (const name of [
+      'AUTH_ISSUER',
+      'WEBSITE_CLIENT_ID',
+      'WEBSITE_CLIENT_KEY',
+      'API_RESOURCE',
+      'WEBSITE_SCOPES',
+      'SITE_ORIGINS',
+      'WORKER_INSPECTOR_PORT',
+    ])
+      delete env[name];
     child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
       cwd: app,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
+      env,
     });
     child.stdout!.on('data', keep);
     child.stderr!.on('data', keep);
@@ -95,6 +115,7 @@ afterAll(async () => {
     try {
       process.kill(-child.pid, 'SIGTERM');
     } catch {}
+  await kernel.stop(true);
 });
 
 const languageOf = (page: Page, selector: string) =>
@@ -119,7 +140,7 @@ test('the kernel client reads the local fixtures as the kernel serves them', asy
   expect(found.status).toBe(200);
   expect(found.error).toBeNull();
   // The ADR-0034 session token travels in headers that the client handles, never in the body.
-  expect(Object.keys(found.data!).sort()).toEqual(['related', 'subject']);
+  expect(Object.keys(found.data!).sort()).toEqual(['account', 'related', 'subject']);
   expect(found.data!.subject).toEqual(kokoro);
 
   // Every property and subject the read mentions comes with its labels, so a page needs no second read.
@@ -163,10 +184,13 @@ test('the kernel client reads the local fixtures as the kernel serves them', asy
     effect_status: 'not_applicable',
     request_id: expect.any(String),
   });
-  // The client follows a merged subject's one redirect hop, so the read answers with the survivor.
+  // The kernel exposes its one redirect hop; the web route resolves the survivor before answering with its URL.
   const survivor = await client.subjects({ id: mergedId }).get();
-  expect(survivor.status).toBe(200);
-  expect(survivor.data!.subject).toEqual(kokoro);
+  expect(survivor.status).toBe(308);
+  expect(survivor.error).toMatchObject({
+    status: 308,
+    value: { redirect: { from: mergedId, to: kokoro.id } },
+  });
   expect(sent.slice(0, 3)).toEqual([kokoro.id, taketori.id, missingId].map((id) => `GET /v1/subjects/${id}`));
   expect(sent[3]).toBe(`GET /v1/subjects/${mergedId}`);
 });
@@ -175,28 +199,45 @@ test(
   'a subject page renders the subject in the page language on the server',
   async () => {
     const origin = await site();
-    const response = await fetch(`${origin}/en/subjects/${kokoro.id}`);
+    const canonicalPath = `/en/subjects/${kokoro.id}/${encodeURIComponent(slug(kokoro.labels.en!))}`;
+    const alias = await fetch(`${origin}/en/subjects/${kokoro.id}`, { redirect: 'manual' });
+    expect(alias.status).toBe(301);
+    expect(alias.headers.get('cache-control')).toBe('private, no-store');
+    expect(new URL(alias.headers.get('location')!, origin).href).toBe(`${origin}${canonicalPath}`);
+
+    const response = await fetch(`${origin}${canonicalPath}`);
     expect(response.status).toBe(200);
-    expect(response.headers.get('cache-control')).toMatch(/(?=.*\bprivate\b)(?=.*\bno-store\b)/);
+    expect(response.headers.get('cache-control')).toBe('public, max-age=0, s-maxage=0, must-revalidate');
 
     const page = await open(`/en/subjects/${kokoro.id}`, { javaScriptEnabled: false });
     expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(kokoro.labels.en);
     expect(await page.title()).toContain(kokoro.labels.en);
     const text = await page.locator('main').innerText();
     expect(text).toContain(kokoro.descriptions.en!);
-    for (const id of ['schema:author', 'schema:genre', 'schema:isbn', 'schema:numberOfPages'])
-      expect(text).toContain(property(id).labels.en);
-    const author = page.getByRole('link', { name: soseki.labels.en!, exact: true });
-    expect(await author.getAttribute('href')).toBe(`/en/subjects/${soseki.id}`);
+    // The overview shows the key facts; the remaining facts are in Details.
+    expect(text).toContain('Author');
+    expect(text).toContain('Genre');
+    expect(text).not.toContain('Number of pages');
+    // The author is linked from the header and from the fact row; both go to the same page.
+    const author = page.getByRole('link', { name: soseki.labels.en!, exact: true }).first();
+    expect(await author.getAttribute('href')).toBe(
+      `/en/subjects/${soseki.id}/${encodeURIComponent(slug(soseki.labels.en!))}`,
+    );
     // Only the best rank shows: the preferred genre, not the deprecated one.
     expect(text).toContain(novel.labels.en!);
     expect(text).not.toContain(shortStory.labels.en!);
     expect(text).toContain('978-4-10-101013-7');
-    expect(text).toMatch(/\b384\b/);
-    expect(text).not.toContain('+384');
     // The source of the ISBN is listed once, as a link.
     expect(await page.locator(`a[href="${aozora}"]`).count()).toBe(1);
     await page.context().close();
+
+    // Details holds every fact, with the page count as a number.
+    const details = await open(`/en/subjects/${kokoro.id}/details`, { javaScriptEnabled: false });
+    const facts = await details.locator('main').innerText();
+    for (const label of ['Author', 'Genre', 'ISBN', 'Number of pages']) expect(facts).toContain(label);
+    expect(facts).toMatch(/\b384\b/);
+    expect(facts).not.toContain('+384');
+    await details.context().close();
   },
   timeout,
 );
@@ -218,13 +259,20 @@ test(
     // Property labels come in English and Japanese only, so a Korean page names properties in English.
     page = await open(`/ko/subjects/${kokoro.id}`, { javaScriptEnabled: false });
     expect((await page.getByRole('heading', { level: 1 }).textContent())?.trim()).toBe(kokoro.labels.ko);
-    const author = page.getByRole('link', { name: soseki.labels.en!, exact: true });
-    expect(await author.getAttribute('href')).toBe(`/ko/subjects/${soseki.id}`);
+    // The author is linked from the header and from the fact row; both go to the same page.
+    const author = page.getByRole('link', { name: soseki.labels.en!, exact: true }).first();
+    expect(await author.getAttribute('href')).toBe(
+      `/ko/subjects/${soseki.id}/${encodeURIComponent(slug(soseki.labels.en!))}`,
+    );
     expect(await author.evaluate((element) => element.closest('[lang]')?.getAttribute('lang'))).toBe('en');
-    expect(await languageOf(page, `main :text-is("${property('schema:numberOfPages').labels.en}")`)).toBe('en');
     await page.context().close();
 
-    page = await open(`/ja/subjects/${kokoro.id}`, { javaScriptEnabled: false });
+    // The page count is a remaining fact, so it is in Details.
+    page = await open(`/ko/subjects/${kokoro.id}/details`, { javaScriptEnabled: false });
+    expect(await languageOf(page, 'main :text-is("Number of pages")')).toBe('en');
+    await page.context().close();
+
+    page = await open(`/ja/subjects/${kokoro.id}/details`, { javaScriptEnabled: false });
     expect(await page.locator('main').innerText()).toContain(property('schema:numberOfPages').labels.ja);
     await page.context().close();
   },
@@ -247,12 +295,17 @@ test(
       let page = await open(`/${locale}/subjects/${taketori.id}`, { javaScriptEnabled: false });
       const text = await page.locator('main').innerText();
       expect(text).toContain(own.subject_value_unknown!);
-      expect(text).toContain(own.subject_value_none!);
       const unlabelled = page.getByRole('link', { name: own.subject_value_unlabelled!, exact: true });
-      expect(await unlabelled.getAttribute('href')).toBe(`/${locale}/subjects/${dangling}`);
+      expect(await unlabelled.getAttribute('href')).toBe(
+        `/${locale}/subjects/${dangling}/${encodeURIComponent(slug(own.subject_value_unlabelled!))}`,
+      );
+      await page.context().close();
+      // A value that is known to be absent is stated in Details, where the remaining facts are.
+      page = await open(`/${locale}/subjects/${taketori.id}/details`, { javaScriptEnabled: false });
+      expect(await page.locator('main').innerText()).toContain(own.subject_value_none!);
       await page.context().close();
       // A qualifier with no value is stated too.
-      page = await open(`/${locale}/subjects/${kokoro.id}`, { javaScriptEnabled: false });
+      page = await open(`/${locale}/subjects/${kokoro.id}/details`, { javaScriptEnabled: false });
       expect(await page.locator('main').innerText()).toContain(own.subject_value_none!);
       await page.context().close();
     }
@@ -265,13 +318,17 @@ test(
   async () => {
     const origin = await site();
     const response = await fetch(`${origin}/ja/subjects/${mergedId}`, { redirect: 'manual' });
-    expect(response.status).toBe(308);
-    expect(new URL(response.headers.get('location')!, origin).pathname).toBe(`/ja/subjects/${kokoro.id}`);
+    expect(response.status).toBe(301);
+    expect(new URL(response.headers.get('location')!, origin).pathname).toBe(
+      `/ja/subjects/${kokoro.id}/${encodeURIComponent(slug(kokoro.labels.ja!))}`,
+    );
 
     // A value naming a merged subject links to the survivor, never to the merged id.
     const page = await open(`/ja/subjects/${taketori.id}`, { javaScriptEnabled: false });
     const genre = page.getByRole('link', { name: shortStory.labels.ja!, exact: true });
-    expect(await genre.getAttribute('href')).toBe(`/ja/subjects/${shortStory.id}`);
+    expect(await genre.getAttribute('href')).toBe(
+      `/ja/subjects/${shortStory.id}/${encodeURIComponent(slug(shortStory.labels.ja!))}`,
+    );
     expect(await page.locator(`a[href*="${mergedGenre}"]`).count()).toBe(0);
     await page.context().close();
   },
@@ -297,8 +354,8 @@ test(
     await page.evaluate(() => {
       (window as unknown as { kept: boolean }).kept = true;
     });
-    await page.getByRole('link', { name: soseki.labels.en!, exact: true }).click();
-    await page.waitForURL(`${origin}/en/subjects/${soseki.id}`);
+    await page.getByRole('link', { name: soseki.labels.en!, exact: true }).first().click();
+    await page.waitForURL(`${origin}/en/subjects/${soseki.id}/${encodeURIComponent(slug(soseki.labels.en!))}`);
     await page.getByRole('heading', { level: 1, name: soseki.labels.en! }).waitFor();
     expect(await page.evaluate(() => (window as unknown as { kept?: boolean }).kept)).toBe(true);
     await page.context().close();

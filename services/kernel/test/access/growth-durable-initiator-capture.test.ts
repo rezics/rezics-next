@@ -1,3 +1,4 @@
+import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { captureDurableInitiator } from '../../src/access/index.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
@@ -57,3 +58,36 @@ for (const delegated of [false, true]) {
     expect(measured).toBe(true);
   }, 120_000);
 }
+
+test('capture keeps constant statements and rows at 8, 64 and 512 consented scopes', async () => {
+  const fixtures = new Map<number, Awaited<ReturnType<typeof captureFixture>>>();
+  const report = await checkGrowth(db, {
+    name: 'durable initiator capture by consented scope count',
+    scales: [8, 64, MAX_CONSENTED_SCOPES],
+    bounds: { statements: 'constant', rows: 'constant', blocks: 'linear' },
+    async grow(database, scale) {
+      // Vary scopes alone; authorization also probes the grants seeded by this fixture.
+      for (const fixture of fixtures.values())
+        await database.admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2', [
+          fixture.target.route,
+          fixture.target.id,
+        ]);
+      fixtures.clear();
+      const scopes = ['subject:write', ...Array.from({ length: scale - 1 }, (_, i) => `scope:${i}`)];
+      fixtures.set(scale, await captureFixture(db, false, scopes));
+    },
+    async operation(_database, scale) {
+      const f = fixtures.get(scale)!;
+      const complete = new Error('Capture measured before target writes');
+      await expect(
+        captureAttempt(f, async (context) => {
+          expect(await captureDurableInitiator(context, f.actor)).toMatchObject({
+            originalAccount: { minimumAuthnEpoch: '1' },
+          });
+          throw complete;
+        }),
+      ).rejects.toBe(complete);
+    },
+  });
+  expect(report.samples.map(({ scale }) => scale)).toEqual([8, 64, MAX_CONSENTED_SCOPES]);
+});

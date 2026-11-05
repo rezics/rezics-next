@@ -1,0 +1,1484 @@
+# Catalogue editing
+
+The adopted [catalogue editorial journey](research/catalogue-editorial-journey-design.md) connects a correction
+to the current Subject reader and explains an individual change without inventing a historical Item. Imports
+owns browser binding. Semantic owns these native contracts. Subject creation, proposal, acceptance and adoption
+keep their existing APIs and authority. A selected scalar `schema:name` statement is independent of labels.
+
+## Browser flow: direct generic identity intake
+
+The direct `/{locale}/catalogue/new` visit asks for the current released Type and explicit data language, then
+searches the entered name before the ordinary initial-facts and review flow. Search suggestions show available
+language labels, Type/grain and bounded summaries; opening one uses its normal current reader. A result never
+establishes equality or copies terms, facts, aliases or relationships. Type and term edits retire the prior result
+and continue confirmation while preserving the private draft. The private read binds the current query, language,
+Type release and viewer state; native Search has no suggestion cursor, so this visit offers its finite first page.
+
+Search failures remain distinct from an empty result. Retry stays available, and an explicit unverified-discovery
+acknowledgement permits a deliberate attempt to continue after an outage. The intake page returns current
+`subject.create` eligibility from the mounted Global Context parent, independently of suggestion success. Guest,
+allowed, refused (permission, gate, or suspension) and temporarily unknown eligibility stay distinct from session
+availability. A stale allowed observation is not an authorization bypass; fresh submission re-reads current
+eligibility, and the native create command remains final. Match browsing stays available when creation is refused.
+An acknowledged create retry reads the exact returned identity and never resubmits. Specialized creators and the
+private related-work handoff keep their existing routes and writers.
+
+Decision: after unavailable discovery, direct generic creation may continue only with an explicit unverified-search acknowledgement; the failure never counts as no matches or as creation authority.
+Decision: catalogue identity creation eligibility is the current Global Context `subject.create` viewer-action observation, independent of suggestion status; guest is session-derived.
+
+## Browser flow: original licensed catalogue text
+
+The authenticated Subject authored visit reads the current public selected document independently from native
+proposal and editorial action observations. A person composes original text for an admitted document property and
+language, supplies its licence and citations, previews the safe document rendering, and reviews the exact intended
+statement before proposing it. A proposal receipt identifies a candidate; it does not make that candidate selected
+or public. The visit reads the exact candidate and its document through the native comparison, then reads public
+selected text separately. Acceptance and selection remain separate actions from proposal, each shown only when its
+own current mounted operation is available. Native commands reauthorize at execution.
+
+Unavailable action data blocks new commands and leaves safe local text available for a permission reread. A
+confirmed denial keeps public selected text readable. If a prepared property, subject revision, admitted release or
+viewer changes, the prepared intent retires while local drafts remain. Uncertain proposal delivery keeps the exact
+statement, document bytes, licence, citations and command key for current-credential replay; it is never resealed
+against a newer release. Public selected text comes only from an independent current Subject and document read.
+
+Decision: the authored visit keeps public selected-text reading independent from exact native proposal and editorial permissions; unavailable permission reads block commands while retaining safe local text.
+
+### Prepare and recover an authored contribution
+
+- Touches: one current Subject, admitted release, selected public document read, one fixed Global Context action projection and the exact candidate comparison with bounded document disclosure.
+- Bound: preserve the existing two-MiB document preview/body ceiling, candidate-page cap, and native command limits; no cited-content fetching, paragraph permission reads, or candidate-history enumeration. Local draft and preview bytes are bounded independently from database plans.
+- Growth check: hold one released Type, one admitted document and one candidate fixed while unrelated documents, candidate histories and grants grow; account for Access preparation, exact candidate readback and final public disclosure with the existing authored native fixture.
+
+## Browser flow: multilingual subject terms
+
+The subject header and compact subject frame offer **Edit names and descriptions** at
+`/{locale}/subjects/{id}/{slug}/terms`. The private, noindex page keeps the exact subject identity and reads native
+terms with their quoted ETag. Released Type names use the existing locale fallback; data language is a separate
+explicit choice. This is catalogue data, separate from Puck presentation documents and cited statement proposals.
+
+Each language shows original names, descriptions and aliases. Keep, replace and remove are explicit choices;
+blank replacement inputs are invalid, never implicit deletion. Only intentional changes enter the patch. Other
+languages and drafts survive language switches, denials and stale responses. Remaining labels and aliases use
+native limits. Current authority and derived-term eligibility belong to the server; server refusal details remain
+visible, and a profile link appears only when the existing canonical account lookup supplies it.
+
+Discard restores only the selected language's local draft; an added language without stored terms stays removable,
+even after discard. The unsaved-language review lists explicit field choices, including invalid or unchanged-value
+replacements, and lets the contributor return to each language. Both local reset actions lock during submission,
+uncertain delivery and stale comparison; they never delete stored terms or send a request.
+
+A definite stale or conflicting write, or an explicit current comparison, opens a three-way resolution workspace.
+The admitted original snapshot, the intended patch and the fresh native comparison stay separate. Overlapping
+language fields (exact map presence, exact strings and exact alias arrays) require Keep current, Use my draft or
+Edit a replacement; a blank replacement never deletes. Non-overlapping edits are preclassified. Confirmation waits
+for an explicit whole-patch review bound to that comparison revision and ETag, then sends only the resolved patch
+with a new command key. A second stale result returns to a new resolution. Uncertain delivery stays on the sealed
+command. Private comparisons and resolutions retire with the current authority.
+Decision: replacement is an exact set value for that language field; removal uses Keep current when the current map
+lacks it, or Use my draft when the intended patch already removes it.
+
+Navigation is dirty only when the effective patch changes stored terms; staying retains every language draft and the
+selected language, and the existing pending-send warning says an unresolved request may finish and is not cancelled by
+leaving.
+
+The session BFF preserves identity, CSRF, concurrency, idempotency and native session headers. Native website proof
+provisions subjects through ordinary `POST /v1/subjects`; imported field support remains the kernel terms command
+that BFF already calls. Uncertain delivery freezes the payload, ETag and key for retry. Stale revisions or
+conflicting keys require reload, per-field resolution against the current comparison, whole-patch review and an
+explicit new confirmation with that revision's ETag. A successful write is followed by a native read of the same returned ID; only that read
+supplies current terms and the canonical reader address. Failed or concealed rereads never publish a local preview.
+The generated client supplies the PATCH body type. A successful response must contain exactly the requested Subject
+and positive revision with its matching strong ETag; its returned Session is passed to the immediate current read.
+A served 404 is the uniform missing/concealed outcome. Source integration and type validity alone establish neither
+native execution nor visual acceptance.
+
+Semantic owns the native terms API. An unavailable operation remains unavailable in the browser; it never becomes
+a successful local preview or a substitute catalogue mutation.
+
+## Browser flow: why this value
+
+Each displayed scalar statement offers **Why this value** at the subject’s `/value` route, addressed by the exact
+property and statement ID. A fresh, authorized current Subject read establishes its value, selected rank, qualifiers,
+references, actual Context and statement release/revision. The latest subject revision and acceptance alone never
+establish selection. A changed selection, unresolved reading, suppressed field, concealed read, denial and failed read
+remain distinct from native unknown-value and no-value assertions. Metadata keeps its actual language and fallback.
+
+The page reuses the ordinary value and document renderer. Only an authorized document representation in the current
+response can supply text; a locator is unavailable text. Citations are supporting material, with no verification or
+rights badge. Sources, Changes, existing review and the current reader remain available as navigation.
+
+Review metadata comes from one bounded current candidate page for the exact emitted slot. Only metadata of the
+selected statement is retained. An absent row is explicitly not returned, with a next-page control only when the
+native response supplies its opaque continuation, including through empty pages. There is no automatic history
+scan, private-alternative cache, point-read API or inference of erased content. Emitted relation metadata is required
+to address relation slots; without it, review information is unavailable. A link carrying another Context cannot
+silently fall back to Global; the existing Realm resolver still owns that native binding.
+
+The session BFF preserves caller authorization and continuity and marks responses private/no-store. The existing
+safe change-detail adapter can explain the selected statement’s exact revision when supplied and matched; its
+generated native binding validates the exact Subject/revision and supported closed response before explaining it.
+Concealed, denied and unavailable detail stays explicit. No historical snapshot or write authority is assumed.
+
+Each value loader result starts a read episode; the browser rereads under its observed current reader before displaying it.
+
+## Browser flow: configured editorial Context
+
+Personal `/{locale}/my/contexts/new` and catalogue `/{locale}/contexts/new` create a named Context through the
+existing native `POST /v1/contexts` body `{labels, settings?}`. No-setting creation remains the explicit default.
+A released policy is chosen from the current active definition only: one owned immutable release snapshot, at most
+256 setting IDs and 64 defaults each, with local filter/paging. The create body sends a settings ID, never a
+release digest. Review shows the exact names, chosen ID, previewed release and each inherit/suppress default with
+its property label or stable ID. A Context interpretation does not replace the global selection, publish a source
+fact, confer moderator grants or turn a suppressed inherited value into a deleted statement.
+
+If the active release changes the selected policy's meaning before dispatch, the preview refreshes and Create must
+be used again. After acknowledgement the workspace shows the returned `{settings.id,settings.release,defaults}`; a
+mismatch with the reviewed preview keeps the actual native Context and never retries POST or rewrites the result.
+Unknown delivery retries the identical labels, settings ID and key. A known create records the returned UUID once
+and later failures retry only that read. Captured historical labels resolve against that Context's immutable
+release; a later activation does not mutate existing defaults. Subject comparison uses the existing context-review
+route and native inherited/suppressed/replaced/unresolved outcomes, including a suppress default's no-value
+result. Explicit Context curation reads the chosen Context and separate Global Subject readings, then uses one
+bounded viewer-action batch for the exact Context and Subject. The Context action resource independently projects
+candidate decision and adoption availability; a failed action read stays unavailable, keeps comparison readable and
+offers a reload. Commands reauthorize and retain the exact candidate, slot, Context and head. Acceptance does not
+select a candidate, and Context selection does not change Global. Decision: live review stays on the create form with
+one Create action; a pre-submit active-release reread requires another Create only when the selected policy's id and
+defaults change.
+
+Decision: explicit Context decision and adoption controls use separate native operation pairs on the exact selected
+`semantic.context` viewerActions reference; action-read failure leaves comparison visible and write controls unavailable.
+
+### Compare and curate one explicit Context slot
+
+- Touches: one exact Context, its Subject reading, the separate Global reading, the current release, one 20-candidate page and one viewer-action batch for the Context and Subject.
+- Bound: retain the exact property/slot/candidate and existing session; do not enumerate Contexts or candidate/grant history, or hydrate actions per row.
+- Growth check: with the chosen Subject, slot and page fixed, unrelated Contexts, candidates and grants leave the two action references and bounded native reads fixed; existing Context, candidate and viewer-action growth suites own the indexed work bounds.
+
+Decision: both creation surfaces read the mounted create operation on its fixed Global Context parent; lifecycle
+controls use current action availability and exact Context retention state.
+
+## Browser flow: subject contributions
+
+The existing subject header and compact view frame expose one **Contribute** menu. The shared UI Menu supplies
+keyboard navigation, Escape/focus return, and the phone bottom sheet with its localized Back control. Initial
+creation, editing this subject, review, and read-only Sources/history occupy separate groups. The entry consumes
+the existing native action components and their shared destination descriptors, preserving the caller's actual
+Recipe and publication conditions and unrelated native actions. It introduces no second search or editor engine.
+
+The review link uses the exact current Context returned by the subject/page read; without that identity it offers
+no guessed Context. Relations retain the current Realm address and its native unsupported-context explanation.
+Sources and Changes remain ordinary readers. Signed-out editing/review navigation carries the exact chosen
+localized destination, including Context or work query, through the existing session sign-in return parameter.
+This is navigation, not a client permission model: native pages and BFF responses still decide current access,
+availability, disclosure and action authority. Initial creation remains separate from later proposals and term
+PATCH, and citations never become ingestion Source metadata or a permission grant.
+
+Navigation adds no producer call or per-row hydration read. Existing forms, readers, drafts, concurrency and request
+keys remain with their owning components. Detailed Changes consumes the delivered native read, and terms mutation
+uses the native PATCH command documented below. A menu link establishes neither availability nor a successful write. The Contribute stories use
+actual routes for navigation and the existing terms page for explicit denied/unavailable samples. Native acceptance,
+interaction execution and phone/desktop visual review remain integration work.
+
+Recipe departure reuses the localized authoring prompt; uncertain retries preserve the exact command while bypassing
+local definition checks and still reaching current native authorization.
+
+Initial Subject creation uses the shared departure guard for entered terms, Type changes and profile controls;
+blank language rows and a preset profile Type remain clean, while pending or uncertain commands warn that leaving
+loses local retry recovery without cancelling the request. Profile controls are compared with their initial values
+per Type without invoking validation callbacks, so returning to unchanged values clears that draft's warning.
+
+The generic creation route uses one search field with an explicit localized-label-prefix or exact-Type-ID mode;
+running a search keeps the selected Type and multilingual term drafts, while choosing a result requires its current
+exact descriptor. Without a specialized profile, that descriptor supplies the admitted property choices; supported
+scalar and exact readable item values use shared controls, while unsupported datatypes remain visible and are omitted
+from the prepared item so other supported facts can still be created. Types owned by an existing creator show a
+direct handoff and cannot be prepared here; the current draft stays in place until that link is followed.
+
+## Browser flow: fictional character identity and credits
+
+The catalogue creation entry, a fictional character's header and a work's Characters view offer **Character identity
+and credit editor**. `/{locale}/catalogue/character?work={id}` starts from an exact existing work;
+`/{locale}/subjects/{id}/{slug}/character` corrects the canonical character, optionally retaining `work`. These
+private, noindex routes keep the actual `wd:Q95074` identity separate from people and accounts. Current public
+subjects and the active release load independently; the immutable release decides effective fields, targets,
+qualifiers, units and classifications. Definition fallback carries its actual language.
+
+Subject and work entries use the shared **Contribute** menu, preserving the exact character or work address and
+the existing signed-out return destination. The standalone catalogue creation entry shares that destination.
+
+Names, original text, traits, measurements and identifiers appear in meaningful groups. Initial creation reuses
+native subject POST, initial-term validation and the shared statement, rank, qualifier and grouped-reference
+controls. Only explicitly entered languages and added facts are sent; no birth year, classification, image, Source
+metadata or work credit is inferred. The optional work query is context only. Contributors review the exact native
+item, then confirm one Character create. Creating a Character is not associating it with a work: an admitted work
+may offer a later, independent appearance or credit proposal that selects the new UUID.
+The association editor may show that UUID as the target title until a current character read exists. The exact returned UUID is
+reread before providing the canonical reader and correction address; concealed or unavailable readback offers a
+read retry without another create. Unknown create delivery keeps the same body and key.
+Creation eligibility is the current Global Context `subject.create` observation on that existing parent. A work
+query, classification return token, or the future UUID cannot confer creation, credit, classification proposal, or
+selection. Guest is session-derived. Admitted Character and work descriptors stay readable when creation is
+unavailable. Commands reauthorize at execution.
+Decision: Character identity creation uses the shared current parent `subject.create` observation, independent of
+work context, classification return, and later relation commands.
+
+### Create a Character identity
+
+- Touches: one current Global Context `subject.create` observation, admitted Character and optional work descriptors, one sealed create command, and one exact returned-identity read.
+- Bound: reuse the existing parent action observation, independently bounded definitions, and existing target/suggestion readers; no permission request per field or suggested identity, history scan, or polling. Retain existing field, statement, qualifier, serialized-command, and held-retry caps.
+- Growth check: hold one Character type, one optional work, and one create command fixed while unrelated subjects, grants, and relation histories grow; charge native authority preparation with the existing Character create fixture.
+
+### Correct an existing Character from the selected reading
+
+Decision: carry the selected Subject Context and optional Realm through the Character correction address and current native Subject read. The visit is read-only unless it is a fresh Global address; opening that Global visit keeps the optional Work and classification handoff while retiring local evidence and focus intent. Work remains an independent Global read. Creation and Work-credit authority stay on their existing paths.
+
+The existing Subject GET accepts its native `context` query. The reader admits a selected result only when its returned Subject id and Context match the address, its Type is Character, and the definition bundle matches the released Subject definition. A missing or mismatched selected reading is shown as unsupported or unavailable; it is never displayed as Global under a selected Context. Existing correction and candidate operations stay Global-only.
+
+One profile load reads one active Definition pointer, one optional Character Subject, one optional independent Work Subject, and the selected released Definition (reusing the active bundle when its digest matches); an optional Work descriptor is one existing bounded descriptor read. There is no per-assertion request or page refill. The native Subject response carries the admitted assertions and their qualifier and reference groups within its existing response bound. A receiving exact-evidence visit must use holder, property, and statement identity from that current response, then reread the same Subject Context before restoring focus.
+
+The mounted current Character visit and exact evidence return are still required. Public Character association reads, their windows, disclosure gates, and native growth acceptance remain with the Subject pages owner.
+
+Scalar corrections reuse the multi-field workspace, with unchanged fields excluded and independent per-field
+results. Classification targets use the existing subject picker and the same statement, qualifier, grouped-reference,
+validation and sealed-command helpers. Character corrections review the exact changed classification set before
+sealing, copy a complete citation group onto other editable holders in the same visit, then propose each included
+field independently. Native candidate review and selection remain a later, deliberate step; a successful proposal
+is not a selected classification. Current assertions, other languages, qualifiers and references survive replacement
+drafting. Name maps link to the actual terms adapter; an unavailable native producer stays unavailable. Original text
+links to the existing authored editor with explicit language and licence. No candidate is presented as current
+publication.
+Decision: Character, Screen, Add-on and StoryArc classification corrections opt into the shared changed-set review and evidence
+reuse controls. Album and Manga callers keep immediate per-field confirmation.
+
+## Browser flow: Screen classification correction
+
+On an existing Movie, TVSeries, TVSeason or Episode, the Screen profile offers only classification properties admitted
+by that subject's current emitted type. The existing classification controls coordinate the complete changed set,
+allow deliberate independent copies of complete citation groups, and propose each holder separately. Editing one
+holder leaves its siblings and their outcomes intact. Candidate acceptance and selection remain explicit native
+decisions. After selection, the exact current subject read updates both the classification values and the Screen
+profile reader through its existing observe path; a proposal alone does not change current values.
+Decision: Screen classification correction binds the same opt-in changed-set review and evidence reuse coordinator as
+Character. Album and Manga writers that share the field control keep immediate per-field confirmation.
+
+Appearances and credits are statements on the selected existing work. The existing relation editor retains separate
+emitted properties, the native `wdt:P453` character qualifier and exact target/key slots, credited names, roles,
+order and citations. The current release emits `schema:character` and qualified `wdt:P725` voice credits, but no
+separate actor-to-character credit property. That gap is visible; no actor control or substitute property is invented.
+Choosing another work never copies credits. Existing native candidate decisions, adoption, disclosure and
+source-or-consent behavior remain authoritative. Invalid input, stale metadata, denial and unavailability retain
+drafts. Uncertain requests freeze the original body and key for retry; changing metadata or session state hides
+the retained workspace until it can be read again.
+
+## Browser flow: current relationship authority
+
+The existing qualified relationship editor reads current viewer actions in one deduplicated native batch for
+Global Context and the exact source, target and released slot-key participants. Semantic resolves disclosure;
+readable public data, a picker label and released admission never grant proposal, decision or selection authority.
+The private page identifies its authenticated viewer state and reports action unavailability separately from a
+confirmed denial. Unavailable actions offer read recovery while exact-slot comparison remains useful.
+Decision: use the existing shared native action projection for relationship preparation and provider review; the
+proposal binds its actual Global Context parent, while source/target/slot-key references establish disclosure only.
+
+Fresh proposal preparation reads the current descriptor, exact slot and native actions before explicit review.
+A changed release requires another review. Proposal, acceptance/rejection and adoption retain separate native
+commands, expected heads and confirmations. Decision and selection readback follows acknowledgement; acceptance
+never adopts. Concealed participants keep an unreadable state. A known proposal followed by a failed read offers
+read recovery; uncertain delivery retains the exact original command and key. Existing creator handoffs still own
+missing related identities and their independently acknowledged native UUIDs. Archive position remains a role code;
+no fabricated ordering, music role or live-action binding is introduced.
+
+### Prepare a qualified relationship correction
+
+- Touches: the source Subject, immutable admitted descriptor, at most two addressed participants, one exact candidate
+  slot (20 candidates), current selection, and one native Context/Subject action and disclosure projection.
+- Bound: at most four deduplicated native resource references before hydration, 64 action entries and 256 mounted
+  operation bindings per resource; only the four applicable operations reach the page. Existing statement admission,
+  qualifier/reference and serialized request limits apply. Native execution reauthorizes, including exact-key replay.
+- Growth check: the existing native relation fixture fixes participants and slot while independent relation/history
+  populations grow. Native Subject points and Context anchors use their existing partition-leading indexes; target
+  disclosure preparation and decision/selection readback are part of the work, not just rendered candidate rows.
+
+## Browser flow: reading work relationships
+
+Every returned admitted work relation stream has its own released forward or inverse label, bounded preview and
+exact Connections continuation. Reverse rows retain the original holder and assertion, including qualifier values,
+Context, revision, release and citation groups. Evidence supports that assertion alone. Targets, artwork, evidence
+and accessible names remain inside its spoiler gate. Empty requires a current complete native window; refused,
+concealed, unavailable, unsupported and truncated readings stay distinct. Reading never grants curation authority.
+Decision: allocate at most twelve preview assertions overall, round-robin across returned streams with at most three
+per stream; return from evidence, Sources or a target to the admitted overview row, then continue its exact stream.
+
+The projection examines only G already returned windows and their native capped rows and B response bytes, renders
+at most min(12, G × 3) originals and their admitted Q qualifier/reference parts, and never fetches targets or cursors.
+The producer retains native caps, admission, currentness and growth obligations. A truncated or locally omitted row
+always exposes continuation, without a total, chronological ordering or complete-franchise claim. The no-window
+compatibility preview uses the same total cap. Existing Connections owns its native projection and pagination.
+
+## Browser flow: missing related work
+
+A released work-to-work relation in the relation editor (derivation, world, association, or order groups
+emitted by the current Type descriptor) can search an existing target first. When the draft target is still
+unchosen, **Create a missing related work** opens generic subject creation. Membership, credit identity,
+appearance, Contents, StoryArc children, add-on bases, and edition or release creation stay on their existing
+owners. Decision: admission uses the pinned field targets plus the created Type's exact ID or listed bases from
+the current creation descriptor; no Type list is hardcoded, and a matching title never infers identity.
+
+The visit is a private in-memory handoff bound to the source subject, property, optional slot, pinned release,
+current reader, and an immutable copy of the editable draft (qualifiers, grouped references, rank, and qualifier
+holder identities). The URL carries only a local token. Cross-reader, expired, changed-property, and arbitrary UUID
+tokens cannot establish a relationship or authorize a write.
+
+Creation explains the intended relationship and source work as context only. Multilingual terms and native facts are
+ordinary creation input and never copy source names, credits, dates, citations, or provider identity. Confirmation
+uses the sealed generic create command. Unknown delivery retries the same body and key; a confirmed but unread
+identity retries only the read. Cancellation returns to the preserved relationship draft through an explicit
+decision and sends no relationship command.
+
+Return shows the created readable target and requires **Choose this work** before replacing the unchosen draft
+target. Changed metadata or an unavailable created target explains the block without discarding entered
+qualifiers or evidence and without creating a second target. A sealed or already consumed handoff is not mutated.
+Successful target creation is not identity matching and does not prove the asserted adaptation, sequel, or other
+work relationship.
+
+The contributor then reviews the restored relation, may correct evidence, and proposes through the existing
+relation writer. Candidate acceptance, Context selection, and the current source-subject read remain independent.
+Unknown relation outcomes keep their own sealed body and key. A failed relationship never offers Create again as
+recovery. Target creation, relationship proposal, acceptance, and Context selection remain distinct actions.
+
+## Browser flow: missing classification concept
+
+An editable, unsealed classification holder on Character, Screen, Add-on, or StoryArc changed-set review can search
+an existing Concept first. When the field admits a released Concept Type and the target is still unchosen, **Create a
+missing classification concept** opens the shared Concept creator. Album and Manga classification remain on their
+owners. Decision: correction drafts project the admitted selected rank losslessly through a local classification
+statement copy; global statement-input creation stays normal-rank.
+
+The visit is a private in-memory handoff bound to the source subject, property, stable holder, original statement,
+private draft (rank, qualifiers, grouped references, inclusion), current release digest, current reader, and unchosen
+target. The URL carries only a local token. Cross-reader, expired, altered-property, reused, and arbitrary UUID tokens
+cannot authorize a return or a write. Context names the work or character and field; it copies no labels, facts,
+provider aliases, or evidence.
+
+Return shows the created readable UUID, label, and Type and requires **Choose this concept** before filling the
+unchosen target. A target edited meanwhile, a sealed, succeeded, or uncertain holder, withdrawn metadata, or an
+unadmitted created Type blocks a fresh write without discarding entered evidence and without creating another concept.
+Cancellation restores the original private draft and sends no classification command. After a deliberate choice, the
+existing changed-set review and independent native candidate writer remain in force. Creating or reading a Concept is
+not proposal, acceptance, adoption, or work publication.
+
+## Browser flow: add-ons and expansions
+
+The subject's existing **Contribute** menu offers **Add-on and expansion editor**. Creation uses
+`/{locale}/catalogue/addon`, optionally retaining an exact base-game `work` query. An add-on's menu opens
+`/{locale}/subjects/{id}/{slug}/addon`. Both private, noindex routes retain the native `wd:Q209163` identity and
+released `game.addon` profile. A game work, distribution, file or language/platform combination is a different
+object. Neither the editor nor a base-work link changes Library behavior.
+
+Decision: a `work` query is preview context only; creation and correction require a separate exact readable subject
+choice admitted by the current `game.addon` release, and only native results establish selected membership.
+
+Creation configures the existing game initial-facts and terms controls with the active emitted profile. Only
+explicitly added facts enter native subject POST. The exact work from a `work` query is shown as a suggestion and is
+never staged automatically. Creation eligibility is the current Global Context `subject.create` observation through
+the shared CreateAuthority; a work suggestion, session presence, definitions, and the existing-subject picker do not
+grant creation. Guest, refused (permission, gate, or suspension), and unknown stay distinct from session availability.
+One parent action observation is independent of field and target count. A stale allowed observation is not an
+authorization bypass; fresh confirmation re-reads eligibility, and the native create command remains final. A base-work picker resolves the chosen subject through the current public reader and
+checks target admission against the current immutable release before staging `wdt:P8646`; an unavailable, concealed,
+stale or unadmitted target leaves the existing draft editable. Contributors can revise or remove the unsent choice,
+then add admitted qualifiers and grouped citations with the shared statement fields. This does not copy base credits,
+languages, platforms, availability, progression or licence. Date precision, language strings, qualifiers and grouped
+citations retain native schemas. Item-valued qualifier keys use the same native picker as game credits. Before
+creation, the contributor reviews the exact prepared item: admitted type identity and language attribution, every
+term and alias, the explicit base statement or its absence, and every initial assertion with qualifiers and grouped
+references. A contextual suggestion never appears as a sent assertion. Pending target checks block confirmation.
+Unsupported or withdrawn entries stay as repair needs. Confirmation seals that reviewed item through the ordinary
+create command. Unknown delivery retries the identical body and key; a known acknowledgement records the returned
+UUID once and later failures retry only that current read. Initial facts are selected at creation; the exact returned
+UUID is reread before offering the reader and correction links. Concealed or unavailable readback keeps that UUID and
+offers a read retry without another creation. Native diagnostics address the captured holder, nested qualifier or
+reference part; a removed holder keeps a summary and does not focus a neighbour. Contributors may copy one complete
+citation group onto other editable initial-fact holders in the same visit. Decision: AddonBaseWorkspace keeps
+AddonBaseDraft `{ key, statement }` and does not export a FactDraft holder, so creation-time reference reuse copies
+only among admitted GameInitialFacts rows; the explicit base statement keeps its own evidence editor and is never a
+copy source, copy target, or confirmation of the work-query suggestion.
+Decision: Add-on creation binds the shared `readCatalogueCreateEligibility` observation of mounted `subject.create` on
+the Global Context parent to the creator controls; readable metadata and public targets stay independently useful.
+Cost: one Global Context parent viewer-action read for `subject.create` per observation, independent of initial facts
+and base targets; definitions, public work suggestion, and current add-on reads stay their existing requests.
+
+Correction shows the selected current base-work assertions separately from the route suggestion and gives `wdt:P8646`
+its own filtered view of the existing relation editor. Values, qualifiers, rank, grouped evidence, exact-slot review,
+acceptance and adoption use the ordinary native candidate lifecycle. The suggested work cannot choose a target,
+replace a selected holder or imply adoption. A proposal or acceptance alone never establishes current selection; the
+same add-on is reread after selection. Correction also reuses the multi-field workspace, classification controls,
+authored and terms destinations, other relation fields and native candidate review. Add-on classification correction
+binds the delivered Character classification coordinator: contributors review the exact changed set, copy one complete
+citation group onto other editable classification holders, then propose each included field independently. Copying a
+citation or selecting a classification cannot inherit the base work's facts or change its chosen relation. Base-work
+suggestion, proposed membership and current selected base remain distinct. Native candidate review and selection remain
+a later, deliberate step; a successful proposal is not a selected classification. After explicit native selection the
+add-on is reread. Credits retain emitted character-key slots. Unchanged values are excluded, each field reports
+its own result, and no platform compatibility is inferred.
+Decision: Add-on classification correction reviews the whole changed set through the delivered opt-in classification
+coordinator before sealing. A copied citation is a new evidence claim on this add-on; it confers no licence, target
+admission or candidate acceptance. Classification current-reading admission follows add-on subject identity and session,
+independent of base-work relation editor remounts. Correction drafts use the shared statementInput rank; the public
+selected statement keeps its actual rank. Current denial, unavailability and metadata changes retain
+drafts; uncertain writes retain their sealed body and key. Ordinary forms send citations as statement references,
+never ingestion Source metadata. Existing BFF, native disclosure, rights and source-or-consent rules remain
+authoritative; unavailable terms production stays unavailable.
+
+## Browser flow: work parts
+
+The Contents view links to `/{locale}/subjects/{id}/{slug}/work-parts`. This private, noindex editor reads one
+bounded native part stream at a time, with its own opaque continuation, current count semantics and projection
+freshness. Rows retain native stream order; neither a first page nor its array indices describes a complete
+composition. Contents, volumes, episodes and tracks use only existing emitted canonical relations. A missing
+relation profile or qualified assertion stays unavailable for editing.
+
+The entry retains the current native Context and Realm address. Current relation contribution APIs admit Global
+only, so another Context or a Realm shows the existing unsupported-context explanation without reading or writing
+a substitute Global composition.
+
+Inverse rows belong to the individual part, not the displayed parent. Corrections keep that exact holder,
+property, target or external address, and optional native slot key. The existing relation editor supplies target
+discovery, citations, native validation, exact-slot competition and explicit decision/selection controls. Only an
+admitted `schema:position` on a relation declaring position order is editable; all other qualifiers remain intact.
+An emitted relation without that qualifier remains readable without an invented order field. Choosing a new
+containment target opens its separate slot and does not remove the original assertion.
+
+When that emitted membership admits `schema:position` and position order, the loaded page also offers a bounded
+position workspace. Contributors stage at most sixteen readable assertions already present on the current page;
+selecting does not fetch another page or imply missing members. Positions stay native strings: the contributor
+enters each replacement, and the workspace clones the original assertion through the existing relation draft,
+replacing only the admitted position part. Other qualifiers, citations, rank and source meaning survive. A
+forward relation is written on the container; an inverse relation is written on the actual member holder. If
+position is itself the native slot key, the review shows the original slot and the new-slot proposal separately.
+The changed-set review lists only actual changes and explains that each membership is an independent native
+proposal. Confirmation reuses the existing relation writer, sealed body and idempotency key per holder. A later
+failure does not resubmit a successful sibling or abandon an uncertain command; refused rows need a new explicit
+review. After candidate selection, a current reread of the original stream highlights holders still present and
+explains absent ones without scanning another page. Decision: the workspace composes `RelationTransport.propose`
+per holder and mounts the existing relation editor only for explicit candidate review.
+
+Relation fields and qualifiers come from one exact descriptor for the authorized Subject Type, with its release
+digest retained. Missing or incomplete descriptors stay unavailable and recover in place with drafts intact; stored
+candidates keep their own immutable release pins. An uncertain proposal retries with its original command key and
+payload, leaving current authorization and validation to the native command.
+
+Each opened assertion retains an independent draft and native idempotency key. Proposing creates a candidate;
+acceptance and selection are separate explicit actions. No atomic composition save, automatic adoption, identity
+merge or work/edition/release conversion exists. Selection rereads the actual current stream; an incomplete or
+uncaught-up result remains labelled. Denied or failed page reads conceal the previous page while retaining mounted
+drafts for recovery. Ordinary forms send statement references, never ingestion Source metadata. These controls do
+not infer rights or replace the existing disclosure and source-or-consent rules.
+
+A current TVSeries parts view offers **Create an episode of this series**. That private Screen form locks the
+Episode type, carries the exact series UUID as a suggestion, and reads current series and emitted `schema:isPartOf`
+metadata before offering membership. The contributor explicitly confirms the admitted belongs-to target and may
+enter an optional native position string; the address never infers membership, season identity, credits or an
+ordinal. Confirmed admitted membership may enter the sealed `POST /v1/subjects` body. Otherwise the existing
+relation proposal, review and selection complete the link after the exact created ID is reread. A failed
+relationship is never reported as linked, and a retry does not create a second episode. Return uses a current
+parts-stream read and highlights the child on this page, or shows its located identity without scanning later
+pages. Standalone Screen creation remains unchanged.
+Decision: confirmed admitted series membership may enter Episode POST; a failed or omitted relationship is completed
+through the existing relation proposal and never reported as linked from the create response.
+
+## Browser flow: game and visual-novel works
+
+`/{locale}/catalogue/game` is the profile-guided entry in catalogue creation. Game, visual-novel, add-on and
+software-release readers link to `/{locale}/subjects/{id}/{slug}/game`. The private, noindex journey retains the
+actual native identity and Type. Work facts, creators, classifications and related works/releases follow effective
+emitted metadata. Labels retain their actual fallback language. The current visual-novel work Type does not emit
+`schema:gamePlatform`; its absence does not authorize adding that field. Released software and independently
+referable add-ons remain separate subjects. Language/platform combinations never manufacture release subjects.
+
+Creation composes the existing multilingual initial-terms form with optional native statement controls, target
+picker, qualifiers and references. Only explicitly added facts enter ordinary `POST /v1/subjects`; native initial
+facts are selected in Global. The shared creator reads current `subject.create` authority on the Global Context
+parent and requires an allowed observation for fresh creation; guest, refusal and unavailable states stay distinct
+while definitions and public targets remain readable. It rechecks before the write, and native execution reauthorizes
+the command. Contributors review the exact prepared item before confirmation: admitted type identity
+and its original label language, work versus add-on versus software-release grain from the current Type descriptor
+and bases, every language row and alias array, and every initial assertion with its native datatype, qualifiers,
+default `normal` rank and grouped references. Type-keyed drafts survive switches; only the current type's prepared
+item enters review or a sealed command. Contributors may copy one complete citation group onto up to sixteen other
+editable initial facts in this visit; copies are independent, leave existing groups intact, and convey no values,
+qualifiers, rank or authority. Source or destination edits while copy review is open invalidate it. Confirmation
+seals that reviewed item through the existing production validator. The exact returned UUID supplies the current
+reader, with read retry after concealment or unavailability. Uncertain delivery preserves the exact augmented payload
+and key. Invalid current definitions refresh without discarding entered facts. A later classification or relation
+review remains an independent native journey.
+Decision: Game creation review classifies grain from the current Type descriptor: software release when the type is
+or is based on `wd:Q20631656`, add-on when it is or is based on `wd:Q209163`, otherwise an underlying work.
+Admission stays `gameDefinitions`/`gameDraft`.
+Decision: GameInitialFacts keeps add-on reuse as parent-owned props; standalone Game creation opts into its own
+visit-private reuse panel and does not install that panel on AddonProfileCreate.
+
+Corrections compose the common multi-field scalar editor, qualified relation editor and per-field submission
+helpers. Classification claims use native item values in scalar competition slots; credits and work links retain
+the native target and any declared slot key. Every selected statement keeps its qualifiers and evidence together.
+Only changed facts become candidates; unchanged languages and other fields remain intact. Submission reports
+independent results and exact candidate IDs awaiting review, separate from acceptance, adoption and the ordinary
+current reader. Uncertain attempts retain their commands and keys. Metadata, denial, stale and unavailable states
+remain visible. Missing controls confer no additional native capability.
+Withdrawn scalar drafts in the shared generic and profile editors retain a bounded private assertion and original
+label outside the disabled admitted fields; cancellable local removal preserves siblings, while commands and locked
+results require exact recovery through matching definitions.
+Game classification drafts keep their prior release definitions privately for read-only inspection while withdrawn;
+fresh proposals and exact replays wait until current admission returns.
+Decision: Game classification correction reviews the whole changed set through the delivered SubjectFacts coordinator
+before sealing. Contributors reuse one complete citation group onto other editable Game classification drafts as an
+independent evidence claim; copying conveys no licence, native acceptance or provider ownership. Withdrawn, in-flight,
+uncertain and succeeded holders stay visible in the reuse panel as ineligible and receive no copy. Each property remains
+an independent native command. A proposal never marks the assertion selected until an explicit native review and
+selection, after which the Game is reread. Jumping back from review invalidates the snapshot until the contributor
+reviews the current drafts again. A removed draft's diagnostic stays on that holder and is not redirected.
+
+Names and descriptions link the existing terms adapter. Its generated native binding is integrated.
+Native authority and deduplication remain Semantic-owned; this profile never substitutes `schema:name` proposals
+for terms writes. Authored text uses the existing document/licence editor with a local safe preview and exact
+grouped-evidence review. The preview compares only the currently authorized selected document for that field;
+submitting sends an ordinary native candidate proposal, while candidate review and selection remain independent. A
+citation supports the field but does not grant permission to copy its prose. Ordinary forms do not submit ingestion
+Source metadata, infer rights,
+copy provider prose or covers, publish profiles, or change Library progress.
+
+## Browser flow: ordinary identifier evidence
+
+Details and Sources share the existing **Contribute → Edit this subject → Identifier evidence** entry at
+`/{locale}/subjects/{id}/{slug}/identifiers`. The private, noindex route resolves the canonical subject address.
+It uses the ordinary session BFF, public subject read and current immutable definition release. Effective Type
+properties, in emitted order, admit external identifiers, URLs (including `schema:sameAs`) and patterned string
+codes. This is the definitions contract's code classification, not a universal provider inventory. ISBN remains
+edition data; work and edition identities never change. Labels retain their actual fallback language.
+
+The page scopes the existing multi-field fact workspace, scalar controls, native validators and citation/value
+renderers. Each disclosed selected statement remains separate, with its original literal, qualifiers and grouped
+references. Editing a selected assertion starts a replacement candidate; an additional value is explicit where
+multivalued. No URL, scheme, identifier spelling or provider key is normalized or looked up globally. Names,
+relations and original text retain their separate editors. Citations support a fact; they do not prove identity,
+license an asset or supply ingestion Source metadata. Bootstrap receipts and imported claim tuples are untouched.
+
+Decision: the installed Identifier visit carries the selected Context and existing Realm selector as bounded public
+origin intent. A non-Global origin shows the Global-only correction limit before an explicit choice mounts the existing
+Global correction reader; origin intent never enters `readCorrection`, candidate schemas or proposal commands. A direct
+legacy `/identifiers` address remains a Global correction visit with no invented origin.
+
+The menu records at most one Context and one Realm UUID in the route search. The installed route admits no root
+Context selector and re-reads a Realm origin through the existing public page reader; it requires the exact returned
+Realm and Context before naming that reading current. Changed, missing, refused and unavailable Realm readings show
+no earlier facts. A Context-only origin without the established Realm selector is explicitly unsupported and offers
+an explicit Global recovery choice. The selected Realm reading and any later Global correction are separate reads.
+Choosing Global starts `readCorrection` with only its existing Subject address and current Global advice; candidate
+review remains its existing independent controller. Review links preserve the bounded origin, so revisiting a
+non-Global URL requires the deliberate Global choice again.
+
+The combined route search, including one inspection property/statement pair and an existing review pair, is capped at 2,048 characters and 2,048 UTF-8 bytes;
+duplicate or contradictory selectors are refused before the editor mounts. A direct Global visit performs one route
+canonical Subject read and then the existing correction read: one public Subject request, one active Definition
+request, one immutable release request, and at most one authorized viewer-actions request. A Realm visit adds one
+bounded public page read before the explicit Global choice; the page reader's existing optional Terms advice remains
+its owner. The installed visit makes no per-identifier read, source lookup or write. Exact selected-assertion
+inspection and return share one public origin pane, separate from Global correction and candidate review. Inspection
+uses only the admitted Type properties and exact disclosed statement ID, with ordinary rank and spoiler gates;
+values, holder, property, rank, qualifiers and reference groups stay distinct even for equal literals.
+The pane reads on explicit inspection (or a bounded inspection locator), and return performs one fresh public
+page read in the original Realm. During reads it hides the previous evidence. Focus returns only to a surviving
+exact assertion with unchanged Type, releases and Context, otherwise to the current reader heading. Interaction
+or visit retirement cancels pending focus. Session observations, source replacement and new review intent retire
+the visit. No per-occurrence request, source resolution or identity inference follows.
+
+Changed included fields seal separate native candidate requests and keys. Partial success, denial, invalid values,
+stale metadata, uncertainty and unavailability retain the existing per-field behavior. Session preparation hides
+retained work until the current read is available again. A field no longer admitted by the refreshed Type disables
+submission while retaining the draft and sealed key. No proposal changes the current reader or creates a subject.
+
+Each confirmed result links to its exact property and candidate on this same route and opens the existing native
+candidate reader in place, carrying native session continuity. An absent exact candidate remains absent on that
+page; only the supplied opaque continuation can fetch another page. Review, acceptance, whole-slot adoption and
+confirmed current reading remain distinct. The existing native API owns authority, disclosure, constraints and
+source-or-consent fences; the page adds no permission or validation engine.
+
+Web capture handoff: `pages-catalogue-ordinary-identifier-evidence-editor--` followed by `route-entry`,
+`current-evidence`, `empty`, `loading`, `signed-out`, `denied`, `unavailable`, `stale-metadata`, `proposed`, `invalid`,
+`uncertain-retry`, `partial-results`, `exact-candidate-continuation`, `accepted-awaiting-selection`, `selected`,
+`pending-reading` or `reader-unavailable`. Use the same IDs with phone390/desktop1280, light/dark and locale globals.
+Connected examples use synthetic native-shaped payloads through production adapters; the route story uses
+`PageStory`. Existing native subject/candidate APIs are bound through the current BFF; execution of the plays,
+normal Web captures and native integration acceptance remain pending. There is no new missing producer adapter.
+
+Decision: keep the current identifier editor and candidate controllers; align the fake adoption acknowledgement with
+the native selection envelope and pin expected-head, competing-candidate selection and grouped citation readback.
+Current identifier definitions admit no qualifiers, so tests do not invent one; shared statement mapping preserves
+admitted qualifiers.
+
+## Browser flow: cited fact correction review and evidence reuse
+
+Generic Edit facts and every profile that renders SubjectFacts add a changed-set review before confirmation, and an explicit Reuse this reference action on a complete citation group. Character, Screen, Add-on and StoryArc classification corrections pass that same opt-in coordinator on their per-field holders. Game classification binds its own review coordinator. Album and Manga classification writers that duplicate their own submit keep immediate confirmation. Review opens with the included drafts and stays current while they change; jumping back from the review invalidates it until the contributor reviews again. Confirmation sends only that reviewed set through the existing sealed per-field commands. Independent results stay per field. Reopening a draft invalidates only the editable review, never a sealed request. After a partial set, the result board labels proposed, selected after an explicit native action, refused, uncertain and still-editable fields; existing candidate controls remain the acceptance and adoption path. Decision: after native selection the Character caller rereads that Character through the existing facts read, and the explicit Read current selection control remains for a failed or differing current result. After native selection the add-on caller rereads that add-on the same way. Classification current-reading, proposal, acceptance and adoption stay independent native outcomes.
+
+Reuse copies one complete grouped reference, in part order, onto up to sixteen currently editable drafts in the same subject visit. Each target gets an independent structured clone and new local holder identities; existing groups stay intact. The copy is a new evidence claim, not a transfer of support, prose or cover rights, provider identity, or acceptance authority. Over-limit, retired, locked or definition-incompatible targets stay unchanged with an explicit reason. Applying reuse makes no native request. A source or target that changes while the panel is open must be reviewed again. Session replacement retires the local snapshot.
+
+Facts correction binds current proposal authority to the active Global Context and candidate inspection to the exact disclosed Subject. Candidate decision (`context:accept`) and selection (`context:adopt`) remain separate operations. Decision: Facts correction reads one batched action projection for the disclosed `semantic.subject` and fixed Global Context; proposal, candidate inspection, editorial decision, and selection use their mounted operations independently, and an unavailable component disables dependent fresh commands.
+
+### Bound action projection for cited fact correction
+
+- Touches: one disclosed Subject, its active released scalar definitions, at most twelve changed rows with complete qualifiers and references, the existing candidate comparison, and deduplicated native Subject and Global Context action references.
+- Bound: one shared viewer-action batch and the existing bounded candidate page; action hydration is independent of rendered fields, qualifiers and references. The twelve-row, serialized command and aggregate changed-set byte limits remain in force.
+- Growth check: hold the Subject, twelve rows and citation bytes fixed while unrelated Subjects, candidates and authority history grow; account for the action preparation and candidate readback alongside each native proposal command.
+
+## Narrative story arcs
+
+The Contribute menu opens `/catalogue/story-arc`; an existing `wd:Q2620972` Subject also offers its
+`/subjects/:id/:slug/story-arc` correction workspace. These entries preserve locale and Realm addresses.
+The current generic producers support Global only, so a Realm address shows their unavailable-context state
+without silently submitting to Global. A physical volume, release, season or pagination segment does not establish
+an arc. The editor selects real native IDs and the current emitted Type and properties; it creates no schema,
+mapping or inferred membership.
+
+Initial creation reuses the ordinary multilingual terms form, its frozen retry key and exact created-Subject
+reread. It also binds only the current StoryArc Type's admitted scalar properties, with independent statement,
+qualifier and grouped-reference holders, to that same prepared item. The contributor reviews the complete native
+item and repairs native diagnostics before confirming. The workspace retains the acknowledged UUID and offers an
+explicit continue action; a work query remains a suggestion and creates no membership. A concealed or unavailable
+reader never becomes a fabricated success preview.
+Creation eligibility is the current Global Context `subject.create` observation on that existing parent. A disclosed
+work, released arc relation, classification return, or the future UUID cannot confer creation, later proposal,
+acceptance, or selection. Guest is session-derived. Admitted Story Arc and work descriptors stay readable when
+creation is unavailable. Commands reauthorize at execution.
+Decision: Story Arc identity creation uses the shared current parent `subject.create` observation; disclosed work
+and released arc relation remain admission evidence.
+
+### Create a Story Arc identity
+
+- Touches: one current Global Context `subject.create` observation, admitted StoryArc and optional work descriptors, one sealed create command, and one exact returned-identity read.
+- Bound: reuse the existing parent action observation, independently bounded definitions, and existing target/suggestion readers; no permission request per field or suggested identity, history scan, or polling. Retain existing field, statement, qualifier, serialized-command, and held-retry caps.
+- Growth check: hold one StoryArc type, one optional work, and one create command fixed while unrelated subjects, grants, and relation histories grow; charge native authority preparation with the existing StoryArc create fixture.
+
+Decision: the current StoryArc release gives its scalar properties no qualifier slots, so initial evidence uses
+their declared multiplicity and complete citation groups without inventing qualifier vocabulary.
+
+An explicitly selected existing parent work owns the forward `rezics:storyArc` relation. Its shared relationship
+editor retains exact arc target slots, `schema:position`, `rezics:firstPart`, `rezics:lastPart` and grouped citations
+as emitted. Creating an arc creates no parent statement. The arc's own series, part-of, predecessor and other
+admitted relationships open the existing relationship workspace. Acceptance and adoption use current heads and
+the actual reader; an unselected adoption stays pending. Other slots and their evidence remain intact. Ordinary
+forms submit no ingestion Source metadata, and existing source-or-consent and disclosure decisions remain native.
+
+Classification correction on an existing disclosed StoryArc reviews the complete changed admitted set through the
+shared Character classification coordinator, copies one complete citation group onto other editable holders in the
+same visit, and proposes each holder independently. A work suggestion cannot identify a classification, confer copy
+rights or select a candidate. Candidate review and selection remain a later native decision; after selection the
+exact arc is reread and shown even when it differs from the earlier proposal. Current-read failure stays on the
+classification overlay and does not empty the profile or adopt the work identity.
+Decision: StoryArc classification correction opts into CharacterClassifications `changedSetReview`. A successful
+current reread updates only the same arc UUID; failed reads keep the last admitted public identity and the
+classification overlay. Draft rank keeps a selected `preferred` assertion; Character48 staging still emits
+`statementInput` `normal` until that producer projects richer rank into its holders.
+
+## Ordinary multilingual correction
+
+Decision: The mounted `subject.terms` operation is observed through current `statement:propose` authority on the Global Context; the Subject Terms read independently proves current disclosure and revision.
+
+### Correct multilingual Terms with current native edit eligibility
+
+- Touches: the exact currently disclosed Subject Terms/revision, one Global Context reference for the mounted operation and its native Access/disclosure witnesses, bounded language fields, and actual conflict snapshots.
+- Bound: one Subject read and one Global viewer-action reference per observation, explicit retry, or pre-command check; no authority read per language, alias, or historical revision, and no grant enumeration. Existing native request and response bounds apply before hydration.
+- Growth check: use the existing native Terms and authority captures at three legitimate scales. Grow unrelated subjects, revision history, and grants while holding one Subject, bounded Terms payload, and one command fixed; inspect complete-operation work and strict indexed point-read plans. Report local editor copies as separately named bytes.
+
+The selected operation is `PATCH /v1/subjects/{id}/terms`. Required headers are a strong quoted `If-Match`
+containing the actual Subject revision, and the existing quoted `Idempotency-Key`. Its closed request is:
+
+```ts
+type TermsPatch = {
+  labels?: Record<string, string | null>;
+  descriptions?: Record<string, string | null>;
+  aliases?: Record<string, string[] | null>;
+};
+type TermsResult = { subject: string; revision: number };
+```
+
+Omitted fields and languages remain unchanged. Null removes that language entry. An alias array replaces that
+language's complete alias set. Native language, text, count and request byte limits apply; at least one valid
+label must remain. Type, release semantics and derived Account-agent terms cannot be edited here. The native command is `correctTerms(pool, input)` in `services/kernel/src/semantic/terms.ts`; its
+input binds the Subject, expected revision, patch, Actor, receipt key/digest, exact creation authorization,
+ordinary no-effect authorization, current Subject read preparation, route key and deadline. Its validation exports are `TermsPatch`, `TermsResult`, `TermChange`, `patchTerms` and `termRevision` in
+`services/kernel/src/semantic/terms.ts`. The mounted closed HTTP schemas are `TermsPatchSchema` and `TermsResultSchema` in
+`semantic/http/subjects.ts`. Imports can bind the mounted PATCH and this small result directly. The native authorship
+inputs are `revisionResource(subject, revision): Resource`, `REVISION_NS: string`, and
+`initializeRevisionAuthorship(tx, {subject, revision}): Promise<void>` from `semantic/authorship.ts`.
+The command must predeclare the exact revision resource through the existing creation manifest and parent
+creation authorization, then initialize it after the real revision insert. A revision collision requires whole-command
+authorization and manifest preparation again within the original deadline; replay initializes nothing.
+
+The write must require the existing Global `statement:propose` grant together with current Subject eligibility,
+Actor, Scope, visibility, redirect and fence checks before inspecting a receipt or producing an effect. Unknown
+and concealed Subjects both return 404. A fresh stale revision returns 412; conflicting reuse of a key returns 422. A denied attempt has no effect. An authorized replay returns its original `{subject, revision}` without
+another revision. Unchanged input uses native `noEffect` semantics and the actual current revision. It never
+reports a fabricated change.
+
+One native Subject-partition command must atomically append a never-reused revision, current terms, immutable
+changed field/language identity and existing command bookkeeping. Its receipt stores only `TermsResult`, never
+an old full Item. The response supplies ETag and Session; the browser then reads the actual current Subject.
+Per-revision author-resource initialization must use the native authorship producer, and publication must call
+the actual `recordSubjectPageTransition` hook. Neither direct Access SQL nor a second permission engine supplies
+those obligations.
+
+Ordinary overrides must retain exact original imported term Source support and current tuple/field fences.
+They cannot detach provider evidence, turn a taken-down import into native text, or reconstruct withheld text.
+The [Source attribution contract](../services/kernel/src/semantic/source-record-attribution-contract.md) owns
+original `(subject, fact_revision)` support. Current Subject, labels, related, summary and Search readers must
+use bounded authoritative term heads, without scanning the Subject's complete history or adding a stale name
+cache. Existing personal-payload locators and minimizers must cover every new persisted payload and receipt/event
+role while preserving communal identity, the nonpersonal change skeleton, account time T and legal holds.
+
+`correctTerms` now composes the actual native authorship and publication producers. Each changed
+field/language switches an indexed `semantic.term_head` pointer to a fresh immutable fact slot. Text stays
+in `semantic.fact`, using its existing Source-role capture and minimization; the head stores only technical
+coordinates. A head retains its original support transaction even across deletion and replacement. The
+`current_term_fact` view supplies current Subject, labels, related, summary, Search and publication reads.
+The native revision stores only changed fields/languages and original revision support locators. Source-fenced
+current terms or addressed deleted heads conceal the write, including receipt replay; they are never recovered
+from stored payload. Empty alias arrays and null both remove that language's alias set. No-op commands use
+ordinary Global proposal authorization without declaring a resource that will not be created. Actual writes
+retain the exact revision creation manifest and initializer finalization.
+
+Kernel typing is the delivery check for this stage. The preserved real API acceptance remains later proof;
+local Source enrollment does not certify shared-history coverage or account-erasure completion.
+
+## Individual revision explanation
+
+`GET /v1/subjects/{id}/revisions/{revision}` is implemented by `readRevisionDetail` in
+`services/kernel/src/semantic/revision-detail.ts`; its closed HTTP schema is `RevisionDetailSchema` in
+`services/kernel/src/semantic/http/subjects.ts`. The existing revisions list remains unchanged. The response is:
+
+```ts
+type Selection = { candidate: string; rank: 'normal' | 'preferred' };
+type Reading = {
+  decision: { head: number; verdict: 'accept' | 'reject' | 'abstain'; revision: number } | null;
+  selected: boolean;
+  rank: 'normal' | 'preferred' | 'deprecated' | null;
+};
+type RevisionDetail = {
+  subject: string;
+  revision: { revision: number; kind: string; release: string };
+  change:
+    | { kind: 'record' }
+    | { kind: 'terms'; fields: { field: 'labels' | 'descriptions' | 'aliases'; languages: string[] }[] }
+    | { kind: 'candidate'; candidate: string; property: string; context: string; reading: Reading }
+    | {
+        kind: 'decision';
+        candidate: string;
+        property: string;
+        context: string;
+        head: number;
+        verdict: 'accept' | 'reject' | 'abstain';
+        reading: Reading;
+      }
+    | {
+        kind: 'adoption';
+        property: string;
+        context: string;
+        head: number;
+        mode: 'inherit' | 'replace' | 'suppress';
+        selection: Selection[];
+      };
+};
+```
+
+UUID fields are `subject`, `candidate` and `context`. Revision and head numbers are positive integers; adoption
+selection retains its native 32-entry bound. `record` is the minimal nonpersonal skeleton when existing revision
+metadata has no single corresponding editorial record. No actor, token, write basis, payload, historical snapshot
+or textual diff is returned. Actual immutable term revisions supply the tag
+`{kind: 'terms', fields: TermChange[]}`, where `TermChange` is
+`{field: 'labels' | 'descriptions' | 'aliases', languages: string[]}`. It is served from the native revision, after checking its original Source support.
+
+The read applies current Subject, Context, candidate, related-target and exact Source-tuple disclosure, including
+terminal erasure. Unknown and currently concealed records return 404. Original and redirected related targets
+must independently remain visible and authorized; preparation releases each checkout before foreign authority.
+The final read checks current disclosure again. Responses use `Cache-Control: no-cache` and the existing Session.
+`reading` uses actual current decision and selected slot rank in the record's Context (Global for proposals).
+An adoption's selection describes that recorded adoption only. Revision order never proves current adoption.
+
+Decision: a selected terms revision opens the current Terms editor; a disclosed Global property opens the current property editor with only the Subject and property, and return reloads the same number of visited history pages through fresh signed cursors; unsupported contexts stay on Current reading.
+
+Changes offers **Review current candidate** for candidate and decision revisions. For an adoption, choose one of
+its recorded selected rows before opening that exact candidate. These actions perform a new exact current read in
+the disclosed Context; they do not recreate historical candidate bodies, actors or selection state. Candidate
+status comes from the current candidate read, while current selection comes from the current subject/Context read.
+Returning restores the original subject and selected revision after rereading at most five loaded history pages.
+The return address is held in memory and retired when the signed-in authority changes. A concealed, missing or
+expired target stays unavailable and never falls back to cached detail.
+
+The existing revision, candidate, decision and adoption stores remain authoritative. Three Subject/revision
+indexes locate the relevant record without enumerating history; candidate hydration and current selection retain
+the native selection bounds. No second history or personal-payload store is introduced. The generated client now
+binds this read in the existing Changes browser and selected-value explanation, through their private/no-store
+session BFF. Runtime validation rejects mismatched identities, unknown tags, extra fields, nonpositive heads and
+selection beyond 32. Candidate and decision readings describe the current native Context; adoption mode and selection
+describe only the recorded adoption. The terms tag now uses the same mounted native detail response. The browser
+keeps each field with its own language list and uses translated field labels and language names. Its closed parser
+retains the native three-field bound; Changes and Why this value share the adapter and explanation. A terms change
+cannot be presented as the origin of a selected scalar statement.
+Own-contribution withdrawal and restore
+now bind the generated candidate `delete` and `$restoreDeleted.post` methods. Their closed
+`{subject, candidate, deleted}` result must match both requested UUIDs and the requested deletion state before
+success and a current read. Current availability comes only from that read; an absent bounded candidate row proves
+neither deletion nor ownership, grants or a restore deadline. The shared result panel first reads the exact
+`GET /v1/subjects/:id/candidates/:candidate/lifecycle` metadata under the original viewer and candidate lifetime.
+It offers fresh operations only from current native allowed operations; action dependency failure keeps read retry
+available. Unknown command delivery retains its immutable operation, identity and key independently of fresh
+availability. Native 409 conflict is not treated as proof of retention expiry. Withdrawal confirmation explains that accepted
+revisions and independent Context decisions remain; current selection is read separately.
+Decision: exact contribution availability returns identity, lifecycle and separately bounded Global selection;
+failed action hydration remains unavailable and suppresses fresh mutations. Selection uses only current adoption
+metadata or exact compact assertion metadata, never a deleted statement payload. Native outcome checks and promotion to main remain
+separate; type checking alone does not prove those outcomes.
+
+Web owns the normal next visual review using the unchanged `pages-catalogue-changes--` IDs: `revisions`,
+`continue-and-explain`, `proposal`, `limited-safe-detail`, `loading`, `empty`, `denied`, `invalid`, `conflict`,
+`concealed`, `unavailable-retry`, `detail-retry` and `detail-loading`. The unchanged
+`pages-catalogue-why-this-value--` stories retain their existing outcomes and plays. Root samples direction;
+there is no capture restart.
+
+## Browser flow: manga series and volumes
+
+`/{locale}/catalogue/manga`, linked from catalogue creation, offers the released `schema:ComicSeries` and
+`schema:PublicationVolume` profiles. Their existing subject headers and compact frames include the editor in the
+Contribute menu, linking to `/{locale}/subjects/{id}/{slug}/manga` through the shared destination descriptor.
+The editor groups current membership, creators, publication, identifiers,
+classifications and original writing using effective emitted properties. Definition labels retain their actual
+fallback language. Initial term languages remain independent of the interface language.
+
+A volume requires an independently identifiable published object and the exact readable manga series selected
+through the common target picker. `wdt:P179` carries this relationship; an explicitly entered `schema:position`
+qualifier supplies its ordinal. Row order does not. A series receives neither volume pagination nor ISBN fields.
+The emitted series part count uses its explicit volume or chapter unit; no latest, maximum, sum or progress is
+inferred. Editions remain separate: the current edition producer does not admit these manga Types as work targets,
+so this editor offers no invented edition action. It never derives a subject ID from names or ordinals.
+
+Creation reuses native `POST /v1/subjects`, the session BFF and its idempotency contract. Only entered initial
+facts are submitted; the confirmed creation selects those facts in Global. The exact returned ID supplies the
+ordinary current reader. A failed read retains that ID and retries only the read. Uncertain delivery freezes the
+payload and key; conflict requires explicit draft review. Invalid values refresh the active release while keeping
+the draft, and a removed or changed field is rejected rather than silently dropped.
+
+Before a new Manga create, the author searches and acknowledges the exact type and first name, then reviews the
+normalized terms and every selected initial statement, including qualifiers, evidence, authored text licence and
+the original-text acknowledgement. Editing any reviewed value retires that review. Decision: Manga keeps identity, fact review and permission observation separate; guest, refused and unavailable creation remain distinct while definitions and public target search stay useful. A new write requires a fresh `subject.create` observation from the
+Global Context parent, and native execution still reauthorizes. An uncertain write retries the exact command and key;
+a known acknowledgement keeps its returned ID and retries only the ordinary reader.
+
+Corrections reuse the common per-field draft, partial-result and candidate-review controls. Unchanged scalar
+fields are omitted, qualifiers and citations survive replacement, and each uncertain field keeps its own key.
+Membership and creator changes use the integrated relation editor's actual qualified slots and target discovery.
+Original abstracts use the shared authored-text, explicit language and licence controls. Names and descriptions
+link to the existing terms adapter and its native conditional PATCH; `schema:name` proposals do not substitute
+for term-map writes. Its current denied, unavailable and conflict outcomes remain authoritative. Classification
+corrections reuse the shared item-value control already used for Character: an admitted Concept through the
+existing picker, ordinary citations, per-field candidates and explicit decision/selection. Decision: Manga,
+Album and Screen bind that control; Game keeps its existing specialized classification workspace. A later
+proposal awaits review and does not alter the current reading. Existing disclosure and source-or-consent rules
+remain native.
+Decision: Album and Manga keep that Character classification writer mounted across reading loss and when every
+admitted classification field is withdrawn, hiding stale public and private controls while retaining drafts,
+citations and exact sealed retry identity. Compatible drafts resume under a newly admitted reading; withdrawn
+assertions stay inspect-only and admit no new writes. Explicit discard and departure, or viewer/CSRF
+replacement, retire the holder. Keyboard recovery orients to the classification summary. A hidden reading does
+not construct a review session; resumed review uses the newly admitted reading. Creation and
+selected-reader recovery remain independent. Semantic retains Concept suggestion, proposal, review, selection
+and command authority; Web binds the existing generated candidate methods and does not invent an endpoint.
+
+The real-route story IDs are:
+
+- `pages-catalogue-manga-series-and-volume-editor--create-series`
+- `pages-catalogue-manga-series-and-volume-editor--create-volume`
+- `pages-catalogue-manga-series-and-volume-editor--correct-series`
+- `pages-catalogue-manga-series-and-volume-editor--correct-volume`
+- `pages-catalogue-manga-series-and-volume-editor--uncertain`
+- `pages-catalogue-manga-series-and-volume-editor--denied`
+- `pages-catalogue-manga-series-and-volume-editor--invalid`
+- `pages-catalogue-manga-series-and-volume-editor--conflict`
+- `pages-catalogue-manga-series-and-volume-editor--stale-correction`
+- `pages-catalogue-manga-series-and-volume-editor--reader-unavailable`
+- `pages-catalogue-manga-series-and-volume-editor--reader-concealed`
+- `pages-catalogue-manga-series-and-volume-editor--saving`
+- `pages-catalogue-manga-series-and-volume-editor--loading`
+- `pages-catalogue-manga-series-and-volume-editor--unavailable`
+- `pages-catalogue-manga-series-and-volume-editor--empty`
+- `pages-catalogue-manga-series-and-volume-editor--signed-out`
+
+Use the locale, theme and phone390/desktop1280 viewport globals. They are declared request examples; native
+acceptance and normal Web captures remain separate verification.
+
+## Browser flow: book and book-series works
+
+The existing create entry and the Book or BookSeries subject’s Contribute menu offer **Book and book-series work editor**.
+`/{locale}/catalogue/literary` reuses the common initial-terms form; the work reader offers
+`/{locale}/subjects/{id}/{slug}/literary`. These pages consume effective emitted `schema:Book` and
+`schema:BookSeries` properties, constraints, units and relation metadata. Labels and descriptions keep their actual
+metadata language and the existing fallback. They do not publish definitions or change a subject's Type.
+
+Creation sends only entered multilingual terms and explicitly added initial scalar facts through ordinary
+`POST /v1/subjects`. Each fact reuses the shared value, qualifier and grouped-reference controls, with a URL-first
+citation part for the existing quick-entry path. Additional parts stay in their chosen reference group and order;
+their datatypes, units and available qualifiers come from the exact admitted release. Untouched citation scaffolds
+are omitted, while typed zero and false values remain. No number, language, classification or relation is inferred
+from another field. The shared creator reads current `subject.create` authority on the Global Context parent and
+requires an allowed observation for fresh creation; guest, refusal and unavailable states stay distinct while
+released Book and BookSeries descriptors remain readable. It rechecks before the write, and native execution
+reauthorizes the command. Decision: Literary initial entry remains scalar-only; relation qualifiers stay in the existing
+post-creation relation editor. The form retains independent drafts across Type choices. Native rejection refreshes
+metadata while retaining the draft; uncertain delivery retains the exact command and key. The returned subject ID is
+reread before offering its canonical current-reader link, and the read must match the submitted ID and Type. A created
+identity with an unavailable reader is shown as created, with a separate read retry of that UUID, never another create.
+The existing publication entry after create is navigation only; it does not confer publication authority.
+
+Standalone Book and BookSeries creation reviews the exact prepared item before sealing: chosen Book versus BookSeries
+and its label language, every multilingual term and alias, and every admitted initial assertion with its qualifiers,
+normal rank and grouped references. Dates keep their precision and quantities keep their units and bounds; they are
+not rewritten as display labels. A later edit, type switch, reference copy or successful metadata change requires
+reviewing the current item again. Contributors may copy one complete reference group onto up to sixteen other initial
+statements in this creator; copies are independent, leave each destination's existing groups in place, and never copy
+values, qualifiers, rank or authority. Incompatible, removed, sealed and uncertain holders cannot receive a copy.
+Source or destination edits while copy review is open make it stale; Cancel leaves drafts unchanged. A BookSeries
+title is not a source series identity. Whole-item review does not select imported candidates, attach editions,
+populate contents or publish relations.
+
+Decision: pinned Book scalars currently admit no initial qualifiers; review still shows qualifier lists when a
+statement carries them. With four admitted holders and zero qualifiers, preparation and reuse cover per-holder
+reference group lengths [7], [7, 16, 8] and [7, 16, 16, 16, 16, 16, 16, 16, 8], producing structured-part
+counts 32→53, 128→149 and 512→533 under the existing 12-row and 16-part limits.
+
+Initial Literary metadata retry admits one read, retains its recovery action while pending, and moves focus to the creation heading only for still-current keyboard intent; failure retains the action and moved focus, pointer initiation or caller, locale or session retirement stays silent.
+Decision: Book and BookSeries creation uses the shared current parent `subject.create` observation, independent of session presence, definitions, current Subject actions, target suggestions, and later publication or relation commands.
+
+### Create a Book or BookSeries work
+
+- Touches: one current Global Context `subject.create` observation, admitted Book and BookSeries descriptors, one sealed create command, and one exact returned-identity read.
+- Bound: reuse the existing parent action observation, independently bounded definitions, and existing target readers; no permission request per field, history scan, or polling. Retain existing field, statement, serialized-command, and held-retry caps.
+- Growth check: hold one Book or BookSeries type and one create command fixed while unrelated subjects, grants, and relation histories grow; charge native authority preparation with the existing Literary create fixture.
+
+Decision: Literary correction carries bounded public Subject/Realm/Context and released Book or BookSeries type intent; nonGlobal intent is refused before editor or candidate work mounts, with a separate fresh Global visit that drops the old intent.
+
+The optional correction query is capped at 2,048 characters and UTF-8 bytes including percent-encoding expansion.
+It retains one validated public literary address and no previous address, observations, commands or draft bodies.
+Duplicate, unknown, unsupported or contradictory fields invalidate the whole descriptor independently of native
+missing, refused and unavailable reads. Direct addresses retain ordinary Global correction and creation is unchanged.
+Fresh profile admission compares a supplied Type with the current native Type. The existing native correction,
+relation and authored read windows and related-summary caps are unchanged; the descriptor adds zero native reads.
+Decision: Literary correction inspects one exact current authored statement by its native statement ID after an authenticated fresh FactsTransport read; PartValue keeps each value and evidence part subject to its existing disclosure controls, and reveal state retires on caller, Context, release, reader or evidence change. The single validated literaryReturn source is a navigation-only link whose Subject route performs fresh public admission; no previous reading, upstream locator, or release/reader URL intent is stored.
+
+The current work groups identity/original names, bibliography/declared quantities, creator/series/classification
+relations and admitted original text. Bibliography reuses the multi-field editor and its independent results and
+keys; relations reuse the native target picker and qualified-slot editor; original text reuses authored fields,
+per-document language, licence and evidence. Opening a relation or authored section starts its bounded read and
+keeps its editor mounted when collapsed. Corrections create candidates for exact native review, not immediate
+publication. The names link uses the existing native terms adapter and its actual result; an unavailable write remains
+unavailable, and no `schema:name` proposal substitutes for a title-map edit.
+
+ISBN and page counts remain edition facts. Book word count uses the released exact unitless quantity, without
+page conversion, text-coverage inference or trusted whole-work evidence. BookSeries part count uses only its
+released volume/chapter units; membership is contributed on each member, without deriving totals. Unsupported
+conveniences are omitted, including a BookSeries author field when only contributor/publisher are emitted.
+Initial authored text and relations are entered after creation through the existing integrated editors. These
+ordinary forms submit no ingestion Source envelope and infer no prose, cover or rights permission.
+
+## Browser flow: person and organization catalogue profiles
+
+`/{locale}/catalogue/people` guides creation of the released `schema:Person` and `schema:Organization` catalogue
+identities. The existing Contribute menu in subject headers and compact frames links their identity under Edit to
+`/{locale}/subjects/{id}/{slug}/people`; work credit actions pass the exact work ID as `?work=` under Create. These
+entries share the standalone profile entry's destination and the menu's existing signed-out return flow. Duplicate discovery
+uses the existing global search. The work remains separate: after creating or finding the person or organization,
+the work's native relation editor selects that identity and contributes its cited role and qualifiers. Creation
+does not manufacture a credit or creator ownership.
+
+The profile reads the actual active immutable definitions and current subject in parallel. Effective properties
+and datatypes determine support. Initial multilingual terms reuse generic creation. Optional initial facts use
+the shared statement fields: structured value, native value discriminator, admitted qualifiers, grouped ordered
+references and independent copies from the visit-private reference-reuse coordinator. Rank stays the native
+default `normal`; this creator has no rank control. A missing citation is an editable invalid condition under
+actual native rules, never a manufactured URL or a copy of the current work. Editing one part does not rewrite
+sibling groups. Only explicitly entered facts enter `POST /v1/subjects` and are selected at creation. Person and
+Organization keep separate local fact drafts; switching type cannot seal the other type's facts.
+
+Before native creation the contributor reviews the exact People item: type, every language row and alias, and
+every initial assertion with its qualifiers, default rank and grouped references. The review is a local draft,
+not published, selected or accepted. Creating the identity and adding an optional later work credit remain
+independent native operations; creation does not add a credit. A later edit, type switch, definition refresh or
+reference copy requires reviewing the current item again. Unknown delivery retries the sealed item and key;
+acknowledged creation retries only the exact-UUID read. The returned ID is read through the ordinary reader.
+Creation controls use the current signed-in viewer's `subject.create` observation on the mounted Global Context;
+guest, refusal and unavailable observation remain distinct from independently useful released profile definitions.
+Drafts survive Type switches and stale-metadata rejection, including fields no longer admitted; withdrawn fields
+keep a visible repair or discard path. An explicit retry keeps Retry focusable with `aria-disabled` while
+pending, then returns focus to Retry on failure or moves it to the profile/form heading on success.
+
+Corrections reuse the integrated multi-field editor's selected values, qualifiers, references, independent keys,
+partial results and exact-candidate review. Submission proposes an alternative; acceptance and selection remain
+separate. Unchanged fields and all other term languages remain intact. The profile links the existing terms adapter
+for the mounted native terms command; unavailable responses remain unavailable in this journey.
+For correction reload, keyboard intent keeps a surviving focused opener; otherwise current success focuses the
+profile heading and current failure focuses Retry. Focus movement, pointer use and route, locale, session, reader or
+workspace retirement cancel that handoff.
+`schema:name` proposals never replace term-map editing. Account-agent derived names, software-agent creation,
+eligibility, personal disclosure and `sourceOrConsent` stay with their existing native authorities. Ordinary forms
+never send ingestion Source metadata or infer private relationships.
+
+Person biography, occupations and working languages appear as labelled groups on the existing People profile.
+This release admits `schema:abstract`, occupation `wdt:P106` and `schema:knowsLanguage`; other requested occupation
+predicates stay named unsupported. An admitted biography field uses the existing authored document composer with
+language, document identity, references and return; short descriptions are not rewritten as long biography. Occupations
+and languages are independently selected admitted items. Organization producer history is a companion
+`/{locale}/subjects/{id}/{slug}/producer` route that reuses the existing relation editor; parent `wdt:P749` and
+predecessor/successor `wdt:P1365`/`wdt:P1366` bind as independent directed organization relations. Released media fields still require their dedicated editor;
+this flow supplies no cover import or inferred rights. Metadata text retains its actual fallback language, independently
+of the entered facts' languages.
+
+The ordinary Person overview reads biography, occupations and working languages from the current composed
+Subject, with the same emitted property meanings as the correction profile. It never rereads the Subject, derives
+occupations from credits or hydrates related targets. Document text uses only the page's admitted, exact
+subject/candidate/document/digest/language binding and the existing authored-text renderer, spoiler controls and
+media/link policy. Missing native document presentation is explicitly unavailable. Each assertion retains its
+qualifiers and ordered citation groups; withheld item targets expose neither identity nor link. Partial dates keep
+the native precision. Legacy People correction returns to the canonical overview's biography heading.
+A changed source observation, locale, viewer/session, exposure or lifetime removes the complete old reader subtree,
+including expanded evidence and delayed definition results; a focused removed control returns to the stable heading.
+
+From a public Person page, the correction entry carries its resolved Context and optional resolved Realm as intent,
+along with the locale, effective definition observation, reader incarnation and one same-locale public return
+address. A non-Global Context or Realm that the native editor cannot select is explained before any Global profile read or editor
+mounts. A separate Global choice starts the existing fresh Global read and advice; it does not use public visibility
+as mutation permission. Return rereads the original public Person through its existing Subject reader and disclosure
+gates. Organization history, direct Global visits, creation and Work credit handoffs keep their existing entry paths.
+
+Decision: the ordinary reader shows admitted alternatives within each named group; when none are admitted it shows
+one unsupported notice, rather than repeating technical predicate alternatives.
+
+Cost: each fresh Person observation adds only the existing active-definition pointer and immutable release GETs
+(two requests); zero Subject, document, session, exposure, target, media or per-fact requests. Definition failure
+stays unavailable until a fresh page observation. Retention replaces one definition result and one current page
+projection, without history or background retry. At most 15 admitted fields per group and 20 selected assertions per
+field render; additional assertions link to the existing finite Details view. Evidence renders at most 32 qualifiers,
+32 ordered citation groups and 32 parts per group per assertion; larger evidence shows unavailable and remains in
+the existing correction/Details owners. Page document selection retains its existing 15-document and native body
+bounds; Web adds no hydration. Projection is O(admitted fields + current statements + rendered evidence), independent
+of catalogue size. The owner of the composition response retains its original transport bounds. Source stories
+exercise admitted, empty, withheld and unsupported states; they do not establish native or rendered acceptance.
+
+Entry and return add one descriptor capped at 2,048 query characters and UTF-8 bytes. An unsupported origin performs
+no profile read. An explicit Global choice uses the existing profile load and advice; return performs one existing
+public Subject read, with no per-field or per-assertion request.
+
+The Storybook page is **Pages/Catalogue/Person and organization catalogue editor**, with base ID
+`pages-catalogue-person-and-organization-catalogue-editor`. Its `create-route`, `person-route` and
+`organization-route` stories enter the real router; `create`, `person`, `organization`, `correct-cited-fact`,
+`loading`, `person-loading`, `organization-loading`, `empty`, `signed-out`, `denied`, `invalid`, `stale-metadata`,
+`unavailable`, `uncertain-submit`, `created-readback-unavailable` and `created-readback-concealed` expose the
+connected states. Current-profile loading is Character/add-on `current-loading`, Screen `correction-loading`, and
+People `person-loading`/`organization-loading`. Locale, viewport and theme use globals. Connected relationship
+writes are deliberately unavailable in the preview; real routes bind the existing session relation editor. These
+fixtures do not establish native execution or visual acceptance; Web owns normal phone390/desktop1280, light/dark
+captures.
+
+## Browser flow: released album catalogue editor
+
+The existing catalogue creation row offers **Create album** at `/{locale}/catalogue/album`. An admitted album's
+current reader and compact work frame offer **Edit album profile** through the existing Contribute menu at
+`/{locale}/subjects/{id}/{slug}/album`. A public-origin entry first retains that disclosed reading as bounded
+intent and shows its Subject and resolved Context. It stays read-only until the person chooses the named Global
+correction action. A legacy direct Album route remains a Global correction visit. The shared destination descriptor
+also preserves the menu's exact signed-out return address.
+These private, noindex pages retain the exact native subject ID and `schema:MusicAlbum` Type. Canonical slug
+corrections keep that identity; a different resolved ID is not silently edited. Realm/context addresses do not
+fall through to a Global write.
+
+This is a profile for the already emitted creative-work Type, not a recording, release or personal copy. Controls
+come from the effective active definitions release: no publication date is invented or required by the profile.
+Native dates and scalar details, artist/part relations, classifications and authored text have distinct groups.
+Definitions retain their actual metadata language and fallback attribution. Existing names, descriptions and
+aliases show their own languages and link to the terms adapter described above. `schema:name` proposals do not
+patch the title maps. The terms editor binds the mounted native writer and reports its actual availability.
+
+Creation reuses native subject input validation and the existing session BFF's `POST /v1/subjects`. The visit
+returns current session-derived viewer state and the Global Context `subject.create` observation through the
+ordinary private BFF, independently of definitions, suggestions and edition reading. Guest, confirmed refusal and
+unavailable observation stay distinct. Fresh creation requires current applicable eligibility and a current admitted
+review of the exact MusicAlbum work; commands still reauthorize at execution. Edition disclosure does not authorize
+creating the work. A private draft survives temporary observation failure. Review is invalidated when its actual
+input changes. Late results after viewer, locale, route or editor lifetime replacement are rejected. An uncertain
+command retains its exact bytes and key; recovery does not reseal it, change Type or release, or become a second
+create. A validated acknowledgment keeps the exact returned UUID even when later reading fails; retry reads that
+identity without another write.
+Decision: Album creation eligibility is the current Global Context `subject.create` observation, independent of
+edition disclosure; guest is session-derived.
+
+Creation sends only
+explicitly entered terms and added assertions, qualifiers and citations; it sends no ingestion Source metadata.
+There are no default artist, date, role, part or classification assertions. Actual target search, scalar controls
+and qualified relation controls are shared with the existing editors. Artist credits use `schema:contributor`
+with admitted person/organization targets. Its emitted qualifiers supply credited-as text, a role concept,
+position and an applies-to-part target. Positions follow the native string constraint; applies-to-part currently
+accepts a story arc, not an invented track. `wdt:P361` part-of-work has no order qualifier. Series membership uses
+its separate native relation and position. No track, recording, audio store, streaming service or lyric controls
+are supplied. The initial classification picker is native; correction reuses the shared item-value control for
+admitted classification fields, with independent drafts and the ordinary candidate review.
+Album classification correction keeps that private holder mounted while a current reading is missing or every
+admitted classification field is withdrawn, then recovers compatible drafts and citations under the newly
+admitted reading. Withdrawn assertions remain visible for reconciliation; sealed unknown commands keep their
+original sender, credentials, key and operands. A hidden reading does not construct a review session.
+Creation readback and this correction holder stay independent.
+
+Correction reuses the scalar multi-field staging and per-field partial results, exact candidate review, qualified
+relation editor and original authored-text composer. Unchanged language maps, qualifiers and references remain
+intact. Blank values do not imply clearing. An original summary is a separate authored document with an explicit
+language and licence. Successful proposals remain awaiting review; neither a proposal nor an aggregate submit
+claims publication. Exact returned subject/candidate IDs lead to the actual native reader or review. Failed
+creation readback retains the created ID and retries the read rather than creating again.
+
+Decision: a public Album entry carries one closed origin descriptor of at most 2,048 encoded UTF-8 bytes and no
+assertion locator. It shows the source address and resolved Context without mounting correction; only a deliberate
+Global choice starts a fresh correction visit. Return reads the original public Subject/Realm again and restores
+focus only when Subject, Context, locale, reader observation and released definition still match. A general entry
+uses the current occurrence choices in the existing FactField and relation editor; labels and equal values never
+identify an assertion. Descriptor loss or unsupported origin offers an explicit current Global restart. Existing
+candidate, evidence and relation windows remain unchanged. The mounted current correction example is
+`album-current-visit.stories.tsx`; `album-current-visit.test.tsx` covers the public entry, deliberate choice,
+distinct current occurrences and return-focus cancellation.
+
+### Create a MusicAlbum work
+
+- Touches: one current Global Context `subject.create` observation, independently bounded admitted MusicAlbum
+  definitions, and existing target/suggestion readers.
+- Bound: retain existing field, statement, qualifier, serialized-command and held-retry caps; no permission request
+  per field or suggested identity, history scan or polling.
+- Growth check: hold the parent action observation, admitted Type and initial-fact set fixed while unrelated grants,
+  identities and history grow; charge native Access preparation for the create observation.
+
+Invalid, denied and conflicting creation results retain the draft and submitted command for comparison, with an
+explicit choice to review a new attempt. Uncertain delivery freezes the exact payload/key for retry. Stale metadata
+cannot prevent native receipt replay: retries use the same native POST without a new definitions preflight. Metadata
+is reloaded without discarding entered rows; withdrawn fields remain visible for deliberate removal. Correction
+reload failures retain staged scalar and relation drafts, and disable further edits until a successful reload.
+Withdrawn scalar commands retain a read-only private assertion and exact per-holder retry through the existing native writer; refusal preserves the sealed intent, and only deliberate current recovery moves focus to its result.
+Only emitted support is offered; unknown rights remain unknown and no provider prose, covers or permissions are
+inferred.
+
+The focused payload regressions live in `apps/web/tests/catalogue-album-profile.test.ts`. Connected story examples
+live in **Pages/Catalogue/Released album catalogue editor**, under the ID prefix
+`pages-catalogue-released-album-catalogue-editor--`. The state IDs are `ready`, `loading`, `empty`, `signed-out`,
+`unavailable`, `concealed`, `correction`, `denied`, `invalid`, `conflict`, `stale-metadata`, `reader-unavailable`,
+`created`, `retry`, `proposed` and `credit-correction`. They exercise existing generated request helpers against
+explicit fictional examples, using the recorded emitted definitions and genuinely empty `sourceRecords: []`.
+They are not native integration or visual evidence. Locale, phone390/desktop1280 viewport and light/dark theme
+use globals. The shared terms writer is bound through the existing editor. Native integration and visual
+acceptance remain separate; Web owns normal captures.
+
+## Browser flow: film, television and episode profiles
+
+`/{locale}/catalogue/screen` is the released film/series/season/episode creation journey, linked from ordinary
+catalogue creation. Existing work headers and compact view frames offer the profile in their Contribute menu at
+`/{locale}/subjects/{id}/{slug}/screen` for corrections. The private, noindex routes use the existing shell,
+session BFF and current canonical subject reader.
+Complete Screen creation, recovery and long review examples render that shell with the
+production editor; independent field examples stay supplementary.
+The entry follows the existing contribution menu's Realm restrictions.
+
+The active emitted release decides the four available Types and their effective properties, labels, targets,
+qualifiers and units. The editor groups dates, quantities, creators/cast, parts, classifications and text. Metadata
+uses the interface locale's normal fallback with its actual language; subject term languages remain independent.
+Duration uses the released seconds unit where offered, date precision is explicit, and episode position is text,
+including specials and fractional ordinals. No season-number property or parent-season relation is invented.
+An independently identified publication belongs in the existing AnimeRelease/publication editor. Language,
+format, files and viewing progress never manufacture an edition or transfer a work's credits to it.
+
+Creation uses the common profile and multilingual initial-terms form. Only explicitly added rows enter the native
+`POST /v1/subjects` body; blank added rows are invalid until changed or explicitly removed. Subject targets use
+the existing picker, with released target admission. Each row reuses the shared value, qualifier and grouped-reference
+controls, with a URL-first part and explicit Add part/Add reference actions. Qualifiers, reference part datatypes,
+units and multiplicity follow the exact admitted release; populated references preserve group boundaries, order and
+stable holder identity. Untouched citation scaffolds are omitted without losing typed zero or false values. Optional
+qualifiers and citations retain their native shape.
+Standalone Screen creation reviews the exact prepared item before sealing: selected type and its label language,
+every multilingual term and alias, and every admitted initial assertion with its qualifiers, rank and grouped
+references. Confirmation seals that same item; an edit, type switch, reference copy or successful metadata change
+requires a current review again. Creating a standalone season or episode does not establish series or season
+membership; membership remains the existing separate native operation after this identity exists. Episode-from-series
+creation keeps immediate confirmation. Contributors may copy one complete reference group onto up to sixteen other
+initial statements in this creator; copies are independent, leave each destination's existing groups in place, and
+never copy values, qualifiers, rank or authority. Incompatible, removed, sealed and uncertain holders cannot receive
+a copy. Source or destination edits while copy review is open make it stale; Cancel leaves drafts unchanged.
+Type-keyed drafts survive a type switch; only the current type's prepared item enters review or a sealed command.
+Unsupported or retired fields stay visible as repair needs. A failed current metadata read is not an empty baseline.
+Initial creation facts are selected in Global and use the native `normal` rank. Confirmation retains the exact
+returned subject ID, and only an ordinary read of that ID supplies its reader address. Failed readback offers a read
+retry of that UUID without another creation. Ready, denied or concealed, missing, stale or redirected, and unavailable
+readings stay distinct. Uncertain delivery freezes the full terms/facts command and key; a definite refusal can
+return through explicit repair and re-review, and a timeout cannot. Stale metadata refreshes without discarding the
+draft, and key conflicts require explicit review before a new confirmation.
+The native API validates the submitted command. An uncertain retry reaches that same native idempotency path
+without replacing its payload or key after a metadata change. Complete-item review visits admitted holders and their
+structured parts; one confirmation uses one create command and its exact-ID current read.
+Creation eligibility is the current Global Context `subject.create` observation on that existing parent. A readable
+series, later relation transport, or the future UUID cannot confer creation, membership proposal, or selection. Guest
+is session-derived. Admitted Screen types, public targets and series context stay readable when creation is
+unavailable. Commands reauthorize at execution.
+Decision: Screen identity creation uses the shared current parent `subject.create` observation, independent of series
+context and later relation commands.
+
+### Create a Screen identity
+
+- Touches: one current Global Context `subject.create` observation, admitted Movie, Series, Season or Episode descriptors, optional series context, one sealed create command, and one exact returned-identity read.
+- Bound: reuse the existing parent action observation, independently bounded definitions, and existing target/suggestion readers; no permission request per field or suggested identity, history scan, or polling. Retain existing field, statement, qualifier, serialized-command, and held-retry caps.
+- Growth check: hold one Screen type, one optional series context, and one create command fixed while unrelated subjects, grants, and relation histories grow; charge native authority preparation with the existing Screen create fixture.
+
+Initial Screen metadata retry replaces the failure with a pending status, keeps one read in flight, and preserves the Retry action on another failure; successful keyboard recovery orients to the creation heading only while focus intent survives movement, pointer use and caller retirement.
+
+Corrections compose the common multi-field editor and qualified relation editor. Unchanged fields and unedited
+languages, qualifiers and references survive; each changed scalar field has its own result and retry key. A
+submitted proposal is still awaiting review and selection, and review follows the exact returned candidate ID.
+Creators, cast roles and part relations keep their emitted slot semantics. Existing original-text/licence and
+multilingual-terms editors remain distinct companions; a `schema:name` candidate cannot replace the term map.
+The terms entry uses the shared native writer and reports its actual availability, refusal and conflict outcomes.
+Ordinary forms send no ingestion Source metadata and confer no prose, cover or other reuse rights.
+
+Original long descriptions are contributed through the existing authored-document editor after creation.
+Classification facts may be entered at creation when emitted. Correction reuses the shared item-value
+classification control for those emitted fields, with independent drafts and explicit candidate
+decision/selection. No substitute writer or Concept seed is supplied.
+
+## Browser flow: independently identified publications
+
+`/{locale}/catalogue/publication?work={id}` starts from an exact readable work. Book works use the released
+`bf:Instance` grain, screen works `rezics:AnimeRelease`, and software or game works `wd:Q20631656`, only when
+those Types and the allowed work-linking relations are emitted. These are publication grains, never new work
+identities, recordings, personal copies or Library entries. ISBN or title equality never infers an edition, and
+the work's credits, labels, evidence and provider identity are not copied. The independent-identification
+confirmation stays explicit. Creation eligibility is the current Global Context `subject.create` observation,
+independent of this work, an accepted relationship suggestion, or the chosen work relation. Guest, confirmed
+refusal and unavailable observation stay distinct from session availability; admitted public work reading remains
+when creation is unavailable. Fresh creation still re-reads current eligibility, and the native create command
+remains final. Decision: independently identified publication creation eligibility is the current Global Context
+`subject.create` viewer-action observation; a disclosed work cannot grant it, and guest is session-derived.
+Decision: a dirty independent publication visit uses the same window beforeunload protection as recipe composition; in-app leave still uses the router blocker.
+
+The contributor enters multiple language rows with labels, descriptions and aliases using native initial-term
+semantics. Duplicate languages and invalid language or term input are explained before sealing. Rows keep a
+stable identity through removal and error correction; removing an entered row uses the same draft-loss treatment
+as other catalogue creation. The existing work is shown as an immutable target; its evidence and admitted
+qualifiers remain editable. Optional publication facts use complete statement holders with the shared value,
+qualifier, grouped-reference and rank presentation, limited to the profile's emitted fields and native
+multiplicity. Each assertion owns its references: a URL entered for one fact never cites another. Empty controls
+produce no assertions. Decision: initial publication facts use the same `normal` rank as other native subject
+creation; preferred and deprecated ranks remain later correction.
+
+Whole-publication review shows every language, the selected grain, the exact work link, facts, qualifiers, ranks
+and grouped evidence with definition names and actual language attribution. Edit returns to the corresponding
+stable holder. Confirm seals that reviewed item and the existing command key. Server-side creation rereads the
+exact work, checks the allowed profile and relation, and uses the existing subject-creation authority on the Global Context parent. Metadata
+refresh reconciles only an unsent or definitively rejected draft. Native diagnostics map statement, qualifier and
+reference pointers to the current holder; a removed holder leaves the diagnostic on the whole review rather than
+a neighbour. The exact returned UUID is reread before offering the readable publication and an explicit return to
+the original work. Unknown delivery retries the sealed body and key; a confirmed unread result retries only the
+read. Returning or changing language after a confirmed result cannot create another publication.
+
+### Observe current publication creation authority
+
+- Touches: one disclosed work, independently bounded definitions, one Global Context `subject.create` action observation, and existing target/suggestion readers.
+- Bound: one parent action observation; no permission request per field or suggested identity, history scan or polling. Retain existing field, statement, qualifier, serialized-command and held-retry caps.
+- Growth check: hold the work, admitted profile and sealed command fixed while unrelated subjects, grants and suggestion history grow; account for native authority preparation with the existing publication native fixture.
+
+## Browser flow: original recipe composition and correction
+
+The catalogue creation entry and a Recipe subject's Contribute menu open the canonical Recipe editor at
+`/{locale}/catalogue/recipe` and `/{locale}/subjects/{id}/{slug}/recipe`. These private, noindex pages keep
+`schema:Recipe` identity and the exact effective released profile. Ingredient text, material `wdt:P186`,
+`cookTime`, `recipeYield`, `suitableForDiet` and `recipeInstructions` keep distinct meanings, datatypes and
+multiplicity. An ingredient string is not a material identity or diet classification. Nutrition, substitutions,
+fetched instructions, ingredient parsing, serving scaling and health claims are omitted.
+
+An author enters multilingual terms and adds recipe rows through the current profile. Ingredient language,
+native quantity amount/unit/precision and item targets stay explicit. Instructions reuse the ordinary authored
+document composer with original language and licence; citations never copy source wording or grant reuse.
+Each row shows its meaning and actual definition-language fallback. Row identity and entered values survive
+removing another row or term. Populated removal keeps the established confirmation and focuses a surviving control.
+
+Each assertion composes complete evidence through shared StatementFields, retaining specialized authored, target
+and scalar value controls. Independent reference groups, ordered parts, admitted properties, value discriminators
+and supported qualifiers stay as the pinned release and creation/proposal API allow. Unsupported parts keep
+field-specific feedback. Existing groups appear in full, exactly once, without mutating source objects, replacing
+a URL in place, sharing across rows or merging look-alike groups. Empty controls send no evidence or fact.
+Decision: contributors add complete groups in the shared statement editor rather than a URL-only citation field;
+untouched empty scaffolds are omitted.
+
+Before initial creation, a whole-recipe review shows exact language maps, ingredient text, distinct
+materials/diets, quantities with native units, safely rendered authored instructions and every statement's
+complete evidence. Editing a member invalidates only that unsent review and returns to its control. Unsupported
+or malformed authored input stays editable and cannot appear as a successful preview. Confirm seals the reviewed
+native RecipeCommand item and key. Unknown create outcomes keep that body, key and credential. Confirmed-but-unread
+results retry only the returned identity read. After readback, the current Recipe reader and continue-editing
+the exact UUID are ordinary navigation, not a second identity or an implicit correction.
+
+The fresh-create visit reads current `subject.create` eligibility from the mounted Global Context parent through
+the existing private observation, independently of released definitions, target suggestions and later correction.
+Guest, allowed, refused (permission, gate, or suspension) and temporarily unknown stay distinct from session
+availability. Match search remains available when creation is refused or unknown. A stale allowed observation is
+not an authorization bypass; confirm re-reads current eligibility, and the native create command remains final.
+Correction, proposal, editorial decision and selection never consume this parent create admission.
+Decision: Recipe creation eligibility is the current Global Context `subject.create` viewer-action observation;
+guest is session-derived; later correction omits that observation.
+
+### Create a structured Recipe identity
+
+- Touches: one active definition pointer and immutable release, one Global Context `subject.create` viewer-action observation, admitted Recipe fields, existing target/suggestion readers, and one sealed create command with its current-identity readback.
+- Bound: preserve the existing field, statement, qualifier, serialized-command and held-retry caps; no permission request per field or suggested identity, history scan or polling.
+- Growth check: hold one Recipe draft, one parent action observation and the admitted field set fixed while unrelated subjects, grants and candidate histories grow; Access preparation is charged with the existing native Recipe fixture.
+
+A correction edits one selected assertion's value or complete evidence, reviews that proposed statement against
+the currently authorized selected reading, and submits through proposeRecipe. Retained, added, edited and
+explicitly removed evidence groups are listed. Existing source evidence initializes the private draft once under
+its holder identity. A newly selected current candidate does not overwrite that draft. Untouched rows and their
+groups stay unchanged. Proposed, reviewed, selected and current readable results stay distinct. Uncertain
+correction recovery keeps its own sealed key, independent of creation. A failed correction does not roll back
+creation. Nested diagnostics use stable holder mapping so a delayed pointer cannot focus a different row after
+an earlier group is removed.
+
+## Browser flow: definition guide
+
+Decision: the active guide opens on the first bounded page and provides separate localized label-prefix and
+exact-Type-ID inputs; next-page navigation follows the current prefix cursor. Active browsing uses the released
+Type directory and exact selected-Type descriptors. An explicit release digest continues to mean its immutable
+historical release.
+Decision: missing qualifier definitions on an exact Type descriptor are completed from that descriptor's
+release digest through the existing immutable release reader; admitted fields stay the descriptor's list, and
+a missing pin stays unread rather than becoming the active bundle.
+Decision: a pinned field opened from a validated editor return offers Compare current definition. That view
+resolves the original exact digest and the active pointer's exact digest independently, shows native
+differences side by side, and never substitutes the current release for an unavailable pin. Label differences
+are not definition changes. Comparison does not require the return URL, but the Compare control does.
+Decision: comparison reads stay bounded to the active pointer and the two exact releases; Type directory
+search is not used. Opening, switching and closing comparison keeps the original editor return, including
+its field and statement.
+
+## Browser flow: music-context creation
+
+`/{locale}/catalogue/music-context` creates one released place, music event, administrative area, or instrument. Generic
+catalogue creation links to this localized entry. The page reads one successful active immutable release and offers
+only actual Types admitted by the existing music-context classifier, including its emitted structural bases. An
+unavailable definition read is an error; a release with no admitted Type shows that absence without inventing a
+profile or seed.
+
+The selected Type's exact emitted properties, datatypes, qualifiers, target restrictions, and multiplicities drive
+initial fact controls. Native editors keep date precision and unknown values, exact relation-target UUIDs, quantities,
+qualifiers, and independent reference groups. Untouched scaffolds are omitted. A reference group can be deliberately
+reviewed and copied to at most 16 eligible local facts; the copy is independent evidence and grants no rights or
+acceptance. Terms and aliases remain multilingual subject terms, separate from statement evidence.
+
+The data language starts unset and must be chosen for each term row; route locale only selects interface wording.
+Private term and fact drafts remain distinct by exact Type. A withdrawn fact stays visible until removed, while a
+withdrawn Type remains available for deliberate whole-draft discard. The contributor reviews the prepared Type,
+terms, facts, targets, ranks, qualifiers, and every evidence part before confirming. A changed release requires a new
+review, and nested native feedback returns to its stable holder. The visit returns current Global Context `subject.create`
+eligibility through the private BFF, independently of definition success, and consumes that shared observation in the
+mounted controls. Guest, confirmed refusal and unavailable observation stay distinct; admitted Types remain readable when
+creation is unavailable. A stale allowed observation is not an authorization bypass: fresh submission re-reads current
+eligibility, and the native create command remains final. The BFF rechecks current admission and forwards the reviewed
+item through ordinary native subject creation with current authority. Unknown delivery retries the same bytes and key;
+after acknowledgement, recovery reads only the returned UUID. The ordinary subject reader supplies the exact public
+identity. Creating a place, event, area, or instrument proposes no album, performer, venue, occurrence, membership,
+personal ownership, Context, or account-setting relation.
+
+Decision: music-context creation starts with no data language selected; contributors choose each term language independently of the route locale.
+Decision: music-context creation observes current Global Context `subject.create` eligibility through the shared private BFF; it does not add identity suggestion search or rewrite the ordinary subject reader to a music-context companion.
+Decision: the current bundled vocabulary emits no Place, Event, AdministrativeArea or MusicInstrument Type, so this visit shows absence until live admission includes one; tests may clone the existing Place classifier grain onto that release without seeding the vocabulary.
+
+### Prepare a music-context identity
+
+- Touches: one successful active immutable release, one current Global Context `subject.create` observation, ordinary native subject POST, and one created-identity read.
+- Bound: retain existing field, statement, qualifier, serialized-command and held-retry caps; no permission request per field or suggested identity, history scan or polling.
+- Growth check: hold one released Place, Event, AdministrativeArea or MusicInstrument Type and one parent action observation fixed while unrelated Types, grants and identities grow; charge native authority preparation with Access.
+
+## Browser flow: catalogue file and release-group creation
+
+`/{locale}/catalogue/file` creates one released catalogue file or release group. Generic catalogue creation and the existing file/group companion entry link to this localized visit. Subject file URLs stay the ordinary reader. The page reads one successful active immutable release and offers only Types admitted by `isCatalogueFileType` or `isReleaseGroupType`, including emitted structural bases. A Type that matches both is a file. Labels are not admission. An unavailable definition read is an error; a release with no admitted Type shows that absence without inventing a profile.
+
+The contributor chooses the file grain or the release-group grain and sees what that identity describes. Public catalogue identity stays separate from a personal copy, ownership, download availability or a verified physical file. No upload, filesystem hashing, source fetching, AniDB, MyList or Library writer follows. The selected Type's exact emitted identifier, size, codec, language, quality and other admitted properties, grouped by the existing fileGroups, drive initial statement controls. A supplied hash is shown as a catalogue assertion with its evidence; it is not a verified match, identity equality, encoding normalization or automatic merge.
+
+Native editors keep nested type:value discriminators, date precision, quantities, languages, exact relation-target UUIDs, qualifiers, independent reference groups and normal rank. Target-valued statements use current allowed target Types and explicit readable UUID choices; titles, paths and neighbouring releases never infer an episode, publication or group. Untouched scaffolds are omitted. A malformed entered value remains an error. A reference group can be deliberately reviewed and copied to at most 16 eligible local facts; the copy is independent evidence and grants no rights, identity, publication or acceptance. Terms and aliases remain multilingual subject terms, separate from statement evidence.
+
+Private term and fact drafts remain distinct by exact Type. A withdrawn fact stays visible until removed, while a withdrawn Type remains available for deliberate whole-draft discard. Refresh never silently drops entered evidence. The contributor reviews the prepared Type, terms, facts, targets, ranks, qualifiers and every evidence part before confirming. A changed item or release requires a new review. Nested native diagnostics map through captured holder identities, so removal never focuses a replacement row. The visit returns current Global Context `subject.create` eligibility through the private BFF, independently of definition success, and consumes that shared observation in the mounted controls. Guest, confirmed refusal and unavailable observation stay distinct; admitted Types remain readable when creation is unavailable. A stale allowed observation is not an authorization bypass: fresh submission re-reads current eligibility, and the native create command remains final. The BFF rechecks current admission and forwards the reviewed item through ordinary native subject creation with current authority. Unknown delivery retries the same bytes and key; after acknowledgement, recovery reads only the returned UUID. The ordinary file/group reader supplies the exact public identity. Creating one identity proposes no later relation, candidate selection or personal ownership. Existing association, grouping, inverse paging and correction controls are unchanged.
+
+Decision: file and release-group creation start with no data language selected; contributors choose each term language independently of the route locale. Successful create returns to `/{locale}/subjects/{id}/{slug}/file`.
+Decision: file and release-group creation observe current Global Context `subject.create` eligibility through the shared private BFF; `CreateTransport.eligibility` stays optional for other specialist creators.
+
+### Prepare a catalogue file or release-group identity
+
+- Touches: one successful active immutable release, one current Global Context `subject.create` observation, ordinary native subject POST, and one created-identity read.
+- Bound: retain existing field, statement, qualifier, serialized-command and held-retry caps; no permission request per field or suggested identity, history scan or polling.
+- Growth check: hold one released File or FileGroup Type and one parent action observation fixed while unrelated Types, grants and identities grow; charge native authority preparation with Access.
+
+## Browser flow: concept and scheme creation
+
+`/{locale}/catalogue/concept` creates one released Concept or ConceptScheme. Generic catalogue creation links to this
+localized entry. The page reads one successful active immutable release and offers only Types admitted by
+`conceptTypeAdmitted`, including emitted structural bases. An unavailable definition read is an error; a release with
+no admitted Type shows that absence without inventing a profile or seed. Search of existing targets is ordinary
+bounded identity intake before deliberate creation; a matching title is not identity.
+
+The selected Type's exact emitted properties drive initial fact controls. `skos:inScheme`, `skos:broader`, `foaf:focus`
+and `skos:closeMatch` stay distinct; no inverse edge, hierarchy copy, or closeMatch-as-equivalence is inferred. Image
+is omitted where unsupported. Decision: a ConceptScheme admits its actual emitted fields (currently terms plus
+`schema:url` and `schema:sameAs`); the form does not invent statements to fill gaps. Terms remain multilingual subject
+terms, separate from statement evidence. Decision: Concept creation reuses the existing CreateSubjectForm identity
+search and review seams rather than a second writer.
+Decision: generic Type-directory handoff prefers `/catalogue/file` for admitted file or release-group Types, then `/catalogue/concept` for admitted Concept or ConceptScheme Types.
+
+A direct visit ends at the ordinary Concept reader. A classification-return caller may offer an explicit return; the
+creator never writes a parent-work classification or grants adoption. Unknown delivery retries the same bytes and key;
+after acknowledgement, recovery reads only the returned UUID. Creating a concept proposes no vocabulary release, source
+licence, provider claim, equivalence mapping, or ballot.
+
+A detour acknowledgement retains only its exact UUID in a bounded, same-reader session record separate from the
+expiring classification draft. On remount the visit restores the UUID before offering submission and retries only its
+ordinary exact-ID read. A failed read keeps the UUID and retry useful. Return rereads the UUID and requires current
+Concept Type and structural-base admission; stored labels or Types never stand in for that disclosure.
+
+The visit returns current Global Context `subject.create` eligibility through the private BFF, independently of
+definition success, and consumes that shared observation in the mounted controls. Guest, confirmed refusal and
+unavailable observation stay distinct; admitted Types remain readable when creation is unavailable. A stale allowed
+observation is not an authorization bypass: fresh submission re-reads current eligibility, and the native create
+command remains final. Identity search, definitions and authority stay independent; a matching title is not identity
+and confers no create grant. An expired or mismatched classification handoff cannot authorize a return or a write, and
+it does not discard a known create result.
+Decision: keep only an acknowledged Concept UUID in a bounded 24-hour, same-reader session record separate from the expiring classification draft; require a fresh exact-ID read and current Type/base admission before return.
+
+Decision: Concept creation observes current Global Context `subject.create` eligibility through the shared private BFF;
+definitions, identity search and authority stay independent.
+
+### Prepare a catalogue Concept or ConceptScheme identity
+
+- Touches: one successful active immutable release, one current Global Context `subject.create` observation, ordinary native subject POST, and one created-identity read.
+- Bound: retain existing field, statement, qualifier, serialized-command and held-retry caps; no permission request per field or suggested identity, history scan or polling.
+- Growth check: hold one released Concept or ConceptScheme Type and one parent action observation fixed while unrelated Types, grants and identities grow; charge native authority preparation with Access.
+
+## Sources correction visit
+
+Sources keeps selected evidence, reviewed source-record attribution and licence, authored-text rights and cover rights separate. A visible fact, validation result, citation or historical revision grants neither correction authority nor provenance. Current native subject:propose action is the only mutation authority; missing action data is unavailable, while a confirmed empty action set refuses correction. Private action data is never emitted by SSR.
+
+Correction eligibility is limited to the exact currently disclosed own scalar evidence allowed by the native action projection. Selected or historical evidence does not establish a writable candidate. If the selected Context or Realm is unsupported, the page explains that scope and drops its unsupported intent. A Global-only correction requires an explicit fresh Global choice before the existing editor mounts; the editor then reacquires the current Global Subject and action advice, and commands reauthorize.
+
+Exact selected-synopsis Sources follows the [synopsis owner contract](subject-pages.md#exact-selected-synopsis-sources-contract), including independent document admission and the final selected-slot check. General Sources remains independent; its facts, citations and locators do not establish selected admission. Identity never comes from an href, spelling or locator; the existing Sources reader owns return and focus.
+
+The destination rereads current admission and selection. Proposing or accepting a candidate never injects it as selected support. Reader replacement retires pending reads; retries retain their exact command custody.
+
+### Inspect selected evidence and current correction entry
+
+- Touches: one bounded selected Subject read, reviewed metadata and native correction-action preparation; comparison uses its existing page cap.
+- Bound: existing evidence/reference budgets, one deduplicated native Global action resource, no per-citation permission reads or remote body fetches.
+- Growth: unrelated sources, candidate history and authority history do not grow selected evidence bytes or the fixed comparison handoff. Native action preparation includes current authority and disclosure work.

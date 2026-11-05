@@ -1,25 +1,33 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { betterAuth } from 'better-auth';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair, decodeJwt, SignJWT } from 'jose';
 import { testDatabase } from '../scripts/database.ts';
+import { runPlacedTests } from '../scripts/placed-tests.ts';
 import { betterAuthOptions } from '../src/better-auth.ts';
 import { withAuthTransport } from '../src/rate-limit.ts';
 let peerSequence = 0;
 const nextPeer = () => `192.0.2.${++peerSequence}`;
-import { createAuthService, type AccessAccount, type AuthServiceOptions } from '../src/index.ts';
+import {
+  createAuthService,
+  type AccessAccount,
+  type AuthService,
+  type AuthServiceOptions,
+  type CredentialEffectAuthorization,
+  type CredentialEffectBinding,
+} from '../src/index.ts';
 
 // Exercise native production defaults in a fresh module graph.
 if (process.env.NODE_ENV !== 'production') {
   test('bounded production behavior preserves security outcomes', async () => {
-    const child = Bun.spawn(['bun', 'test', 'test/bounded-sessions.test.ts'], {
+    const child = await runPlacedTests(['bun', 'test', 'test/bounded-sessions.test.ts'], {
       cwd: import.meta.dir + '/..',
       env: { ...process.env, NODE_ENV: 'production' },
-      stdout: 'inherit',
-      stderr: 'inherit',
     });
-    expect(await child.exited).toBe(0);
+    if (child.output) console.info(child.output);
+    expect(child.code).toBe(0);
   }, 120000);
 } else {
   let db: ReturnType<typeof testDatabase>;
@@ -67,6 +75,30 @@ if (process.env.NODE_ENV !== 'production') {
   async function count(id: string) {
     return Number((await pool.query('SELECT count(*) FROM session WHERE "userId"=$1', [id])).rows[0].count);
   }
+  async function credentialEffect(
+    service: AuthService,
+    input: {
+      key: string;
+      subjectAccountId: string;
+      headers: Headers;
+      credential: Parameters<AuthService['internal']['stageCredentialEffect']>[0]['credential'];
+    },
+  ) {
+    const stage = await service.internal.stageCredentialEffect(input);
+    const approval = await service.internal.approveCredentialEffect({
+      effectRef: stage.effectRef,
+      key: input.key,
+      subjectAccountId: input.subjectAccountId,
+      headers: input.headers,
+    });
+    return service.internal.applyCredentialEffect({
+      authorization: approval.reference,
+      effectRef: stage.effectRef,
+      key: input.key,
+      subjectAccountId: input.subjectAccountId,
+      headers: input.headers,
+    });
+  }
 
   test('two native instances atomically evict the deterministic oldest stored row, including expired rows; rollback retains it', async () => {
     await nativeOwner(pool, 'capacity');
@@ -110,7 +142,10 @@ if (process.env.NODE_ENV !== 'production') {
       audience: 'https://bounded.api.test',
       secret,
       signing: { activeKid: jwk.kid, privateKeys: [jwk] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
+        async readFencedAccount(id) {
+          return this.readAccount(id);
+        },
         async readAccount(id) {
           if (unavailable) throw new Error('Access unavailable');
           return accounts.get(id) ?? null;
@@ -125,7 +160,7 @@ if (process.env.NODE_ENV !== 'production') {
           account.authnEpoch++;
           return { accountId, minimumAuthnEpoch: account.authnEpoch, receiptId: `floor-${accountId}` };
         },
-      },
+      }),
     };
     const first = await createAuthService(options);
     const second = await createAuthService({ ...options, database: other });
@@ -322,6 +357,10 @@ if (process.env.NODE_ENV !== 'production') {
     let serial = 0;
     const delivered: string[] = [];
     const receipts = new Map<string, { accountId: string; minimumAuthnEpoch: number; receiptId: string }>();
+    const credentialApprovals = new Map<
+      string,
+      { stage: CredentialEffectBinding; expiresAt: string; consumed: boolean }
+    >();
     const barrier = (accountId: string) => {
       if (failBarrier) throw new Error('Access barrier unavailable');
       const account = accounts.get(accountId)!;
@@ -341,15 +380,25 @@ if (process.env.NODE_ENV !== 'production') {
           delivered.push(token);
         },
       },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
+        async readFencedAccount(id) {
+          return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+        },
         async readAccount(id) {
-          return accounts.get(id) ?? null;
+          const account = accounts.get(id);
+          return account ? { ...account } : null;
         },
         async readRecoveryAccount(id) {
           return accounts.get(id) ?? null;
         },
         async authorizeProvisioning(id) {
           return { accountId: id };
+        },
+        async approveCredentialEffect({ stage }) {
+          const reference = `credential-opening-${serial++}`;
+          const expiresAt = new Date(Date.now() + 60000).toISOString();
+          credentialApprovals.set(reference, { stage, expiresAt, consumed: false });
+          return { reference, expiresAt };
         },
         async invalidateAccount({ accountId }) {
           return barrier(accountId);
@@ -373,8 +422,42 @@ if (process.env.NODE_ENV !== 'production') {
             throw new Error('Invalid completion');
           account.fenced = false;
         },
-        async consumeAuthorization({ subjectAccountId, purpose, human }) {
-          const invalidation = purpose === 'session' ? undefined : barrier(subjectAccountId);
+        async consumeAuthorization(input) {
+          const { subjectAccountId, purpose, human } = input;
+          if (purpose !== 'session') {
+            const opening = credentialApprovals.get(input.authorization);
+            const stage = opening?.stage;
+            const account = accounts.get(subjectAccountId);
+            if (
+              !opening ||
+              opening.consumed ||
+              !stage ||
+              !account ||
+              stage.subjectAccountId !== subjectAccountId ||
+              stage.purpose !== purpose ||
+              stage.operationKey !== input.operationKey ||
+              stage.effectReference !== input.effectReference ||
+              stage.actingHumanId !== human.account_id ||
+              stage.clientId !== human.client_id ||
+              JSON.stringify(stage.scopes) !== JSON.stringify(human.scope)
+            )
+              throw new Error('Access denied');
+            opening.consumed = true;
+            const receipt: CredentialEffectAuthorization = {
+              ...stage,
+              receiptId: input.authorization,
+              subjectAccountId,
+              actingHumanId: human.account_id,
+              operatorAccountId: account.automated ? 'operator' : null,
+              purpose: stage.purpose,
+              clientId: human.client_id,
+              scopes: human.scope,
+              humanEpoch: human.authn_epoch,
+              subjectEpoch: account.authnEpoch,
+              expiresAt: opening.expiresAt,
+            };
+            return receipt;
+          }
           return {
             receiptId: `opening-${serial++}`,
             subjectAccountId,
@@ -386,10 +469,29 @@ if (process.env.NODE_ENV !== 'production') {
             humanEpoch: human.authn_epoch,
             subjectEpoch: accounts.get(subjectAccountId)!.authnEpoch,
             expiresAt: new Date(Date.now() + 60000).toISOString(),
-            ...(invalidation ? { invalidation } : {}),
           };
         },
-      },
+        async revalidateCredentialEffect({ stage, authorization }) {
+          const opening = credentialApprovals.get(authorization);
+          if (!opening || JSON.stringify(opening.stage) !== JSON.stringify(stage)) throw new Error('Access denied');
+        },
+        async advanceCredentialFloor({ stage, consumedOpening, expectedPreviousFloor }) {
+          const floor = barrier(stage.subjectAccountId);
+          if (floor.minimumAuthnEpoch !== expectedPreviousFloor + 1) throw new Error('Access denied');
+          return {
+            receiptId: floor.receiptId,
+            accountId: stage.subjectAccountId,
+            minimumAuthnEpoch: floor.minimumAuthnEpoch,
+            operationKey: stage.operationKey,
+            effectReference: stage.effectReference,
+            effectDigest: stage.effectDigest,
+            purpose: stage.purpose,
+            openingReceiptId: consumedOpening.receiptId,
+            previousFloor: expectedPreviousFloor,
+            fenced: !!accounts.get(stage.subjectAccountId)!.fenced,
+          };
+        },
+      }),
     };
     const service = await createAuthService(options);
     const second = await createAuthService({ ...options, database: other });
@@ -499,8 +601,8 @@ if (process.env.NODE_ENV !== 'production') {
     const credential = (await pool.query(`SELECT password FROM account WHERE "userId"='effects-human'`)).rows[0]
       .password;
     await expect(
-      service.internal.setCredential({
-        authorization: 'replace',
+      credentialEffect(service, {
+        key: 'replace',
         subjectAccountId: 'effects-human',
         headers: new Headers({ cookie: humanCookie }),
         credential: { kind: 'password', password },
@@ -518,8 +620,8 @@ if (process.env.NODE_ENV !== 'production') {
     const fresh = await login();
     for (let i = 0; i < 63; i++) await insertNative(pool, 'effects-human', true);
     // Credential replacement must invalidate before revoking the full neighborhood.
-    await service.internal.setCredential({
-      authorization: 'replace',
+    await credentialEffect(service, {
+      key: 'replace-applied',
       subjectAccountId: 'effects-human',
       headers: new Headers({ cookie: fresh }),
       credential: { kind: 'password', password },

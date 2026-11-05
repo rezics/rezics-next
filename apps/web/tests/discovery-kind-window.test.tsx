@@ -1,0 +1,317 @@
+import { afterAll, afterEach, expect, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act, type ComponentProps } from 'react';
+
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
+const window = new Window({ url: 'https://search.test/en/search' });
+const globals = {
+  window,
+  document: window.document,
+  HTMLElement: window.HTMLElement,
+  Node: window.Node,
+  IS_REACT_ACT_ENVIRONMENT: true,
+};
+const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+
+const { createRoot } = await import('react-dom/client');
+const { DiscoveryKinds } = await import('../src/search/discovery-kinds');
+const { setLocale } = await import('../src/paraglide/runtime.js');
+type Props = ComponentProps<typeof DiscoveryKinds>;
+type Loaded = Awaited<ReturnType<Props['load']>>;
+const host = document.createElement('main');
+document.body.append(host);
+let root: ReturnType<typeof createRoot>;
+
+function kind(id: string) {
+  return { id, labels: { en: id }, icon: 'book', count: { kind: id, value: 123, exact: true } };
+}
+
+function ready(ids: string[], next: string | null, asOf = 'checkpoint') {
+  return { status: 'ready' as const, kinds: { values: ids.map(kind), next }, asOf };
+}
+
+function props(
+  initial: Props['initial'],
+  selected: string[],
+  load: Props['load'],
+  extra: Partial<Pick<Props, 'checkpoint' | 'onRefresh' | 'onRefusal'>> = {},
+): Props {
+  return { initial, checkpoint: 'checkpoint', selected, locale: 'en', hydrated: true, load, ...extra };
+}
+
+async function show(identity: string, value: Props) {
+  setLocale('en', { reload: false });
+  if (!root) root = createRoot(host);
+  await act(async () =>
+    root.render(
+      <form onSubmit={(event) => event.preventDefault()}>
+        <DiscoveryKinds key={identity} {...value} />
+      </form>,
+    ),
+  );
+}
+
+function more() {
+  return [...host.querySelectorAll('button')].find((button) => button.textContent === 'More types')!;
+}
+
+async function click(label = 'More types') {
+  await act(async () => [...host.querySelectorAll('button')].find((button) => button.textContent === label)!.click());
+}
+
+function hiddenKinds() {
+  return [...host.querySelectorAll<HTMLInputElement>('input[type="hidden"][name="kinds"]')].map(({ value }) => value);
+}
+
+afterEach(async () => {
+  if (root) await act(async () => root.unmount());
+  root = undefined!;
+  host.replaceChildren();
+});
+
+afterAll(() => {
+  window.happyDOM.abort();
+  for (const [key, descriptor] of previous) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+});
+
+function submitted() {
+  return new window.FormData(host.querySelector('form')!).getAll('kinds').map(String).sort();
+}
+
+const ids = (page: number) => Array.from({ length: 8 }, (_, index) => `schema:${page}-${index}`);
+const visible = () =>
+  [...host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].map((input) => input.value);
+
+test('32 explicit reads replace one eight-option window, preserve exact selections and initial counts', async () => {
+  const calls: string[] = [];
+  const selected = ['schema:0-0', 'schema:1-0', 'schema:2-1', 'external', 'external'];
+  await show(
+    'query',
+    props(ready(ids(0), 'cursor-1').kinds, selected, async (cursor) => {
+      calls.push(cursor);
+      return ready(ids(calls.length), `cursor-${calls.length + 1}`);
+    }),
+  );
+  for (let page = 1; page <= 32; page++) {
+    await click();
+    expect(visible()).toEqual([...ids(0), ...ids(page)]);
+    expect(submitted()).toEqual([...new Set(selected)].sort());
+    expect(host.textContent!.match(/123/g)).toHaveLength(8);
+  }
+  expect(calls).toEqual(Array.from({ length: 32 }, (_, index) => `cursor-${index + 1}`));
+  expect(host.textContent).toContain('browsing limit');
+  await click('Return to the directory start');
+  expect(visible()).toEqual(ids(0));
+  expect(more()).toBeUndefined();
+  expect(calls).toHaveLength(32);
+});
+
+test('pending reads and transport retries retain the window, cursor and native checkbox changes', async () => {
+  let settle!: (value: Loaded) => void;
+  const calls: string[] = [];
+  await show(
+    'query',
+    props(ready(ids(0), 'opaque+/=').kinds, [], async (cursor) => {
+      calls.push(cursor);
+      if (calls.length === 1) return ready(ids(1), 'exact-next');
+      if (calls.length === 2)
+        return new Promise((resolve) => {
+          settle = resolve;
+        });
+      if (calls.length === 3) throw new TypeError('transport');
+      return ready(ids(2), null);
+    }),
+  );
+  expect(submitted()).toEqual([]);
+  expect(host.textContent).toContain('All result types');
+  await click();
+  const chosen = host.querySelector<HTMLInputElement>('input[value="schema:1-0"]')!;
+  await act(async () => chosen.click());
+  await click();
+  expect(more().disabled).toBe(true);
+  expect(visible()).toEqual([...ids(0), ...ids(1)]);
+  expect(submitted()).toEqual(['schema:1-0']);
+  await act(async () => settle({ status: 'unavailable', retryable: true, recovery: { status: 'unavailable' } }));
+  expect(more()).toBeUndefined();
+  expect(visible()).toEqual([...ids(0), ...ids(1)]);
+  await click('Retry this result type page');
+  expect(visible()).toEqual([...ids(0), ...ids(1)]);
+  await click('Retry this result type page');
+  expect(visible()).toEqual([...ids(0), ...ids(2)]);
+  expect(calls).toEqual(['opaque+/=', 'exact-next', 'exact-next', 'exact-next']);
+  expect(hiddenKinds()).toEqual(['schema:1-0']);
+  await click('Return to the directory start');
+  expect(submitted()).toEqual(['schema:1-0']);
+});
+
+test('cycles and duplicate or empty progress stop explicit paging and permit return to the accepted start', async () => {
+  const invalid = [ready(ids(3), 'a'), ready(ids(1), 'd'), ready(['duplicate', 'duplicate'], 'd'), ready([], 'd')];
+  for (const [index, failure] of invalid.entries()) {
+    let calls = 0;
+    await show(
+      String(index),
+      props(ready(ids(0), 'a').kinds, ['schema:1-0'], async () => {
+        calls++;
+        return calls === 1 ? ready(ids(1), 'b') : calls === 2 ? ready(ids(2), 'c') : failure;
+      }),
+    );
+    await click();
+    await click();
+    await click();
+    expect(visible()).toEqual([...ids(0), ...ids(2)]);
+    expect(host.textContent).toContain('did not advance');
+    await click('Return to the directory start');
+    expect(visible()).toEqual(ids(0));
+    expect(submitted()).toEqual(['schema:1-0']);
+    expect(more()).toBeDefined();
+  }
+});
+
+test('denial and closure hide accepted options; a changed query aborts obsolete reads', async () => {
+  for (const status of ['denied', 'closed', 'session'] as const) {
+    await show(
+      status,
+      props(ready(ids(0), 'a').kinds, ['schema:0-0'], async () => ({ status: 'unavailable', recovery: { status } })),
+    );
+    await click();
+    expect(visible()).toEqual([]);
+    expect(host.querySelector('button')).toBeNull();
+  }
+  let signal!: AbortSignal;
+  let settle!: (value: Loaded) => void;
+  await show(
+    'old-query/en/checkpoint',
+    props(ready(ids(0), 'a').kinds, [], async (_cursor, pending) => {
+      signal = pending;
+      return new Promise((resolve) => {
+        settle = resolve;
+      });
+    }),
+  );
+  await click();
+  await show(
+    'new-query/ja/new-checkpoint',
+    props(ready(ids(9), 'fresh').kinds, [], async () => ready(ids(10), null)),
+  );
+  expect(signal.aborted).toBe(true);
+  await act(async () => settle(ready(ids(1), null)));
+  expect(visible()).toEqual(ids(9));
+  await click();
+  expect(visible()).toEqual([...ids(9), ...ids(10)]);
+});
+
+test('preparation retries the exact cursor after Retry-After, while changed checkpoint coverage asks Search to refresh', async () => {
+  const calls: string[] = [];
+  await show(
+    'preparing',
+    props(ready(ids(0), 'opaque-cursor').kinds, ['selected-outside-window'], async (cursor) => {
+      calls.push(cursor);
+      return calls.length === 1
+        ? { status: 'preparing', recovery: { status: 'source-not-ready', retryAt: Date.now() + 60_000 } }
+        : ready(ids(1), 'next');
+    }),
+  );
+  await click();
+  const retry = [...host.querySelectorAll('button')].find(
+    (button) => button.textContent === 'Retry this result type page',
+  )!;
+  expect(retry.disabled).toBe(true);
+  expect(host.textContent).toContain('Additional result types are being prepared.');
+
+  const preparedCalls: string[] = [];
+  await show(
+    'preparation-retry',
+    props(ready(ids(0), 'preparing-cursor').kinds, [], async (cursor) => {
+      preparedCalls.push(cursor);
+      return preparedCalls.length === 1
+        ? { status: 'preparing', recovery: { status: 'source-not-ready' } }
+        : ready(ids(1), null);
+    }),
+  );
+  await click();
+  await click('Retry this result type page');
+  expect(preparedCalls).toEqual(['preparing-cursor', 'preparing-cursor']);
+  expect(visible()).toEqual([...ids(0), ...ids(1)]);
+
+  let refreshes = 0;
+  await show(
+    'expired-checkpoint',
+    props(
+      ready(ids(0), 'cursor').kinds,
+      ['selected-outside-window'],
+      async () => ready(ids(4), 'new-cursor', 'checkpoint-2'),
+      {
+        onRefresh: () => refreshes++,
+      },
+    ),
+  );
+  await click();
+  expect(visible()).toEqual([]);
+  expect(host.textContent).toContain('The result type directory changed. Refresh it to continue.');
+  expect(hiddenKinds()).toEqual(['selected-outside-window']);
+  expect(host.textContent).not.toContain('123');
+  await click('Refresh result types');
+  expect(calls).toEqual(['opaque-cursor']);
+  expect(refreshes).toBe(1);
+});
+
+test('a native cursor restart requests the current first directory through Search', async () => {
+  let loads = 0;
+  let refreshes = 0;
+  await show(
+    'native-restart',
+    props(
+      ready(ids(0), 'expired-cursor').kinds,
+      [],
+      async () => {
+        loads++;
+        return { status: 'restart', recovery: { status: 'restart' } };
+      },
+      {
+        onRefresh: () => refreshes++,
+      },
+    ),
+  );
+  await click();
+  expect(visible()).toEqual([]);
+  await click('Refresh result types');
+  expect(loads).toBe(1);
+  expect(refreshes).toBe(1);
+});
+
+test('changed omitted-kind coverage drops old options and deliberately re-reads Search', async () => {
+  let refreshes = 0;
+  const initial = {
+    ...ready(ids(0), 'cursor').kinds,
+    omitted: [{ id: 'source:a', labels: { en: 'A' }, state: 'preparing' as const }],
+  };
+  await show(
+    'omitted-coverage',
+    props(
+      initial,
+      ['schema:0-0', 'retained'],
+      async () => ({
+        ...ready(ids(1), 'next'),
+        kinds: {
+          ...ready(ids(1), 'next').kinds,
+          omitted: [{ id: 'source:a', labels: { en: 'A' }, state: 'unavailable' as const }],
+        },
+      }),
+      {
+        onRefresh: () => refreshes++,
+      },
+    ),
+  );
+  await click();
+  expect(visible()).toEqual([]);
+  expect(hiddenKinds()).toEqual(['schema:0-0', 'retained']);
+  await click('Refresh result types');
+  expect(refreshes).toBe(1);
+});

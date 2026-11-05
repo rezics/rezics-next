@@ -1,11 +1,13 @@
+import { readSessionToken } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import type { KernelClient } from '@rezics/client';
 import { chromium, type Browser } from 'playwright';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
 
 type ReadResult = Awaited<ReturnType<ReturnType<KernelClient['media']>['get']>>;
 type KernelProblem = NonNullable<ReadResult['error']>['value'];
@@ -189,47 +191,122 @@ function freePort(): Promise<number> {
   });
 }
 
-const children: ChildProcess[] = [];
+type ResourceScope = 'suite' | 'test';
+type OwnedResource = { label: string; scope: ResourceScope; close: () => Promise<void> };
+type ResourceLease<T> = OwnedResource & { value: Promise<T> };
+const resources = new Set<OwnedResource>();
+const servers = new Set<ProcessCustody>();
 const started = new Map<boolean, Promise<string>>();
-let browser: Browser | undefined;
+let browserLease: ResourceLease<Browser> | undefined;
+let teardownStarted = false;
+
+function ownResource<T extends object>(
+  label: string,
+  scope: ResourceScope,
+  create: () => T | PromiseLike<T>,
+  dispose: (resource: T) => unknown | PromiseLike<unknown>,
+): ResourceLease<T> {
+  if (teardownStarted) throw new Error(`${label} acquisition began after suite teardown`);
+  let resource: T | undefined;
+  let closing: Promise<void> | undefined;
+  let lease!: ResourceLease<T>;
+  const value = Promise.resolve()
+    .then(create)
+    .then((created) => {
+      resource = created;
+      if (teardownStarted) void lease.close().catch(() => {});
+      return created;
+    });
+  void value.catch(() => {});
+  const close = () =>
+    (closing ??= (async () => {
+      let current = resource;
+      if (current === undefined) {
+        try {
+          current = await value;
+        } catch {
+          resources.delete(lease);
+          return;
+        }
+      }
+      await dispose(current);
+      resources.delete(lease);
+    })());
+  lease = { label, scope, value, close };
+  resources.add(lease);
+  return lease;
+}
+
+function browserForTest(): Promise<Browser> {
+  if (teardownStarted) throw new Error('CSRF browser acquisition began after suite teardown');
+  browserLease ??= ownResource(
+    'CSRF browser',
+    'suite',
+    () => chromium.launch(),
+    (browser) => browser.close(),
+  );
+  return browserLease.value;
+}
+
+function resourceCleanupActions(scope?: ResourceScope) {
+  return [...resources]
+    .filter((resource) => scope === undefined || resource.scope === scope)
+    .map((resource) => ({ label: resource.label, run: resource.close, timeoutMs: 6000 }));
+}
 
 // The documented command, pointed at the fake through the environment it reads in development.
 function site(configured = false): Promise<string> {
   if (started.has(configured)) return started.get(configured)!;
   const starting = (async () => {
     const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    const child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: fake.url.origin,
-        AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId,
-        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-        API_RESOURCE: resource,
-        WEBSITE_SCOPES: scopes.join(' '),
-        SITE_ORIGINS: configured ? `http://127.0.0.1:${port},${secondOrigin}` : undefined,
-      },
-    });
-    children.push(child);
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
     const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
+    let custody: ProcessCustody | undefined;
+    try {
+      if (teardownStarted) throw new Error('CSRF Vite acquisition began after suite teardown');
+      const child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+        cwd: app,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          KERNEL_ORIGIN: fake.url.origin,
+          AUTH_ISSUER: `${fake.url.origin}/auth`,
+          WEBSITE_CLIENT_ID: clientId,
+          WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+          API_RESOURCE: resource,
+          WEBSITE_SCOPES: scopes.join(' '),
+          SITE_ORIGINS: configured ? `http://127.0.0.1:${port},${secondOrigin}` : undefined,
+        },
+      });
+      custody = ownNodeProcess(child, {
+        label: `CSRF ${configured ? 'configured' : 'default'} Vite server`,
+        outputLimit: 8000,
+      });
+      servers.add(custody);
+      const deadline = Date.now() + 150_000;
+      for (;;) {
+        if (teardownStarted) throw new Error('CSRF Vite readiness ended when suite teardown began');
+        if (child.exitCode !== null)
+          throw new Error(`dev server exited with ${child.exitCode}:\n${custody.diagnostics()}`);
+        try {
+          const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
+          if (response.status < 500) return origin;
+        } catch {}
+        if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${custody.diagnostics()}`);
+        await Bun.sleep(500);
+      }
+    } catch (error) {
+      if (!custody) throw error;
+      await withCleanup(async () => {
+        throw error;
+      }, [
+        {
+          label: `CSRF ${configured ? 'configured' : 'default'} Vite startup`,
+          run: () => custody!.close(),
+          timeoutMs: 7000,
+        },
+      ]);
+      throw error;
     }
   })();
   started.set(configured, starting);
@@ -237,13 +314,19 @@ function site(configured = false): Promise<string> {
 }
 
 afterAll(async () => {
-  await browser?.close();
-  fake.stop(true);
-  for (const child of children)
-    if (child.pid)
-      try {
-        process.kill(-child.pid, 'SIGTERM');
-      } catch {}
+  teardownStarted = true;
+  await withCleanup(
+    () => cleanupAll(resourceCleanupActions('test')),
+    [
+      ...resourceCleanupActions('suite'),
+      ...[...servers].map((server, index) => ({
+        label: `CSRF Vite server ${index + 1}`,
+        run: () => server.close(),
+        timeoutMs: 7000,
+      })),
+      { label: 'CSRF Auth and kernel fake', run: () => fake.stop(true), timeoutMs: 5000 },
+    ],
+  );
 });
 
 const setCookie = (response: Response, name: string) =>
@@ -281,14 +364,23 @@ async function signIn(configured = false) {
 
 // Read server-rendered HTML in a browser with scripts disabled, as in the existing browser tests.
 async function pageOf(origin: string, value?: string) {
-  browser ??= await chromium.launch();
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 860 },
-    reducedMotion: 'reduce',
-    javaScriptEnabled: false,
-    extraHTTPHeaders: value ? { cookie: `${session}=${value}` } : {},
-  });
-  try {
+  const lease = ownResource(
+    'CSRF browser context',
+    'test',
+    async () =>
+      (await browserForTest()).newContext({
+        viewport: { width: 1280, height: 860 },
+        reducedMotion: 'reduce',
+        javaScriptEnabled: false,
+      }),
+    (context) => context.close(),
+  );
+  return await withCleanup(async () => {
+    const context = await lease.value;
+    if (value)
+      await context.addCookies([
+        { name: session, value, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
+      ]);
     const page = await context.newPage();
     const response = await page.goto(`${origin}/en`, { waitUntil: 'networkidle' });
     expect(response?.status()).toBe(200);
@@ -296,12 +388,10 @@ async function pageOf(origin: string, value?: string) {
     const count = await meta.count();
     return {
       count,
-      token: count === 1 ? await meta.getAttribute('content') : null,
+      token: value ? await readSessionToken(origin, `${session}=${value}`) : null,
       cookies: (await response!.headersArray()).filter((header) => header.name.toLowerCase() === 'set-cookie'),
     };
-  } finally {
-    await context.close();
-  }
+  }, [{ label: 'CSRF browser context', run: lease.close, timeoutMs: 6000 }]);
 }
 
 async function upload(origin: string, headers: Record<string, string>, method = 'PUT') {
@@ -412,15 +502,15 @@ test(
   timeout,
 );
 
-// Render the session's token in the signed-in document head to turn this into test(...).
+// Public HTML carries no token; the private browser session query supplies it.
 test(
-  "a signed-in page carries its session's CSRF token and a signed-out page carries none",
+  "a signed-in browser reads its session's CSRF token while the public head carries none",
   async () => {
     const { origin, value } = await signIn();
     const signedOut = await pageOf(origin);
     expect(signedOut.count).toBe(0);
     const signedIn = await pageOf(origin, value);
-    expect(signedIn.count).toBe(1);
+    expect(signedIn.count).toBe(0);
     expect(tokenBytes(signedIn.token).length).toBe(16);
     expect((await pageOf(origin, value)).token).toBe(signedIn.token);
     const accepted = await upload(origin, { cookie: `${session}=${value}`, origin, ...tokenHeaders(signedIn.token) });

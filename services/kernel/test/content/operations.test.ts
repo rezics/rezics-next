@@ -1,10 +1,11 @@
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createAuthService, type AuthService } from '@rezics/auth';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { exportJWK, generateKeyPair } from 'jose';
-import { Pool } from 'pg';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { Client, Pool } from 'pg';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { AccessUnavailableError, createAccess } from '../../src/access/index.ts';
 import { installCommandAdmission } from '../../src/access/command-admission.ts';
@@ -22,9 +23,29 @@ import { readBatch, type Envelope } from '../../src/events/log.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { AuthenticationError, type AccountActor } from '../../src/request/access.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
+
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `operations_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
 
 const db = await openGrowthDatabase();
-let authDatabase: ReturnType<typeof testDatabase>;
+let authDatabase: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let authPool: Pool;
 let auth: AuthService;
 let access: ReturnType<typeof createAccess>;
@@ -39,7 +60,7 @@ const fixedBodySha256 = createHash('sha256').update(fixedBody).digest();
 afterAll(async () => {
   for (const client of nativeClients) await client.close();
   await authPool?.end();
-  authDatabase?.close();
+  await authDatabase?.close();
   await db.close();
 });
 const route = 0x6a31;
@@ -58,6 +79,36 @@ const context = (key = crypto.randomUUID()) => ({
 const input = { threadId, authorId };
 let native: NativeWorkflowStatus | null = null;
 const statusIds: string[] = [];
+async function renew(accountId: string) {
+  for (const scopes of [actions, ['account:read'], ['post:erase']]) {
+    const response = await auth.handler(
+      new Request(`${issuer}/signin`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          account_id: accountId,
+          password: 'correct horse battery staple',
+          client_id: 'operations-test',
+          scope: scopes,
+        }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    const cookie = response.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; ');
+    const issued = await auth.handler(
+      new Request(`${issuer}/token`, {
+        method: 'POST',
+        headers: { origin: issuer, 'content-type': 'application/json', cookie },
+        body: '{}',
+      }),
+    );
+    expect(issued.status).toBe(200);
+    tokens.set(`${accountId}:${scopes.join(' ')}`, ((await issued.json()) as { access_token: string }).access_token);
+  }
+}
 async function verified(accountId: string, scopes = actions) {
   return access.authenticate(tokens.get(`${accountId}:${scopes.join(' ')}`)!, {
     pool: db.pool,
@@ -116,7 +167,7 @@ async function post(name: string, author = authorId, at = '2020-01-01T00:00:00Z'
   return post;
 }
 beforeAll(async () => {
-  authDatabase = testDatabase();
+  authDatabase = await cloneAuthDatabase();
   authPool = new Pool({ connectionString: authDatabase.url });
   const pair = await generateKeyPair('ES256', { extractable: true });
   const key = { ...(await exportJWK(pair.privateKey)), kid: 'operations-fixture' };
@@ -127,7 +178,7 @@ beforeAll(async () => {
     audience: 'https://api.example.test',
     secret: 'operations-fixture-secret-with-at-least-32-bytes',
     signing: { activeKid: key.kid, privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(accountId) {
         const account = await readAccount(db.pool, routeOf(accountId)!, accountId);
         return (
@@ -145,7 +196,7 @@ beforeAll(async () => {
         if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'operations-test', firstParty: true, scopes: actions });
   access = createAccess({
@@ -165,29 +216,7 @@ beforeAll(async () => {
       accountId,
     ]);
     await grant(accountId, 'account:read', accountId);
-    for (const scopes of [actions, ['account:read'], ['post:erase']]) {
-      const response = await auth.handler(
-        new Request(`${issuer}/signin`, {
-          method: 'POST',
-          headers: { origin: issuer, 'content-type': 'application/json' },
-          body: JSON.stringify({ account_id: accountId, password, client_id: 'operations-test', scope: scopes }),
-        }),
-      );
-      expect(response.status).toBe(200);
-      const cookie = response.headers
-        .getSetCookie()
-        .map((value) => value.split(';')[0])
-        .join('; ');
-      const issued = await auth.handler(
-        new Request(`${issuer}/token`, {
-          method: 'POST',
-          headers: { origin: issuer, 'content-type': 'application/json', cookie },
-          body: '{}',
-        }),
-      );
-      expect(issued.status).toBe(200);
-      tokens.set(`${accountId}:${scopes.join(' ')}`, ((await issued.json()) as { access_token: string }).access_token);
-    }
+    await renew(accountId);
   }
   await db.admin.query(
     `INSERT INTO content.thread
@@ -343,10 +372,7 @@ test('status conceals noninitiators and current account denials before exact nat
   for (const denied of [{ kind: 'anonymous' } as const, other, await verified(authorId, ['post:erase'])])
     expect(await readOperation(deps, denied, outcome.value.operationId, context())).toBeNull();
   expect(await readOperation(deps, actor, newId(route), context())).toBeNull();
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(authorId),
-    authorId,
-  ]);
+  await suspendAccount(db.admin, authorId);
   // A still-live authenticated read retains its approved account snapshot.
   expect((await readOperation(deps, actor, outcome.value.operationId, context()))?.done).toBe(false);
   expect(statusIds).toEqual([workflowId]);
@@ -358,10 +384,8 @@ test('status conceals noninitiators and current account denials before exact nat
   await expect(newRequest).rejects.toBeInstanceOf(AuthenticationError);
   await expect(newRequest).rejects.toMatchObject({ status: 401 });
   expect(statusIds).toEqual([]);
-  await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-    routeOf(authorId),
-    authorId,
-  ]);
+  await reinstateAccount(db.admin, authorId);
+  await renew(authorId);
   await db.admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND action=$3', [
     routeOf(authorId),
     authorId,
@@ -546,15 +570,10 @@ test('explicit legal grants, concurrent retries and current named status denials
     routeOf(other.accountId),
     other.accountId,
   ]);
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(other.accountId),
-    other.accountId,
-  ]);
+  await suspendAccount(db.admin, other.accountId);
   await expect(beginAuthorErasure(legalDeps, other, input, ctx)).rejects.toThrow();
-  await db.admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-    routeOf(other.accountId),
-    other.accountId,
-  ]);
+  await reinstateAccount(db.admin, other.accountId);
+  await renew(other.accountId);
   await db.admin.query('DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3', [
     route,
     postId,
@@ -699,22 +718,41 @@ test('checkGrowth measures production initiation and status with fixed Access th
       { operationId: operation.value.operationId },
     );
   expect((await client.getWorkflow(workflowId))?.status).toBe('ENQUEUED');
+  const baseline = 4096;
+  // Pad the small content/native histories, without changing the fixed roster or the already-large ACL axis.
+  await seed(
+    db,
+    {
+      ...population,
+      rows: (placement) =>
+        Object.fromEntries(
+          Object.entries(population.rows!(placement)).filter(([table]) => table.startsWith('content.')),
+        ),
+    },
+    { from: 0, to: baseline },
+  );
+  const growNative = async (from: number, to: number) => {
+    for (let ordinal = from; ordinal < to; ordinal++)
+      await client.enqueue(
+        {
+          queueName: 'governance',
+          workflowName: 'content.authorErase',
+          workflowID: `operations-growth-${ordinal}`,
+        },
+        { operationId: id(`noise-${ordinal}`) },
+      );
+  };
+  await growNative(0, baseline);
+  // Every run initiates a fresh operation; the full native poll keeps the same workflow identity.
   const report = await checkGrowth(db, {
     name: 'author erasure initiation and status',
+    rule: 'series',
     scales: [32, 256, 2048],
     bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
     grow: async (_db, scale, previous) => {
-      await seed(db, population, { from: previous, to: scale });
+      await seed(db, population, { from: baseline + previous, to: baseline + scale });
       // Grow native identities too; the observed target and its bounded inputs stay fixed.
-      for (let ordinal = previous; ordinal < scale; ordinal++)
-        await client.enqueue(
-          {
-            queueName: 'governance',
-            workflowName: 'content.authorErase',
-            workflowID: `operations-growth-${ordinal}`,
-          },
-          { operationId: id(`noise-${ordinal}`) },
-        );
+      await growNative(baseline + previous, baseline + scale);
       await db.admin.query('ANALYZE dbos.workflow_status');
     },
     operation: async () => {
@@ -723,6 +761,14 @@ test('checkGrowth measures production initiation and status with fixed Access th
       expect((await readOperation(nativeDeps, actor, operation.value.operationId, context()))?.done).toBe(false);
     },
   });
+  expect(report.rule).toBe('series');
+  for (const sample of report.samples)
+    for (const cost of sample.repetitions) {
+      expect(cost.relations['content.post']?.sequentialScans).toBe(0);
+      expect(cost.relations['content.post']?.rows).toBe(2);
+      expect(cost.relations['content.operation']?.sequentialScans).toBe(0);
+      expect(cost.relations['dbos.workflow_status']?.sequentialScans).toBe(0);
+    }
   expect(report.samples.map(({ scale }) => scale)).toEqual([32, 256, 2048]);
   expect(report.samples.every(({ cost }) => cost.rows > 0 && cost.statements > 0)).toBe(true);
   const largest = report.samples.at(-1)!.cost;

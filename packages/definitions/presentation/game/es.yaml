@@ -1,15 +1,113 @@
 types:
   schema:VideoGame: videojuego
-  wd:Q20631656: release
-  wd:Q209163: expansión
+  wd:Q20631656: 'versión'
+  wd:Q209163: 'complemento'
 properties:
   schema:gamePlatform: plataforma de juego
   schema:gtin: GTIN
   wdt:P2899: edad mínima
   wdt:P31: instancia de
   wdt:P155: precedido por
+  rezics:releaseSupersedes: reemplaza
   wdt:P437: distribución
   wdt:P408: motor
   schema:numberOfPlayers: número de jugadores
   schema:minValue: valor mínimo
   wdt:P8646: expansión de
+inverseProperties:
+  schema:gamePlatform: 'Juegos en esta plataforma'
+  wdt:P31: 'Lanzamientos de este tipo'
+  wdt:P437: 'Lanzamientos en este formato'
+  wdt:P155: 'Secuela'
+  rezics:releaseSupersedes: 'Reemplazado por'
+  wdt:P408: 'Juegos que usan este motor'
+  wdt:P8646: 'Expansiones'
+typeDescriptions:
+  schema:VideoGame: 'Un videojuego como obra con información conjunta de plataformas; distinto de un lanzamiento de software o una copia personal.'
+  wd:Q20631656: 'Un lanzamiento de software identificado de forma independiente que representa una o varias obras; las listas de plataformas e idiomas no crean lanzamientos por sí solas.'
+  wd:Q209163: 'Una obra complementaria de videojuego con identidad propia, incluidas expansiones y DLC; un parche, archivo descargado o recurso incluido no basta.'
+libraryProfiles:
+  game.playing:
+    states:
+      planned: 'Planeado'
+      in_progress: 'En curso'
+      completed: 'Completado'
+      paused: 'En pausa'
+      dropped: 'Abandonado'
+    units:
+      scalar_amount:
+        minute:
+          label: 'minuto'
+          countForms:
+            one: 'minuto'
+            other: 'minutos'
+            many: 'minutos'
+    copyKinds:
+      physical: 'Físico'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'En propiedad'
+        disposed: 'Desprendido'
+      digital:
+        owned: 'En propiedad'
+  game.release:
+    states:
+      planned: 'Planeado'
+      in_progress: 'En curso'
+      completed: 'Completado'
+      paused: 'En pausa'
+      dropped: 'Abandonado'
+    units:
+      scalar_amount:
+        minute:
+          label: 'minuto'
+          countForms:
+            one: 'minuto'
+            other: 'minutos'
+            many: 'minutos'
+    copyKinds:
+      physical: 'Físico'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'En propiedad'
+        disposed: 'Desprendido'
+      digital:
+        owned: 'En propiedad'
+  game.addon:
+    states:
+      planned: 'Planeado'
+      in_progress: 'En curso'
+      completed: 'Completado'
+      paused: 'En pausa'
+      dropped: 'Abandonado'
+    units:
+      scalar_amount:
+        minute:
+          label: 'minuto'
+          countForms:
+            one: 'minuto'
+            other: 'minutos'
+            many: 'minutos'
+    copyKinds:
+      physical: 'Físico'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'En propiedad'
+        disposed: 'Desprendido'
+      digital:
+        owned: 'En propiedad'
+propertyDescriptions:
+  schema:gamePlatform: 'Un concepto de plataforma en la que funciona el juego o lanzamiento; el calificador de idioma conserva su asociación con la plataforma.'
+  schema:gtin: 'El Global Trade Item Number del lanzamiento, con 8, 12, 13 o 14 dígitos sin separadores.'
+  wdt:P2899: 'Edad mínima de la clasificación del lanzamiento, como cantidad entera no negativa en años (wd:Q577).'
+  wdt:P31: 'Un concepto de tipo de lanzamiento, como completo, parcial o de prueba; no el tipo de catálogo del sujeto.'
+  wdt:P155: 'La obra o lanzamiento anterior al que sigue este.'
+  rezics:releaseSupersedes: 'El lanzamiento de software exacto que este lanzamiento reemplaza; independiente del orden cronológico.'
+  wdt:P437: 'Un concepto de formato de distribución o soporte físico del lanzamiento, como un disco óptico.'
+  wdt:P408: 'Un concepto que nombra el motor de software del juego.'
+  schema:numberOfPlayers: 'Máximo de jugadores como entero sin unidad; en un rango declarado se usa el extremo superior y se califica el inferior por separado.'
+  schema:minValue: 'Extremo inferior del rango declarado de jugadores, como calificador entero sin unidad del número de jugadores; no se deduce de un valor aislado.'
+  wdt:P8646: 'El juego base que amplía esta obra complementaria identificada; no la obra representada por un lanzamiento de software.'

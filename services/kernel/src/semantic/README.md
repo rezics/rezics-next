@@ -2,6 +2,290 @@
 
 This module owns subject facts and their item projections, partition paging, and immutable definition releases with editorial activation history.
 
+## Semantic label policy
+
+`languageRanges` and `chooseLabel` are pure shared Definitions functions exported by the package root, including its
+browser condition. The native `services/kernel/src/semantic/language.ts` entry is a compatibility re-export for
+Content, Library and Search. The policy and stored-tag behavior remain unchanged. There is no general pickText or model change; native consumers retain their existing import path.
+
+## Canonical identity boundary
+
+Subject IDs are permanent and never reused. Global subject:create creates revision 1 with its self mapping in the source transaction; import also needs batch authority. Creation is independent of Search, and compact facts do not create another revision target. subject:merge asserts duplicate identity only, with the optional atomic [reviewed Person evidence](identity-epoch-contract.md#reviewed-person-identity-precondition) precondition. Editions, translations and formats remain distinct subjects linked by relations. Durable completion requires mapping and both fixed participants.
+
+The pure kernel-identity-core leaf owns mapping DTOs, bounded evidence classification and immutable merge/unmerge/repoint transforms. Its public entry is identity-core/index.ts: no SQL, runtime, command, Access, environment, clock, randomness or crypto. It indexes acquired evidence once and performs O(N) time/space for at most 100 originals; its four states and reasons are unchanged, and pending never implies self.
+
+Effectful adapters remain in kernel-semantic. The exact entries are identity-adapters/read.ts for lightweight native mapping reads, identity-adapters/index.ts for the effectful store, and identity-adapters/identity-epoch-binding.ts for the public binding. Callers retain existing named exports, opaque proof objects and WeakMaps. readIdentityMappings and readIdentityRatingReview stay on read.ts and do not load the store or binding graph; the [rating currentness contract](identity-rating-currentness.md) owns its exact reviewed operand and same-home COMMIT participant.
+
+Static edges remain retention → binding → retention, binding → index → binding, binding → identity → retention, and reversal → binding. Deferred edges remain identity → binding for undo/lookup and binding → identity for reversal verification. Existing read.ts and index.ts cold-load behavior is unchanged. Remove only the four replaced Access-to-binding rule 2 exceptions; keep rule 3 cycle records. The adapter stays in kernel-semantic because admission, closure and participant mechanisms share its native authority.
+
+Adapters own independent repeatable-read collection, route/home selection, support jobs, SQL, authorization, prearm, native receipt hashing, binding proofs, admission and publication. Library keeps originals and source fences, Search keeps membership/currentness, Rating keeps visibility witnesses and hashing, and Content keeps lifecycle writes. Mapping/store/publication/admission and three-scale growth remain owner acceptance. No wildcard custody export, new package, module, protocol, second Library resolver, permission cache or baseline exception is introduced.
+
+## Bounded current relation visits
+
+`currentRelationFacts` is the native authority used by forward and inverse relation pages. It resolves only supplied
+candidate keys, then the mounted page reader rechecks current statement, revision, disclosure and target state before
+returning the page. Compact facts use exact slot and statement keys; expanded candidates retain the bounded native
+selection reader. The route-leading fact index is installed in the normal semantic schema and the forward migration.
+
+Decision: compact relation facts use route, Subject, slot and statement key seeks; inverse keys without a slot use the existing route/Subject/statement index, and the core schema dump remains core-only.
+
+The derived read budget, SQL controls, byte inputs, partition checkouts and plan-evidence case are documented in
+[current-relations-cost.md](current-relations-cost.md). This source-level declaration does not claim native plan
+acceptance; the controller runs that acceptance after integration.
+
+## Released source-weighted classification tags
+
+Decision: VNDB source tag weights use only the exact Kana `/vn` `tags.rating` aggregate, metric `vndbTagsRating`, unit `1` and range `(0,3]`; `tags_vn.vote` remains an association admission filter and is never converted into this statistic.
+
+`produceVndbSourceTagWeightCandidate` in `source-tag-weight.ts` accepts the exact `https://api.vndb.org/kana/vn` endpoint, request body and response bytes for one Kana `/vn` lookup. It requires `filters: ["id", "=", <record id>]`, `fields: "id,tags{id,rating,spoiler,lie}"` and `results: 1`; then it validates the returned VN id and requested provider tag id, requires `lie: false`, preserves the rating's decimal token without floating-point rounding, and carries spoiler `0`, `1` or `2` onto the same ordinary `schema:genre` or `schema:keywords` candidate. It rejects the dump's individual votes, guessed values, a request that omitted `tags.rating`, and unsupported fields. The numeric qualifier is source evidence; it never supplies a REZICS vote, confidence, rank, acceptance, adoption or publication.
+
+The candidate carries the caller's exact native Context, Concept and classification property. Its references include the VNDB record citation, exact source tag id, SHA-256 of the complete unversioned response and the official [Kana `/vn` API field contract](https://api.vndb.org/kana#post-vn). The proposal endpoint remains Global; the returned `contextId` is the exact Context Imports must use for native acceptance and adoption, and grants no authority. A later source revision is a new candidate for the same exact source association and must pass those existing native authorities. There is no import-time aggregation or page-time vote scan. The public subject page reads the already selected and disclosed statement plus the page's bounded Concept summary; its private viewer-action component remains an independent read in the same `POST /v1/pages:read` request.
+
+For this producer, `lie: true` is a suppressed source outcome. Imports still owns the existing Source-fence checks and source tuple; this mapper creates neither and cannot override suppression. Imports' live Kana acquisition and source-fence handoff remain unavailable until that owner connects them.
+
+### Imports handoff example
+
+The captured official query uses this exact request body:
+
+```json
+{ "filters": ["id", "=", "v17"], "fields": "id,tags{id,rating,spoiler,lie}", "results": 1 }
+```
+
+Its response contains `v17` / `g3` with `rating: 2.59999990463257`, `spoiler: 2` and `lie: false`; the complete response digest is `sha256:5cd11554c247c1c3085297a765d172216b9733331d5aac273788ba9fe6d5eba5`. With the actual native subject, Context and Concept ids substituted, the callable producer returns this statement shape:
+
+```json
+{
+  "property": { "id": "schema:genre" },
+  "value": { "type": "value", "content": "<concept-uuid>" },
+  "rank": "normal",
+  "qualifiers": [
+    {
+      "property": { "id": "rezics:sourceTagWeight" },
+      "value": { "type": "value", "content": { "amount": "+2.59999990463257", "unit": "1" } }
+    },
+    { "property": { "id": "rezics:sourceTagWeightMetric" }, "value": { "type": "value", "content": "vndbTagsRating" } },
+    {
+      "property": { "id": "rezics:spoilerLevel" },
+      "value": { "type": "value", "content": { "amount": "+2", "unit": "1" } }
+    }
+  ],
+  "references": [
+    {
+      "parts": [
+        { "property": { "id": "schema:url" }, "value": { "type": "value", "content": "https://vndb.org/v17" } },
+        { "property": { "id": "rezics:sourceTagId" }, "value": { "type": "value", "content": "g3" } },
+        {
+          "property": { "id": "rezics:sourceSnapshot" },
+          "value": {
+            "type": "value",
+            "content": "unversioned:sha256:5cd11554c247c1c3085297a765d172216b9733331d5aac273788ba9fe6d5eba5"
+          }
+        }
+      ]
+    },
+    {
+      "parts": [
+        {
+          "property": { "id": "schema:url" },
+          "value": { "type": "value", "content": "https://api.vndb.org/kana#post-vn" }
+        }
+      ]
+    }
+  ]
+}
+```
+
+Imports submits that statement to `POST /v1/subjects/{subject}/candidates` under its real `statement:propose` authority and retains the returned candidate id and revision. The endpoint's response is `{ "candidate": "<native-candidate-uuid>", "revision": <native-revision> }`; acceptance and adoption then use the producer's `contextId`, returned native identities, and the existing `context:accept` / `context:adopt` authorities. This is the declared native exchange shape, not a captured successful response from this attempt. The captured end-to-end response remains deferred to the native acceptance run.
+
+### Page cost
+
+The installed subject reader selects at most 12 relation slots for each property and examines the 13th row as its rejected/continuation lookahead. The tag caller has exactly two relation properties, `schema:genre` and `schema:keywords`, so the raw tag window is `W = 2 × (12 + 1) = 26`. This includes rejected lookahead and the existing source revision/security fence checks; it does not scan fact history to find current tags. A producer-created weighted row has at most `Q = 3` qualifiers and `4` reference parts (three parts in the source citation and one API documentation URL), or seven keyed evidence observations. There is at most one direct Concept target per row, so distinct source-tag target expansion `D ≤ W`; existing one-hop redirect fills remain bounded by that same distinct-target set.
+
+The read uses indexed outbound seeks, then `O(W × Q + D)` keyed fact and disclosure observations plus the existing batched summary reads. Each producer statement is below 2 KiB, and one requested Concept summary is below 10 KiB under the released label and id limits (one language is requested by the mounted page). The weighted-tag evidence contribution is therefore at most `W × (2 KiB + 10 KiB) = 319,488` UTF-8 bytes. `test/semantic/growth-source-tag-weight.test.ts` grows unrelated subjects and retracted association assertions at 64/512/4096 while holding the selected tags and page language fixed; it counts rows, SQL statements, indexed blocks, expanded targets and response bytes. The rest of the page retains the existing subject and `POST /v1/pages:read` limits. No selected tag vote history is read or aggregated.
+
+The checked-in native source example is the captured official response at `test/fixtures/vndb-source-weight-v17.json`: VNDB `v17`, tag `g3`, raw aggregate `2.59999990463257`, spoiler `2`, `lie: false`. This proves the producer input shape only. The live dump does not supply `tags.rating`, and Imports has no Kana API acquisition binding yet, so a production import cannot emit this weight until that owner supplies the cited API response. No importer coordinator or default seed is changed here.
+
+The co-owned [provider review queue](../../../../docs/import-review.md) uses native candidates, Context authority,
+the shared worker and exact queue-association minimization for its asynchronous discovery index.
+Provider queue pages retain `context:read` and `context:accept` admission. Their private BFF includes an independent current
+`actions` component. It projects only installed accept/reject/adopt operations through `readViewerActions` on the
+exact native Context anchor through the existing generated viewerActions endpoint, once per bounded page. A failed action read is explicitly unavailable; it never grants
+controls or claims a confirmed denial. Commands still reauthorize. Selection requires the existing candidate workspace
+and independent `context:adopt`; neither acceptance nor queue membership implies selection authority.
+Native candidate reads preserve `abstained` separately from no decision (`null`); both remain pending review,
+and statement/adoption DTOs retain `normal`, `preferred` and `deprecated` ranks without changing write admission.
+The [catalogue editing contract](../../../../docs/catalogue-editing.md) owns ordinary multilingual corrections and
+minimal current-disclosure revision explanations. `correctTerms` is the native command; the mounted PATCH exports
+`TermsPatchSchema`/`TermsResultSchema` from `http/subjects.ts`. Native acceptance remains post-integration proof.
+Ordinary authored text reads the mounted `subject.propose` operation on the fixed Global Context alongside the
+separate `subject.accept_candidate`, `subject.reject_candidate` and `subject.adopt` operations on their own current
+Context authorities. The proposal command still reauthorizes the exact admitted target and property at execution.
+The mounted `subject.terms` viewer-action binding observes `statement:propose` on the canonical Global Context;
+the Semantic Context resolver marks it applicable only there while Access decides the current grant. Subject Terms
+disclosure and revision stay on the separate Subject read, and command execution still reauthorizes natively.
+
+The mounted facts correction reader uses the same generated `viewerActions` endpoint for the exact visible
+`semantic.subject` and the fixed Global Context. The generic Subject resolver applies current disclosure before
+projecting `subject.list_candidates`; the proposal operation is anchored to Global Context. Proposal, inspection,
+editorial decision (`context:accept`) and selection (`context:adopt`) remain distinct, and command execution performs
+its normal native authorization again.
+
+### Wikidata time and quantity value admission
+
+`admitWikidataValue(input, property)` in `wikidata-value-admission.ts` is the receiving adapter for Imports. It accepts a Wikibase value snak or a DataValue wrapper and returns either an exact native value (`value`, `somevalue` or `novalue`) or `{ state: 'unsupported', reason }`. Missing input, unknown value, no-value, unsupported datatype and invalid content remain separate. Its output is still subject to the selected property's Definitions schema and `checkStatementInput`; it grants no permission and writes no parallel store. The importer supplies the real source reference and retains unsupported source data under its existing source-record owner.
+
+Time content is the closed portable shape `{ time, precision, calendarmodel, timezone?, before?, after? }`: signed 4–16 digit historical year strings, precision 9–11, Gregorian or Julian calendar IRI, safe-integer timezone minutes and safe nonnegative uncertainty counts. The timestamp stays a lexical string; no calendar conversion or day/month completion occurs. Quantity content keeps exact `amount`, optional `lowerBound`/`upperBound`, and unit strings; decimal fields retain the existing 127-character bound and disclosed unit behavior. `globe-coordinate`, lexeme values and other specialized types return typed unsupported results. See the [Definitions time value contract](../../../../packages/definitions/README.md#wikidata-time-values) for the admitted schema and primary Wikibase serialization references.
+
+Admission is linear in at most the native 1,048,576-byte request-body limit. The native statement validator caps one Subject at 512 facts, each statement at 16 qualifiers and 16 references, and each reference at 16 parts; time lexical length is at most 33 characters and quantity amount/bounds at most 127. Native candidate/revision/item storage serializes these closed objects as JSON without converting numeric strings, so proposal, acceptance, adoption, current read and candidate-linked revision detail observe the same candidate identity and exact value. Existing statement execution stays generic and Definitions-driven.
+
+## Public exposure boundary
+
+Existing active/released definitions, common editor/profile data, subject creation, proposal, acceptance,
+adoption, reads and their native disclosure remain public through their current Auth, scopes and resource
+Access. Public exposure changes neither those authorities nor admitted command quotas.
+
+Custom definition publish/activate and Context extension publish/activate declare
+`gate:definition_publication`. Subject merge, the mounted identity mutation command, declares
+`gate:subject_identity`. Anonymous and ungranted accounts receive `403 platform_closed` before command
+receipts, revisions or domain effects. A native explicit platform grant admits development commands only;
+the existing action scopes and Global/Context resource authority still apply. Built-in active/release reads
+remain public. Native grant APIs, visible-operation filtering and served OpenAPI use the existing platform
+system; declarations alone prove no runtime, source or CPU outcome.
+
+Custom publication, advanced identity mutation, reviewed vocabulary seeds and measured-input expansion
+remain deferred until polished. Source metadata authority and reviewed vocabulary seeds retain their
+explicit platform authority and seed review requirements. Ordinary provider imports do not auto-seed them.
+
+### Definition publication admission cost
+
+- Touches: the existing keyed temporal exposure lookup for `definition_publication`, followed when closed by
+  exact `gate:definition_publication`/`gate:any` Global checks for the authenticated actor and any principal.
+- Bound: one native group admission, using the original request deadline and configured clock; constant keyed
+  work under the existing Access admitted-key cap, with logarithmic index probes and no semantic scan.
+- Growth check: reuses `test/access/gates/growth-admission.test.ts` for native keyed gate work; native refusal,
+  no-effect and granted publication evidence is in `test/semantic/public-slice-exposure.test.ts`.
+
+### Identity mutation admission cost
+
+- Touches: the existing exposure point for `subject_identity` and exact Global gate authority before merge work.
+- Bound: one native admission under the original deadline and clock; constant gate rows/statements and
+  logarithmic index probes. The existing bounded merge command retains its own resource and mutation costs.
+- Growth check: reuses `test/access/gates/growth-admission.test.ts`; native closure, zero receipt/revision/domain
+  effects and explicit granted identity execution are covered by `test/semantic/public-slice-exposure.test.ts`.
+
+## Worker lifecycle
+
+`semanticWorkModule` in `work-module.ts` is registered once as `semantic` in `KERNEL_WORK_MODULES`, after
+community and before search. Registration adds publication maintenance and one relay starter through
+`WorkContext.addService`. After the single DBOS launch, the relay starter runs `linkProjection` and the publication
+Relay through `startRelays` on the same native worker pool, retaining the `semantic_links` consumer, event handling,
+checkpoints, freshness and relation disclosure. Publication repair uses the existing maintenance queue and drains
+in-flight work on service shutdown.
+The module registers `semantic_erasure` for native tombstones, `semantic_erasure_local` for bounded local
+continuation and `semantic_erasure_locator` for native source delivery. Tombstones synchronize the real agent
+and close the participant fence before discovery. Source-home role locators, payload minimization and permanent
+checkpoints use the same native worker lifecycle. Completed local work stays idle at `pending-shared-custody`;
+missing Accounts receipt/outbox/DBOS custody never authorizes a Semantic ACK. The outer worker relay owns effects
+delivery and the actual locator open-work protocol.
+
+The service returns the actual relay stop handle. Work shutdown stops scheduling and drains in-flight projection
+before SDK, client and pool teardown; a later starter failure also drains this service. Repeated stop and worker
+signals use the existing worker lifecycle. Relay cadence, concurrency and pool-size validation retain their existing
+bounds. Projection cost remains the existing [Links projection write](#links-projection-write) Cost entry.
+This module composes the native relation projector, publication repair and Relay, delivered identity workflow and
+local erasure effects. It does not create another process, queue or participant.
+Native registration, convergence and drain evidence lives in `test/semantic/work-module.test.ts`.
+
+`identity-epoch-coordinator.ts` exports `resumeIdentityEpochJob` and `waitIdentityEpochPublished` with the adopted
+`(pool, job) => Promise<void>` signatures. Trusted registration installs the fixed version-1 Search/Library
+composition once, using the existing Search configuration and membership route key. Missing configuration is
+unavailable when resumption is requested. Admitted events enqueue the same job through the existing maintenance
+queue and return-existing workflow ID. Admission, mapping, Search, Library, receipt reconciliation and publication
+run serially with released native homes. Finite 100-page workflow segments retain only job/segment/receipt locators;
+waiting releases native connections and checks actual job/control publication rather than workflow success.
+
+The mapping declaration remains provisional and fails unavailable. The integrated Search and Library
+participants preserve their producer-owned unavailable boundaries until their native coverage is complete.
+Registration therefore establishes neither readiness nor a native ACK. The frozen positive fixture and native publication,
+replay, growth, default-worker and all-copy/privacy/nine-physical-Cost evidence remain outstanding; no native-tested
+coordinator revision is claimed. Accounts additionally needs its real immutable decision/reversal intent verifier,
+the co-owned admission binding and the original caller's publication-before-completion step. Existing publication,
+cutover and operation outcome suites remain unchanged downstream proof. This composition grants no Accounts
+authority and supplies no legacy merge fallback.
+
+## Subject page feed
+
+The public `GET /v1/subject-pages` contract accepts an optional cursor and a limit from 1 to 1,000 (default 20).
+Its response contains `subjectPages` with `id`, public display `labels` (`language` and `value`), and optional
+`lastModified` and `originalLanguage`, plus `next` (a cursor or null). A present `lastModified` is a UTC ISO 8601 date-time, never null.
+Legacy rows whose original public effective time was never stored omit it until their next proven meaningful public
+change; web omits XML `lastmod` when it is absent. A known time records the last meaningful change to what the
+page shows.
+
+The feed lists only readable, visible, nonclosed, nonremoved, nonmerged Global subjects with a public fact
+beyond the title. Title-only pages are `noindex`. Every returned subject must be readable now. A candidate may be
+temporarily omitted when it cannot be proved listable, and known `lastModified` values may lag while foreign-change
+relays catch up. Finite relay convergence and the next completed repair pass correct omissions and times. Processing
+or rebuild time and private activity never determine freshness. Merged subject reads retain the API 308 and web 301;
+removed and unreadable subjects retain an indistinguishable 404.
+
+This technical unfiltered feed is outside the [filtered-list useful-page contract](../../../../docs/filtered-lists.md).
+It consumes a raw limit+1 candidate window in one home; short or empty 200 responses and cursor advancement remain
+valid, with current disclosure for every returned entry. This exception does not apply to Zone, TypeList,
+Collection or library filters.
+
+The transport uses the mounted native publication service, and the default Semantic worker registers durable
+repair and Relay delivery. Independent native acceptance is documented in
+[the slice handoff](subject-pages-slices.md#remaining-transport-relay-and-default-composition-acceptance).
+Valid empty/default requests return 200 with the closed envelope; malformed cursors use the existing 400
+`invalid_request` contract. The original full API, growth, foreign catch-up and default composition tests remain
+mandatory; local typechecking alone does not prove those runtime outcomes.
+
+## Admitted identity Source support
+
+`identity-source-support.ts:createIdentitySourceSupportReader(config)` exports the closed
+[request, record and page declarations](identity-source-support-contract.ts). Configuration is exactly
+`Parameters<PublicFilterSourceFactory>[0]`. `readPage` accepts the actual `IdentityJobRef`, FAA
+`PublicFilterSourceDefinition`, opaque frontier/null, examined `inputLimit` and existing read context.
+A record identifies the admitted original, its actual installed terminal and native projection page, or an
+actually withheld null projection. Progress retains the native projection sub-frontier. Complete closes all
+immutable input generations and their projection continuations; it grants no query permission or publication.
+
+The reader walks the same `identity_epoch_input` generations and `identity_epoch_original` keyset as
+`identityEpochStore.pageChanges`. It examines one original per step so even `inputLimit: 1` remains an upper
+bound. Exhaustion requires an actual end-of-keyset read for every retained input, including destination/self and
+unchanged originals. A current mapping supplies the terminal only after actual complete native mapping custody;
+it never supplies population coverage. The scoped projection operation in `search-source.ts` uses current
+anonymous original eligibility and the native Source's own Type, release, candidate, tuple, field, account and
+related-item guards. Exact-job installed mappings become available only inside that asynchronous operation;
+ordinary pending reads retain their existing behavior. Hidden originals cannot borrow visible terminal facts.
+
+FAA's admitted-support declarations and visibly provisional unavailable binding factory are in
+`public-filter-source-binding.ts`, alongside the existing `PublicFilterNativeSource` handoff. The existing
+`subject-source-key-pages.ts` port is preserved unchanged; the bridge does not consume its rebuild interface.
+The bridge directly imports the installed `public-filter-source.ts` factory, whose adapter also remains
+provisional and unavailable. The actual mapping producer is absent on this base. The bridge never substitutes
+`subjectSource`'s history fold, sampled scalar arrays or caller-created registrations for those producers.
+Native binding, projection and admitted-job outcome acceptance remain deferred; the new native outcome test
+requires those actual producers and contains no success fallback. No support page certifies Search writer drain,
+participant receiving/control completion, identity publication or account erasure.
+
+## Item identity metadata
+
+`readItemIdentityVersion` is an internal validation helper for callers that already read the full type through
+`readItemTypes`. Call it on the same repeatable-read client used for `readItemTypes` and `readPartition`; it opens no
+connection or transaction. It returns the latest existing `create` or `identity` revision and its recorded
+transaction id, plus the source's current redirect target. It returns null for invalid, missing or nonvisible ids. A
+redirect is metadata for that source only: the caller reanchors and rechecks the target in its own partition, and
+compares version stamps only when both reads name the same source. The helper neither follows redirects nor proves
+Access. Editorial revisions do not alter the identity version, and a redirect change is checked independently.
+
+- Touches: one visible-subject point read, one latest identity/create index entry, and one latest redirect index entry.
+- Bound: one statement and a fixed three-column, one-row result independent of type length; the revision integer has
+  its ordinary decimal width. B-tree probes grow logarithmically with their indexed relations.
+- Growth check: `test/semantic/growth-item-identity-version.test.ts`: `metadata point reads stay bounded as unrelated
+  revision history grows`.
+
 ## Authorization
 
 Semantic writes use the route action and authority below. When the authority and target are in different partitions, the route binds a server-owned anchor, validates it, and evaluates Access before checking out the target command partition. Same-partition checks stay on `authorizeCommand`. Community Context anchors are looked up by `(route, context_id)` at command time; the Global Context anchor verifies the seeded global row. Context creation uses the parent creation authorization path.
@@ -13,6 +297,7 @@ Semantic writes use the route action and authority below. When the authority and
 | Subject moderation: hide           | `moderation:hide`      | Global Context                             |
 | Subject moderation: take down      | `moderation:takedown`  | Global Context                             |
 | Subject moderation: restore        | `moderation:takedown`  | Global Context                             |
+| Statement disclosure               | `statement:propose`    | Global Context and target account consent  |
 | Statement proposal                 | `statement:propose`    | Global Context                             |
 | Candidate acceptance and rejection | `context:accept`       | Selected Global or community Context       |
 | Candidate adoption                 | `context:adopt`        | Selected Global or community Context       |
@@ -24,12 +309,1118 @@ Semantic writes use the route action and authority below. When the authority and
 | Each bulk proposal command         | `statement:propose`    | Global Context                             |
 | Definition publication             | `definitions:publish`  | Global Context                             |
 | Definition activation              | `definitions:activate` | Global Context                             |
+| Extension publication              | `definitions:publish`  | Selected Global or community Context       |
+| Extension activation               | `definitions:activate` | Selected Global or community Context       |
+| Community Context deletion         | `context:delete`       | Current community Context owner and Access |
+| Community Context restoration      | `context:restore`      | Current community Context owner and Access |
 | Community Context creation         | `context:create`       | Global Context parent, with creation proof |
+
+`POST /v1/subjects` keeps that Global Context command anchor and advertises the same parent to `viewerActions` through `x-authority-resource-types: semantic.context` and `x-authority-resource-id` of the seeded Global Context. Created subject and revision resource types remain the command products. A type label or subject read does not grant creation.
+
+## Identity references
+
+`readSubjectReference(pool: Pool, id: string, authorize: (client: PoolClient) => Promise<boolean>): Promise<{ id: string; component: SubjectComponent } | null>`
+returns only a visible, authorized source identity and its partition anchor. The mandatory callback runs on the same
+repeatable-read, read-only client as the identity and partition reads. Callers close over their actual Access check
+and native command acceptance time when present. Missing, invalid, hidden, taken-down and denied sources return null;
+deadline and unavailable failures propagate. An authorized visible redirect throws `SubjectRedirectError` without
+following its target. Each survivor needs a separately anchored current authorization check, including after revocation.
+The component is an observation of source identity, not authorization evidence or a display-freshness promise.
+
+This boundary does not prepare types or read display metadata. Fresh profile writers use `readItemTypes` independently.
+Full subject display readers retain their existing projection freshness and deadline behavior.
+The HTTP display reader prepares current subject and statement-audience authorization after the freshness wait,
+before checking out the display snapshot. Waiting does not consume short-lived permission evidence or extend its TTL;
+authorization still checks the current native snapshot within the original request deadline.
+
+## Identity epoch status
+
+The adopted receiving `IdentityEffect` alternative is implemented by the existing Store through
+[the native receiving producer](identity-receiving-effects.ts). Its closed receiving records
+are declared in [identity-receiving-effects-types.ts](identity-receiving-effects-types.ts).
+[Receiving custody](identity-epoch-contract.md#receiving-effects-and-local-custody) binds the exact admitted
+job/step/version/scope, Source incarnation/generation, owner epoch and OLD/NEW/first-apply/handoff effect.
+Original structural and ordinary follow branches retain their semantics. The
+[native Source seam](identity-epoch-contract.md#receiving-effect-interface-and-native-source-custody)
+uses only the actual `library/native-source-custody.ts:createNativeLibrarySourceCustody` implementation and
+its closed owner declarations. Capture is resumable; preparation re-resolves the completed native frontier and
+takes a strict fresh hold. Admission revalidates that retained native hold on the actual receiving transaction,
+including current owner/account fences, even if the live Source generation changed. Retained custody grants no
+new Source observation or ordinary destination-disposition authority.
+Effect/control/consumer records precede native hold release. Native acceptance and growth run after integration; declarations alone are not admission readiness.
+
+`identityEpochStore.readMapping` is bound to the Library subject resolver. Revision-1 births store a self mapping in
+their source command, including unnamed account-agent births. `stepIdentityEpochBootstrap(pool, partition)` exports
+bounded native source pages and installs mappings only when their source transaction receipt is taken into control
+custody. The resolver rechecks original and terminal visibility independently; mappings do not grant Access.
+
+Before DBOS launch, the default Semantic WorkModule calls `installIdentityEpochBootstrap(pool)`. A one-time
+READ COMMITTED installation transaction drains structural writers under relation locks, inspects all native
+source relations and installs a deferred source-local birth guard. Its immutable cut survives interruption;
+it is unavailable until a separate home-0 native command commits closure custody. The exported result contains
+`mode`, `installationXid` and the actual committed `native` receipt. Restart verifies that custody and all
+installed capture/birth guards without inspecting the source population again. Every subsequent birth must
+commit revision 1 and exact self mapping/gate custody in the same native transaction, including account-agent
+births. A legacy insert delayed across the cut cannot commit without that custody.
+
+With no historical source, valid absence custody closes installation without exporting empty homes or
+rewriting the legacy topology counter. Native birth mappings remain independently usable. Pending source keys
+discover new dirty homes through the existing indexed dirty frontier, even if no bootstrap-home row exists yet.
+Missing, interrupted or invalid installation custody never supplies absence readiness. Actual legacy sources
+retain the complete 4096-home topology obligation, including empty homes, before structural cutover.
+
+Native fixtures call `stepIdentityEpochBootstrapWork(pool)`; legacy default Semantic work batches at most
+100 of those same bounded steps with eight released native-home pipelines during initial closure. One bounded
+topology-home frontier command advances the cursor; one later local command takes at most 100 separately
+verified native closure receipts. Four initial native wake events seed bounded chains. A batch continuation is
+committed by its first actual source ACK, so successive batches use the existing source-home queue partitions
+rather than serialize at topology home 0. The durable DBOS effect recovers a crash before that ACK. Dirty-home repair retains its
+individual scheduler steps. Legacy deployments' 4096 homes, including empty
+homes, retain their actual source export, receiving custody, source ACK and native closure. Native source changes retain dirty heads and wake the same scheduler.
+Initially empty legacy homes fuse local SQL statements while preserving three separate native commits and
+the same retained page, receiving custody/basis and source closure. Interrupted stages recover through the
+ordinary retained-page protocol. New dirty homes join the ordered repair cursor before it wraps to earlier work.
+Fair home/target cursor rotation uses a short native transaction; it does not emit a domain event or advance
+the partition log. The selected repair still runs its existing authorized native source operations.
+`readIdentityEpochCutover(client)` observes valid native absence closure or retained full topology custody;
+point mappings do not wait for a legacy sweep.
+The shared relay refills completed worker slots from the current fixed-topology scan. Its normal concurrency and
+poll interval stay unchanged; initial all-home closure no longer waits one poll for each four native homes.
+
+Admission captures exact native input generations before effects, checks the 4096-original cap, and reserves P=1
+at the local control home. Overlapping input claims are busy; a different job occupying that home is locally
+unavailable. Disjoint homes retain independent progress. `identityJobPartition(job)` resolves routed job custody.
+Search and Library participant completion is never inferred from a receipt locator or bootstrap exhaustion.
+`prepareIdentityEpochAdmission(pool, authority, {intent, receipt})` double-collects released current input bases,
+then commits the exact receipt/digest and pending job locator at the routed actor/account binding home, releases,
+reserves the first ordered native control home, releases, and publishes the immutable accepted pointer at the
+binding home. Explicit callers use `bindReceipt(pool, authority, input)`, `admit(tx, {...input, binding})`, then
+`bindReceipt` to reconcile the first committed reservation. `findJob(tx, receipt, binding)` requires current
+native authorization and an actual released proof; old signatures require genuine binding/job co-location.
+Same-key changed intent conflicts across job homes. Failed provisional generations retain exact all-home close
+custody before a later current-basis generation under the same public receipt/digest. `stepIdentityEpochAdmission(pool, job)` acquires one planned
+home and reconciles its actual committed receipt into job custody. The default WorkModule runs that same step.
+`cancelIdentityEpochAdmission(pool, job)` selects cancellation before admission; bounded steps close every planned
+home, including uncertain or never-acquired homes, before releasing immutable input references. Delayed acquisition
+checks an irreversible receiving fence. Cancellation needs no new slot; admitted jobs cannot be cancelled.
+Output generation maintenance/retirement and the real mapping/Search/Library completion participants remain separate
+producers. Successful public merge and account verification/reversal delivery are not established by a pending store job.
+
+### Source-funded consumer maintenance
+
+`withIdentitySourceConsumerMaintenance` creates one ephemeral frame for the complete History default-maintenance
+callback. It binds the configured allocation to the actual Pool, deadline and async invocation, then invalidates the
+frame in `finally`. Source read/work contexts accept optional `identityConsumerWork`; absent, forged, wrong-Pool,
+expired and ended frames return pending before consumer Source I/O. Same-command verification obtains the live frame
+from the command's Pool and deadline. The frame grants no Source, permission, erasure, receiving or cleanup authority.
+
+NativeStepWork and Library WorkDimensions remain independent. Each directory child keeps the existing 100-row limit;
+the parent native allocation funds the bounded read, current-cut verification, fixed Source control probes and cleanup.
+The Library side uses the same `NativeCollectionWork` and its existing composition/SQL instrumentation for both the
+effect page and receiving/seal checks. The owner's allowance is only a per-child ceiling; it never creates a second
+ledger. Missing frame or unknown SQL footprint refuses before dispatch, and dispatched work is not refunded by
+result row counts.
+
+The deployment may override these bounded defaults with the exact `KERNEL_IDENTITY_SOURCE_MAINTENANCE_` keys:
+
+| Key suffix                       | Default | Derivation                                                                                                           |
+| -------------------------------- | ------: | -------------------------------------------------------------------------------------------------------------------- |
+| `NATIVE_ROWS`                    |     236 | Two native child ceilings of 100, 32 fixed Source control touches and four same-command verification touches.        |
+| `NATIVE_POINTS`                  |     236 | Same bounded point probes as the native row allocation.                                                              |
+| `NATIVE_STATEMENTS`              |      70 | 18 directory read, 17 current-cut verify, 29 Source control/failure/cleanup, and six same-command verify statements. |
+| `NATIVE_BYTES`                   |  270336 | 32 KiB Source controls, 8 KiB same-command verification and two 112 KiB native child reservations.                   |
+| `NATIVE_ENGINE_REQUESTS`         |       0 | This path dispatches PostgreSQL work only.                                                                           |
+| `LIBRARY_CANDIDATE_KEYS`         |       1 | The existing effect page requests one selection.                                                                     |
+| `LIBRARY_IDENTITY_METADATA_ROWS` |       0 | No identity metadata sweep is dispatched by this path.                                                               |
+| `LIBRARY_NATIVE_ROWS`            |    8192 | Existing bounded Collection Source row-work ceiling.                                                                 |
+| `LIBRARY_NATIVE_POINTS`          |     128 | Existing bounded Collection Source point ceiling.                                                                    |
+| `LIBRARY_WITNESS_KEYS`           |       1 | At most one selected effect is reconciled per invocation.                                                            |
+| `LIBRARY_STATEMENTS`             |     128 | Existing bounded Collection Source statement ceiling.                                                                |
+| `LIBRARY_BYTES`                  | 1048576 | Existing bounded Collection Source response ceiling.                                                                 |
+| `LIBRARY_EMPTY_SEEKS`            |       2 | One page-end seek and one sealed-empty seek.                                                                         |
+
+Configuration values must be canonical non-negative safe integers within the listed bounds. Zero is rejected for
+required work; the zero defaults are limited to dimensions with no dispatch on this path.
+
+## Agents
+
+### Account agents
+
+Each account has one graph agent. `accountAgentId(account)` derives a stable v8 subject id from the account id and puts it in the account's route. `ensureAccountAgent(pool, ...)` runs in that partition as platform work, creates a person, organization or software application, and synchronizes the single display-name label. Missing language is stored as `und`. Birth uses the native unlabeled-node writer followed by that same label projection, rather than the authored catalogue writer. The label is replaced in place without history; `name: null` erases it, including any prior label values. A first ensure with `name: null` creates an unlabeled node. No revision or event payload retains the name. A later ensure with a name restores the label. Changes emit the ordinary subject identity revision event so search drops the old name. Once verification redirects the derived id, ensure returns the linked catalogue subject without editing it, including for `name: null`: the survivor's labels are catalogue facts.
+
+One `semantic.account_agent_subject` row is the back link: it follows the visible subject into that subject's partition and maps the subject to its account. Unique account and derived-agent keys enforce one link per account and one account per catalogue subject. Subject reads expose `account: { id } | null`. A label edit through the ordinary identity writer is refused for an unverified account node. Statement creation and proposal resolve target types and account-agent ownership in the same batched read; only the owning account or platform work can state facts about or pointing to an unverified node. The primary target of a `sourceOrConsent` property is the exception: a reference permits a public assertion pointing at the node, and an unsourced assertion requires that target account. Account-authored statements use the account agent as their source.
+
+`verifyAccountAgent(pool, { account, catalogue, receipt })` is platform work. It requires a visible unlinked catalogue subject of the same kind: a person node must merge into `schema:Person`, an organization node into `schema:Organization`. Software nodes and kind mismatches receive `AccountAgentVerificationError` without changes. Verification keeps the catalogue id as the survivor, records the receipt on the merge revision, moves the back link, and emits the existing merge events through the durable epoch job specified under [Identity](#identity). Successful return waits for publication; these effects alone are not completion. Access derives the subject from its verification record or otherwise from `accountAgentId(account)`; search follows merge events. Each subsequently projected inbound link row, including its Context and filter identity, is recorded in `semantic.account_agent_moved_link` for exact future reversal paging.
+
+`unverifyAccountAgent(pool, { account, receipt })` is platform work for account revocation. It records the revocation receipt on a new merge revision, removes the catalogue back link and account-node redirect, unregisters the node as a member of the catalogue survivor, and restores the account node's own statements and only the inbound links recorded by that verification, in pages. Statements the account made on the catalogue subject while verified stay there with the account as their source. It emits the existing `SUBJECT_REVISED` event at the returned revision with kind `merge`, plus the ordinary change event when needed. Each subsequently projected inbound link row, including its Context and filter identity, is recorded in `semantic.account_agent_moved_link` for exact future reversal paging. A later verification is allowed. Ordinary merges refuse account nodes and linked catalogue subjects. Reversal uses the same durable epoch job and waits for its publication before successful return.
+
+### Pen names and collective names
+
+A pen name or collective name is a separate person or organization agent with its own page and credits. `rezics:penNameOf` links it to each person or organization behind it; its inverse is “pen names”. Credits never move or copy across that link.
+
+The property's `disclosure: sourceOrConsent` requires either a reference or the target agent's linked account. A sourced statement follows ordinary proposal, acceptance and adoption. An unsourced statement from another account receives `invalid_request` with `/statement/references: required`. The target's account can create or propose an unsourced statement; consent to store it does not publish it. It is accepted in Global but remains private, independently of moderation and Context adoption.
+
+Private candidates share the hidden-statement exclusion probes. Public projections, counts, search snapshots and content disclosure omit them. Subject reads, forward and inverse pages and candidate listings give the linked account and accounts with Global `moderation:hide` access a bounded private overlay. Read permissions and subject moderation still apply. Reader identity is request-scoped and never inherited by relays or exports.
+
+For account readers, `GET /v1/subjects/:id/candidates` optionally adds `consentIdentity` to an admitted, unretracted
+`sourceOrConsent` main-item candidate payload:
+
+```json
+{
+  "consentIdentity": {
+    "subject": { "id": "subject UUID", "labels": { "en": "River Ink" } },
+    "target": {
+      "id": "original target UUID",
+      "labels": { "en": "The person behind the name" },
+      "redirect": "optional survivor UUID"
+    }
+  }
+}
+```
+
+Either identity may be `null`; an admitted identity with no labels retains an empty labels object.
+The relationship remains the exact property from the candidate's pinned release. Source labels come from its
+admitted snapshot. Target labels require independent ordinary subject-read Access and current visibility at the
+original and, if redirected, one-hop survivor, each in its own anchored native snapshot. A second source page
+revalidates current visibility, Access, audience, candidate lifecycle, disclosure and source fences after those
+checkouts have been released. Deleted markers and retracted or withheld candidates never retain identity labels.
+The work is bounded by the existing page limit (1–100) and at most two addressed target identities per candidate;
+redirects also revalidate the original after reading the survivor. Account candidate responses use `private, no-store`;
+anonymous payloads and `no-cache` caching stay unchanged.
+
+The consent adapter and screen use only this identity and pinned property labels for the private assertion, with
+`pickText` locale fallback. Missing names are explicitly unavailable, with reload before fresh confirmation;
+this is a display guard, not a new native permission. Retraction retains its native owner admission and exact-key
+uncertain retry using the native structured-field idempotency key. The assertion appears before confirmation and again before its checkbox and buttons. Anonymous
+public-result reads cannot fill or replace private identity. Denial/concealment clears prepared private state;
+terminal retraction clears the candidate. The focused default-composition regression is
+`test/semantic/statement-consent-identity.test.ts`; native execution is deferred during minimal verification.
+
+`POST /v1/statements/:id/disclose` uses ordinary proposal admission and checks current target ownership inside the command. It permanently discloses that candidate, bumps the holder's security revision and emits its ordinary link projection. Repeating it is harmless. There is no switch back to private; the target account must retract its statement with `POST /v1/statements/:id/retract`. Retraction is terminal and removes it from current views and projections without making a sourced third-party claim removable by the target. Statements are immutable: adding a reference through editing proposes a sourced replacement in the same target slot, which becomes public through ordinary review. The old private candidate remains private in history.
+
+## Relations
+
+The mounted `subject.propose` operation advertises its existing fixed Global Context parent through the ordinary
+viewer-action catalogue. It still creates a revision through parent creation authorization; no resource/action
+formula changes. The generic `semantic.subject` viewer-action resolver uses the same exact native visible-Subject
+points as released Type resolvers, including custom released Types. Hidden or missing participants return native
+unreadability. The private relationship editor batches that disclosure with Context operations and independently
+reads candidate decisions and slot selection; proposal availability never grants decision or adoption authority.
+
+A relation is a statement whose property is an item property and whose value is another subject. Subject-to-subject relations, credits and character appearances all use this one shape; none has a table, endpoint or read path of its own.
+
+### Relation properties
+
+Every item property in a definition release declares how it reads in both directions:
+
+- `inverse`: the property that states the same fact from the value's side, or `symmetric: true` when the fact reads the same from both sides (`same setting`, `alternative version`). A property with neither is shown only on the subject that holds the statement, and the release says so with `inverse: none`.
+- `labels` and `inverseLabels`: localized names for each direction ("Sequel" and "Prequel", "Adapted from" and "Adaptations"). A label never has to be inferred by reversing a sentence.
+- `group`: the display group a relation belongs to: `order` (prequel, sequel, parent story, side story), `derivation` (adaptation, based on, spin-off, translation, edition), `world` (same setting, alternative setting, alternative version), `membership` (series, part of, collection) or `association` (other Relations view entries); `credit` for staff and cast in Credits and Works, `appearance` for characters in Characters and Appearances, and `classification` for concept-valued facts such as genre, tags, platform, gender and form.
+- `targets`: the admitted value types, as for every item property.
+- `order`: `position` (the statement's `schema:position`), `date` (the holder's earliest `schema:datePublished`) or `name` (its default label). Missing values sort last; ties use holder id and statement id. Properties without an order retain holder-id order.
+- `filter`: one admitted item qualifier whose values select inverse pages, for example a credit role.
+- `acyclic: true` when the relation must form a directed acyclic graph (part of, prequel, based on). A write that would close a cycle is refused.
+
+A fact is stored once, on the side the release names as canonical. The other side is a read of the inverse, never a second statement, so the two directions cannot disagree. The inverse is served from inbound-edge rows in the target's partition, maintained from the forward statement and rebuildable from it.
+
+Decision: a Person's released `wdt:P106` occupation targeting exactly `skos:Concept` is admitted as a native relation; other classification statements remain descriptive facts.
+
+The per-subject cap of 512 applies to descriptive facts, including labels, descriptions, aliases, classifications and every other non-relation statement. A statement is a relation when its property in the release used to write it declares a group of `order`, `derivation`, `world`, `membership`, `association`, `credit` or `appearance`, or is the declared Person occupation exception above. Relation statements do not count toward that cap. The per-command limit remains 512 facts, so large casts are written across commands.
+
+Relations remain statements and keep the same candidates, slots, Contexts, adoption, revisions, moderation and history as other statements. Each relation slot is keyed by `(subject, property, target)`. A property's optional `relation.slotKey` adds the value of an admitted item qualifier to that identity, for example `wdt:P725` uses `wdt:P453` to give each actor–character pair its own slot. A relation with a resolved target and no slot-key qualifier uses the target slot with an empty key. A `somevalue` with a `schema:sameAs` IRI has its own external-IRI slot; `somevalue` without that qualifier and `novalue` use the property-level slot. A later resolved statement is proposed in its target slot and does not automatically move the unresolved candidate.
+
+Relation slots are projected into `semantic.outbound_link` in the holder's partition, with a mirror in `semantic.inbound_link` in the target's partition. Unresolved relation slots have outbound rows, count toward property totals and have no inbound row. The subject read returns the first 12 selected slots per relation property and its exact count. Both projections carry `context_id`. Global is the base layer; a community Context stores only added or replacing relations and active suppression rows for overridden Global keys. The relay projects Context decisions in both directions. Forward and inverse pages accept `context`, and subject previews use the same ordered merge. Global reads select only Global rows. Global counters retain their existing keys and fixed Global `context_id`; the separate `outbound_link_context_count` and `inbound_link_context_count` tables hold signed deltas keyed by Context. Counts add the Global counter and the selected Context's delta. Subject previews select each projected statement once, even when a slot selects several values. Their resolution diagnostics retain a separate bounded 12-row Global preview for omitted slots.
+
+A source relation is mapped to a release property only after its direction has been checked against the source's documentation and at least one known record. A source relation that no existing standard term expresses gets a `rezics:` term with its own inverse, labels and group; it is never dropped because no Wikidata property matches, and it is never mapped to a looser term that changes its meaning.
+
+An importer turns a source's subject-to-subject relations into these statements on the native subjects; it never keeps them as descriptive records about the source, which no relation read would see.
+
+### Credits and appearances
+
+A credit is a statement on the work whose property names the job and whose value is a person or organization. Its qualifiers record the name as credited, the credit order, the detailed role concept and, for performers, the character portrayed. An appearance is a `schema:character` statement on the work, qualified by its role concept (main, supporting, cameo), the credited name and its spoiler level. Character-to-character relations (family, rivals, alter egos) are ordinary relations between character subjects and follow the rules above.
+
+Spoiler level is a qualifier on the statement, not a property of the character: the same character can be a spoiler in one work and not in another.
+
+Detailed roles are concepts in a role scheme, so every staff position and cast role a source uses has a place; a credit is never dropped or flattened because a closed role list lacks it. Credits are read through the same inverse and forward reads as every other relation, so a credit list and a relation list can never disagree about roles.
+
+The relation properties a subject can take, with their labels and admitted qualifiers, are read from the active release for the subject's type. Every editor builds its choices from that read; none keeps its own list.
+
+### Inverse reads
+
+The value side of a relation is read through an indexed inverse read: the subjects whose statements with a given property point at a given subject, filtered by type and qualifier, ordered by a declared key (credit order, series position, date, name) and paged with an opaque continuation. Every inverse read returns an exact count or an "at least" count. Inverse reads never load the holding subjects' other facts.
+
+`GET /v1/subjects/:id/links` retains the cross-property listing and response shape when `property` is absent. A property page accepts `filter` (one subject id across its declared qualifiers), `type` (a type CURIE, including its subtypes in the active release), `limit` (1–100, default 20), and an opaque `cursor`. Cursors bind the anchor, property, filter, type and the reader's ordered language ranges. Every returned link includes the holder's shared display summary; compatibility `type` and `label` fields copy its values. Summary labels follow the shared label rule below, including the original-language fallback, without reading unrelated facts.
+
+Every module embedding a chosen subject label uses `languageRanges` and `chooseLabel` from `language.ts`, including inverse and forward pages, previews and `readSubjectSummaries`. Reads returning all labels retain that shape. The label choice rule is:
+
+1. Parse the whole `Accept-Language` list in descending q order, preserving header order for ties. Ignore malformed entries, q=0 and `*`; put a valid explicit `language` query tag first and keep at most 16 ranges, including that override.
+2. For each range in order, match case-insensitively: exact tag, then truncate one subtag at a time (removing a trailing extension singleton too). If none matches, maximize it with `Intl.Locale` and try that likely-script form with the same truncation. Thus `zh-CN` can find `zh-Hans` and `zh-TW` can find `zh-Hant`.
+3. After every reader range, try the subject's original language (`schema:inLanguage`) with the same lookup, then English, then the first label in language-tag order. Return null if there are no labels. Preserve the chosen label's actual stored language tag.
+
+The original language is read alongside labels in the same batched statement, with one additional indexed fact range per subject. For multivalued original languages, use the first live preferred statement, then the first live normal statement in slot order. Expanded slots use the current Global adoption. Retracted, deprecated and hidden statements are excluded.
+
+The projection stores a base row with the nil UUID and a row per distinct value across all declared filter qualifiers. A two-role statement appears once in each role page and once unfiltered. Every row carries the holder type and its order key. Name keys use English then the first language tag (without reader or original-language preferences), NFKC case folding and a 256-character cap. Position keys use a fixed-width decimal encoding, preserving large integer ordinals; dates normalize signed years and date parts. The holder computes these keys with its write release. Global adoption of a publication date and identity writes through `updateSubjectIdentity` enqueue paged outbound-link re-emission when holder keys change. Changing a property's declared order or filter list in a release requires a projection rebuild; adding a second qualifier does not backfill existing rows.
+
+Rows and `inbound_link_count` counters change in one partition-fenced transaction, including replay, removal and merge moves. Property and qualifier counts are exact. A type-filtered count samples the first 1,000 rows in the selected property/filter range; it is exact when that range has at most 1,000 rows and otherwise is an "at least" count. This bounded count sample is separate from the page scan. The page scan examines at most `4 × limit + 1` rows under a type filter and can return an empty or short page with a continuation. A continuation advances past examined rows, never past an unexamined match. Freshness waits, authorization and deadline failures follow the existing subject-link read.
+
+The released Character voice lookup is GET /v1/subjects/:id/links with property wdt:P725, Character filter and wdt:P453 qualifier. Admission requires the active release to declare wdt:P725 as a credit relation with wdt:P453 as both slot key and qualifier targeting Character. The performer remains the main value. The reader accepts at most 20 output rows and examines at most 20 ordered keys, including suppressed and otherwise ineligible candidates; a partial continuation begins after the last examined key. Ordinary inverse behavior is unchanged, and same-Character degree/history growth stays within the existing index bounds.
+
+Character visits may compose two windows of at most 20 assertions and 256 related-reference summaries, subject to tighter installed limits. Direct native Subject reads opt into includeDocuments=true; aggregate pages keep their dependent document plan. Content owns the shared public document schema, types, mapper and HTTP disclosure and erasure. A preview body must match its exact document, Subject, candidate, digest and language, be available and validated, or remain unreadable. Semantic adds no second document hydration or mapper.
+
+`GET /v1/subjects/:id/relations?property=P` reads the holder's forward projection. It accepts the same `filter`, `type`, `limit` (1–100, default 25) and opaque `cursor` parameters. The page is ordered by the property's declared key, includes each selected slot's Context view and the target's shared subject summary, and returns an exact or at-least count. Its type-filtered scan examines at most `4 × limit + 1` rows; the separate type-count sample is capped at 1,000 rows. Unresolved values follow resolved targets and sort by their declared key, then external IRI and statement id. Targets without a visible summary are omitted without changing counts; external values carry a null summary. Freshness, authorization and deadline handling match `/links`.
+
+Both projections are maintained by the links relay and can be rebuilt from forward statements. Holder type, default label or date changes page through that holder's outbound links and re-emit their inbound rows. A target type, default label or date change pages through its inbound rows and re-emits the holders' outbound rows. Each relay step handles a bounded page; no request performs the full re-emission. Merges page both projections. A merge redirects reads from the source to the survivor without rewriting the source's statements; a later statement on the survivor creates another slot until an editor folds the statements. Revision history already pages revisions, bulk candidate reads probe candidates by slot, moderation reads one slot at a time and pages visibility projection work, and search source reads exclude relation facts from descriptive enumeration.
+
+A hub (a long-running franchise, a prolific voice actor, a genre concept) has an unbounded number of relations, so every view over them is paged and no read enumerates them all. Credits that belong to one episode or one release are stated on that episode or release subject, not on the work.
+
+### Custom relation types
+
+People and communities can add relation types without code. A custom relation type is a property in a definition release and carries everything a bundled relation property carries: localized labels for both directions, inverse or symmetry, acyclicity, group, admitted subject types on both sides, cardinality, admitted qualifiers (ordinal, episode or chapter range, spoiler level, free note), and optional mappings to standard terms (`owl:equivalentProperty`, `skos:exactMatch`, `skos:closeMatch`) used for export. A relation type with no stated meaning, domain and range (a bare "related to") is not admitted.
+
+A custom relation type follows the same lifecycle as any term:
+
+- It is proposed by a person or a Realm and becomes usable when its definition release is reviewed and activated; the editor that proposes it is a form over the release format, not a separate store.
+- It has one meaning for its lifetime. A changed meaning is a new term; the old one is deprecated with a pointer.
+- Statements that use it are proposed, accepted and adopted in a Context like any other statement, keep their evidence and history, and can be moderated.
+- It is visible where its Context is selected. A Realm's relation type shows on that Realm's pages and on the global page only after Global adopts the term and the statements.
+- It is queryable in search filters and inverse reads exactly like a bundled property.
+- A graph view over it is a bounded neighbourhood read: an anchor, a depth of at most two, an explicit set of properties and a page size. Unanchored closure (all ancestors, all connected works) is not a read.
+- A layout or grouping a person arranges for a graph view is view state; it never changes the facts.
+
+The number of custom relation types is limited per Context; statements that use one are stored, paged and counted exactly like statements that use a bundled relation property.
+
+#### Term extensions
+
+A Context's custom relation types are one term extension: an immutable body addressed by its digest (`@rezics/definitions/extension`, format `https://rezics.com/definitions/extension/1`) that holds only item properties and refers to the Global release for types and qualifiers. `POST /v1/contexts/:id/definitions/extensions` publishes a body once (`definitions:publish` on that Context), `POST /v1/contexts/:id/definitions/extensions/:digest:activate` makes it the Context's head with an expected-head check (`definitions:activate` on that Context), and `GET /v1/contexts/:id/definitions` returns the active extension, or a null extension at head 0. The routes accept Global's id as well: Global has its own extension. Publication and activation emit the `definitions.published` and `definitions.activated` events with the Context as their subject.
+
+- A term's CURIE is `c<context id as 32 hex>:<localName>` and its IRI is `https://rezics.com/contexts/<context id>/terms/<localName>`. A term is never reused for another meaning, and an inverse name counts as a used name.
+- A term carries a `description` (at least `en`), `labels`, `domain` (holder types of the Global release), `targets`, `multivalued` and a `relation` with a group from `order`, `derivation`, `world`, `membership` or `association`, exactly one of `inverse` (a CURIE in the Context's namespace, or `none`) and `symmetric`, `inverseLabels` when there is an inverse, and optional `acyclic` and `order`. Its qualifiers are Global release properties for position, the part or range, spoiler level and note. Optional `mappings` are `{ predicate, iri }` pairs with `owl:equivalentProperty`, `skos:exactMatch` or `skos:closeMatch` and an absolute IRI. A term without a meaning, domain or target is refused with the field named in the error pointer.
+- A later extension of the same Context may add terms, change labels and deprecate a term with `deprecated.replacedBy`. It may not drop a term or change a term's description, domain, targets, multiplicity, group, acyclicity or direction, nor lift a deprecation; activation refuses it with the field named. At most 64 terms, deprecated ones included.
+- Global's extension follows the same rules, and a term of another Context may appear in it only as a copy of that Context's active term (same CURIE and body). Until then Global does not know the property, and refuses to accept its candidates.
+- The release a Context sees is the Global release plus Global's extension plus the Context's own, composed into one release by `applyExtension` and addressed by its own digest (`semantic.release_composite` maps it back to its parent and extension). Candidates and the link relay keep the composed digest; a subject's own revisions keep the published release, so reading a subject in another Context never picks up this Context's terms. Proposals, acceptance, adoption, relation and link pages, previews and counts, and the subject read resolve through it. Bulk writes, merges, search source reads and summaries use the published release or resolve a stored digest.
+- The graph read is the relation and link pages: there is no separate graph endpoint.
+
+## Search
+
+[Filtered lists](../../../../docs/filtered-lists.md) is the shared authority for complete indexed observations,
+current disclosure, direct/prepared admission, freshness, canonical list identity and cost. Semantic owns the
+selected-fact projection and complete disclosure dependencies consumed by Search, including compact/expanded
+conformance, datatype/unit normalization, same-statement qualifiers, ranks, adoption, suppression, retraction,
+public consent and foreign target/source-tuple fences. Private Library facts remain owner-local PostgreSQL data.
+
+Search compiles the one released grammar and owns preparation and source-to-searchable freshness. The pure shared
+matcher (`current-filter-plan.ts` and `current-leaf.ts`) is the conformance reference. It is not a requirement to
+replay all selected facts for every request. Typed parameterized range/qualifier index predicates may implement the
+same semantics. Samples, witness hints and overflow markers do not establish complete negative coverage. Missing
+essential coverage stays unknown under NOT and produces preparation/readiness until a complete admitted plan exists.
+
+### Selective current native evidence
+
+`readScopeLeafEvidence` reads a known live source and one admitted Search leaf. It prepares viewer Access before
+source checkout, verifies the public floor on the same repeatable-read source observation, and emits only public
+normalized statements with native candidate identities, recording revisions, releases and current Global ranks.
+Its selection and normalization helpers are shared with `subjectSource`; it does not interpret filters. Internal
+public evidence ignores ambient owner and moderator statement overlays.
+
+Descriptive slots use exact native slot keys, at most 33 compact operations and at most 32 expanded selections.
+Relation point leaves seek the canonical fact and candidate possible-pair ranges before current selection,
+moderation, retraction, consent, provenance and target checks. Narrow partial indexes cover canonical writes and
+existing data synchronously, including UUID-valued historical rows without a reliable relation flag. No sampled witness table or asynchronous visibility projection supplies absence.
+Each bounded step consumes one possible witness, including rejected or duplicate keys, and continues strictly
+after its native key. Compact relation progress uses the native fact record sequence; expanded witness progress
+uses the actual UUID. Null and numeric zero remain distinct. Progress binds the source's own revision, security,
+release and admitted leaf, never an unrelated partition position, remembered truth or a permission.
+
+All six caller-reserved work axes include Access's actual producer receipts, pool and transaction operations,
+source/home/slot points, native driver/body/provenance work, definition length guards, rejected data and foreign
+observations. Explicit native plan bounds charge rows independently of returned rows. Driver payloads are guarded
+before transfer and charged in UTF-8 bytes. A source checkout is released before any independent definition,
+source-fence or target read; source authority is checked again afterwards. Exhausted reservations yield readiness,
+while Access/deadline/dependency errors retain their typed unavailable behavior. A foreign work-mode producer
+without a native work receipt refuses before IO rather than manufacturing an Actor or hiding its IO.
+
+Selection coverage requires the complete selected slot in this observation. Partial selections and witness
+revalidation do not prove negatives. Empty-pair coverage requires both complete canonical possible-witness ranges
+to be empty from the beginning for every requested pair in this observation. Historical witnesses rejected by
+current authority, continuation range end and matcher misses never prove empty pairs; they remain unknown even
+when quiescent. Final witness reads repeat native selection and all applicable public checks. Broader relation
+range plans and composed-release work adapters remain typed unavailable until their native bounded ports exist.
+
+### Complete facet population preparation
+
+`createFacetPopulationSource(config)` in `facet-population.ts`, additively exported by `semantic/index.ts`,
+implements the separate closed [population contract](facet-population-contract.ts). Each call joins the
+canonical retained consumer through `PublicFilterSourceBinding.join`; `population` must equal that native
+immutable read definition. A fingerprint detects retained-input mutation but supplies no authority.
+The three existing Source readers remain unchanged. The agreed binding/key-page modules currently contain
+visibly provisional fail-unavailable adapters; native availability and acceptance require their real producers.
+
+Preparation seeks one native home at a time, retaining its first key-page position and a finite final
+key-page position. It drains every ordinary outbox event between those positions, including creation behind
+the key frontier. Event subjects are only locators: an exact native subject point establishes the anchor.
+Event sequence/count gaps and epoch changes invalidate the build. Empty homes advance only on native complete
+key pages. Missing, moved or identity-pending homes preserve readiness rather than completing empty.
+Later ordinary changes belong to replacement preparation; the captured window never grows while draining.
+
+Opaque UUID frontiers retain one bounded page and scalar phase/cursor state. A unique predecessor CAS retains
+the winning next page atomically; retry reads that page and charges its subjects. No population or home vector
+is encoded into the cursor. Native consumer/Source currentness is revalidated before every step, including seal.
+Completion certifies finite population enumeration only. Search must exhaust each subject's full projection,
+perform its current matcher/disclosure work and publish through its own retained consumer; no permissions,
+public values, ordinary purge completion or receiving acknowledgement are supplied here.
+
+### Projection safety and freshness obligations
+
+Semantic must supply complete facet projections and disclosure dependencies. Query-level privacy-reduction
+invalidation/acknowledgement is required in addition to candidate original/terminal and Access checks. Local
+reductions invalidate public use in the authoritative transaction. Foreign source-fence, target, consent and
+Collection reductions invalidate affected public use immediately. The consumer acknowledgement must cover actual
+refresh-visible repair, including dependent foreign repair. Observe the required current safety state before
+execution and revalidate before disclosure; missing, pending, unsafe or changed state means preparation/readiness.
+A local security revision or ordinary relay checkpoint cannot certify query privacy.
+
+A withheld harem tag must not influence membership, NOT harem exclusion, order, fields, source metadata, counts or
+cursor-visible information. Checking returned subjects alone misses excluded subjects. Omitting counts is also
+insufficient. Complete ordinary generations and published identity epochs are never grants or acknowledgement of
+pending privacy repair. This is an abstract producer/consumer seam, not a new safety-token ABI, certificate store,
+global home sweep or permission authority; current ports do not yet establish it.
+
+Ordinary catalogue edits become filterable within 60 seconds in healthy operation; actual source-to-searchable
+lag over five minutes yields readiness. Engine refresh alone is not pipeline freshness. Privacy reductions have no
+lag allowance. Owner writes appear on the owner's next read. Semantic supplies the source-side events/dependencies;
+Search owns complete searchable visibility and preparation. Unsafe totals/facet counts over unchecked populations
+must be omitted without approximate/as_of, zero or row-length substitutes.
+
+### Native privacy-reduction log cost
+
+- Touches: wired subject, candidate, selection, consent, source-tuple and Collection reductions lock one authoritative
+  home head and append one immutable log row in the same command transaction.
+- Bound: append input is at most 1,000 total affected identities and impacts; each home page examines at most its
+  requested 1–1,000 log rows, including gaps as unknown rather than empty.
+- Growth check: `test/semantic/privacy-reduction-log.test.ts` covers monotonic per-home history and all 4,096 native
+  homes. Physical rows/blocks growth has not been measured in this change, and this log does not close population
+  cut or original projection readiness.
+
+### Implementation status and retained evidence
+
+The selective native evidence capability above does not implement a general list evaluator. Its earlier
+whole-slot/one-pending-leaf/final-replay list design is superseded. The universal 256 raw-key proof requirement, ban on derived
+query/index state and ban on range/qualifier SQL no longer govern lists. Existing exported types and frozen tests
+remain in place until reviewed native replacement acceptance permits removal. This prose adoption removes no code
+and proves no native capability. Independent leaf, multi-leaf and integration reports remain evidence, not gates
+for the replacement architecture. Unrelated complete-slot, graph, history and command bounds remain intact.
+
+The [Zone integration audit](../../../../docs/research/semantic-integration-audit-zone-composition.md) identifies
+an integrated resource substrate but incomplete actual membership, page/default execution and Zone-specific
+withholding, purge, account cleanup and scheduler work. Typed transport, immutable release loading, pure cursor
+capacity and helper setup do not close these gaps. Required acceptance retains two-release pins, same shared Search
+runtime, current grant/source/fact revocation, canonical cross-page ordering, native cursor restart/session/cache,
+full personas/API/default composition and growth. The shared common-page limit is 16 reads and 128 total output
+slots; the old SAME256, final replay, alias-window and home-certificate prescriptions are superseded.
+
+## Identity
+
+Native account-context reading brackets anonymous hydration with two repeatable-read observations. Pending, unavailable or differing positive epochs refuse the result. Terminal values grouped by one query do not establish that separate native calls share a snapshot. Native SQL and Access authority remain unchanged.
+
+Mapping and publication retain opaque proofs, exact hash and custody rules, pre-arm, independently observed native state, and resumable jobs. Participant classification remains O(N) for N≤100. Cross-home enrollment, movement and abort remain deferred wherever atomic_guard_unavailable applies; no partial protocol is promised. Detailed execution, SQL and publication custody remain in the [identity epoch contract](identity-epoch-contract.md).
+
+Library owns its canonical Source participant and cost: the raw-key page remains capped at 100, the aggregate input is independently capped at 256, and native row and identity-metadata bounds remain separate. See the [Library identity participant](../library/README.md#native-identity-scope-planning-and-current-seals). A same-query aggregate does not expand its Source page cap.
+`stepIdentityEpochMapping(pool, job)` in `identity-epoch-mapping.ts` is the native mapping step. It retains
+immutable input generations, bounded link/member phases and released per-home effect receipt custody. It
+accepts no caller page, frontier, affected-ID vector or completion callback. Terminal repoint retains the smallest
+remaining live original from the admitted generation, then maps the remainder directly to that saved root;
+singleton detachment has no remainder. The public intent is unchanged. Mapping completion remains a
+receipt locator: it cannot publish without the two fixed participant receipts. Accounts source intents,
+full positive undo/publication, generation minimization/erasure and inclusive native cost evidence remain
+pending at the boundaries documented in the [identity contract](identity-epoch-contract.md#mapping-execution-boundary).
+
+### Durable publication and caller contract
+
+Merge, unmerge, repoint, `verifyAccountAgent` and `unverifyAccountAgent` use the same native durable mechanism.
+Jobs with disjoint changed group sets run concurrently; claims, production partition-local capacity P=1 and reclaim pressure
+are partition-local. PREPARING is affected pending/overlap-busy. No global sole pending job, whole-job lock,
+active marker or universal page gate is allowed. Coherent immutable non-ABA double collection checks at most
+4,096 originals per resulting group before ALL new admission effects. Missing/moved/incomplete evidence is
+unavailable. Later drift after durable preparation retains recovery, never effect-free overflow/not_applied.
+
+Ordinary `POST /v1/subjects:merge` keeps its native body, Global authorization and quoted Idempotency-Key.
+Only actual admission returns `202 {operation: {id}}` with `Location: /v1/subjectIdentityOperations/{id}`.
+`mergeSubjects` keeps the completed callable DTO; HTTP never treats a completed 200 as admission.
+Current-authority replay finds that same operation. The existing GET poll pending/completed DTOs and concealed
+unknown/denied behavior remain; a redirect/revision alone cannot complete it. Suspension follows the [native bearer contract](identity-epoch-contract.md#ordinary-http-asynchronous-identity-operation).
+
+Verification/reversal retain their successful subject/component DTO and same receipt. The SAME Accounts workflow
+uses bounded admission/delivery steps, bounded indexed native publication probes and durable sleep OUTSIDE a step,
+before approval/page/finish/pending-clear. No worker is held through an outage. Busy/capacity/handoff retries the
+same intent, never denies review. Access now records immutable account-home decision/reversal intents in the
+original native transaction/receipt and verifies them before releasing the home for admission. The original
+wrappers use the typed native coordinator adapter and require actual mapping and both participant publication.
+Current dev includes identity-epoch-coordinator.ts, registered by semantic/work-module.ts. registerIdentityEpochCoordinator wires persisted read/admission, mapping, the configured Search canonical-index and Library private-follow-counts participants, receipt reconciliation, publication and bounded workflow segments of at most 100 pages before yielding and resuming outside a durable step. resumeIdentityEpochJob re-enqueues the original immutable job with return-existing; waitIdentityEpochPublished checks committed native published custody, not SDK success. This confirms installed wiring only: independent native observations, both participant receipts and complete publication acceptance remain required, and unresolved custody/generation evidence stays pending.
+Historical missing custody and consumer-aware source minimization remain pending owner obligations; exact keys,
+delivered guards and integration debt are in the owning contract.
+No queue, public pending DTO, permission change or second operation protocol is introduced.
+
+### Lists, point reads and personal references
+
+Canonical lists use maintained canonical-ID indexes and unique prepared rows. Observation, publication and cursor
+currentness are scoped to the ACTUAL source and its COMPLETE expanded query dependencies, including excluded,
+NOT and order-only originals. A finite unchanged owner source must make useful-page progress while disjoint jobs
+run continuously. A genuinely all-group catalogue can have broad dependencies without stalling that owner source.
+Partition summaries carry committed scoped reader revisions, never max allocated epoch or global job history.
+
+`createIdentityScopedObservations(pool)` publishes the native `register`, `arm`, `finish`, `revalidate`,
+`repair` and `retire` declarations in `identity-scope-types.ts`. Registration retains complete Source capture
+frontiers and inverse enrollment; pre-arm receiving commits the exact attempt obligation and reader revision
+together. The existing maintenance queue revisits one pending scope per selected home, with retained circular
+cursors so an unavailable scope does not prevent another scope's repair. Public structural capture is owned
+by `identity-scoped-public-source.ts`; the opaque handle only locates its committed native records.
+
+Library completion pages the original `library/identity-scope-effects.ts` native expected selections, one
+bounded page per step. Caller `records`/`receiving` arrays are optional lookup hints. Each selected committed
+receiving binding, applied effect and exact control custody must resolve before the Source retains its frontier.
+The completion head binds registration, capture, source generation, immutable attempt and the complete native
+seal/version/frontier. Changed or unsealed input cannot inherit an earlier prefix. Exhaustion closes the active
+attempt only after `verifyLibraryScopeEffectsSeal` succeeds on the live Source command and current native
+owner/capture/attempt guards hold. That transaction increments the committed revision; it leaves Source repair
+to establish the next clean observation. Enumeration and native hold guards share the caller's original
+`WorkAllowance` through `NativeCollectionWork.compose`; native receipts are charged without resetting dimensions.
+Maintenance uses the retained caller or registration step ceiling for a fresh bounded reservation per step.
+A fresh registration after retirement gets a new registration ID and increments the existing revision; it
+cannot inherit the earlier attempt's completion prefix. Upgrade rows with unknown preexisting send outcomes
+stay unavailable unless their exact committed directory locator is retained; absence is never rollback.
+
+Retirement first makes the summary unsafe, finishes real outstanding attempts, then retires one directory ticket
+at a time under its original bridge. A durable source-local sending intent precedes every directory enrollment.
+Directory release retains a native receipt and tombstone, so a lost reply or delayed enrollment cannot resurrect
+a removed ticket. Closed bridges retain tickets until their preparation custody reopens them. After the final
+local unresolved seek, actual native `releaseHold` and the retired summary commit together. Immutable old cursor
+bases fail the retiring summary; retiring a registration creates no authority to purge its native business Source
+or another owner's capture/history. Attempt and retirement tombstones remain against delayed messages.
+
+Library public-output identity is separate from account-owned identity: its Source address binds Collection,
+incarnation, output generation and immutable activation transaction/decimal position/source generation. Current
+source generation is independently checked. No account ID is inferred from a Collection. The old Library native
+factory is untouched; its current rejection of an unsupported public-output locator remains unavailable until
+its owner delivers the discriminated runtime.
+
+Foreign runtime readiness remains explicit. The exact original-module Library expected-effect declarations
+are provisional unavailable adapters until the native producer arrives. The additive
+`identity-receiving-effects.ts:readIdentityReceivingSelection(pool, selection, {deadline})` is loaded read-only
+when delivered; no hint can substitute for its committed record. The admission ticket reader and FAA binding
+also remain provisional in this base. Public catalogue completion retains its own capture/attempt-bound expected
+state and never consumes a Library seal. Its remaining foreign ABI is a public-catalogue native expected
+projection/effect page, current Source-local final seal verifier, and exact committed projection/receiving lookup
+bound to `(NativePublicSource, captureId, registration, scopeId, job, attempt)`. No such export exists in
+`public-filter-source-binding.ts`; its public read/repair declarations do not certify identity-effect exhaustion.
+Until that producer is available the public active obligation is retained and cannot advance the reader revision
+as completed. These boundaries are native readiness limits, not a claim that this implementation passed native proof.
+The focused `identity-scoped-observation-outcomes.test.ts` scenarios remain integration acceptance, unexecuted
+at this implementation stage.
+
+The [owning contract](identity-epoch-contract.md#scoped-reader-publication-and-complete-query-dependencies)
+derives native registration, arm/finish custody, reordered lower-job publication/cancel handling and start/final/
+current cursor checks from existing source keys/observations. Actual complete native Collection/owner/Search
+bindings remain missing. Returned-hit samples, broad owner-fact mutation alarms and unavailable source stubs are
+not completeness proof. No new cursor vector/crypto, source ABI or hidden source-wide global marker is assumed.
+
+No request-time alias walk, 4,096-home sweep or separate per-page readMapping prerequisite is allowed. Pages use
+existing shared batched owner/epoch reads plus two probes and existing candidate source points, with no extra
+snapshot/client/control statements or per-ID loop, inside filtered-list budgets. Current original AND terminal
+eligibility and full excluded/order/FOREIGN physical-query admission remain independent of identity metadata.
+
+Unaffected and fresh self point reads remain useful; source basis routes ONE relevant current control home per
+original. Missing/moved/retired state is unavailable, never self/zero or a guessed terminal route. Same-backend
+standalone mapping uses one RR/eight statements; cross-backend released observations use source<=10/control<=6,
+16 total or 11 pending. Original/terminal privacy is separately charged. Existing one-anchor readSubjectReference,
+item metadata and type reads retain their native anchor/client/time contracts; no permission cache is created.
+
+Stored personal original IDs, notes, dates, order and multiplicity remain. Canonical views choose the highest live
+native owner_write_seq with conflict visible, union labels and keep copies/sessions distinct. Undo is a new owner
+write. Library's [native sequence prerequisite](../library/owner-write-sequence.md) already delivers the authorized
+allocator, private owner counter and nullable live/archive sequence columns. The missing boundary is production
+set/clear/Undo integration and bounded legacy cutover/readiness, not the primitive's existence. Null legacy values
+cannot select a canonical winner; timestamps/UUIDs do not substitute. Allocation adds its actual two body
+statements to the owner command, replay does not allocate, and failed allocation rolls back with the fact. Collection
+browsing shows one canonical card while editing preserves every stored occurrence. New writes address current
+terminals and corrections preserve unrelated later edits.
+
+### Native cutover and retained evidence
+
+The [owning native contract](identity-epoch-contract.md#native-cutover-adoption) requires locked native absence
+custody for a fresh installation or all 4096 legacy homes, including empty/unselected homes and actual owner epochs.
+Both paths retain every birth/writer/queued continuation, native source export,
+receiving custody BEFORE exact-head ACK, and home barrier plus deferred SAME-TX final guard. Ordinary/import
+births initialize self at the SUBJECT source home; account-agent births use account home. Real scheduler/bootstrap
+or actual locked absence installation must close coverage; readEpoch side effects, seeded rows or preset readiness are insufficient. Actual guard races
+cover verify AND reversal in flight; an owner move proves retryable availability, not the final guard.
+
+Immutable input refs plus a constant transform form the affected index before effect gates run. Current generations
+are flat. At EVERY durable/crash/replay/abandon state, each partition q retains at most Gq+4P full generations and
+Aq+4P·4096 memberships, including bootstrap/unsealed/export/partial-delete/abandoned/move copies. Native ref locks,
+minimized undo/reversal/move/cursor custody and locked empty-range reclaim proof are required. Unreclaimed local
+copies block new local admission; other partitions progress. R/L/H obligations remain history-proportional storage,
+not hidden full groups. General physical owner transfer is a named missing bounded native custody/storage proof.
+
+Ordered capacity begins at the FIRST ordered resource INCLUDING actual job home. Compact receipt-to-job binding
+is indexed actor/account-home history with retention/erasure accounting. Every claim generation, native confirmation,
+accepted pointer, planned-home close proof, receiving handoff and source hold/validation copy is included in the
+[owning inventory](identity-epoch-contract.md#native-home-binding-inventory-and-recovery-cost). No extra P slot,
+full membership vector or resource allowance is added. Sole-owner Ad1 ledger minimization/shared-copy custody is
+named pending coverage. Native attempt locks close
+EVERY planned home against delayed/uncertain acquire; job-home CAS selects admitted versus cancelling. P=1 progress
+follows strictly ordered waits, not leases or try/unwind timing. See the contract for costs and required schedules.
+
+### Library canonical publication participant
+
+The SAME version-1 `library-private-follow-counts` identity participant covers ALL six member/entry/label/session/
+copy/output canonical drivers, directory/candidates/support, first apply, follows/totals, OLD withdrawal/NEW add,
+fences and exact prior custody. A follow-only ACK cannot publish; no third participant or Library A5 transfer.
+Directory proof is ONE `(owner,canonical)` candidate plus structural `(original,scope)` existence/extrema with
+indexed inverse discovery. A million same-original/profile/lifecycle sessions cannot create a million directory
+rows. No per-fact witness/copy or required legacy canonical_source_fact write is adopted as directory proof.
+
+Support per `(canonical target,follower)` changes totals at 0-to-1/1-to-0; derived data stays in target home and
+stored follows in source home. Legitimate first apply versus gate installation is serialized in the same native
+transaction; stale delivery rereads current source, account eligibility and mapping. Complete prior effect custody,
+crash/replay and terminal no-resurrection remain required. [Private follow counts](../../../../docs/private-follow-counts.md)
+owns that store. Missing native adapters/locators cannot supply a noData ACK.
+
+Core OP is the actual `command/operational.ts:runOperationalTransaction` and `enqueueIntent`, with native fencing
+and atomic DBOS intent. It has no Core receipt/event/outbox/write-basis/position/intent table/relay. Access owns its
+separate account-home verify/reversal intent TABLE; shared-history owns operational DBOS history; Library A5 owns
+derived Library data. Semantic inventories its physical identity stores and receiving cleanup locators; exhausting
+Semantic refs does not certify Library purge. Fixed A5 participants are distinct from identity publication ones.
+Participant-own erasure ACK is acyclic; overall completion separately waits frontier/no-open-late/allACK.
+
+### Specification closure and remaining native acceptance
+
+This document and the [sole native owner](identity-epoch-contract.md) adopt scoped concurrency with production
+partition-local capacity P=1. The native STORE, bounded all-home bootstrap, ordered preparation/cancellation and
+Library identity binding implement that route; their TypeScript contracts describe the same actual producers.
+The old global-control proposal is superseded. Native evidence for these producers does not establish complete
+publication or freeze the remaining Cost obligations.
+
+The contract retains REQUIRED admission/publication/HTTP/cutover native schedules, scoped finite-owner progress,
+complete excluded/order dependencies, coherent cap/ABA, P=1 claims, uncertain cancellation, legitimate first apply,
+all-home bootstrap, all-table overflow, physical retention/ref/reclaim every step, verify/reversal in flight and
+actual late/failed locator/custody. Primitive negatives are separate from full Search/Library completion; no
+consumer cycle or fake ACK. No formatter or earlier setup red is native performance or publication proof.
+Old identity-basis/home-sweep/sealed-repair scaffolding supplies neither readiness nor a revived certificate ABI.
+Unrelated core/graph/history/command/lifecycle and existing concurrent CPU-validation adoption remain unchanged.
+
+## Definition publication preparation
+
+The production request deadline remains 2,000 ms. The current release schema is
+compiled once at module initialization, and validation already deduplicates pattern
+proofs within a call. Recompiling the schema per publication is not the correction.
+Synchronous CPU preparation before command entry consumes that deadline and can
+stall unrelated requests even though no command gate or transaction is held. The
+paired [current-policy report](../../../../docs/research/definition-validation-cpu-current.md)
+and [independent deep report](../../../../docs/research/definition-validation-cpu-deep.md)
+are evidence, not competing implementation authorities. Their historical timing
+incident used the older timeout-based checker; their refused P1114 probes are not
+publication authority. The current bounded IRI proof, unconditional pattern walks,
+and whole-current-catalogue regression remain in force.
+
+### Owned input and digest domains
+
+Before either digest is computed, publication must perform bounded owned JSON
+traversal, then compute the whole canonical release digest and the request-envelope
+digest in their distinct domains. Neither digest substitutes for the other. Preserve
+collection, byte, and error precedence. Keep the actual immutable body bound to the
+bytes through asynchronous preparation, hashing, and writing. This applies to
+parsed HTTP input and direct callers: caller ownership, a caller freeze, and
+schema-valid shape do not prove immutable binding. Do not publish a sanitized or
+mutated graph after hashing different bytes.
+
+### Validation and published-body reuse
+
+The Definitions policy in [its package contract](../../../../packages/definitions/README.md)
+still applies to every schema and pattern. Exact finite module-owned fixed-pattern
+proofs are reusable only after actual proof by that same current checker and policy,
+keyed by exact source, flags, and checker/policy identity. Unknown, failed, over-budget,
+and changed-policy entries provide no safety. There is no fixed-template trust clause,
+checker replacement, time-dependent verdict, or arbitrary untrusted global proof
+cache.
+
+An actually validated immutable published body may be reused only for the same
+database/pool and canonical digest. The existing
+`readRelease(pool, digest, { composed: false })` is the current authority: it checks
+that the published row still exists even on a process-cache hit. A composed release,
+cross-pool entry, or cache-only digest equality is not published proof. Before any
+runtime adoption, a native specification must close finite entry and byte limits,
+eviction and lifetime, and cold validation. This uses the existing validated-body
+read authority; it does not add a second publication-body cache or cache-only
+authority.
+
+### Preparation, command, and native boundary
+
+Heavy preparation happens before fresh native command authorization and outside a
+held Global gate, Source gate, or command transaction. Every attempt, including
+receipt replay, rechecks current Auth and Access at native authoritative T before
+receipt disclosure. Preserve replay 201, a new key for an existing digest 200,
+authorized idempotency conflict 422, current denial, and one effect. Prepared data
+is never permission. A contention retry prepares native authority afresh under the
+original request deadline and evidence TTL; it does not renew the deadline or reuse
+authorization from before preparation.
+
+The indivisible cold checker must leave the request event loop so unrelated requests
+can progress. A Bun thread running the same bounded checker is a candidate, not a
+delivered or frozen Core port. Before implementation, shared owners must specify and
+prove admission and finite active-plus-retired slots and bytes, startup, reuse,
+reclaim, cancellation, shutdown, saturation, and late-result disposal. Worker
+termination, `unref`, or `Promise.race` alone does not prove physical cleanup. Do not
+add a durable queue, DBOS launch, service, execution engine, hidden CPU queue, or
+unapproved numerical cap. Keep the production deadline at 2,000 ms: thread progress
+does not prove every maximum-size cold release can publish within it, or that physical
+thread and heap cleanup are bounded. Parent clone and hash costs count too.
+
+Native acceptance is still required for current-bundle and hostile-pattern behavior;
+owned mutation and digest binding; cross-pool cache rejection and eviction; current
+replay denial; unrelated-request progress; deadline and late work with no commit; and
+active-plus-retired resource bounds. These are not delivered tests or runtime claims.
+
+## Copy and release work disclosure
+
+`readCopyWorkDisclosure(deps, {identities, languages?})` is the native batch for
+Commerce and the ordinary Subject page. It is exported with
+`CopyWorkDisclosureRequest`, `CopyWorkDisclosureObservation`,
+`CopyWorkDisclosureState` and `CopyWorkReference` from `semantic/index.ts`.
+The released binding is `schema:exampleOfWork` on Types that currently admit
+that derivation (`bf:Instance`, `rezics:AnimeRelease`, `wd:Q20631656` in the
+bundled catalogue, and any later released Type that includes the same
+property). Same UUID, digest, provider identifier, acquisition record, label
+similarity or chronology is never membership. A multi-work edition stays
+multiple work identities.
+
+Raw input is at most 100 identities, counting duplicates before
+deduplication. Selected language tags reuse the existing 1–8 UTF-8 language
+bound. Each original is `available` with at most three canonical `{id, labels}`
+works (complete-empty is `available` with `works: []`), or
+`scope` / `withheld` / `missing` / `unsupported` / `unavailable` / `denied`.
+Hidden members and unprovable partial sets do not leak undisclosed IDs,
+counts or serialized keys. Four current-head locators are lookahead: a full
+window is `unsupported`, never a pretended three-row complete set. Labels
+come from `readSubjectSummaries` in batches of at most 256 targets. The
+returned `current()` re-observes source and target partition cuts and Access;
+it is not a boolean that claims a later commit is safe.
+
+Decision: the bundled `schema:exampleOfWork` slot is single-valued, so native
+writes admit one work per edition. The producer still proves a three-plus-
+lookahead window so a later multi-valued release does not guess a primary
+work. Identity mapping `absent` uses the requested id as the current
+terminal; `pending` and `unavailable` refuse the item.
+Decision: an unpublished merge mapping, a redirect on the observed terminal,
+or two different partition cuts for one home during assembly answers
+`unavailable` rather than a mixed old/new membership or a leaked terminal.
+
+### Copy and release work disclosure Cost
+
+- Touches: at most 100 raw inputs (U distinct sources), identity mappings in
+  chunks of 100, one current-head locator window of 4 Global present
+  `schema:exampleOfWork` rows per source, current relation facts for those
+  locators, and at most 3U summary targets in 256-id batches. Partition
+  metadata, link checkpoints and Access run per addressed home. No
+  source-history enumeration, all-home scan, cross-partition SQL join or
+  per-row HTTP hydration.
+- Bound: N ≤ 100, U ≤ N, locators ≤ 4U, targets ≤ 3U. SQL/control/Access/
+  identity/summary/byte terms follow those caps and the existing
+  per-partition release rule. Rejected, duplicate, concealed and lookahead
+  work are charged. Output bytes are the typed results plus selected labels.
+- Growth check: `test/semantic/growth-copy-work-disclosure.test.ts` at
+  64/512/4096 unrelated subjects and growing old relation history.
+
+`readSubjectSummaries` is the shared display projection. Callers provide the trusted server `routeKey`
+and native pool, plus either the actual Access/Actor/deadline or a pinned release and prepared resource
+checks. `summaryAuthorization` preserves a callable related-read check while letting the batch prepare
+native evidence before checkout. The default subject/related/links/relations/graph and Search route bindings
+use it; Search Discovery, Account-linked subjects, Commerce, Library and Zone defaults use the native
+Access form. Preparation retains the actual Actor and original request deadline, and never retains allow.
+The existing current-original AND one-hop terminal checks and final-use revalidation of owning readers
+remain required; a display snapshot does not establish later privacy, identity or publication currency.
+
+The deployed Kernel has one physical pool. A batch uses one final `REPEATABLE READ READ ONLY` checkout
+through `withReadTransaction`, reusing that executor's scoped client if the caller already owns a snapshot.
+A `pool.query` facade never qualifies as a snapshot. Independently partition-bound representative and
+summary statements, native resource checks, selected Content media and exact source-tuple fences all use
+that client. Authoritative partition metadata is checked for every addressed home, including empty probes;
+missing/moved homes retain unavailability. Content's existing `readFences` runs on those bindings without
+another checkout or copied Content SQL. There is no distributed snapshot or cross-partition row join.
+
+The label's actual language selects among the first 12 representative-edition rows, falling back to an
+unqualified representative and then the first row. Native evidence for newly selected edition keys needs
+pool I/O, so an initial bounded read can release its plan, prepare those actual keys and re-read the
+selection under the final snapshot. A changed selection retries with fresh preparation, with at most three
+snapshot attempts under the original deadline; continuing churn answers unavailable. No planning allow or
+row result is carried into the final projection. A batch without new representative keys needs no planning
+retry. Caller-supplied checks that are already prepared can run in the caller's snapshot; lazy preparation
+there is unavailable rather than a nested checkout.
+
+Labels follow the shared language rule. Preferred images win over normal images; deprecated, hidden and
+retracted statements are omitted, including expanded slots' current Global adoption. An unavailable chosen
+image yields null rather than switching editions. `maySeeCover` may withhold a cover without hiding the
+subject. Missing or invalid routing configuration rejects before summary I/O, including empty batches.
+Before dimensions, credit, placeholders or variants are copied, each selected available reference must
+pass its exact source/external-ID/field-group fence in that same snapshot. A fenced cover becomes null
+while the rest of the summary remains. The original point reader's independent cover guard remains.
+
+Composed current-summary observations retain the actual source components, expose `available`, `absent` and
+`concealed` cover outcomes, and load at most 64 requested/fallback label languages plus the Subject's original
+language. They use the same summary, media-reference and source-fence owners; callers keep these components through
+final disclosure. A caller may represent an unavailable optional presentation without serializing stale metadata.
+
+`summary-snapshot.test.ts` authors one mixed-partition mounted `createKernel` graph regression with native
+representative facts, re-encoded media, resource checks and tuple fences. A concurrent writer commits
+between its final representative probe and subsequent facts. The regression observes real PostgreSQL
+snapshot/backend identity and checkout lifetime, and retains hidden/missing null outcomes. It is deferred
+native proof, not an executed pass in the implementation typing stage.
+
+Global and community Context subject reads return `summary` beside `subject`. Their related subject fills retain `labels` and any redirect and add `type`, `types` and `cover`. Property definitions retain their label-only shape. Cover summaries contain media ids and authored display metadata; variant URLs are built by clients through the media route.
+
+### Qualified relation display
+
+`/links` may include `assertion` and `related` for a qualified statement; `/relations` keeps its native
+`statement` and adds `related`. These are current selected source statements, resolved in the selected Context
+from compact facts or the current adoption, with their own stored release, revision, rank and Snak datatypes.
+Projection rows are locators and ordering keys, never qualifier bodies. Related item values use the shared current
+summary authorization and tuple fences, in the same bounded batch as row labels. Concealed item qualifiers and
+references are omitted. Source tuple takedowns omit the statement. Related display fills retain the 256 raw-ID
+bound: main rows take priority and qualifiers without an admitted display fill are omitted. A public page retains
+its aggregate only when an unfiltered first page exhausts and currently discloses the entire counted set. Internal
+readers retain skeleton counters. Native cursors still advance by the last examined row.
+
+Credits keep their main role property and credited subject together with that statement's `wdt:P1932`,
+`schema:position` (the release's P1545 mapping), `wdt:P3831` and `wdt:P453` qualifiers. Appearance rows keep
+`schema:character` (P674) and their own qualifiers. No label or role is inferred from another statement.
+
+## Native Context discovery
+
+`createContextDirectory({pool,access,tokens,clock?})` exports `list` and `lifecycle`, together with
+`ContextDirectoryEntrySchema` and the corresponding exact types from `semantic/index.ts`.
+`GET /v1/contexts` takes an optional case-insensitive NFC label/technical-ID prefix `query`, `limit` from 1 to 100
+(default 20), an opaque `cursor`, and `deleted` (default false). It returns `{contexts,next}`. `deleted=true`
+selects retained deleted Contexts; the default selects active readable Contexts. Each entry contains exactly
+`id`, native `kind`, native `labels`, `state`, `deletedAt` and `purgeAfter`. Active timestamps are null.
+`GET /v1/contexts/{id}/lifecycle` returns `{context:entry}` with the same current authorization and metadata.
+Missing, purged, expired and denied identities share the existing concealed 404. No missing Context falls back to Global.
+
+A deleted entry additionally requires the current direct native owner and the current `context:restore` formula,
+including Auth/scopes, denials and the exclusive original thirty-day deadline. A hold never extends that deadline.
+The metadata is a retained native read, not an owner flag or another grant. Global is its actual seeded row and
+never has delete/restore availability. The existing viewerActions catalogue uses the same reader and native
+state constraints for read, create on Global, delete on active community Contexts and restore on retained tombstones.
+Realm/Space availability does not change independent Context discovery, authority or lifecycle.
+
+The Source-owned candidate index stores bounded normalized label prefixes and technical keys, not authorization.
+Only the backend reads native Context rows and batches the current Access decisions by home. It releases Source
+before current owner Account anchors and revalidates native state/generation/owner evidence afterwards, including
+with pool max=1. Confidential list cursors bind actor/client/scopes/authentication epoch/request principal, query,
+deleted selection, page size and directory home epoch; rejected private keys never appear in plaintext.
+A request examines at most 100 raw candidate rows, including rejected matches and lookahead. Short/empty progress
+pages retain an opaque continuation. Native incomplete/moved/unknown coverage returns 503 `semantic_not_ready`,
+never a fabricated empty EOF. The existing maintenance workflow and outbox effect populate retained Contexts,
+including Global, and bridge creation, native label/owner changes, delete, restore and purge through retained
+route/key frontiers. Each step selects one Source Context; the request never enumerates all homes or history.
+Native epoch/write-state changes invalidate that home's coverage synchronously. Empty installed homes are certified
+at migration's writer cut. The existing worker starts a bounded initial population before relays start.
+
+Every indexed language/key row inherits actual Source erasure roles, including former owners and acting humans,
+through the existing locator/capture producer. Unknown or oversized Source role coverage remains preparing.
+The registered physical stores have exact-key minimization and native removal/receiving disposition proof;
+late fenced copies are rejected. Technical progress has no actor or private payload. This index establishes
+neither Accounts/history completeness nor participant ACK/custody completion.
+Erasure clears the exact copied prefix and retains only its technical repair coordinate. Reads stay preparing
+until bounded maintenance can rebuild from the current native Context. Former erased roles can be omitted only
+after the real Source minimizer's exact current-row disposition proves retained nonpersonal metadata.
+
+## Current list presentation facts
+
+`readListPresentationFacts({pool,access,actor,routeKey,deadline}, originals, {languages}?)`, exported
+from `semantic/list-presentation.ts` and `semantic/index.ts`, returns an original-keyed Map of
+`{id, facts: Record<string, Fact[]>} | null`. `Fact` is the existing `search/hits.ts` union. The server
+supplies the trusted 32-byte route key. More than 100 **raw** originals, including duplicates, is
+rejected before I/O. Invalid/unknown originals and independently undisclosed originals or terminals
+produce null. A visible subject with complete evidence and no selected representable values produces
+`facts: {}`. Missing or changed native identity/source proof produces `semantic_not_ready` (503);
+the existing deadline classification remains `deadline_exceeded` at HTTP boundaries.
+
+The active immutable release is resolved once, with its current activation rechecked before return.
+Only the actual terminal Type's effective `listPresentation.keyFacts` is used: at most four properties,
+three distinct actual values per property, and no vertical fallback for old releases without hints.
+`effectiveGlobalSlotFacts` supplies current compact or adopted Global authority under the public
+statement audience. The existing Search statement and Fact formatters supply item, time, quantity
+and patterned-code values. Unsafe integer or lossy decimal amounts are omitted, without rounding.
+Items independently resolve and authorize both original and terminal; unavailable items supply no
+ID or label and are not replaced by later values. Only actual current label facts are filled.
+
+Relation prefixes use the existing ordered outbound index solely as bounded locators. Their native
+checkpoint must cover the source revision's own write position, and each locator must match the
+source revision/security and current selected slot. Unrelated later partition positions do not make
+a finite unaffected source wait. Each exact original/terminal, selection, provenance, consent,
+account and source-fence observation is freshly collected again before disclosure. Source tuple
+fences retain the native security revision, including an absent fence observation. There is no
+reusable authorization verdict, cached native time, whole-subject hydration or all-home sweep.
+Each source, control, account, tuple and related home is released before preparing another home.
+
+Commerce still owns attaching these facts **beside** `subject` on FULL members and checking the
+returned terminal against its selected member. This helper adds no summary fields or HTTP endpoint.
+Web consumes the existing exact Fact shape. Unpublished identity changes remain honest readiness
+failures until the identity owner's native mapping/publication work completes; no fixture seeds a
+successful mapping or participant receipt.
+
+## Retained Kind Type dependencies
+
+Collection presentation no longer derives a dominant Type. An unset choice uses each member's Type hints immediately;
+an explicit owner choice supplies Collection presentation. Neither journey waits for `kind-type-evidence.ts`,
+per-viewer audience evidence, preparation or kind currentness. Explicit Type/catalogue publication and real Semantic
+subject disclosure retain their existing contracts.
+
+The native dependency helpers and retained immutable bodies remain available to shared callers and cleanup. Their
+existing original/terminal disclosure checks, same-home transaction binding and writer fences still apply when
+invoked; a retained body is not permission or a restored principal. The former automatic Kind positive-evidence
+journey is superseded and is not a Collection presentation release prerequisite.
+
+## Deletion and retention
+
+The [deletion contract](deletion-contract.md) audits first-public-scope records, native evidence, required routes,
+retention adapter and independent implementation briefs against [the deletion policy](../../../../docs/deletion.md).
+Communal subjects and immutable definition releases are not automatically private records owned by their creator.
+Contribution attribution and current community Context resource ownership must establish owner deletion authority.
+
+Implemented behavior includes community Context owner deletion and restoration below, native subject/candidate
+hide, takedown and moderation restore, terminal consent-statement retraction, source-fence disclosure, immediate
+derived-account-agent name clearing, and the indexed local account erasure runtime in
+[account-erasure-contract.md](account-erasure-contract.md). Agent synchronization alone remains a field clear;
+the default local continuation minimizes actual located source records and preserves pending shared custody. Native takedown retains
+data, but its free-text scope does not implement least-field/passage/image withholding.
+
+Native account-authored birth writes initialize one `semantic.revision` resource per original write revision with
+the `semantic.revision.author` role (`statement:delete` and `statement:restore`). Compact creation declares its
+subject and revision-1 resources; proposals and ordinary term corrections declare only their exact next revision. Slot expansion keeps the
+original assertion's revision anchor. Imported and agent/source writes receive no synthetic author grant, and
+historic rows are not backfilled. The Global formula remains the create/propose authority; authored document
+custody records the declared revision UUID while imported summary and cover custody retains the actual Global
+anchor. `MAX_CREATION_RESOURCES` remains 16.
+
+The exact candidate lifecycle GET uses the command's original contribution locator in its Subject partition,
+not candidate cursor traversal. It returns only identity, visible lifecycle, independently bounded Global selected
+reading, viewer kind and current mounted operations. Selection reads only the exact compact assertion or the
+bounded current Global adoption metadata; tombstones are unselected without loading any statement payload. Subject authorization, audience disclosure, current author
+account and Source fences apply before disclosure and again at final validation. A concealed or unknown candidate
+has the same not-found outcome; tombstones fetch no statement payload or revision history. Revision-resource
+Access and original write-basis ownership constrain allowed withdrawal/restoration; restoration also requires
+current Global proposal authority and the native strict retention deadline. Commands still reauthorize every replay.
+Action dependency failure is explicit unavailable metadata and does not become a confirmed denial.
+The read uses constant exact locator/lifecycle/disclosure/authority lookups independent of candidate order and
+history. Selection adds exact slot/head probes and at most the existing 32-entry adoption metadata; it does
+not fetch rejected display candidates. Source provenance is bounded to 16 KiB before hydration and fails closed
+when withheld; the original revision author witness also applies before compact assertion expansion.
+
+The contribution lifecycle authority is the existing retention-owned `semantic.record_lifecycle`, keyed by
+`(route, subject, candidate)`. Both current readers and ordinary commands use that same row; `purging` is
+withheld and projects as deleted through the unchanged lifecycle evidence shape. The obsolete
+`contribution_lifecycle` schema definition is retained without a runtime reader or writer; no historic data is
+backfilled or silently reinterpreted. Delete retains the payload through
+its original strict 720-hour restore window, makes normal current slot, disclosure, summary, relation and Source
+reads withhold it, and allows candidate pages to return only `{id, deleted:true}` after existing audience privacy
+and source-fence checks. Restore retains the first deletion window and does not change adoption, moderation,
+subject visibility or source custody. Both routes authorize the original write-revision resource at fresh native T;
+restore also prepares current Global `statement:propose` on its own released connection for every attempt and replay.
+The native publication producer records the affected public selected slot before and after the mutation at the
+original command T. The subject security revision and existing bounded link-delta producer invalidate current
+Source/graph evidence; Search recognizes the registered candidate lifecycle events as reindexing hints.
+Repeated deletion uses the native no-effect result without a duplicate domain event or a new deadline.
+
+`revisionResource` and `initializeRevisionAuthorship` retain their selected exported signatures. Initialization
+validates the actual same-command revision and principal, then calls the existing role initializer and native
+Semantic producer-role/Source-commit hooks. It does not attest shared history completeness. Proposal preflight
+reads the indexed latest revision and declares exactly its successor. A stale body restarts the whole manifest
+and authorization within the original deadline. Trusted legacy callback writes retain their ungranted behavior.
+
+Writer audit: `subject.ts:writeSubject` and `candidates.ts:writeProposal` initialize native account-authored
+creation/proposal revisions when their manifest declares the anchor. Physical slot expansion retains the original
+revision; accept/reject/adopt revisions are editorial decisions. Source/import/agent bulk writers get no synthetic
+human grant. `subject.ts:updateSubjectIdentity` remains a separate identity-revision writer without an author grant;
+its identity facts are communal and require the identity owner contract before any grant coverage is expanded.
+`terms.ts:correctTerms` initializes the actual new `terms` revision after insertion in its native transaction.
+Its current terms, field/language explanation, receipt and canonical publication commit together. There is no backfill.
+
+| Operation                       | Touches                                                                                                                                                                                                                                     | Bound                                                                                                                                                                                                                                                                                                                                                                                                    | Growth check                                                                                                                                                                                                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Revision author initialization  | One exact new revision anchor and, for native subject birth only, its exact subject resource; existing creation manifest and role initializer.                                                                                              | One resource and grant per account-authored write revision; compact facts do not multiply grants and 512 facts retain the existing 16-entry manifest cap.                                                                                                                                                                                                                                                | `test/semantic/contribution-authorship.test.ts` and `test/semantic/contribution-lifecycle.test.ts` inspect native creation/grant rows; 64/512/4096 full growth evidence remains post-integration.                                             |
+| Owned contribution availability | One indexed original-candidate locator, one retention lifecycle PK mutation and security revision update, current author Access and (restore only) fresh Global proposal Access; before/after native slot/publication and link-delta reads. | Each selected/expanded slot retains its existing 32-entry cap. Relation maintenance uses the existing exact affected-slot Context registry (C entries) and at most 32 selected facts per Context, O((1 + C) × 32), independent of unrelated subject history/population. No new Context cap, history walk, subject-degree scan or live aggregate recount. Payload purge and account cleanup are separate. | `test/semantic/contribution-authorship.test.ts` adds collision, rollback, replay, window, Content and single-connection cases. Existing `contribution-lifecycle.test.ts` and all 64/512/4096 growth acceptance remain post-integration proof. |
+
+Required remaining work: run the original native acceptance and regenerate the API artifacts through the official
+integration producer. The native shared-history source-set producer is still unavailable at
+`history/record-source-set-native.ts:nativeRecordSourceSetProducer`; local producer custody does not replace that
+producer or prove shared-copy coverage. Separate platform early/legal purge, legal holds, automatic minimal personal/private payload purge and
+account-erasure de-identification remain outside this slice. Account confirmation
+is final in first scope: private cleanup starts at the same native T by bounded durable work, without a 30-day
+account grace. The 30-day restore window applies to individually deleted records. Only platform legal-order
+purge can remove retained takedown fields, subject to legal holds. Content owns source fences. Account cleanup uses the bounded local runtime described in the account-erasure contract; individual record
+retention and legal-order purge remain separate work. Its pages cap raw keys before filtering, commit native
+checkpoints with owning mutations, and retain only eligible communal/progress skeletons. Takedown alone never
+creates its deadline. Workflow-history retention does not establish semantic erasure. Public aggregate disclosure follows
+[aggregate-disclosure.md](aggregate-disclosure.md) and its separately owned backend in `links.ts`, `subject.ts` and
+`graph.ts`: omit an unproved number while retaining internal counters. The deletion audit asserts empty inverse
+links and absent count after source revocation with consumers paused.
+
+The shared state and attribution boundary is the read-only `readSemanticLifecycle(client,{target,accountId,nativeT})`
+state and owner-evidence reader defined in the contract. Native author/write-basis and current Context owner
+grants establish evidence, while Access remains authoritative for actions; provenance grants no ownership or role.
+Its fresh-state/locator acceptance runs independently of missing lifecycle HTTP routes.
+
+| Surface                       | Actual pending work and independent acceptance                                                                                                                                                                                                                                                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| State and owner evidence      | Native reader and existing read-only Access role-evidence port; `lifecycle-state.test.ts` and `growth-lifecycle-state.test.ts` require no DELETE/retention routes.                                                                                                                                                                                            |
+| Owned lifecycle and retention | Community Context DELETE/restore and keyed contribution availability are implemented; contribution mutation uses the real publication producer, while native proof, purge/hold, scoped withholding and account cleanup remain separate work. `contribution-lifecycle.test.ts` and `growth-contribution-lifecycle.test.ts` remain full post-integration proof. |
+| Public aggregates             | Omission is decided by the aggregate contract; the actual backend still needs to suppress the stored inverse count on this base; the paused-consumer audit preserves returned-row visibility and internal stored counters.                                                                                                                                    |
+
+### Native Context historical-party enrollment
+
+`enrollContextRoleProvenance(tx,{route,occurrence})` in `context-role-provenance.ts` is the Source sink for
+the exact readonly Access `ContextRoleProvenance`. Its SQL ABI is
+`semantic.enroll_context_role_provenance(integer,bigint,uuid,uuid,uuid,text,text,text,uuid,uuid)`, with arguments
+`route, occurrence, resourceId, originalCreator, accountId, grantRole, valid, side, grantTransaction,
+sourceTransaction`, returning `(state text, context_key bigint)`. Both bigint identities stay canonical decimal
+strings in TypeScript. Access validates and locks its genuine occurrence and binds its original deferred trigger
+and pending redrive to this entrypoint; the sink neither reads nor mutates Access grants or provenance.
+
+The sink locks the exact Context erasure key in its active home and enrolls the original creator as `author`
+and the actual new or former owner as `owner` in the existing locator inventory. Creator-only occurrences use
+`author`; a former occurrence needs no current grant. Unknown roles, missing/purged keys and unavailable native
+command provenance remain pending. Only the actual Global Context row's native no-personal-payload policy yields
+`not-applicable`. A deferred constraint binds every new occurrence receipt to the real same-home write basis,
+epoch and position; a setting or supplied transaction UUID cannot establish enrollment.
+
+Occurrence receipts retain native technical coordinates, side and separate grant/source/receiving transactions,
+without another party payload. Their Context foreign key joins the existing erasure inventory and cascades on
+physical Context removal. An identical occurrence does not dirty its locator again. A distinct late occurrence
+reopens that exact Source seal/home and records the current native delivery generation. The existing durable
+locator relay registers the account-home late item, invalidates both Source page cursors and restarts local work
+under the account fence. Pending redrive must emit the existing locator-scheduled event for its actual enrollment
+position. The TypeScript port uses the current command with no additional checkout; another Context home stays
+pending and requires a real durable receiver. Enrollment changes no Context payload, lifecycle or ownership and
+establishes no history receiving, account, family or participant completion.
+
+Focused acceptance is `test/semantic/context-role-provenance.test.ts`; native execution follows integration.
+
+### Community Context lifecycle
+
+`DELETE /v1/contexts/:id` and `POST /v1/contexts/:id:restore` use the native command executor, request digest,
+receipt and Session component. DELETE accepts no body or a closed empty object; restore requires a closed empty
+object. Neither route has an If-Match contract. Successful responses contain only
+`{context:{id,state:'deleted'|'active'}}`. A replay returns the original receipt after fresh authorization;
+a fresh request already in the requested state is a genuine noEffect and emits no event.
+
+The existing `semantic.context.owner` role includes `context:delete` and `context:restore` alongside
+`context:accept`, `context:adopt` and `access:grant`. The moderator role remains acceptance-only. Both lifecycle
+actions require real Access authorization on the stable Context anchor and the exact direct current owner grant,
+read through the shared lifecycle reader on the same prepared client at native command T. Creation history and
+individual action grants do not establish ownership. Transferred owners can act; revoked owners cannot execute
+or replay receipts. Global has no personal lifecycle and both actions return 403.
+
+The existing Context row stores `active`, `deleted` or the reserved terminal `purged` state, a monotonic
+`security_revision`, and an independent `held` flag. Each actual active-to-deleted transition installs its deletion
+time and strict 720-hour deadline at command T. Retries and fresh deleted no-ops preserve that original window.
+Restore succeeds only before the deadline; exactly thirty days returns 409. Restore retains the completed window
+for evidence; a later actual deletion starts a new window. SQL compares exact native timestamptz values without
+rounding through JavaScript dates. The internal evidence renders canonical UTC timestamps with microsecond precision.
+
+Deletion immediately excludes the Context from normal point reads and public eligibility, editorial anchors,
+settings/default selection, subject overlays, candidates, relations, links and current extensions. Extension caches
+are consulted only after a current Context point check; a direct Context definition read checks current identity
+even for an explicit read grant. Retained source Context extension heads remain trusted immutable term-birth
+evidence for Global adoption validation; that evidence grants no current Context read or write eligibility. Extension publication/activation checks the active native anchor before receipt
+lookup. Immutable release meanings and adopted Global definitions remain intact for retained historical facts;
+private extension/composed digests do not become public release routes. Restore keeps the same ID, labels, settings,
+defaults, current extension head and adoption history, and respects current subject visibility and candidate moderation.
+
+Only real transitions emit the registered `com.rezics.semantic.record.deleted.v1` or `.restored.v1` identity event,
+with Context kind, ID and monotonic version. Receipts, basis and outbox commit atomically; no subject revision or
+counter is rewound. Ordinary DELETE retains native rows and payload. Ordinary retention below removes local personal/private fragments at the original expiry; it creates no
+account erasure acknowledgement, legal-hold service or destructive takedown deadline.
+
+The bounded lifecycle derivation and evidence qualifications are recorded in the Context discovery,
+lifecycle and current disclosure row of the [Cost table](#cost).
+
+Sourced bulk creation, proposals and retractions all declare their actual response/event history scopes, including
+no-effect resolution. Their permanent command codecs preserve native record-source-set custody; batch dispatch
+does not substitute for the individual command's history declaration.
+
+### Ordinary record retention
+
+`semanticRetention(pool,{clock}).step({partition,limit,key})` is the native ordinary-record adapter.
+A page accepts a limit through 100 and selects at most `min(limit, 4)` raw source keys (the scheduler uses two), then removes at most four physical
+payload fragments. Its rotating partition cursor revisits held and future-due keys. The original native
+720-hour window survives restart, and restoration remains exclusive at that deadline. Payload mutation,
+fragment progress and the exact page result share a native transaction. Reusing a page key with another
+limit is refused. Native Content and shared-history closure are required before a key counts as purged.
+
+`record-purge-authority.ts` owns the unchanged contribution `RecordPurgeReference`, the closed
+`NativeRecordPurgeReference` union with Context/Zone keys, `RecordPurgeSource`, and the original opaque
+`RecordPurgeAuthority` prepare/read/lock exports. Native resource deletion records its actual generation,
+transaction and original 720-hour deadline with deferred same-command commit provenance. Issuance and effect
+locks verify current native versions, home epoch, hold and restore disposition. Zone withholding prevents
+ordinary purge. No resource becomes a candidate, revision or authored document.
+
+Context creation/lifecycle/extension and Zone commands declare actual source roots before history serialization.
+Mounted/referenced resources acquire no ownership association. Source enrollment records original command
+positions without a deletion generation at birth; historical unconverted writers keep inventory pending.
+`record-purge-custody.ts` implements durable source holds, committed released-home receiving acceptance,
+receiver locks and native callback completion, and bounded source inventory cuts. Its opaque handles are lookup
+hints; native retained rows provide the proof. Source eligibility writers serialize against outstanding holds,
+and release requires exact committed target completion. See the [deletion contract](deletion-contract.md#ordinary-owner-issued-purge-authority).
+
+Resource retention now uses the same issuer and Accounts history prepare/minimize port as contributions,
+releasing checkouts between homes. Content's authored-field hook remains contribution-only. Accounts owns
+native resource history storage/mapping and its copy minimizers; unsupported integration remains unavailable,
+with no shared completion from local payload cleanup or a source inventory cut. This implementation stage
+runs Kernel typing only; original native physical absence, custody, growth and rollback acceptance remains later.
+
+- Touches: only selected native source identities, their exact indexed fragments, owning source locks,
+  partition cursor and page result. Shared physical minimizers retain their existing immutable field guards.
+- Bound: source-key limits apply before eligibility/hold filtering; four payload rows per page, fixed store
+  prefixes and the existing command deadline. Discovery seeks by partition/key, and fragment lookup seeks
+  by source prefix/physical key. No unrelated revision, account, payload or outbox scan.
+- Growth check: the original `growth-deletion.test.ts` retains its 64/512/4096 native proof after integration.
+  Focused source/body, held revisit, rollback and restart cases are in `record-retention.test.ts` and
+  `test/zones/record-retention.test.ts`. These outcomes are unexecuted in the current typecheck-only stage.
+
+## Native command record sources
+
+`record-source-set.ts` issues one opaque set on the original native command transaction, before any
+Content, work or history serializer. The native writers append exact compact/candidate snapshots,
+old and current selections, actual term field/language revisions, and document identities returned
+by Content. Reading a copied document uses Content's native original-source helper; missing metadata
+is unavailable, never source absence. Terms use their real field/language keys, without candidate IDs.
+
+The original 512 submitted-fact, current-fact, term, byte and snak bounds remain binding. A set has at
+most 512 actual source units. Old/current versions share a unit only when
+that unit is the same actual contribution/document reference or term field/language. Distinct
+document references count separately; the existing snak bounds do not raise the source-member cap. Append rejects a genuinely larger
+set. There is no repeated declaration, truncated vector or raised sixteen-reference history limit.
+Native membership is relational and indexed in both set and member directions. Seal validates exact
+native revisions and computes the canonical digest in PostgreSQL; the executor callback and deferred
+commit constraint reject an unsealed, mismatched or incomplete native writer attempt. Committed heads
+and members are immutable. Rollback exposes no set.
+
+Accounts owns the mutually exclusive `declareCommandRecordSourceSet(tx,set)` declaration and its
+association with each real generated HistoryLocator. The Source producer provides the transaction-local
+building locator before seal; Accounts must defer sealed digest verification until the native command
+commits. The producer calls the actual Accounts declaration port directly. Source owns no history SQL
+or serializer initializer. Context and Zone keep the existing small port.
+
+Indexed member lookup pages only known native sets. Its end frontier says nothing about prior producer
+coverage, permissions, purge eligibility, historical completeness or a final acknowledgement. Reads use
+one live native home and release it before any foreign history read. Set metadata enters the existing
+Semantic all-role erasure inventory and minimizer; only the immutable technical keys needed to resolve
+ownership survive, with no account attribution or copied content body in the native set stores.
 
 ## Cost
 
-These bounds follow `subject.ts`, `page.ts`, `item.ts`, `definitions.ts`, `bulk.ts`, `fences.ts`, their SQL, `http/subjects.ts`, `http/bulk.ts`, `semantic/http/definitions.ts`, and the subject/definition migrations and schema dumps; they are derivations, not measurements.
-Let N be total subjects, P subjects in the anchor partition, F stored fact rows of one subject, at most 512, d page depth, s page size, i batch ids, at most 256, D definition revisions (bounding both releases and activations), and M activated vertical manifests together with the bundled catalogue. U×t is one subject's editorial history.
+These bounds follow `subject.ts`, `links.ts`, `page.ts`, `item.ts`, `definitions.ts`, `bulk.ts`, `fences.ts`, their SQL, `http/subjects.ts`, `http/bulk.ts`, `semantic/http/definitions.ts`, and the subject/definition migrations and schema dumps; they are derivations, not measurements.
+Let N be total subjects, P subjects in the anchor partition, F current descriptive fact rows of one subject, at most 512, d page depth, s page size, i batch ids, at most 256, D definition revisions (bounding both releases and activations), and M activated vertical manifests together with the bundled catalogue. U×t is one subject's editorial history.
 For several subjects, F denotes their maximum; logarithms mean `log(2 + size)`.
 Rows means rows examined, including filtered rows, not just returned rows; blocks means shared blocks accessed, including index, heap, and payload blocks, rather than cache misses or elapsed time.
 A B-tree point probe examines O(1) rows and O(log size) blocks; range retrieval adds its visited rows and blocks, and inserts add logarithmic index work per row.
@@ -37,145 +1428,1079 @@ The table gives the supported indexed access shape, not a promise that PostgreSQ
 Fact indexes have size up to N times F, so write `L = log(N(1 + F))`; with bounded F this is O(log N).
 Command history can grow without new subjects: let H count receipts/outbox/write-basis rows and `C = log(2 + H)`; it cannot honestly be bounded by N alone.
 For variable-size subject payloads add B shared blocks, where B is the total payload blocks read or written (including the receipt); growth checks hold B fixed. Structural validation caps decimal strings at 127 characters and time years at 16 digits, so every value has a fixed maximum size. Bounds assume fixed payload sizes; definition validation enforces a 4 MiB release limit before publishing, with 1,024 types, 4,096 properties and 64 properties per type, and validates cold reads too. A cold read is linear in the release's canonical bytes and happens once per digest per process. A warm cache, keyed by digest, serves later requests from the validated body. Those requests touch the subject's type and the properties on its facts; they do not iterate the release. Their rows, blocks and statements are constant in M.
-`writeFacts` refuses more than 512 facts for one subject before SQL. Creation and slot expansion both use that path. Each slot's `log_seq` stops at 33, and only an expand row may use 33.
+Each write command refuses more than 512 submitted facts before SQL. The subject's `current_facts` cap counts descriptive facts only. Each slot's `log_seq` stops at 33, and only an expand row may use 33. Term corrections allocate fresh immutable
+slots and use indexed current heads, so current reads do not fold old term history. Head pointers and revision
+field/language support locators contain no text; term text retains the existing fact producer/minimizer plumbing.
 `pageSubjects` enforces 1 <= s <= 100 at read entry (default 25) and fetches s + 1 subjects by primary key. A batched read refuses more than 256 ids before SQL.
 For batches, g is the number of nonempty partitions, at most min(i, 4096), and P is the largest touched partition; for authorization, G is resource permission rows, U membership-history rows examined, q candidate organizations, and A total Access rows.
 A sourced batch has at most 100 commands. T is the number of distinct source tuples among the candidates a read would show, bounded by the statements on that page. Source-fence reads use content's `readFences`: one statement per tuple partition, at most 100 tuples, so a larger page takes `ceil(T / 100)` statements in that partition.
 `subject_pkey(route, subject_id)` and `fact_pkey(route, subject_id, slot_id, log_seq)` locate a subject and one slot. `fact_label (route, subject_id, language) WHERE kind = 'label' AND operation = 'assert'` reaches label rows without the subject's other facts.
-Counts below exclude the separately listed authorization cost unless a subsection includes it. A page read uses BEGIN, SET, partition SELECT, one page SELECT, COMMIT (five statements). A subject read adds one statement per slot view and one batched read per related partition.
+Counts below exclude the separately listed authorization cost unless a subsection includes it. A page read uses BEGIN, SET timeout, partition SELECT, one page SELECT, COMMIT (five statements). Link and relation pages use an unforced indexed projection range; inverse pages also probe pending merge work for at most `4 × limit + 1` holder ids, then reread the page after that work finishes. A subject read checks the current partition's projection checkpoint before its snapshot, then uses unforced indexed reads for relation previews and counts. It adds one statement per descriptive slot view, one 13-row outbound range and one counter probe per relation property, 12 relation slot views per property, and one requested-id batch per partition plus one redirect-target batch per partition when needed. The checkpoint wait includes a pending merge-member probe.
 For commands, K denotes seven framework statements per successful fresh attempt: BEGIN, two SETs, time SELECT, another SET, fence SQL, COMMIT; add one receipt SELECT when configured and the body statements below.
 The fence statement updates one `core.partition` row through `partition_pkey`, inserts one `core.outbox` row per event through `outbox_pkey`, and optionally one `core.receipt` and one `editorial.write_basis` row through `receipt_pkey`, `write_basis_pkey` and `write_basis_partition_no_position_key`; their partition foreign keys probe `partition_pkey`.
-Contention retries stop at three attempts; fence waits and retries use the deadline (default two seconds), so the stated counts are per attempt, with extra constant-size partition polls, rather than a claim about machine speed.
+Counts are per attempt. `runCommand` and the operational executor retry contention
+with fresh per-attempt authorization until the original deadline, using jittered
+backoff of up to 100 ms with no attempt-count cap. Fence waits and extra constant-size
+partition polls remain charged. The default deadline and executor behavior do not
+change.
+
+| Operation                                           | Touches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Bound                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Growth check                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Context discovery, lifecycle and current disclosure | Source-owned prefix/raw-key index; native Context/owner-grant batches per candidate home, released owner Account batches, current Access and final native revalidation; native retained preparation and exact erasure keys. Context PK/active point at native T; ordinary Access, command, receipt, basis and outbox; one Context update per real transition. Community reads also probe the exact direct current resource-owner grant and its Access account before cached extension/overlay use. Transferred Contexts follow the surviving owner; Global adds no owner-account statement. | At most 100 raw request candidates including rejects/lookahead, limit 1–100; indexed seeks and bounded native anchors under the original deadline and 64 KiB response bound. One Source Context per preparation step, fixed sixteen routes per home; no request home/history sweep. Existing stricter Access, lifecycle, Source and erasure evidence limits remain binding. Constant selected rows and statements, including one role-prefixed owner-grant probe and one owner-account point; logarithmic indexed blocks in Context population and Subject history, plus separately charged Access/command work under the native evidence ceilings. Delete and restore share this shape. No dependent-Subject enumeration, history scan, cross-home SQL or cached permission.                                             | Focused `context-directory.test.ts` current/private/deleted/revoked/empty/progress/restore outcomes are retained for later Goal acceptance; local typechecking is not native growth or runtime proof. `test/semantic/growth-context-lifecycle.test.ts` retains history/population scales 64/512/4096 and native pool work across delete, restore, Context, definition and overlay reads. Raw all-scale evidence was not independently recovered; this row does not certify physical all-Cost, retention/account cleanup or main closure. `context-lifecycle.test.ts` preserves settings/extensions/current decisions; `context-lifecycle-command.test.ts` covers receipt/noEffect, rollback, denial, state and time. |
+| Subject summaries                                   | At most 256 raw input IDs, deduplicated; independently partition-bound full-key representative (12 slots) and summary probes, bounded selected edition probes, native current resource authorization, selected Content cover references, and exact source tuples in chunks of 100 per home. One batched authoritative partition-metadata read binds all addressed homes on the same final physical-pool RR client.                                                                                                                                                                          | For K input and bounded addressed keys: O(K log N) indexed point/range work plus existing label, slot, expansion and Access budgets. Final data statements are `2g_subject + 2g_edition + g_media + B + 1`, where B sums `ceil(distinct tuples / 100)` over tuple homes; BEGIN/SET/COMMIT, active-release lookup and native authorization are additional. At most two released planning attempts add their actual original-group representative/summary/authorization/anchor work and rollback; preparation is outside checkout. No per-partition transaction, nested checkout, pool.query escape, degree/history scan or cross-partition row join. The prior tuple allowance `Q_existing + 2B` remains an upper bound on the already-prepared covered fixtures (B=1); batch metadata replaces the separate tuple anchor. | Existing subject-summary page/edition growth, original-language, privacy and shared-cover native controls remain later obligations. One authored `test/semantic/summary-snapshot.test.ts` exercises the actual mounted mixed-partition batch; only Kernel typing is run in this source slice. No new growth campaign or claim of constant statements per physical database.                                                                                                                                                                                                                                                                                                                                          |
+
+### Subject identity reference
+
+- Touches: one `core.partition` primary-key probe, one route-leading `semantic.subject` primary-key probe filtered by native visibility, and one descending `semantic.redirect` primary-key range limited to the latest row. The mandatory caller's Access check runs on that same snapshot and retains its own evidence cost. No projection, checkpoint, pending-member, definition, fact, relation, label, media or summary reads.
+- Bound: two data statements and three transaction-control statements; at most three examined relation rows, O(log N) blocks, and constant result bytes independent of type/label size, unrelated subjects, redirect/editorial history and relation degree. Invalid ids perform no SQL; missing and nonvisible identities skip Access, and denied sources disclose neither identity nor redirect.
+- Growth check: `test/semantic/growth-subject-reference.test.ts`: `reference resolution stays bounded as unrelated history and relation degree grow`.
+
+### Identity epoch publication and canonical access
+
+- Touches: actual source/current-route/control points, coherent cap collection, ordered local claims/attempt locks,
+  fixed native mapping/Search/Library custody, complete structural scope registration and committed reader summaries.
+- Bound: [the owning Cost derivation](identity-epoch-contract.md#cost) names A/G/M/E/R/L/H, actual K+body and distinct
+  OP costs, local Gq+4P/Aq+4P·4096 retention, page-fit/in-unit continuation and examined rows/blocks/statements.
+  Same-backend standalone mapping is one RR/eight statements; cross-backend source<=10/control<=6,total16/pending11.
+  Filtered pages share batched observations/two probes/candidate points within existing <=12/backend or8+4R composed
+  budgets and one connection. Raw100 applies to durable steps only. No global observation or per-ID loop is hidden.
+- Growth check: REQUIRED, UNDELIVERED `test/semantic/growth-identity-publication.test.ts` named cases in the owning Cost
+  section,
+  using checkGrowth series/leading SQL tags/native EXPLAIN, three-scale group/support and independent control/history/
+  live-obligation axes. Reclaim/wakeup is in prepare and its own measured case. Native table counts and relation/index
+  byte deltas cover every retained/crash/replay/abandon state; continuous disjoint jobs cannot stall finite owner pages.
+  Complete producer/body/c_MAX evidence for all nine items remains required for full publication and Cost closure.
 
 ### Command and receipt
 
 - Touches: `runCommand` reads time without a relation and 0/1 receipt by its full PK; fresh fence writes partition 1, outbox 1 (2 for bootstrap), basis 0/1, receipt 0/1 as above. Replay authorizes before receipt, returns its saved response, and skips body/fence. Grow total N and H; fix F, event count and authorization evidence.
 - Bound: Fresh rows O(1), blocks O(C), statements K + 1 + body for receipted commands; replay rows O(1), blocks O(C), six framework statements, no writes.
-- Growth check: `test/semantic/growth-subjects.test.ts`: `Command and receipt stays within its bound as N grows`
+- Growth check: `test/semantic/growth-subjects.test.ts`: `Command and receipt stays within its bound as N grows`, scales `[1, 4, 16]`.
 
 ### Subject creation
 
 - Touches: `createSubject`: insert 1 `semantic.subject` via `subject_pkey`; one `insert-facts.sql` inserts F `semantic.fact` rows via `fact_pkey` and F subject FK probes; receipt stores the resolved item, fence emits 1 event. Grow total N; fix F, partition and command history size.
 - Bound: Rows O(1 + F), blocks O((1 + F)L + C), two body statements, ten including receipted command; F <= 512 in `writeFacts` before any insert.
-- Growth check: `test/semantic/growth-subjects.test.ts`: `Subject creation stays within its bound as N grows`
+- Growth check: `test/semantic/growth-subjects.test.ts`: `Subject creation stays within its bound as N grows`, scales `[1, 4, 16]`.
+
+### Account agents
+
+- Touches: `ensureAccountAgent` reads the node by its derived id and writes at most the subject, its label and the back link. Label synchronization deletes the node's label rows and installs zero or one replacement, without reading or changing other facts. It records a name-free identity revision and subject event. Migration removes prior label history once. Verification is one merge. Inbound link moves append one reversal row per moved link row. The write-rule probe adds the back-link lookup to the batched target-type read. Grow total subjects and links; fix the account, label count, merge page and authorization evidence.
+- Bound: Ensure and label erasure touch O(1) rows and statements, independent of previous name changes. Erasure touches only that node's label rows, plus constant revision, subject and command bookkeeping. The write-rule probe adds no statement per target. Both the combined type/ownership read and the account-agent batch read join by the full `(route, subject_id)` primary key. The combined read checks the requested route against the partition and carries that guard to the link through route equality; it supplies no independent back-link partition range. A small link table can be read once for the whole batch rather than once per absent key. Growing populations use full-key probes, including absent links. The account-agent batch read retains its correlated lookup boundary. Native widths 1, 8 and 64 examine at most one link row per key per read as unrelated accounts grow from 500 to 8000. Both use one statement per partition under the existing 257-input cap. Verification uses the existing merge page cost plus O(L) ledger rows for L moved statements.
+- Growth check: `test/semantic/account-agent-cost.test.ts`: `account agent ensure uses constant statements as account agents grow`; `account agent ownership probe uses constant statements at targets 1, 8 and 64`; `native target widths 1, 8 and 64 probe exact account-agent keys as unrelated accounts grow`. The native check retains both original scenarios and grows unrelated linked subjects through 500, 2,000 and 8,000 rows. `test/semantic/growth-sourced-writes.test.ts`: `the native100 sourced batch probes account agents by route and subject key` requires full-key index conditions in every observed plan while the fixed 100-command batch retains its source-fence and series checks.
+
+### Private statements
+
+- Touches: one disclosure row per protected candidate, the existing hidden-candidate batch probes, and indexed audience ranges for private page overlays. A private inverse range spans holder partitions, indexed by target and account; its SQL declares that exception. Public background reads always exclude private candidates.
+- Bound: no per-statement read is added. Anonymous pages add no statements or rows; authenticated public pages have a fixed audience-range query returning one aggregate row and no private entries. Disclosure updates one statement and performs its ordinary projection, including registered Context layers, O(1) plus that projection. Existing Context suppressions and replacements retain their pages and counts after disclosure or retraction.
+- Growth check: `test/semantic/growth-private-statements.test.ts`: `public inverse rows stay flat with 64, 512 and 4096 private pen-name links`, scales `[64, 512, 4096]`, one warm-up per scale.
+
+### Verification reversal
+
+- Touches: the back link, account-node redirect, survivor membership, and the per-filter inbound link rows recorded as moved from the account node.
+- Bound: Rows O(links moved from the node), independent of the survivor's in-degree; reversal processes the recorded links in pages and never scans the survivor's links.
+- Growth check: `test/semantic/agent-verification-reversal.test.ts`: `verification reversal growth stays flat across survivor in-degree` with scales `[64, 512, 4096]`.
+
+### Concept scheme reference
+
+`readConceptSchemeReference(pool, options)` proves the exact known Concept's current effective Global
+`skos:inScheme` membership, native type, readable identity and the foreign scheme's readable identity. It takes
+the unchanged live command `nativeT`, native actor/Access and both already prepared read evidences. Its fixed
+`deadline` must not exceed either evidence ceiling; Content also includes request, creation, participation and
+Realm-read ceilings. It returns an attempt-local boolean, throws `SubjectRedirectError` for a redirected identity,
+and refuses incomplete or changed observations with native unavailability. It never follows a survivor.
+
+- Touches: source subject/type/security and identity index points; the existing compact slot resolver or latest
+  Global adoption and exact selected candidate keys; selected revision provenance and retraction points; hidden
+  candidate/disclosure points; the target scheme's native Access/type/identity points; and exact imported facts
+  tuple fences using the server route key. Source, target and fence homes are released separately and their native
+  versions are read again before success. Rejected display samples, labels, related fields and link checkpoints
+  do not participate. An imported membership without the server key fails closed.
+- Bound: constant rows and statements for the admitted slot of at most 32 facts/selections; logarithmic index
+  blocks in catalogue, revision, adoption, candidate and tuple history, plus existing native Access bounds. The
+  compact fact key admits at most 32 facts before expansion, with no truncating query limit. `skos:inScheme`
+  uses its property slot, so complete absence needs no degree scan or new maintained index. Readability and
+  membership are observations for this command only and never grant board creation rights.
+- Growth check: `test/semantic/growth-concept-scheme-reference.test.ts`, real native Realm board caller captures
+  at `[64,512,4096]` for compact, expanded imported and complete mismatched membership. Independent axes grow
+  unrelated catalogue/provenance/fences and the known Concept's unselected candidate history and irrelevant properties/relations.
+  The shared harness counts native Access, source, target, identity, fences and Realm work, examined/removed rows,
+  blocks, statements, connections and bytes. Native refusal and projection-lag creation are covered by
+  `test/content/realm-board-create-native.test.ts`.
+
+### Search current relation extraction
+
+- Touches: source-local current selection identities, the exact selected candidate and original revision,
+  current acceptance, moderation, disclosure and retraction points; independently anchored original/terminal
+  targets and imported tuple fences. The existing position point also checks native owner availability, including
+  for empty reads and counts. Native fact/adoption inserts maintain the keyed projection in the same transaction;
+  deprecated compact facts remain authoritative without entering current selection. Cold recovery retains its
+  consumed fact/adoption key under a source-local lock.
+- Bound: a sample examines at most 1000 selected keys and at most 128 per declared outgoing relation property;
+  an exact probe examines at most 128 matching selected keys within the shared 1000-key call budget. Rejects
+  consume that budget. Cold recovery consumes one historical fact/adoption key per call, with at most 32 selected
+  candidates per adoption. Sampling, withheld or unrepresentable qualifiers and exhausted probes remain unknown, never complete
+  negative evidence. These extraction bounds do not establish the separate whole-population privacy protocol.
+- Growth check: `test/semantic/search-source-facets.test.ts` exercises native degree129, exact off-sample
+  positives, deprecated facts and retained finite recovery without modifying an authoritative fact or checkpoint.
+  `test/semantic/search-source.test.ts` retains missing/moved-owner refusal, including the empty-ID case. Native default
+  worker caller evidence is in `test/search/released-relation-source.test.ts`. Three-scale physical work and
+  whole-population retained-cut readiness remain required before a complete projection/query claim.
+
+### Search current nonrelation snapshot
+
+The mounted `subjectSource.read` projects current Global nonrelation statements from `search_selected` through
+[search-source-current-statements.sql](search-source-current-statements.sql). Terms still use `current_term_fact`.
+This is not a second selection engine: `search_project_fact` / `search_project_adoption` already maintain the
+heads, and `search_rebuild_one` remains the cold-fold owner. Exact row derivation is
+[search-source-cost.md](search-source-cost.md). Decision: unreadied head coverage throws
+`CommandUnavailableError('contention')` after one rebuild outside the snapshot; ready-empty stays an empty list.
+A ready Subject whose active seek returns the overflow lookahead is the same unavailable signal without rebuild.
+Expanded Global heads keep the stored `search_selected` body and adoption rank.
+
+- Touches: the existing `B ≤ 256` id batch, partition position, subject/readiness points, current term heads,
+  `search_selected_nonrelation_page` active nonrelation heads with per-Subject `LIMIT S·C+1`, then the existing disclosure,
+  lifecycle, fence and release points on those returned heads. One cold fold step, when needed, runs after the
+  snapshot and is charged on that visit.
+- Bound: physical selected rows are at most `B·(S·C+1)` including one lookahead per Subject (`B ≤ 256`,
+  `S ≤ 512` current nonrelation facts and `C ≤ 32` selected candidates per expanded slot). The seek's partial
+  index predicate excludes inactive rows and active relations before lookahead. The output is at most `B·S·C`
+  statements on success; UTF-8 bytes scale with those statements and the existing per-value validators. Obsolete
+  fact/revision count and active relation degree are not terms. Ready overflow is unavailable, not a truncated page.
+- Growth check: `test/semantic/growth-search-source-current-visit.test.ts` at 64/512/4096 unrelated Subjects with
+  active relation heads on the requested Subject, growing obsolete history on the requested keys, and unrelated
+  Subjects; its native plan asserts the dedicated partial index at every scale. `test/semantic/search-source-current-visit.test.ts`
+  covers compact and expanded heads, retract, competing candidates, lifecycle, rank, qualifier, late commit, Context,
+  disclosure and unreadied coverage. This does not claim a new Search page acceptance.
 
 ### Anchored subject read
 
-- Touches: `read-subject.sql` probes one subject, its latest redirect and its latest revision, and reads its non-statement facts. Each property reads that slot's compact rows or, once expanded, its current adoption and its selected candidates by key, plus at most 32 current rejections through `acceptance_current_rejected`. It does not read the slot's other candidates or `semantic.acceptance` history. HTTP then fills related labels, eligibility, visibility and redirects with one batched read per related partition. Grow the subject's history through proposals, verdicts and adoptions in Global and in a Context, and one hidden statement; the subject stays fixed. A route key adds one source-fence read for the statements shown.
-- Bound: Rows O(F + 32 × properties), blocks O((F + related) log N). Semantic statements are O(related partitions), bounded by the subject's own item values. Access still runs one permission check per related id. Independent of P and U×t. F is at most 512.
-- Growth check: `test/semantic/growth-reads.test.ts`: `Anchored subject read stays within its bound as the subject's history grows`
+- Touches: `read-subject.sql` probes one subject, its latest redirect and its latest revision, and reads its non-statement facts through a keyed `current_term_fact` lateral (the current-term view, never historical fact materialization). Each property reads that slot's compact rows or, once expanded, its current adoption and its selected candidates by key, plus at most 32 current rejections through `acceptance_current_rejected`. It does not read the slot's other candidates or `semantic.acceptance` history. HTTP then fills related labels, eligibility, visibility and redirects with one requested-id batch per partition plus one redirect-target batch per partition when needed. Grow the subject's history through proposals, verdicts and adoptions in Global and in a Context, and one hidden statement; the subject stays fixed. A route key adds one source-fence read for the statements shown. The self summary and related summaries use the shared batched label statement, including the original-language slot, with the costs derived in the [Cost table](#cost).
+- Bound: Rows O(F + 12 × p), where F is at most 512 descriptive facts and p is the number of relation properties on the type (at most 64); each property range reads one extra sentinel row to continue the preview. Blocks are O((F + 13p + related) log N). Semantic statements are O(p + related partitions). Independent of the number of relations held and of U×t. The display fills add O((i + 1) × (labels + 65)) rows for i ≤ 256 related ids and O(subject, edition and media partitions) statements. Access still runs one permission check per related id.
+- Growth check: `test/semantic/growth-relations.test.ts`: `A subject read examines the same rows whatever the number of relations it holds`; `test/semantic/growth-reads.test.ts`: `Anchored subject read stays within its bound as the subject's history grows`.
+
+### Forward relation page
+
+- Touches: one outbound index range (`limit + 1`, or at most `4 × limit + 1` under a type filter), one counter probe, the selected slot views, and one target-label read per page partition. Each target adds one `fact_pkey` range for the original-language slot (at most 33 fact rows); an expanded slot adds its current Global adoption and at most 32 selected candidates and hidden-candidate probes, all in that same statement. The type-filtered count has its own sample of at most 1,000 projection rows.
+- Bound: Rows O(s) (O(s + 1,000) with a type count), blocks O(s log N + partitions), statements O(1 + page partitions), independent of the holder's relation count. Slot views and label fills are bounded by the page: for i ≤ s targets, label work is O(i × (labels + 33 + 32)) rows and O(i × (labels + 65) log N) blocks, with no extra statements per target.
+- Growth check: `test/semantic/growth-relations.test.ts`: `A subject read examines the same rows whatever the number of relations it holds`.
+
+### Material-list statements
+
+The catalogue's `wdt:P186` uses the forward relation path above, ordered by
+`schema:position`, with one slot per target. Adding this property to a type adds
+one 13-row range, one counter probe and at most 12 slot views to its subject
+preview, plus bounded target fills. Full material lists use paged relation reads;
+each request is bounded by its page limit. Creation checks the 32-selection limit
+per target slot (including a declared slot key), while preserving the 512-fact
+command budget. Exact quantity and bound checks run before SQL and add no
+statements. Document instructions reuse the existing imported or authored field
+append, with no additional SQL. The API round trips are covered by
+`test/semantic/recipe-structure.test.ts`.
+
+### Key-change re-emission page
+
+- Touches: at most 101 present source rows through the ordered projection indexes, at most 100 changed mirror rows with fixed qualifier/filter fanout and fixed partitions, fixed identity/key point reads, and one continuation command. The holder query seeks each next cursor tuple and carries its payload in that probe; it does not hydrate the page with additional source-row probes. The target query reads one indexed range. The five-part keyset cursor advances through the exact last examined row, including all filter rows, NIL targets and Contexts.
+- Bound: rows and statements per step are independent of total degree and relation history; blocks are logarithmic in involved indexes. Mirror lookups probe the full stable identity, and inactive outbound rows use the exact tuple found by that probe. Total eventual catch-up is O(degree) over separate bounded steps, never one request or one relay snapshot.
+- Growth check: `test/semantic/growth-key-reemit.test.ts`: `holder key re-emission processes a bounded page as its out-degree grows`; `test/semantic/growth-key-reemit.test.ts`: `target key re-emission processes a bounded page as its in-degree grows`.
 
 ### Batch label fill
 
 - Touches: `readLabels` takes at most 256 ids, groups them by partition, and issues one statement per partition. Each id is an exact `(route, subject_id)` pair: one `subject_pkey` probe and one `fact_label` probe. The label probe reads label rows only. Grow that partition and the total; the eight subjects stay fixed.
 - Bound: Rows O(i × labels), blocks O(i log N), one statement per nonempty partition. Independent of P. i is at most 256.
-- Growth check: `test/semantic/growth-reads.test.ts`: `Batch label fill stays within its bound as its partition grows`
+- Growth check: `test/semantic/growth-reads.test.ts`: `Batch label fill stays within its bound as its partition grows`.
 
 ### Partition keyset page
 
 - Touches: `page-subjects.sql` reads s + 1 subjects by `subject_pkey` with a bound limit, then each of those rows probes `fact_label` for its label rows only. The label probe is a per-row read. `readPartition` reads one `core.partition` row. Grow the partition, the total and page depth; the check uses page size 1.
 - Bound: Rows O((s + 1) × labels), blocks O((s + 1) log N), five statements. Independent of P, of d, and of facts other than labels.
-- Growth check: `test/semantic/growth-subjects.test.ts`: `Partition keyset page stays within its bound as d grows`
+- Growth check: `test/semantic/growth-subjects.test.ts`: `Partition keyset page stays within its bound as d grows`, scales `[1, 4, 16]`.
+
+### Subject-page feed and publication
+
+The feed's intended per-request budget is one source partition, at most the normalized candidate limit plus one
+unconsumed key-only sentinel, current descriptive labels capped at 512 per subject, at most eight positive identities
+per candidate and owner batches capped at 256. Content fence reads retain their stricter 100-tuple cap. Filtering
+cannot refill from another partition or reset the candidate budget. Native repair and owner fanout share a separate
+32-key step budget plus one sentinel across phases. All publication writes stay in the native store ports.
+
+`subject-page-http.test.ts` checks actual source-window work and transport independently of worker mounting;
+`subject-page-publication-relay.test.ts` checks durable delivery, replay and retained owner evidence;
+`subject-page-default-composition.test.ts` checks the actual mounted object and default worker lifecycle. These are
+behavioral acceptance specifications, not passing cost measurements for the current readiness stub. Full feed and
+repair growth evidence remains in the unchanged `growth-subject-pages.test.ts` and native growth files, with legal
+scales, shared catalog/background accounting and actual owner work. No feed cost bound is claimed until that work
+runs against the production composition.
+
+### Internal subject-page candidate window
+
+`pageSubjectPageCandidates(pool, ring, { partition, size?, cursor?, clock? })` visits only the supplied owner in one repeatable-read transaction. Size defaults to 20 and accepts integers from 1 through 1000. It returns internal `{ route, id }` keys and the actual owner component, preserving its bigint position. Empty windows finish with `[]` and null; missing and moved owners use the existing typed availability errors, while fenced owners remain readable. Signed cursors bind the owner and normalized size, validate the canonical routed key and actual epoch, and use the supplied kernel clock (system clock by default).
+
+The continuation names the last processed candidate. The key-only extra row remains unprocessed and is the first key of the next unchanged window. Hidden, taken-down and title-only subjects consume the same candidate budget. This primitive establishes neither indexability nor `lastModified`, global traversal or completed sitemap behavior. The eventual public service must perform current Access, visibility and publication checks before disclosing data.
+
+- Touches: `subject-page-candidates.sql` reads only one owner range through `subject_pkey(route, subject_id)`, at most s + 1 keys, plus one `core.partition` PK probe. It reads no facts, labels or eligibility state and never probes the next owner. Grow total subjects and the hot owner's long title-only/hidden runs while preserving unrelated partitions; fix candidate size and continuation.
+- Bound: At most s + 2 examined rows, O(log N + s) shared blocks, and five statements including BEGIN, timeout setting and COMMIT. Size is bounded before SQL; disclosure selectivity cannot increase the window.
+- Growth check: `test/semantic/growth-subject-page-candidates.test.ts`: `candidate window work stays bounded as unrelated and noindex populations grow`. Continuation: `test/semantic/subject-page-candidates.test.ts`: `candidate windows inspect one source partition and preserve the unprocessed sentinel`; `test/semantic/subject-page-candidates.test.ts`: `unchanged candidate traversal visits every hidden and title-only key exactly once`.
 
 ### Item projection and related labels
 
-- Touches: `resolveItem` uses the facts already returned and reads no relation. Related subject labels, eligibility, visibility and redirects are one batched read per related partition, at most 256 ids, not one read per id. Property labels come from the cached release. Grow the related partitions and the total; the subject and its six related ids stay fixed.
-- Bound: Projection reads no rows. Related fill rows O(i × labels), blocks O(i log N), semantic statements O(related partitions). Independent of P. Access permission checks remain one per related id and are bounded by that same fixed id list.
-- Growth check: `test/semantic/growth-reads.test.ts`: `Related labels of a subject read stay within their bound as the related partitions grow`
+- Touches: `resolveItem` uses the facts already returned and reads no relation. Related subject labels, eligibility, visibility and redirects use batched partition point reads capped at 256 ids. Each `readRelated` call may read requested ids and distinct one-hop redirect targets; ids already read in that call are reused. Memoization is local to one `readRelated` call; direct `loadRelated` calls always read current state. Property labels come from the cached release. HTTP also fills the shared summaries for the related ids (including original-language label choice for representative covers), at the cost derived in the [Cost table](#cost). Grow the related partitions and the total; the subject and its six related ids stay fixed.
+- Bound: Projection reads no rows. Related fill rows O(i × labels), blocks O(i log N), semantic statements O(related partitions). Any memoization is discarded when a `readRelated` call ends or fails, so later calls read the caller's current committed state even on a reused database client. One operation uses at most one requested-id and one redirect-target batch per touched partition. Independent of P. The additional summary fill costs O(i × (labels + 65)) rows and O(subject, edition and media partitions) statements. Access permission checks remain one per related id and are bounded by that same fixed id list.
+- Growth check: `test/semantic/growth-reads.test.ts`: `semantic covering reads use unforced indexed access as populations grow`.
 
 ### Definition publish
 
+New release digests admit at most 4096 bases per type, 256 mappings per type/property and 4096 qualifiers per
+property, with existing input-limit diagnostics. [Construction](../../../../packages/definitions/src/publication-construction-contract.md)
+owns the shared linear validation/index loops and historical compatibility boundary. Cold stored reads retain
+historical validity and exact digest verification; capped replay/new-key admission requires one same-pool indexed
+published-digest point, followed by ordinary fresh command authorization before receipt disclosure. Fresh bootstrap
+uses new-publication caps. Pattern aggregate HTTP refusal and its reached-defect/same-pattern-excess tie remain
+pending in the parent CPU contract; these shape limits do not supply that producer.
+
+The [remaining composition plan](../../../../packages/definitions/src/publication-construction-contract.md#remaining-publication-composition)
+owns the residual valid-body algorithm, live graph accounting and exact source handoffs. Semantic binds one
+immutable snapshot to both existing digest domains, historical same-pool existence and the native command.
+Definitions supplies cheap-check/pattern planning and bounded diagnostics; Core/Performance supply the existing
+execution, ingress and physical-disposal lifecycle. The bounded HTTP reader/parser stays shared. A response or
+logical worker finish does not free retained input, retired execution or native parameter custody. No additional
+publication pool, parser, cache authority or numeric resource allowance is adopted here.
+
+After integration, `test/semantic/definition-publication-resources.test.ts` and
+`test/semantic/historical-construction-publication.test.ts` retain the native cold/hostile/refusal/replay and
+historical compatibility obligations. The resource suite includes intentionally red aggregate-work outcomes;
+neither package parity nor these source additions claim native peak, disposal or CPU closure. Physical lifecycle,
+receiving custody and unrelated/history growth still require the actual shared owner harness.
+
 - Touches: `publishRelease`: validate/hash one body, insert 0/1 `semantic.definition_release` through `definition_release_pkey(route, digest)`, conflict does nothing; receipted command emits 1 event even on existing digest. Grow D and H; fix body size and authorization evidence.
-- Bound: Rows O(1), blocks O(log D + C), one body statement, nine including command; no scan of prior releases.
-- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition publish stays within its bound as D grows`
+- Bound: Rows O(1), blocks O(log D + C), one body statement, nine including command; capped historical submissions add one same-pool indexed existence statement; no scan of prior releases.
+- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition publish stays within its bound as D grows`, scales `[1, 4, 16]`.
 
 ### Definition activate
 
 - Touches: `activateRelease`: read 0/1 release body via `definition_release_pkey`; activation SQL reads latest head through backward `definition_activation_pkey(route, head)` then inserts 0/1 activation with expected-head conflict protection and release FK probe. Grow D; fix body size, H and authorization evidence.
-- Bound: Rows O(1), blocks O(log D + C), two body statements, ten including command; stale head writes no activation and rolls back.
-- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition activate stays within its bound as D grows`
+- Bound: The original pointer change is two body statements, ten including command, plus one completion point and the bounded derived-index installation in [Type directory read and lifecycle cost](#type-directory-read-and-lifecycle-cost). Indexed rows and statements are independent of D for a fixed capped Release; stale head rolls back all changes.
+- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition activate stays within its bound as D grows`, scales `[1, 4, 16]`.
 
 ### Definition read
 
 - Touches: `readRelease`: a malformed digest does no SQL. A cache hit reads 0/1 digest through `definition_release_pkey` and returns the cached body; a miss reads the body, validates it, checks the digest and freezes it. The cache holds only validated, digest-checked bodies, and a release is immutable, so a hit does not read the body. HTTP authorizes the global context first. Grow D; exercise a warm and a cold cache.
 - Bound: Rows O(1), blocks O(log D) on a hit. A cold read is linear in release bytes, once per digest per process. Zero or one data statement; no history scan.
-- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition read stays within its bound as D grows`
+- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition read stays within its bound as D grows`, scales `[1, 4, 16]`.
 
 ### Active definition lookup
 
 - Touches: `activeRelease` / HTTP active endpoint: backward activation PK probe for route 0 with LIMIT 1 reads 0/1 head; cache miss adds Definition read. Subject commands call `activeRelease` for this pointer; a cache hit adds no body read. Grow D; fix active body size and authorization evidence, exercise a cold cache. The manifest rows below bound request cost in M.
 - Bound: Rows O(1), blocks O(log D), one data statement on a cache hit and two on a miss. A subject request pays this pointer; a cache hit adds no definition-body statement.
-- Growth check: `test/semantic/growth-definitions.test.ts`: `Active definition lookup stays within its bound as D grows`
+- Growth check: `test/semantic/growth-definitions.test.ts`: `Active definition lookup stays within its bound as D grows`, scales `[1, 4, 16]`.
 
 ### Definition bootstrap
 
 - Touches: `bootstrapRelease`: outer latest-head probe; when absent, command repeats probe, publishes 0/1 release, inserts first activation and emits 2 events, no receipt/basis. Uses definition PKs and fence indexes above. Grow D and H; fix body size, including already-active fast path.
-- Bound: Rows O(1), blocks O(log D + C), one statement if active, otherwise eleven including command; race recovery may add one head lookup after rollback.
-- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition bootstrap stays within its bound as D grows`
+- Bound: One statement if active, otherwise the original eleven command statements plus the bounded directory installation in [Type directory read and lifecycle cost](#type-directory-read-and-lifecycle-cost); race recovery may add one head lookup after rollback. Work stays independent of D and H for a fixed capped Release.
+- Growth check: `test/semantic/growth-definitions.test.ts`: `Definition bootstrap stays within its bound as D grows`, scales `[1, 4, 16]`.
+
+### Context term resolution
+
+- Touches: `effectiveRelease` / `layeredRelease`: the active release pointer, a current availability point for a community Context, then the head probe of Global's extension and of the request's Context (`context_extension_activation_pkey(route, context_id, head)`, backward, `LIMIT 1`), each 0/1 row. A digest pair composes once per process (`applyExtension` over the active release and the extension body, which is read on a miss and validated by digest) and later requests find the composed release in memory. A write registers a composed digest once per process (`INSERT ... ON CONFLICT DO NOTHING` into `semantic.release_composite`); reads never write. A stored composed digest resolves through `readRelease`. Grow the Context's terms; the holder's type keeps one term.
+- Bound: rows O(1), blocks O(log D) per request; a cold read is linear in the extension size (at most 64 terms) once per digest pair per process. A request touches only the properties of the holder's type, so terms on other types add nothing.
+- Growth check: `test/semantic/custom-relation-types.test.ts`: `a Context's term resolution reads a bounded number of rows however many terms the Context holds`, scales `[1, 8, 64]` terms; a Context without an extension reads the active release itself (`a Context without an extension reads the active release unchanged`).
+
+### Extension activation
+
+- Touches: `activateExtension`: read the extension body by `context_extension_pkey`, the Context's latest head, the check of the body against the active release and the prior extension (at most 64 terms each), then insert 0/1 activation with the expected-head check. Publication inserts 0/1 body.
+- Bound: rows O(terms) ≤ 64 for the check, otherwise O(1); blocks O(log D + C).
+- Growth check: none beyond the 64-term limit, which `test/semantic/custom-relation-types.test.ts`: `a Context's custom relation types are limited` exercises.
 
 ### Typed validation
 
 - Touches: `checkTyped` in `rules.ts` checks a supplied release and input in memory, uses the portable checks, which cache compiled validators per release/property and returns referenced item targets without fetching them; it is not wired into subject HTTP on this base. Grow D; fix supplied release, input values and cache state.
 - Bound: Zero relation rows, shared blocks or SQL statements; work follows supplied statement/qualifier/reference values, with no internal input-count cap and no iteration over D releases.
-- Growth check: `test/semantic/growth-definitions.test.ts`: `Typed validation stays within its bound as D grows`
+- Growth check: `test/semantic/growth-definitions.test.ts`: `Typed validation stays within its bound as D grows`, scales `[1, 4, 16]`.
 
 ### Request authorization
 
 - Touches: Subject/definition HTTP checks call Access preparation then final resource check; no semantic relations. Default Access reads account/optional assignment by `account_pkey`/`principal_assignment_pkey`, resource grant/role-grant/denial prefixes through their temporal GiST PKs, and organization memberships through `organization_member_pkey` plus organization account PK; candidate organizations cause up to two membership statements each. Grow total N or D; hold this Access neighbourhood fixed.
 - Bound: Rows O(1 + G + U + q), statements O(1 + q); temporal GiST access has a conservative O((1 + q)A) block bound, not the B-tree point-probe guarantee. Independent of N, P, d, D with Access data fixed; uncapped G, U and q exceed the criterion through evidence fan-out and permission history scans.
-- Growth check: `test/semantic/growth-subjects.test.ts`: `Request authorization stays within its bound as N grows`
+- Growth check: `test/semantic/growth-subjects.test.ts`: `Request authorization stays within its bound as N grows`, scales `[1, 4, 16]`.
 
 ### Subject creation across manifests
 
 - Touches: HTTP `createSubject` on the active release. A warm cache resolves the activation pointer and looks up datatypes for the new facts only. Grow M; fix the subject's type, fact count and authorization evidence.
 - Bound: Rows, blocks and statements constant in M. In-process work touches that type and those properties through the digest cache.
-- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`
+- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`, scales `[1, 10, 100]`.
 
 ### Statement proposal across manifests
 
 - Touches: HTTP `proposeStatement` on the active release. A warm cache resolves the activation pointer and checks the one property on the subject's type. Grow M; fix the statement and authorization evidence.
 - Bound: Rows, blocks and statements constant in M. No iteration of the release.
-- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`
+- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`, scales `[1, 10, 100]`.
 
 ### Candidate acceptance across manifests
 
 - Touches: HTTP `decideCandidate`. Acceptance does not load a release body. Grow M; fix the candidate and authorization evidence.
 - Bound: Rows, blocks and statements constant in M.
-- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`
+- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`, scales `[1, 10, 100]`.
+
+For an older compacted candidate, the same statement reads the latest subject revision through a descending
+`revision_pkey` seek to allocate the next revision. Its recorded release still comes from the independent origin
+point lookup through `revision_transaction`; candidate id, property, slot and relation still come from the current
+asserted fact. The regular decision read retains its latest-revision release. This adds constant examined rows and
+statements, with logarithmic index depth in subject history, within the existing native subject transaction and
+bounded expansion, decision, CAS, receipt and outbox work. No history enumeration or extra connection is needed.
+`test/semantic/growth-compact-candidate-decisions.test.ts` captures the full native compact SQL at 64, 512 and
+4096 on independent revision-history and unrelated-subject axes. The shared established-growth verdict checks
+constant rows/statements and logarithmic blocks; native planner changes and decreasing cost do not require
+identical plans. Retained measured occurrence plans report both extremes and prove the descending head seek and
+indexed origin point at the largest history scale. The frozen native compact decision cases separately verify
+scalar and item-relation decisions, revisions 1/2/3 and unchanged authorized receipt replay.
 
 ### Candidate adoption across manifests
 
 - Touches: HTTP `adoptCandidates` on the active release. A warm cache resolves the activation pointer and checks that one property on the subject's type. Grow M; fix the selection and authorization evidence.
 - Bound: Rows, blocks and statements constant in M. No iteration of the release.
-- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`
+- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`, scales `[1, 10, 100]`.
 
 ### Anchored read with related labels across manifests
 
-- Touches: HTTP subject read. `readSubject` loads the subject's facts and calls `slotView` for each property of its type, then `readRelease` for related property labels and one batched related read per partition for related subjects. A warm `readRelease` reads the digest only. Grow M; fix the type, F, related ids and authorization evidence.
-- Bound: Rows, blocks and statements constant in M. In-process work uses the type's properties and the facts' properties. A cold release read is linear in release bytes, once per digest per process.
-- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`
+- Touches: HTTP subject read. `readSubject` loads descriptive facts and the first 12 relation slots for each relation property on the type, then `readRelease` for related property labels and one batched related read per partition for the preview's targets. A warm `readRelease` reads the digest only. Grow M; fix the type, F, preview size and authorization evidence.
+- Bound: Rows, blocks and statements constant in M. In-process work uses the type's relation properties, descriptive facts and bounded preview. A cold release read is linear in release bytes, once per digest per process.
+- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`, scales `[1, 10, 100]`.
 
 ### Candidate listing across manifests
 
 - Touches: HTTP `listCandidates`. One `readRelease` per distinct candidate release, then datatypes for that candidate's fact only, plus one `slotView`. A warm `readRelease` reads the digest only. Grow M; fix the property, page size and authorization evidence.
 - Bound: Rows, blocks and statements constant in M. No iteration of the release. A cold release read is linear in release bytes, once per digest per process. A route key adds one `readFences` per tuple partition among the candidates shown, T probes chunked at 100, independent of N and of the subject's history.
-- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`
+- Growth check: `test/semantic/expansion.test.ts`: `subject commands and reads stay within budget at 10 and at 100 vertical manifests`, scales `[1, 10, 100]`.
+
+### Authored documents
+
+Single-subject creation and statement proposals accept document values as
+`{ document, licence, language }`: a Text or Blocks snapshot, an SPDX licence or
+`LicenseRef-` identifier, and a BCP 47 language tag. Validation happens before the
+command. Media values remain `unsupported`, including qualifiers and references.
+The bulk `summary` field group accepts every `document` property with source
+evidence and rights, including how-to instructions. Text and Blocks snapshots
+share the existing content append path. Document validation and exact quantity
+bounds add no SQL statements.
+
+The containing statement allocates the candidate and revision before content's
+`appendAuthoredField` runs in the same transaction. Creation uses its compact
+statement ID at revision 1. Semantic stores only `{ language, document: id, digest }`;
+content keeps the body, licence and command's acting account. Each append emits
+`com.rezics.content.authored-field.created.v1`. Qualifier and reference documents
+share their containing candidate. Disclosure follows that candidate's visibility.
+Install hooks return replacement values and facts are written from copies, so a
+serialization retry cannot replace a request snapshot with a stored document ID.
+A failed append or later write rolls back the entire command.
+
+The append adds one exact insert per document with at most 2 MiB of canonical
+bytes; there is no history scan or cleanup command. The API and retry checks are
+in `test/semantic/authored-documents.test.ts`.
 
 ### Sourced bulk write
 
 - Proposal install hooks return replacement values and never mutate command input.
 - Touches: One `readFences` statement per source-tuple partition (at most 100 tuples) before the receipt and before deduplication; one anchored media reference probe per cover; each command then pays its single-request cost plus one document insert or one media claim by key. Same-partition fence reads run inside the command. Grow N; fix the command count at the batch cap.
-- Bound: O(commands × log N). At most 100 commands. No path scans a partition or table, or grows with N, U×t or M beyond index depth.
-- Growth check: `test/semantic/imported-fields.test.ts`
+- Bound: O(A × log N) for A executed command attempts at a fixed batch of at most 100 commands. `runCommand` retries contention with fresh admission until the original request deadline; it has no fixed attempt-count ceiling. The fixed native fixture derives its successful work from 48 changes, 48 fresh-key noEffect duplicates and four replays, then conditionally charges up to 23 data statements for each retained failed statement (admission, receipt, changed body, one document insert or media claim, and fence). Inclusive measured rows, blocks and statements retain aborted work and the failed-statement ledger; the series rule checks established growth of whole batches without subtracting retries. Native plans assert full route-and-subject index conditions and bounded link rows. No path grows with N, U×t or M beyond index depth.
+- Growth check: `test/semantic/growth-sourced-writes.test.ts`: `a sourced bulk write at a fixed batch has constant rows and statements as subjects, documents and fences grow`, scales `[1, 4, 16]`; fixed-fixture checks in `test/semantic/imported-fields.test.ts`: `a cover proposal claims an available cover media object in its own transaction` and `an unchanged summary refresh appends no document`.
+
+A fresh duplicate source resolution returns `noEffect({ status: 200, value })` through `runCommand`. It retains source-fence preparation and current authorization, including finalization, and pays the fixed receipt/fence cost of one receipt lookup and one no-effect partition fence with one receipt insert. It does not advance position or write an outbox or write-basis row. Replay authorizes before looking up the receipt and skips the body and fence.
 
 ### Source-fence disclosure
 
 - Touches: Subject views, candidate listings, and the search source read each issue one `readFences` statement per tuple partition among the candidates that read would show. The search source read adds the same per read.
 - Bound: T probes, `ceil(T / 100)` statements in a partition, independent of N and of the subject's history.
-- Growth check: `test/semantic/imported-fields.test.ts`
+- Growth check: `test/semantic/growth-sourced-writes.test.ts`: `source-fence disclosure on a subject view has constant rows and statements as subjects, fences and the subject's history grow`, scales `[1, 4, 16]`; fixed-fixture check in `test/semantic/imported-fields.test.ts`: `a fenced source tuple refuses new contributions and hides existing ones at read`.
 
 Structural value limits bound subject payload blocks B by F for accepted inputs; shared-block growth checks keep payload size fixed.
 Default authorization has separately anchored but uncapped evidence fan-out; its costs cannot be proved bounded using subject and definition counts alone.
 All writes serialize on their own `core.partition.position` counter, with definitions sharing partition 0; this is a partition-local lock/counter, not a global counter across all subject partitions.
 Fact/subject and activation/release joins and foreign keys stay on the same route, while related-label and Access evidence reads cross partitions as separate reads without a cross-partition join or transaction; the in-process release cache affects constants, not the cold lookup bound.
-The global context is inserted once by migration and has no runtime semantic read/write path; this base has no semantic update, erasure, background projection writer or definition-history listing to cost.
+The global Context is inserted once by migration; native Context reads and discovery use that same fixed row.
+
+### Context relation page
+
+- Touches: one next-key seek in each selected layer (Context and Global) per visited cursor tuple, merged in one partition; two counter probes. Each candidate carries its payload, so forward pages need no separate hydration probe. Only the two candidates are sorted before choosing the next tuple. Context wins an equal tuple, and both layers then advance strictly beyond it. Active suppression rows override Global keys; relay tombstones do not override them. Merge and key-change continuations include Context in their keys.
+- Bound: rows O(s + suppressions in the page's range); independent of Global's and the Context's totals elsewhere.
+- Both candidate probes, including repeated lookahead from the unconsumed layer, count toward physical work. Suppressed tuples advance the cursor without spending the visible page limit or its sentinel; exhaustion requires both layer seeks to be empty. The final result sort contains only the visible page. Seeks retain PostgreSQL C collation and the `(order_key, target-or-source UUID, statement UUID)` cursor. No planner control is required.
+- Native cursor regression: `test/semantic/links-projection.test.ts`: `native relation seeks merge equal keys, skip suppressions and exhaust every cursor and filter`. Command and Access regression: `test/semantic/links.test.ts`: `command-created community suppressions preserve forward and inverse page continuations`.
+- Growth check: `test/semantic/growth-reads.test.ts`: `semantic covering reads use unforced indexed access as their populations grow` captures both native directions, Global and community overlays, and first and middle pages.
+- Growth check: `test/semantic/context-relations.test.ts`: `a Context relation page examines rows bounded by the page and the Context's own changes in its range`, scales `[16, 128, 1024]` Context changes outside the page's property range; forward and inverse page rows stay flat.
+
+### View-count read
+
+`GET /v1/subjects/:id/counts` reads the subject's exact internal inbound and outbound relation counters by property, then sums them by the active release's relation group. Stored counters do not prove current source and target disclosure, so the public response omits the optional `properties` and `groups` fields until bounded current proof is available. Its `content` field is `null` until the content service supplies thread, review and public-collection counts; content fills that field. The response names relation properties and groups, not presentation views.
+
+- Touches: the subject's counter rows (one range per direction), the subject probe and authorization.
+- Bound: rows O(properties with relations) ≤ release properties; independent of relation count.
+- Growth check: `test/semantic/view-counts.test.ts`: `the view-count read costs the same whatever the subject's relation count`. This measures the internal counter ranges with positive totals independently of public omission.
+
+### Client type representation
+
+- Touches: the complete mounted route/schema types, materialized as named client groups before Eden derives method types, and the exactly derived subject-read alias used by Web. The existing proxy, session handling, headers and custom methods remain unchanged.
+- Bound: compiler work follows the fixed mounted route/schema surface; no per-request work, SQL or runtime graph is added. Every mounted group, route and native response type remains available.
+- Growth check: `packages/client/tests/client.test.ts`: `the derived subjects group keeps native counts and routes contributed by other modules`, the existing positive and negative client type contracts, and the full root typecheck against generated declarations.
+
+### Inverse page
+
+- Touches: one index range on the anchor's partition (`s + 1` rows, or at most `4s + 1` under a type filter), one pending-merge index probe for the scanned holder ids, one counter probe, and the shared subject-summary reads for holders on the page. Type counts add a separate sample of at most 1,000 index rows.
+- Bound: rows O(s) (O(s + 1,000) with type counts), blocks O(s + log N), summary statements O(partitions touched), independent of in-degree. For i ≤ s returned holders, the summary fill adds O(i × (labels + 65)) rows and O(i × (labels + 65) log N) blocks in bounded per-partition reads; selected-cover costs are derived below. Access authorization retains its existing per-related-subject cost. Subjects without a visible summary are omitted without changing counts.
+- Growth check: `test/semantic/growth-inverse-pages.test.ts`: `an inverse page examines the same rows whatever the anchor's in-degree`.
+
+### Forward relation page
+
+- Touches: one holder-local ordered index range (`s + 1` rows, or at most `4s + 1` under a type filter), one count probe, and shared subject-summary reads for page targets. Type counts add a separate sample of at most 1,000 index rows. Unresolved values carry a null summary; targets without a visible summary are omitted while counts stay unchanged.
+- Bound: summary statement cost is O(partitions touched), using the shared summary read's bounded statement multiplier; rows and blocks grow with the page and the bounded summary projection. Access authorization retains its existing per-related-subject cost.
+- Growth check: `test/semantic/relation-page-summaries.test.ts`: `a relation page's summaries are bounded by partitions touched`.
+
+### Graph read
+
+- Touches: for each depth, one index range of at most `limit + 1` rows per `(node, property, direction)`, batched into one statement per partition, plus one count probe per expansion. Every forward and inverse range, including recursive walk branches, and both count probes are pinned to Global. Community projection rows cannot change graph membership, truncation counts or continuation pages. A batched visibility/type read per discovered partition retains the existing traversal frontier. After releasing the traversal connection, the bounded node set uses `readSubjectSummaries`, allowing Access to prepare evidence through the pool. It receives the active release, the whole parsed language list and current related-subject authorization, including for representative editions. Each node carries `summary`; `type` and `label` copy `summary.type` and `summary.label.value` (an absent label copies as the empty string).
+- Bound: at most eight explicit properties, two directions, depth two, 25 rows per expansion and 500 emitted edges. The anchor plus at most 500 discovered nodes means at most 501 summary inputs, split into **at most two chunks of 256 ids**. The shared primitive still rejects more than 256 input ids. Graph traversal rows remain O(min(500, (p × l)²)); summary rows add O(i × (labels + 65)) for i ≤ 501, with the bounded image and representative probes in the [Cost table](#cost). Summary statements are O(fixed chunks × (subject partitions + edition partitions + media partitions)); access checks retain their separately documented evidence costs. Traversal and summary reads use the unforced planner. Cost is independent of graph size beyond these bounds.
+- Disclosure: missing, hidden, taken-down and unauthorized nodes have no summary and are omitted together with incident edges and their truncation entries. Nodes disconnected from the anchor after disclosure are omitted too; if the anchor loses disclosure during filling, all three arrays are empty. Filtering retains the original node, edge and truncation ordering and never refills a page or increases a budget. Counts and continuation cursors of retained expansions keep their existing semantics. Covers use current content availability and the shared private-statement and language-selection rules; unavailable or unreadable selected editions and media yield a null cover.
+- Growth check: `test/semantic/graph-read.test.ts`: `a graph read costs the same whatever the size of the graph beyond its bounds`; indexed runtime plan check: `test/semantic/graph-read.test.ts`: `graph and summary covering reads use unforced indexed access as their populations grow`; isolation regression: `test/semantic/graph-context.test.ts`: `the Global graph excludes community-only forward and inverse relations and counts`.
+- API and measured chunk check: `test/semantic/graph-summaries.test.ts`: `graph nodes carry the shared current display summary`, `undisclosed graph nodes disclose no summary or attached edges`, and `bounded graph summary filling preserves the shared 256 ID limit`.
+
+### Links projection write
+
+- Touches: per changed statement, `1 + distinct values across both filter qualifiers` rows and their counters in the target partition. The stable row identity includes the filter value; the partial present-row index orders `(route, subject_id, context_id, property, filter_value, order_key, source_subject_id, statement_id)`.
+- Bound: O(changed statements × (1 + values of both qualifiers)) per event. Key changes enqueue paged re-emission, with O(page) work per relay step and O(degree) work spread across steps. Tombstones retain source revision and security revision so replay cannot resurrect removed rows or double-count them. Merge pages carry all keys and resume through the filter value and Context. A Global change also probes the override index for its changed keys and adjusts those Context deltas; Global adoption reconciles the Contexts registered for that slot, so its work also includes the affected Context rows.
+- Growth check: `test/semantic/growth-inverse-pages.test.ts`: `links projection work grows with changed links and stays flat in in-degree`, three projection rows per changed statement (base, role and arc), a measured loop over 10, 100 and 500 changed links and an in-degree check at scales `[64, 512, 4096]`.
+
+### Native lifecycle evidence
+
+`readSemanticLifecycle(client,{target,accountId,nativeT})` is trusted internal metadata, never a permission
+proof or an HTTP surface. The caller owns authorization, branded authoritative time and its RR or command
+snapshot. The reader opens no connection or transaction, performs no writes, follows no redirects and hydrates
+no payload. See [the deletion contract](deletion-contract.md#first-independent-state-and-attribution-slice)
+for its closed shapes and exact pre-IO rejection behavior. Candidate identity reads the native ordinary-record lifecycle when present and otherwise retains its active default. Context evidence
+reads its actual state, original deletion window and independent held flag from the native Context identity;
+unknown or mismatched locators return null. This metadata still supplies no Access allow decision.
+
+Proposals use the exact revision transaction and partitioned write basis. Compact identity uses its assertion
+fact transaction before and after expansion, with ambiguous/missing author evidence yielding null owner.
+Community Context ownership uses Access's direct `semantic.context.owner` grant at the original branded T
+on the same client; Global has no personal owner. Creator, adopter, provenance and action grants are not owners.
+
+- Touches: candidate PK, exact revision PK for a proposal, and exact `(partition_no,transaction_id)` write basis;
+  compact candidates instead use `fact_compact_candidate` with at most two assertion rows from the finite compact
+  log (33 entries maximum per slot), sufficient to detect ambiguity. Context uses its PK and, for a community,
+  one direct temporal role-grant probe. No subject proposal/revision history scan or property inference.
+- Bound: two statements for a candidate (including its lifecycle point), one for Global, two for a community Context; constant point rows and
+  statements, logarithmic B-tree blocks in actual history/population. No cost depends on unrelated revisions.
+- Growth check: `test/semantic/growth-lifecycle-state.test.ts` measures the native reader at 64/512/4096 actual
+  unrelated proposals on the same subject with constant rows/statements and logarithmic blocks. Native
+  `lifecycle-state.test.ts` covers original authors, mismatched subject and current owner revocation;
+  `lifecycle-input.test.ts` covers only negative pre-IO validation. Access's native `resource-role-held.test.ts`
+  separately covers microsecond validity, branded T, direct grants and anchored RR after revocation.
+
+### Mounted Zone source composition
+
+- Touches: the existing Zone head/current Access, original pinned saved Scope definitions, actual common Collection
+  providers and canonical prefixes, current native membership and common page summaries. See the
+  [runtime inventory](../zones/README.md) for callable methods and explicit ordered-owner unavailability.
+- Bound: original 16 scopes and 16 mounts; structural UUID work shares aggregate 256 raw keys including aliases,
+  rejects, lookahead and final rereads. Name/count output uses the independently named direct/ready operation
+  classes in [Filtered lists](../../../../docs/filtered-lists.md#cost), not UUID post-sorting or a universal 256.
+  Common admission retains 16 reads/128 slots and native independent receipts; the shared summary cost stays in
+  the Cost table above. Retained locators have bounded slots/bytes and use Accounts' unchanged encrypted profile.
+- Growth check: original native Zone source/union/current-target/cursor/finite outcomes and three-scale controller
+  evidence remain required. Local composition delivery checks Kernel typing only and certifies no native/physical,
+  Source publication, GET-list, account cleanup or default-worker completion.
+
+### Zone account-owner fence
+
+#### Zone read and mutation owner fence
+
+- Touches: after the exact Zone head lookup, read the current owner through the Access account primary key
+  `(routeOf(owner_id), owner_id)`. The native account state and `fenced` bit are checked in the same database
+  transaction as the Zone visibility decision or mutation. A missing owner fails closed. No owner, role, subject,
+  history, or account-wide scan is used.
+- Bound: at most two exact account point statements per Zone metadata/configuration/page read (eligibility plus the
+  response guard) and one per mutation; constant rows and statements, O(log A + log Z) B-tree blocks where A is
+  Accounts history and Z is Zone data. Zone-owned list already checks the requesting account once for the whole
+  page and does not add a per-row owner lookup.
+- Growth check: `test/zones/resource-growth.test.ts`: `Zone resource point metadata and bounded owned keys retain native growth bounds`, scales `[64, 512, 4096]`; native T behavior is covered by
+  `test/zones/account-erasure-user-cases.test.ts`.
+
+### Semantic account tombstone effect
+
+#### Existing account-agent identity cleanup
+
+- Touches: one exact Access account/agent source read and, when a derived Semantic agent exists, the existing
+  account-agent subject/backlink keys and a single local label revision. Verified identities continue through the
+  existing bounded reversal workflow; unrelated Semantic subjects are not enumerated.
+- Bound: constant point reads and writes for an ordinary unverified account agent. Verified reversal retains the
+  existing paged inbound-link bound; this effect adds no account-wide or subject-wide scan and makes no claim about
+  all-role erasure or shared custody.
+- Growth check: `test/semantic/agent-verification-reversal.test.ts`: `verification reversal growth stays flat across survivor in-degree`, scales `[64, 512, 4096]`; registration is covered by
+  `test/semantic/work-module.test.ts`.
+
+### Semantic candidate owner fence
+
+#### Candidate page and disclosure owner checks
+
+- Touches: one bounded batch joining each returned proposal candidate to its exact revision transaction, editorial
+  principal and Access account primary key; direct Content disclosure checks use the same exact candidate and owner
+  evidence. Missing owner evidence fails closed on candidate pages.
+- Bound: one additional statement for a candidate page with at most the requested page size plus one indexed
+  transaction and account join per candidate; one additional indexed join for a point disclosure read. Rows are
+  O(page size), independent of unrelated subjects and account count. No subject or history sweep is used.
+- Growth check: `test/semantic/account-erasure-user-cases.test.ts`: `native T fences a live moderator private candidate overlay while retaining the communal subject` and
+  `native T fences disclosed personal consent at the Semantic source before consumer catchup`.
+
+### indexed local account erasure
+
+- Touches: actual source/provenance transaction joins and same-home keyed role locators; one pending locator and
+  exact owning row per continuation, followed by released-home account progress. The registered locator effect
+  uses the actual participant fence, late-item and open-work protocols. No account-wide graph or payload scan.
+- Bound: one pending locator, one unsettled receipt and at most one exact Context child key, or one empty routing-home key; all count within native ceilings of 100 raw keys, 64 KiB returned and 1 KiB per locator;
+  fixed 4096-home routing discovery plus work proportional to this account's source records. Permanent applicability,
+  per-home receipts and delivery cursors survive process loss and workflow replay. Native growth captures all SQL
+  and pools. The default account-and-T workflow uses one persisted DBOS step per native page on the existing
+  effects queue and partition key; no queue settings change or nested page loop is involved. Its actual workflow
+  ID remains a pending shared-copy locator in native progress. Pending shared custody is observable and idle,
+  and never authorizes a Semantic ACK.
+- Growth check: `test/semantic/growth-account-erasure-local.test.ts` and
+  `test/semantic/account-erasure-local-runtime.test.ts`; default composition is covered by `work-module.test.ts`.
+  The owning contract retains historical-coverage, full shared-custody and final-ACK launch requirements.
+
+### Distinct origins in the erasure Source directory
+
+The physical `erasure_locator` queue minimizes one account/role/physical record. It is not the
+identity of a Source delivery. `erasure_source_record` retains every authentic transaction and
+source-position pair at each native delivery position. Its generated `origin_key` encodes that
+nullable pair as `transaction/position`; UUID and bigint text contain no slash. The key does not
+allocate a transaction, position or epoch. In particular, two transactions delivered by the same
+native command remain two directory rows. The existing source commits and write bases retain
+their separate native epoch/position associations.
+
+The Source cursor orders `store, record_key, role, delivery_position, origin_key`. Detail and
+refresh read the exact directory origin, independently of the queue's most recent provenance.
+A physical row's completed minimization does not prove both origins' shared custody: the reader
+requires the exact transaction, role and source position, refreshing that origin when absent.
+Local holds, page keys and terminal traversal carry the discriminator. Existing transfers whose
+origin was never stored are unavailable; current locator state cannot reconstruct their proof.
+Sealed replay seeks an existing origin through its transaction/position index. A new origin at
+a sealed account is refused. Rolling the migration down refuses to collapse distinct origins.
+
+- Touches: each directory insert maintains its full primary key, ordered traversal index and
+  origin-replay index. Same-origin conflicts still perform their actual conflict probe. Each raw
+  Source seek returns at most one full origin; detail and native hold verification use its full
+  key and separately probe exact shared custody. Refresh adds one exact directory lock before
+  the existing minimization command. Failed, repeated and rolled-back work retains these touches.
+- Bound: the discriminator adds at most 57 UTF-8 bytes per stored or transferred key, including
+  the nullable historical cases. It is present in the directory primary/traversal keys, generated
+  value, raw/detail projections, cursor digest, hold and page/terminal writes and comparisons.
+  The replay index additionally stores the authentic transaction text and source position. Each
+  nonempty page has one origin; EOF uses the separate empty discriminator. These are additional
+  costs, not funding, a replacement eight-axis quote or a reduction in capture's existing
+  defective five-empty-seek layout. The complete original pre-I/O price and physical capture
+  repair remain required before the configured Source journey can be declared complete.
+- Growth check: `test/semantic/identity-search-receiving-provenance.test.ts` retains both genuine
+  command orders and rollback of attempted native provenance. The appended native case in
+  `test/semantic/subject-erasure-source.test.ts` requires both equal-delivery origins through
+  actual sealed traversal, shared custody and native holds; it also requires exact sealed replay,
+  wrong-position/new-origin refusal and rollback of the rejected source commit/write basis.
+  These assertions and all native growth/combined campaigns remain UNRUN under minimal verification.
+
+### Receiving capture of both command write bases
+
+The funded receiving trigger reads the job's original write basis and the distinct native
+command's write basis. Each retains its own principal, delegation bytes, transaction, source
+position and `erasure_provenance` row. An absent original basis does not skip the native basis;
+a shared original/native transaction is visited once. The post-fence planner arms separate
+nullable locator-count/byte operands for each basis. The deferred body compares both again.
+A basis appearing, disappearing or changing its funded projection after planning aborts the
+whole transaction, including the effect receipt, pending event and attempted origin writes.
+Other, unfunded capture callers retain their existing behavior.
+
+`searchReceivingCaptureCost(copies, sources, originalBasis, nativeBasis?)` exposes the
+conservative deferred reservation subtotal. Omit the fourth operand when the native and
+original transactions are the same or there is no native origin. Pass null for a distinct
+native transaction whose basis is absent. A present operand contains its exact bounded
+`{locators, bytes}`. This is not a whole Source or ordinary preparation quote.
+
+- Touches: one additional indexed `write_basis` point per distinct native transaction in both
+  the planner and deferred body; native provenance upsert and all actual actor/delegation
+  locator calls, their existing locks, conflict probes and triggers. The pending event stores
+  both nullable native operands. Repeated events repeat the reads, reservations and validation.
+- Bound: all eight axes remain explicit. The additional deferred native probe reserves
+  `{candidateKeys:0,nativeRows:1,identityMetadataRows:0,nativePoints:1,witnessKeys:0,statements:1,bytes:256,emptySeeks:1}`.
+  A present native basis with L locators (0–5) and R bounded requested-by bytes (0 or 92) adds
+  rows/points `2+9L`, statements `2+8L`, bytes `512+R+2816L`, empty seeks `5L`, with zero
+  candidate/metadata/witness axes for this operational body. The planner separately prepays
+  its real basis SELECT and arm UPDATE, including a 512-byte arm bound. Failure retains
+  reached reservations and rolls SQL back. These additions do not discount the existing
+  conservative five-empty-seek base, replace the complete origin/index/control derivation,
+  raise an allowance or establish the required Source-core 24-point/two-seek fit.
+- Growth check: the new native-basis unit regression independently enumerates all eight
+  reservation axes, separate and shared transactions, absent original basis and refusal before
+  arming. The native regression uses real executor write bases and delivery for two actor
+  origins, plus superseded pre-fence planning and atomic rollback. Its generous isolated
+  physical ledger is not the authentic Source funding oracle. Both files and all existing
+  native/combined oracles remain authored UNRUN; the two obsolete capture-cost cases are
+  unchanged pending actual physical repair.
+
+### Receiving capture of both copy origins
+
+The post-fence planner traverses complete indexed copy prefixes for both the original
+and distinct native command transaction. It gathers those copies before carried source
+roles, retaining both authentic origins when an account/role occurs in both prefixes.
+A shared transaction is traversed once. The deferred body repeats the same complete
+prefixes and verifies their aggregate count against the armed operand before dispatching
+any additional locator. A late copy aborts the actual command transaction. Source-only
+collisions still refuse until complete Source support/copy closure is available.
+
+- Touches: each actual planner keyset seek, including each EOF, is independently prepaid.
+  Every visited copy prepays its locator body, directory/index/trigger work and 512 bytes
+  of planner origin bookkeeping. The deferred loop uses the actual copy transaction,
+  preserving equal-delivery distinct origins. Failures retain attempted reservations.
+- Bound: `copies` in the deferred cost function is the complete aggregate over both
+  distinct copy prefixes. The retained fixed eight rows/points/statements cover budget
+  read and consume, partition, two copy EOFs, two source EOFs and the original basis
+  probe. The distinct native basis probe adds one more. Each visited copy/source role
+  still reserves rows/points/statements/bytes/empty-seeks `10/10/9/3072/5`, plus the
+  planner's separate 512 bytes; the event adds 1024 planner bytes. Candidate, metadata
+  and witness axes are zero for these operational bodies. These conservative subtotals
+  preserve the defective five-seek base; they neither establish Source-core fit nor
+  replace the complete original preparation quote and physical repair.
+- Growth check: new planner-unit assertions retain 17 overlapping roles per origin,
+  all-eight-axis arithmetic, shared-origin traversal and pre-arm funding refusal. New
+  genuine-command regressions require complete 1/10/100 copy capture and a late native
+  copy to roll back receipt, pending queue, locators, copies, provenance, source commit
+  and write basis while prior original origins survive. Their isolated generous ledger
+  is not the original Source frame, unrelated-data growth or configured factory proof.
+  All product/native assertions remain authored UNRUN under minimal verification.
+
+### List presentation cost
+
+See [the runtime contract](#current-list-presentation-facts).
+
+- Touches: at most 100 raw originals, native current identity/control points, original and terminal
+  Access/source headers, active Type metadata, at most four configured properties and three output
+  values per property, their bounded selected slots, exact candidate/revision/author/consent/account/tuple points, bounded related
+  identity/label fills and the same finite dependencies at final currentness. Compact slot logs and
+  expanded selections retain their existing native 33-log/32-selection limits; these reads and any
+  withheld or unrepresentable candidates are charged, not free hydration.
+- Bound: O(k log N) point and ordered-prefix work in the admitted page/slot/value neighborhood;
+  no subject-history, unrelated population or full-degree scan, no cross-partition join and at most
+  one held native backend. Existing point, byte, row, statement and caller deadline limits remain.
+- Growth check: `test/semantic/growth-list-presentation-facts.test.ts` uses the shared inclusive
+  native capture at unrelated subject/statement/history/account/tuple populations 64/512/4096 and
+  requested widths 1/8/100. It charges Access, identity, selection, related, fence, reread, failed
+  attempts and native race restoration/relay work; every observed relation uses the actual strict
+  greater-than-eight-pages access-path guard. Native privacy cases are in
+  `list-presentation-privacy.test.ts`; released book/film/recipe and withholding cases remain in
+  the frozen `list-presentation-facts.test.ts`. Native execution and quantitative fit receipts are
+  deferred to post-integration acceptance under the current minimal verification instruction.
+
+### Subject revision history, disclosure and current correction actions
+
+The public revision-history route reads the first page and a deep cursor page at a fixed page size. Rows and statements
+stay constant for both pages; indexed blocks grow logarithmically with the selected subject's revision history and are
+independent of other subjects' histories. Statement disclosure measures one candidate mutation with fixed fanout;
+rows and statements stay constant and indexed blocks grow logarithmically with unrelated candidate history.
+
+#### Revision-history pages
+
+- Touches: One requested fixed-size page, its keyed Subject revision range and current `subject:read` authorization.
+- Bound: The native page size and signed cursor remain fixed; indexed work grows logarithmically with the selected Subject history and does not scan other Subjects.
+- Growth check: `test/semantic/revision-history-growth.test.ts` reads first and deep pages at scales `[1, 8, 64]`, asserting constant rows/statements and logarithmic blocks.
+
+#### Statement disclosure change
+
+- Touches: One affected candidate and its bounded disclosure dependencies, including refused and failed native reads.
+- Bound: One candidate mutation with fixed fanout; unrelated candidate history is not hydrated.
+- Growth check: `test/semantic/revision-history-growth.test.ts` measures one-candidate disclosure at scales `[1, 8, 64]`, asserting constant rows/statements and logarithmic blocks.
+
+#### Current correction-action projection
+
+`readSubjectCorrectionActions` uses the mounted `subject.propose` and `subject.terms` references with the shared
+`readViewerActions` reader. It checks current public Subject visibility, type and revision against the exact Global
+Context authority read. A stale revision, concealed Subject or failed authority read produces no positive operation.
+
+- Touches: One current Subject state, one current revision point and the deduplicated mounted Global Context action references, including native Access and failed, stale or concealed branches.
+- Bound: One Subject and one Global Context per request, with at most the two correction operation identities. It does not hydrate actions for historical revisions, scan revision history or enumerate an actor's grants.
+- Growth check: `test/semantic/viewer-actions.test.ts` exercises both mounted operation identities against current Global Access, including revocation. `test/semantic/revision-history-growth.test.ts` retains the three-scale history/disclosure captures; controller post-integration acceptance measures strict plans and examined rows for the action point reader as unrelated history and grants grow.
+
+## Native subject page publication
+
+`createSubjectPagePublicationStore({ pool, access, clock, routeKey })` reads persisted publication points and proves
+current inclusion through the original public Access and subject gates. It uses the canonical kernel route key,
+the public statement audience, current Global selection and moderation, consent disclosure, relation target gates
+and imported tuple fences. At most eight stored identities are attempted. Labels alone confer no inclusion.
+Unknown historical time remains absent; original command time is retained across meaningful removals and replay.
+Decision: subject-page publication envelopes classify as non-personal public page state; command identity stays independent.
+Target Access evidence is prepared from bounded witness hints before the final read acquires a connection.
+The final snapshot rechecks current selection, target state and authorization; hints confer no inclusion.
+`readCurrent` also produces optional `originalLanguage` from currently public selected `schema:name` facts,
+preferring preferred rank when present, otherwise normal rank, in native page order. The first valid monolingual
+language wins; otherwise the same rank/order rule applies to `schema:inLanguage`. Tag admission matches
+`apps/web/src/subject/language.ts`. Unknown language is omitted. Labels, locale and source kind cannot supply it;
+this display metadata adds neither inclusion evidence nor a publication clock and does not reorder labels.
+
+### Current native navigation projection
+
+`readPublicSubjectPageCandidates(deps: SummaryReaderDependencies, subjectIds: readonly string[])` in
+`subject-page-navigation.ts` accepts at most 100 raw keys and returns
+`Promise<Map<string, PublicSubjectPageCandidate | null>>`. Its closed data declaration is:
+
+```ts
+type PublicSubjectPageCandidate = {
+  id: string;
+  target: { family: 'subject'; subjectId: string } | { family: 'account'; accountId: string; canonicalPath: string };
+  views: readonly string[];
+};
+```
+
+The existing native feed factory uses this projection in batches of at most 100 within its original raw window
+of at most 1,000 candidates plus the unchanged key-only lookahead. It brackets the existing `store.readCurrent`
+proof with released native page observations. Every emitted entry has `target` and `views`; these fields are
+optional in the HTTP wire schema for compatibility. The wire remains `{ subjectPages, next }`, with unchanged
+`id`, sorted `labels`, optional `originalLanguage` and optional `lastModified`. No readiness or revision is exposed.
+Native missing-time evidence still omits `lastModified`; navigation supplies no time or inclusion evidence.
+
+`presentation/semantic-page.ts` shares `semanticPageView` with ordinary `pages.read`. It resolves actual offered
+views through the current active production profile and definitions after fresh anonymous native Subject and
+presentation Access. It does not render documents or dispatch a request per row. Missing profile/release readiness,
+changed native source state, redirects, hidden originals and denied Access withhold the projection. Original keys
+never borrow a terminal's eligibility. Source homes are read and released separately, and current home, revision,
+security, type, Account-association and profile/release guards are rechecked after dependencies. Equality rejects
+changed data; it never grants permission. Missing or moved native home authority remains an error. All work,
+including rejected keys and failed native work, shares the caller deadline and original raw window; this adds no
+scan, free native-work allowance, raised SQL/row/point/byte/time budget or new physical-cost claim.
+
+Account family and canonical navigation come only from the delivered Accounts
+`readPublicAccountCanonicalTargets` reader with current reciprocal verification, publication mappings, Account
+and exact handle-claim guards. Preparation and finish each call that same native reader with the same at-most-100
+original keys and caller deadline, bracketing dependent publication work. Finish withholds missing or changed
+Account identity, canonical path or admitted views, then performs the final original Subject/profile/release and
+current disclosure checks. Both actual native owners must admit the current result; matching snapshots cannot
+supply permission. Both Account batches, their internal initial/final native checks, failures and the final Subject
+checks belong in actual Cost evidence under all existing lower native SQL/point/byte/time limits.
+A valid Account whose `canonicalPath` is null is omitted;
+no immutable profile URL or handle is invented. An Account association without a proven current canonical target
+also withholds independent Subject fallback. An ordinary unassociated Subject uses its own native page destination.
+No family is inferred from labels, types, key shape or the legacy verification flag. These are navigation data,
+not permission/custody, whole-query Account exclusion or ordering authority.
+
+Subject template offerings and Account view admission are separate native facts. Only `family: 'account'` intersects
+the offered Subject template names with the Accounts-owned `PublicAccountCanonicalView` admission:
+`overview | posts | reviews | collections`. Root overview semantics remain with Accounts; activity flags do not
+grant it. Unassociated Subject destinations retain every actually offered view. Neither templates nor labels/types
+grant an Account activity view, and navigation adds no agents/realms family or view outside the closed owner union.
+
+Integration handoff for the Semantic manager and Web: consume `target` as the canonical family/address and `views`
+as the current native offered names, intersected with current Account admission for Account destinations. This is
+the same feed boundary consumed by `apps/web/src/sitemap/feeds/subjects.ts`; no second producer is needed.
+Preserve the original feed id and metadata; do not hydrate each row,
+construct handleless URLs or treat bare id/labels as a complete projection. The kernel feed already passes its
+actual composed native Access and route key to the reader. `test/semantic/subject-page-feed-targets.test.ts` adds
+focused native current-target scenarios; `subject-page-http.test.ts` retains its original publication assertions
+and bootstraps the real production presentation profile. Consumer integration and native acceptance run after
+landing; this declaration does not claim native feed/publication/current-authority acceptance, Web delivery,
+physical cost acceptance or main proof.
+
+Native creation, identity labels, Global selection and selected rank changes, selected moderation, bulk retraction,
+consent disclosure, account-agent labels, verification reversal and merge gates record bounded component deltas.
+Proposals, unselected decisions, private Context activity, unchanged imports and physical expansion add no public
+clock. Derived link moves carry original evidence through durable continuation metadata and request bounded repair.
+The store owns all publication persistence and route-local CAS, claim, bootstrap, dependency and fanout ports.
+Forward dependencies live with the source subject; reverse memberships and tombstones live with their owners.
+Dependency producer events join the command's ordinary event array and commit with the native command, ledger and
+forward deltas. The store's autonomous missing-proof request emits the registered local `repair_queued.v1` marker
+through the ordinary command result. It carries no public transition time. Repair and Relay runners remain separate
+integrations.
+
+### Native publication transition cost
+
+- Touches: affected component/dependency points, the subject publication point and immutable subject-local ledger;
+  bounded source continuation metadata and the existing command outbox envelope.
+- Bound: O(changed components × log N), within the native 512-fact cap and bounded selected slot. No subject-degree,
+  history or dependent enumeration is added to native commands.
+- Growth check: `test/semantic/subject-page-local-publication.test.ts`: `native publication transition and current proof cost excludes unrelated components and history`.
+- Native outcomes: `test/semantic/publication-native-hooks.test.ts`: `every native public mutation records only its actual shown component transitions`.
+
+### Current publication proof cost
+
+- Touches: original gates and bounded descriptive labels, the two bounded current name/language slots and their
+  candidate provenance and tuple fences, at most eight keyed current witness checks and public target gates.
+  Each candidate check reads its latest statement identity through the indexed route/subject/candidate key; it
+  does not fold the subject's relation degree or candidate history. Missing proof coalesces into one durable
+  subject-home repair point.
+- Bound: fixed per-witness work independent of subject degree and history, owner batches at most 256 and Content
+  fence batches at most 100. A settled empty projection and missing time alone do not restart repair.
+- Growth check: `test/semantic/subject-page-local-publication.test.ts`: `native publication transition and current proof cost excludes unrelated components and history`; `test/semantic/publication-native-hooks.test.ts`: `native publication cost diagnostics identify any degree-wide statement`.
+- Metadata outcomes: `test/semantic/subject-page-local-publication.test.ts`: `publication original language follows current public names ranks fallback and unknown omission`;
+  `test/semantic/publication-native-hooks.test.ts`: `publication language admission and rank priority use only currently disclosed selections`.
+
+### Durable publication store cost
+
+- Touches: one route-led publication/lease/checkpoint range and at most 32 supplied repair or owner fanout keys.
+- Bound: home-checked transactions, generation/version CAS and idempotent identities; no cross-home write or global
+  reverse range. Live component dependency ranges lead with `(route, subject_id, component_key)`; live reverse
+  ranges lead with `(route, owner_kind, owner_key)`. Both exclude retained removal tombstones. Committing an unfinished
+  page releases its lease and makes the next page runnable immediately.
+- Integration checks belong to the independent repair runner acceptance:
+  `test/semantic/subject-page-repair.test.ts`: `durable publication repair advances a fixed combined key budget and settles`;
+  `test/semantic/growth-subject-page-repair.test.ts`: `repair store and current witness reads remain bounded as unrelated state grows`.
+
+Source original enrollment uses the delivered `identity_epoch_prearm_inverse` directory and locks its
+native bridge before taking the Source bridge. The same released-home receipt covers the Source
+forward ticket and admission inverse; Source readiness requires both. Retirement removes both under
+the same open-bridge fence. The native admission ticket reader replaces the provisional declaration
+on integration; Source PREPARATION receiving remains Source-owned. Existing original tickets are
+re-enrolled before their summary can become clean after this directory binding is installed.
+
+## Immutable native definition catalogues
+
+The mounted Definitions API accepts bounded addressed artifacts at
+`POST /v1/definitions/catalogue/artifacts` (`{kind,artifact}`), retaining original
+canonical package bytes and computing the address itself. Supported kinds are
+`root`, `node`, `release` and `declaration`. There are no external URI resolvers.
+Release admission uses the original validator, construction policy and exact native
+historical exemption; a new catalogue cannot bypass small Release publication caps.
+Kind/1 construction supports **exact-type only**, including for ineligible Kinds.
+The package's original parser rejects unsupported versions, fields and generic filters.
+
+`POST /v1/definitions/catalogues` takes `{pin}` and commits immutable build input.
+The ordinary semantic Work module registers the build in the existing DBOS maintenance
+queue. Each native continuation locks that root's progress, validates one bounded
+artifact and retains its DFS stack/member cursor and counters in the same Global
+command. `POST /v1/definitions/catalogues/:root:step` provides an authorized finite
+continuation through the same body. `GET .../:root/build` exposes retained state,
+phase, counters, missing address and refusal diagnostic. Missing input is incomplete;
+uploading the exact bytes resumes it. Corrupt closure is refused. Every node digest,
+child range and repeated subtree is checked, followed by original Release validation,
+complete shared identity comparison and exact condition/presentation/profile closure.
+A savepoint rolls back an invalid step's derived rows before retaining refusal.
+Crash/replay either commits the whole step or none of it. No partial indexes are read.
+
+All publication/continuation operations require the existing `definitions:publish`
+action and publication gate on Global. Activation requires `definitions:activate`
+there, with fresh native command authorization before receipt lookup. Existing
+sealed request replay/conflict rules apply. `POST .../:root:activate` takes
+`{expected_head}` and changes the single Global catalogue head only for a complete
+root. The CAS and `com.rezics.definitions.catalogue.activated.v1` invalidation commit
+together. Building another root leaves the old head usable; old immutable pins remain
+readable after activation. The bounded Release1 publication, activation, historical
+read and construction paths retain their own original head and meaning. The explicit
+`legacyReleaseKinds` adapter accepts at most 100 selected IDs within one original
+bounded Release1, uses the original `compatibilityKind`, and never fabricates a
+catalogue root, profile or changed historical digest.
+
+`createNativeDefinitionCatalogue({pool,access})` is the actual mounted request reader.
+It imports the native Actor and Access accounting port. Native Access preparation,
+current authoritative time, final Global Definitions permission and metadata SQL share
+the caller's ledger and deadline. The HTTP adapter uses the existing native ledger
+implementation; it adds no permission or native Source evidence. `GET
+/v1/definitions/catalogue` returns null only when no catalogue is active. Missing or
+unfinished pinned indexes are typed unavailable, not an empty catalogue.
+
+`POST .../:root/kinds:resolve` accepts 1–100 unique exact IDs, independently of page
+membership. `GET .../:root/kinds` accepts `query`, `language`, `limit` and `cursor`.
+Metadata search is a literal, case-sensitive **label prefix in the exact requested
+language**, default English and empty prefix; it does not expand subtypes or search
+subjects. No language fallback is inferred. Sort is exact UTF-16 label order, then
+exact stable Kind ID order. Build-time DFS ordinals preserve the package's exact ID
+comparison without putting unbounded IDs into B-tree sort keys. Language/ID equality
+uses bounded SHA-256 keys with original identities retained and verified. Language
+label sort keys fit the original declaration label bound. Cursors use the host's
+existing signed cursor implementation and bind immutable root/spec/reduction,
+operation, query, language and actual sort; the payload is a bounded ordinal, never
+an unsigned caller key. Keyset boundaries have their own indexed lookup. A key-only
+lookahead establishes continuation; a short byte-limited response does not imply EOF.
+
+Original identifiers and directory keys use UTF-8 byte storage; member/declaration
+bodies use PostgreSQL `json`. This preserves every admitted JSON string, including
+escaped null characters that PostgreSQL `text`/`jsonb` cannot represent. Hash keys
+and UTF-16 sort keys do not normalize those identities. Refusal diagnostics sanitize
+null characters and truncate by code point within the declared status byte budget.
+
+`GET .../:root/candidates?exact_type_id=...` plans only auto-eligible exact-Type
+candidates, precedence descending and exact stable Kind ID ascending. Two disjoint
+indexed ranges handle the same-precedence tail and remaining lower precedence without
+scanning old pages. The Type ID comparison is exact. The vocabulary Release pins
+meaning, not every item's Release. Candidate lists are not subject admission, voting,
+currentness, Source readiness or permission. Automatic consumer enrollment/cuts and
+Source adoption remain separate work; this publisher supplies no provisional ACK port.
+Existing ordinary subject creation continues to use its original Release admission.
+
+### Catalogue build and activation cost
+
+- Touches: one Global root/progress point, one addressed artifact, a retained DFS stack or member cursor, root-keyed identities/metadata and the native command/outbox.
+- Bound: a node is at most 256 entries/256 KiB; one continuation inserts at most 256 tasks. A Release is at most 4 MiB with original member caps; a continuation indexes at most 64 members (128 identity/member writes). A declaration is at most 64 KiB and indexes at most 64 labels. Statement/key/row counts are bounded by these plans plus fixed progress/command overhead. Only a single bounded Release is re-decoded on its successive member pages. Total build work follows the finite population, with no total Type, Kind, shard or node ceiling. Activation touches fixed Global build/head points and one event, with no catalogue enumeration.
+- Growth check: the authored `definition-catalogue-publication.test.ts` uses three genuinely compiled 384-Type shards and ordinary default createKernel APIs. Its native execution is deferred. For 200,000 Kinds plus 196 Release members and count-bound nodes, there are 783 leaves, four parents and one directory root (788 nodes). Each Kind needs one declaration continuation for an ordinary label set; each 1,024-Type shard needs 16 Type-member continuations plus its property/profile pages. Thus build commands are O(nodes + Kinds + member rows/64 + label rows/64), with storage O(population + labels + member semantics). This conservative one-artifact-per-step implementation trades throughput for fixed request work; 200,000 is a design workload, not a configured maximum or an executed benchmark.
+
+### Exact and paged metadata cost
+
+- Touches: fixed Global native Access/time points, one root readiness point, at most 100 exact keys or 101 indexed metadata keys, a continuation boundary and admitted body points in one repeatable-read snapshot.
+- Bound: O(K log N) application keys and indexed rows. Label pages select a bounded range before same-partition body-size joins. Candidate pages use exact-Type postings; neither GET traverses directories, history or complete release registries. Size projections precede body transfer. Total serialized response is at most 1 MiB; excess exact output or a single oversized record is explicitly unavailable, never silently omitted. Byte-limited pages retain a signed continuation. Original engine visibility work is not custom-metered.
+- Growth check: the same authored journey covers noninitial exact Kind lookup, signed metadata/candidate continuation, denied writes, stale CAS, incomplete/corrupt closure, original historical Release meaning and immutable old pins. Native acceptance, operational consumer/default Search/subject integration, physical scale and main proof remain deferred and unclaimed.
+
+The read plans are in [definition-catalogue.ts](definition-catalogue.ts): exact IDs
+use the Kind primary key; label keysets use the label primary key and
+`definition_catalogue_label_boundary`; candidate tails use
+`definition_catalogue_candidates`. The [forward migration](../../db/semantic/migrations/20261101000800_definition_catalogue.sql)
+declares those partition/root-leading indexes. Build continuations in
+[definition-catalogue-publication.ts](definition-catalogue-publication.ts) use the
+retained DFS link and `definition_catalogue_pending`, never a complete-directory scan.
+
+Public COMPLETE output capture is implemented by
+[identity-public-output-capture.ts](identity-public-output-capture.ts), with literal work plans, immutable SQL
+receipts and an additive migration. The [epoch contract](identity-epoch-contract.md#public-output-capture-execution-and-composition)
+records bounded continuation, current validation, persisted successor staging, native disposition, monotone
+enrollment fencing and literal eight-axis composition. Unknown enrolled receiver/writer closure and admitted
+Subject inverse removal remain precisely refusing and retained. Generic registered public Source capture remains a separate variant.
+The authored production-composition regression is `test/semantic/identity-public-output-capture.test.ts`;
+acceptance/native/browser execution is deferred to controller integration.
+
+## Current Type directory
+
+`GET /v1/definitionTypes` accepts a literal case-sensitive label-prefix `query`, or
+an exact `typeId`, `locale` (default `en`), `limit` (1–20, default 20), and `cursor`.
+It returns `{types,next}`. Each Type identifies `typeId`, `releaseDigest`, the selected
+`label`/`language`, direct `parents`, and `description`/`descriptionLanguage` (null
+when absent). Ordering is exact JavaScript label order followed by exact Type ID.
+`GET /v1/definitionTypes/{typeId}` returns that summary, the immutable released
+`definition`, and its effective `properties` dictionary, including value schemas,
+facets and presentation hints. Unknown exact Types return the ordinary 404.
+Both operations use the same Global resource, Definitions read action and eligibility
+as `definitions.read_active`; each read checks authority and metadata in one RR snapshot.
+Feed/discovery Kind choices continue using Search's existing directory.
+
+Decision: materialize the eight reader locales (`en`, `de`, `es`, `fr`, `ja`, `ko`,
+`zh-Hans`, `zh-Hant`), applying the existing `pickText` fallback independently to
+labels and descriptions; other reader locales are invalid requests, while released
+label languages remain unrestricted. Adding a reader locale requires rebuilding
+this derived index. The active immutable native catalogue supplies its entire Release
+set. Before a native catalogue is active, the original Release1 head supplies the
+bounded directory. If a Type occurs in several member Releases, identical shared
+Type/property identities retain their meaning and the smallest Release digest is
+its deterministic descriptor pin. The original whole-release APIs, release head,
+activation history and stored pins keep their existing semantics.
+
+A signed, 15-minute cursor binds operation, prefix/exact ID, locale, page size and
+catalogue source/head. Changed query bindings and tampering return `invalid_cursor`;
+a replaced/retired head or expired cursor returns `stale_cursor`, never a mixed page.
+Directory data and the head are read in the same snapshot. Empty prefix pages use the
+same index as searches; exact ID search and descriptors use digest-keyed points.
+
+The derived index has immutable catalogue-leading entries and fixed-width radix
+edges with ordinary PostgreSQL B-tree indexes. A three-byte, terminated UTF-16
+encoding preserves literal label and ID ordering, including nulls, prefix IDs and
+IDs exceeding PostgreSQL's B-tree tuple limit. Hash-only ordering would change ties;
+indexing entire IDs would reject originally admitted Releases. Each parent/edge key
+is bounded (128-byte edge), and the unique node key rejects hash collisions rather
+than silently combining paths. No complete-registry scan or sort is used by reads.
+
+The existing authorized native build has a final directory phase, seeking at most
+65 Type member rows and committing at most 64 entries, their locale paths and its
+checkpoint together. Interrupted steps replay from that checkpoint. Its ordinary
+Work continuation and authorized `:step` run the same phase; activation waits for
+completion. A ready catalogue from before this migration is resumed by the existing
+publish-authorized `POST /v1/definitions/catalogues` and `:step` operations. Its Kind
+indexes remain readable throughout. Original Release1 activation/bootstrap installs
+its single capped Release's directory in the same transaction as the head. Existing
+Release1 heads can be prepared by authorized reactivation. Until preparation finishes,
+directory operations return `semantic_not_ready`, never half-installed entries.
+Historical oversized exemptions remain readable/activatable; they do not bypass
+new directory admission. Building or retiring another root never rewrites the
+current or historical roots' directory entries.
+
+### Type directory read and lifecycle cost
+
+- Anchors: Global authority, one native head (or one backward Release1 head probe),
+  one completion point, catalogue/locale parent-edge ranges and Type/property points.
+- Let `q = limit + 1 ≤ 21`, `B = 4,194,304`, and
+  `L = ceil(3 × (B + 512 + 2) / 128) = 98,317`. A label has at most 256 code points
+  (512 UTF-16 units); any original Type ID fits in the capped canonical Release.
+  This deliberately conservative depth covers the full admitted identifier domain.
+  A successor traversal visits at most `V = (q + 2)(L + 1)` edges: output paths,
+  the previous boundary path and the prefix boundary. It makes at most `2V + 1`
+  indexed seeks, each examining at most `q` candidate edges, with no catalogue-wide
+  filtering or sort. Ordinary short label/ID tuples occupy one edge, so a page
+  uses one range seek. Body fill uses at most 20 entry points; the cursor adds one.
+  Exact reads use one entry point and at most 64 property points, independent of
+  total Releases, Types and history. Transferred bodies are at most `(21 + 64)B`
+  for these conservative composed bounds; summaries contain no property bodies.
+- Native directory continuation: one progress lock, one 65-row member range,
+  at most 64 entry upserts and `64 × 8 × L` edge insert attempts, one checkpoint.
+  Body decoding is at most `65B`; edge batches are bounded per Type. Total work
+  follows the finite catalogue population. A Release1 activation adds at most
+  1,024 entry upserts, `1,024 × 8 × L` edge insert attempts, 4,096 property points
+  and one completion write, all from one bounded Release. Shared edges use conflict
+  insertion; no head switch or retirement enumerates catalogue entries. Native
+  publisher status counters retain their original member/Kind meaning; these
+  derived directory writes are accounted by this static bound, not runtime funding.
+- Growth check: `definition-type-directory.test.ts` exercises mounted pages across
+  two and three Releases, noninitial exact descriptors, locale fallback, literal
+  ties, large IDs, interrupted preparation, stale/tampered cursors, immutable
+  Release1 reads, and the actual bounded edge range plans at both catalogue sizes.
+
+## Source Concept reader
+
+Decision: This reader reads current source state only, explicitly identifies unsupported historical pins, and retains at most five opaque hierarchy cursor addresses; revisiting an address rechecks current disclosure.
+
+Correction entry comes from the mounted `subject.propose` operation and is evaluated at its actual Global Context authority, with the current subject visibility and revision checked again in the same native viewer-action read.
+
+## Qualified list work context
+
+`readListPresentationFacts(..., {workContext: true})` extends the existing reader for Search only. Its default remains
+the existing generic facts contract used by Commerce. It reads the current terminal Type's admitted credit properties,
+forward order/derivation/world/membership/association properties and time properties. The Type owns each category;
+no credit graph or inverse traversal runs. Exact candidate, originating immutable release, revision, rank, main value
+and that candidate's qualifiers stay together. Only current original AND terminal disclosure supplies related IDs,
+Types and labels. Account, consent, retraction and exact Source-tuple fences apply before projection, and the same
+finite observations (including selection bases and all locators) repeat before return. Default Search repeats that
+native reader again before its retained execution's final publication observation.
+
+Decision: preserve explicit unknown/no-value and unsupported values; withhold an entire category if a selected
+statement or any examined item/qualifier/lookahead is concealed, so no concealed identity or cardinality is emitted.
+Empty, unsupported and unavailable are distinct from withheld.
+Work-only pending or unavailable identity mappings make their category unavailable; they do not change the
+independent generic-fact availability contract. Concealed targets still withhold their category.
+The wire is documented in
+[Search](../search/README.md#qualified-work-context-in-discovery-v1). A fourth disclosed candidate establishes bounded
+overflow without a guessed destination. MusicAlbum stays a work. The current release has no MusicRelease or
+MusicRecording; the optional Type-identity seam recognizes those exact Types only if Semantic later releases them.
+No definitions, detail reader, relation writer or index are added here.
+
+### Qualified list work context Cost
+
+For k <= 100 raw original keys, immutable Type admission bounds each subject to 64 properties. The existing ordered
+Global outbound range seeks `(route, subject_id, property, context_id, filter_value)` and reads LIMIT 4 per relation
+property, at most 256 locators per hit. Its checkpoint must cover that source's write position, and each locator must
+match current source revision/security. These rows are locators, never qualifier authority. Across the whole hit,
+only four creator and four association candidate locators open selected slots; generic facts independently retain
+three locators for each of four configured properties (at most 12). All time/descriptive slots add at most 64 more
+slot reads: a conservative ceiling is 84 slot resolutions per hit per observation. Each resolver retains the existing
+33 compact log / 32 selection bound (2,772 compact log rows or 2,688 selected rows per hit). Exact provenance reads
+are grouped by native home and chunked at 256 candidate/revision keys. No history or degree-dependent scan occurs.
+
+Only four statements per category reach related preparation: at most 12 mains plus 48 qualifier item keys, plus
+12 generic item keys = 72 raw related keys per hit / 7,200 per page. Each key independently resolves original and
+terminal (at most 14,400 related headers) through full-key batches of 100 grouped by native home. Labels use the
+existing finite native label reader. Account and Source-fence points are deduplicated from these finite source and
+related observations; source fences retain their native 100-tuple chunks. Every checkout closes before foreign
+preparation or another home. Each list read repeats originals, terminal selection/provenance, related identity/labels,
+accounts, fences and release activation; Search invokes that entire reader twice, so its maximum observation fanout
+is four times these source/related bounds. Serialized delivery is separately bounded to three entries per category,
+four qualifier facts per statement, one 256-byte localized label, 16 KiB per hit and 256 KiB per page. There is no
+per-I/O pricing protocol or second writer. Native and mounted-route growth/acceptance remain deferred to integration.
+
+Explicit inverse credit groups retain the original disclosed assertion even when it has no qualifiers. Their optional
+`creditSlot` supplies current slot identity only; it grants no operation and carries no draft. A concealed slot-key
+qualifier never becomes an unqualified correction slot. Other unqualified inverse groups remain compact. The same
+batched current-statement and summary reads supply this projection; it adds no row hydration or history scan.
+
+The response bound follows the existing native 100-row link cap and statement admission: one main Snak, at most
+16 qualifiers and 16 references with 16 parts each, hence 273 Snaks per row. Let A be the maximum UTF-8 JSON
+size of an admitted Snak under its released value schema and native input budget, S the existing disclosed-summary
+bound, and F the fixed assertion/reference/slot framing. The credit payload is bounded by
+`100 × (273A + 257S + F)`: each row has one holder summary and related entries drawn from the existing 256-ID
+summary budget. This is a response ceiling, not another truncation rule. Explicit inspection adds one keyed revision
+read with its existing finite change/reference budgets; correction adds one existing exact-holder/Context authority
+projection with at most three Subjects. Neither operation grows with obsolete history or unrelated Subjects.

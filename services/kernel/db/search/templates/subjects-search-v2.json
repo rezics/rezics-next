@@ -1,0 +1,6 @@
+{
+  "script": {
+    "lang": "mustache",
+    "source": "{\n  \"query\": {\n    \"bool\": {\n      \"must\": {{#has_query}}{{#toJson}}query{{/toJson}}{{/has_query}}{{^has_query}}{\"match_all\": {}}{{/has_query}}\n      {{#has_filter}}, \"filter\": {{#toJson}}filter{{/toJson}}{{/has_filter}}\n      {{#has_boost}}, \"should\": [\n        {\"term\": {\"names.exact\": {\"value\": {{#toJson}}boost{{/toJson}}, \"boost\": 10}}},\n        {\"match_phrase\": {\"names\": {\"query\": {{#toJson}}boost{{/toJson}}, \"boost\": 3}}}\n      ]{{/has_boost}}\n    }\n  },\n  \"size\": {{#toJson}}size{{/toJson}},\n  \"sort\": {{#toJson}}sort{{/toJson}},\n  {{#has_after}}\"search_after\": {{#toJson}}after{{/toJson}},{{/has_after}}\n  \"track_total_hits\": 10000,\n  {{#has_overflow}}\"aggs\": {\"overflow\": {\"filter\": {\"terms\": {\"relation_facet_overflow\": {{#toJson}}overflow_properties{{/toJson}}}}}},{{/has_overflow}}\n  \"_source\": [\"partition\", \"security_revision\"]\n}"
+  }
+}

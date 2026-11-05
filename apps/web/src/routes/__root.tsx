@@ -1,75 +1,250 @@
-import { createRootRoute, HeadContent, Outlet, Scripts, useRouterState } from '@tanstack/react-router';
-import { createIsomorphicFn, createServerFn } from '@tanstack/react-start';
-import { getRequest, getRequestHeader, setResponseStatus } from '@tanstack/react-start/server';
-import { useLayoutEffect } from 'react';
+import {
+  createRootRouteWithContext,
+  HeadContent,
+  isNotFound,
+  Outlet,
+  Scripts,
+  useRouter,
+  useRouterState,
+} from '@tanstack/react-router';
+import type { BuyerHistoryVisit } from '../checkout/buyer-history-visit';
+import type { QueryClient } from '@tanstack/react-query';
+import { createIsomorphicFn } from '@tanstack/react-start';
+import { getRequest, getResponseStatus, setResponseHeader, setResponseStatus } from '@tanstack/react-start/server';
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { env } from 'cloudflare:workers';
-import type { SessionEnv } from '../session/client.ts';
-import { readSessionState } from '../session/state.ts';
-import { m } from '../paraglide/messages.js';
-import { getLocale, locales } from '../paraglide/runtime.js';
-import { AppShell, NotFoundPage } from '../shell/shell';
+import { PreferencesScript } from '../shell/preferences-script';
+import { getLocale } from '../paraglide/runtime.js';
+import { AppShell } from '../shell/app-shell';
+import { NotFoundPage } from '../shell/shell';
 import { ClosedErrorPage, ClosedPage } from '../shell/closed.tsx';
+import { errorPageHead, routeFailure } from '../shell/error-state';
 import { isPlatformClosedError } from '../kernel/platform-closed.ts';
+import { anonymousReadMode, type ReadCredentialMode } from '../kernel/credential.ts';
+import { useSession } from '../session/query.ts';
+import { pageHead, pageLinks, type PagePaths } from '../shell/head.ts';
+import { validatePublicOrigin } from '../shell/origin.ts';
 import '../styles.css';
+import { prepareExposure } from '../kernel/exposure';
+import { isSignedInPath } from '../session/guard';
+import { createNavigation } from '../shell/navigation';
+import { m } from '../paraglide/messages.js';
+import { Tags, ChartNoAxesCombined, FileText } from 'lucide-react';
+import { subjectPurchaseRegions } from '../checkout/subject-purchase';
+import { contextsNavigation } from '../features/contexts/navigation';
+import { myLogsNavigation } from '../library/my-logs';
+import { threadsNavigation } from '../threads/navigation';
+import { zonesNavigation } from '../features/zones/manage/navigation';
+import { catalogueNavigation } from '../features/catalogue/navigation';
+import { importReviewNavigation } from '../features/import-review/navigation';
+import { communityNavigation } from '../community/navigation';
+import { libraryNavigation } from '../library/navigation';
+import { LocaleNavigationProvider } from '../shell/locale-navigation/context';
+import { OwnVotesReturnProvider } from '../ratings/own-votes/return';
 
-const readPreferences = createServerFn({ method: 'GET' }).handler(async () => {
-  const cookie = getRequestHeader('cookie') ?? '';
-  const theme = /(?:^|;\s*)rezics_theme=(system|light|dark)(?:;|$)/.exec(cookie)?.[1] ?? 'system';
-  const host = getRequestHeader('host') ?? 'localhost';
-  const protocol = getRequestHeader('x-forwarded-proto') ?? 'http';
-  const session = await readSessionState(getRequest(), env as Partial<SessionEnv>);
-  return {
-    theme,
-    origin: `${protocol}://${host}`,
-    collapsed: /(?:^|;\s*)rezics_nav=collapsed(?:;|$)/.test(cookie),
-    session: session.state,
-    csrfToken: session.csrfToken,
-  };
-});
-const setClosedResponseStatus = createIsomorphicFn()
-  .server(() => setResponseStatus(403, 'Forbidden'))
+export const commerceNavigation = createNavigation([
+  ...contextsNavigation,
+  ...myLogsNavigation,
+  ...threadsNavigation,
+  ...zonesNavigation,
+  ...catalogueNavigation,
+  ...importReviewNavigation,
+  ...communityNavigation,
+  ...libraryNavigation,
+  {
+    id: 'commerce.creator-offers',
+    kind: 'navigation',
+    group: 'personal',
+    order: 15,
+    label: ({ locale }) => m.creator_offers_heading({}, { locale }),
+    href: '/creator/offers',
+    match: 'prefix',
+    signedIn: true,
+    operation: 'offer.list',
+    icon: Tags,
+  },
+  {
+    id: 'commerce.creator-sales',
+    kind: 'navigation',
+    group: 'personal',
+    order: 16,
+    label: ({ locale }) => m.creator_sales_heading({}, { locale }),
+    href: '/creator/sales',
+    match: 'prefix',
+    signedIn: true,
+    operation: 'commerce_sale.list',
+    icon: ChartNoAxesCombined,
+  },
+  {
+    id: 'commerce.creator-statements',
+    kind: 'navigation',
+    group: 'personal',
+    order: 17,
+    label: ({ locale }) => m.statements_heading({}, { locale }),
+    href: '/creator/statements',
+    match: 'prefix',
+    signedIn: true,
+    operation: 'payout_statement.list',
+    icon: FileText,
+  },
+]);
+
+const preserveErrorResponse = createIsomorphicFn()
+  .server((matches: Parameters<typeof routeFailure>[0]) => {
+    const failure = routeFailure(matches, getResponseStatus());
+    if (!failure) return;
+    setResponseStatus(failure.status);
+    setResponseHeader('cache-control', 'private, no-store');
+    setResponseHeader('x-robots-tag', 'noindex');
+    if (failure.retryAfter) setResponseHeader('retry-after', failure.retryAfter);
+  })
   .client(() => undefined);
-export const Route = createRootRoute({
-  loader: () => readPreferences(),
-  head: ({ loaderData }) => ({
-    meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: m.home_heading() },
-      ...(loaderData?.csrfToken ? [{ name: 'csrf-token', content: loaderData.csrfToken }] : []),
-    ],
-    links: [
-      { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
-      ...locales.map((locale) => ({
-        rel: 'alternate',
-        hrefLang: locale,
-        href: `${loaderData?.origin ?? 'http://localhost'}/${locale}`,
-      })),
-      { rel: 'alternate', hrefLang: 'x-default', href: `${loaderData?.origin ?? 'http://localhost'}/` },
-    ],
-  }),
-  component: Root,
+const publicOrigin = createIsomorphicFn()
+  .server(() => validatePublicOrigin((env as typeof env & { PUBLIC_ORIGIN?: string }).PUBLIC_ORIGIN, getRequest().url))
+  .client(() =>
+    validatePublicOrigin(
+      new URL(document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href ?? window.location.origin).origin,
+    ),
+  );
+export const Route = createRootRouteWithContext<{
+  queryClient: QueryClient;
+  credentialMode: ReadCredentialMode;
+  buyerHistory?: BuyerHistoryVisit;
+}>()({
+  beforeLoad: ({ context, location }) =>
+    isSignedInPath(location.pathname) ? undefined : prepareExposure(context.queryClient),
+  head: ({ matches }) => {
+    const locale = getLocale();
+    const last = matches.at(-1);
+    const data = last?.loaderData as { paths?: PagePaths } | undefined;
+    const path = last?.pathname ?? '/';
+    const origin = publicOrigin();
+    const failure = routeFailure(matches);
+    preserveErrorResponse(matches);
+    const missing = failure?.missing;
+    const hiddenAgentHandle = missing && /^\/(?:[^/]+\/)?@[^/]+(?:\/[^/]+)?$/.test(path);
+    const safePath = hiddenAgentHandle ? `/${locale}` : path;
+    const context = {
+      origin,
+      locale,
+      path: safePath,
+      ...(data?.paths && !hiddenAgentHandle ? { paths: data.paths } : {}),
+    };
+    const head = failure ? errorPageHead(context) : pageHead({}, context);
+    return {
+      meta: [{ charSet: 'utf-8' }, { name: 'viewport', content: 'width=device-width, initial-scale=1' }, ...head.meta],
+      links: [
+        { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
+        ...pageLinks(origin, locale, safePath, failure || hiddenAgentHandle ? undefined : data?.paths),
+      ],
+    };
+  },
+  shellComponent: Root,
+  component: RootRoutes,
   notFoundComponent: NotFoundPage,
   errorComponent: ClosedErrorPage,
 });
-function Root() {
-  const { theme, collapsed, session, csrfToken } = Route.useLoaderData();
+
+function RootRoutes() {
+  return (
+    <OwnVotesReturnProvider>
+      <Outlet />
+    </OwnVotesReturnProvider>
+  );
+}
+
+// This listener precedes the module entry and survives a failed import of client.tsx itself.
+// Only an observed module failure exposes recovery; a pending operation has no deadline.
+const clientLoadRecovery = String.raw`(() => {
+  const failed = () => {
+    if (!document.documentElement.hasAttribute('data-hydrated'))
+      document.documentElement.dataset.clientLoadFailed = '';
+  };
+  window.addEventListener('error', (event) => {
+    if (event.target instanceof HTMLScriptElement && event.target.type === 'module') failed();
+  }, true);
+  window.addEventListener('unhandledrejection', (event) => {
+    const message = String(event.reason?.message ?? event.reason);
+    if (/Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(message)) failed();
+  });
+})()`;
+
+function Root({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  useLayoutEffect(() => router.options.context.buyerHistory?.mount(router), [router]);
+  const nonce = router.options.ssr?.nonce;
+  const href = useRouterState({ select: (state) => state.location.publicHref });
+  const locale = getLocale();
+  router.options.context.buyerHistory?.observeLocale(locale);
+  const options = { locale };
+  const { state: session } = useSession();
   const platformClosed = useRouterState({
     select: (state) => state.matches.some((match) => match.status === 'error' && isPlatformClosedError(match.error)),
   });
-  if (platformClosed) setClosedResponseStatus();
+  const rereadPage = useRouterState({
+    select: (state) =>
+      (state.matches.length === 1 && state.matches[0]?.status !== 'error') ||
+      state.matches.some((entry) => {
+        const match = entry as unknown as {
+          status: string;
+          error?: unknown;
+          _notFound?: boolean;
+          routeId?: string;
+          staticData?: { sessionReread?: boolean };
+        };
+        const route = match.routeId
+          ? (
+              router.routesById as unknown as Record<string, { options?: { staticData?: { sessionReread?: boolean } } }>
+            )[match.routeId]
+          : undefined;
+        return (
+          match.staticData?.sessionReread === true ||
+          route?.options?.staticData?.sessionReread === true ||
+          match._notFound === true ||
+          match.status === 'notFound' ||
+          isNotFound(match.error) ||
+          (match.status === 'error' && isPlatformClosedError(match.error))
+        );
+      }),
+  });
+  const credentialMode = useRef<ReadCredentialMode>(anonymousReadMode);
+  useEffect(() => {
+    if (session !== 'signed-in' || !rereadPage || credentialMode.current === 'session') return;
+    credentialMode.current = 'session';
+    router.update({ context: { ...router.options.context, credentialMode: 'session' } });
+    void router.invalidate();
+  }, [router, session, rereadPage]);
   useLayoutEffect(() => {
     document.documentElement.dataset.hydrated = '';
   }, []);
   return (
-    <html lang={getLocale()} className={theme === 'system' ? undefined : theme}>
+    <html
+      lang={locale}
+      dir={/^(ar|ckb|dv|fa|he|ku|ps|sd|ug|ur|yi)(?:-|$)/i.test(locale) ? 'rtl' : 'ltr'}
+      suppressHydrationWarning
+    >
       <head>
+        {nonce ? <meta property="csp-nonce" content={nonce} /> : null}
+        <PreferencesScript />
         <HeadContent />
       </head>
       <body>
-        <AppShell theme={theme} collapsed={collapsed} session={session} csrfToken={csrfToken}>
-          {platformClosed ? <ClosedPage /> : <Outlet />}
-        </AppShell>
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: clientLoadRecovery }} />
+        <div
+          data-client-load-recovery
+          role="alert"
+          className="border-b border-border bg-background p-4 text-foreground"
+        >
+          <p>{m.shell_client_unavailable({}, options)}</p>
+          <a href={href} className="inline-flex min-h-11 items-center text-primary underline">
+            {m.shell_client_reload({}, options)}
+          </a>
+        </div>
+        <LocaleNavigationProvider>
+          <AppShell navigation={commerceNavigation} subjectPurchase={subjectPurchaseRegions}>
+            {platformClosed ? <ClosedPage /> : children}
+          </AppShell>
+        </LocaleNavigationProvider>
         <Scripts />
       </body>
     </html>

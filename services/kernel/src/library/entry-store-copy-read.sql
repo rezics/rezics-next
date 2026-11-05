@@ -1,5 +1,7 @@
 SELECT route, copy_id AS id, account_id AS "accountId", subject_id AS "subjectId", status, location, source,
        acquired_on::text AS "acquiredOn", disposed_on::text AS "disposedOn", note, revision,
-       created_at::text AS "createdAt", updated_at::text AS "updatedAt", transaction_id AS "transactionId"
+       created_at::text AS "createdAt", updated_at::text AS "updatedAt", transaction_id AS "transactionId",
+       kind, COALESCE(status_profile_pin, library_profile_pin) AS "libraryProfilePin",
+       media_condition AS "mediaCondition", packaging_condition AS "packagingCondition"
 FROM library.copy
-WHERE route = :route AND copy_id = :copy_id;
+WHERE deletion_id IS NULL AND route = :route AND copy_id = :copy_id;

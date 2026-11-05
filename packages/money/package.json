@@ -1,0 +1,17 @@
+{
+  "name": "@rezics/money",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bun check --no-script -p tsconfig.json"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "@types/node": "26.6.6"
+  }
+}

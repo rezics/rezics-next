@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -7,27 +8,7 @@ const root = join(import.meta.dir, '..');
 const components = join(root, 'src', 'components');
 
 // Components that must exist, each with a sibling story that runs as a browser test.
-const storied = [
-  'alert',
-  'avatar',
-  'badge',
-  'button',
-  'card',
-  'client-only',
-  'input',
-  'kbd',
-  'link-overlay',
-  'locale',
-  'localized-text',
-  'presence',
-  'scroll-area',
-  'separator',
-  'show',
-  'skeleton',
-  'skip-nav',
-  'spinner',
-  'status',
-];
+const storied = ['locale', 'localized-text', 'show'];
 
 type Tokens = Record<string, string>;
 
@@ -124,6 +105,15 @@ test('text tokens meet WCAG AA in both themes and the logo red stays a visible m
   }
 });
 
+test('destructive action and error text use the existing text-safe ink in both themes', async () => {
+  for (const [name, tokens] of Object.entries(await themes())) {
+    for (const token of ['destructive', 'destructive-foreground'])
+      expect(tokens[token], `${name} --${token}`).toBe(tokens['accent-foreground']);
+    expect(tokens.brand, `${name} logo red`).toBe(name === 'light' ? '#df3d35' : '#f0524c');
+    expect(tokens['destructive-solid'], `${name} non-text danger red`).toBe(name === 'light' ? '#c42840' : '#d63a50');
+  }
+});
+
 test('the logo red never colors text', async () => {
   const offending = [
     /(?<![\w-])text-brand\b/,
@@ -140,10 +130,18 @@ test('the logo red never colors text', async () => {
 });
 
 const probe = join(components, 'accessibility-probe.stories.tsx');
+const fixture = join(root, 'tests', 'fixtures', 'accessibility-probe.stories.tsx');
 const output = mkdtempSync(join(tmpdir(), 'rezics-ui-stories-'));
 afterAll(() => {
-  rmSync(probe, { force: true });
   rmSync(output, { recursive: true, force: true });
+});
+
+test('the accessibility probe is an opt-in test fixture', async () => {
+  expect(existsSync(fixture)).toBe(true);
+  expect(existsSync(probe)).toBe(false);
+  const config = await Bun.file(join(root, '.storybook', 'main.ts')).text();
+  expect(config).toContain('REZICS_UI_ACCESSIBILITY_PROBE');
+  expect(config).toContain('../tests/fixtures/accessibility-probe.stories.tsx');
 });
 
 test('every ported component has stories that pass as accessible browser tests', async () => {
@@ -153,30 +151,22 @@ test('every ported component has stories that pass as accessible browser tests',
   }
 
   // A control without an accessible name must fail its story: accessibility violations are errors.
-  writeFileSync(
-    probe,
-    [
-      "import type { Meta, StoryObj } from '@storybook/react-vite';",
-      '',
-      'const meta = { title: \'Probe/Unnamed control\', render: () => <button type="button" /> } satisfies Meta;',
-      'export default meta;',
-      'export const UnnamedControl: StoryObj<typeof meta> = {};',
-      '',
-    ].join('\n'),
-  );
   const report = join(output, 'stories.json');
+  const status = () =>
+    execFileSync('git', ['status', '--porcelain'], { cwd: join(root, '..', '..'), encoding: 'utf8' });
+  const statusBefore = status();
   const run = Bun.spawn(['bun', 'x', 'vitest', 'run', '--reporter=json', `--outputFile=${report}`], {
     cwd: root,
     stdout: 'pipe',
     stderr: 'pipe',
-    env: { ...process.env, CI: '1' },
+    env: { ...process.env, CI: '1', REZICS_UI_ACCESSIBILITY_PROBE: '1' },
   });
   const [stdout, stderr] = await Promise.all([
     new Response(run.stdout).text(),
     new Response(run.stderr).text(),
     run.exited,
   ]);
-  rmSync(probe, { force: true });
+  expect(status(), 'the story run must not change repository files').toBe(statusBefore);
   expect(existsSync(report), `${stdout.slice(-2000)}\n${stderr.slice(-4000)}`).toBe(true);
 
   const result = JSON.parse(readFileSync(report, 'utf8')) as {

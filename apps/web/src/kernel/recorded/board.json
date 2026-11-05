@@ -1,12 +1,14 @@
 {
   "board": {
-    "id": "01a1761b-1ac0-77ba-8d65-4321eff7b3a1",
+    "realmId": null,
+    "purpose": "discussion",
+    "id": "01a17a3b-09a4-7204-87d4-43219f9a15ad",
     "route": 17185,
     "title": "Stories of the little prince",
     "visibility": "published",
     "securityRevision": "1",
     "availability": "available",
-    "createdAt": "2026-10-26T02:47:30.249Z"
+    "createdAt": "2026-10-26T18:22:09.911Z"
   },
   "status": 200
 }

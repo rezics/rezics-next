@@ -1,0 +1,120 @@
+# Retained personal-list entry metadata
+
+Each retained-list importer can compare one reviewed provider row with the owner's current private Library facts. The
+comparison is read-only. A separate, explicit confirmation selects fields and applies them through the existing
+native annotation and source-observation commands. Ordinary preview, state adoption, label adoption and date adoption
+never change annotations or source observations.
+
+The review displays the provider value, its retained source field and interpretation, the owner's note and priority,
+and all current provider observations as separate values. It defaults to preserving local facts. The review binds the
+owner, upload, row, provider review token, canonical Subject/profile, current entry incarnation, annotation revision,
+and the source-observation revisions shown. A changed comparison must be reviewed again. Source comments are only
+personal notes when the owner explicitly selects `note: adopt`; an empty, missing, unknown or unsupported note is
+never converted to a clear. `clear` is an explicit native operation. Priority clear means Unranked.
+
+## Provider and field support
+
+| Provider    | Personal note                                          | Personal priority                                             | Source privacy                                                | Source created                                              | Source updated                                                   |
+| ----------- | ------------------------------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------- |
+| VNDB        | `notes` / `note`, nonempty UTF-8 up to 4,096 bytes     | unsupported                                                   | `private` when a recognized boolean value is retained         | unsupported; `started` and `finished` are consumption dates | unsupported                                                      |
+| MyAnimeList | `my_comments`, nonempty UTF-8 up to 4,096 bytes        | `my_priority` values 0/1/2 with the confirmed mapping below   | `my_privacy` when a recognized boolean value is retained      | unsupported                                                 | retained `my_updated_at` or another recognized updated timestamp |
+| Bangumi     | `comment` or `notes`, nonempty UTF-8 up to 4,096 bytes | unsupported                                                   | retained `private` when a recognized boolean value is present | retained `created_at`                                       | retained `updated_at`                                            |
+| AniList     | `notes`, nonempty UTF-8 up to 4,096 bytes              | unsupported; retained numeric priority has no adopted mapping | a retained boolean `private` field only                       | retained `createdAt`                                        | retained `updatedAt`                                             |
+
+Recognized boolean privacy values are provider-specific true/false tokens. **Decision:** MAL `my_privacy` maps only
+the retained strings `private`/`true` and `public`/`false`; numeric `0` and `1` remain unknown because the retained
+provider contract does not define their meanings. Bangumi boolean values map to known privacy; safe nonempty tokens
+remain unknown evidence.
+Unknown nonempty tokens remain private unknown evidence and can be adopted only when the native provenance value can
+retain the exact token. Empty values,
+malformed values and fields absent from a provider's retained schema stay distinguishable and are not guessed. Date-only
+and timestamp strings retain their original precision and zone. AniList integer time tokens are retained as unknown
+timestamp evidence without conversion. State dates such as MAL start/finish and VNDB started/finished never become
+source-created/source-updated provenance.
+
+**Decision:** MyAnimeList `my_priority` uses its retained low/medium/high values 0/1/2 and maps them to owner-local
+positions 100/50/1 (low, medium, high). The review shows this mapping; adopting priority requires the explicit mapping
+identifier `mal-priority-position-v1` in the confirmation. All other retained numeric priorities remain unsupported.
+
+Native priority is an owner-local position from 1 through 100, with 1 highest and null unranked. The MyAnimeList map is
+coarse and may tie with existing positions; the owner chooses whether to replace the current value. The original
+provider value remains in the retained upload evidence. No provider rating, rank or state is used to derive priority.
+
+The native source-observation command admits privacy, source-created and source-updated atomically. For a new
+observation, all three values must be representable and explicitly selected, so the owner never adopts unselected
+known values or fabricates `absent` for an unsupported field. With an existing observation, selected fields can be
+corrected independently while unselected fields use `unchanged`. An explicit native clear requires an existing
+observation. A provider with only a subset of the provenance fields therefore supports those fields for review and
+correction when that observation already exists; it cannot create a partial native observation.
+
+## Review, confirmation and result
+
+Library's native `list-import-metadata-core.ts` owns immutable operands and selection, first-phase eligibility, monotone
+progress and expiry/receipt recovery; `list-import-metadata-coordinator.ts` owns review identity, the two-review history
+rule, selection binding, confirmation phases and uncertain-result reconciliation. Provider adapters capture fence facts
+under their existing locks and persist the core decision. Provider adapters retain their own source evidence,
+field mapping and currentness checks; storage adapters retain owner-scoped reads, locked compare-and-persist operations,
+byte limits and mutation receipts. Native annotation and source-observation commands remain the only write authorities.
+VNDB continues to store metadata in its bounded upload document and preserves its native-admission receipt marker;
+older confirmations without that marker keep their original receipt input. Bangumi keeps its header and per-row review
+records, row locks, cancellation and expiry owner. At its seven-day source deadline, Bangumi scrubs source and
+comparison material and retains only exact confirmation/receipt linkage through the original deadline plus 24 hours.
+Retries in that interval use receipt-only native reads fenced by the current account/client/requester and locked row;
+they cannot start an effect. MAL and AniList use this same coordinator. MAL retains its request-scoped deadline,
+whole-document mutation receipts and 48 MiB encoded JSON limit; AniList retains addressed-row load/save, its complete
+live matching/profile observation and 4 MiB row limit. Their request digests still include `{sourceReviewToken,key}`;
+existing tokens, immutable confirmation inputs and native receipt keys are never rewritten. MAL review keeps the
+mutation outcome wrapper and the HTTP `{id,reviewToken}` result. Both adapters prepare live authority outside local
+transactions and fence the retained source and entry incarnation inside each fresh native command. Admission adds no
+operand to old native receipt inputs. Their existing deadline and digest contracts remain unchanged in this delivery.
+
+Each importer adds a bounded metadata review, read and apply method to its existing upload. Review requires the row's
+current provider review token and an explicit Subject choice. It returns a fresh metadata token; the private read shows
+the current native values and mapped provider values. Confirmation sends that token and up to five unique field
+operations (`adopt` or `clear`). `adopt` takes only the exact retained value shown by that review. Priority adoption
+also requires its displayed mapping identifier. No caller-supplied note, priority or provenance value is accepted.
+
+The metadata ledger is stored with the provider's existing upload row and is capped at two reviews per row. Bangumi's
+source evidence, proposals, operands and ordinary outcomes are scrubbed at seven days; its selected fields, original
+command keys and opaque native receipt digests remain for at most 24 additional hours. Recovery returns applied only
+when the exact original native receipt exists. A started checkpoint alone proves no admission; a missing receipt
+returns unattempted or stale. Final cleanup and account erasure remove this linkage through their existing owners.
+A successful or stale live receipt is retained through one refresh so an old retry can return its original field
+results without confirming the new token. Pending effects must be retried or resolved before a new review can replace them.
+
+Native annotation changes are one revision-guarded command for the selected note and priority fields. Provenance
+changes are one revision-guarded command for the selected source-observation fields. These are separate commands;
+partial success is reported per field, with `applied`, `stale`, `unsupported`, `unattempted` or `failed` outcomes.
+Lost acknowledgements replay the original native command key and operands. A refreshed token cannot reuse an earlier
+outcome as confirmation. Cancellation stops new native commands and preserves admitted commands; there is no
+cross-command rollback. Removing upload evidence invalidates pending review but leaves admitted native facts intact.
+
+Native effects re-read current owner authority and canonical profile through the existing command owners. Review and
+confirmation also bind the current entry incarnation and source review. A changed local annotation revision, source
+observation revision, provider review, profile or incarnation makes the old token stale. Source privacy is private
+evidence only; it cannot authorize public disclosure. No source value or local note is sent to Search, public DTOs,
+events or unredacted errors.
+
+## Bounds and cost
+
+The field count is `F <= 5`; the adopted note bound is `B = 4,096` UTF-8 bytes. A metadata read addresses one row and
+returns at most one native personal entry with at most 32 source observations. Existing provider page sizes are the
+result page bound `P`: VNDB 8, MAL 20, Bangumi 10 and AniList 20. The selected row count per metadata confirmation is
+`R = 1`; repeated requests remain bounded by the upload row count and two review tokens per row. Each request body is
+capped at 2,048 encoded bytes, selects at most five fields and addresses at most two native commands: one atomic
+annotation command and one atomic source-observation admission or correction. The private comparison response is
+capped at 65,536 encoded bytes. Each retained metadata review is capped at 32,768 JSON bytes and each row history at
+65,536 bytes. MAL's existing whole-document limit is raised from 12 MiB to 48 MiB, covering the previous evidence
+allowance plus 500 rows × two 32 KiB review records, rounded up. MAL checks JSONB encoded size before each write;
+VNDB checks the prospective decision object against its installed 8 MiB constraint, while AniList stays inside its
+installed 4 MiB per-row payload limit.
+
+Per review cost is the provider's indexed owner/upload/row read and current profile admission, plus the native personal
+read of one Subject and at most 32 indexed source observations. Per live apply cost adds at most two native commands
+per selected row (annotation and provenance), each with its owner and source fence. An expired retry makes at most two
+receipt-only native command reads, each checking the exact current owner/session and locking the same root/row before
+the bounded keyed receipt lookup; it reads no evidence or personal comparison. Source scrub and final deletion each
+cover at most 99 row keys per page, at most two pages for the 100-row cap, and one root update/deletion. Thus
+`C <= Cfixed-authority + Csource/current-review(R,F) + 2R*Cnative-command + 2R*Creceipt-only + Cresult/cleanup`;
+unrelated owner, account-history and provider-row populations do not add work. Native growth acceptance at
+64/512/4096 retained rows and shared checks are owned by the controller after integration.

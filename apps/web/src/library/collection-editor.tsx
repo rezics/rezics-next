@@ -1,0 +1,473 @@
+import type { CollectionComparisonDefinitions } from './collection-comparison/model';
+import { collectionTextIssue } from './collection-text-input';
+import { CollectionTextInputHelp, collectionTextInputAttributes } from './collection-text-input-field';
+import { ContentItemHeading, ContentItemTitleLink } from '@rezics/ui/content-item';
+import { ListRow, ListRowControl } from '@rezics/ui/list-row';
+import { Menu } from '@rezics/ui/menu';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Checkbox } from '@rezics/ui/shadcn/checkbox';
+import { Field, FieldLabel } from '@rezics/ui/shadcn/field';
+import { Textarea } from '@rezics/ui/shadcn/textarea';
+import { ArrowDownIcon, ArrowUpIcon, EllipsisIcon, GripVerticalIcon, Trash2Icon } from 'lucide-react';
+import type { DragEvent, FormEvent, ReactNode } from 'react';
+import { m } from '../paraglide/messages.js';
+import { getLocale } from '../paraglide/runtime.js';
+import { subjectHref } from '../subject/subject-href';
+import { pageText } from '../features/pages/shared';
+import { libraryTitleValue } from './title';
+import { CollectionMemberDetails, CollectionMemberNoteSaved } from './collection-member-row';
+import { CollectionNoteReader } from './collection-note-reader';
+import { SubjectCover } from './subject-row';
+import { collectionMemberRatio } from './collection-presentation';
+import type { CollectionListPresentations } from './collection-presentation';
+import type { CollectionMember, LibrarySubject } from './reads';
+export { applyCollectionMemberEditPlan, buildCollectionMemberEditPlan } from './collection-member-edit-plan';
+export type { CollectionMemberEditOperation } from './collection-member-edit-plan';
+
+export const fieldClass =
+  'mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary';
+
+/** Metadata stays in the owning local draft; presentation and visibility keep their existing controls. */
+export function CollectionMetadataEditor({
+  title,
+  description,
+  disabled,
+  textSubmitted = false,
+  onTitleChange,
+  onDescriptionChange,
+  onSubmit,
+  children,
+}: {
+  title: string;
+  description: string;
+  disabled: boolean;
+  textSubmitted?: boolean;
+  onTitleChange: (value: string) => void;
+  onDescriptionChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  children: ReactNode;
+}) {
+  return (
+    <form
+      noValidate
+      id="collection-edit-form"
+      className="min-w-0 rounded-2xl border border-border bg-card p-4 sm:p-6"
+      onSubmit={onSubmit}
+    >
+      <details data-collection-details open>
+        <summary className="min-h-11 cursor-pointer py-2 font-medium">{m.library_collection_details()}</summary>
+        <div className="space-y-5 pt-3">
+          <label className="block max-w-3xl">
+            {m.library_collection_title()}
+            <input
+              disabled={disabled}
+              className={fieldClass}
+              onChange={(event) => onTitleChange(event.target.value)}
+              required
+              {...collectionTextInputAttributes({
+                id: 'collection-edit-title',
+                field: 'title',
+                value: title,
+                submitted: textSubmitted,
+              })}
+              value={title}
+            />
+          </label>
+          <CollectionTextInputHelp id="collection-edit-title" field="title" value={title} submitted={textSubmitted} />
+          <label className="block max-w-3xl">
+            {m.library_collection_description()}
+            <textarea
+              disabled={disabled}
+              {...collectionTextInputAttributes({
+                id: 'collection-edit-description',
+                field: 'description',
+                value: description,
+                submitted: textSubmitted,
+              })}
+              className={fieldClass}
+              onChange={(event) => onDescriptionChange(event.target.value)}
+              rows={4}
+              value={description}
+            />
+          </label>
+          <CollectionTextInputHelp
+            id="collection-edit-description"
+            field="description"
+            value={description}
+            submitted={textSubmitted}
+          />
+          {children}
+        </div>
+      </details>
+    </form>
+  );
+}
+
+const dragType = 'application/x-rezics-collection-member';
+/** Reorder and occurrence actions remain 44px for keyboard and pointer users at every width. */
+const actionTargetClass = 'size-11';
+
+/** Shared read-only ListRows for dynamic results, which have no curated member ids or notes. */
+export function CollectionSubjectList({
+  subjects,
+  onCopy,
+  typeRatios,
+  listPresentations,
+  comparisonDefinitions,
+}: {
+  typeRatios?: Readonly<Record<string, string>> | undefined;
+  listPresentations?: CollectionListPresentations | undefined;
+  comparisonDefinitions?: CollectionComparisonDefinitions | undefined;
+  subjects: readonly (LibrarySubject | null)[];
+  onCopy?: (subject: LibrarySubject) => void | Promise<void>;
+}) {
+  return (
+    <ul className="min-w-0 space-y-3" data-collection-members>
+      {subjects.map((subject, index) => {
+        const localizedTitle = subject ? pageText(libraryTitleValue(subject.label), getLocale()) : null;
+        const title = localizedTitle?.text ?? m.library_subject_unavailable();
+        const href = subject ? subjectHref({ id: subject.id, label: title }, getLocale()) : null;
+        const actionsLabel = `${m.library_collection_actions()}: ${m.library_member_occurrence({ title, position: index + 1 })}`;
+        return (
+          <ListRow key={subject?.id ?? `unavailable-${index}`} className="flex min-w-0 items-start gap-4 py-2">
+            <div
+              data-content-item-slot="visual"
+              className="w-[72px] shrink-0 sm:w-24 [&_button]:relative [&_button]:z-10"
+            >
+              <SubjectCover
+                subject={subject}
+                ratio={collectionMemberRatio(subject, typeRatios, listPresentations)}
+                size="fill"
+              />
+            </div>
+            <div className="min-w-0 flex-1 space-y-1">
+              <ContentItemHeading
+                level={3}
+                lang={localizedTitle?.lang}
+                className="line-clamp-2 font-medium leading-snug"
+              >
+                {href ? (
+                  <ContentItemTitleLink
+                    href={href.href}
+                    lang={localizedTitle?.lang}
+                    data-slot="list-row-link"
+                    className="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    {title}
+                  </ContentItemTitleLink>
+                ) : (
+                  title
+                )}
+              </ContentItemHeading>
+              <ListRowControl data-content-item-slot="metadata">
+                <CollectionMemberDetails
+                  member={{ subject }}
+                  listPresentations={listPresentations}
+                  comparisonDefinitions={comparisonDefinitions}
+                />
+              </ListRowControl>
+            </div>
+            {subject && onCopy ? (
+              <ListRowControl data-content-item-slot="actions">
+                <Menu
+                  title={actionsLabel}
+                  trigger={
+                    <Button
+                      type="button"
+                      aria-label={actionsLabel}
+                      title={actionsLabel}
+                      size="icon-lg"
+                      className={actionTargetClass}
+                      variant="ghost"
+                    >
+                      <EllipsisIcon aria-hidden="true" />
+                    </Button>
+                  }
+                  entries={[{ type: 'item', label: m.library_collection_copy(), onSelect: () => onCopy(subject) }]}
+                />
+              </ListRowControl>
+            ) : null}
+          </ListRow>
+        );
+      })}
+    </ul>
+  );
+}
+
+export function CollectionMemberList({
+  members,
+  editing,
+  firstPage,
+  busy = false,
+  textSubmitted = false,
+  selectedIds = new Set(),
+  savedNoteIds = new Set(),
+  onSelectionChange,
+  onMove,
+  onBoundaryMove,
+  boundaryBlocked = false,
+  onNoteChange,
+  onRemove,
+  onCopy,
+  typeRatios,
+  listPresentations,
+  comparisonDefinitions,
+}: {
+  typeRatios?: Readonly<Record<string, string>> | undefined;
+  listPresentations?: CollectionListPresentations | undefined;
+  comparisonDefinitions?: CollectionComparisonDefinitions | undefined;
+  members: readonly CollectionMember[];
+  editing: boolean;
+  firstPage: boolean;
+  busy?: boolean;
+  textSubmitted?: boolean;
+  selectedIds?: ReadonlySet<string>;
+  savedNoteIds?: ReadonlySet<string>;
+  onSelectionChange?: (memberId: string, selected: boolean) => void;
+  onMove?: (memberId: string, after: string | null) => void;
+  onBoundaryMove?: ((memberId: string, placement: 'start' | 'end') => void) | undefined;
+  boundaryBlocked?: boolean;
+  onNoteChange?: (memberId: string, note: string) => void;
+  onRemove?: (memberId: string) => void;
+  onCopy?: (memberId: string) => void | Promise<void>;
+  children?: ReactNode;
+}) {
+  return (
+    <ul className="min-w-0 space-y-3" data-collection-members aria-busy={busy}>
+      {members.map((member, index) => {
+        const localizedTitle = member.subject ? pageText(libraryTitleValue(member.subject.label), getLocale()) : null;
+        const title = localizedTitle?.text ?? m.library_subject_unavailable();
+        const href = member.subject ? subjectHref({ id: member.subject.id, label: title }, getLocale()) : null;
+        const actionContext = m.library_member_occurrence({ title, position: index + 1 });
+        const actionLabel = (action: string) => `${action}: ${actionContext}`;
+        const noteId = `collection-member-note-${member.id}`;
+        const rowRatio = collectionMemberRatio(member.subject, typeRatios, listPresentations);
+        const landscape = rowRatio === '16:9' || rowRatio === '4:3';
+        const columns = editing
+          ? landscape
+            ? 'grid-cols-[auto_128px_minmax(0,1fr)] sm:grid-cols-[auto_192px_minmax(0,1fr)]'
+            : 'grid-cols-[auto_72px_minmax(0,1fr)] sm:grid-cols-[auto_96px_minmax(0,1fr)]'
+          : landscape
+            ? 'grid-cols-[128px_minmax(0,1fr)] sm:grid-cols-[192px_minmax(0,1fr)]'
+            : 'grid-cols-[72px_minmax(0,1fr)] sm:grid-cols-[96px_minmax(0,1fr)]';
+        const moveUpAfter = index === 1 && firstPage ? null : index >= 2 ? members[index - 2]!.id : undefined;
+        const nextAfter = index < members.length - 1 ? members[index + 1]!.id : undefined;
+        const beginDrag = (event: DragEvent<HTMLElement>) => {
+          event.dataTransfer.setData(dragType, member.id);
+          event.dataTransfer.effectAllowed = 'move';
+        };
+        return (
+          <ListRow
+            key={member.id}
+            className={`grid min-w-0 items-start gap-x-3 gap-y-2 py-2 ${columns}`}
+            data-member={member.id}
+            onDragOver={editing && !busy ? (event) => event.preventDefault() : undefined}
+            onDrop={
+              editing && !busy && onMove
+                ? (event) => {
+                    event.preventDefault();
+                    const movedId = event.dataTransfer.getData(dragType);
+                    const from = members.findIndex((item) => item.id === movedId);
+                    if (!movedId || from < 0 || movedId === member.id) return;
+                    const targetIndex = members.findIndex((item) => item.id === member.id);
+                    const placeAfter =
+                      from < targetIndex
+                        ? member.id
+                        : targetIndex === 0
+                          ? firstPage
+                            ? null
+                            : undefined
+                          : members[targetIndex - 1]!.id;
+                    if (placeAfter !== undefined) onMove(movedId, placeAfter);
+                  }
+                : undefined
+            }
+          >
+            {editing ? (
+              <ListRowControl data-content-item-slot="trailing" className="flex flex-col items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className="inline-flex size-11 cursor-grab items-center justify-center text-muted-foreground sm:size-8"
+                  data-drag-handle
+                  draggable={!busy}
+                  onDragStart={beginDrag}
+                >
+                  <GripVerticalIcon />
+                </span>
+                <Checkbox
+                  className="m-3.5 after:-inset-3.5 sm:m-0"
+                  checked={selectedIds.has(member.id)}
+                  disabled={busy || !onSelectionChange}
+                  aria-label={m.library_collection_select_member({ title: actionContext })}
+                  onCheckedChange={(checked) => onSelectionChange?.(member.id, checked === true)}
+                />
+              </ListRowControl>
+            ) : null}
+            <div data-content-item-slot="visual" className="min-w-0 [&_button]:relative [&_button]:z-10">
+              <SubjectCover subject={member.subject} ratio={rowRatio} size="fill" />
+            </div>
+            <div className="min-w-0 flex-1 space-y-1">
+              <ContentItemHeading
+                level={3}
+                lang={localizedTitle?.lang}
+                className="line-clamp-2 font-medium leading-snug"
+              >
+                {href ? (
+                  <ContentItemTitleLink
+                    href={href.href}
+                    lang={localizedTitle?.lang}
+                    data-slot="list-row-link"
+                    className="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  >
+                    {title}
+                  </ContentItemTitleLink>
+                ) : (
+                  title
+                )}
+              </ContentItemHeading>
+              <ListRowControl data-content-item-slot="metadata">
+                <CollectionMemberDetails
+                  member={member}
+                  listPresentations={listPresentations}
+                  comparisonDefinitions={comparisonDefinitions}
+                />
+              </ListRowControl>
+            </div>
+            {editing && member.subject ? (
+              <ListRowControl data-content-item-slot="preview" className="col-span-2 col-start-2">
+                <details
+                  className="min-w-0"
+                  data-collection-note-editor
+                  open={textSubmitted && !!collectionTextIssue('note', member.note) ? true : undefined}
+                >
+                  <summary
+                    className="min-h-11 cursor-pointer py-2 text-sm text-primary"
+                    aria-label={actionLabel(m.library_member_note())}
+                  >
+                    {m.library_member_note()}
+                  </summary>
+                  <Field className="min-w-0 gap-1">
+                    <FieldLabel htmlFor={noteId}>{m.library_member_note()}</FieldLabel>
+                    <Textarea
+                      id={noteId}
+                      aria-label={`${m.library_member_note()}: ${title}`}
+                      className="min-h-16"
+                      disabled={busy}
+                      {...collectionTextInputAttributes({
+                        id: noteId,
+                        field: 'note',
+                        value: member.note,
+                        submitted: textSubmitted,
+                      })}
+                      value={member.note ?? ''}
+                      onChange={(event) => onNoteChange?.(member.id, event.target.value)}
+                    />
+                    <CollectionTextInputHelp id={noteId} field="note" value={member.note} submitted={textSubmitted} />
+                  </Field>
+                </details>
+                {member.note ? (
+                  <p className="line-clamp-2 text-sm text-muted-foreground [overflow-wrap:anywhere]">{member.note}</p>
+                ) : null}
+                {savedNoteIds.has(member.id) ? <CollectionMemberNoteSaved memberId={member.id} /> : null}
+              </ListRowControl>
+            ) : member.subject && member.note ? (
+              <CollectionNoteReader note={member.note} occurrence={actionContext} className="col-start-2" />
+            ) : null}
+            <ListRowControl
+              data-content-item-slot="actions"
+              className={`col-start-2 flex flex-wrap items-center gap-2 ${editing ? 'col-span-2' : ''}`}
+            >
+              {member.subject && (onCopy || (editing && onBoundaryMove)) ? (
+                <Menu
+                  title={actionLabel(m.library_collection_actions())}
+                  trigger={
+                    <Button
+                      type="button"
+                      aria-label={actionLabel(m.library_collection_actions())}
+                      aria-description={editing && onBoundaryMove ? m.library_collection_boundary_help() : undefined}
+                      title={actionLabel(m.library_collection_actions())}
+                      size="icon-lg"
+                      className={actionTargetClass}
+                      variant="ghost"
+                    >
+                      <EllipsisIcon aria-hidden="true" />
+                    </Button>
+                  }
+                  entries={[
+                    ...(onCopy
+                      ? [
+                          {
+                            type: 'item' as const,
+                            label: m.library_collection_copy(),
+                            onSelect: () => onCopy(member.id),
+                          },
+                        ]
+                      : []),
+                    ...(editing && onBoundaryMove
+                      ? [
+                          {
+                            type: 'item' as const,
+                            label: m.library_collection_boundary_start(),
+                            disabled: busy || boundaryBlocked,
+                            onSelect: () => onBoundaryMove(member.id, 'start'),
+                          },
+                          {
+                            type: 'item' as const,
+                            label: m.library_collection_boundary_end(),
+                            disabled: busy || boundaryBlocked,
+                            onSelect: () => onBoundaryMove(member.id, 'end'),
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              ) : null}
+              {editing ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-lg"
+                    className={actionTargetClass}
+                    aria-label={actionLabel(m.library_member_move_up())}
+                    title={actionLabel(m.library_member_move_up())}
+                    disabled={busy || moveUpAfter === undefined}
+                    onClick={() => moveUpAfter !== undefined && onMove?.(member.id, moveUpAfter)}
+                  >
+                    <ArrowUpIcon aria-hidden="true" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-lg"
+                    className={actionTargetClass}
+                    aria-label={actionLabel(m.library_member_move_down())}
+                    title={actionLabel(m.library_member_move_down())}
+                    disabled={busy || nextAfter === undefined || (!firstPage && index === 0)}
+                    onClick={() => nextAfter !== undefined && onMove?.(member.id, nextAfter)}
+                  >
+                    <ArrowDownIcon aria-hidden="true" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-lg"
+                    className={`ms-2 ${actionTargetClass}`}
+                    aria-label={actionLabel(m.library_member_remove())}
+                    title={actionLabel(m.library_member_remove())}
+                    disabled={busy}
+                    onClick={() => onRemove?.(member.id)}
+                  >
+                    <Trash2Icon aria-hidden="true" />
+                  </Button>
+                </>
+              ) : null}
+            </ListRowControl>
+          </ListRow>
+        );
+      })}
+    </ul>
+  );
+}
+
+export { CollectionPresentationFields } from './collection-presentation-review/review';

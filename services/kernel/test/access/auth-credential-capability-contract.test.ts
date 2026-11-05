@@ -1,12 +1,30 @@
 import { expect, expectTypeOf, test } from 'bun:test';
 import type {
   AuthService,
+  EffectPurpose,
+  CredentialEffect,
+  PasskeyPurpose,
+  CredentialFloorPurpose,
+  CredentialFloorReceipt,
+  CredentialFloorBinding,
   CredentialEffectBinding,
   CredentialEffectVerifier,
   SessionProof,
   TrustedAccessPorts,
 } from '@rezics/auth';
 import { AuthBindingDeniedError, AuthBindingUnavailableError } from '../../src/access/auth-bindings.ts';
+import type {
+  PasskeyPurpose as KernelPasskeyPurpose,
+  CredentialFloorPurpose as KernelCredentialFloorPurpose,
+  CredentialCapability,
+  CredentialOpeningLocator,
+} from '../../src/access/auth-credential-capability.ts';
+import type { createOperatorCommands } from '../../src/access/operator.ts';
+import type {
+  CredentialPurpose as ContractCredentialPurpose,
+  PasskeyPurpose as ContractPasskeyPurpose,
+  CredentialFloorPurpose as ContractCredentialFloorPurpose,
+} from '@rezics/auth-contract';
 import { createCredentialCapability } from '../../src/access/auth-credential-capability.ts';
 
 type ConsumeInput = Parameters<NonNullable<TrustedAccessPorts['consumeAuthorization']>>[0];
@@ -34,15 +52,16 @@ test('credential consume input is a closed union that leaves the session variant
   type ExactCredentialInput = Extract<ConsumeInput, { operationKey: string }>;
   type LegacyInput = Extract<ConsumeInput, { operationKey?: undefined; purpose: CredentialPurpose }>;
   expectTypeOf<ExactCredentialInput>().toMatchTypeOf<CredentialInput>();
-  expectTypeOf<LegacyInput>().toEqualTypeOf<LegacyCredentialInput>();
+  expectTypeOf<LegacyInput>().toEqualTypeOf<never>();
   expectTypeOf<Exclude<ConsumeInput, SessionInput | ExactCredentialInput | LegacyInput>>().toEqualTypeOf<never>();
   expectTypeOf<Extract<ExactCredentialInput, { purpose: 'set-password' }>>().not.toEqualTypeOf<never>();
   expectTypeOf<Extract<ExactCredentialInput, { purpose: 'remove-password' }>>().not.toEqualTypeOf<never>();
   expectTypeOf<Extract<ExactCredentialInput, { purpose: 'add-key' }>>().not.toEqualTypeOf<never>();
   expectTypeOf<Extract<ExactCredentialInput, { purpose: 'remove-key' }>>().not.toEqualTypeOf<never>();
   expectTypeOf<CredentialInput>().toMatchTypeOf<ConsumeInput>();
-  expectTypeOf<LegacyInput['operationKey']>().toEqualTypeOf<undefined>();
-  expectTypeOf<LegacyInput['effectReference']>().toEqualTypeOf<undefined>();
+  expectTypeOf<Extract<ConsumeInput, { purpose: CredentialPurpose }>['operationKey']>().toEqualTypeOf<string>();
+  expectTypeOf<Extract<ConsumeInput, { purpose: CredentialPurpose }>['effectReference']>().toEqualTypeOf<string>();
+  expectTypeOf<LegacyCredentialInput>().not.toMatchTypeOf<ConsumeInput>();
   expectTypeOf<Omit<CredentialInput, 'operationKey'>>().not.toMatchTypeOf<ConsumeInput>();
   expectTypeOf<Omit<CredentialInput, 'effectReference'>>().not.toMatchTypeOf<ConsumeInput>();
   expectTypeOf<SessionInput & { purpose: 'device' }>().toEqualTypeOf<never>();
@@ -167,6 +186,7 @@ test('credential binding and stage commands are typed nonsecret locators', () =>
     key: string;
     subjectAccountId: string;
     headers: Headers;
+    deadline?: number;
   }>();
   expectTypeOf<Parameters<Internal['applyCredentialEffect']>[0]>().toEqualTypeOf<{
     authorization: string;
@@ -174,5 +194,36 @@ test('credential binding and stage commands are typed nonsecret locators', () =>
     key: string;
     subjectAccountId: string;
     headers: Headers;
+    deadline?: number;
   }>();
+});
+
+test('passkey purposes are own-human types outside the frozen credential effect union', () => {
+  expectTypeOf<EffectPurpose>().toEqualTypeOf<'session' | CredentialPurpose>();
+  expectTypeOf<ContractCredentialPurpose>().toEqualTypeOf<CredentialPurpose>();
+  expectTypeOf<Extract<CredentialEffect, { kind: 'passkey' }>>().toEqualTypeOf<never>();
+  expectTypeOf<PasskeyPurpose>().toEqualTypeOf<'add-passkey' | 'remove-passkey'>();
+  expectTypeOf<ContractPasskeyPurpose>().toEqualTypeOf<PasskeyPurpose>();
+  expectTypeOf<KernelPasskeyPurpose>().toEqualTypeOf<PasskeyPurpose>();
+  expectTypeOf<CredentialFloorPurpose>().toEqualTypeOf<CredentialPurpose | PasskeyPurpose>();
+  expectTypeOf<ContractCredentialFloorPurpose>().toEqualTypeOf<CredentialFloorPurpose>();
+  expectTypeOf<KernelCredentialFloorPurpose>().toEqualTypeOf<CredentialFloorPurpose>();
+  expectTypeOf<CredentialFloorReceipt['purpose']>().toEqualTypeOf<CredentialFloorPurpose>();
+  expectTypeOf<CredentialFloorBinding['purpose']>().toEqualTypeOf<CredentialFloorPurpose>();
+  type PasskeyInput = Parameters<NonNullable<TrustedAccessPorts['consumePasskeyAuthorization']>>[0];
+  expectTypeOf<PasskeyInput['purpose']>().toEqualTypeOf<PasskeyPurpose>();
+  type OwnPorts = Extract<TrustedAccessPorts, { passkeys: true }>;
+  type OwnApproval = Parameters<NonNullable<OwnPorts['approveCredentialEffect']>>[0];
+  expectTypeOf<OwnApproval['stage']['purpose']>().toEqualTypeOf<CredentialFloorPurpose>();
+  type OperatorOpening = Extract<CredentialOpeningLocator, { kind: 'operator-opening' }>;
+  expectTypeOf<OperatorOpening['purpose']>().toEqualTypeOf<CredentialPurpose>();
+  type Operator = ReturnType<typeof createOperatorCommands>;
+  type OperatorInput = Parameters<Operator['authorizeOpening']>[1];
+  expectTypeOf<NonNullable<OperatorInput['credential']>['purpose']>().toEqualTypeOf<CredentialPurpose>();
+  type PasskeyStage = Awaited<ReturnType<AuthService['internal']['stagePasskeyEffect']>>;
+  expectTypeOf<PasskeyStage['purpose']>().toEqualTypeOf<PasskeyPurpose>();
+  type FloorInput = Parameters<CredentialCapability['consumeAuthAuthorization']>[0];
+  expectTypeOf<FloorInput['purpose']>().toEqualTypeOf<CredentialFloorPurpose>();
+  type Stage = AuthService['internal']['stageCredentialEffect'];
+  expectTypeOf<Extract<Parameters<Stage>[0]['credential'], { kind: 'passkey' }>>().toEqualTypeOf<never>();
 });

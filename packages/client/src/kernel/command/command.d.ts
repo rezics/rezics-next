@@ -2,17 +2,26 @@ export declare const DEFAULT_REQUEST_DEADLINE_MS = 2000;
 import type { Pool, PoolClient } from 'pg';
 import type { Actor } from '../request/access.ts';
 export { CommandUnavailableError } from '../access/unavailable.ts';
+import { type CommandWorkAssociation } from './work-context.ts';
 export type CommandEvent = {
     type: string;
     subject?: string;
     data: unknown;
 };
 export type CommandTransaction = Pick<PoolClient, 'query'>;
+export declare function withSingleCommandAttempt<T>(body: () => Promise<T>): Promise<T>;
 export type CommandCallback = (transactionId: string) => void | Promise<void>;
-type CommandResult<T> = {
+export type CommandResult<T> = Readonly<{
     value: T;
-    events: CommandEvent[];
-};
+    events: readonly CommandEvent[];
+}>;
+/**
+ * Return a successful command result without domain events. The body must make
+ * no domain write; this result asserts that it did not. Its observed position
+ * can be 0. Callers whose consumers require a positive position must not use
+ * noEffect.
+ */
+export declare function noEffect<T>(value: T): CommandResult<T>;
 export declare const MAX_COMMAND_EVENTS = 1000;
 /** Principal kind marker only; never an account ID. */
 export declare const ANONYMOUS_PRINCIPAL_ID = "00000000-0000-0000-0000-000000000000";
@@ -71,6 +80,15 @@ export type PrincipalCommandOptions = PrincipalCommandIdentity & {
     /** Trusted service configuration only, never a request timestamp. */
     clock?: (() => Date) | undefined;
 };
+/** Union-valued callers may assemble these fields separately; normalization
+ * checks their correlation before acquiring a connection or reading a receipt. */
+type PrincipalCommandInput = Omit<PrincipalCommandOptions, 'principal' | 'basis'> & {
+    principal: Readonly<CommandPrincipal>;
+    basis: Readonly<{
+        clientId: string | null;
+        requestedBy: string | null;
+    }>;
+};
 export type CommandReceipt = {
     actorAccountId: string;
     kind: string;
@@ -108,6 +126,8 @@ export type CommandAttempt = Readonly<{
     partition: number;
     basis: Readonly<CommandAttribution> | null;
     time: AuthoritativeTime;
+    /** Optional trusted accounting context; it grants no request or authorization evidence. */
+    commandWork?: CommandWorkAssociation;
 }>;
 export type CommandAuthorizationMode = 'execute' | 'receipt-only';
 /** Trusted service binding, never operation JSON. prepare runs with no resource
@@ -137,17 +157,41 @@ export type CompletedCommandAuthorization = Readonly<{
     mode: CommandAuthorizationMode;
 }>;
 export type CurrentCommand = CommandAttempt & Readonly<{
+    transactionId: string;
     authorization: CompletedCommandAuthorization | null;
 }>;
 type CommandContext = {
     transactionId: string;
     time: AuthoritativeTime;
 };
+/** Original source writers consume the executor's actual codec result, never a second HMAC.
+ * Available only after authorization and replay lookup, on the original transaction. */
+export declare function currentCommandReceipt(tx: CommandTransaction): Readonly<{
+    principal: CommandPrincipal;
+    kind: string;
+    key: string;
+    storageKey: string;
+}>;
+/** Completion metadata only. The caller must retain the queried intent's action/resource policy. */
+export declare function hasOwnCommandCompletion(tx: CommandTransaction, receipt: PrincipalCommandReceipt): Promise<boolean>;
 export declare function authoritativeTimeValue(time: AuthoritativeTime): string;
 /** Read-only context is unavailable before authorization or after the attempt. */
 export declare function currentCommand(tx: CommandTransaction): CurrentCommand;
+/** Trusted owner factories reuse the live executor resources; this grants no second checkout. */
+export declare function currentCommandResources(tx: CommandTransaction): Readonly<{
+    pool: Pool;
+    deadline: number;
+}>;
 /** Allows existing Access checks in a mutation to reuse the same attempt time. */
 export declare function commandTime(tx: CommandTransaction): AuthoritativeTime | undefined;
+/** Executor-owned budget for source preparation; copied attempts have no budget. */
+export declare function commandAttemptDeadline(attempt: CommandAttempt): number;
+/** Executor internals: lend Access an attempt time without granting command authority.
+ * Operational attempts never enter commands, receiptOwners or the callback registry.
+ */
+export declare function withOperationalAttempt<T>(tx: CommandTransaction, attempt: CommandAttempt, run: () => Promise<T>): Promise<T>;
+/** Release an executor time when preparation fails before resource checkout. */
+export declare function releaseOperationalTime(time: AuthoritativeTime): void;
 /** Register work for the current command after its body and finalizer succeed.
  * The callback receives the executor-minted transaction id and runs before the
  * receipt and outbox are written. Registration is scoped to one live attempt.
@@ -163,12 +207,16 @@ export declare class IdempotencyConflictError extends Error {
     readonly partition: number;
     constructor(partition: number);
 }
+/** Carries no receipt identity, removed value or scope provenance. */
+export declare class CommandResultErasedError extends Error {
+    constructor();
+}
 export declare class TooManyEventsError extends Error {
     readonly partition: number;
     readonly count: number;
     constructor(partition: number, count: number);
 }
-type LegacyCommandOptions = {
+export type LegacyCommandOptions = {
     partition: number;
     deadline?: number;
     basis?: CommandBasis;
@@ -178,4 +226,4 @@ type LegacyCommandOptions = {
     clock?: (() => Date) | undefined;
 };
 export declare function runCommand<T>(pool: Pool, options: LegacyCommandOptions, body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>): Promise<CommandOutcome<T>>;
-export declare function runCommand<T>(pool: Pool, options: PrincipalCommandOptions, body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>): Promise<CommandOutcome<T>>;
+export declare function runCommand<T>(pool: Pool, options: PrincipalCommandInput, body: (tx: CommandTransaction, context: CommandContext) => Promise<CommandResult<T>>): Promise<CommandOutcome<T>>;

@@ -20,6 +20,8 @@ export const richTextEditorLabels = {
   table: 'Table',
   insertBlock: 'Insert block',
   slashEmpty: 'No matching blocks',
+  mentionAccounts: 'Mention an account',
+  mentionLoading: 'Looking up account…',
   bold: 'Bold',
   italic: 'Italic',
   strike: 'Strikethrough',

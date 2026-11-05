@@ -1,5 +1,7 @@
+import { suspendAccount } from '../../support/native-suspension-driver.ts';
 import { DBOS } from '@dbos-inc/dbos-sdk';
 import { createAuthService } from '@rezics/auth';
+import { bundledRelease } from '@rezics/definitions/bundled';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import type { CommerceDriver, Inspection, Persona, StripeCreate } from '../../../../../specs/commerce-driver.ts';
@@ -15,14 +17,18 @@ import { createStripePort } from '../../../src/commerce/stripe.ts';
 import * as store from '../../../src/commerce/store.ts';
 import { createKernel } from '../../../src/http/kernel.ts';
 import { actionCatalogue } from '../../../src/http/request.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../../src/semantic/definitions.ts';
 import { derivedId, newId, partitionOf, routeOf } from '../../../src/route/route.ts';
 import { createWorkClient } from '../../../src/work/client.ts';
-import { KERNEL_WORK_MODULES } from '../../../src/work/modules.ts';
-import { startWorker } from '../../../src/worker.ts';
+import { KERNEL_WORK_MODULES } from '../../support/default-work-modules.ts';
+import { readWorkerConfig, startWorker } from '../../../src/worker.ts';
 import { createAuthDatabase } from '../../support/auth-database.ts';
 import { dropTestDatabase } from '../../support/drop-test-database.ts';
 import { capture, costOf, openGrowthDatabase, withoutCatalogStatements } from '../../support/growth.ts';
+import { workerTestEnv } from '../../support/worker-env.ts';
 import { startFakeStripe } from './fake-stripe.ts';
+import { createNativeEditionFixture, type NativeEditionFixture } from './native-edition-fixture.ts';
+import { trustedAccessPorts } from '../../support/trusted-access.ts';
 import { seedUnrelatedOrders as seedOrderFixtures } from './seed-unrelated-orders.ts';
 
 // A separate process owns DBOS's process-global registrations for each isolated driver.
@@ -54,11 +60,8 @@ if (import.meta.main) {
     )
       offset = Math.max(offset, message.advanceTo - realNow());
   });
-  const worker = await startWorker(
-    { databaseUrl: process.env.DATABASE_URL!, poolSize: 10, executorId: 'commerce-outcomes' },
-    KERNEL_WORK_MODULES,
-    process.env,
-  );
+  const workerEnv = workerTestEnv(process.env);
+  const worker = await startWorker(readWorkerConfig(workerEnv), KERNEL_WORK_MODULES, workerEnv);
   // This executor only drains commerce. A deadline jump must not run the host's content crons.
   for (const schedule of await DBOS.listSchedules()) await DBOS.deleteSchedule(schedule.scheduleName);
   // Shorten scheduling latency while preserving the production queues' concurrency policies.
@@ -92,6 +95,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
   const databaseUrl = url.toString();
   const db = await openGrowthDatabase(databaseUrl);
   db.pool.options.max = 1;
+  await bootstrapRelease(db.admin, bundledRelease);
   const authPool = new Pool({ connectionString: await createAuthDatabase(base, authName), max: 2 });
   authPool.on('error', () => {});
   authPool.on('connect', (client) => client.on('error', () => {}));
@@ -142,7 +146,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     audience,
     secret: 'commerce-fixture-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(db.admin, routeOf(id)!, id);
         return (
@@ -159,7 +163,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
         if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   let access: ReturnType<typeof createAccess>;
   function kernel() {
@@ -239,10 +243,7 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     if (issued.status !== 200) throw new Error(`Fixture token issuance failed: ${issued.status}`);
     tokens.set(person.id, ((await issued.json()) as { access_token: string }).access_token);
   }
-  await db.admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    accounts.suspended.route,
-    accounts.suspended.id,
-  ]);
+  await suspendAccount(db.admin, accounts.suspended.id);
   // Resolve the same mounted Access catalogue used by the HTTP boundary for trusted commands.
   await app.handle(
     new Request('http://kernel.test/v1/entitlements', {
@@ -277,16 +278,49 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     },
   });
   let sellerAuthority: Promise<void> | undefined;
+  let editionFixture: Promise<NativeEditionFixture> | undefined;
+  async function contentRequest(
+    method: 'DELETE' | 'GET' | 'POST' | 'PUT',
+    path: string,
+    body?: unknown,
+    headers: Readonly<Record<string, string>> = {},
+  ) {
+    const requestHeaders = new Headers(headers);
+    requestHeaders.set('authorization', `Bearer ${tokens.get(seller.id)!}`);
+    if (body !== undefined && !requestHeaders.has('content-type'))
+      requestHeaders.set('content-type', 'application/json');
+    if (!requestHeaders.has('idempotency-key'))
+      requestHeaders.set('idempotency-key', JSON.stringify(Bun.randomUUIDv7()));
+    return app.handle(
+      new Request(`http://kernel.test${path}`, {
+        method,
+        headers: requestHeaders,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+    );
+  }
   async function authorizeSeller() {
     const context = { pool: db.pool, deadline: Date.now() + 30_000 };
-    await createGrantCommands({ pool: db.pool, access: grantAccess, managementAction: 'access:grant' }).create(
-      { ...context, actor: await grantAccess.authenticate(tokens.get(governor.id)!, context) },
+    const actor = await grantAccess.authenticate(tokens.get(governor.id)!, context);
+    const grants = createGrantCommands({ pool: db.pool, access: grantAccess, managementAction: 'access:grant' });
+    await grants.create(
+      { ...context, actor },
       {
         resource: PLATFORM_RESOURCE,
         subject: { kind: 'account', id: seller.id },
-        actions: ['offer:create'],
+        actions: ['offer:create', 'subject:create'],
         valid: '(,)',
-        key: 'commerce-fixture-seller',
+        key: Bun.randomUUIDv7(),
+      },
+    );
+    await grants.create(
+      { ...context, actor },
+      {
+        resource: { route: 0, id: GLOBAL_CONTEXT },
+        subject: { kind: 'account', id: seller.id },
+        actions: ['subject:create', 'board:create'],
+        valid: '(,)',
+        key: Bun.randomUUIDv7(),
       },
     );
   }
@@ -317,29 +351,22 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
       ready = resolve;
     });
     // Search indexing is optional and would share this executor. The outcome suite does not configure it.
-    const childEnv: Record<string, string> = {
+    const childEnv = {
       ...process.env,
-      DATABASE_URL: databaseUrl,
-      KERNEL_ROUTE_KEY: Buffer.alloc(32, 7).toString('base64url'),
-      KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 8).toString('base64url')}`,
-      AUTH_ISSUER: issuer,
-      AUTH_AUDIENCE: audience,
-      AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
-      STRIPE_SECRET_KEY: 'sk_test_commerce',
-      STRIPE_MANAGED_PAYMENTS: String(managedPayments),
-      STRIPE_API_HOST: `http://127.0.0.1:${fake.port}`,
-      CHECKOUT_SUCCESS_URL: configuration.successUrl,
-      CHECKOUT_CANCEL_URL: configuration.cancelUrl,
-      COMMERCE_OUTCOME_TIME: String(Date.parse(instant)),
-      // Content joins the shared worker and refuses to register without host storage config.
-      CONTENT_R2_ENDPOINT: `https://${'ab'.repeat(16)}.r2.cloudflarestorage.com`,
-      CONTENT_R2_BUCKET: 'content-media',
-      CONTENT_R2_ACCESS_KEY_ID: 'fixture-access',
-      CONTENT_R2_SECRET_ACCESS_KEY: 'fixture-secret',
-      CONTENT_SOURCE_HOSTS: 'images.example.org',
-      CONTENT_AUTH_CONSENT_URL: 'https://consent.example.test/internal/v1/consents:read',
-      CF_ACCESS_CLIENT_ID: 'fixture.access',
-      CF_ACCESS_CLIENT_SECRET: 'fixture-secret-token',
+      ...workerTestEnv({
+        DATABASE_URL: databaseUrl,
+        KERNEL_WORKER_POOL_SIZE: '10',
+        KERNEL_EXECUTOR_ID: 'commerce-outcomes',
+        AUTH_ISSUER: issuer,
+        AUTH_AUDIENCE: audience,
+        AUTH_JWKS_URL: `${issuer}/.well-known/jwks.json`,
+        STRIPE_SECRET_KEY: 'sk_test_commerce',
+        STRIPE_MANAGED_PAYMENTS: String(managedPayments),
+        STRIPE_API_HOST: `http://127.0.0.1:${fake.port}`,
+        CHECKOUT_SUCCESS_URL: configuration.successUrl,
+        CHECKOUT_CANCEL_URL: configuration.cancelUrl,
+        COMMERCE_OUTCOME_TIME: String(Date.parse(instant)),
+      }),
     };
     delete childEnv.OPENSEARCH_URL;
     child = Bun.spawn([process.execPath, import.meta.filename], {
@@ -461,11 +488,18 @@ export async function createCommerceDriver(): Promise<CommerceDriver> {
     },
     async provisionOffer(input = {}) {
       await (sellerAuthority ??= authorizeSeller());
+      const publisher = await (editionFixture ??= createNativeEditionFixture(contentRequest));
+      const edition = await publisher.publish({
+        title: 'Commerce outcome book',
+        subjectTitle: 'Commerce outcome book',
+        body: 'Commerce outcome edition bytes',
+      });
       return (
         await commands().createOffer(
           await actor(seller.id),
           {
-            targetSubjectId: newId(0x7700),
+            targetSubjectId: edition.targetSubjectId,
+            contentEditionId: edition.contentEditionId,
             title: 'Commerce outcome book',
             currency: 'usd',
             unitAmountMinor: input.unitAmountMinor ?? 1200,

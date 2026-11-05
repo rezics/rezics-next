@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -22,14 +23,17 @@ beforeAll(async () => {
     audience: 'https://api.rezics.test',
     secret: 'local-issuer-test-secret-with-at-least-32-bytes',
     signing: { activeKid: 'local', privateKeys: [key] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount() {
         return null;
       },
       async authorizeProvisioning() {
         throw new Error('No provisioning approval');
       },
-    },
+    }),
   };
 }, 60_000);
 
@@ -112,7 +116,10 @@ test('HTTPS origins retain native secure Better Auth session cookies', async () 
   let active = false;
   const service = await createAuthService({
     ...options,
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount() {
         return {
           accountId: 'secure-person',
@@ -125,7 +132,7 @@ test('HTTPS origins retain native secure Better Auth session cookies', async () 
       async authorizeProvisioning() {
         return { accountId: 'secure-person' };
       },
-    },
+    }),
   });
   await service.internal.registerClient({ clientId: 'web', firstParty: true, scopes: [] });
   await service.internal.provisionPassword({

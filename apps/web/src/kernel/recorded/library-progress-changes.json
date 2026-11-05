@@ -1,0 +1,12 @@
+{
+  "changes": [
+    {
+      "id": "01a17a3b-70a2-712a-bae6-f4cc72cd9182:2",
+      "revision": 2,
+      "intent": { "locator": "Part 2, chapter 14", "position": "42" },
+      "createdAt": "2026-10-26T18:22:28.388Z"
+    }
+  ],
+  "next": null,
+  "status": 200
+}

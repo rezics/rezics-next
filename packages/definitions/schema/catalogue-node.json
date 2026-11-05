@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rezics.com/definitions/catalogue-node/1",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "node", "children"],
+      "properties": {
+        "format": {
+          "const": "https://rezics.com/definitions/catalogue-node/1"
+        },
+        "node": {
+          "const": "branch"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["first", "last", "digest"],
+            "properties": {
+              "first": {
+                "type": "string",
+                "pattern": "^(?:declaration:[a-z][a-z0-9_]*:[^\\s]+|release:sha256:[0-9a-f]{64})$(?![\\s\\S])"
+              },
+              "last": {
+                "type": "string",
+                "pattern": "^(?:declaration:[a-z][a-z0-9_]*:[^\\s]+|release:sha256:[0-9a-f]{64})$(?![\\s\\S])"
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$(?![\\s\\S])"
+              }
+            }
+          },
+          "maxItems": 256,
+          "minItems": 1
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "node", "entries"],
+      "properties": {
+        "format": {
+          "const": "https://rezics.com/definitions/catalogue-node/1"
+        },
+        "node": {
+          "const": "leaf"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "kind", "digest"],
+            "properties": {
+              "key": {
+                "type": "string",
+                "pattern": "^(?:declaration:[a-z][a-z0-9_]*:[^\\s]+|release:sha256:[0-9a-f]{64})$(?![\\s\\S])"
+              },
+              "kind": {
+                "enum": ["release", "declaration"]
+              },
+              "digest": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$(?![\\s\\S])"
+              }
+            }
+          },
+          "maxItems": 256,
+          "minItems": 1
+        }
+      }
+    }
+  ]
+}

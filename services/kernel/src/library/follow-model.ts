@@ -24,7 +24,7 @@ export type Follow = Omit<FollowRow, 'route' | 'targetType' | 'state' | 'reason'
 };
 
 export type FollowPageCursor = Pick<Follow, 'updatedAt' | 'targetId'>;
-export type FollowPage = { after: FollowPageCursor | null; limit: number };
+export type FollowPage = { after: FollowPageCursor | null; limit: number; targetType?: FollowTargetType };
 
 export type ApplyFollowInput = {
   accountId: string;

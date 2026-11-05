@@ -3,27 +3,144 @@
   "type": "item",
   "lastrevid": 24681012,
   "modified": "2024-01-02T03:04:05Z",
-  "labels": {"en": {"language": "en", "value": "The Example Book"}, "en-GB": {"language": "en-GB", "value": "Example Book"}},
-  "aliases": {"en": [{"language": "en", "value": "Example Volume"}]},
-  "descriptions": {"en": {"language": "en", "value": "A synthetic book work for conversion tests"}},
-  "sitelinks": {"enwiki": {"site": "enwiki", "title": "The Example Book", "badges": [], "url": "https://en.wikipedia.org/wiki/The_Example_Book"}},
-  "claims": {
-    "P31": [{"id": "Q571$00000000-0000-4000-8000-000000000001", "type": "statement", "rank": "normal",
-      "mainsnak": {"snaktype": "value", "property": "P31", "datatype": "wikibase-item", "datavalue": {"type": "wikibase-entityid", "value": {"entity-type": "item", "numeric-id": 47461344, "id": "Q47461344"}}}}],
-    "P50": [{"id": "Q571$00000000-0000-4000-8000-000000000002", "type": "statement", "rank": "preferred",
-      "mainsnak": {"snaktype": "value", "property": "P50", "datatype": "wikibase-item", "datavalue": {"type": "wikibase-entityid", "value": {"entity-type": "item", "numeric-id": 42, "id": "Q42"}}},
-      "qualifiers": {"P1545": [{"snaktype": "value", "property": "P1545", "datatype": "string", "datavalue": {"type": "string", "value": "1"}}]},
-      "qualifiers-order": ["P1545"],
-      "references": [{"hash": "1111111111111111111111111111111111111111", "snaks": {"P854": [{"snaktype": "value", "property": "P854", "datatype": "url", "datavalue": {"type": "string", "value": "https://catalogue.example.org/books/example"}}]}, "snaks-order": ["P854"]}]},
-      {"id": "Q571$00000000-0000-4000-8000-000000000003", "type": "statement", "rank": "normal",
-      "mainsnak": {"snaktype": "value", "property": "P50", "datatype": "wikibase-item", "datavalue": {"type": "wikibase-entityid", "value": {"entity-type": "item", "numeric-id": 999999999, "id": "Q999999999"}}}}],
-    "P577": [{"id": "Q571$00000000-0000-4000-8000-000000000004", "type": "statement", "rank": "normal",
-      "mainsnak": {"snaktype": "value", "property": "P577", "datatype": "time", "datavalue": {"type": "time", "value": {"time": "+2001-02-03T00:00:00Z", "timezone": 0, "before": 0, "after": 0, "precision": 11, "calendarmodel": "http://www.wikidata.org/entity/Q1985727"}}}}],
-    "P856": [{"id": "Q571$00000000-0000-4000-8000-000000000005", "type": "statement", "rank": "normal",
-      "mainsnak": {"snaktype": "value", "property": "P856", "datatype": "url", "datavalue": {"type": "string", "value": "https://books.example.org/example"}}}],
-    "P999999": [{"id": "Q571$00000000-0000-4000-8000-000000000006", "type": "statement", "rank": "normal",
-      "mainsnak": {"snaktype": "value", "property": "P999999", "datatype": "string", "datavalue": {"type": "string", "value": "UNKNOWN_PROPERTY_SENTINEL"}}}]
+  "labels": {
+    "en": { "language": "en", "value": "The Example Book" },
+    "en-GB": { "language": "en-GB", "value": "Example Book" }
   },
-  "posts": [{"body": "USER_POST_SENTINEL"}],
-  "account": {"email": "PRIVATE_ACCOUNT_SENTINEL@example.invalid", "private": "PRIVATE_TEXT_SENTINEL"}
+  "aliases": { "en": [{ "language": "en", "value": "Example Volume" }] },
+  "descriptions": { "en": { "language": "en", "value": "A synthetic book work for conversion tests" } },
+  "sitelinks": {
+    "enwiki": {
+      "site": "enwiki",
+      "title": "The Example Book",
+      "badges": [],
+      "url": "https://en.wikipedia.org/wiki/The_Example_Book"
+    }
+  },
+  "claims": {
+    "P31": [
+      {
+        "id": "Q571$00000000-0000-4000-8000-000000000001",
+        "type": "statement",
+        "rank": "normal",
+        "mainsnak": {
+          "snaktype": "value",
+          "property": "P31",
+          "datatype": "wikibase-item",
+          "datavalue": {
+            "type": "wikibase-entityid",
+            "value": { "entity-type": "item", "numeric-id": 47461344, "id": "Q47461344" }
+          }
+        }
+      }
+    ],
+    "P50": [
+      {
+        "id": "Q571$00000000-0000-4000-8000-000000000002",
+        "type": "statement",
+        "rank": "preferred",
+        "mainsnak": {
+          "snaktype": "value",
+          "property": "P50",
+          "datatype": "wikibase-item",
+          "datavalue": {
+            "type": "wikibase-entityid",
+            "value": { "entity-type": "item", "numeric-id": 42, "id": "Q42" }
+          }
+        },
+        "qualifiers": {
+          "P1545": [
+            {
+              "snaktype": "value",
+              "property": "P1545",
+              "datatype": "string",
+              "datavalue": { "type": "string", "value": "1" }
+            }
+          ]
+        },
+        "qualifiers-order": ["P1545"],
+        "references": [
+          {
+            "hash": "1111111111111111111111111111111111111111",
+            "snaks": {
+              "P854": [
+                {
+                  "snaktype": "value",
+                  "property": "P854",
+                  "datatype": "url",
+                  "datavalue": { "type": "string", "value": "https://catalogue.example.org/books/example" }
+                }
+              ]
+            },
+            "snaks-order": ["P854"]
+          }
+        ]
+      },
+      {
+        "id": "Q571$00000000-0000-4000-8000-000000000003",
+        "type": "statement",
+        "rank": "normal",
+        "mainsnak": {
+          "snaktype": "value",
+          "property": "P50",
+          "datatype": "wikibase-item",
+          "datavalue": {
+            "type": "wikibase-entityid",
+            "value": { "entity-type": "item", "numeric-id": 999999999, "id": "Q999999999" }
+          }
+        }
+      }
+    ],
+    "P577": [
+      {
+        "id": "Q571$00000000-0000-4000-8000-000000000004",
+        "type": "statement",
+        "rank": "normal",
+        "mainsnak": {
+          "snaktype": "value",
+          "property": "P577",
+          "datatype": "time",
+          "datavalue": {
+            "type": "time",
+            "value": {
+              "time": "+2001-02-03T00:00:00Z",
+              "timezone": 0,
+              "before": 0,
+              "after": 0,
+              "precision": 11,
+              "calendarmodel": "http://www.wikidata.org/entity/Q1985727"
+            }
+          }
+        }
+      }
+    ],
+    "P856": [
+      {
+        "id": "Q571$00000000-0000-4000-8000-000000000005",
+        "type": "statement",
+        "rank": "normal",
+        "mainsnak": {
+          "snaktype": "value",
+          "property": "P856",
+          "datatype": "url",
+          "datavalue": { "type": "string", "value": "https://books.example.org/example" }
+        }
+      }
+    ],
+    "P999999": [
+      {
+        "id": "Q571$00000000-0000-4000-8000-000000000006",
+        "type": "statement",
+        "rank": "normal",
+        "mainsnak": {
+          "snaktype": "value",
+          "property": "P999999",
+          "datatype": "string",
+          "datavalue": { "type": "string", "value": "UNKNOWN_PROPERTY_SENTINEL" }
+        }
+      }
+    ]
+  },
+  "posts": [{ "body": "USER_POST_SENTINEL" }],
+  "account": { "email": "PRIVATE_ACCOUNT_SENTINEL@example.invalid", "private": "PRIVATE_TEXT_SENTINEL" }
 }

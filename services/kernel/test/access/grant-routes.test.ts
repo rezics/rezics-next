@@ -2,7 +2,6 @@ import { afterAll, afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT } from 'jose';
-import { testDatabase } from '../../../auth/scripts/database.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { authoritativeTimeValue } from '../../src/command/command.ts';
 import { createGrantCommands } from '../../src/access/grant-commands.ts';
@@ -13,6 +12,7 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { decodeSession } from '../../src/tokens/session.ts';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { SESSION_HEADER, actionCatalogue } from '../../src/http/request.ts';
@@ -78,7 +78,7 @@ const password = 'native grant routes registration password';
 const routeKey = new Uint8Array(32).fill(71);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(72)]]) };
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
-let authDatabase: ReturnType<typeof testDatabase>;
+let authName: string;
 let authPool: Pool;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
@@ -192,8 +192,8 @@ beforeAll(async () => {
   // media:complete is reserved to the confidential website client. gate:any is
   // internal to Access and is required to delegate platform.governance.
   scopes = [...new Set([...actions.keys()].filter((scope) => scope !== 'media:complete').concat('gate:any'))];
-  authDatabase = testDatabase();
-  authPool = new Pool({ connectionString: authDatabase.url });
+  authName = `grant_routes_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  authPool = new Pool({ connectionString: await createAuthDatabase(process.env.DATABASE_URL!, authName) });
   signingKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
     kid: 'grant-routes',
@@ -243,8 +243,18 @@ beforeAll(async () => {
   recipient = await person('grant_recipient');
 }, 60000);
 afterAll(async () => {
-  await host?.stop();
-  authDatabase?.close();
+  if (host) await host.stop();
+  else await authPool?.end();
+  if (authName) {
+    const url = new URL(process.env.DATABASE_URL!);
+    url.pathname = '/postgres';
+    const owner = new Pool({ connectionString: url.toString(), max: 1 });
+    try {
+      await owner.query(`DROP DATABASE IF EXISTS "${authName}" WITH (FORCE)`);
+    } finally {
+      await owner.end();
+    }
+  }
   await db?.close();
 });
 afterEach(() => {

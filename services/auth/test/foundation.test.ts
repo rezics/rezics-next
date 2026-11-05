@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createLocalJWKSet, decodeJwt, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
@@ -27,7 +28,10 @@ beforeAll(async () => {
     audience,
     secret: 'test-only-better-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: 'fixture-signing-key', privateKeys: [privateJwk] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount(id) {
         if (unavailable) throw new Error('Access unavailable');
         return accounts.get(id) ?? null;
@@ -49,7 +53,7 @@ beforeAll(async () => {
         approvals.delete(reference);
         return { accountId };
       },
-    },
+    }),
   };
   service = await createAuthService(options);
   await service.internal.registerClient({ clientId: 'web', firstParty: true, scopes: ['read', 'write'] });
@@ -202,6 +206,26 @@ test('wrong password, credential swapping, missing identity and all inactive sta
   async function loginWithoutAccess() {
     return cookie;
   }
+});
+
+test('Correct-password suspended sign-in returns existing native ACCOUNT_SUSPENDED code and creates no session', async () => {
+  await provision('suspended-human');
+  accounts.get('suspended-human')!.state = 'suspended';
+  const before = await pool.query('SELECT count(*) FROM session');
+
+  const suspended = await signin('suspended-human');
+  expect(suspended.status).toBe(403);
+  expect(await suspended.json()).toEqual({ error: 'account_suspended', code: 'ACCOUNT_SUSPENDED' });
+  expect(suspended.headers.getSetCookie()).toEqual([]);
+  expect(suspended.headers.has('authorization')).toBe(false);
+  expect((await pool.query('SELECT count(*) FROM session')).rows).toEqual(before.rows);
+
+  const wrongPassword = await signin('suspended-human', { password: 'wrong password' });
+  expect(wrongPassword.status).toBe(401);
+  expect(await wrongPassword.json()).toEqual({ error: 'authentication_denied' });
+  expect(wrongPassword.headers.getSetCookie()).toEqual([]);
+  expect(wrongPassword.headers.has('authorization')).toBe(false);
+  expect((await pool.query('SELECT count(*) FROM session')).rows).toEqual(before.rows);
 });
 
 test('automated actors use only their own real password credentials and have no recovery-email route', async () => {

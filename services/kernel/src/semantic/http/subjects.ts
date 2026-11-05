@@ -1,5 +1,26 @@
+import { memoizedValue } from '../../memoized.ts';
+import { parseSelectedSynopsis } from '../selected-synopsis.ts';
+import { readDocument } from '../../content/document-read.ts';
+import {
+  ReviewedPersonEndpointSchema,
+  ReviewedPersonExpectationSchema,
+  validReviewedPersonExpectation,
+  isReviewedPersonSource,
+} from '../reviewed-person-identity.ts';
+import { correctTerms, termRevision, StaleTermsRevisionError } from '../terms.ts';
+import {
+  changeStatementDisclosure,
+  readStatementAs,
+  StatementDisclosureConflictError,
+  StatementDisclosureDeniedError,
+  StatementDisclosureNotFoundError,
+} from '../statement-disclosure.ts';
+import { readSubjectSummaries, summaryAuthorization } from '../summaries.ts';
+import { languageRanges } from '../language.ts';
+import { CoverSummarySchema, SubjectSummarySchema } from './summaries.ts';
 import { SourceSchema, BatchReferenceSchema } from '@rezics/definitions/bulk';
-import { mergeSubjects, SubjectRedirectError } from '../merges.ts';
+import { admitMergeSubjects, observeSubjectIdentityOperation, SubjectRedirectError } from '../merges.ts';
+import { IdentityEpochStoreError } from '../identity-adapters/index.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { KeyRing } from '../../tokens/seal.ts';
@@ -15,21 +36,27 @@ import {
 import { PageCursorError } from '../page.ts';
 import type { Pool } from 'pg';
 import { withConnection } from '../../database/pool.ts';
-import { SubjectInputError, type Item, type Snak } from '../item.ts';
+import { isRelationProperty, relationSlotForApi, SubjectInputError, type Item, type Snak } from '../item.ts';
 import { createSubject, readRelated, readSubject, SubjectAccessDeniedError, subjectTarget } from '../subject.ts';
-import { DATA_TYPES, type DataType } from '@rezics/definitions';
+import { DATA_TYPES, type DataType, type Release } from '@rezics/definitions';
 import { GrantDeniedError } from '../../access/grant-commands.ts';
 import { resourceAuthorization, type AuthorizationAnchor } from '../../access/resource-authorization.ts';
+import { createResourceCreationManifest, parentCreationAuthorization } from '../../access/index.ts';
 import { activeRelease, GLOBAL_CONTEXT, readRelease, StaleEditorialHeadError } from '../definitions.ts';
+import { effectiveRelease } from '../extensions.ts';
+import { termContext } from '@rezics/definitions/extension';
 import { partitionOf, routeOf } from '../../route/route.ts';
 import type { Access, AccountActor, Resource } from '../../request/access.ts';
-import { AuthenticationError } from '../../request/access.ts';
+import { accessCheck, AuthenticationError } from '../../request/access.ts';
+import { readRevisionDetail } from '../revision-detail.ts';
 import { createApp } from '../../http/app.ts';
 import { defineRateLimit } from '../../http/rate-limit.ts';
 import { ProblemError, problemSchema } from '../../http/problem.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, requestDigest, SESSION_HEADER } from '../../http/request.ts';
 import { relatedReadEligibility, subjectReadEligibility } from '../eligibility.ts';
-import { listSubjectLinks, waitForSubjectLinks } from '../links.ts';
+import { listSubjectLinks, listSubjectRelations, waitForSubjectLinks } from '../links.ts';
+import { listSubjectGraph } from '../graph.ts';
+import { readSubjectRelationCounts, type SubjectRelationCountResponse } from '../counts.ts';
 import { customMethod } from '../../http/custom-method.ts';
 import {
   moderateStatement,
@@ -39,51 +66,111 @@ import {
   readStatementCandidate,
   readSubjectVisibility,
 } from '../moderation.ts';
-import { ContextNotFoundError, editorialContextAnchor, globalContextAnchor } from '../context.ts';
-import type { CommandAuthorization } from '../../command/command.ts';
+import {
+  ContextNotFoundError,
+  editorialContextAnchor,
+  globalContextAnchor,
+  publicContextEligibility,
+} from '../context.ts';
+import { currentCommand, type CommandAuthorization, type CommandTransaction } from '../../command/command.ts';
+import { REACTION_KINDS } from '../../content/events.ts';
+import { readReactionCounts, type ReactionKind } from '../../content/reaction-projection.ts';
+import readVisibility from '../read-visibility.sql';
+import { AccountAgentLabelEditError, AccountAgentWriteDeniedError } from '../agents.ts';
+import readRedirect from '../read-redirect.sql';
+import { SourceRecordSchema } from '../source-records.ts';
+import { revisionResource, StaleRevisionAuthorshipError } from '../authorship.ts';
+import { readSubjectCorrectionActions } from '../viewer-actions.ts';
+import { workReleaseCardFieldLimit, workReleaseCardLimit } from '../work-release-cards.ts';
+import type { ViewerActionBindings } from '../../access/viewer-actions.ts';
+import { requireAccessDeadline } from '../../access/unavailable.ts';
+import { PublicDocumentViewSchema } from '../../content/document-public.ts';
+import { readCharacterPublicDocuments } from '../character-public-reading-documents.ts';
+import { withReadTransaction } from '../read.ts';
+import { readPartition } from '../../partition/partition.ts';
+import { readContributionLifecycle } from '../contribution-lifecycle-read.ts';
+import { compileViewerActionBindings } from '../../access/viewer-actions.ts';
+import readContributionLifecycleLocator from '../contribution-lifecycle-read-locator.sql';
+import {
+  contributionAuthorResource,
+  deleteContribution,
+  restoreContribution,
+  ContributionLifecycleConflictError,
+  ContributionLifecycleNotFoundError,
+  SubjectPagePublicationUnavailableError,
+} from '../contribution-lifecycle.ts';
 
-const DataTypeSchema = t.Unsafe<DataType>(t.Union(DATA_TYPES.map((dataType) => t.Literal(dataType))));
+function DataTypeSchema() {
+  return memoizedValue(DataTypeSchema, () =>
+    t.Unsafe<DataType>(t.Union(DATA_TYPES.map((dataType) => t.Literal(dataType)))),
+  );
+}
+const AgentSelfSourceSchema = t.Object(
+  { kind: t.Literal('agent'), subject: t.String({ format: 'uuid' }) },
+  { additionalProperties: false },
+);
+function SemanticSourceSchema() {
+  return memoizedValue(SemanticSourceSchema, () => t.Union([SourceSchema, AgentSelfSourceSchema]));
+}
 const ValueSchema = t.Union([
   t.Object({ type: t.Literal('value'), content: t.Any() }, { additionalProperties: false }),
   t.Object({ type: t.Literal('somevalue') }, { additionalProperties: false }),
   t.Object({ type: t.Literal('novalue') }, { additionalProperties: false }),
 ]);
-const SnakSchema = t.Object(
-  {
-    property: t.Object({ id: t.String(), data_type: DataTypeSchema }, { additionalProperties: false }),
-    value: ValueSchema,
-  },
-  { additionalProperties: false },
-);
-const ReferenceSchema = t.Object({ parts: t.Array(SnakSchema), hash: t.String() }, { additionalProperties: false });
-const StatementSchema = t.Object(
-  {
-    id: t.String({ format: 'uuid' }),
-    rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated')]),
-    property: t.Object({ id: t.String(), data_type: DataTypeSchema }, { additionalProperties: false }),
-    value: ValueSchema,
-    qualifiers: t.Array(SnakSchema),
-    references: t.Array(ReferenceSchema),
-    rezics: t.Object({ release: t.String(), revision: t.Integer({ minimum: 1 }) }, { additionalProperties: false }),
-  },
-  { additionalProperties: false },
-);
+function SnakSchema() {
+  return memoizedValue(SnakSchema, () =>
+    t.Object(
+      {
+        property: t.Object({ id: t.String(), data_type: DataTypeSchema() }, { additionalProperties: false }),
+        value: ValueSchema,
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
+function ReferenceSchema() {
+  return memoizedValue(ReferenceSchema, () =>
+    t.Object({ parts: t.Array(SnakSchema()), hash: t.String() }, { additionalProperties: false }),
+  );
+}
+function StatementSchema() {
+  return memoizedValue(StatementSchema, () =>
+    t.Object(
+      {
+        id: t.String({ format: 'uuid' }),
+        rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated')]),
+        property: t.Object({ id: t.String(), data_type: DataTypeSchema() }, { additionalProperties: false }),
+        value: ValueSchema,
+        qualifiers: t.Array(SnakSchema()),
+        references: t.Array(ReferenceSchema()),
+        rezics: t.Object({ release: t.String(), revision: t.Integer({ minimum: 1 }) }, { additionalProperties: false }),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
 
-export const ItemSchema = t.Object(
-  {
-    id: t.String({ format: 'uuid' }),
-    type: t.String(),
-    revision: t.Integer({ minimum: 1 }),
-    release: t.String(),
-    context: t.String({ format: 'uuid' }),
-    resolution: t.Record(t.String(), t.Any()),
-    labels: t.Record(t.String(), t.String()),
-    descriptions: t.Record(t.String(), t.String()),
-    aliases: t.Record(t.String(), t.Array(t.String())),
-    statements: t.Record(t.String(), t.Array(StatementSchema)),
-  },
-  { additionalProperties: false },
-);
+export function ItemSchema() {
+  return memoizedValue(ItemSchema, () =>
+    t.Object(
+      {
+        id: t.String({ format: 'uuid' }),
+        type: t.String(),
+        revision: t.Integer({ minimum: 1 }),
+        release: t.String(),
+        context: t.String({ format: 'uuid' }),
+        resolution: t.Record(t.String(), t.Any()),
+        relationCounts: t.Record(t.String(), t.Integer({ minimum: 0 })),
+        labels: t.Record(t.String(), t.String()),
+        descriptions: t.Record(t.String(), t.String()),
+        aliases: t.Record(t.String(), t.Array(t.String())),
+        statements: t.Record(t.String(), t.Array(StatementSchema())),
+        sourceRecords: t.Array(SourceRecordSchema),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
 
 export const ItemInputSchema = t.Object(
   {
@@ -96,13 +183,116 @@ export const ItemInputSchema = t.Object(
   { additionalProperties: false },
 );
 
+export const TermsPatchSchema = t.Object(
+  {
+    labels: t.Optional(t.Record(t.String(), t.Union([t.String(), t.Null()]))),
+    descriptions: t.Optional(t.Record(t.String(), t.Union([t.String(), t.Null()]))),
+    aliases: t.Optional(t.Record(t.String(), t.Union([t.Array(t.String()), t.Null()]))),
+  },
+  { additionalProperties: false },
+);
+export const TermsResultSchema = t.Object(
+  { subject: t.String({ format: 'uuid' }), revision: t.Integer({ minimum: 1 }) },
+  { additionalProperties: false },
+);
+
+const revisionSelection = t.Object(
+  {
+    candidate: t.String({ format: 'uuid' }),
+    rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated')]),
+  },
+  { additionalProperties: false },
+);
+const revisionReading = t.Object(
+  {
+    decision: t.Union([
+      t.Null(),
+      t.Object(
+        {
+          head: t.Integer({ minimum: 1 }),
+          verdict: t.Union([t.Literal('accept'), t.Literal('reject'), t.Literal('abstain')]),
+          revision: t.Integer({ minimum: 1 }),
+        },
+        { additionalProperties: false },
+      ),
+    ]),
+    selected: t.Boolean(),
+    rank: t.Union([t.Null(), t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated')]),
+  },
+  { additionalProperties: false },
+);
+const revisionCandidateFields = {
+  candidate: t.String({ format: 'uuid' }),
+  property: t.String(),
+  context: t.String({ format: 'uuid' }),
+  reading: revisionReading,
+};
+export const RevisionDetailSchema = t.Object(
+  {
+    subject: t.String({ format: 'uuid' }),
+    revision: t.Object(
+      { revision: t.Integer({ minimum: 1 }), kind: t.String(), release: t.String() },
+      { additionalProperties: false },
+    ),
+    change: t.Union([
+      t.Object({ kind: t.Literal('record') }, { additionalProperties: false }),
+      t.Object(
+        {
+          kind: t.Literal('terms'),
+          fields: t.Array(
+            t.Object(
+              {
+                field: t.Union([t.Literal('labels'), t.Literal('descriptions'), t.Literal('aliases')]),
+                languages: t.Array(t.String()),
+              },
+              { additionalProperties: false },
+            ),
+            { maxItems: 3 },
+          ),
+        },
+        { additionalProperties: false },
+      ),
+      t.Object({ kind: t.Literal('candidate'), ...revisionCandidateFields }, { additionalProperties: false }),
+      t.Object(
+        {
+          kind: t.Literal('decision'),
+          ...revisionCandidateFields,
+          head: t.Integer({ minimum: 1 }),
+          verdict: t.Union([t.Literal('accept'), t.Literal('reject'), t.Literal('abstain')]),
+        },
+        { additionalProperties: false },
+      ),
+      t.Object(
+        {
+          kind: t.Literal('adoption'),
+          property: t.String(),
+          context: t.String({ format: 'uuid' }),
+          head: t.Integer({ minimum: 1 }),
+          mode: t.Union([t.Literal('inherit'), t.Literal('replace'), t.Literal('suppress')]),
+          selection: t.Array(revisionSelection, { maxItems: 32 }),
+        },
+        { additionalProperties: false },
+      ),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
 const pageQuery = {
   limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
   cursor: t.Optional(t.String()),
 };
 function candidateError(error: unknown): never {
+  if (error instanceof StatementDisclosureConflictError) throw new ProblemError('conflict');
+  if (error instanceof StatementDisclosureDeniedError) throw new ProblemError('forbidden');
+  if (error instanceof StatementDisclosureNotFoundError) throw new ProblemError('not_found');
   if (error instanceof SubjectInputError) throw invalidSubjectInput(error);
   if (error instanceof SubjectRedirectError) throw new ProblemError('conflict');
+  if (error instanceof IdentityEpochStoreError) {
+    if (error.code === 'identity_group_overflow') throw new ProblemError('identity_group_overflow');
+    if (error.code === 'identity_epoch_busy') throw new ProblemError('overloaded');
+    throw new ProblemError('partition_unavailable');
+  }
   if (error instanceof SubjectNotFoundError) throw new ProblemError('not_found');
   if (error instanceof ContextNotFoundError) throw new ProblemError('not_found');
   if (error instanceof EditorialConflictError) throw new ProblemError('conflict');
@@ -110,18 +300,39 @@ function candidateError(error: unknown): never {
   if (error instanceof PageCursorError) throw new ProblemError('invalid_request');
   if (error instanceof SubjectAccessDeniedError || error instanceof GrantDeniedError)
     throw new ProblemError('forbidden');
+  if (error instanceof AccountAgentLabelEditError)
+    throw new ProblemError('forbidden', {
+      detail: 'Account agent labels are controlled by the account display name.',
+      errors: [{ pointer: '/labels', code: 'unsupported' }],
+    });
+  if (error instanceof AccountAgentWriteDeniedError)
+    throw new ProblemError('forbidden', {
+      detail: `Only the account may state facts about this unverified account agent (${error.subject}).`,
+    });
   throw error;
 }
-const listingErrors = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  503: problemSchema('semantic_not_ready', 'overloaded', 'deadline_exceeded'),
-};
-const LabelsSchema = t.Object(
-  { labels: t.Record(t.String(), t.String()), redirect: t.Optional(t.String({ format: 'uuid' })) },
-  { additionalProperties: false },
-);
+function listingErrors() {
+  return memoizedValue(listingErrors, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    503: problemSchema('semantic_not_ready', 'overloaded', 'deadline_exceeded'),
+  }));
+}
+function LabelsSchema() {
+  return memoizedValue(LabelsSchema, () =>
+    t.Object(
+      {
+        labels: t.Record(t.String(), t.String()),
+        redirect: t.Optional(t.String({ format: 'uuid' })),
+        type: t.Optional(t.String()),
+        types: t.Optional(t.Array(t.String())),
+        cover: t.Optional(CoverSummarySchema),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
 const redirectResponse = t.Object(
   {
     redirect: t.Object(
@@ -131,12 +342,196 @@ const redirectResponse = t.Object(
   },
   { additionalProperties: false },
 );
-const itemResponse = t.Object({ subject: ItemSchema }, { additionalProperties: false });
-const readResponse = t.Object(
-  { subject: ItemSchema, related: t.Record(t.String(), LabelsSchema) },
+function itemResponse() {
+  return memoizedValue(itemResponse, () => t.Object({ subject: ItemSchema() }, { additionalProperties: false }));
+}
+const viewerActionEntry = t.Object(
+  {
+    action: t.String(),
+    operations: t.Array(t.String(), { minItems: 1, maxItems: 256, uniqueItems: true }),
+  },
   { additionalProperties: false },
 );
-const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
+function readResponse() {
+  return memoizedValue(readResponse, () =>
+    t.Object(
+      {
+        subject: ItemSchema(),
+        selectedSynopsis: t.Optional(
+          t.Union([
+            t.Object(
+              {
+                kind: t.Literal('matched'),
+                fact: t.Omit(StatementSchema(), ['rezics']),
+                context: t.String(),
+                release: t.String(),
+              },
+              { additionalProperties: false },
+            ),
+            t.Object({ kind: t.Literal('changed') }, { additionalProperties: false }),
+            t.Object({ kind: t.Literal('missing') }, { additionalProperties: false }),
+            t.Object({ kind: t.Literal('unsupported') }, { additionalProperties: false }),
+            t.Object({ kind: t.Literal('unavailable') }, { additionalProperties: false }),
+          ]),
+        ),
+        reviewedIdentity: t.Optional(t.Union([ReviewedPersonEndpointSchema, t.Null()])),
+        account: t.Union([t.Object({ id: t.String({ format: 'uuid' }) }, { additionalProperties: false }), t.Null()]),
+        summary: t.Union([SubjectSummarySchema, t.Null()]),
+        related: t.Record(t.String(), LabelsSchema()),
+        documents: t.Optional(t.Record(t.String({ format: 'uuid' }), PublicDocumentViewSchema())),
+        viewerActions: t.Optional(
+          t.Union([
+            t.Object(
+              { state: t.Literal('available'), actions: t.Array(viewerActionEntry, { maxItems: 64 }) },
+              { additionalProperties: false },
+            ),
+            t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
+          ]),
+        ),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
+function WorkReleaseCardFieldSchema() {
+  return memoizedValue(WorkReleaseCardFieldSchema, () =>
+    t.Union([
+      t.Object({ state: t.Literal('unsupported') }, { additionalProperties: false }),
+      t.Object({ state: t.Literal('withheld') }, { additionalProperties: false }),
+      t.Object({ state: t.Literal('missing') }, { additionalProperties: false }),
+      t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
+      t.Object(
+        {
+          state: t.Literal('available'),
+          statements: t.Array(StatementSchema(), { maxItems: workReleaseCardFieldLimit }),
+          related: t.Record(t.String(), SubjectSummarySchema),
+        },
+        { additionalProperties: false },
+      ),
+    ]),
+  );
+}
+function WorkReleaseCardSchema() {
+  return memoizedValue(WorkReleaseCardSchema, () =>
+    t.Object(
+      {
+        subject: t.String({ format: 'uuid' }),
+        type: t.String(),
+        summary: SubjectSummarySchema,
+        membership: StatementSchema(),
+        related: t.Record(t.String(), SubjectSummarySchema),
+        fields: t.Object(
+          {
+            'schema:gamePlatform': WorkReleaseCardFieldSchema(),
+            'schema:inLanguage': WorkReleaseCardFieldSchema(),
+            'schema:datePublished': WorkReleaseCardFieldSchema(),
+            'schema:creativeWorkStatus': WorkReleaseCardFieldSchema(),
+            'wdt:P5804': WorkReleaseCardFieldSchema(),
+            'rezics:releaseStatus': WorkReleaseCardFieldSchema(),
+            'schema:contentRating': WorkReleaseCardFieldSchema(),
+            'schema:publisher': WorkReleaseCardFieldSchema(),
+            'schema:producer': WorkReleaseCardFieldSchema(),
+            'wdt:P178': WorkReleaseCardFieldSchema(),
+            'wdt:P162': WorkReleaseCardFieldSchema(),
+            'wdt:P2899': WorkReleaseCardFieldSchema(),
+          },
+          { additionalProperties: false },
+        ),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
+function WorkReleaseCardsSchema() {
+  return memoizedValue(WorkReleaseCardsSchema, () =>
+    t.Union([
+      t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
+      t.Object(
+        { state: t.Literal('available'), cards: t.Array(WorkReleaseCardSchema(), { maxItems: workReleaseCardLimit }) },
+        { additionalProperties: false },
+      ),
+    ]),
+  );
+}
+const SubjectCountsSchema = t.Unsafe<SubjectRelationCountResponse>(
+  t.Object(
+    {
+      properties: t.Optional(
+        t.Record(
+          t.String(),
+          t.Union([
+            t.Object(
+              { out: t.Integer({ minimum: 1 }), in: t.Optional(t.Integer({ minimum: 1 })) },
+              { additionalProperties: false },
+            ),
+            t.Object(
+              { out: t.Optional(t.Integer({ minimum: 1 })), in: t.Integer({ minimum: 1 }) },
+              { additionalProperties: false },
+            ),
+          ]),
+        ),
+      ),
+      groups: t.Optional(
+        t.Record(
+          t.String(),
+          t.Union([
+            t.Object(
+              { out: t.Integer({ minimum: 1 }), in: t.Optional(t.Integer({ minimum: 0 })) },
+              { additionalProperties: false },
+            ),
+            t.Object(
+              { out: t.Optional(t.Integer({ minimum: 0 })), in: t.Integer({ minimum: 1 }) },
+              { additionalProperties: false },
+            ),
+          ]),
+        ),
+      ),
+      content: t.Null(),
+    },
+    { additionalProperties: false },
+  ),
+);
+function graphResponse() {
+  return memoizedValue(graphResponse, () =>
+    t.Object(
+      {
+        nodes: t.Array(
+          t.Object(
+            { id: t.String({ format: 'uuid' }), type: t.String(), label: t.String(), summary: SubjectSummarySchema },
+            { additionalProperties: false },
+          ),
+        ),
+        edges: t.Array(
+          t.Object(
+            {
+              from: t.String({ format: 'uuid' }),
+              property: t.String(),
+              to: t.String({ format: 'uuid' }),
+              statement: t.String({ format: 'uuid' }),
+            },
+            { additionalProperties: false },
+          ),
+        ),
+        truncated: t.Array(
+          t.Object(
+            {
+              node: t.String({ format: 'uuid' }),
+              property: t.String(),
+              direction: t.Union([t.Literal('out'), t.Literal('in')]),
+              count: t.Optional(t.Integer({ minimum: 0 })),
+              cursor: t.String(),
+            },
+            { additionalProperties: false },
+          ),
+        ),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
+function unauthorized() {
+  return memoizedValue(unauthorized, () => problemSchema('authentication_required', 'invalid_credentials'));
+}
 const EditorialBodyContext = t.String({ format: 'uuid' });
 const ExpectedHead = t.Union([t.Integer({ minimum: 1 }), t.Null()]);
 const DecisionBody = t.Object(
@@ -153,6 +548,9 @@ const AdoptionBody = t.Object(
   {
     context: EditorialBodyContext,
     property: t.String({ minLength: 1 }),
+    target: t.Optional(t.String({ format: 'uuid' })),
+    sameAs: t.Optional(t.String({ minLength: 1 })),
+    key: t.Optional(t.String({ format: 'uuid' })),
     mode: AdoptionMode,
     selection: Selection,
     expected_head: ExpectedHead,
@@ -185,7 +583,7 @@ const adoptionResponse = t.Object(
           t.Object(
             {
               candidate: t.String({ format: 'uuid' }),
-              rank: t.Union([t.Literal('normal'), t.Literal('preferred')]),
+              rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated')]),
             },
             { additionalProperties: false },
           ),
@@ -236,15 +634,60 @@ const statementVisibilityResponse = t.Object(
   { additionalProperties: false },
 );
 const cacheControl = { 'cache-control': t.Literal('no-cache') };
+function reactionKind() {
+  return memoizedValue(reactionKind, () =>
+    t.Unsafe<ReactionKind>(t.Union(REACTION_KINDS.map((kind) => t.Literal(kind)))),
+  );
+}
+function reactionCountResponse() {
+  return memoizedValue(reactionCountResponse, () =>
+    t.Object(
+      {
+        counts: t.Array(
+          t.Object({ kind: reactionKind(), count: t.Integer({ minimum: 1 }) }, { additionalProperties: false }),
+        ),
+        watermark: t.Union([
+          t.Object(
+            { epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[1-9][0-9]*$' }) },
+            { additionalProperties: false },
+          ),
+          t.Null(),
+        ]),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
 type SubjectRouteDependencies = {
   pool: Pool;
   routeKey: Uint8Array;
   tokens: KeyRing;
   access: () => Access;
   clock: () => Date;
+  viewerActionBindings?: () => ViewerActionBindings;
 };
 function invalidSubjectInput(error: SubjectInputError): ProblemError {
   return new ProblemError('invalid_request', { errors: error.violations });
+}
+
+function relationSlotAddress(
+  subject: string,
+  property: string,
+  release: Release,
+  input: { target?: string; sameAs?: string; key?: string },
+): string {
+  const fail = (pointers: string[]) =>
+    new SubjectInputError(pointers.map((pointer) => ({ pointer: `/${pointer}`, code: 'invalid_format' as const })));
+  const relation = release.properties[property]?.relation;
+  const isRelation = isRelationProperty(release, property);
+  if (input.target !== undefined && input.sameAs !== undefined) throw fail(['target', 'sameAs']);
+  if (!isRelation && (input.target !== undefined || input.sameAs !== undefined || input.key !== undefined))
+    throw fail([input.target !== undefined ? 'target' : input.sameAs !== undefined ? 'sameAs' : 'key']);
+  if (input.target !== undefined && routeOf(input.target) === null) throw fail(['target']);
+  if (input.sameAs !== undefined && !/^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$/.test(input.sameAs)) throw fail(['sameAs']);
+  if (input.key !== undefined && (input.target === undefined || !relation?.slotKey || routeOf(input.key) === null))
+    throw fail(['key']);
+  return relationSlotForApi(subject, property, relation, input);
 }
 
 type CommandAuthorizer = (resource: Resource, denied: () => Error) => Promise<CommandAuthorization>;
@@ -310,8 +753,98 @@ function relatedIds(subject: Item): { propertyIds: Set<string>; subjectIds: Set<
 
 function subjectRoutes(
   app: ReturnType<typeof createApp>,
-  { pool, routeKey, tokens, access, clock }: SubjectRouteDependencies,
+  { pool, routeKey, tokens, access, clock, viewerActionBindings }: SubjectRouteDependencies,
 ) {
+  function contributionAuthorization(
+    actor: AccountActor,
+    action: 'statement:delete' | 'statement:restore',
+    resource: Resource,
+    deadline: number,
+    includeGlobalPropose: boolean,
+  ): CommandAuthorization {
+    const context = { pool, deadline, partition: partitionOf(resource.route) };
+    const author = resourceAuthorization({
+      access: access(),
+      actor,
+      action,
+      anchor: {
+        resource,
+        async validate(client) {
+          const result = await client.query(
+            `SELECT 1 FROM access.resource_initialization
+             WHERE route=$1 AND resource_id=$2 AND resource_type='semantic.revision'`,
+            [resource.route, resource.id],
+          );
+          return result.rows.length === 1;
+        },
+      },
+      context,
+    });
+    if (!includeGlobalPropose) return author;
+    const proposal = resourceAuthorization({
+      access: access(),
+      actor,
+      action: 'statement:propose',
+      anchor: globalContextAnchor,
+      context,
+    });
+    return {
+      action,
+      resource: author.resource,
+      denied: () => new GrantDeniedError(),
+      async prepare(attempt) {
+        const authorProof = await author.prepare!(attempt);
+        const proposalProof = await proposal.prepare!(attempt);
+        return { authorProof, proposalProof };
+      },
+      async authorize(tx, attempt, proof) {
+        const prepared = proof as { authorProof: unknown; proposalProof: unknown };
+        await author.authorize(tx, attempt, prepared.authorProof);
+        await proposal.authorize(tx, attempt, prepared.proposalProof);
+        return 'execute';
+      },
+    };
+  }
+  const nativeCreationEntry = (
+    resource: Resource,
+    type: string,
+    accountId: string,
+    subject: string,
+    revision: number,
+  ) => ({
+    resource,
+    type,
+    creator: accountId,
+    creation: {
+      async validate(client: CommandTransaction, candidate: Readonly<Resource>): Promise<boolean> {
+        const command = currentCommand(client);
+        if (
+          candidate.route !== resource.route ||
+          candidate.id !== resource.id ||
+          command.basis?.actorAccountId !== accountId ||
+          command.authorization?.mode !== 'execute'
+        )
+          return false;
+        if (type === 'semantic.subject') {
+          const result = await client.query(
+            `SELECT 1 FROM semantic.subject s
+             JOIN semantic.revision r ON r.route=s.route AND r.subject_id=s.subject_id AND r.revision=1
+               AND r.recorded_transaction_id=s.recorded_transaction_id AND r.kind='create'
+             WHERE s.route=$1 AND s.subject_id=$2 AND s.recorded_transaction_id=$3::uuid`,
+            [resource.route, subject, command.transactionId],
+          );
+          return result.rows.length === 1;
+        }
+        const result = await client.query(
+          `SELECT 1 FROM semantic.revision r
+           WHERE r.route=$1 AND r.subject_id=$2 AND r.revision=$3
+             AND r.kind IN ('create','propose','terms') AND r.recorded_transaction_id=$4::uuid`,
+          [resource.route, subject, revision, command.transactionId],
+        );
+        return result.rows.length === 1;
+      },
+    },
+  });
   return app
     .post(
       '/v1/subjects',
@@ -319,9 +852,9 @@ function subjectRoutes(
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
         body: ItemInputSchema,
         response: {
-          201: withHeaders(itemResponse, { [SESSION_HEADER]: t.String(), location: t.String(), etag: t.String() }),
+          201: withHeaders(itemResponse(), { [SESSION_HEADER]: t.String(), location: t.String(), etag: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           422: problemSchema('idempotency_conflict'),
           503: problemSchema(
@@ -336,6 +869,9 @@ function subjectRoutes(
           operationId: 'subject.create',
           'x-exposure': 'public',
           'x-action': 'subject:create',
+          'x-resource-types': ['semantic.subject', 'semantic.revision'],
+          'x-authority-resource-types': ['semantic.context'],
+          'x-authority-resource-id': GLOBAL_CONTEXT,
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },
@@ -343,20 +879,27 @@ function subjectRoutes(
       async ({ body, headers, actor, authorizeCommand, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const account: AccountActor = actor;
-        const active = await activeRelease(pool);
+        const active = await effectiveRelease(pool, GLOBAL_CONTEXT, true);
         if (!active) throw new ProblemError('semantic_not_ready');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
         const target = subjectTarget(routeKey, account.accountId, key);
-        const authorization = await authorizeSemanticWrite({
+        const firstRevision = revisionResource(target.id, 1);
+        const manifest = createResourceCreationManifest([
+          nativeCreationEntry(target, 'semantic.subject', account.accountId, target.id, 1),
+          nativeCreationEntry(firstRevision, 'semantic.revision', account.accountId, target.id, 1),
+        ]);
+        const authorization = parentCreationAuthorization({
           access: access(),
           actor: account,
           action: 'subject:create',
-          anchor: globalContextAnchor,
-          pool,
-          deadline: job.deadline,
-          targetPartition: partitionOf(target.route),
-          authorizeCommand,
-          denied: () => new SubjectAccessDeniedError(),
+          parent: globalContextAnchor,
+          context: {
+            pool,
+            deadline: job.deadline,
+            resource: target,
+            creation: nativeCreationEntry(target, 'semantic.subject', account.accountId, target.id, 1).creation,
+            manifest,
+          },
         });
         try {
           const result = await admission.run('normal', job, () =>
@@ -381,7 +924,112 @@ function subjectRoutes(
           if (error instanceof SubjectInputError) throw invalidSubjectInput(error);
           if (error instanceof SubjectAccessDeniedError || error instanceof GrantDeniedError)
             throw new ProblemError('forbidden');
+          if (error instanceof AccountAgentLabelEditError)
+            throw new ProblemError('forbidden', {
+              detail: 'Account agent labels are controlled by the account display name.',
+              errors: [{ pointer: '/labels', code: 'unsupported' }],
+            });
+          if (error instanceof AccountAgentWriteDeniedError)
+            throw new ProblemError('forbidden', {
+              detail: `Only the account may state facts about this unverified account agent (${error.subject}).`,
+            });
           throw error;
+        }
+      },
+    )
+    .patch(
+      '/v1/subjects/:id/terms',
+      {
+        params: t.Object({ id: t.String() }),
+        headers: t.Object({
+          [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }),
+          'if-match': t.String(),
+        }),
+        body: TermsPatchSchema,
+        response: {
+          200: withHeaders(TermsResultSchema, { [SESSION_HEADER]: t.String(), etag: t.String() }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized(),
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          412: problemSchema('precondition_failed'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'subject.terms',
+          'x-exposure': 'public',
+          'x-action': 'statement:propose',
+          'x-resource-types': ['semantic.revision'],
+          'x-authority-resource-types': ['semantic.context'],
+          'x-authority-resource-id': GLOBAL_CONTEXT,
+          security: [{ bearerAuth: [] }],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        try {
+          const expectedRevision = termRevision(headers['if-match']);
+          const anchor = revisionResource(params.id, expectedRevision + 1);
+          const entry = nativeCreationEntry(
+            anchor,
+            'semantic.revision',
+            actor.accountId,
+            params.id,
+            expectedRevision + 1,
+          );
+          const authorization = parentCreationAuthorization({
+            access: access(),
+            actor,
+            action: 'statement:propose',
+            parent: globalContextAnchor,
+            context: {
+              pool,
+              deadline: job.deadline,
+              resource: anchor,
+              creation: entry.creation,
+              manifest: createResourceCreationManifest([entry]),
+            },
+          });
+          const noEffectAuthorization = resourceAuthorization({
+            access: access(),
+            actor,
+            action: 'statement:propose',
+            anchor: globalContextAnchor,
+            context: { pool, deadline: job.deadline, partition: partitionOf(route) },
+          });
+          const result = await admission.run('normal', job, () =>
+            correctTerms(pool, {
+              subject: params.id,
+              expectedRevision,
+              patch: body,
+              actor,
+              authorization,
+              noEffectAuthorization,
+              prepareSubject: () =>
+                accessCheck(
+                  access(),
+                  actor,
+                  'subject:read',
+                  { route, id: params.id, eligibility: subjectReadEligibility({ route, id: params.id }) },
+                  { pool, deadline: job.deadline },
+                ),
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('subject.terms', actor, { subject: params.id, expectedRevision, body }),
+              routeKey,
+              deadline: job.deadline,
+              clock,
+            }),
+          );
+          session.record(result.component);
+          set.headers.etag = `"${result.revision}"`;
+          return { subject: result.subject, revision: result.revision };
+        } catch (error) {
+          if (error instanceof StaleTermsRevisionError) throw new ProblemError('precondition_failed');
+          return candidateError(error);
         }
       },
     )
@@ -390,26 +1038,27 @@ function subjectRoutes(
       {
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
         body: t.Object(
-          { subjects: t.Array(t.String({ format: 'uuid' }), { minItems: 2, maxItems: 2 }) },
+          {
+            subjects: t.Array(t.String({ format: 'uuid' }), { minItems: 2, maxItems: 2 }),
+            expectedIdentity: t.Optional(ReviewedPersonExpectationSchema),
+          },
           { additionalProperties: false },
         ),
         response: {
-          200: withHeaders(
+          202: withHeaders(
             t.Object(
               {
-                survivor: t.String({ format: 'uuid' }),
-                redirected: t.String({ format: 'uuid' }),
-                revision: t.Integer({ minimum: 2 }),
+                operation: t.Object({ id: t.String({ format: 'uuid' }) }, { additionalProperties: false }),
               },
               { additionalProperties: false },
             ),
-            { [SESSION_HEADER]: t.String() },
+            { [SESSION_HEADER]: t.String(), location: t.String() },
           ),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
-          409: problemSchema('conflict'),
+          409: problemSchema('conflict', 'identity_group_overflow'),
           422: problemSchema('idempotency_conflict'),
           503: problemSchema(
             'semantic_not_ready',
@@ -421,14 +1070,16 @@ function subjectRoutes(
         },
         detail: {
           operationId: 'subject.merge',
-          'x-exposure': 'public',
+          'x-exposure': 'gate:subject_identity',
           'x-action': 'subject:merge',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
           security: [{ bearerAuth: [] }],
         },
       },
-      async ({ body, headers, actor, authorizeCommand, admission, job, session }) => {
+      async ({ body, headers, actor, authorizeCommand, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (body.expectedIdentity && !validReviewedPersonExpectation(body.subjects, body.expectedIdentity))
+          throw new ProblemError('invalid_request');
         const active = await activeRelease(pool);
         if (!active) throw new ProblemError('semantic_not_ready');
         const [, redirected] = [...body.subjects].sort();
@@ -446,8 +1097,11 @@ function subjectRoutes(
         });
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
-            mergeSubjects(pool, {
+            admitMergeSubjects(pool, {
               subjects: body.subjects,
+              ...(body.expectedIdentity
+                ? { expectedIdentity: body.expectedIdentity, routeKey }
+                : { expectedIdentity: undefined }),
               actor,
               idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
               digest: requestDigest('subject.merge', actor, body),
@@ -458,8 +1112,96 @@ function subjectRoutes(
             }),
           );
           session.record(component);
+          set.status = 202;
+          set.headers.location = `/v1/subjectIdentityOperations/${result.operation.id}`;
           return result;
         } catch (error) {
+          return candidateError(error);
+        }
+      },
+    )
+    .get(
+      '/v1/subjectIdentityOperations/:id',
+      {
+        params: t.Object({ id: t.String({ format: 'uuid' }) }),
+        response: {
+          200: t.Object(
+            {
+              operation: t.Union([
+                t.Object({ id: t.String({ format: 'uuid' }), done: t.Literal(false) }, { additionalProperties: false }),
+                t.Object(
+                  {
+                    id: t.String({ format: 'uuid' }),
+                    done: t.Literal(true),
+                    result: t.Object(
+                      {
+                        survivor: t.String({ format: 'uuid' }),
+                        redirected: t.String({ format: 'uuid' }),
+                        revision: t.Integer({ minimum: 2 }),
+                      },
+                      { additionalProperties: false },
+                    ),
+                  },
+                  { additionalProperties: false },
+                ),
+              ]),
+            },
+            { additionalProperties: false },
+          ),
+          401: unauthorized(),
+          404: problemSchema('not_found'),
+          503: problemSchema('overloaded', 'partition_unavailable', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'subject_identity_operation.get',
+          'x-exposure': 'gate:subject_identity',
+          'x-action': 'subject:merge',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, actor, admission, job }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const mergeGrant = await accessCheck(
+          access(),
+          actor,
+          'subject:merge',
+          { route: 0, id: GLOBAL_CONTEXT },
+          { pool, deadline: job.deadline },
+        );
+        const conceal = () => {
+          throw new ProblemError('not_found');
+        };
+        try {
+          const observed = await admission.run('normal', job, () =>
+            withReadTransaction(
+              pool,
+              async (tx) => {
+                if (!(await mergeGrant(tx))) return null;
+                const saved = await observeSubjectIdentityOperation(tx, params.id);
+                if (!saved) return null;
+                for (const subject of [saved.original, saved.terminal]) {
+                  const route = routeOf(subject);
+                  if (route === null) return null;
+                  const readable = await accessCheck(
+                    access(),
+                    actor,
+                    'subject:read',
+                    { route, id: subject, eligibility: subjectReadEligibility({ route, id: subject }) },
+                    { pool, deadline: job.deadline },
+                  );
+                  if (!(await readable(tx))) return null;
+                  const visible = await readVisibility.run(tx, { route, subject_id: subject });
+                  if (!visible || visible.visibility !== 'visible') return null;
+                }
+                return saved;
+              },
+              job.deadline,
+            ),
+          );
+          if (!observed) return conceal();
+          return { operation: observed.operation };
+        } catch (error) {
+          if (error instanceof GrantDeniedError) return conceal();
           return candidateError(error);
         }
       },
@@ -468,12 +1210,30 @@ function subjectRoutes(
       '/v1/subjects/:id',
       {
         params: t.Object({ id: t.String() }),
-        query: t.Object({ context: t.Optional(EditorialBodyContext) }),
+        query: t.Object({
+          context: t.Optional(EditorialBodyContext),
+          language: t.Optional(t.String()),
+          includeViewerActions: t.Optional(t.Boolean()),
+          includeDocuments: t.Optional(t.Boolean()),
+          selectedSynopsis: t.Optional(t.String({ maxLength: 2048 })),
+          reviewIdentitySource: t.Optional(
+            t.Union([
+              t.Literal('bangumi'),
+              t.Literal('vndb'),
+              t.Literal('bangumi_cross_media'),
+              t.Literal('vndb_cross_media'),
+            ]),
+          ),
+          reviewIdentityExternalId: t.Optional(t.String({ maxLength: 255 })),
+        }),
         response: {
-          200: withHeaders(readResponse, { [SESSION_HEADER]: t.String(), etag: t.String(), ...cacheControl }),
+          200: withHeaders(readResponse(), { [SESSION_HEADER]: t.String(), etag: t.String(), ...cacheControl }),
           308: withHeaders(redirectResponse, { location: t.String() }),
-          401: unauthorized,
+          400: problemSchema('invalid_request'),
+          401: unauthorized(),
+          403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
           503: problemSchema('overloaded', 'deadline_exceeded'),
         },
         detail: {
@@ -483,13 +1243,82 @@ function subjectRoutes(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, query, authorize, admission, job, session, set, request }) => {
+      async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
+        if (query.selectedSynopsis !== undefined) set.headers['cache-control'] = 'private, no-store';
+        const selectedSynopsis =
+          query.selectedSynopsis === undefined ? undefined : parseSelectedSynopsis(query.selectedSynopsis);
+        if (query.selectedSynopsis !== undefined && !selectedSynopsis) throw new ProblemError('invalid_request');
+        if (
+          selectedSynopsis &&
+          (routeOf(selectedSynopsis.statement) !== routeOf(params.id) ||
+            routeOf(selectedSynopsis.document) !== routeOf(params.id))
+        )
+          throw new ProblemError('invalid_request');
+        if (
+          selectedSynopsis &&
+          (selectedSynopsis.context !== GLOBAL_CONTEXT ||
+            selectedSynopsis.realm ||
+            (query.context !== undefined && query.context !== GLOBAL_CONTEXT))
+        )
+          throw new ProblemError('conflict');
+        const reviewIdentity =
+          query.reviewIdentitySource !== undefined && query.reviewIdentityExternalId !== undefined
+            ? { source: query.reviewIdentitySource, externalId: query.reviewIdentityExternalId }
+            : undefined;
+        if (
+          (query.reviewIdentitySource !== undefined || query.reviewIdentityExternalId !== undefined) &&
+          (!reviewIdentity || !isReviewedPersonSource(reviewIdentity))
+        )
+          throw new ProblemError('invalid_request');
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
-        const resource = { route, id: params.id };
-        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        const languages = languageRanges(request.headers.get('accept-language'), query.language);
+        const authorizeSummary = summaryAuthorization(async (id, batch) => {
+          const route = routeOf(id)!;
+          return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+        });
         const result = await admission.run('normal', job, () =>
-          readSubject(pool, params.id, check, query.context ?? GLOBAL_CONTEXT, routeKey).catch((error: unknown) => {
+          readSubject(pool, params.id, async () => false, query.context ?? GLOBAL_CONTEXT, routeKey, {
+            languages,
+            ...(selectedSynopsis
+              ? {
+                  selectedSynopsis: {
+                    input: selectedSynopsis,
+                    admit: async () => {
+                      const admitted = await readDocument(
+                        { pool, access: access(), routeKey },
+                        selectedSynopsis.document,
+                        { actor, deadline: job.deadline },
+                      );
+                      for (const anchor of admitted?.anchors ?? [])
+                        session.record({
+                          partition: anchor.partition.partitionNo,
+                          epoch: anchor.epoch,
+                          position: anchor.position,
+                        });
+                      const document = admitted?.document;
+                      return (
+                        !!document &&
+                        document.availability === 'available' &&
+                        document.subjectId === params.id &&
+                        document.candidateId === selectedSynopsis.statement &&
+                        document.digest === selectedSynopsis.digest &&
+                        document.language === selectedSynopsis.language
+                      );
+                    },
+                  },
+                }
+              : {}),
+            ...(reviewIdentity ? { reviewIdentity } : {}),
+            authorize: authorizeSummary,
+            seen: [...session.components],
+            deadline: job.deadline,
+            prepareAuthorize: (id) => {
+              const resource = { route: routeOf(id)!, id };
+              return authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+            },
+            readAs: (read) => readStatementAs(pool, access(), actor, job.deadline, read),
+          }).catch((error: unknown) => {
             if (error instanceof SubjectRedirectError) return error;
             throw error;
           }),
@@ -504,7 +1333,16 @@ function subjectRoutes(
         const release = await readRelease(pool, result.subject.release);
         if (!release) throw new Error('Subject revision release is missing');
         const { propertyIds, subjectIds } = relatedIds(result.subject);
-        const related: Record<string, { labels: Record<string, string>; redirect?: string }> = {};
+        const related: Record<
+          string,
+          {
+            labels: Record<string, string>;
+            redirect?: string;
+            type?: string;
+            types?: string[];
+            cover?: import('../summaries.ts').CoverSummary | null;
+          }
+        > = {};
         for (const property of propertyIds) {
           const definition = release.properties[property];
           if (definition) related[property] = { labels: definition.labels };
@@ -534,12 +1372,114 @@ function subjectRoutes(
             return readRelated(client, allowed);
           }),
         );
-        Object.assign(related, references);
+        const active = await activeRelease(pool);
+        let currentViewerActions:
+          | { state: 'available'; actions: { action: string; operations: string[] }[] }
+          | { state: 'unavailable' }
+          | undefined;
+        if (query.includeViewerActions) {
+          if (!active || !Object.hasOwn(active.release.types, result.subject.type) || !viewerActionBindings) {
+            currentViewerActions = { state: 'unavailable' };
+          } else {
+            let actionRead: Awaited<ReturnType<typeof readSubjectCorrectionActions>>;
+            try {
+              actionRead = await readSubjectCorrectionActions({
+                pool,
+                access: access(),
+                bindings: viewerActionBindings(),
+                actor,
+                clock,
+                subject: params.id,
+                type: result.subject.type,
+                revision: result.subject.revision,
+                deadline: job.deadline,
+              });
+            } catch {
+              actionRead = { state: 'unavailable' };
+            }
+            // Failed action advice is independent of the public Subject reading.
+            currentViewerActions =
+              actionRead.state === 'available'
+                ? { state: 'available', actions: actionRead.actions }
+                : { state: 'unavailable' };
+          }
+        }
+        const summaries = active
+          ? await readSubjectSummaries(
+              {
+                client: { query: pool.query.bind(pool) },
+                pool,
+                routeKey,
+                deadline: job.deadline,
+                release: active.release,
+                authorize: authorizeSummary,
+              },
+              Object.entries(references).map(([id, value]) => value.redirect ?? id),
+              { languages },
+            )
+          : new Map();
+        for (const [id, reference] of Object.entries(references)) {
+          const summary = summaries.get(reference.redirect ?? id);
+          if (summary) related[id] = { ...reference, type: summary.type, types: summary.types, cover: summary.cover };
+        }
+        if (selectedSynopsis && result.selectedSynopsis?.kind === 'matched') {
+          const fact = result.selectedSynopsis.fact;
+          const ids = new Set(
+            [fact, ...fact.qualifiers, ...fact.references.flatMap((reference) => reference.parts)].flatMap((snak) => [
+              snak.property.id,
+              ...(snak.property.data_type === 'wikibase-item' &&
+              snak.value.type === 'value' &&
+              typeof snak.value.content === 'string'
+                ? [snak.value.content]
+                : []),
+            ]),
+          );
+          const labels = Object.fromEntries(
+            Object.entries(related)
+              .filter(([id]) => ids.has(id))
+              .map(([id, entry]) => [id, { labels: entry.labels }]),
+          );
+          if (
+            Buffer.byteLength(
+              JSON.stringify({
+                input: selectedSynopsis,
+                result: result.selectedSynopsis,
+                labels,
+                subject: result.subject.labels,
+              }),
+              'utf8',
+            ) > 262144
+          )
+            result.selectedSynopsis = { kind: 'unavailable' };
+        }
 
+        const documentRead = query.includeDocuments
+          ? await readCharacterPublicDocuments(
+              { pool, access: access(), routeKey },
+              result.subject,
+              release,
+              { actor, deadline: job.deadline },
+              languages[0] ?? 'en',
+            )
+          : undefined;
+        for (const anchor of documentRead?.anchors ?? [])
+          session.record({ partition: anchor.partition.partitionNo, epoch: anchor.epoch, position: anchor.position });
         session.record(result.component);
         set.headers.etag = `"${result.subject.revision}"`;
-        set.headers['cache-control'] = 'no-cache';
-        return { subject: result.subject, related };
+        set.headers['cache-control'] =
+          query.includeViewerActions || documentRead || reviewIdentity || selectedSynopsis
+            ? 'private, no-store'
+            : 'no-cache';
+        return {
+          subject: result.subject,
+          ...(result.selectedSynopsis ? { selectedSynopsis: result.selectedSynopsis } : {}),
+          ...(reviewIdentity ? { reviewedIdentity: result.reviewedIdentity ?? null } : {}),
+          account: result.account,
+          summary: result.summary,
+          related,
+          ...(documentRead ? { documents: documentRead.documents } : {}),
+          ...(currentViewerActions ? { viewerActions: currentViewerActions } : {}),
+        };
       },
     )
     .post(
@@ -551,7 +1491,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(visibilityResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -617,7 +1557,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(visibilityResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -683,7 +1623,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(visibilityResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -750,7 +1690,7 @@ function subjectRoutes(
             [SESSION_HEADER]: t.String(),
           }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           422: problemSchema('idempotency_conflict'),
@@ -766,6 +1706,9 @@ function subjectRoutes(
           operationId: 'subject.propose',
           'x-exposure': 'public',
           'x-action': 'statement:propose',
+          'x-resource-types': ['semantic.revision'],
+          'x-authority-resource-types': ['semantic.context'],
+          'x-authority-resource-id': GLOBAL_CONTEXT,
           security: [{ bearerAuth: [] }],
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
         },
@@ -774,38 +1717,299 @@ function subjectRoutes(
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const subjectRoute = routeOf(params.id);
         if (subjectRoute === null) throw new ProblemError('not_found');
-        const active = await activeRelease(pool);
+        const property = (body.statement as { property?: { id?: unknown } }).property?.id;
+        const owner = typeof property === 'string' ? termContext(property) : null;
+        let active = await effectiveRelease(pool, GLOBAL_CONTEXT, true);
+        // A Context's relation type is proposed with the release that Context sees.
+        if (active && owner && !Object.hasOwn(active.release.properties, property as string))
+          active = await effectiveRelease(pool, owner, true);
         if (!active) throw new ProblemError('semantic_not_ready');
-        const authorization = await authorizeSemanticWrite({
-          access: access(),
-          actor,
-          action: 'statement:propose',
-          anchor: globalContextAnchor,
-          pool,
-          deadline: job.deadline,
-          targetPartition: partitionOf(subjectRoute),
-          authorizeCommand,
-          denied: () => new SubjectAccessDeniedError(),
-        });
+        // Rebuild the entire declaration and authorization after a native revision collision.
+        // A serialization retry inside runCommand also reaches the same body check.
+        for (;;) {
+          requireAccessDeadline(job.deadline);
+          const current = await withReadTransaction(pool, async (client) => {
+            await readPartition(client, partitionOf(subjectRoute));
+            const result = await client.query<{ revision: number }>(
+              `SELECT revision FROM semantic.revision WHERE route=$1 AND subject_id=$2
+             ORDER BY revision DESC LIMIT 1`,
+              [subjectRoute, params.id],
+            );
+            return result.rows[0]?.revision;
+          });
+          if (current === undefined) throw new ProblemError('not_found');
+          const nextRevision = current + 1;
+          const anchor = revisionResource(params.id, nextRevision);
+          const manifest = createResourceCreationManifest([
+            nativeCreationEntry(anchor, 'semantic.revision', actor.accountId, params.id, nextRevision),
+          ]);
+          const authorization = parentCreationAuthorization({
+            access: access(),
+            actor,
+            action: 'statement:propose',
+            parent: globalContextAnchor,
+            context: {
+              pool,
+              deadline: job.deadline,
+              resource: anchor,
+              creation: nativeCreationEntry(anchor, 'semantic.revision', actor.accountId, params.id, nextRevision)
+                .creation,
+              manifest,
+            },
+          });
+          try {
+            const result = await admission.run('normal', job, () =>
+              proposeStatement(pool, {
+                subject: params.id,
+                statement: body.statement,
+                actor,
+                idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+                digest: requestDigest('subject.propose', actor, { subject: params.id, body }),
+                release: active,
+                authorization,
+                expectedRevision: nextRevision,
+                deadline: job.deadline,
+                clock,
+              }),
+            );
+            session.record(result.component);
+            set.status = 201;
+            return { candidate: result.candidate, revision: result.revision };
+          } catch (error) {
+            if (error instanceof StaleRevisionAuthorshipError) continue;
+            return candidateError(error);
+          }
+        }
+      },
+    )
+    .get(
+      '/v1/subjects/:id/candidates/:candidate/lifecycle',
+      {
+        params: t.Object({ id: t.String(), candidate: t.String({ format: 'uuid' }) }),
+        query: t.Object({ property: t.String({ minLength: 1, maxLength: 256 }) }, { additionalProperties: false }),
+        response: {
+          200: withHeaders(
+            t.Object({
+              subject: t.String({ format: 'uuid' }),
+              candidate: t.String({ format: 'uuid' }),
+              property: t.String(),
+              viewer: t.Union([t.Literal('account'), t.Literal('anonymous')]),
+              state: t.Union([t.Literal('available'), t.Literal('deleted')]),
+              selected: t.Boolean(),
+              actions: t.Union([
+                t.Object({
+                  state: t.Literal('available'),
+                  operations: t.Array(t.Union([t.Literal('delete'), t.Literal('restore')]), { maxItems: 2 }),
+                }),
+                t.Object({ state: t.Literal('unavailable') }),
+              ]),
+            }),
+            cacheControl,
+          ),
+          ...listingErrors(),
+        },
+        detail: {
+          operationId: 'statement.read_lifecycle',
+          'x-action': 'subject:read',
+          'x-exposure': 'public',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, query, actor, authorize, admission, job, session, set }) => {
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const resource = { route, id: params.id };
+        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        const propose = () =>
+          accessCheck(access(), actor, 'statement:propose', globalContextAnchor.resource, {
+            pool,
+            deadline: job.deadline,
+          });
+        set.headers['cache-control'] = 'private, no-store';
+        try {
+          const { component, ...result } = await admission.run('normal', job, () =>
+            readStatementAs(pool, access(), actor, job.deadline, () =>
+              readContributionLifecycle(
+                {
+                  pool,
+                  access: access(),
+                  bindings: viewerActionBindings?.() ?? compileViewerActionBindings(app.routes),
+                  clock,
+                  routeKey,
+                },
+                {
+                  subject: params.id,
+                  candidate: params.candidate,
+                  property: query.property,
+                  actor,
+                  deadline: job.deadline,
+                  authorize: check,
+                  propose,
+                },
+              ),
+            ),
+          );
+          session.record(component);
+          return result;
+        } catch (error) {
+          if (error instanceof ContributionLifecycleNotFoundError) throw new ProblemError('not_found');
+          return candidateError(error);
+        }
+      },
+    )
+    .delete(
+      '/v1/subjects/:id/candidates/:candidate',
+      {
+        params: t.Object({ id: t.String(), candidate: t.String({ format: 'uuid' }) }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: t.Optional(t.Object({}, { additionalProperties: false })),
+        response: {
+          200: withHeaders(
+            t.Object({
+              subject: t.String({ format: 'uuid' }),
+              candidate: t.String({ format: 'uuid' }),
+              deleted: t.Boolean(),
+            }),
+            {
+              [SESSION_HEADER]: t.String(),
+            },
+          ),
+          401: unauthorized(),
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema(
+            'semantic_not_ready',
+            'overloaded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'deadline_exceeded',
+          ),
+        },
+        detail: {
+          operationId: 'statement.delete',
+          'x-exposure': 'public',
+          'x-action': 'statement:delete',
+          'x-resource-types': ['semantic.revision'],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, headers, body: _body, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(params.id);
+        if (route === null || routeOf(params.candidate) !== route) throw new ProblemError('not_found');
+        const located = await admission.run('normal', job, () =>
+          withConnection(pool, (client) =>
+            readContributionLifecycleLocator.run(client, {
+              route,
+              subject_id: params.id,
+              candidate_id: params.candidate,
+            }),
+          ),
+        );
+        if (!located) throw new ProblemError('not_found');
+        const resource = contributionAuthorResource(params.id, located.revision);
         try {
           const result = await admission.run('normal', job, () =>
-            proposeStatement(pool, {
+            deleteContribution(pool, {
               subject: params.id,
-              statement: body.statement,
+              candidate: params.candidate,
               actor,
               idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
-              digest: requestDigest('subject.propose', actor, { subject: params.id, body }),
-              release: active,
-              authorization,
+              authorization: contributionAuthorization(actor, 'statement:delete', resource, job.deadline, false),
+              routeKey,
               deadline: job.deadline,
               clock,
             }),
           );
           session.record(result.component);
-          set.status = 201;
-          return { candidate: result.candidate, revision: result.revision };
+          return { subject: result.subject, candidate: result.candidate, deleted: result.deleted };
         } catch (error) {
-          return candidateError(error);
+          if (error instanceof ContributionLifecycleNotFoundError) throw new ProblemError('not_found');
+          if (error instanceof ContributionLifecycleConflictError) throw new ProblemError('conflict');
+          if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+          if (error instanceof SubjectPagePublicationUnavailableError) throw new ProblemError('semantic_not_ready');
+          throw error;
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/subjects/:id/candidates/:candidate', 'restoreDeleted'),
+      {
+        params: t.Object({ id: t.String(), candidate: t.String({ format: 'uuid' }) }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        body: t.Object({}, { additionalProperties: false }),
+        response: {
+          200: withHeaders(
+            t.Object({
+              subject: t.String({ format: 'uuid' }),
+              candidate: t.String({ format: 'uuid' }),
+              deleted: t.Boolean(),
+            }),
+            {
+              [SESSION_HEADER]: t.String(),
+            },
+          ),
+          401: unauthorized(),
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema(
+            'semantic_not_ready',
+            'overloaded',
+            'partition_unavailable',
+            'transaction_retry_exhausted',
+            'deadline_exceeded',
+          ),
+        },
+        detail: {
+          operationId: 'statement.restore_deleted',
+          'x-exposure': 'public',
+          'x-action': 'statement:restore',
+          'x-resource-types': ['semantic.revision'],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, headers, body: _body, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(params.id);
+        if (route === null || routeOf(params.candidate) !== route) throw new ProblemError('not_found');
+        const located = await admission.run('normal', job, () =>
+          withConnection(pool, (client) =>
+            readContributionLifecycleLocator.run(client, {
+              route,
+              subject_id: params.id,
+              candidate_id: params.candidate,
+            }),
+          ),
+        );
+        if (!located) throw new ProblemError('not_found');
+        const resource = contributionAuthorResource(params.id, located.revision);
+        try {
+          const result = await admission.run('normal', job, () =>
+            restoreContribution(pool, {
+              subject: params.id,
+              candidate: params.candidate,
+              actor,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              authorization: contributionAuthorization(actor, 'statement:restore', resource, job.deadline, true),
+              routeKey,
+              deadline: job.deadline,
+              clock,
+            }),
+          );
+          session.record(result.component);
+          return { subject: result.subject, candidate: result.candidate, deleted: result.deleted };
+        } catch (error) {
+          if (error instanceof ContributionLifecycleNotFoundError) throw new ProblemError('not_found');
+          if (error instanceof ContributionLifecycleConflictError) throw new ProblemError('conflict');
+          if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
+          if (error instanceof SubjectPagePublicationUnavailableError) throw new ProblemError('semantic_not_ready');
+          throw error;
         }
       },
     )
@@ -818,7 +2022,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(acceptanceResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict', 'stale_editorial_head'),
@@ -833,6 +2037,7 @@ function subjectRoutes(
         },
         detail: {
           operationId: 'subject.accept_candidate',
+          'x-authority-resource-types': ['semantic.context'],
           'x-exposure': 'public',
           'x-action': 'context:accept',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
@@ -859,6 +2064,7 @@ function subjectRoutes(
         try {
           const { component, acceptance, revision } = await admission.run('normal', job, () =>
             decideCandidate(pool, {
+              routeKey,
               subject: params.id,
               candidate: params.candidate,
               decision: 'accept',
@@ -893,7 +2099,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(acceptanceResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict', 'stale_editorial_head'),
@@ -908,6 +2114,7 @@ function subjectRoutes(
         },
         detail: {
           operationId: 'subject.reject_candidate',
+          'x-authority-resource-types': ['semantic.context'],
           'x-exposure': 'public',
           'x-action': 'context:accept',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
@@ -934,6 +2141,7 @@ function subjectRoutes(
         try {
           const { component, acceptance, revision } = await admission.run('normal', job, () =>
             decideCandidate(pool, {
+              routeKey,
               subject: params.id,
               candidate: params.candidate,
               decision: 'reject',
@@ -968,7 +2176,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(statementVisibilityResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -1005,6 +2213,7 @@ function subjectRoutes(
         try {
           const result = await admission.run('normal', job, () =>
             moderateStatement(pool, {
+              routeKey,
               actor,
               subject: params.id,
               candidate: params.candidate,
@@ -1042,7 +2251,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(statementVisibilityResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -1079,6 +2288,7 @@ function subjectRoutes(
         try {
           const result = await admission.run('normal', job, () =>
             moderateStatement(pool, {
+              routeKey,
               actor,
               subject: params.id,
               candidate: params.candidate,
@@ -1116,7 +2326,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(statementVisibilityResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -1153,6 +2363,7 @@ function subjectRoutes(
         try {
           const result = await admission.run('normal', job, () =>
             moderateStatement(pool, {
+              routeKey,
               actor,
               subject: params.id,
               candidate: params.candidate,
@@ -1190,7 +2401,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(adoptionResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict', 'stale_editorial_head'),
@@ -1205,6 +2416,7 @@ function subjectRoutes(
         },
         detail: {
           operationId: 'subject.adopt',
+          'x-authority-resource-types': ['semantic.context'],
           'x-exposure': 'public',
           'x-action': 'context:adopt',
           'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
@@ -1216,8 +2428,9 @@ function subjectRoutes(
         if (routeOf(params.id) === null) throw new ProblemError('not_found');
         const contextRoute = routeOf(body.context);
         if (contextRoute === null) throw new ProblemError('invalid_request');
-        const active = await activeRelease(pool);
+        const active = await effectiveRelease(pool, body.context, true);
         if (!active) throw new ProblemError('semantic_not_ready');
+        const slot = relationSlotAddress(params.id, body.property, active.release, body);
         const authorization = await authorizeSemanticWrite({
           access: access(),
           actor,
@@ -1232,9 +2445,11 @@ function subjectRoutes(
         try {
           const { component, adoption, revision } = await admission.run('normal', job, () =>
             adoptCandidates(pool, {
+              routeKey,
               subject: params.id,
               context: body.context,
               property: body.property,
+              slot,
               mode: body.mode,
               selection: body.selection as { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' }[],
               expectedHead: body.expected_head,
@@ -1262,26 +2477,59 @@ function subjectRoutes(
           ...pageQuery,
           property: t.String({ minLength: 1 }),
           context: t.Optional(EditorialBodyContext),
+          target: t.Optional(t.String({ format: 'uuid' })),
+          sameAs: t.Optional(t.String({ minLength: 1 })),
+          key: t.Optional(t.String({ format: 'uuid' })),
         }),
         response: {
           200: withHeaders(
             t.Object({
               candidates: t.Array(
-                t.Object({
-                  id: t.String({ format: 'uuid' }),
-                  source: t.Union([SourceSchema, t.Null()]),
-                  retracted: t.Union([t.Integer(), t.Null()]),
-                  retraction: t.Union([
-                    t.Object({ source: SourceSchema, references: t.Array(BatchReferenceSchema) }),
-                    t.Null(),
-                  ]),
-                  statement: StatementSchema,
-                  release: t.String(),
-                  revision: t.Integer(),
-                  decision: t.Union([t.Literal('accepted'), t.Literal('rejected'), t.Null()]),
-                  head: t.Union([t.Integer(), t.Null()]),
-                  rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated'), t.Null()]),
-                }),
+                t.Union([
+                  t.Object(
+                    { id: t.String({ format: 'uuid' }), deleted: t.Literal(true) },
+                    { additionalProperties: false },
+                  ),
+                  t.Object(
+                    {
+                      id: t.String({ format: 'uuid' }),
+                      source: t.Union([SemanticSourceSchema(), t.Null()]),
+                      retracted: t.Union([t.Integer(), t.Null()]),
+                      retraction: t.Union([
+                        t.Object({ source: SemanticSourceSchema(), references: t.Array(BatchReferenceSchema) }),
+                        t.Null(),
+                      ]),
+                      consentIdentity: t.Optional(
+                        t.Object({
+                          subject: t.Union([
+                            t.Object({ id: t.String(), labels: t.Record(t.String(), t.String()) }),
+                            t.Null(),
+                          ]),
+                          target: t.Union([
+                            t.Object({
+                              id: t.String(),
+                              labels: t.Record(t.String(), t.String()),
+                              redirect: t.Optional(t.String()),
+                            }),
+                            t.Null(),
+                          ]),
+                        }),
+                      ),
+                      statement: StatementSchema(),
+                      release: t.String(),
+                      revision: t.Integer(),
+                      decision: t.Union([
+                        t.Literal('accepted'),
+                        t.Literal('rejected'),
+                        t.Literal('abstained'),
+                        t.Null(),
+                      ]),
+                      head: t.Union([t.Integer(), t.Null()]),
+                      rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated'), t.Null()]),
+                    },
+                    { additionalProperties: false },
+                  ),
+                ]),
               ),
               adoption: t.Union([
                 t.Object({
@@ -1292,33 +2540,98 @@ function subjectRoutes(
               ]),
               next: t.Union([t.String(), t.Null()]),
             }),
-            cacheControl,
+            { 'cache-control': t.Union([t.Literal('no-cache'), t.Literal('private, no-store')]) },
           ),
-          ...listingErrors,
+          ...listingErrors(),
         },
         detail: {
           operationId: 'subject.list_candidates',
           'x-exposure': 'public',
           'x-action': 'subject:read',
+          'x-resource-types': ['semantic.subject'],
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, query, authorize, admission, job, session, set }) => {
+      async ({ params, query, actor, authorize, admission, job, session, set }) => {
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const active = await effectiveRelease(pool, query.context ?? GLOBAL_CONTEXT);
+        if (!active) throw new ProblemError('semantic_not_ready');
+        if (!Object.hasOwn(active.release.properties, query.property)) throw new ProblemError('invalid_request');
+        const slot = relationSlotAddress(params.id, query.property, active.release, query);
+        const resource = { route, id: params.id };
+        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        try {
+          const { component, ...result } = await admission.run('normal', job, () =>
+            readStatementAs(pool, access(), actor, job.deadline, (refreshAudience) =>
+              listCandidates(pool, tokens, {
+                subject: params.id,
+                property: query.property,
+                slot,
+                context: query.context ?? GLOBAL_CONTEXT,
+                limit: query.limit ?? 20,
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                authorize: check,
+                routeKey,
+                identity: {
+                  access: access(),
+                  actor,
+                  deadline: job.deadline,
+                  refreshAudience,
+                  prepareSource: () => authorize({ ...resource, eligibility: subjectReadEligibility(resource) }),
+                },
+              }),
+            ),
+          );
+          session.record(component);
+          set.headers['cache-control'] = actor.kind === 'account' ? 'private, no-store' : 'no-cache';
+          return result;
+        } catch (error) {
+          return candidateError(error);
+        }
+      },
+    )
+    .get(
+      '/v1/subjects/:id/revisions/:revision',
+      {
+        params: t.Object({ id: t.String(), revision: t.Numeric({ minimum: 1, maximum: 2147483647, multipleOf: 1 }) }),
+        response: { 200: withHeaders(RevisionDetailSchema, cacheControl), ...listingErrors() },
+        detail: {
+          operationId: 'subject.read_revision',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, actor, authorize, admission, job, session, set }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
         const resource = { route, id: params.id };
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
-            listCandidates(pool, tokens, {
-              subject: params.id,
-              property: query.property,
-              context: query.context ?? GLOBAL_CONTEXT,
-              limit: query.limit ?? 20,
-              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
-              authorize: check,
-              routeKey,
-            }),
+            readStatementAs(pool, access(), actor, job.deadline, () =>
+              readRevisionDetail(pool, {
+                subject: params.id,
+                revision: params.revision,
+                routeKey,
+                authorize: check,
+                authorizeContext: async (context) => {
+                  const target = { route: routeOf(context)!, id: context };
+                  return accessCheck(
+                    access(),
+                    actor,
+                    'context:read',
+                    { ...target, eligibility: publicContextEligibility(target) },
+                    { pool, deadline: job.deadline },
+                  );
+                },
+                authorizeRelated: async (id) => {
+                  const target = { route: routeOf(id)!, id };
+                  return authorize({ ...target, eligibility: subjectReadEligibility(target) });
+                },
+              }),
+            ),
           );
           session.record(component);
           set.headers['cache-control'] = 'no-cache';
@@ -1341,14 +2654,14 @@ function subjectRoutes(
                   revision: t.Integer(),
                   kind: t.String(),
                   release: t.String(),
-                  source: t.Union([SourceSchema, t.Null()]),
+                  source: t.Union([SemanticSourceSchema(), t.Null()]),
                 }),
               ),
               next: t.Union([t.String(), t.Null()]),
             }),
             cacheControl,
           ),
-          ...listingErrors,
+          ...listingErrors(),
         },
         detail: {
           operationId: 'subject.list_revisions',
@@ -1380,20 +2693,314 @@ function subjectRoutes(
       },
     )
     .get(
+      '/v1/subjects/graph',
+      {
+        response: { 400: problemSchema('invalid_request') },
+        detail: {
+          operationId: 'subject.graph_missing_anchor',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      () => {
+        throw new ProblemError('invalid_request', { errors: [{ pointer: '/id', code: 'required' }] });
+      },
+    )
+    .get(
+      '/v1/subjects/:id/graph',
+      {
+        params: t.Object({ id: t.String() }),
+        query: t.Object({
+          property: t.Array(t.String({ minLength: 1 }), { minItems: 1, maxItems: 8 }),
+          direction: t.Union([t.Literal('out'), t.Literal('in'), t.Literal('both')]),
+          depth: t.Numeric({ minimum: 1, maximum: 2, multipleOf: 1 }),
+          limit: t.Optional(t.Numeric({ minimum: 1, maximum: 25, multipleOf: 1, default: 12 })),
+        }),
+        response: {
+          200: withHeaders(graphResponse(), cacheControl),
+          308: withHeaders(redirectResponse, { location: t.String() }),
+          ...listingErrors(),
+        },
+        detail: {
+          operationId: 'subject.graph',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
+        const route = routeOf(params.id);
+        if (route === null)
+          throw new ProblemError('invalid_request', { errors: [{ pointer: '/id', code: 'invalid_format' }] });
+        const properties = [...new Set(query.property)];
+        if (properties.length !== query.property.length)
+          throw new ProblemError('invalid_request', { errors: [{ pointer: '/property', code: 'invalid_format' }] });
+        const active = await activeRelease(pool);
+        if (!active) throw new ProblemError('semantic_not_ready');
+        for (const property of properties) {
+          if (!Object.hasOwn(active.release.properties, property) || !isRelationProperty(active.release, property))
+            throw new ProblemError('invalid_request', {
+              errors: [{ pointer: '/property', code: 'unsupported' }],
+            });
+        }
+        const resource = { route, id: params.id };
+        const seen = [...session.components];
+        await admission.run('normal', job, () => waitForSubjectLinks(pool, seen, params.id, job.deadline));
+        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        try {
+          const { component, ...result } = await admission.run('normal', job, () =>
+            readStatementAs(pool, access(), actor, job.deadline, () =>
+              listSubjectGraph(pool, tokens, {
+                routeKey,
+                subject: params.id,
+                properties,
+                direction: query.direction,
+                depth: query.depth as 1 | 2,
+                limit: query.limit ?? 12,
+                languages: languageRanges(request.headers.get('accept-language')),
+                release: active.release,
+                authorizeSummary: summaryAuthorization(async (id, batch) => {
+                  const route = routeOf(id)!;
+                  return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+                }),
+                authorize: check,
+              }),
+            ),
+          );
+          session.record(component);
+          set.headers['cache-control'] = 'no-cache';
+          return result;
+        } catch (error) {
+          if (error instanceof SubjectRedirectError) {
+            set.status = 308;
+            set.headers.location = `/v1/subjects/${error.to}/graph${new URL(request.url).search}`;
+            return { redirect: { from: error.from, to: error.to } };
+          }
+          return candidateError(error);
+        }
+      },
+    )
+    .get(
+      '/v1/subjects/:id/counts',
+      {
+        params: t.Object({ id: t.String() }),
+        response: {
+          200: withHeaders(SubjectCountsSchema, cacheControl),
+          308: withHeaders(redirectResponse, { location: t.String() }),
+          ...listingErrors(),
+        },
+        detail: {
+          operationId: 'subject.counts',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, authorize, admission, job, session, set, request }) => {
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const active = await activeRelease(pool);
+        if (!active) throw new ProblemError('semantic_not_ready');
+        const resource = { route, id: params.id };
+        const seen = [...session.components];
+        await admission.run('normal', job, () => waitForSubjectLinks(pool, seen, params.id, job.deadline));
+        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        try {
+          const { component } = await admission.run('normal', job, () =>
+            readSubjectRelationCounts(pool, { subject: params.id, release: active.release, authorize: check }),
+          );
+          session.record(component);
+          set.headers['cache-control'] = 'no-cache';
+          // Stored counters have no current source and target disclosure proof, so they remain internal.
+          return { content: null };
+        } catch (error) {
+          if (error instanceof SubjectRedirectError) {
+            set.status = 308;
+            set.headers.location = `/v1/subjects/${error.to}/counts${new URL(request.url).search}`;
+            return { redirect: { from: error.from, to: error.to } };
+          }
+          return candidateError(error);
+        }
+      },
+    )
+    .get(
       '/v1/subjects/:id/links',
       {
         params: t.Object({ id: t.String() }),
-        query: t.Object({ ...pageQuery, property: t.Optional(t.String({ minLength: 1 })) }),
+        query: t.Object({
+          context: t.Optional(EditorialBodyContext),
+          ...pageQuery,
+          property: t.Optional(t.String({ minLength: 1 })),
+          filter: t.Optional(t.String({ format: 'uuid' })),
+          qualifier: t.Optional(t.String({ minLength: 1 })),
+          type: t.Optional(t.String({ minLength: 1 })),
+          language: t.Optional(t.String({ pattern: '^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*$' })),
+        }),
         response: {
           200: withHeaders(
             t.Object(
               {
                 links: t.Array(
                   t.Object(
-                    { subject: t.String(), property: t.String(), statement: t.String() },
+                    {
+                      subject: t.String(),
+                      property: t.String(),
+                      statement: t.String(),
+                      assertion: t.Optional(StatementSchema()),
+                      creditSlot: t.Optional(
+                        t.Object(
+                          {
+                            property: t.String(),
+                            target: t.String(),
+                            key: t.Optional(t.String()),
+                          },
+                          { additionalProperties: false },
+                        ),
+                      ),
+                      related: t.Optional(t.Record(t.String(), SubjectSummarySchema)),
+                      type: t.String(),
+                      label: t.String(),
+                      summary: SubjectSummarySchema,
+                    },
                     { additionalProperties: false },
                   ),
                 ),
+                workReleaseCards: t.Optional(WorkReleaseCardsSchema()),
+                count: t.Optional(t.Object({ value: t.Integer({ minimum: 0 }), exact: t.Boolean() })),
+                freshness: t.Object(
+                  {
+                    consistency: t.Literal('eventual'),
+                    target_seconds: t.Literal(10),
+                    caught_up: t.Boolean(),
+                  },
+                  { additionalProperties: false },
+                ),
+                partial: t.Optional(t.Boolean()),
+                next: t.Union([t.String(), t.Null()]),
+              },
+              { additionalProperties: false },
+            ),
+            cacheControl,
+          ),
+          308: withHeaders(redirectResponse, { location: t.String() }),
+          ...listingErrors(),
+        },
+        detail: {
+          operationId: 'subject.links',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const active = await effectiveRelease(pool, query.context ?? GLOBAL_CONTEXT);
+        if (!active) throw new ProblemError('semantic_not_ready');
+        if (query.property !== undefined && !Object.hasOwn(active.release.properties, query.property))
+          throw new ProblemError('invalid_request');
+        if ((query.filter !== undefined || query.type !== undefined) && query.property === undefined)
+          throw new ProblemError('invalid_request');
+        const property = query.property === undefined ? undefined : active.release.properties[query.property];
+        const relation = property?.relation;
+        const slotQualifier =
+          query.qualifier === 'wdt:P453' &&
+          query.property === 'wdt:P725' &&
+          query.filter !== undefined &&
+          relation?.group === 'credit' &&
+          relation.slotKey === 'wdt:P453' &&
+          property?.qualifiers?.includes('wdt:P453') === true &&
+          active.release.properties['wdt:P453']?.targets?.includes('wd:Q95074') === true;
+        if (query.qualifier !== undefined && !slotQualifier) throw new ProblemError('invalid_request');
+        if (slotQualifier && (query.limit ?? 20) > 20) throw new ProblemError('invalid_request');
+        if (query.filter !== undefined && !relation?.filter && !slotQualifier)
+          throw new ProblemError('invalid_request');
+        if (query.filter !== undefined && routeOf(query.filter) === null) throw new ProblemError('invalid_request');
+        if (query.type !== undefined && !Object.hasOwn(active.release.types, query.type))
+          throw new ProblemError('invalid_request');
+        if (query.context !== undefined && routeOf(query.context) === null) throw new ProblemError('invalid_request');
+        const resource = { route, id: params.id };
+        const seen = [...session.components];
+        const caughtUp = await admission.run('normal', job, () =>
+          waitForSubjectLinks(pool, seen, params.id, job.deadline),
+        );
+        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        try {
+          const { component, ...result } = await admission.run('normal', job, () =>
+            readStatementAs(pool, access(), actor, job.deadline, () =>
+              listSubjectLinks(pool, tokens, {
+                routeKey,
+                context: query.context ?? GLOBAL_CONTEXT,
+                subject: params.id,
+                property: query.property ?? null,
+                limit: query.limit ?? 20,
+                ...(query.filter === undefined ? {} : { filter: query.filter }),
+                ...(slotQualifier ? { qualifier: { property: 'wdt:P453', value: query.filter! } } : {}),
+                ...(query.type === undefined ? {} : { type: query.type }),
+                languages: languageRanges(request.headers.get('accept-language'), query.language),
+                release: active.release,
+                releasePin: active.digest,
+                includeLabels: true,
+                authorizeSummary: summaryAuthorization(async (id, batch) => {
+                  const route = routeOf(id)!;
+                  return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+                }),
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                authorize: check,
+                seen,
+                caughtUp,
+              }),
+            ),
+          );
+          session.record(component);
+          set.headers['cache-control'] = 'no-cache';
+          const links = result.links.flatMap(({ summary, ...link }) =>
+            summary ? [{ ...link, type: summary.type, label: summary.label?.value ?? '', summary }] : [],
+          );
+          return { ...result, links };
+        } catch (error) {
+          if (error instanceof SubjectRedirectError) {
+            set.status = 308;
+            set.headers.location = `/v1/subjects/${error.to}/links${new URL(request.url).search}`;
+            return { redirect: { from: error.from, to: error.to } };
+          }
+          return candidateError(error);
+        }
+      },
+    )
+    .get(
+      '/v1/subjects/:id/relations',
+      {
+        params: t.Object({ id: t.String() }),
+        query: t.Object({
+          ...pageQuery,
+          limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 25 })),
+          property: t.String({ minLength: 1 }),
+          filter: t.Optional(t.String({ format: 'uuid' })),
+          type: t.Optional(t.String({ minLength: 1 })),
+          context: t.Optional(EditorialBodyContext),
+          language: t.Optional(t.String({ pattern: '^[A-Za-z]{1,8}(?:-[A-Za-z0-9]{1,8})*$' })),
+        }),
+        response: {
+          200: withHeaders(
+            t.Object(
+              {
+                relations: t.Array(
+                  t.Object(
+                    {
+                      statement: StatementSchema(),
+                      related: t.Optional(t.Record(t.String(), SubjectSummarySchema)),
+                      target: t.Union([t.String({ format: 'uuid' }), t.Null()]),
+                      external: t.Union([t.String(), t.Null()]),
+                      type: t.Optional(t.String()),
+                      label: t.Optional(t.String()),
+                      summary: t.Union([SubjectSummarySchema, t.Null()]),
+                    },
+                    { additionalProperties: false },
+                  ),
+                ),
+                count: t.Optional(t.Object({ value: t.Integer({ minimum: 0 }), exact: t.Boolean() })),
                 freshness: t.Object(
                   {
                     consistency: t.Literal('eventual'),
@@ -1409,22 +3016,31 @@ function subjectRoutes(
             cacheControl,
           ),
           308: withHeaders(redirectResponse, { location: t.String() }),
-          ...listingErrors,
+          ...listingErrors(),
         },
         detail: {
-          operationId: 'subject.links',
+          operationId: 'subject.relations',
           'x-exposure': 'public',
           'x-action': 'subject:read',
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ params, query, authorize, admission, job, session, set, request }) => {
+      async ({ params, query, actor, authorize, admission, job, session, set, request }) => {
         const route = routeOf(params.id);
         if (route === null) throw new ProblemError('not_found');
-        const active = await activeRelease(pool);
+        const active = await effectiveRelease(pool, query.context ?? GLOBAL_CONTEXT);
         if (!active) throw new ProblemError('semantic_not_ready');
-        if (query.property !== undefined && !Object.hasOwn(active.release.properties, query.property))
+        if (
+          !Object.hasOwn(active.release.properties, query.property) ||
+          !isRelationProperty(active.release, query.property)
+        )
           throw new ProblemError('invalid_request');
+        if (query.filter !== undefined && !active.release.properties[query.property]?.relation?.filter)
+          throw new ProblemError('invalid_request');
+        if (query.filter !== undefined && routeOf(query.filter) === null) throw new ProblemError('invalid_request');
+        if (query.type !== undefined && !Object.hasOwn(active.release.types, query.type))
+          throw new ProblemError('invalid_request');
+        if (query.context !== undefined && routeOf(query.context) === null) throw new ProblemError('invalid_request');
         const resource = { route, id: params.id };
         const seen = [...session.components];
         const caughtUp = await admission.run('normal', job, () =>
@@ -1433,27 +3049,211 @@ function subjectRoutes(
         const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
         try {
           const { component, ...result } = await admission.run('normal', job, () =>
-            listSubjectLinks(pool, tokens, {
-              subject: params.id,
-              property: query.property ?? null,
-              limit: query.limit ?? 20,
-              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
-              authorize: check,
-              seen,
-              caughtUp,
-            }),
+            readStatementAs(pool, access(), actor, job.deadline, () =>
+              listSubjectRelations(pool, tokens, {
+                routeKey,
+                subject: params.id,
+                property: query.property,
+                ...(query.context === undefined ? {} : { context: query.context }),
+                limit: query.limit ?? 25,
+                ...(query.filter === undefined ? {} : { filter: query.filter }),
+                ...(query.type === undefined ? {} : { type: query.type }),
+                languages: languageRanges(request.headers.get('accept-language'), query.language),
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                release: active.release,
+                releasePin: active.digest,
+                authorizeSummary: summaryAuthorization(async (id, batch) => {
+                  const route = routeOf(id)!;
+                  return authorize({ route, id, eligibility: relatedReadEligibility({ route, id }, batch) });
+                }),
+                authorize: check,
+                seen,
+                caughtUp,
+              }),
+            ),
           );
           session.record(component);
           set.headers['cache-control'] = 'no-cache';
-          return result;
+          const relations = result.relations.map((relation) => ({
+            ...relation,
+            summary: relation.summary ?? null,
+          }));
+          return { ...result, relations };
         } catch (error) {
           if (error instanceof SubjectRedirectError) {
             set.status = 308;
-            set.headers.location = `/v1/subjects/${error.to}/links${new URL(request.url).search}`;
+            set.headers.location = `/v1/subjects/${error.to}/relations${new URL(request.url).search}`;
             return { redirect: { from: error.from, to: error.to } };
           }
           return candidateError(error);
         }
+      },
+    )
+    .post(
+      '/v1/statements/:id/disclose',
+      {
+        params: t.Object({ id: t.String({ format: 'uuid' }) }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        response: {
+          200: withHeaders(t.Object({ candidate: t.String({ format: 'uuid' }), disclosed: t.Literal(true) }), {
+            [SESSION_HEADER]: t.String(),
+          }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized(),
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'statement.disclose',
+          'x-exposure': 'public',
+          'x-action': 'statement:propose',
+          security: [{ bearerAuth: [] }],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+        },
+      },
+      async ({ params, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'statement:propose',
+          anchor: globalContextAnchor,
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(route),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
+        try {
+          const result = await admission.run('normal', job, () =>
+            changeStatementDisclosure(pool, {
+              routeKey,
+              candidate: params.id,
+              actor,
+              authorization,
+              deadline: job.deadline,
+              clock,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('statement.disclose', actor, { candidate: params.id }),
+            }),
+          );
+          session.record(result.component);
+          return { candidate: result.candidate, disclosed: true as const };
+        } catch (error) {
+          return candidateError(error);
+        }
+      },
+    )
+    .post(
+      '/v1/statements/:id/retract',
+      {
+        params: t.Object({ id: t.String({ format: 'uuid' }) }),
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+        response: {
+          200: withHeaders(t.Object({ candidate: t.String({ format: 'uuid' }), retracted: t.Literal(true) }), {
+            [SESSION_HEADER]: t.String(),
+          }),
+          400: problemSchema('invalid_request'),
+          401: unauthorized(),
+          403: problemSchema('forbidden'),
+          404: problemSchema('not_found'),
+          409: problemSchema('conflict'),
+          422: problemSchema('idempotency_conflict'),
+          503: problemSchema('overloaded', 'partition_unavailable', 'transaction_retry_exhausted', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'statement.retract',
+          'x-exposure': 'public',
+          'x-action': 'statement:propose',
+          security: [{ bearerAuth: [] }],
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+        },
+      },
+      async ({ params, headers, actor, authorizeCommand, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const authorization = await authorizeSemanticWrite({
+          access: access(),
+          actor,
+          action: 'statement:propose',
+          anchor: globalContextAnchor,
+          pool,
+          deadline: job.deadline,
+          targetPartition: partitionOf(route),
+          authorizeCommand,
+          denied: () => new SubjectAccessDeniedError(),
+        });
+        try {
+          const result = await admission.run('normal', job, () =>
+            changeStatementDisclosure(pool, {
+              routeKey,
+              candidate: params.id,
+              retract: true,
+              actor,
+              authorization,
+              deadline: job.deadline,
+              clock,
+              idempotencyKey: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]),
+              digest: requestDigest('statement.retract', actor, { candidate: params.id }),
+            }),
+          );
+          session.record(result.component);
+          return { candidate: result.candidate, retracted: true as const };
+        } catch (error) {
+          return candidateError(error);
+        }
+      },
+    )
+    .get(
+      '/v1/subjects/:id/reactions',
+      {
+        params: t.Object({ id: t.String() }),
+        response: {
+          200: withHeaders(reactionCountResponse(), cacheControl),
+          308: withHeaders(redirectResponse, { location: t.String() }),
+          ...listingErrors(),
+        },
+        detail: {
+          operationId: 'subject.reactions',
+          'x-exposure': 'public',
+          'x-action': 'subject:read',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, authorize, admission, job, set, request }) => {
+        const route = routeOf(params.id);
+        if (route === null) throw new ProblemError('not_found');
+        const resource = { route, id: params.id };
+        const check = await authorize({ ...resource, eligibility: subjectReadEligibility(resource) });
+        const result = await admission.run('normal', job, () =>
+          withConnection(pool, async (client) => {
+            const subject = await readVisibility.run(client, { route, subject_id: params.id });
+            if (!subject || subject.visibility !== 'visible' || !(await check(client)))
+              throw new ProblemError('not_found');
+            const redirect = await readRedirect.run(client, { route, subject_id: params.id });
+            if (redirect?.target) return { redirect: redirect.target } as const;
+            const result = await readReactionCounts(client, { targetId: params.id });
+            return {
+              counts: result.counts.map(({ kind, count }) => ({ kind, count })),
+              watermark: result.watermark
+                ? { epoch: result.watermark.epoch, position: result.watermark.position.toString() }
+                : null,
+            };
+          }),
+        );
+        if ('redirect' in result) {
+          set.status = 308;
+          set.headers.location = `/v1/subjects/${result.redirect}/reactions${new URL(request.url).search}`;
+          return { redirect: { from: params.id, to: result.redirect } };
+        }
+        set.headers['cache-control'] = 'no-cache';
+        return result;
       },
     );
 }

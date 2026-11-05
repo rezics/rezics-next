@@ -16,6 +16,7 @@ import { createElement, type CompositionEvent, type KeyboardEvent, type ReactNod
 import { cn } from '../utils.ts';
 import { safeDocumentUrl } from './document-url.ts';
 import { documentExtensionsForProfile } from './document-extensions.ts';
+import { Prose } from './prose.tsx';
 
 function textLength(doc: Editor['state']['doc']): number {
   return Array.from(doc.textBetween(0, doc.content.size, '\n', ' ')).length;
@@ -175,14 +176,14 @@ export function EditorSurface({
       { className: cn('relative px-4 py-3 sm:px-6', !compact && 'min-h-[50dvh]') },
       editor
         ? createElement(
-            'div',
+            Prose,
             {
+              measure: false,
               className: cn(
-                'rezics-document text-foreground',
                 compact ? 'document-editor-compact' : 'document-editor',
                 'caret-primary selection:bg-primary/20',
               ),
-              'data-placeholder-dir': dir,
+              ...(dir ? { 'data-placeholder-dir': dir } : {}),
             },
             createElement(EditorContent, { editor }),
           )

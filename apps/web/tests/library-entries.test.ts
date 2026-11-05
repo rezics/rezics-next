@@ -1,12 +1,196 @@
-import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { afterAll, expect, test as bunTest } from 'bun:test';
+import { cleanupAll, ownNodeProcess, withCleanup, type ProcessCustody } from './support/server-custody.ts';
+import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
-import { chromium, type Browser, type Page } from 'playwright';
+import { slug } from '@rezics/definitions/slug';
+import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from 'playwright';
+import { closeAccountMenu, openAccountMenu } from './support/account-menu';
 
 const app = join(import.meta.dir, '..');
+
+let serverCustody: ProcessCustody | undefined;
+let started: Promise<string> | undefined;
+let serverStartupAbort: AbortController | undefined;
+const pendingServerStartups = new Set<Promise<string>>();
+let browser: Browser | undefined;
+let browserLaunch: Promise<Browser> | undefined;
+let browserClosing: Promise<void> | undefined;
+let teardownStarted = false;
+let cleanupPromise: Promise<void> | undefined;
+const ownedContexts = new Set<BrowserContext>();
+const pendingContextSetups = new Set<Promise<unknown>>();
+const contextClosures = new WeakMap<BrowserContext, Promise<void>>();
+const failedContextSetups = new WeakSet<BrowserContext>();
+
+function ensureSiteStartupActive(output = '', cause?: unknown): void {
+  if (teardownStarted) {
+    const message = `dev server startup retired after suite teardown began${output ? `:\n${output}` : ''}`;
+    if (cause !== undefined) throw new Error(message, { cause });
+    throw new Error(message);
+  }
+}
+
+function siteStartupRequestSignal(): { signal: AbortSignal; dispose: () => void } {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  const parentSignal = serverStartupAbort?.signal;
+  const abort = () => controller.abort();
+  parentSignal?.addEventListener('abort', abort, { once: true });
+  if (parentSignal?.aborted) abort();
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timeout);
+      parentSignal?.removeEventListener('abort', abort);
+    },
+  };
+}
+
+type LifetimeTestOperation = () => unknown | PromiseLike<unknown>;
+
+function test(name: string, operation: LifetimeTestOperation, timeoutMs?: number) {
+  return bunTest(
+    name,
+    async () => {
+      const contextsBefore = new Set(ownedContexts);
+      let primary: unknown;
+      let failed = false;
+      try {
+        await operation();
+      } catch (error) {
+        primary = error;
+        failed = true;
+      }
+      const contexts = [...ownedContexts].filter(
+        (context) => !contextsBefore.has(context) && !failedContextSetups.has(context),
+      );
+      const results = await Promise.allSettled(contexts.map(closeContextAttempt));
+      const cleanupErrors = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+      if (failed && cleanupErrors.length > 0)
+        throw new AggregateError([primary, ...cleanupErrors], `${name} and browser context cleanup both failed`, {
+          cause: primary,
+        });
+      if (failed) throw primary;
+      if (cleanupErrors.length > 0) throw new AggregateError(cleanupErrors, `${name} browser context cleanup failed`);
+    },
+    timeoutMs,
+  );
+}
+
+function closeContextAttempt(context: BrowserContext): Promise<void> {
+  let closing = contextClosures.get(context);
+  if (!closing) {
+    closing = cleanupAll([{ label: 'browser context', run: () => context.close(), timeoutMs: 5000 }]);
+    contextClosures.set(context, closing);
+    void closing.catch(() => {});
+  }
+  return closing;
+}
+
+async function closeContext(context: BrowserContext): Promise<void> {
+  // The owning test wrapper reports this cached failure together with its primary assertion failure.
+  await closeContextAttempt(context).catch(() => {});
+}
+
+function closeBrowserHandle(instance: Browser): Promise<void> {
+  browserClosing ??= cleanupAll([{ label: 'Playwright browser', run: () => instance.close(), timeoutMs: 5000 }]);
+  void browserClosing.catch(() => {});
+  return browserClosing;
+}
+
+function launchBrowser(): Promise<Browser> {
+  if (teardownStarted) return Promise.reject(new Error('Browser launch requested after suite teardown began'));
+  browserLaunch ??= chromium.launch().then(async (instance) => {
+    browser = instance;
+    if (teardownStarted) {
+      await closeBrowserHandle(instance);
+      throw new Error('Browser launch completed after suite teardown began');
+    }
+    return instance;
+  });
+  void browserLaunch.catch(() => {});
+  return browserLaunch;
+}
+
+async function withBrowserContext<T>(
+  options: BrowserContextOptions,
+  prepare: (context: BrowserContext) => Promise<T>,
+): Promise<{ context: BrowserContext; value: T }> {
+  let context: BrowserContext | undefined;
+  let complete = false;
+  const operation = withCleanup(async () => {
+    const instance = await launchBrowser();
+    context = await instance.newContext(options);
+    ownedContexts.add(context);
+    if (teardownStarted) throw new Error('Browser context opened after suite teardown began');
+    const value = await prepare(context);
+    if (teardownStarted) throw new Error('Browser context setup completed after suite teardown began');
+    complete = true;
+    return { context, value };
+  }, [
+    {
+      label: 'partial browser context setup',
+      run: () => (complete || !context ? undefined : closeContextAttempt(context)),
+      timeoutMs: 6000,
+    },
+  ]);
+  pendingContextSetups.add(operation);
+  try {
+    return await operation;
+  } catch (error) {
+    if (context) failedContextSetups.add(context);
+    throw error;
+  } finally {
+    pendingContextSetups.delete(operation);
+  }
+}
+
+async function closeBrowser(): Promise<void> {
+  let instance = browser;
+  if (!instance && browserLaunch) {
+    try {
+      instance = await browserLaunch;
+    } catch {
+      instance = browser;
+    }
+  }
+  if (instance) await closeBrowserHandle(instance);
+}
+
+function cleanupSuite(): Promise<void> {
+  return (cleanupPromise ??= (async () => {
+    teardownStarted = true;
+    serverStartupAbort?.abort();
+    const viteCustody = serverCustody;
+    const contextActions = [...ownedContexts].map((context, index) => ({
+      label: `browser context ${index + 1}`,
+      run: () => closeContextAttempt(context),
+      timeoutMs: 6000,
+    }));
+    const setupActions = [...pendingContextSetups].map((setup, index) => ({
+      label: `pending browser context setup ${index + 1}`,
+      run: () => setup,
+      timeoutMs: 7000,
+    }));
+    const startupActions = [...pendingServerStartups].map((startup, index) => ({
+      label: `pending Vite startup ${index + 1}`,
+      run: () => startup,
+      timeoutMs: 15_000,
+    }));
+    await withCleanup(
+      () => cleanupAll([...contextActions, ...setupActions, ...startupActions]),
+      [
+        { label: 'Playwright browser', run: closeBrowser, timeoutMs: 7000 },
+        { label: 'fake API listener', run: () => fake.stop(true), timeoutMs: 7000 },
+        { label: 'Vite process group', run: () => viteCustody?.close(), timeoutMs: 8000 },
+      ],
+    );
+  })());
+}
+
 const timeout = 300_000;
 const clientId = 'rezics-website';
 const session = '__Host-rezics_session';
@@ -14,7 +198,6 @@ const login = '__Host-rezics_login';
 // The API's RFC 8707 resource identifier in tests; production uses https://api.rezics.com.
 const resource = 'https://api.rezics.test';
 const scopes = ['library_entry:list', 'library_entry:read', 'library_entry:update', 'library_entry:delete'];
-const pageLimit = '100';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // The website client's key, which only the Worker holds, and the issuer's signing key.
@@ -157,6 +340,7 @@ const fake = Bun.serve({
   hostname: '127.0.0.1',
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === '/v1/platform/exposure') return json({ admitted: ['personal_library', 'collections'] });
     const issuer = `${url.origin}/auth`;
     const tokenEndpoint = `${issuer}/token`;
     const client = async (form: URLSearchParams) => {
@@ -331,52 +515,88 @@ function freePort(): Promise<number> {
     probe.once('error', reject);
     probe.listen(0, '127.0.0.1', () => {
       const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
+      probe.close((error) => (error ? reject(error) : resolve(port)));
     });
   });
 }
 
-let child: ChildProcess | undefined;
-let started: Promise<string> | undefined;
-
 // The documented command, pointed at the fake through the environment it reads in development.
 function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: fake.url.origin,
-        AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId,
-        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-        API_RESOURCE: resource,
-        WEBSITE_SCOPES: scopes.join(' '),
-      },
-    });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
+  if (teardownStarted) return Promise.reject(new Error('Site startup requested after suite teardown began'));
+  if (!started) {
+    serverStartupAbort = new AbortController();
+    const startup = Promise.resolve().then(async () => {
+      ensureSiteStartupActive();
+      const port = await freePort();
+      ensureSiteStartupActive();
+      const origin = `http://127.0.0.1:${port}`;
+      let output = '';
+      const keep = (chunk: Uint8Array) => {
+        output = (output + Buffer.from(chunk).toString()).slice(-8000);
+      };
+      const startupChild = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
+        cwd: app,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: {
+          ...process.env,
+          KERNEL_ORIGIN: fake.url.origin,
+          AUTH_ISSUER: `${fake.url.origin}/auth`,
+          WEBSITE_CLIENT_ID: clientId,
+          WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
+          API_RESOURCE: resource,
+          WEBSITE_SCOPES: scopes.join(' '),
+        },
+      });
+      const custody = ownNodeProcess(startupChild, {
+        label: 'Vite dev server',
+        outputLimit: 8000,
+        onOutput: keep,
+      });
+      serverCustody = custody;
+      let spawnError: Error | undefined;
+      startupChild.once('error', (error) => {
+        spawnError = error;
+      });
+      const deadline = Date.now() + 150_000;
       try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {
-        // The dev server is still starting.
+        for (;;) {
+          ensureSiteStartupActive(output);
+          if (spawnError)
+            throw new Error(`dev server spawn failed: ${spawnError.message}\n${output}`, { cause: spawnError });
+          if (startupChild.exitCode !== null)
+            throw new Error(`dev server exited with ${startupChild.exitCode}:\n${output}`);
+          let response: Response | undefined;
+          const request = siteStartupRequestSignal();
+          try {
+            response = await fetch(`${origin}/en`, {
+              redirect: 'manual',
+              signal: request.signal,
+            });
+          } catch (error) {
+            ensureSiteStartupActive(output, error);
+            // The dev server is still starting.
+          } finally {
+            request.dispose();
+          }
+          ensureSiteStartupActive(output);
+          if (response && response.status < 500) return origin;
+          if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
+          await Bun.sleep(500);
+        }
+      } catch (error) {
+        return await withCleanup(() => {
+          throw error;
+        }, [{ label: 'Vite startup process group', run: () => custody.close(), timeoutMs: 8000 }]);
       }
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
-    }
-  })();
+    });
+    started = startup;
+    pendingServerStartups.add(startup);
+    void startup.then(
+      () => pendingServerStartups.delete(startup),
+      () => pendingServerStartups.delete(startup),
+    );
+  }
   return started;
 }
 
@@ -428,12 +648,14 @@ const alice = async () => {
 
 async function readPage(path: string, cookie?: string) {
   const response = await fetch(`${await site()}${path}`, {
+    redirect: 'manual',
     headers: cookie ? { cookie: `${session}=${cookie}` } : {},
   });
   return {
     status: response.status,
     html: await response.text(),
     cache: response.headers.get('cache-control') ?? '',
+    location: response.headers.get('location'),
   };
 }
 function main(html: string) {
@@ -467,21 +689,38 @@ function formatInstant(value: string, locale: string) {
     timeZone: 'UTC',
   }).format(new Date(value));
 }
+function shortDate(value: string, locale: string) {
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeZone: 'UTC' }).format(new Date(value));
+}
 function libraryReads() {
   return calls.filter((call) => call.method === 'GET' && call.path === '/v1/libraryEntries');
 }
-let browser: Browser | undefined;
 async function open(path: string, cookie: string): Promise<Page> {
   const origin = await site();
-  browser ??= await chromium.launch();
-  const context = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce' });
-  await context.addCookies([
-    { name: session, value: cookie, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
-  ]);
-  const page = await context.newPage();
-  await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
-  await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+  const { value: page } = await withBrowserContext(
+    { viewport: { width: 1280, height: 860 }, reducedMotion: 'reduce' },
+    async (context) => {
+      await context.addCookies([
+        { name: session, value: cookie, domain: '127.0.0.1', path: '/', httpOnly: true, secure: true, sameSite: 'Lax' },
+      ]);
+      const page = await context.newPage();
+      await page.goto(`${origin}${path}`, { waitUntil: 'networkidle' });
+      await page.locator('html[data-hydrated]').waitFor({ state: 'attached', timeout: 120_000 });
+      return page;
+    },
+  );
   return page;
+}
+async function accountMenuHtml(path: string, cookie: string): Promise<string> {
+  const page = await open(path, cookie);
+  return withCleanup(async () => {
+    await openAccountMenu(page);
+    await page.locator('#account-menu input[name="csrf_token"]').waitFor({ state: 'attached' });
+    return await page.locator('#account-menu').innerHTML();
+  }, [
+    { label: 'account menu', run: () => closeAccountMenu(page), timeoutMs: 5000 },
+    { label: 'account page context', run: () => closeContextAttempt(page.context()), timeoutMs: 6000 },
+  ]);
 }
 async function eventually(check: () => boolean | Promise<boolean>) {
   const deadline = Date.now() + 20_000;
@@ -489,14 +728,7 @@ async function eventually(check: () => boolean | Promise<boolean>) {
   expect(await check()).toBe(true);
 }
 afterAll(async () => {
-  await browser?.close();
-  fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      // The dev server has already exited.
-    }
+  await cleanupSuite();
 });
 
 test(
@@ -509,40 +741,40 @@ test(
     expect(page.cache).toMatch(/\bno-store\b/);
     const body = main(page.html);
     expect(body).toContain('Library');
-    expect(body.indexOf('Zebra story')).toBeLessThan(body.indexOf('Unavailable'));
+    // The one tracked-entries page keeps the kernel's newest-first order across states.
     expect(body.indexOf('Unavailable')).toBeLessThan(body.indexOf('Apple story'));
-    expect(body).toContain('book');
-    expect(body).toContain('data-state="completed"');
-    expect(body).toContain('data-state="planned"');
-    expect(body).toContain(`datetime="${newerStamp}"`);
-    expect(body).toContain(formatInstant(newerStamp, 'en'));
-    expect(body).toContain(formatInstant(middleStamp, 'en'));
-    expect(body).toContain(formatInstant(olderStamp, 'en'));
+    expect(body.indexOf('Apple story')).toBeLessThan(body.indexOf('Zebra story'));
+    // The fake serves no definitions, so the type has no name to show and its raw value stays out.
+    expect(body).not.toContain('book');
+    expect(body).toContain(`dateTime="${newerStamp}"`);
+    expect(body).toContain(shortDate(newerStamp, 'en'));
+    expect(body).toContain(shortDate(middleStamp, 'en'));
+    expect(body).toContain(shortDate(olderStamp, 'en'));
     expect(visible(page.html)).toContain('Unavailable');
     expect(visible(page.html)).not.toContain(hiddenSubjectId);
     const found = links(page.html);
-    expect(found.find((link) => link.text === 'Zebra story')?.href).toBe(`/en/subjects/${id(11)}`);
-    expect(found.find((link) => link.text === 'Apple story')?.href).toBe(`/en/subjects/${id(12)}`);
+    expect(found.find((link) => link.text === 'Zebra story')?.href).toBe(
+      `/en/subjects/${id(11)}/${slug('Zebra story')}`,
+    );
+    expect(found.find((link) => link.text === 'Apple story')?.href).toBe(
+      `/en/subjects/${id(12)}/${slug('Apple story')}`,
+    );
     expect(found.some((link) => link.href.includes(hiddenSubjectId) || link.text === hiddenSubjectId)).toBe(false);
-    const tab = (text: string) => found.find((link) => link.text === text);
-    expect(tab('All')).toMatchObject({ href: '/en/library', current: true });
-    expect(tab('Planned')?.href).toBe('/en/library?state=planned');
-    expect(tab('In progress')?.href).toBe('/en/library?state=in_progress');
-    expect(tab('Completed')?.href).toBe('/en/library?state=completed');
-    expect(tab('Paused')?.href).toBe('/en/library?state=paused');
-    expect(tab('Dropped')?.href).toBe('/en/library?state=dropped');
-    expect(tab('Planned')?.current).toBe(false);
+    expect(found.some((link) => link.text === 'All')).toBe(false);
+    expect(found.some((link) => link.text === 'Collections')).toBe(false);
+    expect(found.find((link) => link.text === 'Planned')?.href).toBe('/en/library?state=planned');
+    // One paged owner read returns entries across states.
     const reads = libraryReads();
-    expect(reads).toHaveLength(1);
-    expect(reads[0]).toMatchObject({
-      method: 'GET',
-      path: '/v1/libraryEntries',
-      view: 'FULL',
-      limit: pageLimit,
-      cursor: null,
-      state: null,
-      authorization: `Bearer ${aliceAccess}`,
-    });
+    expect(reads.filter((read) => read.state === null)).toHaveLength(1);
+    for (const read of reads.filter((read) => read.state === null))
+      expect(read).toMatchObject({
+        method: 'GET',
+        path: '/v1/libraryEntries',
+        view: 'FULL',
+        limit: '20',
+        cursor: null,
+        authorization: `Bearer ${aliceAccess}`,
+      });
 
     calls.length = 0;
     const completed = await readPage('/en/library?state=completed', cookie);
@@ -551,16 +783,11 @@ test(
     expect(completedMain).toContain('Zebra story');
     expect(completedMain).not.toContain('Apple story');
     expect(completedMain).not.toContain('Unavailable');
-    expect(completedMain).toContain('data-state="completed"');
-    expect(completedMain).not.toContain('data-state="planned"');
-    expect(links(completed.html).find((link) => link.text === 'Completed')).toMatchObject({
-      href: '/en/library?state=completed',
-      current: true,
-    });
-    expect(libraryReads()).toHaveLength(1);
-    expect(libraryReads()[0]).toMatchObject({
+    expect(links(completed.html).find((link) => link.text === 'Completed')?.href).toBe('/en/library?state=completed');
+    expect(libraryReads().filter((read) => read.state === 'completed')).toHaveLength(1);
+    expect(libraryReads().find((read) => read.state === 'completed')).toMatchObject({
       view: 'FULL',
-      limit: pageLimit,
+      limit: '20',
       cursor: null,
       state: 'completed',
       authorization: `Bearer ${aliceAccess}`,
@@ -571,44 +798,52 @@ test(
     const plannedMain = main(planned.html);
     expect(plannedMain).not.toContain('Zebra story');
     expect(plannedMain.indexOf('Unavailable')).toBeLessThan(plannedMain.indexOf('Apple story'));
-    expect(links(planned.html).find((link) => link.text === 'Planned')?.current).toBe(true);
+    expect(links(planned.html).find((link) => link.text === 'Clear filter')?.href).toBe('/en/library');
 
     calls.length = 0;
     const empty = await readPage('/en/library?state=in_progress', cookie);
-    expect(main(empty.html)).toContain('Your library is empty.');
+    expect(main(empty.html)).toContain('Nothing in In progress yet');
     expect(main(empty.html)).not.toContain('Zebra story');
-    expect(libraryReads()[0]?.state).toBe('in_progress');
+    expect(libraryReads().filter((read) => read.state === 'in_progress')).toHaveLength(2);
 
     const japanese = await readPage('/ja/library', cookie);
     expect(japanese.status).toBe(200);
     const japaneseMain = main(japanese.html);
     expect(japaneseMain).toContain('ライブラリ');
     expect(japaneseMain).toContain('完了');
-    expect(japaneseMain).toContain(formatInstant(newerStamp, 'ja'));
-    expect(japaneseMain.indexOf('Zebra story')).toBeLessThan(japaneseMain.indexOf('Apple story'));
+    expect(japaneseMain).toContain(shortDate(newerStamp, 'ja'));
+    expect(japaneseMain.indexOf('Apple story')).toBeLessThan(japaneseMain.indexOf('Zebra story'));
 
     calls.length = 0;
     entries = longLibrary();
-    const first = await readPage('/en/library', cookie);
+    const first = await readPage('/en/library?state=planned', cookie);
     expect(first.status).toBe(200);
     const firstMain = main(first.html);
+    for (let number = 1; number <= 20; number++)
+      expect(firstMain).toContain(`Entry ${String(number).padStart(3, '0')}`);
     expect(firstMain.indexOf('Entry 001')).toBeLessThan(firstMain.indexOf('Entry 002'));
-    expect(firstMain.indexOf('Entry 002')).toBeLessThan(firstMain.indexOf('Entry 100'));
-    expect(firstMain).not.toContain('Entry 101');
-    const firstRead = libraryReads()[0];
-    expect(firstRead).toMatchObject({ view: 'FULL', limit: pageLimit, cursor: null, state: null });
-    const more = links(first.html).find((link) => link.text === 'More');
+    expect(firstMain.indexOf('Entry 002')).toBeLessThan(firstMain.indexOf('Entry 020'));
+    expect(firstMain).not.toContain('Entry 021');
+    const firstRead = libraryReads().find((read) => read.state === 'planned');
+    expect(firstRead).toMatchObject({ view: 'FULL', limit: '20', cursor: null, state: 'planned' });
+    const more = links(first.html).find((link) => link.text === 'Next page');
     expect(more?.href).toContain('/en/library?');
+    expect(new URL(more!.href, 'http://site.test').searchParams.get('state')).toBe('planned');
     const cursor = new URL(more!.href, 'http://site.test').searchParams.get('cursor');
     expect(cursor).toBeTruthy();
     expect([...cursors.keys()]).toContain(cursor);
     calls.length = 0;
-    const second = await readPage(`/en/library?cursor=${encodeURIComponent(cursor!)}`, cookie);
+    const second = await readPage(more!.href, cookie);
     expect(second.status).toBe(200);
     const secondMain = main(second.html);
-    expect(secondMain).toContain('Entry 101');
+    expect(secondMain).toContain('Entry 021');
     expect(secondMain).not.toContain('Entry 001');
-    expect(libraryReads()[0]).toMatchObject({ view: 'FULL', limit: pageLimit, cursor, state: null });
+    expect(libraryReads().find((read) => read.state === 'planned')).toMatchObject({
+      view: 'FULL',
+      limit: '20',
+      cursor,
+      state: 'planned',
+    });
   },
   timeout,
 );
@@ -619,37 +854,36 @@ test(
     reset();
     const page = await open('/en/library', await alice());
     try {
-      const zebra = page.locator('main li').filter({ hasText: 'Zebra story' });
+      const zebra = page.locator('main article').filter({ hasText: 'Zebra story' });
       expect(await zebra.count()).toBe(1);
-      const change = zebra.locator('form').first();
-      const key = await change.locator('input[name="idempotencyKey"]').inputValue();
-      expect(key).toMatch(uuid);
-      expect(await page.content()).toContain(key);
-      expect(await change.locator('input[name="revision"]').inputValue()).toBe('4');
+      const choose = async (title: string, name: string) => {
+        await page.getByRole('button', { name: `Actions for ${title}` }).click();
+        await page.getByRole('menuitem', { name: 'Change status' }).click();
+        await page.getByRole('menuitemradio', { name: name, exact: true }).click();
+        // The menu stays open after a choice; Escape closes the submenu, then the menu.
+        await page.keyboard.press('Escape');
+        await page.keyboard.press('Escape');
+        await page.getByRole('menu').first().waitFor({ state: 'detached' });
+      };
       calls.length = 0;
-      await zebra.locator('select').selectOption('paused');
-      await zebra.getByRole('button', { name: 'Save', exact: true }).click();
+      await choose('Zebra story', 'Paused');
       await eventually(() => calls.some((call) => call.method === 'PUT'));
       const put = calls.find((call) => call.method === 'PUT');
       expect(calls.filter((call) => call.method !== 'GET')).toEqual([put]);
       expect(put).toMatchObject({
         method: 'PUT',
         path: `/v1/libraryEntries/${id(11)}`,
-        key,
         authorization: `Bearer ${aliceAccess}`,
         body: { state: 'paused', revision: 4 },
       });
-      await eventually(async () => (await change.locator('input[name="revision"]').inputValue()) === '5');
-      expect(await zebra.locator('[data-state]').getAttribute('data-state')).toBe('paused');
-      expect(await zebra.locator('[data-state]').innerText()).toBe('Paused');
-      const nextKey = await change.locator('input[name="idempotencyKey"]').inputValue();
-      expect(nextKey).toMatch(uuid);
-      expect(nextKey).not.toBe(key);
+      const key = put!.key!;
+      expect(key).toMatch(uuid);
+      // The card, in the Completed section, now says where the entry went.
+      await eventually(async () => (await zebra.innerText()).includes('Paused'));
 
       diverge(id(11), 'dropped');
       calls.length = 0;
-      await zebra.locator('select').selectOption('completed');
-      await zebra.getByRole('button', { name: 'Save', exact: true }).click();
+      await choose('Zebra story', 'Completed');
       await eventually(() =>
         calls.some((call) => call.method === 'GET' && call.path === `/v1/libraryEntries/${id(11)}`),
       );
@@ -658,44 +892,38 @@ test(
         `GET /v1/libraryEntries/${id(11)}`,
       ]);
       expect(calls[0]).toMatchObject({
-        key: nextKey,
         authorization: `Bearer ${aliceAccess}`,
         body: { state: 'completed', revision: 5 },
       });
+      // Each answered write takes a fresh idempotency key.
+      expect(calls[0]!.key).toMatch(uuid);
+      expect(calls[0]!.key).not.toBe(key);
       expect(calls[1]).toMatchObject({ view: 'FULL', authorization: `Bearer ${aliceAccess}` });
       expect(entries.find((item) => item.subjectId === id(11))).toMatchObject({
         state: 'dropped',
         revision: 10,
         updatedAt: reloadedStamp,
       });
-      await eventually(async () => (await zebra.locator('[data-state]').innerText()) === 'Dropped');
-      expect(await zebra.locator('[data-state]').getAttribute('data-state')).toBe('dropped');
+      await eventually(async () => (await zebra.innerText()).includes('Dropped'));
       expect(await zebra.locator('time').getAttribute('datetime')).toBe(reloadedStamp);
       expect(await zebra.getByRole('status').innerText()).toBe('This entry changed elsewhere.');
-      expect(await zebra.locator('form').first().locator('input[name="revision"]').inputValue()).toBe('10');
 
-      const apple = page.locator('main li').filter({ hasText: 'Apple story' });
+      const apple = page.locator('main article').filter({ hasText: 'Apple story' });
       expect(await apple.count()).toBe(1);
-      const removal = apple.locator('form').last();
-      const removeKey = await removal.locator('input[name="idempotencyKey"]').inputValue();
-      expect(removeKey).toMatch(uuid);
-      expect(await removal.locator('input[name="revision"]').inputValue()).toBe('2');
       calls.length = 0;
-      await apple.locator('summary').click();
-      await apple.getByRole('button', { name: 'Confirm removal', exact: true }).click();
+      await page.getByRole('button', { name: 'Actions for Apple story' }).click();
+      await page.getByRole('menuitem', { name: 'Remove from library', exact: true }).click();
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Confirm removal', exact: true }).click();
       await eventually(() => calls.some((call) => call.method === 'DELETE'));
       expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([`DELETE /v1/libraryEntries/${id(12)}`]);
-      expect(calls[0]).toMatchObject({
-        revision: '2',
-        key: removeKey,
-        authorization: `Bearer ${aliceAccess}`,
-      });
+      expect(calls[0]).toMatchObject({ revision: '2', authorization: `Bearer ${aliceAccess}` });
+      expect(calls[0]!.key).toMatch(uuid);
       await eventually(async () => (await apple.count()) === 0);
-      expect(await page.locator('main li').filter({ hasText: 'Zebra story' }).count()).toBe(1);
+      expect(await page.locator('main article').filter({ hasText: 'Zebra story' }).count()).toBe(1);
       expect(await page.locator('main').innerText()).toContain('Unavailable');
       expect(entries.some((item) => item.subjectId === id(12))).toBe(false);
     } finally {
-      await page.context().close();
+      await closeContext(page.context());
     }
   },
   timeout,
@@ -708,59 +936,47 @@ test(
     const cookie = await alice();
     const english = await readPage('/en/library', cookie);
     expect(english.status).toBe(200);
-    const menu = /<div\b[^>]*id="account-menu"[^>]*>([\s\S]*?)<\/div>/.exec(english.html)?.[1] ?? '';
+    const menu = await accountMenuHtml('/en/library', cookie);
     const menuLinks = linksIn(menu);
     expect(menuLinks.find((link) => link.text === 'Library')?.href).toBe('/en/library');
     expect(menuLinks.find((link) => link.text === 'Collections')?.href).toBe('/en/collections');
     expect(menuLinks.find((link) => link.text === 'Following')?.href).toBe('/en/following');
-    const sections = /<nav\b[^>]*aria-label="Library"[^>]*>([\s\S]*?)<\/nav>/.exec(main(english.html))?.[1] ?? '';
-    const sectionLinks = linksIn(sections);
-    expect(sectionLinks.find((link) => link.text === 'Library')).toMatchObject({ href: '/en/library', current: true });
-    expect(sectionLinks.find((link) => link.text === 'Collections')?.href).toBe('/en/collections');
-    expect(sectionLinks.find((link) => link.text === 'Following')?.href).toBe('/en/following');
+    expect(links(english.html).some((link) => link.text === 'All')).toBe(false);
+    expect(links(english.html).some((link) => link.text === 'Collections')).toBe(false);
 
     const japanese = await readPage('/ja/library', cookie);
     expect(japanese.status).toBe(200);
-    const japaneseMenu = /<div\b[^>]*id="account-menu"[^>]*>([\s\S]*?)<\/div>/.exec(japanese.html)?.[1] ?? '';
+    const japaneseMenu = await accountMenuHtml('/ja/library', cookie);
     const japaneseLinks = linksIn(japaneseMenu);
     expect(japaneseLinks.find((link) => link.text === 'ライブラリ')?.href).toBe('/ja/library');
     expect(japaneseLinks.find((link) => link.text === 'コレクション')?.href).toBe('/ja/collections');
     expect(japaneseLinks.find((link) => link.text === 'フォロー中')?.href).toBe('/ja/following');
-    const japaneseSections =
-      /<nav\b[^>]*aria-label="ライブラリ"[^>]*>([\s\S]*?)<\/nav>/.exec(main(japanese.html))?.[1] ?? '';
-    const japaneseSectionLinks = linksIn(japaneseSections);
-    expect(japaneseSectionLinks.find((link) => link.text === 'ライブラリ')).toMatchObject({
-      href: '/ja/library',
-      current: true,
-    });
-    expect(japaneseSectionLinks.find((link) => link.text === 'コレクション')?.href).toBe('/ja/collections');
-    expect(japaneseSectionLinks.find((link) => link.text === 'フォロー中')?.href).toBe('/ja/following');
+    expect(links(japanese.html).some((link) => link.text === 'すべて')).toBe(false);
+    expect(links(japanese.html).some((link) => link.text === 'コレクション')).toBe(false);
   },
   timeout,
 );
 
 test(
-  'signed out, the library offers sign-in',
+  'signed out, the library redirects to sign-in',
   async () => {
     reset();
-    const page = await readPage('/en/library');
-    expect(page.status).toBe(200);
-    expect(page.cache).toMatch(/\bno-store\b/);
-    const body = main(page.html);
-    expect(body).toContain('Library');
-    expect(body).not.toContain('Zebra story');
-    expect(body).not.toContain('Your library is empty.');
-    const signInLink = links(page.html).find((link) => link.text === 'Sign in to see your library.');
-    expect(signInLink?.href).toBe('/auth/sign-in?return_to=%2Fen%2Flibrary');
+    for (const path of ['/en/library', '/ja/library']) {
+      const page = await readPage(path);
+      expect(page.status).toBe(302);
+      expect(page.cache).toMatch(/\bno-store\b/);
+      expect(page.location).toBe(`/auth/sign-in?return_to=${encodeURIComponent(path)}`);
+    }
     expect(calls.some((call) => call.path.startsWith('/v1/libraryEntries'))).toBe(false);
+  },
+  timeout,
+);
 
-    const japanese = await readPage('/ja/library');
-    expect(japanese.status).toBe(200);
-    const japaneseLink = links(japanese.html).find(
-      (link) => link.text === 'ライブラリを見るにはサインインしてください。',
-    );
-    expect(japaneseLink?.href).toBe('/auth/sign-in?return_to=%2Fja%2Flibrary');
-    expect(main(japanese.html)).not.toContain('Zebra story');
+test(
+  'suite teardown refuses a new Vite startup',
+  async () => {
+    await cleanupSuite();
+    await expect(site()).rejects.toThrow('Site startup requested after suite teardown began');
   },
   timeout,
 );

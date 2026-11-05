@@ -10,6 +10,6 @@ WHERE m.route = i.route AND m.media_id = i.media_id
   AND m.uploader_id = i.uploader_id AND m.container_id = i.container_id
   AND m.reservation_request_id = i.reservation_request_id AND m.byte_count = i.byte_count
   AND (m.declared_sha256 IS NULL OR m.declared_sha256 = i.sha256)
-  AND m.purpose = 'post-image' AND m.state = 'reserved'
+  AND m.purpose IN ('post-image', 'avatar', 'realm-icon', 'realm-banner') AND m.state = 'reserved'
   AND NOT m.erased AND NOT m.collection_pending AND NOT m.taken_down
 RETURNING m.media_id;

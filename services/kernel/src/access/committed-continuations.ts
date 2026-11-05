@@ -1,3 +1,5 @@
+import { accessClock } from './access-clock.ts';
+import { deadlineFor } from '../request/deadline.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -16,19 +18,23 @@ import { seal, unseal } from '../tokens/seal.ts';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
 import globalRead from './bootstrap-governance-read.sql';
 import { GrantDeniedError } from './grant-commands.ts';
-import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
+import { LifecycleDeniedError, lifecycleExecutor, type LifecycleReceipt } from './lifecycle-20261025094010-command.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import completeContinuation from './committed-continuation-complete.sql';
 import insertContinuation from './committed-continuation-insert.sql';
 import loadContinuation from './committed-continuation-load.sql';
 import readContinuation from './committed-continuation-read.sql';
 import renewContinuation from './committed-continuation-renew.sql';
+import readEntry from './committed-continuation-entry-read.sql';
+import { createCommittedDeletionRunner } from './committed-deletion-work.ts';
 import { createOperatorFenceRunner } from './operator-fence-work.ts';
 
 /** Distinct from workflow approvals. A sealed reference authorizes one allowlisted
  * cleanup step and never a caller's result or a later permission. */
 export const COMMITTED_CONTINUATION_PURPOSE = 'access.committed-continuation.v1';
 export const COMMITTED_CONTINUATION_TTL_MS = 5 * 60 * 1000;
+/** The protected native workflow port gives each resumed step ten seconds. */
+export const COMMITTED_CONTINUATION_RESUME_BUDGET_MS = 10_000;
 /** Route-bearing continuation ids. Independent of the lifecycle fence namespace. */
 export const CONTINUATION_NAMESPACE = 'b7c3d1e2-4f50-4a61-8c70-0d1e2f304152';
 export const COMMITTED_CONTINUATION_ACTIONS: ActionCatalogue = new Map([
@@ -48,7 +54,12 @@ export class ContinuationDeniedError extends Error {
 }
 
 export type ContinuationEntry = { step: string; target: string; key: string; digest: string };
-export type ContinuationBinding = { operationKey: string; operationDigest: string; commandKeyPrefix: string };
+export type ContinuationBinding = {
+  operationKey: string;
+  operationDigest: string;
+  commandKeyPrefix: string;
+  approvalExpiresAt?: string;
+};
 export type ContinuationSnapshot = {
   route: number;
   continuationId: string;
@@ -75,7 +86,6 @@ export type ContinuationView = {
   expiresAt: string;
   allowlist: ContinuationEntry[];
 };
-type Completion = ContinuationEntry & { receiptId: string };
 type StoredContinuation = {
   continuationId: string;
   accountId: string;
@@ -89,7 +99,7 @@ type StoredContinuation = {
   priorOperatorAccountId: string | null;
   priorReservationId: string | null;
   allowlist: unknown;
-  completions: unknown;
+  derivedAllowlist?: unknown;
   digest: string;
   createdAt: unknown;
   committedExpiresAt: unknown;
@@ -121,54 +131,27 @@ export function canonicalInstant(value: unknown): string {
 function jsonValue(value: unknown): unknown {
   return typeof value === 'string' ? (JSON.parse(value) as unknown) : value;
 }
-function entryShape(value: unknown, completed: boolean): (ContinuationEntry & { receiptId?: string }) | null {
+function entryShape(value: unknown): ContinuationEntry | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const keys = Object.keys(record).sort();
-  const expected = completed ? ['digest', 'key', 'receiptId', 'step', 'target'] : ['digest', 'key', 'step', 'target'];
-  if (keys.join(',') !== expected.join(',')) return null;
-  const step = record.step;
-  const target = record.target;
-  const key = record.key;
-  const digest = record.digest;
+  if (Object.keys(record).sort().join(',') !== 'digest,key,step,target') return null;
+  const { step, target, key, digest } = record;
   if (typeof step !== 'string' || !STEP.test(step)) return null;
   if (typeof target !== 'string' || target.length < 1 || target.length > 128) return null;
   if (typeof key !== 'string' || key.length < 1 || key.length > 240) return null;
   if (typeof digest !== 'string' || !DIGEST.test(digest)) return null;
-  const entry: ContinuationEntry & { receiptId?: string } = { step, target, key, digest };
-  if (completed) {
-    if (typeof record.receiptId !== 'string' || routeOf(record.receiptId) === null) return null;
-    entry.receiptId = record.receiptId;
-  }
-  return entry;
+  return { step, target, key, digest };
 }
-function entries(value: unknown): ContinuationEntry[] | null {
+function entries(value: unknown, minimum = 1, maximum = 4): ContinuationEntry[] | null {
   const parsed = jsonValue(value);
-  if (!Array.isArray(parsed) || parsed.length < 1 || parsed.length > 4) return null;
+  if (!Array.isArray(parsed) || parsed.length < minimum || parsed.length > maximum) return null;
   const allowlist: ContinuationEntry[] = [];
   for (const item of parsed) {
-    const entry = entryShape(item, false);
+    const entry = entryShape(item);
     if (!entry) return null;
-    allowlist.push({ step: entry.step, target: entry.target, key: entry.key, digest: entry.digest });
+    allowlist.push(entry);
   }
   return allowlist;
-}
-function completions(value: unknown): Completion[] | null {
-  const parsed = jsonValue(value);
-  if (!Array.isArray(parsed) || parsed.length > 4) return null;
-  const recorded: Completion[] = [];
-  for (const item of parsed) {
-    const entry = entryShape(item, true);
-    if (!entry?.receiptId) return null;
-    recorded.push({
-      step: entry.step,
-      target: entry.target,
-      key: entry.key,
-      digest: entry.digest,
-      receiptId: entry.receiptId,
-    });
-  }
-  return recorded;
 }
 export function continuationEntryDigest(entry: Pick<ContinuationEntry, 'step' | 'target' | 'key'>): string {
   return createHash('sha256')
@@ -223,6 +206,16 @@ export function validateContinuationBinding(binding: ContinuationBinding): void 
   )
     throw new LifecycleDeniedError();
 }
+/** Approval lifetime is admission metadata, not part of the replayed business command. */
+export function continuationCommandBinding(binding: ContinuationBinding | undefined) {
+  return binding
+    ? {
+        operationKey: binding.operationKey,
+        operationDigest: binding.operationDigest,
+        commandKeyPrefix: binding.commandKeyPrefix,
+      }
+    : null;
+}
 function snapshotOf(route: number, row: StoredContinuation, allowlist: ContinuationEntry[]): ContinuationSnapshot {
   return {
     route,
@@ -245,6 +238,8 @@ function snapshotOf(route: number, row: StoredContinuation, allowlist: Continuat
 function viewOf(keys: KeyRing, route: number, row: StoredContinuation): ContinuationView | null {
   const allowlist = entries(row.allowlist);
   if (!allowlist || row.digest !== committedContinuationDigest(snapshotOf(route, row, allowlist))) return null;
+  const derived = entries(row.derivedAllowlist ?? [], 0, Infinity);
+  if (!derived) return null;
   return {
     reference: seal(keys, COMMITTED_CONTINUATION_PURPOSE, {
       route,
@@ -256,7 +251,7 @@ function viewOf(keys: KeyRing, route: number, row: StoredContinuation): Continua
     commandKeyPrefix: row.commandKeyPrefix,
     barrierReceiptId: row.barrierReceiptId,
     expiresAt: canonicalInstant(row.expiresAt),
-    allowlist,
+    allowlist: [...allowlist, ...derived],
   };
 }
 
@@ -289,7 +284,14 @@ export async function insertDeletionContinuation(
     });
   if (route === null || !allowlist || routeOf(input.barrierReceiptId) === null) throw new LifecycleDeniedError();
   const createdAt = canonicalInstant(authoritativeTimeValue(currentCommand(tx).time));
-  const committedExpiresAt = new Date(Date.parse(createdAt) + COMMITTED_CONTINUATION_TTL_MS).toISOString();
+  const expires = Math.min(
+    Date.parse(createdAt) + COMMITTED_CONTINUATION_TTL_MS,
+    input.binding.approvalExpiresAt === undefined
+      ? Infinity
+      : Date.parse(input.binding.approvalExpiresAt) - COMMITTED_CONTINUATION_RESUME_BUDGET_MS,
+  );
+  if (!Number.isFinite(expires) || expires <= Date.parse(createdAt)) throw new LifecycleDeniedError();
+  const committedExpiresAt = new Date(expires).toISOString();
   const continuationId = derivedId(CONTINUATION_NAMESPACE, `${input.accountId}:${input.binding.operationKey}`, route);
   const snapshot: ContinuationSnapshot = {
     route,
@@ -332,6 +334,146 @@ export async function insertDeletionContinuation(
   if (!inserted) throw new LifecycleDeniedError();
 }
 
+export function isFenceContinuation(root: ContinuationSnapshot): boolean {
+  return root.allowlist.some(
+    (entry) =>
+      ['operator-responsibility-page', 'operator-unfence-page'].includes(entry.step) && entry.target === root.accountId,
+  );
+}
+export function isDeletionContinuation(root: ContinuationSnapshot): boolean {
+  return root.allowlist.some((entry) => entry.step === 'erase-auth-owner' && entry.target === root.accountId);
+}
+
+/** Every effect checks an exact root entry and the stored expiry at its command's T.
+ * The completion and the business receipt commit together; receipt replay writes neither twice. */
+export async function recordCompletion(
+  tx: CommandTransaction,
+  located: { route: number; continuationId: string; digest: string },
+  presented: ContinuationEntry,
+  receiptId: string,
+  receipt: LifecycleReceipt,
+): Promise<{ continuationId: string; receiptId: string }> {
+  return recordBoundCompletion(tx, located, presented, receiptId, receipt, false);
+}
+
+async function recordBoundCompletion(
+  tx: CommandTransaction,
+  located: { route: number; continuationId: string; digest: string },
+  presented: ContinuationEntry,
+  receiptId: string,
+  receipt: LifecycleReceipt,
+  permanentErasure: boolean,
+): Promise<{ continuationId: string; receiptId: string }> {
+  refused(presented.digest === continuationEntryDigest(presented));
+  const row = await oneRow(() =>
+    loadContinuation.run(tx, { route: located.route, continuation_id: located.continuationId }),
+  );
+  refused(row);
+  const stored = row as StoredContinuation;
+  const allowlist = entries(stored.allowlist);
+  refused(allowlist);
+  const snapshot = snapshotOf(located.route, stored, allowlist);
+  refused(stored.digest === located.digest && stored.digest === committedContinuationDigest(snapshot));
+  refused(
+    allowlist.some((item) => sameEntry(item, presented)) ||
+      (await readEntry.run(tx, {
+        route: located.route,
+        continuation_id: stored.continuationId,
+        ...presented,
+      })),
+  );
+  const at = canonicalInstant(authoritativeTimeValue(currentCommand(tx).time));
+  if (permanentErasure) await requireErasureBarrier(tx, snapshot);
+  else refused(Date.parse(canonicalInstant(stored.expiresAt)) > Date.parse(at));
+  await completeContinuation.run(tx, {
+    route: located.route,
+    continuation_id: stored.continuationId,
+    step: presented.step,
+    target: presented.target,
+    key: presented.key,
+    digest: presented.digest,
+    receipt_id: receiptId,
+    receipt_key: receipt.key,
+    receipt_digest: receipt.digest,
+  });
+  return { continuationId: stored.continuationId, receiptId };
+}
+
+/** Permanent erasure is a different, non-bearer authority. It applies ONLY to
+ * the exact current deletion barrier; historical fences, foreign accounts and
+ * ordinary expired approvals retain the public continuation's expiry checks.
+ * The obligation, current account fence and immutable root are checked together.
+ */
+async function requireErasureBarrier(tx: Pick<CommandTransaction, 'query'>, root: ContinuationSnapshot): Promise<void> {
+  refused(isDeletionContinuation(root));
+  const row = await tx.query(
+    `SELECT 1 FROM access.erasure e
+     JOIN access.account a ON a.route=e.route AND a.account_id=e.account_id
+     JOIN access.lifecycle_fence_receipt f ON f.route=a.route AND f.account_id=a.account_id
+       AND f.receipt_id=a.fence_receipt_id
+     WHERE e.route=$1 AND e.account_id=$2 AND a.state='deleted' AND a.authn_fenced
+       AND f.receipt_id=$3 AND f.transaction_id=$4 AND f.minimum_authn_epoch=$5::bigint
+       AND a.minimum_authn_epoch=f.minimum_authn_epoch`,
+    [root.route, root.accountId, root.barrierReceiptId, root.barrierTransactionId, root.minimumAuthnEpoch],
+  );
+  refused(row.rowCount === 1);
+}
+
+/** Native local consumer, deliberately not an Auth completion or an erasure ACK.
+ * Its input is an exact discovered root id. Nothing here copies the root into
+ * DBOS, renews an approval, or infers consumption from authorization records.
+ * Existing business commands execute under their ORIGINAL committed keys.
+ */
+export async function continueErasureDeletion(pool: Pool, continuationId: string, clock?: () => Date): Promise<void> {
+  const discoveredRoute = routeOf(continuationId);
+  refused(discoveredRoute !== null);
+  const route: number = discoveredRoute;
+  async function root(): Promise<ContinuationSnapshot> {
+    return withConnection(pool, async (tx) => {
+      const row = await oneRow(() => loadContinuation.run(tx, { route, continuation_id: continuationId }));
+      refused(row);
+      const stored = row as StoredContinuation;
+      const allowlist = entries(stored.allowlist);
+      refused(allowlist);
+      const snapshot = snapshotOf(route, stored, allowlist);
+      refused(stored.digest === committedContinuationDigest(snapshot));
+      await requireErasureBarrier(tx, snapshot);
+      return snapshot;
+    });
+  }
+  const execute = lifecycleExecutor(pool, clock);
+  const runner = createCommittedDeletionRunner({
+    pool,
+    ...(clock ? { clock } : {}),
+    root,
+    async live(snapshot) {
+      await withConnection(pool, (tx) => requireErasureBarrier(tx, snapshot));
+    },
+    async authorizeStep(_reference, entry) {
+      const snapshot = await root();
+      return execute(
+        {
+          route,
+          id: continuationId,
+          kind: 'cleanup-continuation.recorded',
+          key: `committed:${entry.key}`,
+          input: { continuationId, step: entry.step, target: entry.target, key: entry.key, digest: entry.digest },
+        },
+        (tx, transactionId, receipt) =>
+          recordBoundCompletion(
+            tx,
+            { route, continuationId, digest: committedContinuationDigest(snapshot) },
+            entry,
+            transactionId,
+            receipt,
+            true,
+          ),
+      );
+    },
+  });
+  await runner.continueCommitted(continuationId);
+}
+
 export type CommittedContinuations = {
   /** Trusted kernel recovery port. Each iteration commits one bounded page. */
   continueCommitted(reference: string): Promise<void>;
@@ -357,7 +499,8 @@ export function createCommittedContinuations(config: {
   clock?: () => Date;
   pageSize?: number;
 }): CommittedContinuations {
-  const execute = (clock?: () => Date) => lifecycleExecutor(config.pool, clock ?? config.clock);
+  const clock = config.clock ?? accessClock(config.access);
+  const execute = (frozenClock?: () => Date) => lifecycleExecutor(config.pool, frozenClock ?? clock);
   function unsealed(reference: string): { route: number; continuationId: string; digest: string } {
     const payload = unseal(config.referenceKeys, COMMITTED_CONTINUATION_PURPOSE, reference);
     refused(payload && typeof payload === 'object' && !Array.isArray(payload));
@@ -374,129 +517,132 @@ export function createCommittedContinuations(config: {
     );
     return { route, continuationId, digest };
   }
-  const runner = createOperatorFenceRunner({
+  async function loadRoot(reference: string): Promise<ContinuationSnapshot> {
+    const located = unsealed(reference);
+    const row = await withConnection(config.pool, (client) =>
+      oneRow(() =>
+        loadContinuation.run(client, {
+          route: located.route,
+          continuation_id: located.continuationId,
+        }),
+      ),
+    );
+    refused(row);
+    const stored = row as StoredContinuation;
+    const allowlist = entries(stored.allowlist);
+    refused(allowlist);
+    const snapshot = snapshotOf(located.route, stored, allowlist);
+    refused(stored.digest === located.digest && stored.digest === committedContinuationDigest(snapshot));
+    refused(Date.parse(canonicalInstant(stored.expiresAt)) > clock().getTime());
+    return snapshot;
+  }
+  async function authorizeStep(reference: string, entry: ContinuationEntry) {
+    let sealedReference: { route: number; continuationId: string; digest: string };
+    try {
+      sealedReference = unsealed(reference);
+    } catch (error) {
+      if (error instanceof ContinuationDeniedError) throw error;
+      throw deny();
+    }
+    const presented = entryShape(entry);
+    refused(presented && presented.digest === continuationEntryDigest(presented));
+    const commandKey = `committed:${presented.key}`;
+    refused(commandKey.length <= 240);
+    // Core receipt replay skips the body, so expiry also guards admission to replay.
+    await loadRoot(reference);
+    try {
+      const outcome = await execute()(
+        {
+          route: sealedReference.route,
+          id: sealedReference.continuationId,
+          kind: 'cleanup-continuation.recorded',
+          key: commandKey,
+          input: {
+            continuationId: sealedReference.continuationId,
+            step: presented.step,
+            target: presented.target,
+            key: presented.key,
+            digest: presented.digest,
+          },
+        },
+        (tx, transactionId, receipt) => recordCompletion(tx, sealedReference, presented, transactionId, receipt),
+      );
+      return outcome.value;
+    } catch (error) {
+      if (error instanceof ContinuationDeniedError) throw error;
+      if (error instanceof IdempotencyConflictError) throw deny();
+      throw error;
+    }
+  }
+  const fenceWork = createOperatorFenceRunner({
     pool: config.pool,
     referenceKeys: config.referenceKeys,
-    ...(config.clock ? { clock: config.clock } : {}),
+    clock,
     ...(config.pageSize === undefined ? {} : { pageSize: config.pageSize }),
     async root(reference) {
-      const located = unsealed(reference);
-      const row = await withConnection(config.pool, (client) =>
-        oneRow(() =>
-          loadContinuation.run(client, {
-            route: located.route,
-            continuation_id: located.continuationId,
-          }),
-        ),
-      );
-      refused(row);
-      const stored = row as StoredContinuation;
-      const allowlist = entries(stored.allowlist);
-      refused(allowlist);
-      const snapshot = snapshotOf(located.route, stored, allowlist);
-      refused(stored.digest === located.digest && stored.digest === committedContinuationDigest(snapshot));
-      refused(
-        allowlist.some((entry) => entry.step === 'operator-responsibility-page' && entry.target === stored.accountId),
-      );
+      const snapshot = await loadRoot(reference);
+      refused(isFenceContinuation(snapshot));
       return snapshot;
+    },
+    async record(tx, root, entry, receiptId, receipt) {
+      await recordCompletion(
+        tx,
+        { route: root.route, continuationId: root.continuationId, digest: committedContinuationDigest(root) },
+        entry,
+        receiptId,
+        receipt,
+      );
+    },
+  });
+  const deletionWork = createCommittedDeletionRunner({
+    pool: config.pool,
+    clock,
+    async root(reference) {
+      const snapshot = await loadRoot(reference);
+      refused(isDeletionContinuation(snapshot));
+      return snapshot;
+    },
+    authorizeStep,
+    async live(root) {
+      const row = await withConnection(config.pool, (client) =>
+        oneRow(() => loadContinuation.run(client, { route: root.route, continuation_id: root.continuationId })),
+      );
+      refused(row && Date.parse(canonicalInstant((row as StoredContinuation).expiresAt)) > clock().getTime());
     },
   });
   return {
-    continueCommitted: runner.continueCommitted,
-    continueCommittedPage: runner.page,
+    async continueCommitted(reference) {
+      const root = await loadRoot(reference);
+      if (isFenceContinuation(root)) return fenceWork.continueCommitted(reference);
+      refused(isDeletionContinuation(root));
+      return deletionWork.continueCommitted(reference);
+    },
+    continueCommittedPage: fenceWork.page,
     async read(operationKey, accountId) {
       const route = routeOf(accountId);
       if (route === null || typeof operationKey !== 'string' || operationKey.length < 1 || operationKey.length > 128)
         return null;
-      const row = await withConnection(config.pool, (client) =>
-        oneRow(() => readContinuation.run(client, { route, operation_key: operationKey })),
-      );
+      const row = await withConnection(config.pool, async (client) => {
+        await client.query('BEGIN READ ONLY');
+        try {
+          const result = await oneRow(() => readContinuation.run(client, { route, operation_key: operationKey }));
+          await client.query('COMMIT');
+          return result;
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
+      });
       return row ? viewOf(config.referenceKeys, route, row as StoredContinuation) : null;
     },
-    async authorizeStep(reference, entry) {
-      let sealedReference: { route: number; continuationId: string; digest: string };
-      try {
-        sealedReference = unsealed(reference);
-      } catch (error) {
-        if (error instanceof ContinuationDeniedError) throw error;
-        throw deny();
-      }
-      const presented = entryShape(entry, false);
-      refused(presented && presented.digest === continuationEntryDigest(presented));
-      const commandKey = `committed:${presented.key}`;
-      refused(commandKey.length <= 240);
-      const receiptId = derivedId(
-        CONTINUATION_NAMESPACE,
-        `${sealedReference.continuationId}:${presented.step}:${presented.target}:${presented.key}`,
-        sealedReference.route,
-      );
-      try {
-        const outcome = await execute()(
-          {
-            route: sealedReference.route,
-            id: sealedReference.continuationId,
-            kind: 'cleanup-continuation.recorded',
-            key: commandKey,
-            input: {
-              continuationId: sealedReference.continuationId,
-              step: presented.step,
-              target: presented.target,
-              key: presented.key,
-              digest: presented.digest,
-            },
-          },
-          async (tx) => {
-            const row = await oneRow(() =>
-              loadContinuation.run(tx, {
-                route: sealedReference.route,
-                continuation_id: sealedReference.continuationId,
-              }),
-            );
-            refused(row);
-            const stored = row as StoredContinuation;
-            const allowlist = entries(stored.allowlist);
-            const recorded = completions(stored.completions);
-            refused(allowlist && recorded);
-            const snapshot = snapshotOf(sealedReference.route, stored, allowlist);
-            refused(
-              stored.digest === sealedReference.digest && stored.digest === committedContinuationDigest(snapshot),
-            );
-            const match = allowlist.find((item) => sameEntry(item, presented));
-            refused(match);
-            const prior = recorded.find((item) => sameEntry(item, presented));
-            if (prior) return { continuationId: stored.continuationId, receiptId: prior.receiptId };
-            const at = canonicalInstant(authoritativeTimeValue(currentCommand(tx).time));
-            refused(Date.parse(canonicalInstant(stored.expiresAt)) > Date.parse(at));
-            const updated = await oneRow(() =>
-              completeContinuation.run(tx, {
-                route: sealedReference.route,
-                continuation_id: stored.continuationId,
-                step: presented.step,
-                target: presented.target,
-                key: presented.key,
-                digest: presented.digest,
-                receipt_id: receiptId,
-                at,
-              }),
-            );
-            refused(updated);
-            return { continuationId: stored.continuationId, receiptId };
-          },
-        );
-        return outcome.value;
-      } catch (error) {
-        if (error instanceof ContinuationDeniedError) throw error;
-        if (error instanceof IdempotencyConflictError) throw deny();
-        throw error;
-      }
-    },
+    authorizeStep,
     async renew(token, continuationId) {
       const route = routeOf(continuationId);
       if (route === null) throw new GrantDeniedError();
-      const at = config.clock?.() ?? new Date();
+      const at = clock();
       if (!Number.isFinite(at.getTime())) throw new GrantDeniedError();
       const frozen = () => new Date(at.getTime());
-      const deadline = Date.now() + 10_000;
+      const deadline = deadlineFor(COMMITTED_CONTINUATION_RESUME_BUDGET_MS);
       const context: AccessContext = { pool: config.pool, deadline };
       let actor: AccountActor;
       try {

@@ -2,13 +2,89 @@ import { viewerCredential } from '../session/request.ts';
 import { authorizeDownload, mediaClient, notFound, problem, problemResponse } from './kernel.ts';
 import type { MediaEnv } from './index.ts';
 
-export const validVariant = (variant: string) =>
-  /^(?:original|(?:webp|avif)-(?:320|640|960|1280|1920|2560))$/.test(variant);
+export { validVariant } from './cover-src.ts';
 
 function matchesValidator(header: string | null, etag: string): boolean {
   // Entity tags are quoted strings; commas inside a tag do not separate validators.
   return (header?.match(/(?:W\/)?"[^"\r\n]*"|\*/g) ?? []).some(
     (tag) => tag === '*' || tag.replace(/^W\//, '') === etag,
+  );
+}
+
+type EntityTag = { weak: boolean; opaqueTag: string };
+
+function skipOws(value: string, offset: number): number {
+  while (value[offset] === ' ' || value[offset] === '\t') offset++;
+  return offset;
+}
+
+function trimOws(value: string): string {
+  const start = skipOws(value, 0);
+  let end = value.length;
+  while (end > start && (value[end - 1] === ' ' || value[end - 1] === '\t')) end--;
+  return value.slice(start, end);
+}
+
+function parseEntityTag(value: string): EntityTag | null {
+  const weak = value.startsWith('W/');
+  const quote = weak ? 2 : 0;
+  if (value.length < quote + 2 || value[quote] !== '"' || value.at(-1) !== '"') return null;
+  for (let index = quote + 1; index < value.length - 1; index++) {
+    const code = value.charCodeAt(index);
+    if (!(code === 0x21 || (code >= 0x23 && code <= 0x7e) || (code >= 0x80 && code <= 0xff))) return null;
+  }
+  return { weak, opaqueTag: value.slice(quote + 1, -1) };
+}
+
+function parseEntityTagList(header: string | null): '*' | EntityTag[] | null {
+  if (header === null) return null;
+  let offset = skipOws(header, 0);
+  if (header[offset] === '*') return skipOws(header, offset + 1) === header.length ? '*' : null;
+
+  const tags: EntityTag[] = [];
+  while (offset < header.length) {
+    offset = skipOws(header, offset);
+    if (offset === header.length) break;
+    if (header[offset] === ',') {
+      offset++;
+      continue;
+    }
+
+    const weak = header.startsWith('W/', offset);
+    if (weak) offset += 2;
+    if (header[offset] !== '"') return null;
+    const quote = offset++;
+    while (offset < header.length && header[offset] !== '"') {
+      const code = header.charCodeAt(offset);
+      if (!(code === 0x21 || (code >= 0x23 && code <= 0x7e) || (code >= 0x80 && code <= 0xff))) return null;
+      offset++;
+    }
+    if (offset === header.length) return null;
+    tags.push({ weak, opaqueTag: header.slice(quote + 1, offset) });
+    offset = skipOws(header, offset + 1);
+    if (offset < header.length && header[offset] !== ',') return null;
+    if (header[offset] === ',') offset++;
+  }
+  return tags.length > 0 ? tags : null;
+}
+
+function matchesIfNoneMatch(header: string | null, etag: string): boolean {
+  const validators = parseEntityTagList(header);
+  if (validators === '*') return true;
+  if (validators === null) return false;
+  // The full list was validated above, so fragment matches cannot rescue a malformed value.
+  return matchesValidator(header, etag);
+}
+
+function matchesIfRange(header: string, etag: string): boolean {
+  const candidate = parseEntityTag(trimOws(header));
+  const current = parseEntityTag(etag);
+  return (
+    candidate !== null &&
+    current !== null &&
+    !candidate.weak &&
+    !current.weak &&
+    candidate.opaqueTag === current.opaqueTag
   );
 }
 
@@ -58,11 +134,17 @@ export async function download(request: Request, id: string, variant: string, en
   if (decision.allowed !== true) throw notFound();
   const etag = `"${decision.sha256}"`;
   const headers = new Headers({ etag, 'cache-control': decision.cacheControl });
-  if (matchesValidator(request.headers.get('if-none-match'), etag)) return new Response(null, { status: 304, headers });
+  if (matchesIfNoneMatch(request.headers.get('if-none-match'), etag))
+    return new Response(null, { status: 304, headers });
 
   const metadata = await env.MEDIA.head(decision.key);
   if (!metadata) throw notFound();
-  const range = byteRange(request.headers.get('range'), metadata.size);
+  const rangeHeader = request.method === 'GET' ? request.headers.get('range') : null;
+  const ifRange = request.headers.get('if-range');
+  const range =
+    rangeHeader !== null && (ifRange === null || matchesIfRange(ifRange, etag))
+      ? byteRange(rangeHeader, metadata.size)
+      : undefined;
   if (range === 'unsatisfiable') {
     const response = problemResponse(problem(416, 'invalid_request', 'Invalid Request'));
     response.headers.set('content-range', `bytes */${metadata.size}`);

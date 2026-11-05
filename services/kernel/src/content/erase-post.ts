@@ -1,3 +1,11 @@
+import {
+  prepareDiscoveryMutation,
+  discoveryMutationAuthorization,
+  lockDiscoveryMutation,
+  applyDiscoveryMutation,
+  abortDiscoveryMutation,
+} from './discovery-mutation.ts';
+import discoveryOpening from './discovery-target.sql';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -5,7 +13,11 @@ import type { DurableOperationAnchor, InitiatorRestorer } from '../access/durabl
 import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
   principalCommandIdentity,
+  commandTime,
+  currentCommand,
+  authoritativeTimeValue,
   runCommand,
+  type CommandEvent,
   type CommandAuthorization,
   type CommandAttempt,
   type CommandOutcome,
@@ -15,12 +27,13 @@ import { resourceAuthorizationPage } from '../access/resource-authorization.ts';
 import { accessCommandAuthorization, type Access, type AccessClient, type Actor } from '../request/access.ts';
 import { deadlineClient } from '../access/authenticate.ts';
 import { withConnection } from '../database/pool.ts';
-import { partitionOf, routeOf } from '../route/route.ts';
+import { newId, partitionOf, routeOf } from '../route/route.ts';
 import readScope from './read-erasure-scope.sql';
 import boardRealm from './realm-of-board.sql';
 import erase from './erase-content.sql';
+import erasePostLogicalPage from './erase-post-logical-page.sql';
 import takedown from './takedown.sql';
-import countRevisions from './erase-post-revisions.sql';
+import insertDecision from './insert-moderation-decision.sql';
 import validatePage from './validate-erasure-page.sql';
 
 export type ErasePostDependencies = Readonly<{
@@ -51,7 +64,7 @@ export type ErasureInitiator = Readonly<{
 
 type Point =
   | Readonly<{ action: 'moderation:takedown'; kind: 'board' | 'thread' | 'post'; id: string; reason: string }>
-  | Readonly<{ action: 'post:erase'; kind: 'post'; id: string; reason: string }>
+  | Readonly<{ action: 'post:erase'; kind: 'post'; id: string; reason: string; softDelete?: boolean }>
   | Readonly<{ action: 'media:erase'; kind: 'media'; id: string; reason: string }>;
 type Scope = {
   id: string;
@@ -90,7 +103,7 @@ async function prepareAuthorizedPoint(
           principal: { kind: 'account' as const, id: actor.accountId },
           basis: { clientId: actor.clientId, requestedBy: actor.requestedBy },
         };
-  const parameters = { route, id: point.id, kind: point.kind };
+  const parameters = { route, id: point.id, kind: point.kind, deleted_at: null as string | null };
   const args = (statement: { params: readonly string[] }) =>
     statement.params.map((name) => parameters[name as keyof typeof parameters]);
   const readRealm = async (client: AccessClient, current: Scope | undefined) => {
@@ -221,6 +234,8 @@ async function prepareAuthorizedPoint(
     authorization,
     async mutate(tx: CommandTransaction) {
       if (!scope) throw new GrantDeniedError();
+      parameters.deleted_at =
+        point.action === 'post:erase' && point.softDelete ? authoritativeTimeValue(commandTime(tx)!) : null;
       const statement = point.action === 'moderation:takedown' ? takedown : erase;
       const result = await tx.query<{ security_revision: string }>(statement.sql, args(statement));
       const changed = result.rows[0];
@@ -229,7 +244,19 @@ async function prepareAuthorizedPoint(
       if (!changed) throw new GrantDeniedError();
       const securityRevision = changed.security_revision;
       const value = { targetId: point.id, securityRevision };
-      if (point.action === 'moderation:takedown')
+      if (point.action === 'moderation:takedown') {
+        await insertDecision.run(tx, {
+          route,
+          decision_id: newId(route),
+          recorded_transaction_id: currentCommand(tx).transactionId,
+          board_id: point.kind === 'board' ? point.id : scope.board_id,
+          target_kind: point.kind,
+          target_id: point.id,
+          statement: point.reason,
+          decider_account_id: identity.principal.id,
+          security_revision: securityRevision,
+          decided_at: authoritativeTimeValue(commandTime(tx)!),
+        });
         return {
           value,
           events: [
@@ -243,10 +270,17 @@ async function prepareAuthorizedPoint(
             },
           ],
         };
+      }
       if (point.kind === 'post')
         return {
           value,
-          events: [{ type: 'com.rezics.content.post.erased.v1', data: { postId: point.id, securityRevision } }],
+          events: [
+            {
+              type: 'com.rezics.content.post.erased.v1',
+              subject: point.id,
+              data: { postId: point.id, securityRevision },
+            },
+          ],
         };
       // The media purge consumer resolves this ID and purges only m/<id>/.
       // No remote call or worker connection occurs inside the point transaction.
@@ -273,24 +307,45 @@ async function mutateAuthorizedPoint(
   context: ErasePostContext,
 ): Promise<CommandOutcome<{ targetId: string; securityRevision: string }>> {
   const prepared = await prepareAuthorizedPoint(deps, actor, requested, context);
-  return runCommand(
-    deps.pool,
-    {
-      ...prepared.identity,
-      partition: partitionOf(prepared.route),
-      deadline: context.deadline,
-      clock: deps.clock,
-      authorization: prepared.authorization,
-      receipt: {
-        kind: `content.${prepared.point.action}`,
-        key: context.idempotencyKey,
-        digest: createHash('sha256')
-          .update(canonicalize([prepared.identity, prepared.point])!)
-          .digest(),
+  const receipt = {
+    kind: `content.${prepared.point.action}`,
+    key: context.idempotencyKey,
+    digest: createHash('sha256')
+      .update(canonicalize([prepared.identity, prepared.point])!)
+      .digest(),
+  };
+  const discovery =
+    prepared.point.kind === 'media'
+      ? null
+      : await prepareDiscoveryMutation(deps, {
+          identity: prepared.identity,
+          authorization: prepared.authorization,
+          receipt,
+          deadline: context.deadline,
+          target: { kind: prepared.point.kind, id: prepared.point.id },
+          effect: 'retract',
+        });
+  try {
+    return await runCommand(
+      deps.pool,
+      {
+        ...prepared.identity,
+        partition: partitionOf(prepared.route),
+        deadline: context.deadline,
+        clock: deps.clock,
+        receipt,
+        authorization: discoveryMutationAuthorization(deps, prepared.authorization, discovery),
       },
-    },
-    (tx) => prepared.mutate(tx),
-  );
+      async (tx) => {
+        await lockDiscoveryMutation(tx, discovery);
+        const result = await prepared.mutate(tx);
+        return { ...result, events: [...result.events, ...(await applyDiscoveryMutation(tx, discovery))] };
+      },
+    );
+  } catch (error) {
+    await abortDiscoveryMutation(deps.pool, discovery);
+    throw error;
+  }
 }
 
 /** Ordinary point callers retain the original authenticated-actor boundary. */
@@ -320,6 +375,28 @@ async function logicalErasure(
       kind: 'post',
       id: input.postId,
       reason: input.reason,
+    },
+    context,
+  );
+  return { ...result, value: { postId: result.value.targetId, securityRevision: result.value.securityRevision } };
+}
+
+/** The ordinary owner DELETE retains history during its restore window. */
+export async function softDeletePost(
+  deps: ErasePostDependencies,
+  actor: Actor,
+  input: ErasePostInput,
+  context: ErasePostContext,
+) {
+  const result = await mutateAuthorizedPoint(
+    deps,
+    actor,
+    {
+      action: 'post:erase',
+      kind: 'post',
+      id: input.postId,
+      reason: input.reason,
+      softDelete: true,
     },
     context,
   );
@@ -422,47 +499,64 @@ export async function erasePostLogicalPageAsInitiator(
       return 'execute';
     },
   };
-  return runCommand(
-    deps.pool,
-    {
-      ...identity,
-      partition: partitionOf(route),
-      deadline: context.deadline,
-      clock: deps.clock,
-      authorization,
-      receipt: {
-        kind: 'content.author-erasure.page',
-        key: context.idempotencyKey,
-        digest: createHash('sha256')
-          .update(
-            canonicalize([
-              identity,
-              postIds.map((id) => ({ action: 'post:erase', kind: 'post', id, reason: input.reason })),
-            ])!,
-          )
-          .digest(),
+  const receipt = {
+    kind: 'content.author-erasure.page',
+    key: context.idempotencyKey,
+    digest: createHash('sha256')
+      .update(
+        canonicalize([
+          identity,
+          postIds.map((id) => ({ action: 'post:erase', kind: 'post', id, reason: input.reason })),
+        ])!,
+      )
+      .digest(),
+  };
+  const opening = await discoveryOpening.run(deps.pool, { route, thread_id: input.threadId });
+  const discovery =
+    opening?.first_post_id && postIds.includes(opening.first_post_id)
+      ? await prepareDiscoveryMutation(deps, {
+          identity,
+          authorization,
+          receipt,
+          deadline: context.deadline,
+          target: { kind: 'post', id: opening.first_post_id },
+          effect: 'retract',
+        })
+      : null;
+  try {
+    return await runCommand(
+      deps.pool,
+      {
+        ...identity,
+        partition: partitionOf(route),
+        deadline: context.deadline,
+        clock: deps.clock,
+        receipt,
+        authorization: discoveryMutationAuthorization(deps, authorization, discovery),
       },
-    },
-    async (tx) => {
-      let erasedRevisions = 0;
-      const events = [];
-      for (const id of postIds) {
-        const parameters = { route, id, kind: 'post' };
-        const args = (statement: { params: readonly string[] }) =>
-          statement.params.map((name) => parameters[name as keyof typeof parameters]);
-        const counted = await tx.query<{ revisions: string }>(countRevisions.sql, args(countRevisions));
-        erasedRevisions += Number(counted.rows[0]!.revisions);
+      async (tx) => {
+        await lockDiscoveryMutation(tx, discovery);
+        const changed = await erasePostLogicalPage.run(tx, { route, post_ids: postIds });
+        // Every requested post was authorized at this attempt's T and must still
+        // be eligible for its first logical erasure in the same transaction.
+        if (changed.length !== postIds.length) throw new GrantDeniedError();
+        const erasedRevisions = changed.reduce((total, row) => total + Number(row.revisions), 0);
         if (!Number.isSafeInteger(erasedRevisions) || erasedRevisions < 0)
           throw new RangeError('Operation counter overflow');
-        const changed = (await tx.query<{ security_revision: string }>(erase.sql, args(erase))).rows[0];
-        // An already erased post cannot become a new effect on a different key.
-        if (!changed) throw new GrantDeniedError();
-        events.push({
-          type: 'com.rezics.content.post.erased.v1',
-          data: { postId: id, securityRevision: changed.security_revision },
+        const events: CommandEvent[] = changed.map((row) => {
+          if (row.securityRevision === null) throw new Error('Erased post has no security revision');
+          return {
+            type: 'com.rezics.content.post.erased.v1',
+            subject: row.postId,
+            data: { postId: row.postId, securityRevision: row.securityRevision },
+          };
         });
-      }
-      return { value: { postIds, processedPosts: postIds.length, erasedRevisions }, events };
-    },
-  );
+        events.push(...(await applyDiscoveryMutation(tx, discovery)));
+        return { value: { postIds, processedPosts: postIds.length, erasedRevisions }, events };
+      },
+    );
+  } catch (error) {
+    await abortDiscoveryMutation(deps.pool, discovery);
+    throw error;
+  }
 }

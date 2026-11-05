@@ -1,4 +1,52 @@
+import { memoizedValue } from '../memoized.ts';
+import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
+import { ConfigError } from '../commerce/config.ts';
 import { AccessUnavailableError, requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
+export type AuthConsentConfig = Readonly<{
+  url: string;
+  serviceTokenId: string;
+  serviceTokenSecret: string;
+}>;
+
+export const AUTH_CONSENT_VARIABLES = Object.freeze([
+  'KERNEL_AUTH_CONSENT_URL',
+  'CF_ACCESS_CLIENT_ID',
+  'CF_ACCESS_CLIENT_SECRET',
+] as const);
+
+/** Shared host configuration for every module that restores an initiator.
+ * The group is absent or complete; errors name a variable, never its value. */
+export function readAuthConsentConfig(env: Readonly<Record<string, string | undefined>>): AuthConsentConfig | null {
+  if (!AUTH_CONSENT_VARIABLES.some((variable) => env[variable] !== undefined)) return null;
+  const url = consentValue(env, 'KERNEL_AUTH_CONSENT_URL');
+  try {
+    const parsed = new URL(url);
+    if (
+      parsed.protocol !== 'https:' ||
+      parsed.pathname !== '/internal/v1/consents:read' ||
+      parsed.username ||
+      parsed.password ||
+      parsed.search ||
+      parsed.hash
+    )
+      throw new Error();
+  } catch {
+    throw new ConfigError('KERNEL_AUTH_CONSENT_URL');
+  }
+  return Object.freeze({
+    url,
+    serviceTokenId: consentValue(env, 'CF_ACCESS_CLIENT_ID'),
+    serviceTokenSecret: consentValue(env, 'CF_ACCESS_CLIENT_SECRET'),
+  });
+}
+
+/** Consent values keep the historical visible-ASCII bound. */
+function consentValue(env: Readonly<Record<string, string | undefined>>, variable: string): string {
+  const value = env[variable];
+  if (!value || !/^[\x21-\x7e]{1,1024}$/.test(value)) throw new ConfigError(variable);
+  return value;
+}
+
 export type CurrentConsent = Readonly<{
   actorAccountId: string;
   clientId: string;
@@ -16,17 +64,24 @@ function id(value: unknown): value is string {
 function scopes(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
-    value.length <= 100 &&
+    value.length <= MAX_CONSENTED_SCOPES &&
     value.every(
       (scope) => typeof scope === 'string' && scope.length <= 128 && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(scope),
     )
+  );
+}
+// JSON adds two quotes per scope, punctuation, two bounded IDs and field names.
+function consentResponseOctets() {
+  return memoizedValue(
+    consentResponseOctets,
+    () => MAX_CONSENTED_SCOPE_OCTETS + 2 * MAX_CONSENTED_SCOPES + 4 * 1024 + 128,
   );
 }
 async function boundedJson(response: Response, signal: AbortSignal): Promise<unknown> {
   if (
     !response.body ||
     response.headers.get('content-type')?.split(';')[0]?.trim() !== 'application/json' ||
-    Number(response.headers.get('content-length') ?? 0) > 32768
+    Number(response.headers.get('content-length') ?? 0) > consentResponseOctets()
   )
     throw new Error('Unavailable');
   const reader = response.body.getReader();
@@ -42,7 +97,7 @@ async function boundedJson(response: Response, signal: AbortSignal): Promise<unk
       const { value, done } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > 32768) throw new Error('Unavailable');
+      if (size > consentResponseOctets()) throw new Error('Unavailable');
       chunks.push(value);
     }
     const bytes = new Uint8Array(size);
@@ -65,12 +120,11 @@ async function boundedJson(response: Response, signal: AbortSignal): Promise<unk
  * Every invocation obtains Auth's native current fact, independently of Access's
  * evaluator T/clock. Inject into the restorer; do not install in requestJSON.
  */
-export function createAuthConsentReader(config: {
-  url: string;
-  serviceTokenId: string;
-  serviceTokenSecret: string;
-  fetch?: (url: string, init: RequestInit) => Promise<Response>;
-}): CurrentConsentReader {
+export function createAuthConsentReader(
+  config: AuthConsentConfig & {
+    fetch?: (url: string, init: RequestInit) => Promise<Response>;
+  },
+): CurrentConsentReader {
   const url = new URL(config.url);
   const loopback = ['127.0.0.1', '[::1]'].includes(url.hostname);
   const { serviceTokenId, serviceTokenSecret } = config;

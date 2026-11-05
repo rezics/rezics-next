@@ -1,21 +1,10 @@
-import { afterAll, expect, test } from 'bun:test';
-import { spawn, type ChildProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { createServer } from 'node:net';
-import { join } from 'node:path';
-import { exportJWK, generateKeyPair } from 'jose';
-import { chromium, type Browser, type Page } from 'playwright';
-import type { KernelClient } from '@rezics/client';
-
-const app = join(import.meta.dir, '..');
-const timeout = 300_000;
-const clientId = 'rezics-website';
-const resource = 'https://api.rezics.test';
-const scopes = ['media:create', 'media:read_reservation', 'media:read', 'media:complete', 'media:erase'];
-const clientKeys = await generateKeyPair('ES256', { extractable: true });
-const clientJwk = { ...(await exportJWK(clientKeys.privateKey)), alg: 'ES256', kid: 'website-1' };
-const issuerKeys = await generateKeyPair('ES256', { extractable: true });
-const issuerJwk = { ...(await exportJWK(issuerKeys.publicKey)), alg: 'ES256', kid: 'issuer-1', use: 'sig' };
+import { expect, spyOn, test } from 'bun:test';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import type { BoardPageResponse, KernelClient } from '@rezics/client';
+import { RemovedPost } from '../src/threads/post-removed';
+import { loadBoardPageWithAuthors, loadThreadPageWithAuthors } from '../src/identity/page-loaders';
+import { threadHref } from '../src/threads/thread-href';
 
 type BoardResource = ReturnType<KernelClient['boards']>;
 type ThreadResource = ReturnType<KernelClient['threads']>;
@@ -27,7 +16,6 @@ type ThreadRead = Data<ThreadResource['get']>;
 type Threads = Data<BoardResource['threads']['get']>;
 type Posts = Data<ThreadResource['posts']['get']>;
 type Post = Posts['posts'][number];
-type Problem = NonNullable<Awaited<ReturnType<ThreadResource['get']>>['error']>['value'];
 
 const id = (n: number) => `0192f3a0-6c1e-7b2a-9d4e-${String(n).padStart(12, '0')}`;
 const metadata = {
@@ -36,8 +24,9 @@ const metadata = {
   securityRevision: '1',
   createdAt: '2026-01-01T00:00:00.000Z',
 } as const;
-const board: BoardRead = { board: { ...metadata, id: id(1), title: 'Reading room', availability: 'available' } };
-// A blocks snapshot exercises DocumentBody's heading, paragraph and link rendering.
+const board: BoardRead = {
+  board: { ...metadata, id: id(1), title: 'Reading room', availability: 'available' },
+};
 const body: NonNullable<Post['body']> = {
   version: 'rezics-document-v1',
   profile: 'blocks',
@@ -101,308 +90,339 @@ function thread(n: number, title: string): ThreadRead {
     },
   };
 }
+
 const first = thread(2, 'Zebra reading');
 const second = thread(3, 'Apple reading');
 const last = thread(4, 'Last reading');
 const erasedThread = thread(5, 'A quiet discussion');
-const erased: Post = { ...post(16, id(5)), availability: 'erased', body: null };
-const cursor = 'signed+page/next==';
-const calls: { method: string; path: string; cursor: string | null }[] = [];
-const events: string[] = [];
-let hold = false;
-let release: (() => void) | undefined;
-let gate: Promise<void> = Promise.resolve();
-const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store' } });
-const missing: Problem = {
-  type: 'https://rezics.com/problems/not_found',
-  title: 'Not Found',
-  status: 404,
-  code: 'not_found',
-  retryable: false,
-  effect_status: 'not_applicable',
-  request_id: randomUUID(),
-};
+const pageCursor = 'signed+page/next==';
+const account = { id: id(90), state: 'active', displayName: 'Reader', handle: 'reader' };
 
-// Discovery and signing keys copied from session.test.ts; these public reads need no token grant.
-const fake = Bun.serve({
-  port: 0,
-  hostname: '127.0.0.1',
-  async fetch(request) {
-    const url = new URL(request.url);
-    const issuer = `${url.origin}/auth`;
-    const tokenEndpoint = `${issuer}/token`;
-    if (url.pathname === '/auth/.well-known/openid-configuration')
-      return json({
-        issuer,
-        authorization_endpoint: `${issuer}/authorize`,
-        token_endpoint: tokenEndpoint,
-        jwks_uri: `${issuer}/jwks`,
-        revocation_endpoint: `${issuer}/revoke`,
-        end_session_endpoint: `${issuer}/end-session`,
-        response_types_supported: ['code'],
-        code_challenge_methods_supported: ['S256'],
-        id_token_signing_alg_values_supported: ['ES256'],
-        token_endpoint_auth_methods_supported: ['private_key_jwt'],
-        token_endpoint_auth_signing_alg_values_supported: ['ES256'],
-      });
-    if (url.pathname === '/auth/jwks') return json({ keys: [issuerJwk] });
-    if (!url.pathname.startsWith('/v1/')) return new Response(null, { status: 404 });
-    calls.push({ method: request.method, path: url.pathname, cursor: url.searchParams.get('cursor') });
-    events.push(`start ${url.pathname}`);
-    if (hold) await gate;
-    events.push(`answer ${url.pathname}`);
-    if (request.method !== 'GET') return json(missing, 404);
-    if (url.pathname === `/v1/boards/${id(1)}`) return json(board);
-    if (url.pathname === `/v1/boards/${id(1)}/threads`) {
-      const page: Threads =
-        url.searchParams.get('cursor') === cursor
-          ? { threads: [last.thread], next: null }
-          : { threads: [first.thread, second.thread], next: cursor };
-      return json(page);
-    }
-    for (const value of [first, second, last, erasedThread]) {
-      if (url.pathname === `/v1/threads/${value.thread.id}`) return json(value);
-      if (url.pathname === `/v1/threads/${value.thread.id}/posts`) {
-        const page: Posts =
-          value === erasedThread
-            ? { posts: [erased], next: null }
-            : url.searchParams.get('cursor') === cursor
-              ? { posts: [post(14)], next: null }
-              : { posts: [post(13), post(12)], next: cursor };
-        return json(page);
-      }
-    }
-    return Response.json(missing, { status: 404, headers: { 'content-type': 'application/problem+json' } });
-  },
-});
-
-function freePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as { port: number };
-      probe.close(() => resolve(port));
-    });
-  });
-}
-
-let child: ChildProcess | undefined;
-let started: Promise<string> | undefined;
-
-// The documented command, pointed at the fake through the environment it reads in development.
-function site(): Promise<string> {
-  started ??= (async () => {
-    const port = await freePort();
-    let output = '';
-    const keep = (chunk: Buffer) => {
-      output = (output + chunk.toString()).slice(-8000);
-    };
-    child = spawn('bun', ['run', 'dev', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
-      cwd: app,
-      detached: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        KERNEL_ORIGIN: fake.url.origin,
-        AUTH_ISSUER: `${fake.url.origin}/auth`,
-        WEBSITE_CLIENT_ID: clientId,
-        WEBSITE_CLIENT_KEY: JSON.stringify(clientJwk),
-        API_RESOURCE: resource,
-        WEBSITE_SCOPES: scopes.join(' '),
+function boardPage(
+  values: readonly ThreadRead['thread'][],
+  next: string | null = null,
+  currentBoard = board.board,
+): BoardPageResponse {
+  return {
+    board: currentBoard,
+    pinnedThreads: [],
+    threads: values.map((thread) => ({
+      thread,
+      target: { kind: 'thread', id: thread.id, boardId: thread.boardId },
+      authors: {
+        thread: {
+          state: 'available',
+          id: account.id,
+          kind: 'actor',
+          handle: account.handle,
+          displayName: account.displayName,
+          automated: false,
+        },
+        openingPost: {
+          state: 'available',
+          id: account.id,
+          kind: 'actor',
+          handle: account.handle,
+          displayName: account.displayName,
+          automated: false,
+        },
       },
-    });
-    child.stdout!.on('data', keep);
-    child.stderr!.on('data', keep);
-    const origin = `http://127.0.0.1:${port}`;
-    const deadline = Date.now() + 150_000;
-    for (;;) {
-      if (child.exitCode !== null) throw new Error(`dev server exited with ${child.exitCode}:\n${output}`);
-      try {
-        const response = await fetch(`${origin}/en`, { redirect: 'manual', signal: AbortSignal.timeout(60_000) });
-        if (response.status < 500) return origin;
-      } catch {}
-      if (Date.now() > deadline) throw new Error(`dev server did not serve /en in time:\n${output}`);
-      await Bun.sleep(500);
-    }
-  })();
-  return started;
+      media: { state: 'none', images: [] },
+      interaction: {
+        target: { kind: 'thread', id: thread.id },
+        counts: { state: 'unavailable' },
+        viewer: { state: 'not-applicable' },
+      },
+      comments: { state: 'unavailable' },
+      actions: { reply: 'allowed', react: 'allowed', share: 'available' },
+    })),
+    next,
+    rankRefreshedAt: null,
+    reactionsAsOf: null,
+    viewer: { participation: 'allowed' },
+    actions: { createThread: 'allowed' },
+  } as unknown as BoardPageResponse;
 }
 
-let browser: Browser | undefined;
-async function open(path: string): Promise<Page> {
-  const origin = await site();
-  browser ??= await chromium.launch();
-  const context = await browser.newContext({
-    viewport: { width: 1280, height: 860 },
-    reducedMotion: 'reduce',
-    javaScriptEnabled: false,
-  });
-  const page = await context.newPage();
-  await page.goto(`${origin}${path}`, { waitUntil: 'load' });
-  return page;
-}
-afterAll(async () => {
-  release?.();
-  await browser?.close();
-  fake.stop(true);
-  if (child?.pid)
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {}
+test('a protected board page uses the member credential for its single opening read', async () => {
+  const realmId = id(91);
+  const authorization = 'Bearer realm-member';
+  const reads: { path: string; authorization: string | undefined }[] = [];
+  const memberThread = { id: id(92), authorId: id(90) };
+  const fakeClient = {
+    boards: () => ({
+      page: {
+        get: async (options?: { query?: Record<string, string>; headers?: { authorization?: string } }) => {
+          reads.push({ path: '/v1/boards/member/page', authorization: options?.headers?.authorization });
+          expect(options?.query).toEqual({ sort: 'active' });
+          return { data: boardPage([memberThread as ThreadRead['thread']], null, { ...board.board, realmId }) };
+        },
+      },
+    }),
+  } as unknown as KernelClient;
+
+  const page = await loadBoardPageWithAuthors(fakeClient, { id: id(1) }, authorization);
+
+  expect(page.board).toMatchObject({ id: id(1), realmId });
+  expect(page.threads.threads).toEqual([memberThread]);
+  expect(page.authors?.[id(90)]).toMatchObject({ state: 'available', id: id(90), displayName: 'Reader' });
+  expect(reads).toEqual([{ path: '/v1/boards/member/page', authorization }]);
 });
-const read = (path: string, next: string | null = null) => ({ method: 'GET', path, cursor: next });
-const moreLink = (page: Page) => page.locator('main a[href*="cursor="]');
 
-// Keep the board's kernel order and use the list envelope cursor for the next page.
-test(
-  "a board page lists its threads in the kernel's order and pages with the cursor",
-  async () => {
-    calls.length = 0;
-    const page = await open(`/en/boards/${id(1)}`);
-    try {
-      expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe('Reading room');
-      expect(calls).toContainEqual(read(`/v1/boards/${id(1)}`));
-      expect(calls).toContainEqual(read(`/v1/boards/${id(1)}/threads`));
-      const links = page.locator('main a[href*="/threads/"]');
-      expect(await links.allTextContents()).toEqual(['Zebra reading', 'Apple reading']);
-      expect(await links.evaluateAll((nodes) => nodes.map((node) => node.getAttribute('href')))).toEqual([
-        `/en/threads/${id(2)}`,
-        `/en/threads/${id(3)}`,
-      ]);
-      const more = moreLink(page);
-      expect(await more.count()).toBe(1);
-      const target = new URL((await more.getAttribute('href'))!, page.url());
-      expect(target.pathname).toBe(`/en/boards/${id(1)}`);
-      expect(target.searchParams.get('cursor')).toBe(cursor);
-      calls.length = 0;
-      await more.click();
-      expect(await links.allTextContents()).toEqual(['Last reading']);
-      expect(calls).toContainEqual(read(`/v1/boards/${id(1)}/threads`, cursor));
-      expect(await more.count()).toBe(0);
-    } finally {
-      await page.context().close();
-    }
-  },
-  timeout,
-);
+test('the Board reader retains per-card count, freshness, and action witnesses without enriching the page', async () => {
+  const base = boardPage([first.thread]);
+  const populatedCard = {
+    ...base.threads[0]!,
+    interaction: {
+      target: { kind: 'thread' as const, id: first.thread.id },
+      counts: { state: 'as-of' as const, values: { like: 3 }, source: { epoch: 2, position: '12' } },
+      viewer: { state: 'current' as const, reaction: null },
+    },
+    comments: {
+      state: 'current' as const,
+      cohort: 'public' as const,
+      count: { kind: 'lower-bound' as const, value: 4 },
+      lastActivityAt: '2026-11-04T00:00:00.000Z',
+      source: { epoch: 2, position: '10' },
+    },
+  };
+  const response = { ...base, threads: [populatedCard] } as unknown as BoardPageResponse;
+  const requests: string[] = [];
+  const fakeClient = {
+    boards: () => ({
+      page: {
+        get: async () => {
+          requests.push('page');
+          return { data: response };
+        },
+      },
+    }),
+  } as unknown as KernelClient;
 
-// Keep post order, render each body, and page with the list envelope cursor.
-test(
-  'a thread page shows its posts in order with their rendered bodies',
-  async () => {
-    calls.length = 0;
-    const page = await open(`/en/threads/${id(2)}`);
-    try {
-      expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe('Zebra reading');
-      expect(calls).toContainEqual(read(`/v1/threads/${id(2)}`));
-      expect(calls).toContainEqual(read(`/v1/threads/${id(2)}/posts`));
-      // Distinct body text checks post order without prescribing the page's wrapper markup.
-      expect(
-        (await page.locator('main p').allTextContents()).filter((text) => text.startsWith('Contribution ')),
-      ).toEqual(['Contribution 13', 'Contribution 12']);
-      const headings = page.getByRole('heading', { name: 'A close reading', exact: true });
-      expect(await headings.count()).toBe(2);
-      expect(await page.locator('main p').allTextContents()).toContain('Read the original at the library');
-      const links = page.getByRole('link', { name: 'the library', exact: true });
-      expect(await links.count()).toBe(2);
-      for (const link of await links.all()) expect(await link.getAttribute('href')).toBe('https://example.org/library');
-      const html = await page.locator('main').innerHTML();
-      expect(html).toContain('<h2');
-      expect(html).toContain('<p');
-      const more = moreLink(page);
-      expect(await more.count()).toBe(1);
-      const target = new URL((await more.getAttribute('href'))!, page.url());
-      expect(target.pathname).toBe(`/en/threads/${id(2)}`);
-      expect(target.searchParams.get('cursor')).toBe(cursor);
-      calls.length = 0;
-      await more.click();
-      expect(await headings.count()).toBe(1);
-      expect(await page.locator('main').innerText()).toContain('Contribution 14');
-      expect(await page.locator('main').innerText()).not.toContain('Contribution 13');
-      expect(calls).toContainEqual(read(`/v1/threads/${id(2)}/posts`, cursor));
-      expect(await more.count()).toBe(0);
-    } finally {
-      await page.context().close();
-    }
-  },
-  timeout,
-);
+  const page = await loadBoardPageWithAuthors(fakeClient, { id: id(1) });
 
-// Erased posts show a localized note in place of the document body.
-test(
-  'an erased post says it was erased and shows no body',
-  async () => {
-    for (const [locale, note] of [
-      ['en', /removed by its author/i],
-      ['ja', /消去|削除/],
-    ] as const) {
-      const page = await open(`/${locale}/threads/${id(5)}`);
-      try {
-        expect(await page.locator('main').innerText()).toMatch(note);
-        expect(await page.getByRole('heading', { name: 'A close reading' }).count()).toBe(0);
-        expect(await page.getByRole('link', { name: 'the library' }).count()).toBe(0);
-        expect(await page.locator('main').innerText()).not.toContain('Read the original');
-        expect(await moreLink(page).count()).toBe(0);
-      } finally {
-        await page.context().close();
-      }
-    }
-  },
-  timeout,
-);
+  expect(page.openingCards[first.thread.id]).toBe(populatedCard);
+  expect(page.openingCards[first.thread.id]?.comments).toEqual(populatedCard.comments);
+  expect(page.openingCards[first.thread.id]?.interaction).toEqual(populatedCard.interaction);
+  expect(page.actions).toEqual(response.actions);
+  expect(requests).toEqual(['page']);
+});
 
-// Kernel 404s use the site's not-found page and status.
-test(
-  "a missing board or thread answers the site's not-found page with 404",
-  async () => {
-    const origin = await site();
-    for (const plural of ['boards', 'threads']) {
-      calls.length = 0;
-      const response = await fetch(`${origin}/en/${plural}/${id(99)}`);
-      expect(response.status).toBe(404);
-      // A router miss alone cannot establish that the page handles the kernel's not-found response.
-      expect(calls).toContainEqual(read(`/v1/${plural}/${id(99)}`));
-      const page = await open(`/en/${plural}/${id(99)}`);
-      try {
-        expect(await page.getByRole('heading', { level: 1 }).textContent()).toBe('Page not found');
-        expect(await page.locator('main').innerText()).toContain('The page you requested could not be found.');
-      } finally {
-        await page.context().close();
-      }
-    }
-  },
-  timeout,
-);
+test('a board page preserves kernel order and follows the emitted cursor', async () => {
+  const requests: { path: string; query?: Record<string, string>; ids?: string }[] = [];
+  let pageNumber = 0;
+  const fakeClient = {
+    boards: () => ({
+      page: {
+        get: async (options?: { query?: Record<string, string> }) => {
+          requests.push({ path: `/v1/boards/${id(1)}/page`, ...(options?.query ? { query: options.query } : {}) });
+          const pages = [boardPage([first.thread, second.thread], pageCursor), boardPage([last.thread])];
+          return { data: pages[pageNumber++] };
+        },
+      },
+    }),
+  } as unknown as KernelClient;
 
-// Start thread and post-page reads together without per-post reads.
-test(
-  'a thread page makes at most two kernel reads, issued together',
-  async () => {
-    const origin = await site();
-    calls.length = 0;
-    events.length = 0;
-    gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    hold = true;
-    // A sequential implementation must finish too, so release after a bounded observation window.
-    const fallback = setTimeout(() => release?.(), 1500);
-    try {
-      const response = await fetch(`${origin}/en/threads/${id(2)}`);
-      await response.text();
-      expect(calls.length).toBeLessThanOrEqual(2);
-      expect(calls).toEqual(expect.arrayContaining([read(`/v1/threads/${id(2)}`), read(`/v1/threads/${id(2)}/posts`)]));
-      expect(events.slice(0, 2).sort()).toEqual(
-        [`start /v1/threads/${id(2)}`, `start /v1/threads/${id(2)}/posts`].sort(),
-      );
-      expect(events.slice(2).every((event) => event.startsWith('answer '))).toBe(true);
-      expect(response.status).toBe(200);
-    } finally {
-      clearTimeout(fallback);
-      release?.();
-      hold = false;
+  const firstPage = await loadBoardPageWithAuthors(fakeClient, { id: id(1), sort: 'new' });
+  const secondPage = await loadBoardPageWithAuthors(fakeClient, {
+    id: id(1),
+    cursor: firstPage.threads.next ?? undefined,
+    sort: 'new',
+  });
+
+  expect(firstPage.threads.threads.map((value) => value.title)).toEqual(['Zebra reading', 'Apple reading']);
+  expect(firstPage.threads.next).toBe(pageCursor);
+  expect(secondPage.threads.threads.map((value) => value.title)).toEqual(['Last reading']);
+  expect(secondPage.threads.next).toBeNull();
+  expect(requests).toEqual([
+    { path: `/v1/boards/${id(1)}/page`, query: { sort: 'new' } },
+    { path: `/v1/boards/${id(1)}/page`, query: { cursor: pageCursor, sort: 'new' } },
+  ]);
+});
+
+test('a thread page reads native posts in order with one batched byline read and follows its cursor', async () => {
+  const requests: { path: string; query?: Record<string, string>; ids?: string }[] = [];
+  const pages: Posts[] = [
+    { posts: [post(13), post(12)], next: pageCursor },
+    { posts: [post(14)], next: null },
+  ];
+  let pageNumber = 0;
+  const fakeClient = {
+    threads: () => ({
+      get: async () => {
+        requests.push({ path: `/v1/threads/${id(2)}` });
+        return { data: first };
+      },
+      posts: {
+        get: async (options?: { query?: Record<string, string> }) => {
+          requests.push({ path: `/v1/threads/${id(2)}/posts`, ...(options?.query ? { query: options.query } : {}) });
+          return { data: pages[pageNumber++] };
+        },
+      },
+    }),
+    boards: () => ({ get: async () => ({ data: board }) }),
+    accounts: {
+      get: async (options?: { query?: { ids?: string } }) => {
+        requests.push({ path: '/v1/accounts', ids: options?.query?.ids });
+        return { data: { accounts: [account] } };
+      },
+    },
+  } as unknown as KernelClient;
+  const request = new Request('https://rezics.test/en/threads/thread');
+  const verification = {} as never;
+
+  const firstPage = await loadThreadPageWithAuthors(fakeClient, request, {}, { id: id(2) }, verification, 'anonymous');
+  const secondPage = await loadThreadPageWithAuthors(
+    fakeClient,
+    request,
+    {},
+    { id: id(2), cursor: firstPage.posts.next ?? undefined },
+    verification,
+    'anonymous',
+  );
+
+  expect('redirect' in firstPage).toBe(false);
+  if ('redirect' in firstPage) return;
+  expect(firstPage.thread.title).toBe('Zebra reading');
+  expect(firstPage.posts.posts.map((value) => value.id)).toEqual([id(13), id(12)]);
+  expect(firstPage.posts.posts.map((value) => value.body?.doc.content?.at(-1)?.content?.[0]?.text)).toEqual([
+    'Contribution 13',
+    'Contribution 12',
+  ]);
+  expect(firstPage.posts.next).toBe(pageCursor);
+  expect(secondPage.posts.posts.map((value) => value.id)).toEqual([id(14)]);
+  expect(secondPage.posts.next).toBeNull();
+  expect(requests.filter(({ path }) => path.endsWith('/posts'))).toEqual([
+    { path: `/v1/threads/${id(2)}/posts` },
+    { path: `/v1/threads/${id(2)}/posts`, query: { cursor: pageCursor } },
+  ]);
+  expect(requests.filter(({ path }) => path === '/v1/accounts')).toHaveLength(2);
+  expect(firstPage.authors?.[id(90)]).toEqual(account);
+});
+
+test('an erased post has no body, byline or restore access from an arbitrary callback', async () => {
+  const { authorId: _hiddenAuthor, ...publicPostFields } = post(16, id(5));
+  const erased: Post = {
+    ...publicPostFields,
+    availability: 'erased',
+    removed: true,
+    sha256: null,
+    body: null,
+  } as Post;
+  const requests: { path: string; ids?: string }[] = [];
+  const fakeClient = {
+    threads: () => ({
+      get: async () => ({ data: erasedThread }),
+      posts: { get: async () => ({ data: { posts: [erased], next: null } }) },
+    }),
+    boards: () => ({ get: async () => ({ data: board }) }),
+    accounts: {
+      get: async (options?: { query?: { ids?: string } }) => {
+        requests.push({ path: '/v1/accounts', ids: options?.query?.ids });
+        return { data: { accounts: [account] } };
+      },
+    },
+  } as unknown as KernelClient;
+  const page = await loadThreadPageWithAuthors(
+    fakeClient,
+    new Request('https://rezics.test/en/threads/quiet'),
+    {},
+    { id: id(5) },
+    {} as never,
+    'anonymous',
+  );
+
+  expect(page.posts.posts[0]).toMatchObject({ availability: 'erased', removed: true, body: null });
+  expect(requests).toEqual([{ path: '/v1/accounts', ids: id(90) }]);
+  const markup = renderToStaticMarkup(
+    createElement(RemovedPost, {
+      post: page.posts.posts[0]!,
+      authors: page.authors,
+      now: '2026-02-01T00:00:00.000Z',
+      anchorId: id(16),
+      itemRef: null,
+      menuButton: null,
+      onRestore: () => undefined,
+      onCopyLink: () => undefined,
+    }),
+  );
+  expect(markup).toContain('This post was deleted.');
+  expect(markup).not.toContain('>Restore</button>');
+  expect(markup).not.toContain('Removed by its author');
+  expect(markup).not.toContain('Contribution 16');
+  expect(markup).not.toContain('reader');
+});
+
+test('only a self-deleted owner post with the original unexpired server deadline offers restore', () => {
+  const now = '2026-01-15T00:00:00.000Z';
+  const deadline = '2026-01-31T00:00:00.000Z';
+  const clock = spyOn(Date, 'now').mockReturnValue(new Date(now).getTime());
+  const erased: Post = {
+    ...post(16, id(5)),
+    availability: 'erased',
+    removed: true,
+    sha256: null,
+    body: null,
+    restorableUntil: deadline,
+  };
+  const render = (entry: Post, viewerId?: string, restore = true) =>
+    renderToStaticMarkup(
+      createElement(RemovedPost, {
+        post: entry,
+        authors: { [account.id]: account },
+        now,
+        ...(viewerId === undefined ? {} : { viewerId }),
+        anchorId: id(16),
+        itemRef: null,
+        menuButton: null,
+        ...(restore ? { onRestore: () => undefined } : {}),
+        onCopyLink: () => undefined,
+      }),
+    );
+  try {
+    const owned = render(erased, account.id);
+    expect(owned).toContain('>Restore</button>');
+    expect(owned).toContain(`dateTime="${deadline}"`);
+    // Even an owner tombstone must not recover the hidden body or identity from the author batch.
+    for (const html of [
+      owned,
+      render(erased),
+      render(erased, id(91)),
+      render(erased, account.id, false),
+      render({ ...erased, restorableUntil: now }, account.id),
+      render({ ...erased, restorableUntil: '2026-01-14T23:59:59.999Z' }, account.id),
+      render({ ...erased, restorableUntil: 'invalid' }, account.id),
+    ]) {
+      expect(html).not.toContain('Contribution 16');
+      expect(html).not.toContain('reader');
+      expect(html).not.toContain('Reader');
+      if (html !== owned) expect(html).not.toContain('>Restore</button>');
     }
-  },
-  timeout,
-);
+    const { restorableUntil: _deadline, ...permanent } = erased;
+    expect(render(permanent, account.id)).not.toContain('>Restore</button>');
+    const { authorId: _author, ...unknownOwner } = erased;
+    expect(render(unknownOwner as Post, account.id)).not.toContain('>Restore</button>');
+  } finally {
+    clock.mockRestore();
+  }
+});
+
+test('kernel 404s stay on the not-found boundary for board and thread route loaders', async () => {
+  const missing = { error: { value: { code: 'not_found' } }, status: 404 };
+  const fakeClient = {
+    boards: () => ({ page: { get: async () => missing } }),
+    threads: () => ({ get: async () => missing, posts: { get: async () => missing } }),
+  } as unknown as KernelClient;
+
+  await expect(loadBoardPageWithAuthors(fakeClient, { id: id(99) })).rejects.toBeTruthy();
+  await expect(
+    loadThreadPageWithAuthors(
+      fakeClient,
+      new Request(`https://rezics.test/en${threadHref({ id: id(99), title: 'Missing' })}`),
+      {},
+      { id: id(99) },
+      {} as never,
+      'anonymous',
+    ),
+  ).rejects.toBeTruthy();
+});

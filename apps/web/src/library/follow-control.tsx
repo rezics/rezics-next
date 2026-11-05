@@ -1,0 +1,436 @@
+import { Menu } from '@rezics/ui/menu';
+import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
+import { EllipsisIcon } from 'lucide-react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { locales } from '../paraglide/runtime.js';
+export type { FollowState, FollowWriteInput, FollowWriteResult } from './follow-records';
+import { m } from '../paraglide/messages.js';
+import type { FollowState, FollowWriteInput, FollowWriteResult } from './follow-records';
+import { createFollowIntent, type FollowIntentOwner } from './mine-following-intent';
+
+/** Removal is independent of create and of the ability to read the target or the own edge. */
+export function followAction(state: FollowState, canFollow: boolean, canRemove: boolean): 'follow' | 'remove' | null {
+  if (state.state === 'signed-out') return null;
+  if (state.state !== 'ready') return canRemove ? 'remove' : null;
+  return state.following ? (canRemove ? 'remove' : null) : canFollow ? 'follow' : null;
+}
+
+export type FollowControlProps = {
+  locale?: (typeof locales)[number];
+  labelContext?: string;
+  targetId: string;
+  initial: FollowState;
+  canFollow: boolean;
+  canRemove: boolean;
+  ready: boolean;
+  write: (input: FollowWriteInput) => Promise<FollowWriteResult>;
+  idempotencyKey?: string;
+  menuTitle?: string;
+  onChange?: (following: boolean) => void;
+  onRemovalUnsettledChange?: (unsettled: boolean) => void;
+  onRetry?: () => void;
+  /** Explicit, permitted own-edge or current-list review; never a target read or a write. */
+  onReview?: () => Promise<FollowState | null>;
+  /** Routed controls bind callbacks to actual mounted viewer and directional write admission. */
+  isCurrent?: (following: boolean) => boolean;
+  readLifetime?: string | null;
+  onAccepted?: (following: boolean, input: FollowWriteInput) => boolean;
+  /** A mounted visit can retain the existing command owner while replacing row presentation. */
+  intentOwner?: FollowIntentOwner;
+};
+
+/** The same presenter serves a target button and a Following row's responsive menu. */
+export function FollowControl(props: FollowControlProps) {
+  const create = () => ({
+    targetId: props.targetId,
+    active: true,
+    mounted: false,
+    put: { active: true, allowed: false },
+    remove: { active: true, allowed: false },
+  });
+  const ref = useRef(create());
+  if (ref.current.targetId !== props.targetId) {
+    ref.current.active = false;
+    ref.current = create();
+  }
+  const origin = ref.current;
+  for (const [name, allowed] of [
+    ['put', props.ready && props.initial.state !== 'signed-out' && props.canFollow],
+    ['remove', props.ready && props.initial.state !== 'signed-out' && props.canRemove],
+  ] as const) {
+    if (origin[name].allowed !== allowed) {
+      origin[name].active = false;
+      origin[name] = { active: true, allowed };
+    }
+  }
+  const { put, remove } = origin;
+  useLayoutEffect(() => {
+    if (origin.active) origin.mounted = true;
+    return () => {
+      origin.mounted = false;
+    };
+  }, [origin]);
+  return (
+    <FollowControlState
+      key={props.targetId}
+      {...props}
+      {...(props.onRetry
+        ? {
+            onRetry: () => {
+              if (origin.active && origin.mounted) props.onRetry?.();
+            },
+          }
+        : {})}
+      {...(props.onReview
+        ? {
+            onReview: async () => {
+              if (!origin.active || !origin.mounted) return null;
+              const result = await props.onReview?.();
+              return origin.active && origin.mounted ? (result ?? null) : null;
+            },
+          }
+        : {})}
+      {...(props.onRemovalUnsettledChange
+        ? {
+            onRemovalUnsettledChange: (unsettled: boolean) => {
+              if (origin.active && origin.mounted) props.onRemovalUnsettledChange?.(unsettled);
+            },
+          }
+        : {})}
+      isCurrent={(next) =>
+        origin.active &&
+        origin.mounted &&
+        (next ? put : remove).active &&
+        (next ? put : remove).allowed &&
+        (props.isCurrent?.(next) ?? true)
+      }
+    />
+  );
+}
+
+function FollowControlState({
+  locale,
+  labelContext,
+  targetId,
+  initial,
+  canFollow,
+  canRemove,
+  ready,
+  write,
+  idempotencyKey,
+  menuTitle,
+  onChange,
+  onRemovalUnsettledChange,
+  onRetry,
+  onReview,
+  isCurrent,
+  readLifetime,
+  onAccepted,
+  intentOwner,
+}: FollowControlProps) {
+  const options = locale ? { locale } : {};
+  const accessibleLabel = (label: string) => (labelContext ? `${label}: ${labelContext}` : label);
+  const [current, setCurrent] = useState(initial);
+  const [pendingState, setPending] = useState(false);
+  const localIntent = useRef<FollowIntentOwner | null>(null);
+  if (!intentOwner && !localIntent.current) localIntent.current = createFollowIntent();
+  const intent = intentOwner ?? localIntent.current!;
+  const [failure, setFailure] = useState<Exclude<FollowWriteResult, { ok: true }>['reason'] | null>(
+    intent.conflicted ? 'conflict' : null,
+  );
+  const [removed, setRemoved] = useState(false);
+  const conflict = useRef(intent.conflicted);
+  const review = useRef<{ readLifetime: FollowControlProps['readLifetime'] } | null>(null);
+  const [reviewState, setReviewState] = useState<'idle' | 'pending' | 'failed' | 'ready'>('idle');
+  const inFlight = useRef<{
+    input: FollowWriteInput;
+    isCurrent: FollowControlProps['isCurrent'];
+    readLifetime: FollowControlProps['readLifetime'];
+    onAccepted: FollowControlProps['onAccepted'];
+    onChange: FollowControlProps['onChange'];
+  } | null>(null);
+  const committed = useRef<Pick<
+    FollowControlProps,
+    | 'ready'
+    | 'canFollow'
+    | 'canRemove'
+    | 'write'
+    | 'onChange'
+    | 'onRemovalUnsettledChange'
+    | 'isCurrent'
+    | 'readLifetime'
+    | 'onAccepted'
+  > | null>(null);
+  const runningCurrent = (
+    running: NonNullable<typeof inFlight.current>,
+    currentCheck = committed.current?.isCurrent ?? running.isCurrent,
+  ) => !currentCheck || currentCheck(running.input.following);
+  const reportedRemoval = useRef(false);
+  const signedOut = initial.state === 'signed-out';
+  const following = initial.state === 'ready' ? initial.following : undefined;
+  const initialKey = JSON.stringify([readLifetime, initial.state, following]);
+  const [observed, setObserved] = useState(initialKey);
+  if (observed !== initialKey) {
+    // Adjust before commit: a retired/unavailable read must never leave a ready frame behind.
+    setObserved(initialKey);
+    setCurrent(initial);
+    setRemoved(false);
+  }
+  if (review.current && (!onReview || signedOut || review.current.readLifetime !== readLifetime)) {
+    review.current = null;
+    setReviewState('failed');
+  }
+  const running = inFlight.current;
+  if (
+    running &&
+    (!ready || signedOut || !(running.input.following ? canFollow : canRemove) || !runningCurrent(running, isCurrent))
+  ) {
+    inFlight.current = null;
+    setPending(false);
+    setFailure('unavailable');
+  }
+  // Callback identities may refresh without starting a new request lifetime.
+  useLayoutEffect(() => {
+    committed.current = {
+      ready: ready && !signedOut,
+      canFollow,
+      canRemove,
+      write,
+      ...(readLifetime !== undefined ? { readLifetime } : {}),
+      ...(onChange ? { onChange } : {}),
+      ...(onRemovalUnsettledChange ? { onRemovalUnsettledChange } : {}),
+      ...(isCurrent ? { isCurrent } : {}),
+      ...(onAccepted ? { onAccepted } : {}),
+    };
+  });
+  useLayoutEffect(
+    () => () => {
+      committed.current = null;
+      inFlight.current = null;
+      review.current = null;
+    },
+    [],
+  );
+  const pending = pendingState && inFlight.current !== null;
+  const action = signedOut
+    ? null
+    : intent.current
+      ? intent.current.following
+        ? canFollow
+          ? 'follow'
+          : null
+        : canRemove
+          ? 'remove'
+          : null
+      : followAction(current, canFollow, canRemove);
+  const reviewing = reviewState === 'pending';
+  const disabled = !ready || pending || conflict.current || reviewing;
+  function recover(input: FollowWriteInput, edge: FollowState) {
+    if (!committed.current || !conflict.current || intent.current !== input) return;
+    intent.reject(input);
+    conflict.current = false;
+    if (!input.following) reportRemovalUnsettled(false);
+    setFailure(null);
+    setCurrent(edge);
+    setRemoved(false);
+  }
+  function reportRemovalUnsettled(unsettled: boolean) {
+    if (reportedRemoval.current === unsettled) return;
+    reportedRemoval.current = unsettled;
+    committed.current?.onRemovalUnsettledChange?.(unsettled);
+  }
+  async function reviewConflict() {
+    const input = intent.current;
+    if (!input || !conflict.current || !onReview || review.current) return;
+    const request = { readLifetime };
+    review.current = request;
+    setReviewState('pending');
+    let edge: FollowState | null = null;
+    try {
+      edge = await onReview();
+    } catch {
+      // Failed review leaves the rejected command locked; it supplies no edge knowledge.
+    }
+    if (review.current !== request || !committed.current) return;
+    review.current = null;
+    if (edge?.state === 'ready') {
+      recover(input, edge);
+      setReviewState('ready');
+    } else setReviewState('failed');
+  }
+  async function submit() {
+    const live = committed.current;
+    if (!live?.ready || disabled || conflict.current || inFlight.current || !action) return;
+    const next = intent.current?.following ?? action === 'follow';
+    if (
+      !(next ? live.canFollow : live.canRemove) ||
+      (isCurrent && !isCurrent(next)) ||
+      (live.isCurrent && !live.isCurrent(next))
+    )
+      return;
+    const input = intent.begin(targetId, next, idempotencyKey);
+    if (!next) reportRemovalUnsettled(true);
+    const running = {
+      input,
+      isCurrent: live.isCurrent,
+      readLifetime: live.readLifetime,
+      onAccepted: live.onAccepted,
+      onChange: live.onChange,
+    };
+    inFlight.current = running;
+    setPending(true);
+    setFailure(null);
+    setReviewState('idle');
+    if (current.state === 'pending') setCurrent({ state: 'unavailable' });
+    let result: FollowWriteResult;
+    try {
+      result = await live.write(input);
+    } catch {
+      result = { ok: false, reason: 'unavailable' };
+    }
+    if (inFlight.current !== running || !runningCurrent(running)) return;
+    try {
+      if (result.ok) {
+        intent.confirm(input);
+        if (!input.following) reportRemovalUnsettled(false);
+        const onAccepted = committed.current?.onAccepted ?? running.onAccepted;
+        const accepted = onAccepted?.(result.following, input) ?? true;
+        if (!runningCurrent(running)) return;
+        if (accepted && committed.current?.readLifetime === running.readLifetime) {
+          setCurrent({ state: 'ready', following: result.following });
+          setRemoved(!result.following);
+        }
+        if (!onAccepted) (committed.current?.onChange ?? running.onChange)?.(result.following);
+      } else {
+        conflict.current = result.reason === 'conflict';
+        if (conflict.current) intent.markConflicted(input);
+        setFailure(result.reason);
+      }
+    } finally {
+      if (inFlight.current === running && runningCurrent(running)) {
+        inFlight.current = null;
+        setPending(false);
+      }
+    }
+  }
+  const label = action === 'follow' ? m.library_follow({}, options) : m.library_follow_unfollow({}, options);
+  const error =
+    failure === 'conflict'
+      ? m.library_follow_conflict({}, options)
+      : failure === 'forbidden' || failure === 'unauthorized' || failure === 'closed'
+        ? m.library_follow_forbidden({}, options)
+        : failure
+          ? m.error_message({}, options)
+          : '';
+  return (
+    <div
+      data-slot="follow-control"
+      className="flex min-w-0 flex-wrap items-center gap-2"
+      aria-busy={pending || reviewing}
+    >
+      {current.state === 'ready' && current.following && !menuTitle ? (
+        <span className="text-sm text-muted-foreground">{m.library_following({}, options)}</span>
+      ) : null}
+      {action ? (
+        menuTitle ? (
+          <Menu
+            title={menuTitle}
+            trigger={
+              <Button variant="ghost" size="icon-sm" aria-label={menuTitle} disabled={disabled}>
+                <EllipsisIcon aria-hidden="true" />
+              </Button>
+            }
+            entries={[{ type: 'item', label, disabled, onSelect: () => void submit() }]}
+          />
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled}
+            aria-label={accessibleLabel(label)}
+            onClick={() => void submit()}
+          >
+            {label}
+          </Button>
+        )
+      ) : null}
+      {pending ? (
+        <p role="status" className="text-sm">
+          {m.library_follow_pending({}, options)}
+        </p>
+      ) : current.state === 'pending' ? (
+        <p role="status" className="text-sm">
+          {m.library_follow_loading({}, options)}
+        </p>
+      ) : null}
+      {current.state !== 'ready' && current.state !== 'pending' && current.state !== 'signed-out' ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.library_follow_unavailable({}, options)}
+        </p>
+      ) : null}
+      {conflict.current ? (
+        <>
+          {onReview ? (
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={reviewing}
+              aria-label={accessibleLabel(m.library_follow_conflict_recovery_review({}, options))}
+              onClick={() => void reviewConflict()}
+            >
+              {m.library_follow_conflict_recovery_review({}, options)}
+            </Button>
+          ) : null}
+          {!onReview || reviewState === 'failed' ? (
+            <>
+              <p role="status" className="text-sm text-muted-foreground">
+                {m.library_follow_conflict_recovery_unavailable({}, options)}
+              </p>
+              {canRemove ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  aria-label={accessibleLabel(m.library_follow_conflict_recovery_remove({}, options))}
+                  disabled={reviewing}
+                  onClick={() => {
+                    if (intent.current) recover(intent.current, { state: 'unavailable' });
+                    setReviewState('idle');
+                  }}
+                >
+                  {m.library_follow_conflict_recovery_remove({}, options)}
+                </Button>
+              ) : (
+                <a
+                  href=""
+                  aria-label={accessibleLabel(m.library_follow_conflict_recovery_reload({}, options))}
+                  className={buttonVariants({ variant: 'ghost' })}
+                >
+                  {m.library_follow_conflict_recovery_reload({}, options)}
+                </a>
+              )}
+            </>
+          ) : null}
+        </>
+      ) : onRetry && current.state !== 'ready' && current.state !== 'pending' ? (
+        <Button type="button" variant="ghost" disabled={pending} onClick={onRetry}>
+          {m.library_follow_retry({}, options)}
+        </Button>
+      ) : null}
+      {reviewState === 'ready' ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.library_follow_conflict_recovery_ready({}, options)}
+        </p>
+      ) : null}
+      {error ? (
+        <p role="alert" className="text-sm">
+          {error}
+        </p>
+      ) : null}
+      {removed ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {m.library_follow_removed({}, options)}
+        </p>
+      ) : null}
+    </div>
+  );
+}

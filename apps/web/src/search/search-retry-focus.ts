@@ -1,0 +1,147 @@
+import { useEffect, useLayoutEffect as useBrowserLayoutEffect, useRef, useState } from 'react';
+
+const useFocusLayoutEffect = typeof document === 'undefined' ? useEffect : useBrowserLayoutEffect;
+
+export type SearchRetryOwner = {
+  scope: string;
+  locale: string;
+  session: string | null;
+  checkpoint?: string | undefined;
+  observation?: object | undefined;
+  reader?: string | undefined;
+};
+
+export function searchRetryOwnerCurrent(pending: SearchRetryOwner, current: SearchRetryOwner): boolean {
+  return (
+    pending.scope === current.scope &&
+    pending.locale === current.locale &&
+    pending.session === current.session &&
+    pending.checkpoint === current.checkpoint &&
+    pending.observation === current.observation &&
+    pending.reader === current.reader
+  );
+}
+
+type PendingRetryFocus = {
+  owner: SearchRetryOwner;
+  source: HTMLButtonElement;
+  moved: boolean;
+  retrying: boolean;
+};
+
+function searchRetryScopeCurrent(pending: SearchRetryOwner, current: SearchRetryOwner): boolean {
+  return (
+    pending.scope === current.scope &&
+    pending.locale === current.locale &&
+    pending.session === current.session &&
+    pending.reader === current.reader
+  );
+}
+
+function fallbackFocus(active: Element | null, source: HTMLButtonElement): boolean {
+  const document = source.ownerDocument;
+  return active === source || active === document.body || active === document.documentElement;
+}
+
+/** Restore a surviving Retry, otherwise the named result/recovery region of the same owner. */
+export function searchRetryFocusTarget({
+  pending,
+  current,
+  settled,
+  active,
+  retry,
+  region,
+}: {
+  pending: PendingRetryFocus | null;
+  current: SearchRetryOwner;
+  settled: boolean;
+  active: Element | null;
+  retry: HTMLElement | null;
+  region: HTMLElement | null;
+}): HTMLElement | null {
+  if (!pending || !settled || pending.moved || !searchRetryOwnerCurrent(pending.owner, current)) return null;
+  if (!fallbackFocus(active, pending.source)) return null;
+  if (retry?.isConnected) return retry;
+  return region?.isConnected ? region : null;
+}
+
+export function useSearchRetryFocus(current: SearchRetryOwner, settled: boolean) {
+  const [generation, setGeneration] = useState(0);
+  const regionRef = useRef<HTMLElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
+  const pending = useRef<(PendingRetryFocus & { document: Document; onFocusIn: (event: FocusEvent) => void }) | null>(
+    null,
+  );
+
+  function clear() {
+    const request = pending.current;
+    if (!request) return;
+    request.document.removeEventListener('focusin', request.onFocusIn, true);
+    pending.current = null;
+  }
+
+  useEffect(() => () => clear(), []);
+  useFocusLayoutEffect(() => {
+    const request = pending.current;
+    if (!request) return;
+    if (!searchRetryScopeCurrent(request.owner, current)) {
+      clear();
+      return;
+    }
+    if (!settled) {
+      request.retrying = true;
+      return;
+    }
+    if (!searchRetryOwnerCurrent(request.owner, current)) {
+      if (!request.retrying) {
+        clear();
+        return;
+      }
+      request.owner = { ...current };
+    }
+    const target = searchRetryFocusTarget({
+      pending: request,
+      current,
+      settled: true,
+      active: request.document.activeElement,
+      retry: retryRef.current,
+      region: regionRef.current,
+    });
+    clear();
+    target?.focus();
+  }, [
+    current.scope,
+    current.locale,
+    current.session,
+    current.checkpoint,
+    current.observation,
+    current.reader,
+    settled,
+    generation,
+  ]);
+
+  return {
+    regionRef,
+    retryRef,
+    captureRetryFocus(source: HTMLButtonElement, settleCurrent = false) {
+      if (source.ownerDocument.activeElement !== source) return;
+      clear();
+      const document = source.ownerDocument;
+      const request = {
+        owner: { ...current },
+        source,
+        moved: false,
+        retrying: false,
+        document,
+        onFocusIn(event: FocusEvent) {
+          const target = event.target;
+          if (target !== source && target !== document.body && target !== document.documentElement)
+            request.moved = true;
+        },
+      };
+      document.addEventListener('focusin', request.onFocusIn, true);
+      pending.current = request;
+      if (settleCurrent) setGeneration((value) => value + 1);
+    },
+  };
+}

@@ -1,3 +1,4 @@
+import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 
 export type CurrentConsent = Readonly<{
@@ -23,7 +24,7 @@ export function validConsentInput(value: unknown): value is { actorAccountId: st
 export function validConsentScopes(value: unknown): value is string[] {
   return (
     Array.isArray(value) &&
-    value.length <= 100 &&
+    value.length <= MAX_CONSENTED_SCOPES &&
     value.every(
       (scope) => typeof scope === 'string' && scope.length <= 128 && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(scope),
     )
@@ -46,7 +47,10 @@ export function createCurrentConsentReader({ database }: { database: Pool }): {
          FROM auth_consent c JOIN auth_client a ON a.client_id=c.client_id
          JOIN auth_client_coverage v ON v.client_id=a.client_id AND v.ready
          WHERE c.account_id=$1 AND c.client_id=$2
-           AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=$2)`,
+           AND NOT EXISTS (SELECT 1 FROM auth_client_reduction r WHERE r.client_id=$2)
+           AND NOT EXISTS (SELECT 1 FROM auth_kind_consent_transition t
+             WHERE t.state<>'applied' AND (t.transition_kind='restore' OR
+               (t.client_id=$2 AND (t.account_id IS NULL OR t.account_id=$1))))`,
         [actorAccountId, clientId],
       );
       const row = result.rows[0];

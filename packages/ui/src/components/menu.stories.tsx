@@ -1,276 +1,475 @@
+import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { BookmarkIcon, EllipsisIcon, FlagIcon, LinkIcon, LibraryIcon, PencilIcon, Trash2Icon } from 'lucide-react';
-import React from 'react';
-import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
-import { dismissed, highlighted, registered } from '../test/waits.ts';
-import { settled, withSurface } from '../stories/support.tsx';
-import { Button } from './button.tsx';
-import {
-  Menu,
-  MenuCheckboxItem,
-  MenuContent,
-  MenuGroup,
-  MenuItem,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuSeparator,
-  MenuShortcut,
-  MenuSub,
-  MenuSubContent,
-  MenuSubTrigger,
-  MenuTrigger,
-} from './menu.tsx';
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
+import { Button } from '../shadcn/button.tsx';
+import { Menu, type MenuEntry } from './menu.tsx';
+import { ShelfToolbar } from './shelf-toolbar.tsx';
 
-const meta = {
-  title: 'Rezics UI/Menu',
-  component: Menu,
-  tags: ['autodocs'],
-  decorators: [withSurface],
-  args: { onSelect: fn() },
-  parameters: {
-    docs: {
-      story: { inline: false, iframeHeight: 420 },
-    },
-  },
-} satisfies Meta<typeof Menu>;
+// Phone stories are reviewed at 390px; desktop stories are reviewed at 1280px in both themes.
+
+function Example({ entries, title = 'Actions' }: { entries: MenuEntry[]; title?: string }) {
+  return <Menu title={title} backLabel="Back" entries={entries} trigger={<Button>Open menu</Button>} />;
+}
+function RadioExample() {
+  const [value, setValue] = useState('planned');
+  return (
+    <Example
+      title="Status"
+      entries={[
+        {
+          type: 'radio',
+          label: 'Status',
+          value,
+          onValueChange: setValue,
+          options: [
+            { value: 'planned', label: 'Planned' },
+            { value: 'reading', label: 'Reading' },
+            { value: 'completed', label: 'Completed' },
+          ],
+        },
+      ]}
+    />
+  );
+}
+const meta = { title: 'Components/Menu', component: Example } satisfies Meta<typeof Example>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+const open: Story['play'] = async () => {
+  await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+  await waitFor(() => expect(screen.queryByRole('menu') ?? screen.queryByRole('dialog')).not.toBeNull());
+};
+const phone = { viewport: { value: 'phone' } };
+const plain: MenuEntry[] = [
+  { type: 'item', label: 'Open', onSelect: () => {} },
+  { type: 'link', label: 'Visit subject', href: '/subjects/example' },
+  { type: 'separator' },
+  { type: 'item', label: 'Copy link', onSelect: () => {} },
+];
+export const PlainEntries: Story = {
+  args: { entries: plain },
+  globals: phone,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+    const panel = await screen.findByRole('dialog');
+    const labels = [...panel.querySelectorAll('button, a')].map((row) => row.textContent?.trim()).filter(Boolean);
+    await expect(labels).toEqual(['Open', 'Visit subject', 'Copy link']);
+  },
+};
+export const PlainEntriesDark: Story = { ...PlainEntries, globals: { theme: 'dark' } };
+export const SubmenuPage: Story = {
+  args: {
+    entries: [
+      { type: 'submenu', label: 'Status', entries: [{ type: 'item', label: 'Completed', onSelect: () => {} }] },
+    ],
+  },
+  globals: phone,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Status' }));
+    await expect(await screen.findByRole('button', { name: 'Back' })).toBeVisible();
+    await expect(await screen.findByText('Completed')).toBeVisible();
+  },
+};
+export const BrowserBack: Story = {
+  args: {
+    entries: [
+      { type: 'submenu', label: 'Status', entries: [{ type: 'item', label: 'Completed', onSelect: () => {} }] },
+    ],
+  },
+  globals: phone,
+  play: async () => {
+    const trigger = await screen.findByRole('button', { name: 'Open menu' });
+    const route = window.location.href;
+    await userEvent.click(trigger);
+    await userEvent.click(await screen.findByRole('button', { name: 'Status' }));
+    window.history.back();
+    await waitFor(() => expect(screen.queryByText('Completed')).not.toBeInTheDocument());
+    await expect(screen.getByRole('button', { name: 'Back' })).toBeVisible();
+    window.history.back();
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await expect(window.location.href).toBe(route);
+    await expect(trigger).toHaveFocus();
+  },
+};
+export const RadioEntries: Story = {
+  args: { entries: [] },
+  render: () => <RadioExample />,
+  globals: phone,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+    const planned = await screen.findByRole('radio', { name: 'Planned' });
+    await expect(planned).toBeChecked();
+    await userEvent.click(await screen.findByRole('radio', { name: 'Reading' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeVisible());
+    await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+    await expect(await screen.findByRole('radio', { name: 'Reading' })).toBeChecked();
+  },
+};
+export const RadioDropdown: Story = {
+  args: { entries: [] },
+  render: () => <RadioExample />,
+  globals: { viewport: { value: 'desktop' } },
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+    await expect(await screen.findByRole('menuitemradio', { name: 'Planned' })).toBeChecked();
+    const menu = screen.getByRole('menu');
+    await userEvent.click(screen.getByRole('menuitemradio', { name: 'Reading' }));
+    await waitFor(() => expect(menu).not.toBeVisible());
+  },
+};
+export const DestructiveEntry: Story = {
+  args: { entries: [{ type: 'destructive', label: 'Remove', onSelect: () => {} }] },
+  globals: phone,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Open menu' }));
+    const remove = await screen.findByRole('button', { name: 'Remove' });
+    await expect(remove).toHaveClass(/text-destructive/);
+  },
+};
+export const DesktopDropdown: Story = {
+  args: { entries: plain },
+  globals: { viewport: { value: 'desktop' } },
+  play: open,
+};
+export const DesktopDropdownDark: Story = { ...DesktopDropdown, globals: { theme: 'dark' } };
 
-const PostMenu = (props: React.ComponentProps<typeof Menu> & { moderator?: boolean }) => {
-  const { moderator = true, ...rest } = props;
+const toolbarLabels = {
+  sort: 'Sort by the most recently updated items in your personal collection',
+  direction: 'Choose the direction for ordering the complete collection',
+  ascending: 'Oldest or alphabetically first items before everything else',
+  descending: 'Newest or alphabetically last items before everything else',
+  filter: 'Filter by an especially long list of translated statuses and categories',
+  clearFilters: 'Clear every selected filter from this collection',
+  removeFilter: 'Remove this selected filter from the current collection',
+  layout: 'Choose the presentation layout for the collection',
+  grid: 'Cover grid presentation',
+  list: 'Detailed list presentation',
+  table: 'Tabular collection presentation',
+  display: 'Display density and presentation preferences',
+  density: 'Choose the amount of information shown for each item',
+  small: 'Small amount of detail',
+  medium: 'Medium amount of detail',
+  large: 'Large amount of detail',
+  select: 'Select items in this collection',
+  view: 'View sorting, filtering, and display controls',
+  items: 'items in this collection',
+};
 
+const extraCriteria =
+  'Include items with a long translated status description and a category label that wraps across multiple lines';
+
+function FilterFields({
+  expanded,
+  onExpandedChange,
+  onUnmount,
+}: {
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+  onUnmount: () => void;
+}) {
   return (
-    <div className="flex justify-end">
-      <Menu {...rest}>
-        <MenuTrigger asChild>
-          <Button aria-label="Post actions" size="icon-sm" variant="secondary">
-            <EllipsisIcon />
-          </Button>
-        </MenuTrigger>
-        <MenuContent>
-          <MenuItem value="copy-link">
-            <LinkIcon />
-            Copy link
-            <MenuShortcut>⌘L</MenuShortcut>
-          </MenuItem>
-          <MenuItem value="save">
-            <BookmarkIcon />
-            Save post
-            <MenuShortcut>S</MenuShortcut>
-          </MenuItem>
-          <MenuSub onSelect={rest.onSelect}>
-            <MenuSubTrigger>
-              <LibraryIcon />
-              Add Work to shelf
-            </MenuSubTrigger>
-            <MenuSubContent>
-              <MenuItem value="want-to-read">Want to read</MenuItem>
-              <MenuItem value="reading">Reading</MenuItem>
-              <MenuItem value="read">Read</MenuItem>
-            </MenuSubContent>
-          </MenuSub>
-          <MenuItem disabled value="edit">
-            <PencilIcon />
-            Edit (locked after 24 hours)
-          </MenuItem>
-          <MenuItem value="report">
-            <FlagIcon />
-            Report
-          </MenuItem>
-          {moderator ? (
-            <>
-              <MenuSeparator />
-              <MenuItem value="remove" variant="destructive">
-                <Trash2Icon />
-                Remove post
-                <MenuShortcut>⌫</MenuShortcut>
-              </MenuItem>
-            </>
-          ) : null}
-        </MenuContent>
-      </Menu>
+    <div className="grid min-w-0 gap-3">
+      <label className="grid min-w-0 gap-1 break-words text-sm">
+        <span>Filter by language and translated publication status</span>
+        <select aria-label="Filter by language and translated publication status" className="w-full min-w-0 max-w-full">
+          <option>All languages and statuses</option>
+          <option>Localized status with a very long translated name</option>
+        </select>
+      </label>
+      <label className="grid min-w-0 gap-1 break-words text-sm">
+        <span>Notes for this filter</span>
+        <textarea
+          aria-label="Notes for this filter"
+          rows={2}
+          className="w-full min-w-0 max-w-full rounded-md border bg-background p-2"
+        />
+      </label>
+      <Button variant="outline" onClick={() => onExpandedChange(!expanded)}>
+        {expanded ? 'Hide additional filter criteria' : 'Load additional filter criteria'}
+      </Button>
+      {expanded && (
+        <fieldset className="grid min-w-0 gap-2">
+          <legend className="break-words font-medium">Additional translated filter criteria</legend>
+          {Array.from({ length: 48 }, (_, index) => (
+            <label key={index} className="flex min-w-0 items-start gap-2 break-words text-sm">
+              <input type="checkbox" />
+              <span>
+                {index + 1}. {extraCriteria}
+              </span>
+            </label>
+          ))}
+        </fieldset>
+      )}
+      <Button variant="ghost" onClick={onUnmount}>
+        Unmount ShelfToolbar
+      </Button>
     </div>
   );
-};
+}
 
-const openMenu = async (canvasElement: HTMLElement, name: string) => {
-  await userEvent.click(within(canvasElement).getByRole('button', { name }));
-  return registered(await settled(await screen.findByRole('menu')));
-};
-
-export const PostActions: Story = {
-  render: (args) => <PostMenu {...args} />,
-  async play({ canvasElement }) {
-    const menu = await openMenu(canvasElement, 'Post actions');
-    await expect(within(menu).getByRole('menuitem', { name: /Remove post/ })).toBeVisible();
-    await expect(within(menu).getByRole('menuitem', { name: /Edit/ })).toHaveAttribute('aria-disabled', 'true');
-  },
-};
-
-export const SelectWithKeyboard: Story = {
-  render: (args) => <PostMenu {...args} />,
-  async play({ args, canvasElement }) {
-    const trigger = within(canvasElement).getByRole('button', { name: 'Post actions' });
-    await userEvent.tab();
-    await expect(trigger).toHaveFocus();
-    await userEvent.keyboard('{Enter}');
-    const menu = await settled(await screen.findByRole('menu'));
-    // Opening from the keyboard highlights the first item; wait for it before moving on.
-    await waitFor(() =>
-      expect(within(menu).getByRole('menuitem', { name: /Copy link/ })).toHaveAttribute('data-highlighted'),
-    );
-    await userEvent.keyboard('{ArrowDown}');
-    await waitFor(() =>
-      expect(within(menu).getByRole('menuitem', { name: /Save post/ })).toHaveAttribute('data-highlighted'),
-    );
-    await userEvent.keyboard('{Enter}');
-    await dismissed('menu');
-    await expect(args.onSelect).toHaveBeenCalledWith({ value: 'save' });
-  },
-};
-
-export const CloseWithEscape: Story = {
-  render: (args) => <PostMenu {...args} />,
-  async play({ canvasElement }) {
-    await openMenu(canvasElement, 'Post actions');
-    await userEvent.keyboard('{Escape}');
-    await dismissed('menu');
-    await waitFor(() => expect(within(canvasElement).getByRole('button', { name: 'Post actions' })).toHaveFocus());
-  },
-};
-
-export const Submenu: Story = {
-  render: (args) => <PostMenu {...args} />,
-  async play({ args, canvasElement }) {
-    const menu = await openMenu(canvasElement, 'Post actions');
-    await userEvent.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}');
-    await highlighted(() => within(menu).getByRole('menuitem', { name: /Add Work to shelf/ }));
-    await userEvent.keyboard('{ArrowRight}');
-    await settled(await screen.findByRole('menuitem', { name: 'Reading' }));
-    await highlighted(() => screen.getByRole('menuitem', { name: 'Want to read' }));
-    await userEvent.keyboard('{ArrowDown}{Enter}');
-    await expect(args.onSelect).toHaveBeenCalledWith({ value: 'reading' });
-  },
-};
-
-export const Reader: Story = {
-  render: (args) => <PostMenu {...args} moderator={false} />,
-  async play({ canvasElement }) {
-    const menu = await openMenu(canvasElement, 'Post actions');
-    await expect(within(menu).queryByRole('menuitem', { name: /Remove post/ })).toBeNull();
-  },
-};
-
-const sorts = { hot: 'Hot', new: 'New', 'top-week': 'Top this week' } as const;
-
-// Radio and checkbox items are controlled only: pass value and checked with their change handlers.
-const FeedOptionsMenu = (props: React.ComponentProps<typeof Menu>) => {
-  const [sort, setSort] = React.useState<keyof typeof sorts>('hot');
-  const [blurSpoilers, setBlurSpoilers] = React.useState(true);
-  const [compact, setCompact] = React.useState(false);
-
+function ShelfToolbarFormStory() {
+  const [mounted, setMounted] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+  const [sort, setSort] = useState('recent');
+  const [direction, setDirection] = useState<'asc' | 'desc'>('desc');
+  const [layout, setLayout] = useState<'grid' | 'list' | 'table'>('grid');
+  const [density, setDensity] = useState<'small' | 'medium' | 'large'>('medium');
   return (
-    <Menu {...props} closeOnSelect={false} positioning={{ placement: 'bottom-start' }}>
-      <MenuTrigger asChild>
-        <Button variant="outline">Sort: {sorts[sort]}</Button>
-      </MenuTrigger>
-      <MenuContent className="w-56">
-        <MenuRadioGroup
-          heading="Sort posts"
-          onValueChange={(details) => setSort(details.value as keyof typeof sorts)}
-          value={sort}
-        >
-          {Object.entries(sorts).map(([value, label]) => (
-            <MenuRadioItem key={value} value={value}>
-              {label}
-            </MenuRadioItem>
-          ))}
-        </MenuRadioGroup>
-        <MenuSeparator />
-        <MenuGroup heading="Display">
-          <MenuCheckboxItem checked={blurSpoilers} onCheckedChange={setBlurSpoilers} value="spoilers">
-            Blur spoilers
-          </MenuCheckboxItem>
-          <MenuCheckboxItem checked={compact} onCheckedChange={setCompact} value="compact">
-            Compact cards
-          </MenuCheckboxItem>
-        </MenuGroup>
-      </MenuContent>
-    </Menu>
+    <div className="mx-auto max-w-5xl space-y-4 p-4">
+      <Button variant="outline">Outside control</Button>
+      <nav aria-label="Primary navigation">
+        <a href="#menu-primary-navigation">Primary navigation destination</a>
+      </nav>
+      {mounted ? (
+        <ShelfToolbar
+          labels={toolbarLabels}
+          sorts={[
+            { value: 'recent', label: 'Most recently updated item in the full collection' },
+            { value: 'title', label: 'Alphabetical title order for every collection item' },
+          ]}
+          sort={sort}
+          direction={direction}
+          onSortChange={(nextSort, nextDirection) => {
+            setSort(nextSort);
+            setDirection(nextDirection);
+          }}
+          filters={
+            <FilterFields expanded={expanded} onExpandedChange={setExpanded} onUnmount={() => setMounted(false)} />
+          }
+          active={[{ key: 'status', label: 'A long translated selected status filter that wraps across the panel' }]}
+          onRemoveFilter={() => {}}
+          onClearFilters={() => {}}
+          layout={layout}
+          onLayoutChange={setLayout}
+          density={density}
+          onDensityChange={setDensity}
+          onSelect={() => {}}
+          count={128}
+        />
+      ) : (
+        <Button onClick={() => setMounted(true)}>Mount ShelfToolbar</Button>
+      )}
+    </div>
   );
+}
+
+type TriggerRect = { left: number; top: number; width: number; height: number };
+
+function setTriggerRect(
+  button: HTMLElement,
+  rect: TriggerRect,
+  original: Map<HTMLElement, PropertyDescriptor | undefined>,
+) {
+  if (!original.has(button)) original.set(button, Object.getOwnPropertyDescriptor(button, 'getBoundingClientRect'));
+  Object.defineProperty(button, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => new DOMRect(rect.left, rect.top, rect.width, rect.height),
+  });
+}
+
+async function expectPanelInViewport(panel: HTMLElement) {
+  await waitFor(() => {
+    const rect = panel.getBoundingClientRect();
+    const viewport = panel.ownerDocument.defaultView!;
+    expect(rect.width).toBeGreaterThan(0);
+    expect(rect.height).toBeGreaterThan(0);
+    expect(rect.left).toBeGreaterThanOrEqual(-1);
+    expect(rect.top).toBeGreaterThanOrEqual(-1);
+    expect(rect.right).toBeLessThanOrEqual(viewport.innerWidth + 1);
+    expect(rect.bottom).toBeLessThanOrEqual(viewport.innerHeight + 1);
+  });
+}
+
+const customFormRegression: Story['play'] = async ({ canvasElement }) => {
+  const canvas = within(canvasElement);
+  const document = canvasElement.ownerDocument;
+  const browser = document.defaultView!;
+  const originalHref = browser.location.href;
+  const matchMediaDescriptor = Object.getOwnPropertyDescriptor(browser, 'matchMedia');
+  const triggerRects = new Map<HTMLElement, PropertyDescriptor | undefined>();
+  const originalMatchMedia = browser.matchMedia.bind(browser);
+  const restoreMatchMedia = () => {
+    if (matchMediaDescriptor) Object.defineProperty(browser, 'matchMedia', matchMediaDescriptor);
+    else Reflect.deleteProperty(browser, 'matchMedia');
+  };
+
+  try {
+    expect(originalMatchMedia('(max-width: 767px)').matches).toBe(false);
+    expect(originalMatchMedia('(pointer: coarse)').matches).toBe(false);
+
+    const sortTrigger = canvas.getByRole('button', { name: new RegExp(toolbarLabels.sort) });
+    setTriggerRect(
+      sortTrigger,
+      { left: browser.innerWidth - 120, top: browser.innerHeight - 52, width: 104, height: 36 },
+      triggerRects,
+    );
+    await userEvent.click(sortTrigger);
+    const sortPanel = await screen.findByRole('dialog', { name: toolbarLabels.sort });
+    const sortControl = within(sortPanel).getByRole('combobox', { name: toolbarLabels.sort });
+    await expect(sortControl).toHaveFocus();
+    await expectPanelInViewport(sortPanel);
+    await userEvent.selectOptions(sortControl, 'title');
+    await expect(sortControl).toHaveValue('title');
+    await userEvent.tab();
+    await expect(within(sortPanel).getByRole('combobox', { name: toolbarLabels.direction })).toHaveFocus();
+
+    const initialSortRect = sortPanel.getBoundingClientRect();
+    setTriggerRect(sortTrigger, { left: 36, top: 52, width: 104, height: 36 }, triggerRects);
+    browser.dispatchEvent(new Event('resize'));
+    browser.dispatchEvent(new Event('scroll'));
+    await waitFor(() => {
+      const next = sortPanel.getBoundingClientRect();
+      expect(Math.abs(next.left - initialSortRect.left) + Math.abs(next.top - initialSortRect.top)).toBeGreaterThan(12);
+    });
+    await expectPanelInViewport(sortPanel);
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.sort })).not.toBeInTheDocument());
+    await expect(sortTrigger).toHaveFocus();
+
+    const filterTrigger = canvas.getByRole('button', { name: new RegExp(toolbarLabels.filter) });
+    setTriggerRect(
+      filterTrigger,
+      { left: browser.innerWidth - 120, top: browser.innerHeight - 52, width: 104, height: 36 },
+      triggerRects,
+    );
+    await userEvent.click(filterTrigger);
+    const filterPanel = await screen.findByRole('dialog', { name: toolbarLabels.filter });
+    const filterSelect = within(filterPanel).getByRole('combobox', {
+      name: 'Filter by language and translated publication status',
+    });
+    const notes = within(filterPanel).getByRole('textbox', { name: 'Notes for this filter' });
+    await expect(filterSelect).toHaveFocus();
+    await userEvent.tab();
+    await expect(notes).toHaveFocus();
+    await userEvent.type(notes, 'Keep this native textarea focused during layout changes.');
+    const loadCriteria = within(filterPanel).getByRole('button', { name: 'Load additional filter criteria' });
+    await userEvent.click(loadCriteria);
+    await waitFor(() => expect(filterPanel.scrollHeight).toBeGreaterThan(filterPanel.clientHeight));
+    await expect(getComputedStyle(filterPanel).overflowY).toBe('auto');
+    const nestedScrollOwners = [...filterPanel.querySelectorAll<HTMLElement>('*')].filter((node) => {
+      if (node instanceof HTMLSelectElement || node instanceof HTMLTextAreaElement) return false;
+      const style = getComputedStyle(node);
+      return (style.overflowY === 'auto' || style.overflowY === 'scroll') && node.scrollHeight > node.clientHeight;
+    });
+    await expect(nestedScrollOwners).toEqual([]);
+    await expectPanelInViewport(filterPanel);
+    await expect(loadCriteria).toHaveFocus();
+
+    const initialFilterRect = filterPanel.getBoundingClientRect();
+    setTriggerRect(filterTrigger, { left: 28, top: 88, width: 104, height: 36 }, triggerRects);
+    browser.dispatchEvent(new Event('resize'));
+    browser.dispatchEvent(new Event('scroll'));
+    await waitFor(() => {
+      const next = filterPanel.getBoundingClientRect();
+      expect(Math.abs(next.left - initialFilterRect.left) + Math.abs(next.top - initialFilterRect.top)).toBeGreaterThan(
+        12,
+      );
+    });
+    await expectPanelInViewport(filterPanel);
+    await expect(loadCriteria).toHaveFocus();
+
+    const initialHash = browser.location.hash;
+    await userEvent.click(canvas.getByRole('link', { name: 'Primary navigation destination' }));
+    await expect(browser.location.hash).not.toBe(initialHash);
+    await expect(screen.getByRole('dialog', { name: toolbarLabels.filter })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.filter })).not.toBeInTheDocument());
+    await expect(filterTrigger).toHaveFocus();
+
+    await userEvent.click(filterTrigger);
+    const reopenedFilter = await screen.findByRole('dialog', { name: toolbarLabels.filter });
+    const outsideControl = canvas.getByRole('button', { name: 'Outside control' });
+    await userEvent.click(outsideControl);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.filter })).not.toBeInTheDocument());
+    await expect(outsideControl).toHaveFocus();
+    expect(reopenedFilter).not.toBeInTheDocument();
+
+    const displayTrigger = canvas.getByRole('button', { name: new RegExp(toolbarLabels.display) });
+    await userEvent.click(displayTrigger);
+    const displayPanel = await screen.findByRole('dialog', { name: toolbarLabels.display });
+    const largeDensity = within(displayPanel).getByRole('button', { name: toolbarLabels.large });
+    await userEvent.click(largeDensity);
+    await expect(largeDensity).toHaveAttribute('aria-pressed', 'true');
+    await expect(displayPanel).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.display })).not.toBeInTheDocument());
+    await expect(displayTrigger).toHaveFocus();
+
+    const coarseMatchMedia = (query: string) => {
+      if (query === '(pointer: coarse)') {
+        return {
+          matches: true,
+          media: query,
+          onchange: null,
+          addListener() {},
+          removeListener() {},
+          addEventListener() {},
+          removeEventListener() {},
+          dispatchEvent() {
+            return true;
+          },
+        } as MediaQueryList;
+      }
+      return originalMatchMedia(query);
+    };
+    Object.defineProperty(browser, 'matchMedia', { configurable: true, writable: true, value: coarseMatchMedia });
+    await userEvent.click(sortTrigger);
+    const phoneSheet = await screen.findByRole('dialog', { name: toolbarLabels.sort });
+    await expect(within(phoneSheet).getByRole('combobox', { name: toolbarLabels.sort })).toBeVisible();
+    await userEvent.click(within(phoneSheet).getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.sort })).not.toBeInTheDocument());
+    restoreMatchMedia();
+
+    await userEvent.click(filterTrigger);
+    const beforeUnmount = await screen.findByRole('dialog', { name: toolbarLabels.filter });
+    await userEvent.click(within(beforeUnmount).getByRole('button', { name: 'Unmount ShelfToolbar' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.filter })).not.toBeInTheDocument());
+    const escapeAfterUnmount = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    document.dispatchEvent(escapeAfterUnmount);
+    await expect(escapeAfterUnmount.defaultPrevented).toBe(false);
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Mount ShelfToolbar' }));
+    const freshSortTrigger = canvas.getByRole('button', { name: new RegExp(toolbarLabels.sort) });
+    await userEvent.click(freshSortTrigger);
+    const freshPanel = await screen.findByRole('dialog', { name: toolbarLabels.sort });
+    await expect(within(freshPanel).getByRole('combobox', { name: toolbarLabels.sort })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.sort })).not.toBeInTheDocument());
+  } finally {
+    for (const [button, descriptor] of triggerRects) {
+      if (descriptor) Object.defineProperty(button, 'getBoundingClientRect', descriptor);
+      else Reflect.deleteProperty(button, 'getBoundingClientRect');
+    }
+    restoreMatchMedia();
+    browser.history.replaceState(browser.history.state, '', originalHref);
+  }
 };
 
-export const FeedOptions: Story = {
-  render: (args) => <FeedOptionsMenu {...args} />,
-  async play({ canvasElement }) {
-    const menu = await openMenu(canvasElement, 'Sort: Hot');
-    await expect(within(menu).getByRole('menuitemradio', { name: 'Hot' })).toBeChecked();
-    await userEvent.click(within(menu).getByRole('menuitemradio', { name: 'New' }));
-    await expect(within(menu).getByRole('menuitemradio', { name: 'New' })).toBeChecked();
-    await userEvent.click(within(menu).getByRole('menuitemcheckbox', { name: 'Compact cards' }));
-    await expect(within(menu).getByRole('menuitemcheckbox', { name: 'Compact cards' })).toBeChecked();
+export const ShelfToolbarCustomFormsDesktop: Story = {
+  name: 'Shelf Toolbar Custom Forms Desktop',
+  args: { entries: [] },
+  render: () => <ShelfToolbarFormStory />,
+  globals: { viewport: { value: 'desktop' } },
+  play: customFormRegression,
+};
+
+export const ShelfToolbarCustomFormsPhone: Story = {
+  name: 'Shelf Toolbar Custom Forms Phone',
+  args: { entries: [] },
+  render: () => <ShelfToolbarFormStory />,
+  globals: phone,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: new RegExp(toolbarLabels.view) }));
+    const viewPanel = await screen.findByRole('dialog', { name: toolbarLabels.view });
+    await userEvent.click(within(viewPanel).getByRole('tab', { name: new RegExp(toolbarLabels.filter) }));
+    await expect(
+      within(viewPanel).getByRole('combobox', { name: 'Filter by language and translated publication status' }),
+    ).toBeVisible();
+    await expect(within(viewPanel).getByRole('textbox', { name: 'Notes for this filter' })).toBeVisible();
+    await userEvent.click(within(viewPanel).getByRole('tab', { name: new RegExp(toolbarLabels.display) }));
+    await expect(within(viewPanel).getByRole('group', { name: toolbarLabels.density })).toBeVisible();
+    await userEvent.click(within(viewPanel).getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: toolbarLabels.view })).not.toBeInTheDocument());
   },
-};
-
-export const LongContent: Story = {
-  render: (args) => (
-    <Menu {...args} positioning={{ placement: 'bottom-start' }}>
-      <MenuTrigger asChild>
-        <Button variant="outline">Move to Realm</Button>
-      </MenuTrigger>
-      <MenuContent className="max-h-72 w-72">
-        {[
-          'Hard SF',
-          'Translated Fiction',
-          'Chinese Science Fiction and Fantasy Readers’ Circle',
-          'First Contact',
-          'Space Opera',
-          'Climate Fiction',
-          'Classic Golden Age SF',
-          'Book Clubs',
-          'Worldbuilding',
-          'Hugo and Nebula Awards Discussion',
-          'New Releases',
-        ].map((realm) => (
-          <MenuItem key={realm} value={realm}>
-            <span className="truncate">{realm}</span>
-          </MenuItem>
-        ))}
-      </MenuContent>
-    </Menu>
-  ),
-  async play({ canvasElement }) {
-    const menu = await openMenu(canvasElement, 'Move to Realm');
-    await expect(within(menu).getAllByRole('menuitem')).toHaveLength(11);
-  },
-};
-
-export const Chinese: Story = {
-  render: (args) => (
-    <Menu {...args} positioning={{ placement: 'bottom-start' }}>
-      <MenuTrigger asChild>
-        <Button variant="outline">加入书架</Button>
-      </MenuTrigger>
-      <MenuContent>
-        <MenuGroup heading="《三体》">
-          <MenuItem value="want">想读</MenuItem>
-          <MenuItem value="reading">在读</MenuItem>
-          <MenuItem value="read">读过</MenuItem>
-        </MenuGroup>
-        <MenuSeparator />
-        <MenuItem value="remove" variant="destructive">
-          从所有书架移除
-        </MenuItem>
-      </MenuContent>
-    </Menu>
-  ),
-  async play({ canvasElement }) {
-    const menu = await openMenu(canvasElement, '加入书架');
-    await expect(within(menu).getByRole('menuitem', { name: '在读' })).toBeVisible();
-  },
-};
-
-export const Dark: Story = {
-  ...PostActions,
-  globals: { theme: 'dark' },
 };

@@ -11,7 +11,9 @@ export type BoardPageInput = {
     sort?: BoardCursorSort;
     query?: string;
 };
+export type BoardOpeningPageInput = Omit<BoardPageInput, 'limit'>;
 export type BoardThreadPage = Page<ThreadView> & {
+    pinnedThreads: readonly ThreadView[];
     anchors: readonly AnchoredPosition[];
     /** The oldest returned active-rank row's materialization time, or null when no active row was returned. */
     rankRefreshedAt: string | null;
@@ -30,7 +32,15 @@ export type RealmBoardPage = {
 export declare function readRealmBoard(dependencies: ContentBoardDependencies, boardId: string, context: ReadContext): Promise<Anchored<BoardView | null>>;
 /** Keyset page of one Realm's boards. Candidate ids carry no authority; each
  * returned item goes through the current board and Realm disclosure checks. */
+export declare function selectRealmBoardPage(dependencies: ContentBoardDependencies, realmId: string, context: ReadContext, input?: RealmBoardPageInput): Promise<Readonly<{
+    ids: readonly string[];
+    next: string | null;
+    anchor: AnchoredPosition;
+}>>;
 export declare function listRealmBoards(dependencies: ContentBoardDependencies, realmId: string, context: ReadContext, input?: RealmBoardPageInput): Promise<RealmBoardPage>;
 /** Candidate references carry no authority. Only the shared final reader can
  * supply view fields, the public floor, or the grant/scope/denial decision. */
 export declare function listBoardThreads(dependencies: ContentBoardDependencies, boardId: string, context: ReadContext, input?: BoardPageInput): Promise<BoardThreadPage>;
+/** One native opening cohort: at most twenty ordinary candidates are disclosed,
+ * while one raw lookahead only determines whether the same source can continue. */
+export declare function listBoardOpeningThreads(dependencies: ContentBoardDependencies, boardId: string, context: ReadContext, input?: BoardOpeningPageInput): Promise<BoardThreadPage>;

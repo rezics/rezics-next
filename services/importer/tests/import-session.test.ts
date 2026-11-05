@@ -1,5 +1,6 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
@@ -28,6 +29,7 @@ function fake() {
   const requests: BatchWriteRequest[] = [];
   let fenceCalls = 0;
   const transport = {
+    setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
     async batchWrite(request: BatchWriteRequest): Promise<BatchWriteResult> {
       requests.push(structuredClone(request));
       return {
@@ -141,7 +143,7 @@ test('guard release permits capability rotation and fences old RunStore handles'
     b.release(other);
     a.store.database
       .prepare('INSERT INTO import_owners VALUES(?,?,?,?)')
-      .run('wikidata', process.pid, 'different-birth', 'old');
+      .run('wikidata', process.pid, '00000000-0000-0000-0000-000000000000:1', 'old');
     const reused = a.acquire('wikidata');
     expect(reused).not.toBe('busy');
     if (reused !== 'busy') a.release(reused);
@@ -305,5 +307,58 @@ test('unfenced media intent cannot acknowledge without resolver, while fenced co
     expect(resolverCalls).toBe(0);
   } finally {
     await fenced.close();
+  }
+});
+
+test('assertHeld and readOwner expose the exact held PID/birth capability', () => {
+  const dir = directory();
+  const session = new ImportSession(`${dir}/state.sqlite`);
+  try {
+    const own = session.acquire('wikidata');
+    if (own === 'busy') throw new Error('busy');
+    session.assertHeld(own);
+    const owner = session.readOwner('wikidata');
+    expect(owner?.pid).toBe(process.pid);
+    expect(owner?.birth).toBeString();
+    expect(() => session.assertHeld({ source: 'wikidata', capability: '0'.repeat(48) })).toThrow(
+      'Stale import ownership',
+    );
+    session.release(own);
+    expect(session.readOwner('wikidata')).toBeNull();
+  } finally {
+    session.close();
+    rmSync(dir, { recursive: true });
+  }
+});
+
+test('existing-state open refuses a missing path and peekActive does not rotate a staging lease', async () => {
+  const dir = directory();
+  try {
+    await expect(ImportSession.openExisting(join(dir, 'missing.sqlite'))).rejects.toMatchObject({ kind: 'missing' });
+    expect(existsSync(join(dir, 'missing.sqlite'))).toBe(false);
+    const created = new ImportSession(`${dir}/state.sqlite`);
+    const own = created.acquire('wikidata');
+    if (own === 'busy') throw 0;
+    const run = created.store.begin('wikidata');
+    if (run === 'busy') throw 0;
+    const lease = run.lease;
+    const peeked = created.peekActive(own);
+    expect(peeked?.status).toBe('staging');
+    expect(peeked?.run.lease).toBe(lease);
+    expect(created.store.activeRun('wikidata')?.lease).toBe(lease);
+    created.release(own);
+    created.close();
+    const reopened = await ImportSession.openExisting(`${dir}/state.sqlite`);
+    try {
+      const next = reopened.acquire('wikidata');
+      if (next === 'busy') throw 0;
+      expect(reopened.peekActive(next)?.status).toBe('staging');
+      expect(reopened.peekActive(next)?.run.lease).toBe(lease);
+      reopened.release(next);
+    } finally {
+      reopened.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true });
   }
 });

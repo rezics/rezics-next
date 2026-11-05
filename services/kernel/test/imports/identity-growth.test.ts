@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { COMMON_ACTIONS, GLOBAL, IMPORT_ACTIONS } from '../../../../specs/imports-identity-driver.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import { accessCheck } from '../../src/request/access.ts';
-import { checkGrowth, capture, costOf, assertGrowth, type GrowthSample } from '../support/growth.ts';
+import { checkGrowth, capture, costOf, assertGrowth, settle, type GrowthSample } from '../support/growth.ts';
 import { createImportIdentityDriver } from './identity-driver.ts';
 import { identitySupport } from './identity-fixture.ts';
 
@@ -35,16 +35,8 @@ test('fixed public bulk grant changes and reduced-scope native Auth/Access remai
           'core.outbox',
         ])
           await f.database.admin.query(`VACUUM (ANALYZE) ${table}`);
-        for (const table of [
-          'public."user"',
-          'public.account',
-          'public.session',
-          'auth_consent',
-          'auth_registration_stage',
-          'auth_effect_receipt',
-          'auth_public_key',
-        ])
-          await native.authDatabase.admin.query(`VACUUM (ANALYZE) ${table}`);
+        // checkGrowth settles the application database; Auth owns a separate pool.
+        await settle(native.authDatabase, { analyze: true });
         if (scale === 1) {
           for (const table of [
             'public."user"',

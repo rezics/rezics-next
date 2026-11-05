@@ -17,10 +17,10 @@
  * headers, with real columns. They are not SQL, JSON or pregrouped source records.
  * entry_meta's exported column is id, although the generator selects itemid.
  *
- * Grouped payload follows the independently frozen imports-vndb-driver.ts suite:
- * vn {id, olang}, vn_titles array, entry_meta object with numeric per-entry revision.
+ * Grouped payload follows the converter allowlist and imports-vndb-driver.ts suite:
+ * vn {id, olang, alias, c_votecount, c_average}, vn_titles array, entry_meta object with numeric per-entry revision.
  * Validate all known input columns, then retain only the converter's needed
- * columns. Descriptions, image IDs and unused VN columns are discarded, never
+ * columns, including alias and the explicitly admitted average/count statistic fields. Descriptions, image IDs and unused VN columns are discarded, never
  * reconstructed by this adapter. Preserve native entry_meta dates and counters.
  * entry_meta also contains other entry types: skip those, not orphan v IDs.
  * No auxiliary table is needed for the current converter. Use the
@@ -49,7 +49,8 @@
  * indexes or INTEGER PRIMARY KEY with an equality/range prefix. No scan, automatic
  * index, temporary sort, OFFSET, whole-state enumeration or historical COUNT.
  * Returned rows count actual get/all/iterate consumption, not examined VM rows.
- * blocks:0 means SQLite buffer counters are unavailable, not zero physical IO.
+ * Actual returned-row/statement counts and bound EQP prove indexed access;
+ * SQLite buffers and physical IO are not measured.
  * Streaming the explicit archive once is O(input bytes), independently asserted.
  * Staging writes equal S, durable bytes <=8*input bytes+4096, buffered rows <=160.
  */
@@ -65,7 +66,7 @@ export interface Entry {
   linkTarget?: string;
 }
 export interface GroupedRecord {
-  vn: { id: string; olang: string };
+  vn: { id: string; olang: string; alias: string | null; c_votecount: number; c_average: number | null };
   vn_titles: Array<{ id: string; lang: string; official: boolean; title: string; latin: string | null }>;
   entry_meta: { id: string; created: string; lastmod: string; revision: number; num_edits: number; num_users: number };
 }
@@ -275,7 +276,13 @@ export function sqliteEvidence() {
 
   function prove({ db, sql, parameters }: Call) {
     requireThat(!/\bOFFSET\b|\bCOUNT\s*\(/i.test(sql), 'OFFSET/history COUNT is forbidden');
-    const plan = db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...(parameters as never[])) as Array<{ detail: string }>;
+    const statement = db.prepare(`EXPLAIN QUERY PLAN ${sql}`);
+    let plan: Array<{ detail: string }>;
+    try {
+      plan = statement.all(...(parameters as never[])) as Array<{ detail: string }>;
+    } finally {
+      statement.finalize();
+    }
     const indexes = new Set(
       (db.query("SELECT name FROM sqlite_schema WHERE type = 'index'").all() as Array<{ name: string }>).map(
         (row) => row.name,

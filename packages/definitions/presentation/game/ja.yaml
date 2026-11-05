@@ -1,15 +1,107 @@
 types:
   schema:VideoGame: コンピュータゲーム
-  wd:Q20631656: ソフトウェア・リリース
-  wd:Q209163: 拡張パック
+  wd:Q20631656: 'リリース'
+  wd:Q209163: '追加コンテンツ'
 properties:
   schema:gamePlatform: ゲームプラットフォーム
   schema:gtin: GTIN
   wdt:P2899: 下限年齢
   wdt:P31: 分類
   wdt:P155: 前
+  rezics:releaseSupersedes: 置き換える
   wdt:P437: メディア形態
   wdt:P408: ソフトウェアエンジン
   schema:numberOfPlayers: プレイ人数
   schema:minValue: 最小値
   wdt:P8646: 以下の拡張パック
+inverseProperties:
+  schema:gamePlatform: 'このプラットフォームのゲーム'
+  wdt:P31: 'この種類のリリース'
+  wdt:P437: 'この媒体のリリース'
+  wdt:P155: '続編'
+  rezics:releaseSupersedes: '置き換えられたリリース'
+  wdt:P408: 'このエンジンを使うゲーム'
+  wdt:P8646: '拡張作品'
+typeDescriptions:
+  schema:VideoGame: '対応機種の集約情報を持つゲーム作品。特定のソフトウェアリリースや個人の所蔵物とは区別します。'
+  wd:Q20631656: '一つ以上の作品を収録する、独立して識別されたソフトウェアリリース。機種や言語の一覧だけで別のリリースを作りません。'
+  wd:Q209163: '拡張パックやDLCを含む、独立して参照できるゲームの追加作品。作品としての同一性がないパッチや配布ファイル、同梱素材は含めません。'
+libraryProfiles:
+  game.playing:
+    states:
+      planned: '予定'
+      in_progress: '進行中'
+      completed: '完了'
+      paused: '中断'
+      dropped: '断念'
+    units:
+      scalar_amount:
+        minute:
+          label: '分'
+          countForms:
+            other: '分'
+    copyKinds:
+      physical: '物理'
+      digital: 'デジタル'
+    copyStatuses:
+      physical:
+        owned: '所持'
+        disposed: '手放した'
+      digital:
+        owned: '所持'
+  game.release:
+    states:
+      planned: '予定'
+      in_progress: '進行中'
+      completed: '完了'
+      paused: '中断'
+      dropped: '断念'
+    units:
+      scalar_amount:
+        minute:
+          label: '分'
+          countForms:
+            other: '分'
+    copyKinds:
+      physical: '物理'
+      digital: 'デジタル'
+    copyStatuses:
+      physical:
+        owned: '所持'
+        disposed: '手放した'
+      digital:
+        owned: '所持'
+  game.addon:
+    states:
+      planned: '予定'
+      in_progress: '進行中'
+      completed: '完了'
+      paused: '中断'
+      dropped: '断念'
+    units:
+      scalar_amount:
+        minute:
+          label: '分'
+          countForms:
+            other: '分'
+    copyKinds:
+      physical: '物理'
+      digital: 'デジタル'
+    copyStatuses:
+      physical:
+        owned: '所持'
+        disposed: '手放した'
+      digital:
+        owned: '所持'
+propertyDescriptions:
+  schema:gamePlatform: 'ゲームやリリースが動作する機種を示す概念。言語の修飾子で機種と言語の対応を保持できます。'
+  schema:gtin: 'リリースのGTIN。区切り記号なしの8、12、13、14桁の数字で記録します。'
+  wdt:P2899: 'リリースの年齢区分に対応する最低年齢。年（wd:Q577）単位の0以上の整数の数量です。'
+  wdt:P31: '完全版、一部版、体験版などのリリース種別を示す概念。カタログ上の対象の型とは別です。'
+  wdt:P155: 'この作品やリリースに先行する作品またはリリース。'
+  rezics:releaseSupersedes: '時系列上の前後関係とは別に、このリリースが置き換える特定のソフトウェアリリース。'
+  wdt:P437: '光ディスクなど、リリースの頒布形式や物理媒体を表す概念。'
+  wdt:P408: 'ゲームが使用するソフトウェアエンジンを示す概念。'
+  schema:numberOfPlayers: '最大プレイヤー数を単位なしの整数で記録します。範囲が明記されている場合は上限を値とし、下限は別の修飾子に保存します。'
+  schema:minValue: '明記されたプレイヤー数範囲の下限。プレイヤー数を修飾する単位なしの整数で、単独の数から推測しません。'
+  wdt:P8646: 'この独立した追加作品が拡張する基本ゲーム。ソフトウェアリリースが具体化する作品への関連とは別です。'

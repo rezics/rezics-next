@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import {
   createAuthHost,
@@ -7,18 +8,37 @@ import {
   type AuthService,
 } from '@rezics/auth';
 import { exportJWK, generateKeyPair, decodeJwt, type JWK } from 'jose';
-import { Pool } from 'pg';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { Client, Pool } from 'pg';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createNativeAccountBindings } from '../../src/access/native-account-bindings.ts';
 import { createRecoveryCompletion } from '../../src/access/recovery-completion.ts';
 
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `recovery_complet_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
+
 const pool = createPool(process.env.DATABASE_URL!);
 const issuer = 'https://recovery.auth.test';
 const password = 'original native recovery password';
 const nextPassword = 'replacement native recovery password';
-let database: ReturnType<typeof testDatabase>;
+let database: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let authPool: Pool;
 let service: AuthService;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
@@ -166,14 +186,14 @@ async function snapshot(accountId: string) {
   };
 }
 beforeAll(async () => {
-  database = crashProcess ? { url: process.env.RECOVERY_CRASH_DATABASE!, container: '', close() {} } : testDatabase();
+  database = crashProcess ? { url: process.env.RECOVERY_CRASH_DATABASE!, async close() {} } : await cloneAuthDatabase();
   if (crashProcess === 'before' || crashProcess === 'after') fault = crashProcess;
   await build();
 });
 afterAll(async () => {
   await host?.stop();
   await pool.end();
-  database?.close();
+  await database?.close();
 });
 
 if (crashProcess) {
@@ -344,11 +364,13 @@ if (crashProcess) {
       ).toBe(503);
       fault = undefined;
       const saved = await snapshot(id);
-      await pool.query(`UPDATE access.account SET state=$2,operator_account_id=$3 WHERE account_id=$1`, [
-        id,
-        change === 'suspended' ? 'suspended' : 'active',
-        change === 'operator' ? human.accountId : null,
-      ]);
+      if (change === 'suspended') await suspendAccount(pool, id);
+      else
+        await pool.query(`UPDATE access.account SET state=$2,operator_account_id=$3 WHERE account_id=$1`, [
+          id,
+          'active',
+          change === 'operator' ? human.accountId : null,
+        ]);
       await expect(bindings.trustedAccess.completeRecovery!(saved.witness[0]!.reference)).rejects.toThrow();
       expect((await bindings.internalLifecycle.readFenceState(id))!.fenced).toBe(true);
     }

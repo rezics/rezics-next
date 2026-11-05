@@ -1,3 +1,29 @@
+export * from './membership-response-bounds';
+export * from './passkey-enrollment-response-bounds';
+export * from './operator-page-response-bounds';
+export * from './rename-response-bounds';
+export * from './organization-deletion-response-bounds';
+export * from './consent-response-bounds';
+export * from './recovery-response-bounds';
+export * from './security-action-response-bounds';
+export * from './credential-effect-response-bounds';
+export type * from './auth-erasure-live.ts';
+export * from './kind-consent.ts';
+export type * from './auth-receiving-closure.ts';
+import type { AuthReceivingClosurePorts } from './auth-receiving-closure.ts';
+import type { AuthErasureObligationPorts } from './auth-erasure-obligations.ts';
+import type { ReadNativeCreationContext } from './native-creation-context.ts';
+export type * from './native-creation-context.ts';
+export type * from './auth-erasure-obligations.ts';
+export * from './management';
+
+/** Nonsecret first-party identity for the two Auth-page self-operation profiles. */
+export const AUTH_PAGE_OPERATION_CLIENT_ID = 'rezics-auth-account-operations';
+export const AUTH_PAGE_OPERATION_SCOPES = Object.freeze({
+  organization: Object.freeze(['organization:create'] as const),
+  delete: Object.freeze(['account:delete'] as const),
+});
+
 export interface AccessAccount {
   accountId: string;
   kind: 'actor' | 'organization';
@@ -15,6 +41,10 @@ export interface InvalidationReceipt {
 
 export type EffectPurpose = 'session' | 'set-password' | 'remove-password' | 'add-key' | 'remove-key';
 export type CredentialPurpose = Exclude<EffectPurpose, 'session'>;
+/** Passkeys are managed only by their human owner, never by an operator. */
+export type PasskeyPurpose = 'add-passkey' | 'remove-passkey';
+/** Every purpose recorded in the shared credential stage and floor stores. */
+export type CredentialFloorPurpose = CredentialPurpose | PasskeyPurpose;
 
 /** Auth-owned nonsecret commitment, never credential material or permission context.
  * The keyed digest binds version, stage locator, immutable (subject, operationKey),
@@ -25,12 +55,12 @@ export type CredentialPurpose = Exclude<EffectPurpose, 'session'>;
  * key conflicts even after consumption or restart. Access/DBOS retain only these
  * locators, never passwords, private keys, cookies, JWTs or SessionProof objects.
  */
-export interface CredentialEffectBinding {
+export interface CredentialEffectBinding<Purpose extends CredentialFloorPurpose = CredentialPurpose> {
   operationKey: string;
   effectReference: string;
   effectDigest: string;
   subjectAccountId: string;
-  purpose: CredentialPurpose;
+  purpose: Purpose;
   credentialRowId: string | null;
   credentialRowVersion: string | null;
   actingHumanId: string;
@@ -39,8 +69,8 @@ export interface CredentialEffectBinding {
 }
 
 /** Expected current identity and immutable operation; an optional digest only compares. */
-export type CredentialEffectExpectation = Pick<
-  CredentialEffectBinding,
+export type CredentialEffectExpectation<Purpose extends CredentialFloorPurpose = CredentialPurpose> = Pick<
+  CredentialEffectBinding<Purpose>,
   'operationKey' | 'subjectAccountId' | 'purpose' | 'actingHumanId' | 'clientId' | 'scopes'
 > & { effectDigest?: string };
 
@@ -50,20 +80,27 @@ export type CredentialEffectExpectation = Pick<
  * never treat the old row version as new mutation authority. No minting path, Auth
  * database/key/runtime exposure to the kernel, or caller digest as provenance.
  */
-export type CredentialEffectVerifier = (
-  reference: string,
-  expected: CredentialEffectExpectation,
-) => Promise<CredentialEffectBinding>;
+export interface CredentialEffectVerifier {
+  <Purpose extends CredentialFloorPurpose>(
+    reference: string,
+    expected: CredentialEffectExpectation<Purpose>,
+  ): Promise<CredentialEffectBinding<Purpose>>;
+  (reference: string, expected: CredentialEffectExpectation): Promise<CredentialEffectBinding>;
+}
+
+export type CredentialFloorBinding = CredentialEffectBinding<CredentialFloorPurpose>;
 
 /** Exact credential consume result. Auth compares every field with its own stage
  * before writing; a session/device approval or broad credential opening cannot
  * substitute. A durable reference is a locator, never current authorization.
  */
-export interface CredentialEffectAuthorization extends EffectAuthorizationBase {
+export interface CredentialEffectAuthorization<
+  Purpose extends CredentialFloorPurpose = CredentialPurpose,
+> extends EffectAuthorizationBase {
   operationKey: string;
   effectReference: string;
   effectDigest: string;
-  purpose: CredentialPurpose;
+  purpose: Purpose;
 }
 
 /** A committed native floor receipt, bound to the exact stage and consumed opening.
@@ -74,7 +111,7 @@ export interface CredentialFloorReceipt extends InvalidationReceipt {
   operationKey: string;
   effectReference: string;
   effectDigest: string;
-  purpose: CredentialPurpose;
+  purpose: CredentialFloorPurpose;
   openingReceiptId: string;
   previousFloor: number;
   fenced: boolean;
@@ -89,13 +126,41 @@ export interface CredentialFloorReceipt extends InvalidationReceipt {
  * operation may finish against only its exact committed barrier and unchanged next
  * floor; its invalidated source session grants no consume/replay authority.
  */
-export type CredentialFloorPort = (input: {
-  stage: CredentialEffectBinding;
-  consumedOpening: CredentialEffectAuthorization;
+export type CredentialFloorPort<Purpose extends CredentialFloorPurpose = CredentialFloorPurpose> = (input: {
+  /** Auth's request deadline; kernel request paths always pass it. */
+  deadline?: number;
+  stage: CredentialEffectBinding<Purpose>;
+  consumedOpening: CredentialEffectAuthorization<Purpose>;
   expectedPreviousFloor: number;
   key: string;
-  purpose: CredentialPurpose;
+  purpose: Purpose;
 }) => Promise<CredentialFloorReceipt>;
+
+const credentialRequestDeadlines = new WeakMap<SessionProof, number>();
+
+/** Preserve the active request deadline while Auth invokes a credential port.
+ * Normally the port input carries the deadline directly. This context lets
+ * trusted adapters that only forward the proof keep the same request boundary.
+ */
+export async function withCredentialRequestDeadline<T>(
+  proof: SessionProof,
+  deadline: number,
+  work: () => Promise<T>,
+): Promise<T> {
+  const previous = credentialRequestDeadlines.get(proof);
+  credentialRequestDeadlines.set(proof, deadline);
+  try {
+    return await work();
+  } finally {
+    if (previous === undefined) credentialRequestDeadlines.delete(proof);
+    else credentialRequestDeadlines.set(proof, previous);
+  }
+}
+
+/** Read only the deadline attached to this live trusted proof callback. */
+export function credentialRequestDeadline(proof: SessionProof): number | undefined {
+  return credentialRequestDeadlines.get(proof);
+}
 
 /** The session input stays byte-for-byte equivalent to the existing contract. */
 export type SessionAuthorizationInput = {
@@ -111,23 +176,14 @@ export type CredentialAuthorizationInput = {
     purpose: Purpose;
     operationKey: string;
     effectReference: string;
+    /** Auth's request deadline. SessionAuthorizationInput remains unchanged. */
+    deadline?: number;
   };
 }[CredentialPurpose];
 
-/** @deprecated Only legacy internal.setCredential produces this unbound input.
- * Native kernel capabilities must reject it: it carries no exact effect binding.
- * A later task removes this variant together with the legacy setCredential path.
- */
-export type LegacyCredentialAuthorizationInput = Omit<SessionAuthorizationInput, 'purpose'> & {
-  purpose: CredentialPurpose;
-  operationKey?: undefined;
-  effectReference?: undefined;
-};
-
-export type AuthorizationConsumeInput =
-  | SessionAuthorizationInput
-  | CredentialAuthorizationInput
-  | LegacyCredentialAuthorizationInput;
+export type PasskeyAuthorizationInput = Omit<CredentialAuthorizationInput, 'purpose'> & { purpose: PasskeyPurpose };
+export type CredentialFloorAuthorizationInput = CredentialAuthorizationInput | PasskeyAuthorizationInput;
+export type AuthorizationConsumeInput = SessionAuthorizationInput | CredentialAuthorizationInput;
 
 interface EffectAuthorizationBase {
   receiptId: string;
@@ -144,8 +200,8 @@ interface EffectAuthorizationBase {
 
 /** A consumed durable Access authorization, never a caller-supplied approval.
  * Native credential results carry the complete credential extension. The unbound
- * branch exists for sessions and legacy setCredential only; it cannot carry a
- * partial credential binding. Auth must compare the native extension to its stage.
+ * branch cannot carry a partial credential binding. Auth must compare the native
+ * extension to its stage.
  */
 export type EffectAuthorization =
   | (EffectAuthorizationBase & {
@@ -161,9 +217,39 @@ export type AssignmentProof =
   | { kind: 'none' | 'unresolved' }
   | { kind: 'resolved'; principalId: string; assignedActorId: string; requestId: string; valid: string };
 
+/** A committed Access barrier receipt bound to its account, purpose, operation and floor. */
+export type BarrierReceipt = {
+  accountId: string;
+  purpose: BarrierProof['purpose'];
+  operationKey: string;
+  receiptId: string;
+  minimumAuthnEpoch: number;
+};
+
+/** Exact immutable committed erasure. T is read from Access, never an Auth clock. */
+export type AuthErasureBarrier = { accountId: string; version: number; at: string };
+/** The original, fixed erase-auth-owner dependency, not a general continuation. */
+export type AuthErasureSource = AuthErasureBarrier & { continuationId: string; receiptId: string };
+/** Auth-only historical publication capabilities. These carry no current Auth
+ * receiving incarnation or independent restore/writer fence. Neither publication
+ * acknowledges a participant or issues CurrentAuthReceivingClosure.
+ */
+export type AuthErasureProofPorts = {
+  readAuthErasureBarrier?(accountId: string): Promise<AuthErasureBarrier | null>;
+  readAuthErasureSource?(input: { accountId: string; receiptId: string }): Promise<AuthErasureSource | null>;
+  recordAuthNativeConsumption?(source: AuthErasureSource): Promise<void>;
+  recordAuthHistoryCompletion?(barrier: AuthErasureBarrier): Promise<void>;
+};
+
 /** Internal application ports. Never construct these results from HTTP fields. */
-export interface TrustedAccessPorts {
-  readAccount(accountId: string): Promise<AccessAccount | null>;
+interface SharedAccessPorts
+  extends AuthErasureProofPorts, Partial<AuthErasureObligationPorts>, Partial<AuthReceivingClosurePorts> {
+  /** Private attribution only, resolved before creating a new private copy. */
+  readNativeCreationContext?: ReadNativeCreationContext;
+  /** Private mechanical consumer only; never current user disclosure or authority. */
+  readOriginalLifecycleResult?: import('./native-lifecycle-results.ts').OriginalLifecycleResultPort['readOriginalLifecycleResult'];
+  /** Sign-in may expose a suspended human's state privately for a refusal after credential verification. */
+  readAccount(accountId: string, purpose?: 'signin'): Promise<AccessAccount | null>;
   /** Deleted and fenced accounts only. Ordinary reads stay empty for those rows. */
   readErasureAccount?(accountId: string): Promise<AccessAccount | null>;
   /** Private pending read bound to the exact verified native registration command. */
@@ -177,32 +263,9 @@ export interface TrustedAccessPorts {
   /** Consume once while rechecking relationship, formula, floors and client evidence.
    * Exact credential calls return CredentialEffectAuthorization; Auth compares its
    * operationKey, effectReference, effectDigest, purpose and subject with its own
-   * immutable stage before writing. Native capabilities reject the legacy variant.
+   * immutable stage before writing. A credential purpose requires both locators.
    */
   consumeAuthorization?(input: AuthorizationConsumeInput): Promise<EffectAuthorization>;
-  /** Trusted native credential capability. Missing ports fail closed. Approval
-   * creates the exact native opening; revalidation repeats current authorization
-   * at the Auth commit boundary and before disclosing a saved result. The exact
-   * floor receipt permits only this in-flight operation against its own barrier. */
-  approveCredentialEffect?(input: {
-    stage: CredentialEffectBinding;
-    human: SessionProof;
-  }): Promise<{ reference: string; expiresAt: string }>;
-  /** Resolve the exact native opening from authorization and compare its binding
-   * to stage. Repeat the same formula, current human/operator/subject state,
-   * fences, floors, consent, evidence and original expiry on every call. replay
-   * permits saved-result disclosure only; it never reopens a consumed approval.
-   * floorReceipt permits only the exact in-flight own-human barrier exception.
-   * No proof or permission context may be retained after this callback. */
-  revalidateCredentialEffect?(input: {
-    stage: CredentialEffectBinding;
-    human: SessionProof;
-    authorization: string;
-    consumedOpening?: CredentialEffectAuthorization;
-    floorReceipt?: CredentialFloorReceipt;
-    replay: boolean;
-  }): Promise<void>;
-  advanceCredentialFloor?: CredentialFloorPort;
   /** Commit a durable floor increase before returning; never clear an existing fence. */
   invalidateAccount?:
     | ((input: {
@@ -211,10 +274,18 @@ export interface TrustedAccessPorts {
         reason: 'consent-reduction' | 'session-revocation' | 'logout' | 'refresh-replay';
         proofReference?: string;
         operationKey?: string;
+        /** Exactly the operator opening that created the reducing session of an automated account. */
+        openingReceiptId?: string;
       }) => Promise<InvalidationReceipt>)
     | undefined;
   /** Recovery-only authoritative read may expose a fenced active human's current floor. */
   readRecoveryAccount?(accountId: string): Promise<AccessAccount | null>;
+  /** Cleanup after a barrier reads every account the barrier fenced, of either kind, with its fence flag and floor. */
+  readFencedAccount(accountId: string): Promise<AccessAccount | null>;
+  /** Confirm the exact committed receipt before Auth applies any barrier effect. */
+  confirmBarrier(input: BarrierReceipt): Promise<boolean>;
+  /** Clear the fence a consent reduction raised after its Auth effects complete. */
+  completeBarrier?(input: BarrierReceipt): Promise<void>;
   /** Reject a stale proof; commit an invalidation barrier without clearing any fence. */
   authorizeRecovery?(input: {
     accountId: string;
@@ -228,6 +299,55 @@ export interface TrustedAccessPorts {
    * receipt/floor before execution or replay. HTTP success awaits completion. */
   completeRecovery?: (reference: string) => Promise<void>;
 }
+
+/** Native approval and floor ports for the purposes installed by the host. */
+export interface CredentialApprovalPorts<Purpose extends CredentialFloorPurpose> {
+  /** Trusted native credential capability. Missing ports fail closed. Approval
+   * creates the exact native opening; revalidation repeats current authorization
+   * at the Auth commit boundary and before disclosing a saved result. The exact
+   * floor receipt permits only this in-flight operation against its own barrier. */
+  approveCredentialEffect?(input: {
+    stage: CredentialEffectBinding<Purpose>;
+    human: SessionProof;
+    /** Deadline of the request Auth is serving. */
+    deadline?: number;
+  }): Promise<{ reference: string; expiresAt: string }>;
+  /** Resolve the exact native opening from authorization and compare its binding
+   * to stage. Repeat the same formula, current human/operator/subject state,
+   * fences, floors, consent, evidence and original expiry on every call. replay
+   * permits saved-result disclosure only; it never reopens a consumed approval.
+   * floorReceipt permits only the exact in-flight own-human barrier exception.
+   * No proof or permission context may be retained after this callback. */
+  revalidateCredentialEffect?(input: {
+    stage: CredentialEffectBinding<Purpose>;
+    human: SessionProof;
+    authorization: string;
+    consumedOpening?: CredentialEffectAuthorization<Purpose>;
+    floorReceipt?: CredentialFloorReceipt;
+    replay: boolean;
+    /** Deadline of the request Auth is serving. */
+    deadline?: number;
+  }): Promise<void>;
+  advanceCredentialFloor?(input: Parameters<CredentialFloorPort<Purpose>>[0]): Promise<CredentialFloorReceipt>;
+}
+
+/** Explicit opt-in keeps existing password/key-only hosts typed to their four purposes. */
+export type PasskeyTrustedAccessPorts = SharedAccessPorts &
+  CredentialApprovalPorts<CredentialFloorPurpose> & {
+    passkeys: true;
+    /** Own-human passkey consumer; operator entry points retain CredentialPurpose. */
+    consumePasskeyAuthorization(
+      input: PasskeyAuthorizationInput,
+    ): Promise<CredentialEffectAuthorization<PasskeyPurpose>>;
+  };
+
+export type TrustedAccessPorts =
+  | (SharedAccessPorts &
+      CredentialApprovalPorts<CredentialPurpose> & {
+        passkeys?: false;
+        consumePasskeyAuthorization?: undefined;
+      })
+  | PasskeyTrustedAccessPorts;
 
 export interface SessionProof {
   account_id: string;
@@ -314,7 +434,7 @@ export type AccountOperation =
 
 export interface AccountWorkflowPorts<Context = WorkflowContext> {
   registrationTarget(key: string): string;
-  reserveHandle(input: { handle: string; accountId: string; key: string }): Result<Reservation>;
+  reserveHandle(input: { handle: string; accountId: string; key: string }, context?: Context): Result<Reservation>;
   createPending(
     input: Command & { handle: string; reservationId: string },
   ): Result<{ accountId: string; registrationId: string; expiresAt: string }>;
@@ -322,6 +442,8 @@ export interface AccountWorkflowPorts<Context = WorkflowContext> {
     input: Command & { handle: string; reservationId: string; evidence?: unknown },
   ): Result<{ accountId: string; handle: string }>;
   activate(input: Command & { evidence: unknown }): Result<{ accountId: string }>;
+  /** Private mechanical settlement only. Missing native source remains pending. */
+  readOriginalLifecycleResult?: import('./native-lifecycle-results.ts').OriginalLifecycleResultPort['readOriginalLifecycleResult'];
   expireRegistration(input: Command & { handle: string; reservationId: string }): Result<unknown>;
   releaseExpiredRegistrationHandle(input: Command & { handle: string; reservationId: string }): Result<unknown>;
   provisioningReference(input: {
@@ -339,6 +461,8 @@ export interface AccountWorkflowPorts<Context = WorkflowContext> {
    * Callback-only historical hosts may omit this adapter. */
   authorizeUnprotectedOperation?(operation: AccountOperation): Promise<void>;
   actorAccountId?(context: Context): string;
+  readNativeCreationContext?: ReadNativeCreationContext;
+  copyActors?(context: Context): Promise<readonly { accountId: string; role: 'human' | 'initiator' | 'delegate' }[]>;
   stableCommandKey?(context: Context, phase: string): string;
   /** Durable approval metadata for the resolved context. Absent on historical hosts. */
   approvalBinding?(context: Context): { operationKey: string; digest: string; commandKeyPrefix: string } | undefined;
@@ -431,6 +555,8 @@ export interface ProvisioningResult {
 export type NativeWorkflowPair = { accountId: string; reservationId: string };
 export type AutomatedCreationBinding = Omit<Extract<AccountOperation, { kind: 'automated' }>, 'authorization'>;
 export type NativeWorkflowProofPorts = {
+  /** Optional for older compositions: missing original source always stays pending. */
+  readOriginalLifecycleSource?: import('./native-lifecycle-results.ts').OriginalLifecycleSourcePort['readOriginalLifecycleSource'];
   recordPending(input: NativeWorkflowPair & { reference: string }): Promise<void>;
   pendingReference(input: NativeWorkflowPair): Promise<string | null>;
   provisioningEvidence(input: NativeWorkflowPair): Promise<unknown>;
@@ -456,7 +582,12 @@ export type MembershipWorkInput =
       authorization: string;
     }
   | { kind: 'organization'; organizationId: string; authorization: string };
-export type MembershipWorkReservation = { accountId: string; principal: MembershipPrincipal; reservationId: string };
+export type MembershipWorkReservation = {
+  accountId: string;
+  principal: MembershipPrincipal;
+  reservationId: string;
+  transition?: { generationId: string; operationId: string };
+};
 export type MembershipWorkResult =
   | { status: 'completed'; accountId: string; reservationId: string }
   | { status: 'membership_limit'; code: 'membership_limit' };
@@ -470,6 +601,10 @@ export interface MembershipWorkflowPorts<Context> {
     reservation: MembershipWorkReservation,
     key: string,
   ): Promise<unknown>;
+  /** Realm-only mechanical obligation ports. A Realm workflow fails closed when unavailable. */
+  recover?(reservation: MembershipWorkReservation, key: string): Promise<boolean>;
+  finalize?(reservation: MembershipWorkReservation, key: string): Promise<unknown>;
+  cancel?(reservation: MembershipWorkReservation, key: string): Promise<unknown>;
   terminalize(reservation: MembershipWorkReservation, key: string): Promise<unknown>;
   release(input: MembershipWorkReservation & { key: string }): Promise<unknown>;
 }
@@ -482,9 +617,14 @@ export type BarrierProof = Readonly<{
   operationKey: string;
   digest: string;
   expiresAt: string;
+  /** Only a consent reduction from an operator-opened session binds the opening Auth committed for it. */
+  openingReceiptId?: string;
 }>;
 
-export type BarrierProofExpectation = Pick<BarrierProof, 'accountId' | 'purpose' | 'previousEpoch' | 'operationKey'>;
+export type BarrierProofExpectation = Pick<
+  BarrierProof,
+  'accountId' | 'purpose' | 'previousEpoch' | 'operationKey' | 'openingReceiptId'
+>;
 
 /** Committed successful native Auth recovery, bound to the exact Access barrier
  * and a new credential establishment. Structurally matches Access evidence. */
@@ -501,6 +641,7 @@ export type RecoveryEstablishmentEvidence = Readonly<{
 /** Auth capabilities consumed by kernel session composition. */
 export interface AuthSessionPort {
   internal: {
+    receivingClosure?: import('./auth-receiving-closure.ts').AuthReceivingClosureProducer;
     accessTokenForProof(proof: SessionProof): Promise<string>;
   };
 }
@@ -532,3 +673,23 @@ export type BarrierProofVerifierFactory<Database> = (options: { database: Databa
 export type ProvisioningEvidenceVerifierFactory<Database> = (options: {
   database: Database;
 }) => ProvisioningEvidencePort;
+export type {
+  OriginalLifecycleRequest,
+  OriginalLifecycleSource,
+  OriginalLifecycleSourcePort,
+  OriginalLifecycleResult,
+  OriginalLifecycleResultPort,
+} from './native-lifecycle-results.ts';
+export {
+  securityResponseLimits,
+  securityScopeLimit,
+  securityJsonStringBytes,
+  securityFixedResponseByteBudgets,
+  securityResponseByteBudgets,
+} from './security-response-bounds.ts';
+
+export * from './automated-page-response-bounds.ts';
+export * from './account-operation-response-bounds.ts';
+export * from './registration-response-bounds.ts';
+export * from './sign-in-response-bounds.ts';
+export * from './account-operation-response-bounds.ts';

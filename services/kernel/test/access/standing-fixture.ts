@@ -8,14 +8,15 @@ import { createPool } from '../../src/database/pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { newId, routeOf, partitionOf } from '../../src/route/route.ts';
 import { accessCheck, type Resource, type AccessClient } from '../../src/request/access.ts';
-import { registerTestClient, testAccess, testApp } from '../support/test-kernel.ts';
+import { registerTestClient, testAccess, testKernel } from '../support/test-kernel.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 /** Real Auth issuance and production Access; SQL below is privileged fixture setup. */
-export async function standingFixture(extraActions: readonly string[] = []) {
+export async function standingFixture(extraActions: readonly string[] = [], commandPool?: Pool) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-  const pool = createPool(url);
+  const pool = commandPool ?? createPool(url);
   pool.options.max = 1;
   const reader = new Pool({ connectionString: url, max: 1 });
   const authDatabase = `standing_auth_${process.pid}`;
@@ -72,7 +73,7 @@ export async function standingFixture(extraActions: readonly string[] = []) {
     audience,
     secret: 'test-only-better-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(reader, routeOf(id)!, id);
         return (
@@ -89,9 +90,8 @@ export async function standingFixture(extraActions: readonly string[] = []) {
         if (!approvals.delete(reference)) throw new Error('No fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
-  const app = testApp({ pool });
   for (const id of [actor, principal, recipient]) {
     await reader.query(
       `INSERT INTO access.account (route,account_id,kind,state,transaction_id)
@@ -117,36 +117,30 @@ export async function standingFixture(extraActions: readonly string[] = []) {
     'thread:create': ['content.thread', 'content.post'],
     'post:create': ['content.post'],
   };
-  for (const [index, action] of actions.entries()) {
-    const detail = {
-      operationId: action.replace(':', '.'),
-      'x-action': action,
-      security: [{ bearerAuth: [] }],
+  const mountedActions = actionCatalogue(testKernel({ pool }));
+  const fixtureActions = new Map<string, { anonymous: boolean; 'x-resource-types'?: readonly string[] }>();
+  for (const action of actions) {
+    const mounted = mountedActions.get(action);
+    fixtureActions.set(action, {
+      anonymous: mounted?.anonymous ?? false,
       ...(declaredTypes[action] === undefined ? {} : { 'x-resource-types': declaredTypes[action] }),
-    };
-    app.get(
-      `/fixture/${index}`,
-      {
-        detail,
-      },
-      () => null,
-    );
+    });
   }
   await registerTestClient(auth, {
     clientId: 'web',
     firstParty: true,
-    actions: actionCatalogue(app),
+    actions: fixtureActions,
     scopes: ordinaryClientScopes,
   });
   await registerTestClient(auth, {
     clientId: 'other-client',
     firstParty: true,
-    actions: actionCatalogue(app),
+    actions: fixtureActions,
     scopes: ordinaryClientScopes,
   });
   const access = testAccess({
     pool,
-    actions: actionCatalogue(app),
+    actions: fixtureActions,
     resourceRoles: {
       roles: { 'fixture.owner': ['fixture:own'], 'fixture.unmounted': ['unmounted:action'] },
       types: {
@@ -211,6 +205,7 @@ export async function standingFixture(extraActions: readonly string[] = []) {
         },
       },
       actor: await access.authenticate(token, boundary),
+      bearer: token,
     };
   }
   async function grant(subject: string, action: string, target = resource, valid = '(,)') {
@@ -335,7 +330,7 @@ export async function standingFixture(extraActions: readonly string[] = []) {
           await dropTestDatabase(reader, authDatabase);
         } finally {
           try {
-            await pool.end();
+            if (!commandPool) await pool.end();
           } finally {
             await reader.end();
           }

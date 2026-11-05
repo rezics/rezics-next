@@ -1,0 +1,135 @@
+import { m } from '../../paraglide/messages.js';
+import { getLocale } from '../../paraglide/runtime.js';
+import { ImportSourceOutcome } from '../rich-private-entry/source-confirm';
+import type { BangumiOutcome, BangumiRowMeta } from './contract';
+import { BangumiAction } from './controls';
+import { bangumiOutcomeLabel } from './meaning';
+import { BangumiCurrentFacts, BangumiScoreOutcomeView } from './score';
+
+function Outcome({
+  outcome,
+  titles,
+  row,
+  busy,
+  onInspect,
+  admission,
+}: {
+  outcome: BangumiOutcome;
+  titles: Map<number, string>;
+  row: BangumiRowMeta | undefined;
+  busy: boolean;
+  onInspect: (ordinal: number) => void;
+  admission: BangumiRowMeta['sourceAdmission'];
+}) {
+  const acknowledged = outcome.status === 'applied' || outcome.score?.status === 'applied';
+  const inspected = !!row?.entryReadback || !!row?.voteReadback;
+  return (
+    <li className="rounded-md border p-3" data-bangumi-outcome={outcome.status} data-bangumi-row={outcome.ordinal}>
+      <p className="font-medium [overflow-wrap:anywhere]">{titles.get(outcome.ordinal) ?? `#${outcome.ordinal + 1}`}</p>
+      <p>{bangumiOutcomeLabel(outcome.status)}</p>
+      {outcome.applied.length ? (
+        <p className="text-sm">{m.library_bangumi_applied_fields({ fields: outcome.applied.join(', ') })}</p>
+      ) : null}
+      {outcome.retained.length ? (
+        <details>
+          <summary className="min-h-11 cursor-pointer py-2">{m.library_bangumi_retained_summary()}</summary>
+          <p className="text-sm [overflow-wrap:anywhere]">
+            {m.library_bangumi_retained_fields({ fields: outcome.retained.join(', ') })}
+          </p>
+        </details>
+      ) : null}
+      {outcome.score ? <BangumiScoreOutcomeView outcome={outcome.score} /> : null}
+      {outcome.status === 'stale' ? (
+        <p className="text-sm text-muted-foreground">{m.library_bangumi_stale_help()}</p>
+      ) : null}
+      {acknowledged && row?.target ? (
+        <div className="mt-3 space-y-2">
+          <BangumiAction type="button" variant="outline" disabled={busy} onClick={() => onInspect(outcome.ordinal)}>
+            {inspected ? m.library_bangumi_refresh_current() : m.library_bangumi_inspect_current()}
+          </BangumiAction>
+          <BangumiCurrentFacts entry={row.entryReadback} vote={row.voteReadback} />
+        </div>
+      ) : null}
+      <ImportSourceOutcome outcome={admission} />
+    </li>
+  );
+}
+
+export function BangumiResultPage({
+  outcomes,
+  remaining,
+  meta,
+  busy,
+  cancelled,
+  canRetry,
+  onRetry,
+  onReview,
+  onRefresh,
+  onInspect,
+}: {
+  outcomes: BangumiOutcome[];
+  remaining: number[];
+  meta: BangumiRowMeta[];
+  busy: boolean;
+  cancelled: boolean;
+  canRetry: boolean;
+  onRetry: () => void;
+  onReview: () => void;
+  onRefresh: () => void;
+  onInspect: (ordinal: number) => void;
+}) {
+  const titles = new Map(meta.map((row) => [row.ordinal, row.title]));
+  const rowsByOrdinal = new Map(meta.map((row) => [row.ordinal, row]));
+  const admissions = new Map(meta.map((row) => [row.ordinal, row.sourceAdmission]));
+  const locale = getLocale();
+  return (
+    <section className="space-y-4" data-bangumi-stage="results">
+      {cancelled ? (
+        <p role="status">{m.library_bangumi_stopped()}</p>
+      ) : (
+        <p role="status">{m.library_bangumi_partial()}</p>
+      )}
+      <p className="text-sm text-muted-foreground">{m.library_bangumi_erasure_limit()}</p>
+      <ul className="space-y-3">
+        {outcomes.map((outcome) => (
+          <Outcome
+            key={outcome.ordinal}
+            outcome={outcome}
+            titles={titles}
+            row={rowsByOrdinal.get(outcome.ordinal)}
+            busy={busy}
+            onInspect={onInspect}
+            admission={admissions.get(outcome.ordinal) ?? null}
+          />
+        ))}
+        {remaining.map((ordinal) => (
+          <li
+            key={`remaining-${ordinal}`}
+            className="rounded-md border p-3"
+            data-bangumi-outcome="unattempted"
+            data-bangumi-row={ordinal}
+          >
+            <p className="font-medium [overflow-wrap:anywhere]">{titles.get(ordinal) ?? `#${ordinal + 1}`}</p>
+            <p>{m.library_bangumi_result_unattempted()}</p>
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-wrap gap-3">
+        <BangumiAction type="button" variant="outline" disabled={busy} onClick={onReview}>
+          {m.library_bangumi_return_review()}
+        </BangumiAction>
+        <BangumiAction type="button" variant="outline" disabled={busy} onClick={onRefresh}>
+          {m.library_bangumi_fresh_read()}
+        </BangumiAction>
+        {canRetry ? (
+          <BangumiAction type="button" disabled={busy} onClick={onRetry}>
+            {m.library_bangumi_retry_command()}
+          </BangumiAction>
+        ) : null}
+        <a href={`/${locale}/library`} className="inline-flex min-h-11 items-center px-3 py-2 underline">
+          {m.library_bangumi_return_library()}
+        </a>
+      </div>
+    </section>
+  );
+}

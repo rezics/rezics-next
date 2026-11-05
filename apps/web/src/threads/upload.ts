@@ -1,6 +1,8 @@
+import type { FutureThreadUploadEpisode } from './thread-upload-episode/episode';
+import { sessionCsrfToken } from '../session/query';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import type { UploadedImage } from '@rezics/ui';
-import type { ReservationInput } from '../media/kernel';
+import type { Media, ReservationInput } from '../media/kernel';
 import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 
 /** Kernel reservation accepts only these image types. */
@@ -23,6 +25,10 @@ export type UploadRefusalReason = 'closed' | 'type' | 'too-large' | 'rejected' |
 export class UploadRefusal extends Error {
   readonly reason: UploadRefusalReason;
   readonly retryAfter?: number;
+  retryAfterHeader?: string;
+  responseTime?: number;
+  /** Retain a known reservation when completion or processing has an uncertain outcome. */
+  mediaId?: string;
   constructor(reason: UploadRefusalReason, retryAfter?: number) {
     super(reason);
     this.name = 'UploadRefusal';
@@ -31,19 +37,40 @@ export class UploadRefusal extends Error {
   }
 }
 
-type ReservedMedia = { id: string; state: string; mediaType: string; byteCount: number };
+type ReservedMedia = Pick<Media, 'id' | 'state' | 'mediaType' | 'byteCount' | 'containerId'>;
 type FutureThread = { boardId: string; idempotencyKey: string };
-type ReserveTarget = string | { containerId: string } | { newThread: FutureThread };
+type PostReserveTarget = string | { containerId: string } | { newThread: FutureThread };
+type ReserveTarget = PostReserveTarget | { realmId: string };
+type ImagePurpose = 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
+export type UploadStage = 'reservation' | 'transfer' | 'processing';
+export type UploadStageUpdate = (stage: UploadStage, mediaId?: string) => void;
+export type UploadResponseWait = (status: number, retryAfterHeader: string | undefined, responseTime: number) => void;
+export type MediaReservationIntent = Readonly<{
+  key: string;
+  body: Readonly<ReturnType<typeof reserveBody>>;
+  file: File;
+  viewer: string;
+  credential: string;
+}>;
 
-// A 409 names no thread, and the site has no route key to derive one. Keep the id the reservation already returned.
-const futureThreadIds = new Map<string, string>();
+/** One attachment's original commands. A disclosed container gets its own immutable reservation command. */
+export type ReplyImageReservation = {
+  original: MediaReservationIntent;
+  container?: MediaReservationIntent;
+};
+export type ReplyImageUploadOptions = {
+  episode?: FutureThreadUploadEpisode;
+  reservation: ReplyImageReservation;
+  onStage?: UploadStageUpdate;
+  onResponseWait?: UploadResponseWait;
+};
 
 function isPostImageType(value: string): value is PostImageType {
   return (postImageTypes as readonly string[]).includes(value);
 }
 
 function csrfToken(): string {
-  return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+  return sessionCsrfToken() ?? '';
 }
 
 function throwIfAborted(signal: AbortSignal): void {
@@ -69,7 +96,20 @@ function parseRetryAfter(value: string | null): number | undefined {
   return Math.min(3600, Math.max(0, Math.ceil((date - Date.now()) / 1000)));
 }
 
-async function refusalFrom(response: Response): Promise<UploadRefusal> {
+function attachRefusalMetadata(
+  refusal: UploadRefusal,
+  retryAfterHeader: string | undefined,
+  responseTime: number,
+): UploadRefusal {
+  if (retryAfterHeader !== undefined) refusal.retryAfterHeader = retryAfterHeader;
+  refusal.responseTime = responseTime;
+  return refusal;
+}
+
+async function refusalFrom(response: Response, onResponseWait?: UploadResponseWait): Promise<UploadRefusal> {
+  const responseTime = Date.now();
+  const retryAfterHeader = response.headers.get('retry-after') ?? undefined;
+  onResponseWait?.(response.status, retryAfterHeader, responseTime);
   if (response.status === 403) {
     const body = await response
       .clone()
@@ -77,23 +117,27 @@ async function refusalFrom(response: Response): Promise<UploadRefusal> {
       .catch(() => undefined);
     if (isPlatformClosedProblem(response.status, body)) {
       await response.body?.cancel().catch(() => {});
-      return new UploadRefusal('closed');
+      return attachRefusalMetadata(new UploadRefusal('closed'), retryAfterHeader, responseTime);
     }
   }
   await response.body?.cancel().catch(() => {});
-  if (response.status === 415) return new UploadRefusal('type');
-  if (response.status === 413) return new UploadRefusal('too-large');
+  if (response.status === 415) return attachRefusalMetadata(new UploadRefusal('type'), retryAfterHeader, responseTime);
+  if (response.status === 413)
+    return attachRefusalMetadata(new UploadRefusal('too-large'), retryAfterHeader, responseTime);
   if (response.status === 429) {
-    const retryAfter = parseRetryAfter(response.headers.get('retry-after'));
-    if (retryAfter === undefined) return new UploadRefusal('rate-limited');
-    return new UploadRefusal('rate-limited', retryAfter);
+    const retryAfter = parseRetryAfter(retryAfterHeader ?? null);
+    return attachRefusalMetadata(
+      retryAfter === undefined ? new UploadRefusal('rate-limited') : new UploadRefusal('rate-limited', retryAfter),
+      retryAfterHeader,
+      responseTime,
+    );
   }
-  return new UploadRefusal('unavailable');
+  return attachRefusalMetadata(new UploadRefusal('unavailable'), retryAfterHeader, responseTime);
 }
 
-function siteFetch(path: string, init: RequestInit & { method: string }): Promise<Response> {
+function siteFetch(path: string, init: RequestInit & { method: string }, credential?: string): Promise<Response> {
   const headers = new Headers(init.headers);
-  if (init.method !== 'GET' && init.method !== 'HEAD') headers.set('X-CSRF-Token', csrfToken());
+  if (init.method !== 'GET' && init.method !== 'HEAD') headers.set('X-CSRF-Token', credential ?? csrfToken());
   return fetch(path, { ...init, credentials: 'same-origin', cache: 'no-store', headers });
 }
 
@@ -115,12 +159,24 @@ function mediaOf(value: unknown): ReservedMedia | null {
   if (
     typeof record.id !== 'string' ||
     record.id === '' ||
-    typeof record.state !== 'string' ||
+    (record.state !== 'reserved' &&
+      record.state !== 'uploaded' &&
+      record.state !== 'available' &&
+      record.state !== 'rejected') ||
     typeof record.mediaType !== 'string' ||
-    typeof record.byteCount !== 'number'
+    typeof record.byteCount !== 'number' ||
+    !Number.isSafeInteger(record.byteCount) ||
+    typeof record.containerId !== 'string' ||
+    record.containerId === ''
   )
     return null;
-  return { id: record.id, state: record.state, mediaType: record.mediaType, byteCount: record.byteCount };
+  return {
+    id: record.id,
+    state: record.state,
+    mediaType: record.mediaType,
+    byteCount: record.byteCount,
+    containerId: record.containerId,
+  };
 }
 
 function pause(ms: number, signal: AbortSignal): Promise<void> {
@@ -190,63 +246,145 @@ async function naturalSize(file: Blob, signal: AbortSignal): Promise<{ width: nu
   return size;
 }
 
-function reserveBody(target: ReserveTarget, file: File) {
-  const image = { purpose: 'post-image' as const, mediaType: file.type, byteCount: file.size };
+function reserveBody(target: ReserveTarget, file: File, purpose: ImagePurpose) {
+  const image = { purpose, mediaType: file.type, byteCount: file.size };
   if (typeof target === 'string') return { containerId: target, ...image };
   if ('containerId' in target) return { containerId: target.containerId, ...image };
-  return { newThread: target.newThread, ...image };
+  if ('realmId' in target) return { realmId: target.realmId, ...image };
+  return { newThread: Object.freeze({ ...target.newThread }), ...image };
 }
 
-async function reserve(target: ReserveTarget, file: File, signal: AbortSignal): Promise<ReservedMedia> {
-  const response = await siteFetch('/media', {
-    method: 'POST',
-    signal,
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(reserveBody(target, file)),
+export function createMediaReservationIntent(
+  target: ReserveTarget,
+  file: File,
+  purpose: ImagePurpose,
+  viewer: string,
+  credential = csrfToken(),
+): MediaReservationIntent {
+  return Object.freeze({
+    key: crypto.randomUUID(),
+    body: Object.freeze(reserveBody(target, file, purpose)),
+    file,
+    viewer,
+    credential,
   });
+}
+
+async function reserve(
+  target: ReserveTarget,
+  file: File,
+  signal: AbortSignal,
+  purpose: ImagePurpose,
+  intent?: MediaReservationIntent,
+  options?: ReplyImageUploadOptions,
+  credential = intent?.credential ?? csrfToken(),
+  onResponseWait = options?.onResponseWait,
+): Promise<ReservedMedia> {
+  throwIfAborted(signal);
+  options?.episode?.assertCurrent();
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (intent) headers['idempotency-key'] = JSON.stringify(intent.key);
+  const response = await siteFetch(
+    '/media',
+    {
+      method: 'POST',
+      signal,
+      headers,
+      body: JSON.stringify(intent?.body ?? reserveBody(target, file, purpose)),
+    },
+    credential,
+  );
+  throwIfAborted(signal);
+  options?.episode?.assertCurrent();
   if (response.status === 409 && typeof target !== 'string' && 'newThread' in target) {
-    const key = target.newThread.idempotencyKey;
-    const known = futureThreadIds.get(key);
-    if (known) {
-      await response.body?.cancel().catch(() => {});
-      return reserve({ containerId: known }, file, signal);
-    }
-    const discovered = containerIdFrom(await response.json().catch(() => undefined));
-    if (!discovered) throw new UploadRefusal('unavailable');
-    futureThreadIds.set(key, discovered);
-    return reserve({ containerId: discovered }, file, signal);
+    const disclosed = containerIdFrom(await response.json().catch(() => undefined));
+    throwIfAborted(signal);
+    options?.episode?.assertCurrent();
+    const known = options?.episode?.containerId ?? disclosed;
+    if (!known) throw new UploadRefusal('unavailable');
+    options?.episode?.remember(known);
+    // Recovery repeats this exact command even if its response is lost.
+    const reservation = options?.reservation;
+    if (reservation && !reservation.container)
+      reservation.container = createMediaReservationIntent(
+        { containerId: known },
+        file,
+        purpose,
+        intent!.viewer,
+        intent!.credential,
+      );
+    return reserve(
+      { containerId: known },
+      file,
+      signal,
+      purpose,
+      reservation?.container,
+      options,
+      credential,
+      onResponseWait,
+    );
   }
-  if (!response.ok) throw await refusalFrom(response);
+  if (!response.ok) throw await refusalFrom(response, onResponseWait);
   const payload = await response.json();
+  throwIfAborted(signal);
+  options?.episode?.assertCurrent();
   const media = mediaOf(payload);
   if (!media) throw new UploadRefusal('unavailable');
   if (typeof target !== 'string' && 'newThread' in target) {
     const containerId = containerIdFrom(payload);
-    if (containerId) futureThreadIds.set(target.newThread.idempotencyKey, containerId);
+    if (containerId) options?.episode?.remember(containerId);
   }
   return media;
 }
 
-async function putBytes(media: ReservedMedia, file: File, signal: AbortSignal): Promise<void> {
-  const response = await siteFetch(`/media/${encodeURIComponent(media.id)}`, {
-    method: 'PUT',
-    signal,
-    headers: { 'content-type': media.mediaType },
-    body: file.slice(0, file.size, media.mediaType),
-  });
-  if (!response.ok) throw await refusalFrom(response);
+async function putBytes(
+  media: ReservedMedia,
+  file: File,
+  signal: AbortSignal,
+  credential: string,
+  onResponseWait?: UploadResponseWait,
+): Promise<void> {
+  throwIfAborted(signal);
+  const response = await siteFetch(
+    `/media/${encodeURIComponent(media.id)}`,
+    {
+      method: 'PUT',
+      signal,
+      headers: { 'content-type': media.mediaType },
+      body: file.slice(0, file.size, media.mediaType),
+    },
+    credential,
+  );
+  if (!response.ok) throw await refusalFrom(response, onResponseWait);
   await response.body?.cancel().catch(() => {});
 }
 
-async function poll(id: string, signal: AbortSignal): Promise<ReservedMedia> {
-  const started = Date.now();
+async function readReservation(
+  id: string,
+  signal: AbortSignal,
+  credential: string,
+  onResponseWait?: UploadResponseWait,
+): Promise<ReservedMedia> {
+  const response = await siteFetch(`/media/${encodeURIComponent(id)}`, { method: 'GET', signal }, credential);
+  if (!response.ok) throw await refusalFrom(response, onResponseWait);
+  const media = mediaOf(await response.json());
+  if (!media || media.id !== id) throw new UploadRefusal('unavailable');
+  return media;
+}
+
+async function poll(
+  id: string,
+  signal: AbortSignal,
+  initial?: ReservedMedia,
+  started = Date.now(),
+  credential = csrfToken(),
+  onResponseWait?: UploadResponseWait,
+): Promise<ReservedMedia> {
   let delay = initialDelay;
   for (let read = 0; read < maxReads; read += 1) {
     throwIfAborted(signal);
-    const response = await siteFetch(`/media/${encodeURIComponent(id)}`, { method: 'GET', signal });
-    if (!response.ok) throw await refusalFrom(response);
-    const media = mediaOf(await response.json());
-    if (!media) throw new UploadRefusal('unavailable');
+    const media = read === 0 && initial ? initial : await readReservation(id, signal, credential, onResponseWait);
+    throwIfAborted(signal);
     if (media.state === 'available' || media.state === 'rejected') return media;
     const wait = Math.min(delay, maxDelay);
     delay = Math.min(delay * 2, maxDelay);
@@ -256,23 +394,271 @@ async function poll(id: string, signal: AbortSignal): Promise<ReservedMedia> {
   throw new UploadRefusal('unavailable');
 }
 
+async function readUploadedImage(
+  mediaId: string,
+  file: File,
+  signal: AbortSignal,
+  initial?: ReservedMedia,
+  started?: number,
+  credential = csrfToken(),
+  onResponseWait?: UploadResponseWait,
+): Promise<UploadedImage> {
+  try {
+    const settled = await poll(mediaId, signal, initial, started, credential, onResponseWait);
+    if (settled.state !== 'available') throw new UploadRefusal('rejected');
+    const size = await naturalSize(file, signal);
+    return { src: mediaId, width: size.width, height: size.height };
+  } catch (error) {
+    throwIfAborted(signal);
+    if (isAbort(error)) throw error;
+    const failure = error instanceof UploadRefusal ? error : new UploadRefusal('unavailable');
+    failure.mediaId = mediaId;
+    throw failure;
+  }
+}
+
 /** Reserve a post image on a thread or a future thread, upload its bytes, and resolve once content accepts it. */
-export async function uploadReplyImage(target: ReserveTarget, file: File, signal: AbortSignal): Promise<UploadedImage> {
+async function uploadImage(
+  target: ReserveTarget,
+  file: File,
+  signal: AbortSignal,
+  purpose: ImagePurpose,
+  intent?: MediaReservationIntent,
+  onStage?: UploadStageUpdate,
+  options?: ReplyImageUploadOptions,
+  onResponseWait?: UploadResponseWait,
+): Promise<UploadedImage> {
+  let mediaId: string | undefined;
+  const credential = intent?.credential ?? csrfToken();
   try {
     throwIfAborted(signal);
     if (!isPostImageType(file.type)) throw new UploadRefusal('type');
     if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
     if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
-    const reserved = await reserve(target, file, signal);
+    if (
+      intent &&
+      (intent.file !== file ||
+        intent.body.purpose !== purpose ||
+        (purpose === 'avatar' && 'containerId' in intent.body && intent.body.containerId !== intent.viewer))
+    )
+      throw new UploadRefusal('unavailable');
+    onStage?.('reservation');
+    const reserved = await reserve(target, file, signal, purpose, intent, options, credential, onResponseWait);
+    const expectedContainer =
+      typeof target === 'string'
+        ? target
+        : 'containerId' in target
+          ? target.containerId
+          : 'realmId' in target
+            ? target.realmId
+            : null;
+    if (
+      reserved.mediaType !== file.type ||
+      reserved.byteCount !== file.size ||
+      (expectedContainer !== null && reserved.containerId !== expectedContainer)
+    )
+      throw new UploadRefusal('unavailable');
+    mediaId = reserved.id;
     throwIfAborted(signal);
-    await putBytes(reserved, file, signal);
-    const settled = await poll(reserved.id, signal);
-    if (settled.state === 'rejected') throw new UploadRefusal('rejected');
-    const size = await naturalSize(file, signal);
-    return { src: reserved.id, width: size.width, height: size.height };
+    if (reserved.state === 'rejected') throw new UploadRefusal('rejected');
+    if (reserved.state === 'reserved') {
+      onStage?.('transfer', mediaId);
+      await putBytes(reserved, file, signal, credential, onResponseWait ?? options?.onResponseWait);
+      throwIfAborted(signal);
+    }
+    onStage?.('processing', mediaId);
+    return await readUploadedImage(
+      mediaId,
+      file,
+      signal,
+      undefined,
+      undefined,
+      credential,
+      onResponseWait ?? options?.onResponseWait,
+    );
   } catch (error) {
-    if (error instanceof UploadRefusal || isAbort(error)) throw error;
-    throw new UploadRefusal('unavailable');
+    throwIfAborted(signal);
+    if (isAbort(error)) throw error;
+    const failure = error instanceof UploadRefusal ? error : new UploadRefusal('unavailable');
+    if (mediaId !== undefined) failure.mediaId = mediaId;
+    throw failure;
+  }
+}
+
+export function uploadReplyImage(
+  target: PostReserveTarget,
+  file: File,
+  signal: AbortSignal,
+  options?: ReplyImageUploadOptions,
+): Promise<UploadedImage> {
+  const command = options?.reservation.container ?? options?.reservation.original;
+  const originalTarget = command?.body;
+  const reservedTarget =
+    originalTarget && 'containerId' in originalTarget ? { containerId: originalTarget.containerId! } : target;
+  return uploadImage(
+    reservedTarget,
+    file,
+    signal,
+    'post-image',
+    command,
+    options?.onStage,
+    options,
+    options?.onResponseWait,
+  );
+}
+
+/** Resume only missing bytes on the original reservation, then observe its native processing state. */
+export async function resumeReplyImageUpload(
+  mediaId: string,
+  file: File,
+  signal: AbortSignal,
+  onStage?: UploadStageUpdate,
+  intent?: MediaReservationIntent,
+  onResponseWait?: UploadResponseWait,
+): Promise<UploadedImage> {
+  const started = Date.now();
+  const credential = intent?.credential ?? csrfToken();
+  try {
+    throwIfAborted(signal);
+    if (!isPostImageType(file.type)) throw new UploadRefusal('type');
+    if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
+    if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
+    if (intent && (intent.file !== file || !('containerId' in intent.body))) throw new UploadRefusal('unavailable');
+    onStage?.('processing', mediaId);
+    const current = await readReservation(mediaId, signal, credential, onResponseWait);
+    throwIfAborted(signal);
+    if (
+      current.mediaType !== file.type ||
+      current.byteCount !== file.size ||
+      (intent && current.containerId !== intent.body.containerId)
+    )
+      throw new UploadRefusal('unavailable');
+    if (current.state === 'rejected') throw new UploadRefusal('rejected');
+    if (current.state === 'reserved') {
+      onStage?.('transfer', mediaId);
+      await putBytes(current, file, signal, credential, onResponseWait);
+      throwIfAborted(signal);
+      onStage?.('processing', mediaId);
+    }
+    return await readUploadedImage(mediaId, file, signal, current, started, credential, onResponseWait);
+  } catch (error) {
+    throwIfAborted(signal);
+    if (isAbort(error)) throw error;
+    const failure = error instanceof UploadRefusal ? error : new UploadRefusal('unavailable');
+    failure.mediaId = mediaId;
+    throw failure;
+  }
+}
+
+export function uploadAvatar(
+  accountId: string,
+  file: File,
+  signal: AbortSignal,
+  intent?: MediaReservationIntent,
+  onStage?: UploadStageUpdate,
+  onResponseWait?: UploadResponseWait,
+): Promise<UploadedImage> {
+  if (intent && intent.viewer !== accountId) return Promise.reject(new UploadRefusal('unavailable'));
+  return uploadImage({ containerId: accountId }, file, signal, 'avatar', intent, onStage, undefined, onResponseWait);
+}
+
+export async function readSiteAvatarUploadAdvice(
+  signal: AbortSignal,
+  onResponseWait?: UploadResponseWait,
+): Promise<{
+  ok: true;
+  body: unknown;
+  retryAfter?: string;
+  responseTime: number;
+}> {
+  const response = await siteFetch('/media/avatar-upload-advice', { method: 'GET', signal });
+  const responseTime = Date.now();
+  const retryAfter = response.headers.get('retry-after') ?? undefined;
+  onResponseWait?.(response.status, retryAfter, responseTime);
+  if (!response.ok) {
+    const refusal = await refusalFrom(response);
+    if (retryAfter !== undefined) refusal.retryAfterHeader = retryAfter;
+    refusal.responseTime = responseTime;
+    throw refusal;
+  }
+  try {
+    return {
+      ok: true,
+      body: await response.json(),
+      ...(retryAfter !== undefined ? { retryAfter } : {}),
+      responseTime,
+    };
+  } catch {
+    const refusal = new UploadRefusal('unavailable');
+    if (retryAfter !== undefined) refusal.retryAfterHeader = retryAfter;
+    refusal.responseTime = responseTime;
+    throw refusal;
+  }
+}
+
+/** Realm uploads reuse the uploader-bound byte/digest/completion pipeline; previews need a native derivative summary. */
+export async function uploadRealmImage(
+  realmId: string,
+  purpose: 'realm-icon' | 'realm-banner',
+  file: File,
+  signal: AbortSignal,
+): Promise<{ id: string }> {
+  let mediaId: string | undefined;
+  const credential = csrfToken();
+  try {
+    throwIfAborted(signal);
+    if (!isPostImageType(file.type)) throw new UploadRefusal('type');
+    if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
+    if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
+    const reserved = await reserve({ realmId }, file, signal, purpose, undefined, undefined, credential);
+    mediaId = reserved.id;
+    throwIfAborted(signal);
+    await putBytes(reserved, file, signal, credential);
+    return await finishRealmUpload(mediaId, signal, credential);
+  } catch (error) {
+    if (isAbort(error)) throw error;
+    const failure = error instanceof UploadRefusal ? error : new UploadRefusal('unavailable');
+    if (mediaId) failure.mediaId = mediaId;
+    throw failure;
+  }
+}
+
+async function finishRealmUpload(mediaId: string, signal: AbortSignal, credential: string): Promise<{ id: string }> {
+  const settled = await poll(mediaId, signal, undefined, Date.now(), credential);
+  if (settled.state !== 'available') throw new UploadRefusal('rejected');
+  return { id: mediaId };
+}
+
+/**
+ * Re-read the original reservation before any byte transfer.
+ * Purpose stays with the caller: this read has no purpose field.
+ */
+export async function resumeRealmImageUpload(
+  mediaId: string,
+  file: File,
+  realmId: string,
+  signal: AbortSignal,
+): Promise<{ id: string }> {
+  const credential = csrfToken();
+  try {
+    throwIfAborted(signal);
+    if (!isPostImageType(file.type)) throw new UploadRefusal('type');
+    if (!Number.isSafeInteger(file.size) || file.size < 1) throw new UploadRefusal('unavailable');
+    if (file.size > postImageByteLimit) throw new UploadRefusal('too-large');
+    const current = await readReservation(mediaId, signal, credential);
+    throwIfAborted(signal);
+    if (current.containerId !== realmId || current.mediaType !== file.type || current.byteCount !== file.size)
+      throw new UploadRefusal('unavailable');
+    if (current.state === 'rejected') throw new UploadRefusal('rejected');
+    throwIfAborted(signal);
+    if (current.state === 'reserved') await putBytes(current, file, signal, credential);
+    return await finishRealmUpload(mediaId, signal, credential);
+  } catch (error) {
+    throwIfAborted(signal);
+    if (isAbort(error)) throw error;
+    const failure = error instanceof UploadRefusal ? error : new UploadRefusal('unavailable');
+    failure.mediaId = mediaId;
+    throw failure;
   }
 }
 

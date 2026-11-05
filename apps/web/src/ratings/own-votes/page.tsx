@@ -1,0 +1,643 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type Ref } from 'react';
+import { Link, useRouter, useRouterState } from '@tanstack/react-router';
+import { Button } from '@rezics/ui/shadcn/button';
+import { PageHeading } from '../../shell/page-heading';
+import { getLocale } from '../../paraglide/runtime.js';
+import { m } from '../../paraglide/messages.js';
+import type { OwnVoteEntry, OwnVotesPage } from './types';
+import { executeOwnVoteIntent, voteReadbackForIntent, type OwnVotesRead } from './actions';
+import { useOwnVotesCurrentOrigin } from './current-origin';
+import { OwnVotesDeparture, type OwnVotesDepartureControl, type OwnVotesDepartureRef } from './departure';
+import { OwnVoteEditor, type OwnVoteFeedback } from './editor';
+import { indexOwnVotes, removeOwnVote, replaceOwnVote, votePairKey, type VotePair } from './inventory';
+import { createOwnVoteIntent, isAdmittedVoteAction, type OwnVoteIntent } from './intent';
+import type { OwnVoteReadback } from './readback';
+import { OwnVotesInspection } from './inspection';
+import {
+  useOwnVotesCoordinates,
+  useOwnVotesPendingCoordinate,
+  useOwnVotesReturn,
+  useOwnVotesReturnReceipt,
+  type OwnVotesCoordinateMove,
+  type OwnVotesReturnOutcome,
+} from './return';
+
+type Execute = (input: { data: OwnVoteIntent }) => Promise<Awaited<ReturnType<typeof executeOwnVoteIntent>>>;
+type Review = (input: { data: { intent: OwnVoteIntent; after: 'REVIEW' } }) => Promise<OwnVoteReadback>;
+
+export function CurrentViewerOwnVotesPage({
+  initial,
+  cursor,
+  invalidAddress = false,
+  responseVersion = 0,
+}: {
+  initial: OwnVotesRead;
+  cursor: string | null;
+  invalidAddress?: boolean;
+  responseVersion?: number;
+}) {
+  const router = useRouter({ warn: false });
+  const historyKey = useRouterState({ select: (state) => state.location.state.key ?? '' });
+  const locale = getLocale();
+  const receipt = useOwnVotesReturnReceipt(historyKey, cursor, locale);
+  const pendingCoordinate = useOwnVotesPendingCoordinate(cursor);
+  const origin = useOwnVotesCurrentOrigin(
+    initial,
+    cursor,
+    invalidAddress,
+    !!receipt || pendingCoordinate,
+    responseVersion,
+  );
+  const coordinates = useOwnVotesCoordinates(origin.coordinateAuthority, origin.cursor);
+  const confirmMovement = useRef<OwnVotesDepartureControl | null>(null);
+  const acceptRead = useCallback(
+    (candidate: unknown) => {
+      const pending = coordinates.pending;
+      if (
+        !pending ||
+        pending.authorityKey !== origin.coordinateAuthority ||
+        pending.cursor !== origin.cursor ||
+        !origin.isAdmittedRead(candidate)
+      )
+        return;
+      if (candidate.state === 'ready') coordinates.admit(origin.cursor);
+      else if (candidate.state === 'unavailable') coordinates.fail(pending.id);
+      else if (candidate.state === 'invalid-cursor' || candidate.state === 'denied' || candidate.state === 'signed-out')
+        coordinates.cancel(pending.id);
+    },
+    [coordinates, origin],
+  );
+  const refresh = useCallback(async () => {
+    if (receipt) {
+      const routeRead = origin.admitRouteResponse(initial, receipt.owner.responseVersion);
+      if (routeRead) return routeRead;
+    }
+    const result = await origin.refresh();
+    if (result && typeof result === 'object' && 'data' in result) acceptRead(result.data);
+    return result;
+  }, [receipt, origin, initial, acceptRead]);
+  const staged = coordinates.pending;
+  useEffect(() => {
+    if (!staged || staged.authorityKey !== origin.coordinateAuthority || staged.cursor !== origin.cursor) return;
+    const routeRead = origin.admitRouteResponse(initial, staged.responseVersion);
+    if (routeRead) {
+      void routeRead.then((result) => {
+        if (result && typeof result === 'object' && 'data' in result) acceptRead(result.data);
+      });
+    }
+  }, [staged, origin, initial, acceptRead]);
+  useEffect(() => {
+    if (staged && staged.authorityKey !== origin.coordinateAuthority) coordinates.retire();
+    else if (origin.state === 'denied' || origin.state === 'signed-out') coordinates.retire();
+  }, [staged, origin, coordinates]);
+  useEffect(() => {
+    if (!staged && (origin.state === 'ready' || origin.state === 'invalid-cursor') && origin.isCurrent())
+      coordinates.admit(origin.cursor);
+  }, [staged, origin, coordinates]);
+  const move = useCallback(
+    async (destination: OwnVotesCoordinateMove) => {
+      const sourceAuthority = origin.coordinateAuthority;
+      const sourceCursor = origin.cursor;
+      const sourceResponse = origin.responseIdentity();
+      const sourceView = origin.viewKey;
+      if (!origin.isCurrent()) return;
+      const id = coordinates.stage(responseVersion, destination);
+      if (!id) return;
+      const allowed = await confirmMovement.current!.confirm();
+      if (
+        !allowed ||
+        !origin.isCurrent() ||
+        origin.coordinateAuthority !== sourceAuthority ||
+        origin.cursor !== sourceCursor ||
+        origin.responseIdentity() !== sourceResponse ||
+        origin.viewKey !== sourceView
+      ) {
+        coordinates.cancel(id);
+        return;
+      }
+      confirmMovement.current!.allowNavigation();
+      try {
+        await router.navigate({
+          to: '/library/ratings',
+          search: destination.cursor === null ? {} : { cursor: destination.cursor },
+        });
+        const location = router.state.location;
+        const search = location.search as Record<string, unknown>;
+        const navigatedCursor = typeof search.cursor === 'string' ? search.cursor : null;
+        if (
+          location.pathname.replace(/^\/(?:en|zh-Hant|zh-Hans|ja|ko|de|fr|es)(?=\/|$)/, '') !== '/library/ratings' ||
+          navigatedCursor !== destination.cursor
+        )
+          coordinates.cancel(id);
+      } finally {
+        confirmMovement.current?.clearNavigation();
+      }
+    },
+    [origin, coordinates, responseVersion, router],
+  );
+  const heading = useRef<HTMLHeadingElement>(null);
+  const [returnResult, setReturnResult] = useState<{
+    outcome: OwnVotesReturnOutcome;
+    index: Map<string, OwnVoteEntry>;
+    page: OwnVotesPage;
+    responseIdentity: string;
+  } | null>(null);
+  const returnVisit = useOwnVotesReturn({
+    visitKey: origin.viewKey,
+    cursor: origin.cursor,
+    locale: origin.locale,
+    owner: () => origin.captureReturnOwner(receipt?.owner.responseVersion ?? -1),
+    isCurrent: origin.isCurrent,
+    refresh,
+    receipt,
+    onResolved: (outcome, index, page) => {
+      setReturnResult({ outcome, index, page, responseIdentity: origin.responseIdentity() });
+    },
+    onFocus: (outcome) => {
+      if (outcome.kind === 'found') {
+        const row = Array.from(document.querySelectorAll<HTMLElement>('[data-own-vote-target]')).find(
+          (candidate) =>
+            candidate.dataset.ownVoteTarget === outcome.pair.targetId &&
+            candidate.dataset.ownVoteQuestion === outcome.pair.questionId,
+        );
+        row?.querySelector<HTMLButtonElement>('button')?.focus();
+      } else if (outcome.kind === 'refreshed') heading.current?.focus();
+    },
+  });
+  const state = pendingCoordinate
+    ? 'preparing'
+    : returnVisit.pending
+      ? returnVisit.failed
+        ? 'unavailable'
+        : 'preparing'
+      : origin.state;
+  const page = pendingCoordinate || returnVisit.pending ? null : origin.page;
+  const admittedReturn =
+    returnResult?.responseIdentity === origin.responseIdentity() && returnResult.page === page ? returnResult : null;
+  return (
+    <OwnVotesWorkspace
+      key={origin.viewKey}
+      state={state}
+      page={page}
+      cursor={origin.cursor}
+      locale={origin.locale}
+      isCurrent={origin.isCurrent}
+      onRefresh={returnVisit.refresh}
+      onUpdatePage={origin.updatePage}
+      headingRef={heading}
+      execute={executeOwnVoteIntent}
+      review={({ data }) => voteReadbackForIntent(data.intent, data.after)}
+      returnPending={returnVisit.pending && !returnVisit.failed}
+      returnOutcome={admittedReturn?.outcome ?? null}
+      {...(admittedReturn ? { returnIndex: admittedReturn.index } : {})}
+      onDeparturePair={returnVisit.inspect}
+      {...(origin.isCurrent() ? { onNavigate: (destination: OwnVotesCoordinateMove) => void move(destination) } : {})}
+      hasPrevious={coordinates.hasPrevious}
+      previousCursor={coordinates.previousCursor}
+      firstAvailable={cursor !== null || invalidAddress}
+      confirmMovement={confirmMovement}
+    />
+  );
+}
+
+/** The page state and interaction owner; stories inject the same command/readback boundary. */
+export function OwnVotesWorkspace({
+  state,
+  page,
+  cursor,
+  locale,
+  isCurrent,
+  onRefresh,
+  onUpdatePage,
+  headingRef,
+  execute,
+  review,
+  returnPending = false,
+  returnOutcome = null,
+  returnIndex,
+  onDeparturePair,
+  onNavigate,
+  hasPrevious = false,
+  previousCursor = null,
+  firstAvailable = cursor !== null,
+  confirmMovement,
+}: {
+  state: OwnVotesRead['state'];
+  page: OwnVotesPage | null;
+  cursor: string | null;
+  locale: string;
+  isCurrent: () => boolean;
+  onRefresh: () => Promise<unknown>;
+  onUpdatePage: (update: (page: OwnVotesPage) => OwnVotesPage) => void;
+  headingRef: Ref<HTMLHeadingElement>;
+  execute: Execute;
+  review: Review;
+  returnPending?: boolean;
+  returnOutcome?: OwnVotesReturnOutcome | null;
+  returnIndex?: Map<string, OwnVoteEntry>;
+  onDeparturePair?: (pair: VotePair | null) => void;
+  onNavigate?: (move: OwnVotesCoordinateMove) => void;
+  hasPrevious?: boolean;
+  previousCursor?: string | null;
+  firstAvailable?: boolean;
+  confirmMovement?: OwnVotesDepartureRef | undefined;
+}) {
+  const [selectedPair, setSelectedPair] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [intent, setIntent] = useState<OwnVoteIntent | null>(null);
+  const intentRef = useRef<OwnVoteIntent | null>(null);
+  const [feedback, setFeedback] = useState<OwnVoteFeedback | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [awaitingCommand, setAwaitingCommand] = useState(false);
+  const [retired, setRetired] = useState(false);
+  const attempt = useRef(0);
+  const selection = useRef<{ entry: OwnVoteEntry; active: boolean } | null>(null);
+  useEffect(
+    () => () => {
+      if (selection.current) selection.current.active = false;
+      attempt.current += 1;
+    },
+    [],
+  );
+  const index = useMemo(() => {
+    if (page && returnIndex) return returnIndex;
+    if (!page) return new Map<string, OwnVoteEntry>();
+    try {
+      return indexOwnVotes(page);
+    } catch {
+      return new Map<string, OwnVoteEntry>();
+    }
+  }, [page, returnIndex]);
+  const indexedPageValid = !page || index.size === page.votes.length;
+  const activeEntry = selectedPair ? (index.get(selectedPair) ?? null) : null;
+  const visibleState = retired ? 'preparing' : state;
+  const visiblePage = retired ? null : page;
+  // A new action observation requires a new explicit selection. Local readback retains the actions object.
+  if (selectedPair && (state !== 'ready' || !activeEntry || selection.current?.entry.actions !== activeEntry.actions)) {
+    if (selection.current) selection.current.active = false;
+    selection.current = null;
+    setSelectedPair(null);
+    setEditing(false);
+    setDraft('');
+    setFeedback(null);
+    clearIntent();
+  }
+  const observation = selection.current;
+  const unresolved =
+    feedback?.kind === 'uncertain' ||
+    feedback?.kind === 'review-pending' ||
+    feedback?.kind === 'review-failed' ||
+    (awaitingCommand && feedback?.kind === 'review-missing');
+  const dirty = !!activeEntry && editing && draft !== String(activeEntry.own.units);
+  const locked = busy || unresolved;
+  const presentationCurrent = () => !retired && isCurrent();
+  const selectedCurrent = () =>
+    presentationCurrent() &&
+    observation?.active === true &&
+    !!activeEntry &&
+    (!intent ||
+      (intent.pair === votePairKey(activeEntry) &&
+        intent.path === `/v1/subjects/${activeEntry.targetId}/ratings/${activeEntry.questionId}/vote`));
+
+  function clearIntent() {
+    attempt.current += 1;
+    intentRef.current = null;
+    setIntent(null);
+    setAwaitingCommand(false);
+    setBusy(false);
+  }
+
+  function retire() {
+    if (!isCurrent()) return;
+    if (selection.current) selection.current.active = false;
+    attempt.current += 1;
+    intentRef.current = null;
+    setRetired(true);
+    setSelectedPair(null);
+    setEditing(false);
+    setDraft('');
+    setIntent(null);
+    setFeedback(null);
+    setAwaitingCommand(false);
+    setBusy(false);
+  }
+
+  function select(entry: OwnVoteEntry) {
+    if (!isCurrent() || locked) return;
+    if (selection.current) selection.current.active = false;
+    selection.current = { entry, active: true };
+    attempt.current += 1;
+    intentRef.current = null;
+    setIntent(null);
+    setFeedback(null);
+    setEditing(false);
+    setDraft('');
+    setSelectedPair(votePairKey(entry));
+    onDeparturePair?.(entry);
+  }
+
+  function replaceFromReadback(readback: OwnVoteReadback, active: OwnVoteIntent) {
+    if (readback.kind === 'current') {
+      onUpdatePage((current) => {
+        const entry = current.votes.find((row) => votePairKey(row) === active.pair);
+        if (!entry) return current;
+        return replaceOwnVote(current, { ...entry, own: readback });
+      });
+      return;
+    }
+    if (readback.kind === 'cleared') {
+      onUpdatePage((current) => removeOwnVote(current, active));
+      setSelectedPair(null);
+      setEditing(false);
+      setDraft('');
+    }
+  }
+
+  async function send(active: OwnVoteIntent) {
+    if (
+      !selectedCurrent() ||
+      !activeEntry ||
+      intentRef.current !== active ||
+      busy ||
+      !isAdmittedVoteAction(activeEntry, activeEntry.actions, active.method) ||
+      !isAdmittedVoteAction(activeEntry, activeEntry.actions, 'GET')
+    )
+      return;
+    const currentAttempt = ++attempt.current;
+    const ownsResult = () => selectedCurrent() && attempt.current === currentAttempt && intentRef.current === active;
+    setBusy(true);
+    setFeedback({ kind: active.method === 'PUT' ? 'saving' : 'clearing' });
+    try {
+      const result = await execute({ data: active });
+      if (!ownsResult()) return;
+      setBusy(false);
+      if (result.kind === 'acknowledged') {
+        const readback = result.readback;
+        if (readback.kind === 'current') {
+          replaceFromReadback(readback, active);
+          if (active.method === 'PUT' && readback.units === active.body?.units) {
+            setFeedback({ kind: 'saved' });
+            setEditing(false);
+            setDraft('');
+          } else {
+            setFeedback({ kind: 'review-current', value: readback.units });
+          }
+          clearIntent();
+          return;
+        }
+        if (readback.kind === 'cleared' && active.method === 'DELETE') {
+          replaceFromReadback(readback, active);
+          setFeedback({ kind: 'cleared' });
+          clearIntent();
+          return;
+        }
+        setAwaitingCommand(false);
+        setFeedback({ kind: 'readback-unavailable' });
+        return;
+      }
+      if (result.kind === 'rejected') {
+        clearIntent();
+        setEditing(active.method === 'PUT');
+        setFeedback({ kind: 'rejected' });
+        return;
+      }
+      setAwaitingCommand(true);
+      setFeedback({ kind: 'uncertain' });
+    } catch {
+      if (!ownsResult()) return;
+      setBusy(false);
+      setAwaitingCommand(true);
+      setFeedback({ kind: 'uncertain' });
+    }
+  }
+
+  function startIntent(method: 'PUT' | 'DELETE', units?: number) {
+    if (!activeEntry || !selectedCurrent() || locked || !originPageContains(activeEntry)) return;
+    try {
+      const next = createOwnVoteIntent(page!.viewer.accountId, activeEntry, method, units);
+      intentRef.current = next;
+      setIntent(next);
+      setAwaitingCommand(true);
+      void send(next);
+    } catch {
+      setFeedback({ kind: 'rejected' });
+    }
+  }
+
+  function originPageContains(entry: OwnVoteEntry) {
+    return !!page && index.get(votePairKey(entry)) === entry;
+  }
+
+  async function reviewOriginal() {
+    const active = intentRef.current;
+    if (
+      !active ||
+      !selectedCurrent() ||
+      !activeEntry ||
+      busy ||
+      !isAdmittedVoteAction(activeEntry, activeEntry.actions, 'GET')
+    )
+      return;
+    const currentAttempt = ++attempt.current;
+    const ownsResult = () => selectedCurrent() && attempt.current === currentAttempt && intentRef.current === active;
+    const wasUncertain = awaitingCommand;
+    setBusy(true);
+    setFeedback({ kind: 'reviewing' });
+    try {
+      const result = await review({ data: { intent: active, after: 'REVIEW' } });
+      if (!ownsResult()) return;
+      setBusy(false);
+      if (result.kind === 'current') {
+        replaceFromReadback(result, active);
+        if (!wasUncertain) {
+          setFeedback({ kind: 'review-current', value: result.units });
+          clearIntent();
+        } else {
+          setFeedback({ kind: 'review-pending', value: result.units });
+        }
+        return;
+      }
+      if (!wasUncertain && (result.kind === 'cleared' || result.kind === 'missing') && active.method === 'DELETE') {
+        replaceFromReadback({ kind: 'cleared' }, active);
+        setFeedback({ kind: 'review-cleared' });
+        clearIntent();
+        return;
+      }
+      if (result.kind === 'missing' || result.kind === 'cleared') {
+        setFeedback({ kind: wasUncertain ? 'review-missing' : 'readback-unavailable' });
+        return;
+      }
+      setFeedback({ kind: wasUncertain ? 'review-failed' : 'readback-unavailable' });
+    } catch {
+      if (!ownsResult()) return;
+      setBusy(false);
+      setFeedback({ kind: awaitingCommand ? 'review-failed' : 'readback-unavailable' });
+    }
+  }
+
+  const message = (() => {
+    if (!indexedPageValid) return m.library_my_ratings_unavailable();
+    switch (visibleState) {
+      case 'signed-out':
+        return m.library_my_ratings_signed_out();
+      case 'denied':
+        return m.library_my_ratings_denied();
+      case 'preparing':
+        return returnPending ? m.library_my_ratings_return_refreshing() : m.library_my_ratings_preparing();
+      case 'unavailable':
+        return m.library_my_ratings_unavailable();
+      case 'invalid-cursor':
+        return m.library_my_ratings_invalid_cursor();
+      case 'ready':
+        return null;
+    }
+  })();
+  const navigateLink = (event: MouseEvent<HTMLAnchorElement>, destination: OwnVotesCoordinateMove) => {
+    if (!onNavigate || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    onNavigate(destination);
+  };
+
+  return (
+    <main className="mx-auto w-full max-w-5xl space-y-6 px-4 py-6 sm:px-6">
+      <PageHeading ref={headingRef} tabIndex={-1}>
+        {m.library_my_ratings_heading()}
+      </PageHeading>
+      <p className="max-w-3xl text-muted-foreground">{m.library_my_ratings_description()}</p>
+      {message ? (
+        <section
+          className="space-y-3"
+          role={visibleState === 'unavailable' || visibleState === 'invalid-cursor' ? 'alert' : 'status'}
+        >
+          <p>{message}</p>
+          {visibleState === 'unavailable' ? (
+            <Button className="min-h-11" onClick={() => void onRefresh()}>
+              {m.library_my_ratings_retry_page()}
+            </Button>
+          ) : null}
+          {visibleState === 'invalid-cursor' && firstAvailable ? (
+            <Link
+              className="inline-flex min-h-11 items-center underline"
+              to="/library/ratings"
+              onClick={(event: MouseEvent<HTMLAnchorElement>) => navigateLink(event, { kind: 'first', cursor: null })}
+            >
+              {m.library_my_ratings_first()}
+            </Link>
+          ) : null}
+        </section>
+      ) : null}
+
+      {visibleState === 'ready' && visiblePage && indexedPageValid ? (
+        <>
+          {returnOutcome ? (
+            <p role="status" data-own-vote-return-status>
+              {returnOutcome.kind === 'found'
+                ? m.library_my_ratings_return_found()
+                : returnOutcome.kind === 'missing'
+                  ? m.library_my_ratings_return_missing()
+                  : m.library_my_ratings_return_refreshed()}
+            </p>
+          ) : null}
+          <p className="text-sm text-muted-foreground">{m.library_my_ratings_page_order()}</p>
+          {visiblePage.votes.length === 0 ? (
+            feedback?.kind === 'cleared' || feedback?.kind === 'review-cleared' ? null : (
+              <p role="status">{visiblePage.next ? m.library_my_ratings_sparse() : m.library_my_ratings_empty()}</p>
+            )
+          ) : (
+            <OwnVotesInspection
+              entries={visiblePage.votes}
+              locale={locale}
+              selectedPair={selectedPair}
+              disabled={locked}
+              onSelect={select}
+              onVisit={(entry) => onDeparturePair?.(entry)}
+            />
+          )}
+          {activeEntry && selectedCurrent() ? (
+            <OwnVoteEditor
+              entry={activeEntry}
+              locale={locale}
+              editing={editing}
+              draft={draft}
+              locked={locked}
+              busy={busy}
+              feedback={feedback}
+              canRetry={
+                awaitingCommand && !!intent && isAdmittedVoteAction(activeEntry, activeEntry.actions, intent.method)
+              }
+              onEdit={() => {
+                setDraft(String(activeEntry.own.units));
+                setEditing(true);
+                setFeedback(null);
+              }}
+              onDraft={setDraft}
+              onSave={() => startIntent('PUT', Number(draft))}
+              onCancel={() => {
+                setEditing(false);
+                setDraft('');
+                setFeedback(null);
+              }}
+              onClear={() => startIntent('DELETE')}
+              onRetry={() => {
+                const active = intentRef.current;
+                if (active && awaitingCommand) void send(active);
+              }}
+              onReview={() => void reviewOriginal()}
+            />
+          ) : null}
+          {feedback?.kind === 'cleared' || feedback?.kind === 'review-cleared' ? (
+            <p role="status">{m.library_my_ratings_cleared()}</p>
+          ) : null}
+          {feedback?.kind === 'rejected' ? (
+            <Button className="min-h-11" variant="outline" onClick={() => void onRefresh()}>
+              {m.library_my_ratings_retry_page()}
+            </Button>
+          ) : null}
+          <nav className="flex flex-wrap gap-3" aria-label={m.library_my_ratings_heading()}>
+            {cursor !== null ? (
+              <Link
+                className="inline-flex min-h-11 items-center underline"
+                to="/library/ratings"
+                onClick={(event: MouseEvent<HTMLAnchorElement>) => navigateLink(event, { kind: 'first', cursor: null })}
+              >
+                {m.library_my_ratings_first()}
+              </Link>
+            ) : null}
+            {hasPrevious ? (
+              <Link
+                className="inline-flex min-h-11 items-center underline"
+                to="/library/ratings"
+                search={previousCursor === null ? {} : { cursor: previousCursor }}
+                onClick={(event: MouseEvent<HTMLAnchorElement>) =>
+                  navigateLink(event, { kind: 'previous', cursor: previousCursor })
+                }
+              >
+                {m.library_my_ratings_previous()}
+              </Link>
+            ) : null}
+            {visiblePage.next ? (
+              <Link
+                className="inline-flex min-h-11 items-center underline"
+                to="/library/ratings"
+                search={{ cursor: visiblePage.next }}
+                onClick={(event: MouseEvent<HTMLAnchorElement>) =>
+                  navigateLink(event, { kind: 'continue', cursor: visiblePage.next! })
+                }
+              >
+                {m.library_my_ratings_continue()}
+              </Link>
+            ) : null}
+          </nav>
+        </>
+      ) : null}
+      <OwnVotesDeparture
+        dirty={dirty}
+        locked={locked}
+        isCurrent={presentationCurrent}
+        onLeave={retire}
+        confirmMovement={confirmMovement}
+      />
+    </main>
+  );
+}

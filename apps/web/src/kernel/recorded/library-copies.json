@@ -1,0 +1,66 @@
+{
+  "copies": [
+    {
+      "id": "01a17a3b-700b-7781-9456-f4cc234fc6cc",
+      "subjectId": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
+      "status": "owned",
+      "revision": 1,
+      "location": "Hallway shelf, second row",
+      "source": "Kinokuniya Shinjuku",
+      "acquiredOn": "2024-03-16",
+      "disposedOn": null,
+      "note": "Paperback with the original watercolours.",
+      "subject": {
+        "id": "01a17a3b-0884-721b-91ef-d7ffd7bb58e4",
+        "type": "schema:Book",
+        "label": "The Little Prince",
+        "types": ["schema:Book"],
+        "cover": null
+      }
+    },
+    {
+      "id": "01a17a3b-7065-7048-8c7f-f4ccfae1f4fe",
+      "subjectId": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
+      "status": "owned",
+      "revision": 1,
+      "location": "Kobo library, e-book",
+      "source": "Kobo",
+      "acquiredOn": "2025-11-02",
+      "disposedOn": null,
+      "note": "EPUB, Meredith McKinney translation.",
+      "subject": {
+        "id": "01a17a3b-6b89-748f-a486-33c354ef3c9a",
+        "type": "schema:Book",
+        "label": "Kokoro",
+        "types": ["schema:Book"],
+        "cover": {
+          "media": "01a17a3b-0884-7c01-8a3f-c0de00000001",
+          "width": 320,
+          "height": 480,
+          "placeholder": {
+            "thumbhash": "lCcGJQa4h4CEV6eYZ3dol8hwhAtX",
+            "color": "#6d4d6f"
+          },
+          "variants": [
+            {
+              "format": "webp",
+              "width": 320
+            }
+          ],
+          "focalPoint": null,
+          "credit": {
+            "rightsHolder": "REZICS fixtures",
+            "via": {
+              "name": "Generated fixture",
+              "url": "https://rezics.com"
+            },
+            "license": "CC0-1.0",
+            "obligations": []
+          }
+        }
+      }
+    }
+  ],
+  "next": null,
+  "status": 200
+}

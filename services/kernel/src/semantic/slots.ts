@@ -1,8 +1,11 @@
+import { collectSemanticRecordFacts } from './record-source-set.ts';
+import { AccessUnavailableError } from '../access/unavailable.ts';
 import type { CommandTransaction } from '../command/command.ts';
-import { derivedId, routeOf } from '../route/route.ts';
+import { routeOf } from '../route/route.ts';
+import { statementAudience } from './statement-disclosure.ts';
 import { writeFacts } from './write-facts.ts';
 import { GLOBAL_CONTEXT, StaleEditorialHeadError } from './definitions.ts';
-import { SLOT_NS, type FactRow, type Statement } from './item.ts';
+import { statementSlotId, type FactRow, type Statement } from './item.ts';
 import insertAcceptanceCurrent from './slots-insert-acceptance-current.sql';
 import insertAcceptanceHead from './slots-insert-acceptance.sql';
 import insertAdoptionHead from './slots-insert-adoption.sql';
@@ -15,6 +18,7 @@ import readHiddenCandidates from './slots-read-hidden.sql';
 import readSlotOperation from './slots-read-operation.sql';
 import readRejectedCandidates from './slots-read-rejected.sql';
 import readSelectionFacts from './slots-read-selection.sql';
+import lockReviewedSelection from './reviewed-person-identity-lock-selection.sql';
 
 export type Candidate = {
   candidate_id: string;
@@ -23,15 +27,16 @@ export type Candidate = {
   release: string;
   revision: number;
   view_order: number;
+  relation: boolean;
 };
 export type Adoption = {
   mode: 'inherit' | 'replace' | 'suppress';
   head: number;
-  selection: { candidate: string; rank: 'normal' | 'preferred' }[];
+  selection: { candidate: string; rank: 'normal' | 'preferred' | 'deprecated' }[];
   revision: number;
 };
 export function slotId(subject: string, property: string): string {
-  return derivedId(SLOT_NS, `${subject}\nstatement\n${property}`, routeOf(subject)!);
+  return statementSlotId(subject, property);
 }
 
 /** A single bounded resolver for virtual compact state and persisted editorial state. */
@@ -40,11 +45,12 @@ export async function latestAdoption(
   subject: string,
   property: string,
   context: string,
+  slot = slotId(subject, property),
 ): Promise<Adoption | null> {
   const row = (await readLatestAdoption.run(tx, {
     route: routeOf(subject)!,
     subject_id: subject,
-    slot_id: slotId(subject, property),
+    slot_id: slot,
     context_id: context,
   })) as Adoption | null;
   return row;
@@ -65,12 +71,19 @@ export async function currentAcceptance(
   return row ?? null;
 }
 
-export async function resolveSlot(tx: CommandTransaction, subject: string, property: string, context = GLOBAL_CONTEXT) {
+export async function resolveSlot(
+  tx: CommandTransaction,
+  subject: string,
+  property: string,
+  context = GLOBAL_CONTEXT,
+  slot = slotId(subject, property),
+) {
   const route = routeOf(subject)!;
-  const slot = slotId(subject, property);
   const last = await readSlotOperation.run(tx, { route, subject_id: subject, slot_id: slot });
+  // No head means there are no compact facts to resolve in this snapshot.
+  if (!last) return { expanded: false, compact: [] as Candidate[], adoption: null };
   if (last?.operation === 'expand') {
-    const adoption = await latestAdoption(tx, subject, property, context);
+    const adoption = await latestAdoption(tx, subject, property, context, slot);
     return { expanded: true, compact: [] as Candidate[], adoption };
   }
   const rows = (await readCompactFacts.run(tx, { route, subject_id: subject, slot_id: slot })) as (Candidate & {
@@ -127,8 +140,13 @@ async function selectionFacts(
   return rows.map((row) => candidateFact(property, row, row.adopted_rank));
 }
 
-async function globalSlotView(tx: CommandTransaction, subject: string, property: string): Promise<FactRow[]> {
-  const state = await resolveSlot(tx, subject, property, GLOBAL_CONTEXT);
+async function globalSlotView(
+  tx: CommandTransaction,
+  subject: string,
+  property: string,
+  slot = slotId(subject, property),
+): Promise<FactRow[]> {
+  const state = await resolveSlot(tx, subject, property, GLOBAL_CONTEXT, slot);
   if (!state.expanded) return state.compact.map((candidate) => candidateFact(property, candidate));
 
   const selection = state.adoption?.mode === 'replace' ? state.adoption.selection : [];
@@ -139,26 +157,36 @@ async function globalSlotView(tx: CommandTransaction, subject: string, property:
     route: routeOf(subject)!,
     subject_id: subject,
     context_id: GLOBAL_CONTEXT,
-    slot_id: slotId(subject, property),
+    slot_id: slot,
     rejected_limit: rejectedLimit,
     excluded: selection.map((row) => row.candidate),
   });
   return [...selected, ...rows.map((row) => candidateFact(property, row, 'deprecated'))];
 }
 
+export async function hiddenCandidateKeys(
+  tx: CommandTransaction,
+  entries: readonly { route: number; subject_id: string; candidate_id: string }[],
+): Promise<Set<string>> {
+  if (entries.length === 0) return new Set();
+  const hidden = (await readHiddenCandidates.run(tx, {
+    candidates: entries,
+    ...(await statementAudience(tx)),
+  })) as { subject_id: string; candidate_id: string }[];
+  return new Set(hidden.map((row) => `${row.subject_id}\n${row.candidate_id}`));
+}
+
 async function omitHidden(tx: CommandTransaction, subject: string, facts: FactRow[]): Promise<FactRow[]> {
-  const ids = facts.flatMap((fact) =>
-    fact.kind === 'statement' && fact.statement_id !== null ? [fact.statement_id] : [],
+  const route = routeOf(subject)!;
+  const entries = facts.flatMap((fact) =>
+    fact.kind === 'statement' && fact.statement_id !== null
+      ? [{ route, subject_id: subject, candidate_id: fact.statement_id }]
+      : [],
   );
-  if (ids.length === 0) return facts;
-  const hidden = await readHiddenCandidates.run(tx, {
-    route: routeOf(subject)!,
-    subject_id: subject,
-    candidate_ids: ids,
-  });
-  if (hidden.length === 0) return facts;
-  const gone = new Set(hidden.map((row) => row.candidate_id));
-  return facts.filter((fact) => fact.statement_id === null || !gone.has(fact.statement_id));
+  if (entries.length === 0) return facts;
+  const gone = await hiddenCandidateKeys(tx, entries);
+  if (gone.size === 0) return facts;
+  return facts.filter((fact) => fact.statement_id === null || !gone.has(`${subject}\n${fact.statement_id}`));
 }
 
 async function readSlotView(
@@ -167,10 +195,11 @@ async function readSlotView(
   property: string,
   context = GLOBAL_CONTEXT,
   defaults: Readonly<Record<string, 'inherit' | 'suppress'>> = {},
+  slot = slotId(subject, property),
 ): Promise<{ facts: FactRow[]; resolution?: 'unresolved' | 'suppressed' }> {
-  if (context === GLOBAL_CONTEXT) return { facts: await globalSlotView(tx, subject, property) };
+  if (context === GLOBAL_CONTEXT) return { facts: await globalSlotView(tx, subject, property, slot) };
 
-  const state = await resolveSlot(tx, subject, property, context);
+  const state = await resolveSlot(tx, subject, property, context, slot);
   if (!state.expanded) {
     if (defaults[property] === 'suppress') return { facts: [], resolution: 'suppressed' };
     return { facts: state.compact.map((candidate) => candidateFact(property, candidate)) };
@@ -180,7 +209,7 @@ async function readSlotView(
   if (state.adoption?.mode === 'replace')
     return { facts: await selectionFacts(tx, subject, property, state.adoption.selection) };
 
-  const global = await globalSlotView(tx, subject, property);
+  const global = await globalSlotView(tx, subject, property, slot);
   if (!global.length) return { facts: global };
   const inherited: FactRow[] = [];
   for (const fact of global) {
@@ -196,9 +225,50 @@ export async function slotView(
   property: string,
   context = GLOBAL_CONTEXT,
   defaults: Readonly<Record<string, 'inherit' | 'suppress'>> = {},
+  slot = slotId(subject, property),
 ): Promise<{ facts: FactRow[]; resolution?: 'unresolved' | 'suppressed' }> {
-  const view = await readSlotView(tx, subject, property, context, defaults);
-  return { ...view, facts: await omitHidden(tx, subject, view.facts) };
+  const view = await readSlotView(tx, subject, property, context, defaults, slot);
+  const facts = await omitHidden(tx, subject, view.facts);
+  await collectSemanticRecordFacts(tx, subject, facts);
+  return { ...view, facts };
+}
+
+/** Current Global authority only: rejected display candidates never enter this view.
+ * Compact slots contain only their admitted creation facts; subsequent editorial
+ * writes expand the slot. Expanded selection is admitted at at most 32 entries.
+ */
+export async function effectiveGlobalSlotFacts(
+  tx: CommandTransaction,
+  subject: string,
+  property: string,
+  slot = slotId(subject, property),
+  lockSelected = false,
+): Promise<{ facts: FactRow[]; basis: unknown }> {
+  const state = await resolveSlot(tx, subject, property, GLOBAL_CONTEXT, slot);
+  const selection = state.adoption?.mode === 'replace' ? state.adoption.selection : [];
+  if (lockSelected) {
+    const locked = (await lockReviewedSelection.run(tx, {
+      route: routeOf(subject)!,
+      subject_id: subject,
+      slot_id: slot,
+      expanded: state.expanded,
+      selection,
+      context_id: GLOBAL_CONTEXT,
+      head: state.adoption?.head ?? 0,
+    }))!;
+    if (state.expanded && (locked.candidates !== selection.length || locked.adoption !== (state.adoption ? 1 : 0)))
+      throw new AccessUnavailableError('contention');
+  }
+  const facts = state.expanded
+    ? await selectionFacts(tx, subject, property, selection)
+    : state.compact.map((candidate) => candidateFact(property, candidate));
+  if (state.expanded && facts.length !== selection.length) throw new AccessUnavailableError('contention');
+  const visible = await omitHidden(tx, subject, facts);
+  await collectSemanticRecordFacts(tx, subject, visible);
+  return {
+    facts: visible,
+    basis: state.expanded ? state.adoption : state.compact,
+  };
 }
 
 /** Insert-CAS: collision with an already written head never overwrites history. */
@@ -246,12 +316,13 @@ export async function insertAdoption(
   mode: Adoption['mode'],
   selection: Adoption['selection'],
   revision: number,
+  slot = slotId(subject, property),
 ): Promise<number> {
   const head = (expectedHead ?? 0) + 1;
   const inserted = await insertAdoptionHead.run(tx, {
     route: routeOf(subject)!,
     subject_id: subject,
-    slot_id: slotId(subject, property),
+    slot_id: slot,
     context_id: context,
     head,
     mode,
@@ -267,32 +338,31 @@ export async function expandSlot(
   subject: string,
   property: string,
   transactionId: string,
+  slot = slotId(subject, property),
+  relation?: boolean,
 ): Promise<void> {
-  const state = await resolveSlot(tx, subject, property);
+  const state = await resolveSlot(tx, subject, property, GLOBAL_CONTEXT, slot);
   if (state.expanded) return;
+  await collectSemanticRecordFacts(
+    tx,
+    subject,
+    state.compact.map((row) => candidateFact(property, row)),
+  );
   for (const row of state.compact) {
     await insertCandidate.run(tx, {
       route: routeOf(subject)!,
       subject_id: subject,
       candidate_id: row.candidate_id,
-      slot_id: slotId(subject, property),
+      slot_id: slot,
       property,
       rank: row.rank,
       statement: row.statement,
       release: row.release,
       revision: row.revision,
       view_order: row.view_order,
+      relation: row.relation,
     });
-    await insertAcceptance(
-      tx,
-      subject,
-      row.candidate_id,
-      GLOBAL_CONTEXT,
-      null,
-      'accept',
-      row.revision,
-      slotId(subject, property),
-    );
+    await insertAcceptance(tx, subject, row.candidate_id, GLOBAL_CONTEXT, null, 'accept', row.revision, slot);
   }
   if (state.adoption) {
     const { head, mode, selection, revision } = state.adoption;
@@ -300,7 +370,7 @@ export async function expandSlot(
     await insertExpandedAdoption.run(tx, {
       route: routeOf(subject)!,
       subject_id: subject,
-      slot_id: slotId(subject, property),
+      slot_id: slot,
       context_id: GLOBAL_CONTEXT,
       head,
       mode,
@@ -316,7 +386,7 @@ export async function expandSlot(
     transaction_id: transactionId,
     facts: [
       {
-        slot_id: slotId(subject, property),
+        slot_id: slot,
         log_seq: 33,
         operation: 'expand',
         kind: 'statement',
@@ -325,6 +395,7 @@ export async function expandSlot(
         statement_id: null,
         body: {},
         release: null,
+        relation: relation ?? state.compact.some((row) => row.relation),
       },
     ],
   });

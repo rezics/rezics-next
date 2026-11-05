@@ -10,9 +10,9 @@ import {
   parentCreationAuthorization,
   resourceAuthorization,
 } from '../../src/access/index.ts';
-import { createAccess } from '../../src/access/permission.ts';
 import { readAccount, type Account } from '../../src/access/account-data.ts';
-import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
+import { accessCommandAuthorization, type Access, type AccountActor } from '../../src/request/access.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
@@ -23,6 +23,7 @@ import {
 } from '../../src/command/command.ts';
 import { withConnection } from '../../src/database/pool.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import * as contract from '../../src/content/imported-contract.ts';
 import { readPartition } from '../../src/partition/partition.ts';
 import {
   claimMedia,
@@ -50,12 +51,15 @@ import selectCandidates from '../../src/content/select-collectable-media.sql';
 import insertPost from '../../src/content/insert-post.sql';
 import insertRevision from '../../src/content/insert-revision.sql';
 import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase, type Population } from '../support/growth.ts';
+import { SUBJECT_THREAD_EVENT_FIELDS } from '../support/subject-thread-event.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
 
 const scales = [1, 8, 64] as const,
   ordinalsPerScale = 100;
+// Keep the first sample on the same indexed lookup/age-selection plans as later samples.
+const indexedHistory = 8192;
 const routeKey = new Uint8Array(32).fill(7);
 const platform = '00000000-0000-8000-8000-000000000000';
 let hash = 'a'.repeat(64);
@@ -93,7 +97,7 @@ function seedRow(kind: keyof typeof seedColumns, values: readonly unknown[]): Re
 // prettier-ignore
 type Fixture = { tag: string; prefix: string; seedClient: string; seedSource: string; sourceExternalId: string; sourceRoute: number;
   sourcePartition: number; partition: number; route: number; actor: AccountActor; boardId: string; threadId: string; postId: string;
-  revisionId: string; accounts: Map<string, Account>; access: ReturnType<typeof createAccess>; storage: Storage; basePosition: bigint; baseOrdinal: number };
+  revisionId: string; accounts: Map<string, Account>; access: Access; storage: Storage; basePosition: bigint; baseOrdinal: number };
 
 let db: GrowthDatabase | undefined;
 let imageBytes = new Uint8Array();
@@ -116,14 +120,16 @@ function context() {
 // prettier-ignore
 function newPartition(): number { let selected: number; do selected = 64 + Math.floor(Math.random() * 3968); while (partitions.has(selected)); partitions.add(selected); return selected; }
 
-function sourceNeighbours(fixture: Fixture): string[] {
-  const ids: string[] = [];
-  for (let candidate = 0; ids.length < ordinalsPerScale * scales[2]; candidate++) {
-    const externalId = `neighbour-${candidate}`;
-    if (partitionOf(tupleRoute(routeKey, fixture.seedSource, externalId)) === fixture.sourcePartition)
-      ids.push(externalId);
-  }
-  return ids;
+// No constraint or read path of the measured operations ties a stored fence route to the hash of its tuple, so the
+// neighbours take fixed ids and spread over the hot partition's 16 routes without hashing.
+function sourceNeighbours(
+  fixture: Pick<Fixture, 'sourcePartition'>,
+  count = ordinalsPerScale * scales[2],
+): { externalId: string; route: number }[] {
+  return Array.from({ length: count }, (_, index) => ({
+    externalId: `neighbour-${index}`,
+    route: fixture.sourcePartition * 16 + (index % 16),
+  }));
 }
 
 // prettier-ignore
@@ -173,17 +179,17 @@ async function makeAnchor(options: { partition?: number; tag?: string } = {}): P
   for (const [resource, action] of [[threadId, 'media:create'], [threadId, 'post:create'], [boardId, 'board:read'],
     [platform, 'media:import_from_url'], [platform, 'source_fence:read'], [platform, 'source_fence:takedown']] as const)
     await grant({ actor }, resource, action);
-  const access = createAccess({ actions: new Map(actor.scopes.map(action => [action, { anonymous: false, ...(action === 'media:create' || action === 'media:import_from_url'
+  const access = admittedAccess({ actions: new Map(actor.scopes.map(action => [action, { anonymous: false, ...(action === 'media:create' || action === 'media:import_from_url'
   ? { 'x-resource-types': ['content.media'] as const }
   : action === 'post:create'
     ? { 'x-resource-types': ['content.post'] as const }
-    : {}) }])),
-    accountEvidence: candidate => accounts.get(candidate.accountId) });
+    : {}) }])) });
+  const admitted = await authenticateAccount(access, { pool: db!.pool, deadline: Date.now() + 290_000 }, actor);
   const position = await db!.admin.query<{ position: string }>(
     'SELECT COALESCE(max(position),0)::text AS position FROM core.outbox WHERE partition_no=$1', [partition]);
   const fixture: Fixture = { tag, prefix: `growth-media:${tag}:`, seedClient: 'rezics-website',
     seedSource, sourceExternalId, sourceRoute, sourcePartition,
-    partition, route, actor, boardId, threadId, postId, revisionId, accounts, access, storage: new Storage(),
+    partition, route, actor: admitted, boardId, threadId, postId, revisionId, accounts, access, storage: new Storage(),
     basePosition: BigInt(position.rows[0]!.position) + 1n, baseOrdinal: 0 };
   await createPostAnchor(fixture);
   return fixture;
@@ -312,9 +318,12 @@ async function ageMedia(media: readonly MediaAnchor[]) {
 
 async function growthPopulation(
   fixture: Fixture,
-  options: { sourceOnly?: boolean; includeSourceNeighbours?: boolean } = {},
+  options: { sourceOnly?: boolean; includeSourceNeighbours?: boolean; sourceNeighbourCount?: number } = {},
 ): Promise<Population> {
-  const sourceIds = options.sourceOnly || options.includeSourceNeighbours ? sourceNeighbours(fixture) : [];
+  const sourceIds =
+    options.sourceOnly || options.includeSourceNeighbours
+      ? sourceNeighbours(fixture, options.sourceNeighbourCount)
+      : [];
   // These populations use production account/content/media/Access/envelope shapes and source-fence tuple keys with valid groups and revisions.
   // prettier-ignore
   const population: Population = {
@@ -322,9 +331,9 @@ async function growthPopulation(
     hotPartition: options.sourceOnly ? fixture.sourcePartition : fixture.partition,
     hotShare: 1,
     rows: ({ ordinal }) => {
-      const externalId = sourceIds[ordinal];
-      const sourceRows = externalId === undefined ? {} : { 'content.source_fences': [seedRow('sourceFence',
-        [tupleRoute(routeKey, fixture.seedSource, externalId), fixture.seedSource, externalId, 'cover', true, 1])] };
+      const neighbour = sourceIds[ordinal];
+      const sourceRows = neighbour === undefined ? {} : { 'content.source_fences': [seedRow('sourceFence',
+        [neighbour.route, fixture.seedSource, neighbour.externalId, 'cover', true, 1])] };
       if (options.sourceOnly) return sourceRows;
       const route = fixture.route, mediaId = newId(route), containerId = newId(route), postId = newId(route), revisionId = newId(route);
       const otherUploader = newId(route), uploaderId = ordinal % 2 === 0 ? fixture.actor.accountId : otherUploader;
@@ -378,21 +387,46 @@ async function growthPopulation(
 // prettier-ignore
 async function runMediaGrowth(fixture: Fixture, name: string,
   operation: (database: GrowthDatabase, scale: number, repetition: number) => Promise<unknown>,
-  options: { includeSourceNeighbours?: boolean; warmup?: (database: GrowthDatabase, scale: number, repetition: number) => Promise<unknown> } = {}) {
-  const population = await growthPopulation(fixture, options);
+  options: { includeSourceNeighbours?: boolean; revisionHistory?: boolean;
+    warmup?: (database: GrowthDatabase, scale: number, repetition: number) => Promise<unknown> } = {}) {
+  const population = await growthPopulation(fixture, { ...options,
+    sourceNeighbourCount: indexedHistory + ordinalsPerScale * scales[2] });
+  const seedHistory = async (database: GrowthDatabase, from: number, to: number) => {
+    const position = await database.admin.query<{ position: string }>(
+      'SELECT COALESCE(max(position),0)::text AS position FROM core.outbox WHERE partition_no=$1', [fixture.partition]);
+    fixture.basePosition = BigInt(position.rows[0]!.position) + 1n;
+    fixture.baseOrdinal = from;
+    await seed({ pool: database.pool, admin: database.admin }, population, { from, to });
+  };
+  // Pad every growing relation, including variants, authority, envelopes and the
+  // imported source's separate home. The fixed admitted actor inverse stays at 1,000.
+  await seedHistory(db!, 0, indexedHistory);
+  const revisions: Population = {
+    name: `growth-media:${fixture.tag}-target-revisions`, hotPartition: fixture.partition, hotShare: 1,
+    rows: () => ({ 'content.revision': [seedRow('revision', [fixture.route, fixture.threadId, fixture.postId,
+      newId(fixture.route), body, bodyHash, '', 'CC0-1.0', [], fixture.boardId, 'available', newId(fixture.route)])] }),
+  };
   return checkGrowth(db!, {
     name,
+    rule: 'series',
     scales,
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     repetitions: 1,
     warmup: options.warmup ?? operation,
     grow: async (database, scale, previous) => {
-      const position = await database.admin.query<{ position: string }>(
-        'SELECT COALESCE(max(position),0)::text AS position FROM core.outbox WHERE partition_no=$1', [fixture.partition]);
-      fixture.basePosition = BigInt(position.rows[0]!.position) + 1n;
-      fixture.baseOrdinal = previous * ordinalsPerScale;
-      await seed({ pool: database.pool, admin: database.admin }, population,
-        { from: previous * ordinalsPerScale, to: scale * ordinalsPerScale });
+      if (options.revisionHistory) {
+        // Isolate r: unrelated media/Access/envelope histories stay fixed, while
+        // the named post gains revisions without changing the referenced revision.
+        await seed({ pool: database.pool, admin: database.admin }, revisions,
+          { from: previous * ordinalsPerScale, to: scale * ordinalsPerScale });
+        const result = await database.admin.query<{ revisions: number; head: string }>(
+          `SELECT (SELECT count(*)::integer FROM content.revision WHERE route=$1 AND post_id=$2) AS revisions,
+             head_revision_id::text AS head FROM content.post WHERE route=$1 AND post_id=$2`,
+          [fixture.route, fixture.postId]);
+        expect(result.rows).toEqual([{ revisions: 1 + scale * ordinalsPerScale, head: fixture.revisionId }]);
+      } else {
+        await seedHistory(database, indexedHistory + previous * ordinalsPerScale, indexedHistory + scale * ordinalsPerScale);
+      }
     },
     operation,
   });
@@ -412,7 +446,8 @@ async function commandOptions(fixture: Fixture, kind: string, action?: string) {
 // prettier-ignore
 function postEvent(fixture: Fixture, postId: string, revisionId: string) {
   return { type: 'com.rezics.content.post.created.v1', subject: postId,
-    data: { threadId: fixture.threadId, itemId: postId, revisionId, actorId: fixture.actor.accountId } };
+    data: { threadId: fixture.threadId, itemId: postId, revisionId, actorId: fixture.actor.accountId,
+      ...SUBJECT_THREAD_EVENT_FIELDS } };
 }
 
 // prettier-ignore
@@ -541,7 +576,7 @@ growthTest('Media reservation and state reads stays within its bound as u grows'
 growthTest('Post media claim stays within its bound as r grows', async () => {
   const f = await makeAnchor(), media = await mediaAnchors(f, 'available', 3);
   return runMediaGrowth(f, 'Post media claim', (_db, _scale, i) => claimPostMedia(f, media[Math.floor(i / 2)]!.id, f.postId, f.revisionId),
-    { warmup: async () => claimPostMedia(f, (await mediaAnchor(f, 'available')).id, f.postId, f.revisionId) });
+    { revisionHistory: true, warmup: async () => claimPostMedia(f, (await mediaAnchor(f, 'available')).id, f.postId, f.revisionId) });
 });
 // prettier-ignore
 growthTest('Cover reference read and claim stays within its bound as u grows', async () => {
@@ -611,3 +646,28 @@ growthTest('Source fence check stays within its bound as P grows', async () => {
     operation: db => withConnection(db.pool, (client: PoolClient) => readFences(client,
       [{ route: f.sourceRoute, source, external_id: externalId, field_group: 'cover' }])) });
 });
+
+// prettier-ignore
+test("the hot partition's neighbour ids are deterministic and cost at most one partition hash each", async () => {
+  const count = ordinalsPerScale * scales[2], real = contract.tupleRoute;
+  const f = await makeAnchor({ partition: 100 });
+  let hashes = 0;
+  const spy = spyOn(contract, 'tupleRoute').mockImplementation((...args: Parameters<typeof real>) => {
+    if (++hashes > count) throw new Error(`Neighbour seeding hashed more than once per id (${hashes} hashes for ${count} ids)`);
+    return real(...args);
+  });
+  const build = async () => {
+    hashes = 0;
+    const population = await growthPopulation(f, { sourceOnly: true });
+    return Array.from({ length: count }, (_, ordinal) => population.rows!({ ordinal, route: f.sourcePartition * 16, partition: f.sourcePartition,
+      hot: true })['content.source_fences']![0]!);
+  };
+  try {
+    const first = await build(), second = await build();
+    expect(second).toEqual(first);
+    expect(new Set(first.map(row => row.external_id)).size).toBe(count);
+    expect(first.every(row => partitionOf(row.route as number) === f.sourcePartition)).toBe(true);
+  } finally {
+    spy.mockRestore();
+  }
+}, 60_000);

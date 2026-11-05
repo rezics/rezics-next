@@ -93,3 +93,27 @@ test('server configuration carries configured commerce and leaves it absent when
   expect(readConfig({ ...base, ...env }).commerce).toEqual(readCommerceConfig(env));
   expect(readConfig(base).commerce).toBeNull();
 });
+
+test('webhook configuration accepts exactly four distinct rotation secrets', () => {
+  const secrets = ['whsec_one', 'whsec_two', 'whsec_three', 'whsec_four'];
+  expect(readCommerceConfig({ ...env, STRIPE_WEBHOOK_SECRETS: secrets.join(', ') })!.webhookSecrets).toEqual(secrets);
+});
+
+test('duplicate, excessive and empty rotation entries fail configuration without exposing values', () => {
+  for (const value of [
+    'whsec_one,whsec_one',
+    'whsec_one, whsec_one',
+    'whsec_one,whsec_two,whsec_three,whsec_four,whsec_five',
+    'whsec_one, ,whsec_two',
+  ]) {
+    let error: unknown;
+    try {
+      readCommerceConfig({ ...env, STRIPE_WEBHOOK_SECRETS: value });
+    } catch (caught) {
+      error = caught;
+    }
+    expect(error).toBeInstanceOf(ConfigError);
+    expect((error as Error).message).toBe('Invalid or missing STRIPE_WEBHOOK_SECRETS');
+    expect((error as Error).message).not.toContain('whsec_');
+  }
+});

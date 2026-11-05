@@ -1,6 +1,43 @@
 types:
   schema:Recipe: receta de cocina
 properties:
+  schema:suitableForDiet: 'apto para la dieta'
+  schema:recipeInstructions: instrucciones
   schema:recipeIngredient: ingrediente
   schema:cookTime: tiempo de cocción
   schema:recipeYield: raciones
+inverseProperties:
+  schema:suitableForDiet: 'Recetas para esta dieta'
+libraryProfiles:
+  recipe.cooking:
+    states:
+      planned: 'Planeado'
+      in_progress: 'En curso'
+      completed: 'Completado'
+      paused: 'En pausa'
+      dropped: 'Abandonado'
+    units:
+      scalar_amount:
+        minute:
+          label: 'minuto'
+          countForms:
+            one: 'minuto'
+            other: 'minutos'
+            many: 'minutos'
+    copyKinds:
+      physical: 'Físico'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'En propiedad'
+        disposed: 'Desprendido'
+      digital:
+        owned: 'En propiedad'
+typeDescriptions:
+  schema:Recipe: 'Instrucciones e ingredientes para preparar comida; distinta del alimento y de una sesión personal de cocina.'
+propertyDescriptions:
+  schema:suitableForDiet: 'Un concepto que declara la adecuación a una dieta, como vegetariana; no se deduce de los nombres de los ingredientes.'
+  schema:recipeInstructions: 'Un documento redactado con los pasos de preparación; acepta un valor de documento, no una cadena simple ni una URL.'
+  schema:recipeIngredient: 'Un ingrediente como texto con idioma, por ejemplo 200 g de harina; los vínculos estructurados a alimentos usan la relación de material.'
+  schema:cookTime: 'Duración de la cocción como número entero no negativo de minutos (wd:Q7727), por ejemplo 25; no una hora del día ni el tiempo total de preparación y reposo.'
+  schema:recipeYield: 'Número de raciones como cantidad entera sin unidad, igual o superior a 1, por ejemplo 4; no instrucciones de porciones en texto libre.'

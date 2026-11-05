@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 
 export type VerificationConfig = { sitekey: string; scriptUrl: string };
 type Turnstile = {
@@ -15,22 +15,111 @@ type Turnstile = {
   reset(id: string): void;
   remove(id: string): void;
 };
-let script: Promise<Turnstile> | undefined;
-function loadScript(url: string): Promise<Turnstile> {
-  script ??= new Promise<Turnstile>((resolve, reject) => {
-    const element = document.createElement('script');
-    element.src = url;
-    element.async = true;
-    element.onload = () => {
-      const api = (window as Window & { turnstile?: Turnstile }).turnstile;
-      if (api) resolve(api);
-      else reject(new Error('Verification unavailable'));
-    };
-    element.onerror = () => reject(new Error('Verification unavailable'));
-    document.head.appendChild(element);
-  });
-  return script;
+
+type ScriptEntry = {
+  url: string;
+  element: HTMLScriptElement;
+  promise: Promise<Turnstile>;
+  resolve: (api: Turnstile) => void;
+  reject: (error: Error) => void;
+  consumers: number;
+  settled: boolean;
+  cancelQueued: boolean;
+};
+
+type ScriptLease = { promise: Promise<Turnstile>; release: () => void };
+const inFlight = new Map<string, ScriptEntry>();
+let lastLoaded: { url: string; api: Turnstile } | undefined;
+const useClientLayoutEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
+
+function removeEntry(entry: ScriptEntry) {
+  if (inFlight.get(entry.url) === entry) inFlight.delete(entry.url);
+  entry.element.onload = null;
+  entry.element.onerror = null;
+  entry.element.remove();
 }
+
+function acquireScript(url: string): ScriptLease {
+  let entry = inFlight.get(url);
+  if (!entry && lastLoaded?.url === url) {
+    return { promise: Promise.resolve(lastLoaded.api), release: () => {} };
+  }
+
+  if (!entry) {
+    // Drop abandoned loads when configuration changes; a live widget keeps its own bounded lease.
+    for (const [priorUrl, prior] of inFlight) {
+      if (prior.consumers === 0) {
+        removeEntry(prior);
+        inFlight.delete(priorUrl);
+      }
+    }
+
+    const element = document.createElement('script');
+    element.async = true;
+    element.src = url;
+    let resolve!: (api: Turnstile) => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<Turnstile>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    entry = { url, element, promise, resolve, reject, consumers: 0, settled: false, cancelQueued: false };
+    inFlight.set(url, entry);
+    element.onload = () => {
+      if (inFlight.get(url) !== entry || entry!.settled) return;
+      const api = (window as Window & { turnstile?: Turnstile }).turnstile;
+      if (!api) {
+        entry!.settled = true;
+        entry!.reject(new Error('Verification unavailable'));
+        if (entry!.consumers === 0) removeEntry(entry!);
+        return;
+      }
+      entry!.settled = true;
+      lastLoaded = { url, api };
+      entry!.resolve(api);
+      if (entry!.consumers === 0) removeEntry(entry!);
+    };
+    element.onerror = () => {
+      if (inFlight.get(url) !== entry || entry!.settled) return;
+      entry!.settled = true;
+      entry!.reject(new Error('Verification unavailable'));
+      if (entry!.consumers === 0) removeEntry(entry!);
+    };
+    document.head.appendChild(element);
+  }
+
+  entry.consumers += 1;
+  entry.cancelQueued = false;
+  let released = false;
+  return {
+    promise: entry.promise,
+    release() {
+      if (released) return;
+      released = true;
+      entry!.consumers = Math.max(0, entry!.consumers - 1);
+      if (entry!.consumers !== 0 || entry!.cancelQueued) return;
+      entry!.cancelQueued = true;
+      queueMicrotask(() => {
+        if (entry!.consumers !== 0) {
+          entry!.cancelQueued = false;
+          return;
+        }
+        if (entry!.settled) {
+          removeEntry(entry!);
+          return;
+        }
+        entry!.settled = true;
+        removeEntry(entry!);
+        entry!.reject(new Error('Verification unavailable'));
+      });
+    },
+  };
+}
+
+type VerificationCallbacks = {
+  onToken: (token: string) => void;
+  onStart: () => void;
+};
 
 // Dialog content mounts lazily. No challenge script or widget exists before opening it.
 export function Verification({
@@ -47,42 +136,69 @@ export function Verification({
   onStart: () => void;
 }) {
   const container = useRef<HTMLDivElement>(null);
-  useEffect(() => {
+  const callbacks = useRef<VerificationCallbacks>({ onToken, onStart });
+  const configKey = JSON.stringify([config.sitekey, config.scriptUrl, locale]);
+  const latestConfigKey = useRef(configKey);
+  latestConfigKey.current = configKey;
+  const activeWidget = useRef<object | null>(null);
+
+  useClientLayoutEffect(() => {
+    callbacks.current = { onToken, onStart };
+  }, [onStart, onToken]);
+
+  useClientLayoutEffect(() => {
+    const widget = {};
+    activeWidget.current = widget;
     let live = true;
-    let dispose: (() => void) | undefined;
-    onStart();
-    onToken('');
-    void loadScript(config.scriptUrl)
-      .then((api) => {
-        if (!live || !container.current) return;
+    let api: Turnstile | undefined;
+    let widgetId: string | undefined;
+    const lease = acquireScript(config.scriptUrl);
+    const current = () =>
+      live && activeWidget.current === widget && latestConfigKey.current === configKey && reset.current === resetWidget;
+    const publishToken = (next: string) => {
+      if (current()) callbacks.current.onToken(next);
+    };
+    const resetWidget = () => {
+      if (!current() || !api || !widgetId) return;
+      publishToken('');
+      api.reset(widgetId);
+    };
+
+    reset.current = resetWidget;
+    callbacks.current.onStart();
+    publishToken('');
+
+    void lease.promise
+      .then((loadedApi) => {
+        if (!current() || !container.current) return;
+        api = loadedApi;
         const id = api.render(container.current, {
           sitekey: config.sitekey,
           language: locale,
-          callback: (token) => {
-            if (live) onToken(token);
-          },
-          'expired-callback': () => {
-            if (live) onToken('');
-          },
-          'error-callback': () => {
-            if (live) onToken('');
-          },
+          callback: (next) => publishToken(next),
+          'expired-callback': () => publishToken(''),
+          'error-callback': () => publishToken(''),
         });
-        reset.current = () => {
-          onToken('');
-          api.reset(id);
-        };
-        dispose = () => api.remove(id);
+        widgetId = id;
       })
       .catch(() => {
-        if (live) onToken('');
+        publishToken('');
       });
+
     return () => {
+      const owned = activeWidget.current === widget;
       live = false;
-      reset.current = null;
-      onToken('');
-      dispose?.();
+      if (owned) {
+        activeWidget.current = null;
+        if (reset.current === resetWidget) {
+          reset.current = null;
+          callbacks.current.onToken('');
+        }
+      }
+      if (api && widgetId) api.remove(widgetId);
+      lease.release();
     };
-  }, [config.sitekey, config.scriptUrl, locale, onToken, onStart, reset]);
+  }, [config.scriptUrl, config.sitekey, configKey, locale, reset]);
+
   return <div ref={container} />;
 }

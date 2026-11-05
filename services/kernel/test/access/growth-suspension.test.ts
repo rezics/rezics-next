@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
 import { createRegistrationPorts } from '../support/registration-ports.ts';
@@ -13,6 +13,25 @@ import { newId, routeOf } from '../../src/route/route.ts';
 import { capture, checkGrowth, openGrowthDatabase } from '../support/growth.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
+
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `growth_suspensio_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
 
 const issuer = 'https://suspension-growth.auth.test';
 const audience = 'https://suspension-growth.api.test';
@@ -26,7 +45,7 @@ const seedConcurrency = 8;
 // plus the mounted requests in three warm-ups, captures and the final proof.
 const growthTimeout = Math.ceil((64 * accountsPerScale) / seedConcurrency) * 500 + 7 * 5 * 3_000;
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
-let authDatabase: ReturnType<typeof testDatabase>;
+let authDatabase: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let authPool: Pool;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
@@ -129,7 +148,7 @@ beforeAll(async () => {
   });
   const actions = actionCatalogue(kernel);
   scopes = [...actions.keys()].filter((action) => action !== 'media:complete');
-  authDatabase = testDatabase();
+  authDatabase = await cloneAuthDatabase();
   authPool = new Pool({ connectionString: authDatabase.url });
   signingKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -184,7 +203,7 @@ beforeAll(async () => {
     stderr: 'pipe',
   });
   expect(await bootstrap.exited).toBe(0);
-  for (let i = 0; i < 7; i++) positives.push(await person(`positive_${i}`));
+  for (let i = 0; i < 4; i++) positives.push(await person(`positive_${i}`));
   await lifecycle.reserveCoordination({
     accountId: grantor.accountId,
     relatedAccountId: newId(0x7311),
@@ -198,7 +217,7 @@ beforeAll(async () => {
 }, 60000);
 afterAll(async () => {
   await host?.stop();
-  authDatabase?.close();
+  await authDatabase?.close();
   await seedPool?.end();
   await db?.close();
 });
@@ -207,29 +226,94 @@ test(
   'mounted suspension keeps full native formula, stage and counter cost bounded at 1/8/64 x 500',
   async () => {
     let positive = positives[0]!;
-    const exercise = async () => {
-      expect(
-        (await call(root.bearer, `/v1/accounts/${positive.accountId}:suspend`, {}, 'growth-positive')).response.status,
-      ).toBe(200);
+    let spare = positive;
+    // Coordination does not block suspension. Restore between probes so each
+    // sample suspends the same account, whose hold cardinality is what grows.
+    let grantorSuspended = false;
+    const restoreGrantor = async () => {
+      if (!grantorSuspended) return;
+      const restored = await call(root.bearer, `/v1/accounts/${grantor.accountId}:reinstate`, {});
+      expect(restored.response.status).toBe(200);
+      expect(restored.value).toMatchObject({
+        reinstatement: { accountId: grantor.accountId, state: 'active' },
+      });
+      grantorSuspended = false;
+    };
+    const suspendGrantor = async () => {
+      const suspended = await call(root.bearer, `/v1/accounts/${grantor.accountId}:suspend`, {});
+      expect(suspended.response.status).toBe(200);
+      expect(suspended.value).toMatchObject({
+        suspension: { accountId: grantor.accountId, state: 'suspended' },
+      });
+      grantorSuspended = true;
+    };
+    const exercise = async (subject: { accountId: string }, freshKey: string) => {
+      expect((await call(root.bearer, `/v1/accounts/${subject.accountId}:suspend`, {}, freshKey)).response.status).toBe(
+        200,
+      );
       expect(
         (await call(root.bearer, `/v1/accounts/${recipient.accountId}:suspend`, {}, replayKey)).response.status,
       ).toBe(200);
       expect((await call(root.bearer, `/v1/accounts/${recipient.accountId}:suspend`, {})).response.status).toBe(403);
-      // Coordination does not block suspension. Its exact success replay stays
-      // available; a fresh command against the now-suspended account is refused.
-      expect(
-        (await call(root.bearer, `/v1/accounts/${grantor.accountId}:suspend`, {}, 'growth-coordinated')).response
-          .status,
-      ).toBe(200);
+      await suspendGrantor();
+      // A fresh command against the now-suspended coordinated account is refused.
       expect((await call(root.bearer, `/v1/accounts/${grantor.accountId}:suspend`, {})).response.status).toBe(403);
     };
     const report = await checkGrowth(db, {
       name: 'mounted native suspension',
       bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
       repetitions: 1,
-      warmups: 1,
       async grow(database, scale, previous) {
-        positive = positives[[1, 8, 64].indexOf(scale) * 2]!;
+        positive = positives[[1, 8, 64].indexOf(scale)]!;
+        if (previous === 0) {
+          // Authorization and the rate counter read these relations. Unrelated keys
+          // keep them past the sequential-scan crossover before the first scale.
+          const background = Array.from({ length: 4000 }, () => newId(0));
+          const backgroundTransaction = newId(0);
+          await database.admin.query(
+            `INSERT INTO semantic.context(route,context_id,kind,labels)
+          SELECT 0,id,'community','{}' FROM unnest($1::uuid[]) id
+          WHERE id <> '00000000-0000-8000-8000-000000000000'`,
+            [background],
+          );
+          await database.admin.query(
+            `INSERT INTO access.resource_role_grant(route,resource_id,subject_id,grant_role,valid,transaction_id)
+          SELECT 0,id,id,'unrelated.reader','(,)',$2 FROM unnest($1::uuid[]) id
+          WHERE id <> '00000000-0000-8000-8000-000000000000'`,
+            [background, backgroundTransaction],
+          );
+          await database.admin.query(
+            `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+          SELECT 0,id,id,'subject:read','(,)',$2 FROM unnest($1::uuid[]) id
+          WHERE id <> '00000000-0000-8000-8000-000000000000'`,
+            [background, backgroundTransaction],
+          );
+          await database.admin.query(
+            `INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id)
+          SELECT 0,id,id,'subject:read','resource','(,)',$2 FROM unnest($1::uuid[]) id
+          WHERE id <> '00000000-0000-8000-8000-000000000000'`,
+            [background, backgroundTransaction],
+          );
+          await database.admin.query(
+            `INSERT INTO access.write_rate_counter (route, identity_digest, family, count, expires_at)
+          SELECT 7, md5(i::text) || md5((i + 100000)::text), 'background', 1, '2099-01-01'::timestamptz
+          FROM generate_series(1, 4000) i`,
+          );
+          // The suspend locks one account and probes coordination by key. Unrelated
+          // rows keep both relations past the sequential-scan crossover.
+          await database.admin.query(
+            `INSERT INTO access.account(route,account_id,kind,state,transaction_id)
+          SELECT 0,id,'actor','active',$2 FROM unnest($1::uuid[]) id`,
+            [background, backgroundTransaction],
+          );
+          await database.admin.query(
+            `INSERT INTO access.lifecycle_coordination(route,account_id,reservation_id,related_account_id,purpose,transaction_id)
+          SELECT 0,id,id,id,'membership',$2 FROM unnest($1::uuid[]) id`,
+            [background, backgroundTransaction],
+          );
+        }
+        // A fresh active account for the unmeasured suspend. The positive mutation stays one-shot.
+        spare = await person(`growth_warmup_${scale}`);
         // Unrelated account rows are produced by native pending registration;
         // no SQL fixture writes an account state, floor, fence or measured outcome.
         for (let start = previous * accountsPerScale; start < scale * accountsPerScale; start += seedConcurrency) {
@@ -275,35 +359,39 @@ test(
         root.bearer = await issue('grant_root@suspension-growth.test');
         for (const table of [
           'access.account',
+          'access.handle_claim',
+          'access.resource_grant',
+          'access.resource_role_grant',
+          'access.resource_denial',
           'access.lifecycle_coordination',
           'access.lifecycle_fence_receipt',
+          'access.write_rate_counter',
+          'semantic.context',
           'core.receipt',
+          'core.outbox',
+          'editorial.write_basis',
         ])
           await database.admin.query(`VACUUM (ANALYZE) ${table}`);
         // Native seeding can outlast the pool's idle lifetime. Warm the real
         // mounted path after seeding so per-connection SQL type discovery does
         // not enter only the largest sample. The positive mutation remains fresh.
-        expect(
-          (await call(root.bearer, `/v1/accounts/${grantor.accountId}:suspend`, {}, 'growth-coordinated')).response
-            .status,
-        ).toBe(200);
+        // Leave the coordinated account active for the unmeasured and measured suspends.
+        await restoreGrantor();
+        await suspendGrantor();
+        await restoreGrantor();
         expect(
           (await call(root.bearer, `/v1/accounts/${recipient.accountId}:suspend`, {}, replayKey)).response.status,
         ).toBe(200);
       },
-      async warmup(_database, scale) {
-        const measured = positive;
-        positive = positives[[1, 8, 64].indexOf(scale) * 2 + 1]!;
-        try {
-          await exercise();
-        } finally {
-          positive = measured;
-        }
+      warmup: async (_database, scale) => {
+        await exercise(spare, `growth-warmup-${scale}`);
+        await restoreGrantor();
       },
-      operation: exercise,
+      operation: () => exercise(positive, 'growth-positive'),
     });
-    positive = positives[6]!;
-    const observed = await capture(db, exercise);
+    positive = positives[3]!;
+    await restoreGrantor();
+    const observed = await capture(db, () => exercise(positive, 'growth-positive'));
     for (const fragment of [
       'access.account',
       'access.lifecycle_coordination',

@@ -7,8 +7,7 @@ import { createAuthService, createAccountWorkflows } from '../../../auth/src/ind
 import type { AccountWorkflowPorts, AccountOperation } from '../../../auth/src/workflows.ts';
 import { createPool, withConnection } from '../../src/database/pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAuthenticator } from '../../src/access/authenticate.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { createAccess } from '../../src/access/index.ts';
 import {
   createLifecycleCommands,
   createLifecycleInternals,
@@ -20,6 +19,9 @@ import { createOperatorCommands } from '../../src/access/operator.ts';
 import { accessCheck } from '../../src/request/access.ts';
 import { AuthBindingDeniedError } from '../../src/access/auth-bindings.ts';
 import { createCommittedContinuations } from '../../src/access/committed-continuations.ts';
+import { configureTestReceiptKeys } from '../support/receipt-keys.ts';
+import { nativeReceiptKeyCandidates } from '../../src/command/receipt-key.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 export type FixtureConfiguration = {
   kernelUrl: string;
@@ -36,6 +38,7 @@ export async function handleFixture(
 ) {
   // A single resource connection also detects accidental simultaneous anchor checkout.
   const kernel = createPool(config.kernelUrl);
+  configureTestReceiptKeys(kernel);
   kernel.options.max = 1;
   const database = new Pool({ connectionString: config.authUrl });
   const read = (id: string) => withConnection(kernel, (client) => readAccount(client, routeOf(id)!, id));
@@ -67,8 +70,17 @@ export async function handleFixture(
           .digest('hex')}`
       : `wf:${workflow}`;
     const receipt = await kernel.query<{ response: { accountId: string; registrationId: string } }>(
-      "SELECT response FROM core.receipt WHERE partition_no=$1 AND principal_id=$2 AND command_kind='access.actor-pending' AND idempotency_key=$3",
-      [partitionOf(route), '00000000-0000-8000-8000-000000000001', `${route}:${prefix}:pending-account`],
+      "SELECT response FROM core.receipt WHERE partition_no=$1 AND principal_kind='account' AND principal_id=$2 AND command_kind='access.actor-pending' AND idempotency_key=ANY($3::text[])",
+      [
+        partitionOf(route),
+        '00000000-0000-8000-8000-000000000001',
+        nativeReceiptKeyCandidates(
+          kernel,
+          'access.actor-pending',
+          '00000000-0000-8000-8000-000000000001',
+          `${route}:${prefix}:pending-account`,
+        ),
+      ],
     );
     if (
       receipt.rows[0]?.response.accountId !== row.account_id ||
@@ -103,7 +115,7 @@ export async function handleFixture(
     audience: 'https://durable-handles.api.test',
     secret: config.secret,
     signing: { activeKid: config.signing.kid!, privateKeys: [config.signing] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await read(id);
         return account
@@ -144,16 +156,12 @@ export async function handleFixture(
           subjectEpoch: Number(subject.minimumAuthnEpoch),
         };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({
     clientId: 'durable-web',
     firstParty: true,
     scopes: ['account:update', 'account:delete', 'organization:create', 'organization:membership', 'account:manage'],
-  });
-  const verifier = createAuthenticator({
-    ...auth.verifier,
-    fetch: async () => auth.handler(new Request(auth.verifier.jwksUrl)),
   });
   const actions = new Map([
     ...LIFECYCLE_ACTIONS,
@@ -162,7 +170,10 @@ export async function handleFixture(
   ] as const);
   const access = createAccess({
     actions,
-    accountEvidence: (actor) => verifier.identity(actor)?.account,
+    auth: {
+      ...auth.verifier,
+      fetch: async () => auth.handler(new Request(auth.verifier.jwksUrl)),
+    },
   });
   const commands = createLifecycleCommands({ pool: kernel, access });
   const continuations = createCommittedContinuations({
@@ -222,7 +233,7 @@ export async function handleFixture(
       if (!approval || (approval.operation && JSON.stringify(approval.operation) !== JSON.stringify(operation)))
         throw new Error('Approval mismatch');
       const context = { pool: kernel, deadline: Date.now() + 5000 };
-      const actor = await verifier.authenticate(approval.token, context).catch(() => {
+      const actor = await access.authenticate(approval.token, context).catch(() => {
         throw new AuthBindingDeniedError();
       });
       if (actor.kind !== 'account') throw new Error('No authenticated actor');
@@ -324,7 +335,7 @@ export async function handleFixture(
       beforeRevoke = callback;
     },
     authenticate(token: string) {
-      return verifier.authenticate(token, { pool: kernel, deadline: Date.now() + 5000 });
+      return access.authenticate(token, { pool: kernel, deadline: Date.now() + 5000 });
     },
     get workflows() {
       return workflows;

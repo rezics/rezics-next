@@ -5,30 +5,32 @@
   "exports": {
     ".": "./src/index.ts",
     "./membership-workflows": "./src/membership-workflows.ts",
+    "./kind-consent": "./src/kind-consent.ts",
     "./current-consent": "./src/current-consent.ts",
     "./internal-consent": "./src/internal-consent.ts",
     "./website-maintenance": "./src/website-maintenance.ts"
   },
   "scripts": {
     "check": "bun scripts/check.ts",
-    "typecheck": "tsc --noEmit --runExternalCode -p tsconfig.json",
+    "typecheck": "bun scripts/typecheck.ts",
     "db": "bun scripts/database.ts"
   },
   "dependencies": {
-    "@better-auth/core": "1.8.0-beta.2",
-    "@better-auth/oauth-provider": "1.8.0-beta.2",
-    "@better-auth/utils": "0.5.0",
-    "@better-fetch/fetch": "1.3.2",
-    "@dbos-inc/dbos-sdk": "5.4.6-preview",
+    "@better-auth/core": "1.8.0-beta.3",
+    "@better-auth/oauth-provider": "1.8.0-beta.3",
+    "@better-auth/passkey": "1.8.0-beta.3",
+    "@better-auth/utils": "0.5.1",
+    "@better-fetch/fetch": "1.3.3",
+    "@dbos-inc/dbos-sdk": "5.5.3-preview",
     "@rezics/auth-contract": "workspace:*",
-    "better-auth": "1.8.0-beta.2",
+    "better-auth": "1.8.0-beta.3",
     "better-call": "1.4.4",
-    "jose": "6.2.13",
+    "jose": "6.2.14",
     "pg": "8.23.1"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
     "dbmate": "2.37.0",
-    "reylo": "0.5.0"
+    "reylo": "0.6.0"
   }
 }

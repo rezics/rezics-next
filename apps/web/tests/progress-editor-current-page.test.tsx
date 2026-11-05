@@ -1,0 +1,762 @@
+import { afterAll, expect, mock, test } from 'bun:test';
+import { dirname } from 'node:path';
+import { act, Fragment, StrictMode, useLayoutEffect, useState, type ReactNode } from 'react';
+import type {
+  ProgressFailure,
+  ProgressFinishInput,
+  ProgressRecorded,
+  ProgressRecordInput,
+  ProgressSessionPage as Page,
+} from '../src/library/progress-reads';
+
+const { Window } = await import(
+  Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
+);
+const window = new Window({ url: 'https://rezics.test/en/library/progress', width: 1280, height: 900 });
+const globals = {
+  window,
+  document: window.document,
+  navigator: window.navigator,
+  HTMLElement: window.HTMLElement,
+  HTMLInputElement: window.HTMLInputElement,
+  HTMLButtonElement: window.HTMLButtonElement,
+  HTMLFormElement: window.HTMLFormElement,
+  Element: window.Element,
+  Node: window.Node,
+  NodeFilter: window.NodeFilter,
+  Document: window.Document,
+  ShadowRoot: window.ShadowRoot,
+  DocumentFragment: window.DocumentFragment,
+  MutationObserver: window.MutationObserver,
+  ResizeObserver: window.ResizeObserver,
+  Event: window.Event,
+  MouseEvent: window.MouseEvent,
+  PointerEvent: window.PointerEvent,
+  getComputedStyle: window.getComputedStyle.bind(window),
+  requestAnimationFrame: window.requestAnimationFrame.bind(window),
+  cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
+  scrollTo: window.scrollTo.bind(window),
+  IS_REACT_ACT_ENVIRONMENT: true,
+};
+const previous = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+for (const [key, value] of Object.entries(globals))
+  Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+afterAll(async () => {
+  mock.restore();
+  for (const [key, descriptor] of previous) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else Reflect.deleteProperty(globalThis, key);
+  }
+  await window.happyDOM.close();
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+type Mutation = ProgressRecorded | ProgressFailure;
+const commands: {
+  kind: string;
+  data: ProgressRecordInput | ProgressFinishInput;
+  work: ReturnType<typeof deferred<Mutation>>;
+}[] = [];
+const histories: { data: { id: string; changes?: string; units?: string }; work: ReturnType<typeof deferred<Page>> }[] =
+  [];
+function command(kind: string, { data }: { data: ProgressRecordInput | ProgressFinishInput }) {
+  const work = deferred<Mutation>();
+  commands.push({ kind, data, work });
+  return work.promise;
+}
+mock.module('cloudflare:workers', () => ({ env: {} }));
+mock.module('@tanstack/react-start', () => import('../.storybook/react-start'));
+mock.module('@tanstack/react-start/server', () => import('../.storybook/react-start'));
+mock.module('../src/threads/composer', () => ({ csrfHeaders: () => ({ 'x-csrf-token': 'csrf' }) }));
+// Grant exposure only; mount the real editor, router, forms, menu and dialog.
+mock.module('../src/kernel/exposure', () => ({
+  useOperation: () => true,
+  operationIsAdmitted: () => true,
+  Exposure: ({ children }: { children: ReactNode }) => <Fragment>{children}</Fragment>,
+}));
+mock.module('../src/library/progress-server', () => ({
+  recordProgressSession: (input: { data: ProgressRecordInput }) => command('record', input),
+  finishProgressSession: (input: { data: ProgressFinishInput }) => command('finish', input),
+  readProgressSession: ({ data }: { data: (typeof histories)[number]['data'] }) => {
+    const work = deferred<Page>();
+    histories.push({ data, work });
+    return work.promise;
+  },
+}));
+const { createRoot } = await import('react-dom/client');
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+const { renderToString } = await import('react-dom/server');
+const { createBrowserHistory, createRootRoute, createRoute, createRouter, RouterProvider } =
+  await import('@tanstack/react-router');
+const { within, userEvent } = await import('storybook/test');
+const { ProgressSessionPage } = await import('../src/library/progress-session');
+const { m } = await import('../src/paraglide/messages.js');
+const { setLocale } = await import('../src/paraglide/runtime.js');
+setLocale('en', { reload: false });
+type LoadedPage = Extract<Page, { signedIn: true }>;
+type Kind = 'record' | 'add' | 'remove' | 'finish';
+type Mode = 'scalar_amount' | 'cursor_position' | 'completed_units';
+function page(id = 'original', kind: Kind = 'record', mode?: Mode): LoadedPage {
+  return {
+    signedIn: true,
+    idempotencyKey: crypto.randomUUID(),
+    changesCursor: 'changes:opaque/==',
+    unitsCursor: 'units:opaque/==',
+    session: {
+      id,
+      subjectId: `subject-${id}`,
+      versionSubjectId: null,
+      subject: { id: `subject-${id}`, type: 'book', types: ['book'], label: `Subject ${id}`, cover: null },
+      versionSubject: null,
+      mode: mode ?? (kind === 'add' || kind === 'remove' ? 'completed_units' : 'scalar_amount'),
+      unit: 'accepted-unit',
+      unitLabel: 'pages',
+      meaning: 'known',
+      recordingState: 'supported',
+      inputRules: { min: '0', max: '100', step: '0.01', total: 'optional' },
+      total: '100',
+      amount: '2.5',
+      locator: mode === 'cursor_position' ? 'chapter 1' : null,
+      position: mode === 'cursor_position' ? '10' : null,
+      completedUnitCount: 0,
+      state: 'active',
+      revision: 7,
+      startedAt: '2026-01-01T00:00:00Z',
+      completedAt: null,
+      changes: [],
+      changesNext: null,
+      units: [],
+      unitsNext: null,
+    },
+  };
+}
+function success(p: LoadedPage): ProgressRecorded {
+  const { id, amount, locator, position, completedUnitCount, state, completedAt, total } = p.session;
+  return {
+    ok: true,
+    session: {
+      id,
+      amount,
+      locator,
+      position,
+      completedUnitCount,
+      state,
+      completedAt,
+      total,
+      revision: p.session.revision + 1,
+    },
+  };
+}
+async function settle(action: () => void) {
+  await act(async () => {
+    action();
+  });
+}
+async function mount(initial: LoadedPage, phone = false) {
+  commands.length = histories.length = 0;
+  const host = window.document.createElement('div');
+  window.document.body.append(host);
+  const root = createRoot(host as unknown as HTMLElement);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(['session'], { state: 'signed-out', csrfToken: null });
+  let shown: Page | null = initial;
+  let renderPage: () => void;
+  const rootRoute = createRootRoute({
+    component: function Page() {
+      const [, render] = useState(0);
+      useLayoutEffect(() => {
+        renderPage = () => render((value) => value + 1);
+      });
+      return shown && <ProgressSessionPage page={shown} logsCursor="logs:independent/==" />;
+    },
+  });
+  const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: '/' });
+  const destinationRoute = createRoute({ getParentRoute: () => rootRoute, path: '/destination' });
+  window.history.replaceState({}, '', '/');
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([indexRoute, destinationRoute]),
+    history: createBrowserHistory({ window: window as unknown as Window }),
+  });
+  const originalMatchMedia = window.matchMedia;
+  if (phone)
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: true,
+        media: query,
+        addEventListener() {},
+        removeEventListener() {},
+      }) as unknown as MediaQueryList) as typeof window.matchMedia;
+  await router.load();
+  const tree = () => (
+    <StrictMode>
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </StrictMode>
+  );
+  await settle(() => root.render(tree()));
+  const show = async (p: Page | null) =>
+    settle(() => {
+      shown = p;
+      renderPage();
+    });
+  const body = within(window.document.body as unknown as HTMLElement);
+  const user = userEvent.setup({ document: window.document as unknown as Document });
+  const click = async (label: string) =>
+    act(async () => {
+      await user.click(body.getByRole('button', { name: label, exact: true }));
+    });
+  const dialog = () => body.getByRole('dialog');
+  const escape = async () =>
+    act(async () => {
+      dialog().dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+  const field = (label: string) => within(dialog()).getByLabelText(label) as HTMLInputElement;
+  const fill = async (label: string, value: string) =>
+    act(async () => {
+      await user.clear(field(label));
+      if (value) await user.type(field(label), value);
+    });
+  const key = () => dialog().querySelector<HTMLInputElement>('[name="idempotencyKey"]')!.value;
+  const submit = async (kind: Kind) => {
+    await click(
+      kind === 'finish'
+        ? m.library_progress_confirm_complete()
+        : kind === 'record'
+          ? m.library_progress_record()
+          : kind === 'add'
+            ? m.library_progress_add_units()
+            : m.library_progress_remove_units(),
+    );
+    if (kind !== 'finish' && body.queryByRole('button', { name: m.library_progress_confirm_correction() }))
+      await click(m.library_progress_confirm_correction());
+  };
+  const start = async (kind: Kind) => {
+    if (kind === 'finish') {
+      await click(m.library_collection_actions());
+      await act(async () => {
+        await user.click(body.getByRole('menuitem', { name: m.library_progress_complete(), exact: true }));
+      });
+    } else {
+      await click(m.library_progress_update());
+      await fill(
+        kind === 'record'
+          ? m.library_progress_amount()
+          : kind === 'add'
+            ? m.library_progress_add_units()
+            : m.library_progress_remove_units(),
+        kind === 'record' ? '4.75' : 'part:1\npart~9',
+      );
+    }
+    await submit(kind);
+    return commands.at(-1)!;
+  };
+  const intact = (p: LoadedPage, kind: Kind) => {
+    expect(host.textContent).toContain(`Subject ${p.session.id}`);
+    expect(host.querySelector(':scope > article > [role="alert"]')?.textContent ?? null).toBeNull();
+    if (kind === 'finish')
+      expect(body.getByRole('button', { name: m.library_progress_confirm_complete() })).toBeDefined();
+    else {
+      expect(dialog().querySelector(':scope > [role="alert"]')?.textContent ?? null).toBeNull();
+      expect(key()).toBe(p.idempotencyKey);
+      expect(
+        field(
+          kind === 'record'
+            ? m.library_progress_amount()
+            : kind === 'add'
+              ? m.library_progress_add_units()
+              : m.library_progress_remove_units(),
+        ).value,
+      ).toBe(kind === 'record' ? '4.75' : 'part:1\npart~9');
+    }
+  };
+  await show(initial);
+  return {
+    host,
+    body,
+    show,
+    click,
+    dialog,
+    escape,
+    field,
+    fill,
+    key,
+    submit,
+    navigate: () => router.navigate({ to: '/destination' }),
+    path: () => router.state.location.pathname,
+    start,
+    intact,
+    ssr: () => renderToString(tree()),
+    close: async () => {
+      await settle(() => root.unmount());
+      router.history.destroy();
+      host.remove();
+      client.clear();
+      if (phone) window.matchMedia = originalMatchMedia;
+    },
+  };
+}
+
+test('Late progress mutations and history responses cannot replace the newly loaded progress session or unlock its pending operation', async () => {
+  const cases: [Kind, 'success' | 'reject' | ProgressFailure['reason']][] = [
+    ['record', 'success'],
+    ['record', 'forbidden'],
+    ['record', 'reject'],
+    ['add', 'success'],
+    ['remove', 'unsupported_library_profile'],
+    ['finish', 'success'],
+    ['finish', 'closed'],
+  ];
+  for (const sameSession of [false, true])
+    for (const [kind, outcome] of cases) {
+      const original = page('original', kind);
+      const h = await mount(original);
+      try {
+        const old = await h.start(kind);
+        const replacement = page(sameSession ? 'original' : 'replacement', kind);
+        replacement.session.revision = 23;
+        await h.show(replacement);
+        const current = await h.start(kind); // Usable while the old mutation is still unresolved.
+        expect(current.data).toMatchObject({
+          sessionId: replacement.session.id,
+          revision: 23,
+          idempotencyKey: replacement.idempotencyKey,
+        });
+        await settle(() =>
+          outcome === 'reject'
+            ? old.work.reject(new Error('old network failure'))
+            : old.work.resolve(outcome === 'success' ? success(original) : { ok: false, reason: outcome }),
+        );
+        h.intact(replacement, kind);
+        expect(histories).toHaveLength(0); // A retired success must not launch a history read.
+        await h.submit(kind);
+        expect(commands).toHaveLength(2); // Old finally must not unlock this pending command.
+        await settle(() => current.work.resolve({ ok: false, reason: 'unavailable' }));
+      } finally {
+        await h.close();
+      }
+    }
+}, 30_000);
+
+test('history and post-history continuations retire on replacement, and unmount retires every mutation kind', async () => {
+  for (const kind of ['record', 'add', 'finish'] as const) {
+    const original = page('original', kind);
+    const h = await mount(original);
+    try {
+      const old = await h.start(kind);
+      await settle(() => old.work.resolve(success(original)));
+      expect(histories).toHaveLength(1);
+      const replacement = page('replacement', kind);
+      await h.show(replacement);
+      const current = await h.start(kind);
+      await settle(() =>
+        kind === 'record'
+          ? histories[0]!.work.resolve(original)
+          : kind === 'add'
+            ? histories[0]!.work.reject(new Error('old history failure'))
+            : histories[0]!.work.resolve({ signedIn: false, idempotencyKey: 'ignored' }),
+      );
+      h.intact(replacement, kind);
+      await h.submit(kind);
+      expect(commands).toHaveLength(2);
+      await settle(() => current.work.resolve({ ok: false, reason: 'unavailable' }));
+    } finally {
+      await h.close();
+    }
+
+    for (const phase of ['mutation', 'history']) {
+      const h = await mount(original);
+      try {
+        const old = await h.start(kind);
+        if (phase === 'history') await settle(() => old.work.resolve(success(original)));
+        await h.show(null); // Unmount SessionEditor without destroying the test root.
+        if (phase === 'mutation') {
+          await settle(() => old.work.resolve(success(original)));
+          expect(histories).toHaveLength(0);
+        } else await settle(() => histories[0]!.work.reject(new Error('unmounted history failure')));
+        expect(h.host.textContent).toBe('');
+        const replacement = page('remounted', kind);
+        await h.show(replacement);
+        const current = await h.start(kind);
+        expect(current.data.idempotencyKey).toBe(replacement.idempotencyKey);
+        await settle(() => current.work.resolve({ ok: false, reason: 'unavailable' }));
+      } finally {
+        await h.close();
+      }
+    }
+  }
+}, 30_000);
+
+test('manual refresh is latest-request-wins for successes, refusals and thrown failures', async () => {
+  for (const outcome of ['success', 'denied', 'error']) {
+    const initial = page();
+    initial.session.recordingState = 'unavailable';
+    const h = await mount(initial);
+    try {
+      await h.click(m.library_progress_retry());
+      await h.click(m.library_progress_retry());
+      const latest = page('latest');
+      await settle(() => histories[1]!.work.resolve(latest));
+      await h.click(m.library_progress_update());
+      await h.fill(m.library_progress_amount(), '4.75');
+      await settle(() =>
+        outcome === 'error'
+          ? histories[0]!.work.reject(new Error('older refresh'))
+          : histories[0]!.work.resolve(outcome === 'denied' ? { signedIn: false, idempotencyKey: 'ignored' } : initial),
+      );
+      expect(h.host.textContent).toContain('Subject latest');
+      expect(h.field(m.library_progress_amount()).value).toBe('4.75');
+      expect(h.dialog().querySelector(':scope > [role="alert"]')?.textContent ?? null).toBeNull();
+    } finally {
+      await h.close();
+    }
+  }
+});
+
+test('same-page retries keep uncertain intent, successful saves refresh authoritative history and rotate only on success', async () => {
+  const initial = page();
+  const h = await mount(initial);
+  try {
+    expect(h.ssr()).toContain('Subject original');
+    await h.click(m.library_progress_update());
+    await h.fill(m.library_progress_amount(), '0');
+    await h.submit('record');
+    await h.submit('record');
+    expect(commands).toHaveLength(1);
+    const intent = { sessionId: initial.session.id, revision: 7, idempotencyKey: initial.idempotencyKey, amount: '0' };
+    expect(commands[0]!.data).toEqual(intent);
+    await settle(() => commands[0]!.work.reject(new Error('unknown commit outcome')));
+    expect(h.field(m.library_progress_amount()).value).toBe('0');
+    expect(h.key()).toBe(initial.idempotencyKey);
+    expect(histories).toHaveLength(0);
+    await h.submit('record');
+    expect(commands[1]!.data).toEqual(intent);
+    const recorded = success(initial);
+    recorded.session.amount = '0';
+    await settle(() => commands[1]!.work.resolve(recorded));
+    expect(histories[0]!.data).toEqual({
+      id: initial.session.id,
+      changes: initial.changesCursor,
+      units: initial.unitsCursor,
+    });
+    const rotated = h.key();
+    expect(rotated).not.toBe(initial.idempotencyKey);
+    await h.submit('record');
+    expect(commands).toHaveLength(2); // Pending includes the authoritative refresh.
+    const authoritative = {
+      ...initial,
+      session: { ...initial.session, ...recorded.session, units: ['authoritative-unit'] },
+    };
+    await settle(() => histories[0]!.work.resolve(authoritative));
+    expect(h.body.queryByRole('dialog')).toBeNull();
+    const savedUnload = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(savedUnload);
+    expect(savedUnload.defaultPrevented).toBe(false);
+    expect(h.host.textContent).toContain('authoritative-unit');
+    await h.show(initial); // An ordinary rerender with the same loader object must not reset state.
+    await h.click(m.library_progress_update());
+    expect(h.key()).toBe(rotated);
+    expect(h.field(m.library_progress_amount()).value).toBe('0');
+    await h.fill(m.library_progress_amount(), '4.75');
+    await h.submit('record');
+    expect(commands[2]!.data).toEqual({ ...intent, revision: 8, idempotencyKey: rotated, amount: '4.75' });
+    await settle(() => commands[2]!.work.resolve({ ok: false, reason: 'conflict' }));
+    expect(h.key()).toBe(rotated);
+    expect(h.field(m.library_progress_amount()).value).toBe('4.75');
+  } finally {
+    await h.close();
+  }
+});
+
+test('correction review keeps a closed draft and recovers a conflict only after explicitly loading latest progress', async () => {
+  const initial = page();
+  const h = await mount(initial);
+  try {
+    await h.click(m.library_progress_update());
+    await h.fill(m.library_progress_amount(), '0');
+    await h.click(m.library_progress_record());
+    expect(commands).toHaveLength(0);
+    await h.click(m.library_progress_cancel());
+    expect(h.field(m.library_progress_amount()).value).toBe('0');
+    // Stay keeps the deliberate zero in the open editor.
+    await h.escape();
+    expect(h.body.getByRole('alertdialog')).toBeDefined();
+    await h.click(m.library_progress_draft_navigation_stay());
+    expect(h.body.queryByRole('alertdialog')).toBeNull();
+    expect(h.body.queryByRole('dialog')).not.toBeNull();
+    expect(h.field(m.library_progress_amount()).value).toBe('0');
+    await h.submit('record');
+    const original = commands[0]!.data;
+    await settle(() => commands[0]!.work.resolve({ ok: false, reason: 'conflict' }));
+    await h.click(m.library_progress_confirm_correction());
+    expect(commands[1]!.data).toEqual(original);
+    await settle(() => commands[1]!.work.resolve({ ok: false, reason: 'conflict' }));
+    await h.click(m.library_progress_review_latest());
+    await settle(() =>
+      histories[0]!.work.resolve({ ...initial, session: { ...initial.session, amount: '25', revision: 10 } }),
+    );
+    expect(h.field(m.library_progress_amount()).value).toBe('0');
+    await h.submit('record');
+    expect(commands[2]!.data).toMatchObject({ amount: '0', revision: 10 });
+    expect(commands[2]!.data.idempotencyKey).not.toBe(original.idempotencyKey);
+  } finally {
+    await h.close();
+  }
+});
+
+test('Stay preserves the exact Progress draft across dialog and sheet modes, and Discard requires confirmation', async () => {
+  const cases = [
+    {
+      id: 'scalar',
+      kind: 'record' as const,
+      mode: 'scalar_amount' as const,
+      phone: false,
+      values: [[m.library_progress_amount(), '0']] as const,
+      baseline: [[m.library_progress_amount(), '2.5']] as const,
+    },
+    {
+      id: 'cursor',
+      kind: 'record' as const,
+      mode: 'cursor_position' as const,
+      phone: true,
+      values: [
+        [m.library_progress_locator(), 'chapter 2'],
+        [m.library_progress_position(), '18'],
+      ] as const,
+      baseline: [
+        [m.library_progress_locator(), 'chapter 1'],
+        [m.library_progress_position(), '10'],
+      ] as const,
+    },
+    {
+      id: 'add',
+      kind: 'add' as const,
+      mode: 'completed_units' as const,
+      phone: false,
+      values: [[m.library_progress_add_units(), 'part:1\npart~9']] as const,
+      baseline: [[m.library_progress_add_units(), '']] as const,
+    },
+    {
+      id: 'remove',
+      kind: 'remove' as const,
+      mode: 'completed_units' as const,
+      phone: false,
+      values: [[m.library_progress_remove_units(), 'part:1\npart~9']] as const,
+      baseline: [[m.library_progress_remove_units(), '']] as const,
+    },
+  ];
+  for (const scenario of cases) {
+    const h = await mount(page(scenario.id, scenario.kind, scenario.mode), scenario.phone);
+    try {
+      await h.click(m.library_progress_update());
+      for (const [label, value] of scenario.values) await h.fill(label, value);
+      await h.escape();
+      expect(h.body.getByRole('alertdialog')).toBeDefined();
+      await h.click(m.library_progress_draft_navigation_stay());
+      for (const [label, value] of scenario.values) expect(h.field(label).value).toBe(value);
+      if (scenario.id === 'scalar') {
+        await h.escape();
+        expect(h.body.getByRole('alertdialog')).toBeDefined();
+        await h.click(m.library_progress_draft_navigation_discard());
+        expect(h.body.queryByRole('dialog')).toBeNull();
+        await h.click(m.library_progress_update());
+        for (const [label, value] of scenario.baseline) expect(h.field(label).value).toBe(value);
+      }
+    } finally {
+      await h.close();
+    }
+  }
+});
+
+test('Pristine, reverted, and intentionally empty scalar drafts do not warn on departure', async () => {
+  const h = await mount(page());
+  try {
+    await h.click(m.library_progress_update());
+    await h.fill(m.library_progress_amount(), '0');
+    await h.fill(m.library_progress_amount(), '2.5');
+    const reverted = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(reverted);
+    expect(reverted.defaultPrevented).toBe(false);
+    await h.escape();
+    expect(h.body.queryByRole('alertdialog')).toBeNull();
+    expect(h.body.queryByRole('dialog')).toBeNull();
+  } finally {
+    await h.close();
+  }
+
+  const emptyPage = page('empty');
+  emptyPage.session.amount = null;
+  const empty = await mount(emptyPage);
+  try {
+    await empty.click(m.library_progress_update());
+    const untouched = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(untouched);
+    expect(untouched.defaultPrevented).toBe(false);
+  } finally {
+    await empty.close();
+  }
+});
+
+test('Internal navigation offers Stay or confirmed Discard and keeps unresolved commands stay-only', async () => {
+  const h = await mount(page());
+  try {
+    await h.click(m.library_progress_update());
+    await h.fill(m.library_progress_amount(), '0');
+    const unload = new window.Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+
+    await act(async () => {
+      void h.navigate();
+      await Promise.resolve();
+    });
+    expect(h.body.getByRole('alertdialog')).toBeDefined();
+    await h.click(m.library_progress_draft_navigation_stay());
+    expect(h.path()).toBe('/');
+    expect(h.field(m.library_progress_amount()).value).toBe('0');
+
+    await act(async () => {
+      void h.navigate();
+      await Promise.resolve();
+    });
+    await h.click(m.library_progress_draft_navigation_discard());
+    expect(h.path()).toBe('/destination');
+    expect(h.body.queryByRole('dialog')).toBeNull();
+    expect(commands).toHaveLength(0);
+
+    await h.click(m.library_progress_clear());
+    await h.escape();
+    expect(h.body.getByRole('alertdialog')).toBeDefined();
+    await h.click(m.library_progress_draft_navigation_stay());
+    expect(window.document.body.textContent).toContain(m.library_progress_clear_scope());
+    await h.click(m.library_progress_cancel());
+  } finally {
+    await h.close();
+  }
+
+  const pending = await mount(page('pending'));
+  try {
+    await pending.click(m.library_progress_update());
+    await pending.fill(m.library_progress_amount(), '0');
+    await pending.submit('record');
+    const original = commands[0]!.data;
+    await act(async () => {
+      void pending.navigate();
+      await Promise.resolve();
+    });
+    expect(pending.body.getByRole('alertdialog')).toBeDefined();
+    expect(pending.body.queryByRole('button', { name: m.library_progress_draft_navigation_discard() })).toBeNull();
+    await pending.click(m.library_progress_draft_navigation_stay());
+    expect(pending.path()).toBe('/');
+    expect(commands).toHaveLength(1);
+    await settle(() => commands[0]!.work.reject(new Error('unknown commit outcome')));
+    await pending.click(m.library_progress_confirm_correction());
+    expect(commands[1]!.data).toEqual(original);
+    await settle(() => commands[1]!.work.resolve({ ok: false, reason: 'unavailable' }));
+  } finally {
+    await pending.close();
+  }
+});
+
+test('clear confirms an unsupported finished session, retries its exact operands and refreshes saved facts', async () => {
+  const initial = page();
+  Object.assign(initial.session, {
+    state: 'completed',
+    completedAt: '2026-01-02T00:00:00Z',
+    recordingState: 'unsupported',
+  });
+  const h = await mount(initial);
+  try {
+    await h.click(m.library_progress_clear());
+    expect(commands).toHaveLength(0);
+    expect(h.dialog().textContent).toContain(m.library_progress_clear_scope());
+    await h.click(m.library_progress_confirm_clear());
+    const original = commands[0]!.data;
+    expect(original).toEqual({
+      sessionId: initial.session.id,
+      revision: 7,
+      idempotencyKey: initial.idempotencyKey,
+      clear: true,
+    });
+    await settle(() => commands[0]!.work.reject(new Error('response lost')));
+    await h.click(m.library_progress_confirm_clear());
+    expect(commands[1]!.data).toEqual(original);
+    const cleared = success(initial);
+    cleared.session.amount = null;
+    await settle(() => commands[1]!.work.resolve(cleared));
+    await settle(() => histories[0]!.work.resolve({ ...initial, session: { ...initial.session, ...cleared.session } }));
+    expect(h.body.queryByRole('dialog')).toBeNull();
+    expect(h.host.textContent).toContain(m.library_progress_state_completed());
+    expect(histories[0]!.data.changes).toBe(initial.changesCursor);
+  } finally {
+    await h.close();
+  }
+});
+
+test('decimal corrections explain invalid operands before review and retain exact drafts and retries', async () => {
+  for (const mode of ['scalar_amount', 'cursor_position'] as const) {
+    const initial = page('decimal', 'record', mode);
+    initial.session.inputRules = { min: '0.25', max: '999999999999.123456', step: '0.000001', total: 'optional' };
+    const h = await mount(initial);
+    const label = mode === 'scalar_amount' ? m.library_progress_amount() : m.library_progress_position();
+    try {
+      await h.click(m.library_progress_update());
+      for (const invalid of ['1e3', '', '01', '0.249999', '999999999999.123457', '1.1234567']) {
+        await h.fill(label, invalid);
+        await h.click(m.library_progress_record());
+        expect(commands).toHaveLength(0);
+        expect(h.body.queryByRole('button', { name: m.library_progress_confirm_correction() })).toBeNull();
+        expect(h.field(label).value).toBe(invalid);
+        expect(h.field(label).getAttribute('aria-invalid')).toBe('true');
+        expect(
+          h
+            .field(label)
+            .getAttribute('aria-describedby')
+            ?.split(' ')
+            .some((id) => window.document.getElementById(id)?.getAttribute('role') === 'alert'),
+        ).toBe(true);
+      }
+      await h.escape();
+      expect(h.body.getAllByRole('alertdialog')).toHaveLength(1);
+      await h.click(m.library_progress_draft_navigation_stay());
+      expect(h.field(label).value).toBe('1.1234567');
+      await h.fill(label, '999999999999.123456');
+      if (mode === 'cursor_position') {
+        for (const invalid of ['', 'x'.repeat(257)]) {
+          await h.fill(m.library_progress_locator(), invalid);
+          await h.click(m.library_progress_record());
+          expect(h.field(m.library_progress_locator()).getAttribute('aria-invalid')).toBe('true');
+          expect(h.body.queryByRole('button', { name: m.library_progress_confirm_correction() })).toBeNull();
+        }
+        await h.fill(m.library_progress_locator(), ' '); // Opaque native locator; do not trim it.
+      }
+      await h.click(m.library_progress_record());
+      expect(h.body.getByRole('region', { name: m.library_progress_review() }).textContent).toContain(
+        '999999999999.123456',
+      );
+      await h.click(m.library_progress_confirm_correction());
+      const original = commands[0]!;
+      expect(original.data).toMatchObject(
+        mode === 'scalar_amount'
+          ? { amount: '999999999999.123456' }
+          : { locator: ' ', position: '999999999999.123456' },
+      );
+      await settle(() => original.work.resolve({ ok: false, reason: 'unavailable' }));
+      expect(h.field(label).closest('fieldset')?.disabled).toBe(true);
+      expect(h.field(label).value).toBe('999999999999.123456');
+      await h.submit('record');
+      expect(commands[1]!.data).toEqual(original.data);
+      await settle(() => commands[1]!.work.resolve({ ok: false, reason: 'unavailable' }));
+    } finally {
+      await h.close();
+    }
+  }
+});

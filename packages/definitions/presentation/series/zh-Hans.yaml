@@ -1,6 +1,14 @@
 types:
-  wd:Q7725310: '系列创意作品'
+  wd:Q7725310: '系列'
   schema:BookSeries: '丛书'
 properties:
   wdt:P2635: '作品部分数量'
   wdt:P1433: '发表于'
+inverseProperties:
+  wdt:P1433: '收录作品'
+typeDescriptions:
+  wd:Q7725310: '有名称的创作作品系列，可包括非虚构或不同媒介作品；个人策划的列表属于收藏集。'
+  schema:BookSeries: '一组书籍组成的丛书，各成员用所属系列关系连接，并可记录位置。'
+propertyDescriptions:
+  wdt:P2635: '来源明确给出的系列部分数，以卷（wd:Q1238720）或章（wd:Q1980247）为单位的非负整数数量记录。'
+  wdt:P1433: '此系列所刊登于的更大创作作品，如杂志。'

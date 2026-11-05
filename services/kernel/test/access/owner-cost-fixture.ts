@@ -1,10 +1,11 @@
 import { createPool } from '../../src/database/pool.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { createAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { createLifecycleCommands, createLifecycleInternals, LIFECYCLE_ACTIONS } from '../../src/access/lifecycle.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import type { AccountActor } from '../../src/request/access.ts';
 import ownersRead from '../../src/access/lifecycle-owners.sql';
+import { settle, type GrowthDatabase } from '../support/growth.ts';
+import { vacuumFollows } from '../support/growth-capture.ts';
 
 export type Plan = {
   'Node Type': string;
@@ -19,13 +20,19 @@ export type Plan = {
   'Relation Name'?: string;
   Plans?: Plan[];
 };
+type OwnerCostPools = {
+  readonly pool: ReturnType<typeof createPool>;
+  readonly reader: ReturnType<typeof createPool>;
+  readonly growth: GrowthDatabase;
+};
 export const nodes = (plan: Plan): Plan[] => [plan, ...(plan.Plans ?? []).flatMap(nodes)];
 
-export async function ownerCostFixture() {
+export async function ownerCostFixture(pools?: OwnerCostPools) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must name the migrated test database');
-  const pool = createPool(url);
-  const reader = createPool(url);
+  const ownsPools = pools === undefined;
+  const pool = pools?.pool ?? createPool(url);
+  const reader = pools?.reader ?? createPool(url);
   const commandPlans: Plan[] = [];
   // Observe the private guard on the actual command client, with its real
   // authoritative-time parameters, before the membership mutation or denial.
@@ -57,7 +64,7 @@ export async function ownerCostFixture() {
   const absent = newId(0x1234);
   const actor = owners[0]!;
   const at = new Date().toISOString();
-  const access = createAccess({ actions: LIFECYCLE_ACTIONS, accountEvidence: (_actor, context) => context.account });
+  const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
   const commands = createLifecycleCommands({ pool, access });
   const internal = createLifecycleInternals({
     pool,
@@ -82,22 +89,26 @@ export async function ownerCostFixture() {
   );
   async function context() {
     return {
-      actor: {
-        kind: 'account',
-        accountId: actor,
-        clientId: 'owner-cost',
-        requestedBy: null,
-        authnEpoch: 1,
-        scopes: [...LIFECYCLE_ACTIONS.keys()],
-      } as AccountActor,
+      actor: await authenticateAccount(
+        access,
+        { pool, deadline: Date.now() + 10_000 },
+        {
+          accountId: actor,
+          clientId: 'owner-cost',
+          requestedBy: null,
+          authnEpoch: 1,
+          scopes: [...LIFECYCLE_ACTIONS.keys()],
+        },
+      ),
       account: await readAccount(reader, routeOf(actor)!, actor),
       deadline: Date.now() + 5000,
     };
   }
   // One family at 1x/8x/64x. Current measured owners stay fixed while unrelated
   // members, same-member expired history, same-route organizations and routes grow.
-  async function seed(scale: number, ownerCount = owners.length) {
+  async function seed(scale: number, ownerCount = owners.length, holdSnapshot?: () => Promise<() => Promise<void>>) {
     await reader.query('TRUNCATE access.organization_member');
+    const releaseSnapshot = holdSnapshot ? await holdSnapshot() : undefined;
     await reader.query(
       `INSERT INTO access.organization_member (route,organization_id,member_account_id,role,valid,transaction_id)
        SELECT $1::integer,$2::uuid,id,'owner','[2025-01-01,)'::tstzrange,$2 FROM unnest($3::uuid[]) id
@@ -119,7 +130,10 @@ export async function ownerCostFixture() {
                           (3,$1,$6::uuid),(4,$1::integer+1,$7::uuid)) anchor(category,route,org)`,
       [route, organizationId, scale, actor, expired, otherOrganization, elsewhere],
     );
-    await reader.query('VACUUM (ANALYZE) access.organization_member');
+    await releaseSnapshot?.();
+    if (!pools?.growth) throw new Error('owner cost fixture needs its growth database to settle seeded rows');
+    if (!vacuumFollows(pools.growth.admin))
+      await settle(pools.growth, { relations: ['access.organization_member'], analyze: true });
   }
   function parameters(memberId: string, instant = at) {
     return { route, organization_id: organizationId, member_id: memberId, at: instant };
@@ -166,8 +180,10 @@ export async function ownerCostFixture() {
     change,
     tombstone: async () => commands.tombstone(await context(), { accountId: organizationId, key: key() }),
     close: async () => {
-      await pool.end();
-      await reader.end();
+      if (ownsPools) {
+        await pool.end();
+        await reader.end();
+      }
     },
   };
 }

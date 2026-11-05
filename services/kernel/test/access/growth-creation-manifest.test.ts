@@ -151,29 +151,28 @@ test('native creation, provenance, grant writes and replay stay bounded as unrel
     expect(sample.cost.relations!['access.resource_role_grant']!.blocks).toBeGreaterThan(0);
   }
 }, 120000);
-test('manifest sizes one, eight and sixteen add at most linear native work including initialization and replay', async () => {
-  // The shared harness requires geometric population scales. Map its three stages
-  // to the bounded manifest sizes, then also check costs against actual tuple counts.
-  await grow(8, 0);
-  const sizes = [1, 8, 16];
+test('manifest changed resources add at most linear native work including initialization and replay', async () => {
   const report = await checkGrowth(db, {
     name: 'manifest changed resources',
+    rule: 'series',
+    scales: [1, 4, 16],
     bounds: { rows: 'linear', statements: 'linear', blocks: 'linear' },
     repetitions: 3,
-    async grow() {
+    async grow(_, scale, previous) {
+      if (previous === 0) await grow(8, 0);
       await db.admin.query('VACUUM (ANALYZE)');
     },
     async operation(_, scale) {
-      await createAndReplay(sizes[[1, 8, 64].indexOf(scale)]!);
+      await createAndReplay(scale);
     },
   });
-  const [first, eight, sixteen] = report.samples;
+  const [first, four, sixteen] = report.samples;
   for (const metric of ['rows', 'statements', 'blocks'] as const) {
     // Per-entry marginal work cannot grow with manifest length. Buffer splits get
     // a fixed four-block allowance; no allowance is needed for rows or statements.
     const allowance = metric === 'blocks' ? 4 : 0;
-    expect((sixteen!.cost[metric] - eight!.cost[metric]) / 8).toBeLessThanOrEqual(
-      (eight!.cost[metric] - first!.cost[metric]) / 7 + allowance,
+    expect((sixteen!.cost[metric] - four!.cost[metric]) / 12).toBeLessThanOrEqual(
+      (four!.cost[metric] - first!.cost[metric]) / 3 + allowance,
     );
   }
 }, 120000);

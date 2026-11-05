@@ -1,0 +1,634 @@
+# Home and Following feeds
+
+`GET /v1/feedItems` returns one mixed page. `stream` is `home` (default) or `following`,
+`limit` is 1–20 (default 20), and `cursor` is an opaque continuation. `Accept-Language`
+selects native summary languages. The response is `{feedItems,next,asOf,sources}`.
+The exported closed `FeedItemSchema` and `FeedPageSchema` define the client-inferred wire.
+
+## Public discovery variants
+
+The [adopted second scope](research/content-second-scope-plan.md#adopted-decisions) includes public
+Collection, review and Space cards in this same discovery lane. Search owns the mixed key/summary union,
+population, ranking, current owner hydration and final eligibility; Commerce owns selected-public-output
+Collection eligibility, and Content owns review and Space populations. Feed composition consumes those native
+summaries without point-read enrichment, private membership or Collection query contents as fallback data.
+Following Collection activity retains its existing meaning and does not establish discovery eligibility.
+
+The installed `FeedItemSchema` admits public discovery Subject, Account, Collection, review and Space rows,
+plus Following thread, post and Collection rows. Web consumes the generated union through its existing
+ContentItem adapter and canonical locale-aware owner destinations. Public owner cards show supplied description
+text, explicit empty descriptions, unavailable descriptions and unavailable curator/carrier presentation. A Space's
+disclosed Realm title remains carrier context; following is neither Realm membership nor an access grant.
+
+Decision: Home public-owner cards keep exact owner navigation usable while missing curator/presentation and bounded private follow admission remain explicitly unavailable, without per-card enrichment.
+
+The native Collection summary carries `id`, `title`, nullable `description` and Search's complete closed `card`,
+including admitted curator, cover, presentation and preview completeness; Home shares its schema through Search's
+public schema-only entry. Installed Web receiving must consume the official publication. Space adds
+`address`, optional `summary` and optional nullable `realm: {id,title}`. These fields do not distinguish withheld
+context from dependency failure. Web does not label either an empty value or an absent field as withheld.
+Collection card context retains its native available/unavailable curator and available/empty/withheld/unavailable
+preview states. Space context requires explicit native states before additional distinctions can render.
+
+The feed page has no native own-follow projection or directional follow actions for these owners. The producer
+handoff is a separate authenticated page/batch projection bounded to the returned 20 exact Collection/Space IDs,
+with current viewer/credential lifetime, own-edge state, independent create/remove admission and recovery
+readback. Removal admission must survive lost target disclosure without returning new target facts. Public
+feed documents stay anonymous/cache-safe. Until this producer is released in the generated client, signed-in
+cards show follow state unavailable and install no mutation callbacks. The eventual Home composition must use
+Library FollowControl and existing writers, retiring callbacks synchronously on page/selector/locale/credential
+replacement; unknown writes retain their original key and require deliberate readback/retry.
+Unknown or mismatched summaries make discovery unavailable instead of becoming fallback
+Account cards.
+`feed-discovery.ts` dispatches exhaustively on Search's summary discriminator and requires the exact owner,
+kind and summary identity. A rejected mapping retains the incoming lane position for retry. Search-omitted
+removed or unauthorized candidates retain Search's native examined frontier, including empty pages with `next`.
+
+Web continues to receive, for example, `{source:'discovery', key:{owner:'semantic',kind:'schema:Book',route:0,id},
+summary:subjectSummary, destination:{kind:'subject',id,title:null}, occurredAt:null,
+id:'discovery:semantic:'+id}` or the corresponding `accounts/account` key, Account summary and
+`{kind:'account',id,title}` destination. Collection destinations carry their exact ID; Space destinations
+carry the exact ID and admitted canonical address. Their installed mappings retain exact kind/selection
+cursor binding, `6D+3` discovery work, B=160 and one bounded mixed round.
+
+## Selection and native summaries
+
+Optional singular `kind` is the exact native kind ID, for example
+`GET /v1/feedItems?stream=home&limit=20&kind=schema%3ABook`. Omission retains all kinds.
+The native `kind.in` literal grammar permits a nonempty string of at most 256 UTF-8
+bytes without control characters; IDs are neither trimmed nor case folded. Empty,
+malformed, oversized or repeated `kind` parameters return RFC 9457 validation problems.
+No arbitrary JSON filter is accepted. Exact Space and Context parameters follow the
+Home dimension contract below.
+
+Selection applies to the freshly disclosed primary `FeedItem.key.kind` across all
+three sources. A thread about a Book remains kind `thread`, a reply remains `post`,
+and a Collection containing Books remains `collection`. An attached Subject or follow
+reason does not change the primary kind or grant disclosure. Following and Continue
+retain all their original current owner, body, parent, container and erasure checks.
+Discovery receives `filter: {kind: {in: [kind]}}` through the existing
+`DiscoverySearch(principal, MixedDiscoveryRequest, DiscoveryReadContext)` provider
+with `representation: 'discovery-v1'`. Native release/input refusal, including
+`unsupported_query` (422), is returned as its actual problem rather than an unavailable
+lane or an all-kind fallback. Genuine dependency/preparation failures retain their
+existing source states.
+
+The existing native choice source is `POST /v1/subjects:search` with
+`{representation:'discovery-v1',kindPage:{limit:8}}`. Its response includes
+`kinds:{values:[{id,labels,icon,count?}],next}` with at most eight native choices.
+Continue metadata with `kindPage:{limit:8,cursor:kinds.next}` and the same request
+bindings; this continuation is metadata-only. This source does not claim choice text
+search. There is no separate Content choice directory or all-kind enumeration.
+
+Each item has a stable native `id`, `source`, canonical `key`, nullable `occurredAt`,
+currently disclosed native `summary`, and typed `destination`. Destinations contain IDs
+and titles, never external URLs. A post preserves both `threadId` and `postId` for the
+consumer's canonical thread route and post fragment. Continue also carries the original
+native Continue subject, state and session. Thread/post summaries use native current
+read fields. Their optional `author` carries only the currently disclosed Accounts display name, handle and avatar;
+optional `excerpt` contains native document plain text, with whitespace collapsed, capped at 160 Unicode code points
+and cut before a grapheme would cross the cap. Empty or withheld bodies omit the excerpt; missing identities omit
+the author, with no identifier fallback. No row ratings are added. Collection summaries contain its current ID, title and description.
+
+The mounted page cap is 20 rows; the native kind picker returns at most eight choices per metadata page, and the
+existing rating-question directory returns at most 20. Space restoration uses one current Space point read. The
+wire has no aggregate disclosed-summary byte cap, and its Following Collection description has no `maxLength`;
+Public Collection/review/Space summary bounds remain producer-owned; Web does not enrich the supplied rows.
+Response row counts do not establish native indexed scan work.
+
+Web Back/Forward and owner-destination return keep a versioned descriptor in the current same-origin Home
+history entry. It contains only the stream, exact selector IDs and current opaque request frontier; it has no feed
+rows, private summaries or credentials, and selection is never added to the URL. The Web reader validates the
+descriptor's version, origin, localized Home path, selector grammar and 32,768-character cursor bound before
+restoring it. A frontier above that bound is omitted and returns as explicit restart with the same selectors.
+Space and rating-question identities are revalidated through their existing point readers. A changed or expired
+native frontier shows explicit restart, which keeps the same selectors and removes the cursor. Selection
+replacement retires the current page and pending request before reading; session/viewer remounts cannot reuse the
+previous private page body. Following is restored only while the current viewer is signed in.
+Decision: Home return state is a bounded same-origin history descriptor, never URL filters or retained feed bodies.
+Decision: Global Home refuses a directory page containing any Realm-scoped or retired question, never filters or refills it locally, and treats active Realm points as denied and retired points as lost while retaining the selected ID for recovery or clear.
+The [Home question lifetime](../apps/web/src/features/pages/home-question-lifetime.md) defines the current metadata, retry and selected identity boundaries.
+
+Anonymous home invokes only the existing public DiscoverySearch producer. Following and
+Continue are `not_requested`. Authenticated responses are `private, no-store`; session
+preparation belongs to the consumer. Current actor-home lifecycle and credential floor,
+`follow:list`, and the personal Library gate admit Following. Home additionally requires
+`library_entry:list`, `progress_session:list`, the personal Library gate with the original
+Library action, and the reading-progress gate. Discovery independently admits the Search
+gate. Refusal and closed gates remain RFC 9457 problems. Admission is never converted
+into an empty or unavailable lane.
+
+The existing `KernelDependencies.discovery` supplies DiscoverySearch unchanged, including
+its owner hydration, final disclosure and selected ordering. The feed does not create a
+second Search factory. Discovery's default is native name order, not recent activity or
+a personalized recommendation. Continue calls the existing owner reader with `limit:6`
+and `view:'FULL'`, its native Access, pool, route key, tokens and optional Search service.
+A missing canonical owner Source remains preparing/unavailable. No state/session is
+manufactured. Every requested source independently reports `ready`, `preparing` or
+`unavailable`; only ready empty means known empty. One failed source leaves the others
+usable. Raw dependency errors, reason counts and hidden references are not returned.
+
+## Page positions and cost
+
+The merge is deterministic round-robin in Continue, Following, discovery order, with
+the next turn persisted. Each lane preserves its native order. Following uses descending
+`(occurred_at,activity_id)`. Canonical object deduplication prefers Continue, then Following,
+then discovery for this page. Duplicate and rejected candidates consume their source
+positions. No all-follow, all-kind or partition scan runs in a request; no profile lookup
+is performed per row; Following resolves at most F distinct disclosed authors in one Accounts summary batch.
+
+One bounded mixed round fetches Continue's six, discovery width
+`max(1,floor((P-6)/2))`, and Following width `max(1,P-6-discoveryWidth)`.
+Following alone reads P; anonymous home gives discovery P. The feed reserves the actual
+native owners' raw-work upper bounds: discovery `6D+3`, Continue 39 and inbox F. At P=20
+the mixed candidate bound is 91, anonymous 123, Following 20; all are below B=160. There is no
+additional refill round. `feed.ts` records the producer constants and derives this ceiling.
+The author batch adds at most F identities (F≤20, below Accounts’ 100-key batch cap), each with at most
+one avatar and one verified-agent Subject, retaining the native initial/final Account and handle checks.
+This adds no feed candidates and no per-row reads. The composed candidate-plus-author-key ceiling (including those two optional references per identity) is
+112 for mixed Home, 123 anonymous and 80 Following, still within 160. Original owner readers retain their maximum three native
+continuation rounds and stricter native operation budgets. Owner point probes and
+batched semantic summary/reference reads are bounded by these candidates; merge work
+is O(B log B), and native indexed owner probes are O(B log R).
+
+Space-selected Following adds initial/final native Space and Realm reads (four keys)
+and at most F distinct current board reads, cached only for this request. It adds no
+feed candidates or refill. The conservative candidate/author/Space key reservation is
+123 for mixed Home and 104 for Following at P=20, below B=160. The native board and
+Space readers retain their own container, presentation and final disclosure work.
+
+Discovery/inbox pages wider than one fit completely in the response budget. Small pages
+may partially consume Continue's native six: the cursor retains the original owner
+cursor, the last examined native activity key and the page's key fingerprint. The next
+read rehydrates that same native page and resumes after that key. A changed owner page
+requires a stale-cursor restart instead of skipping data or caching private progress.
+Sparse pages, including empty pages with `next`, are valid. Kind rejections consume
+the original raw budget and advance actual examined source positions before merge,
+deduplication and output. No refill or additional candidate read runs for a selection.
+The server never derives a frontier from visible output count.
+
+The composite cursor binds the exact viewer/credential authority inputs, stream, page
+size, languages, exact optional kind, format, fixed boundary, next turn and source positions.
+A cursor from all kinds or one selected kind cannot replay under another selection.
+Omitting kind preserves the existing cursor query semantics. Bounded parts
+use the existing native encrypted list-cursor envelopes with a common authenticated
+digest and part/count bindings. Total cursor size is capped at 32 KiB and expires after
+15 minutes. Following's initial keyset boundary is fixed by that page sequence.
+Native discovery membership/freshness remains owned by its retained cursor. `asOf` is
+the private page boundary or anonymous discovery's native freshness timestamp.
+
+### Cost: Home and Subject conversation activity assembly
+
+- **Touches:** compose selected Home/Subject references, both activity snapshots, all page hydration and final
+  source/place/Realm/viewer disclosure. Charge existing native batch helpers, Semantic, Accounts, Access, media,
+  citation and reaction callees, every participating pool/control/runner phase, full-body reads and serialized bytes.
+- **Bound:** derive from selected T <= 20 native thread keys, represented homes H <= T, fixed page budgets and the
+  installed producer limits. Preserve physical-prefix bounds for initial/final observations. Include duplicate keys,
+  known-zero/lower-bound/withheld, sparse, guest/private, dependency-failure and exact retry branches. Output length
+  alone cannot bound authority/history work.
+- **Growth check:** independently grow unrelated threads/posts, selected removed/contribution history, account/
+  authority history and source repair backlog at 256/1024/4096 while T, H, page limits and admitted bytes stay fixed.
+  Measure the complete consumer operation, including strict indexed plans, actual examined rows/blocks, SQL/control
+  work, retained/materialized/serialized UTF-8 bytes and all owner phases. Keep producer repair measurements with
+  its original owner; this journey measures how page consumers call it.
+
+## Activity, delivery and current authority
+
+The default Content registration adds committed thread/review/reply creation, Realm
+subject adoption, and currently public Collection listing/member/update effects to the
+same shared effects runtime. A catalogue-valid event must match its exact outbox event,
+partition, epoch, position and actual event index. Subject references retain the native
+maximum of 128. Realm content additionally carries its actual Space. Activities contain
+only source/target/object locators and time, never bodies, titles, grants or permission
+flags. Semantic publication locators retain Realm and publication IDs so a withdrawal
+or replacement cannot revive an old event. Following Collection events remain activity only; the adopted
+public Collection discovery variant uses Search's independently eligible public metadata source.
+
+`createFeedActivityStore({pool,clock?,tokens})` exports
+`pageTargetActivity(target,{cursor?,limit?},deadline)` returning `{activities,next}`, and
+`applyFollowingActivity({accountId,reasonTarget,activity},deadline)`. Limits are 1–128.
+The additive `tokens` dependency is the actual composition's native ring, not a new
+environment secret. Internal inventory/inbox cursors use native sealing; durable work
+positions have no HTTP-session expiry. Their current retention and source identity are
+still rechecked. The HTTP composite cursor supplies the viewer/session lifetime.
+
+`createFollowActivitySource({pool,clock?,tokens,workClient,activityStore})` exports
+`pageRecipients(target,{cursor?,limit?},deadline)` returning `{recipients:[{accountId}],next}`,
+and `checkCurrentFollowSupport(actor,{targets},deadline)` returning
+`[{target,status:'following'|'not_following'|'unavailable'}]`, with at most three targets.
+Subject, Collection and Space are supported. Recipient keysets advance on examined
+inverse candidates, including stale/ineligible accounts. The indexed positive inverse
+and its current terminal/epoch/readiness are candidate support only. Every positive
+disclosure independently reads current actor-home follows, explicit negatives, lifecycle
+and identity. Redirected support is positive only with a complete bounded native witness;
+unknown or oversized support is unavailable. No truncated authority page grants access.
+The native identity reader accepts 100 originals; an alias witness exceeding that bound
+is unavailable rather than truncated. A recipient cursor whose current terminal/epoch
+changed restarts its bounded inverse walk; idempotent inbox writes absorb repeated candidates.
+
+Each fanout step reads at most 128 inverse candidates, releases the source home, and
+delivers to one viewer home per transaction. Work is O(targets × recipients) overall,
+O(128 log R) per step. Inventory commit and durable fanout enqueue both precede effect
+success. Idempotent source-derived IDs make retries safe. Library registers follow-change
+backfill beside its existing work. Before reading recent inventory it delivers the
+existing native follow-count replacement and confirms candidate coverage, closing the
+race between new-follow backfill and concurrent activity fanout. Backfill delivers at
+most 2000 references from the same 30-day inventory. It examines at most 2048 references
+in sixteen resumable pages of 128; the final page delivers only the remaining allowance.
+The inventory key remains the followed native original reason, including after a redirect;
+the inverse destination is resolved independently and never substitutes that inventory key.
+
+Following is a candidate inbox. Before returning each item, the feed checks genuine
+current follow support, calls the original native current owner read, checks current
+references/container chain, and checks follow support again. Thread keys are grouped
+by the existing native disclosure executor's backend/container
+snapshots rather than individually probing every thread. Reply reads retain their exact
+native thread/post anchor. Thread/opening post/reply, board/Realm/Space, publication head,
+Collection visibility, and owner body/reference
+authorization remain with their original readers. Removed, erased, hidden or revoked
+objects are omitted according to that current authority. No projection supplies an allow.
+One retained reference supplies one checked reason; multiple reasons deduplicate by
+canonical object and no reason count or hidden target is exposed.
+
+## Retention and recovery
+
+Each viewer retains only the newest 2000 references and only the last 30 days, whichever
+is stricter. Delivery serializes per viewer and trims the overflow immediately; reads
+always apply the age cutoff. The default hourly retention schedule uses the existing
+shared schedule provisioner and bounded indexed deletion of 128 inventory and 128 inbox
+rows per step, with durable partition/segment continuations. Target inventory is also
+age bounded. No request performs cleanup or archive backfill. Destinations lead to the
+owner's full history.
+
+The existing Content account-erasure authored phase drains at most 128 of that account's
+own private inbox rows before advancing. Terminal lifecycle fencing prevents delayed
+deliveries from recreating them. These rows contribute only to Content's existing
+outcome; they never acknowledge foreign or Library erasure. Worker steps retry through
+the existing runtime and resume after failure. Owner/source movement or unavailable
+identity remains unavailable until native recovery; it is never declared empty.
+
+The default-composition regression is `services/kernel/test/content/feed.test.ts`, using
+real server/worker, discovery, canonical owner work, native follow changes and disclosure.
+Module schema dumps are derived by the controller through the normal supported path.
+
+## Home dimensions
+
+Native kind and Space selection are delivered across Discovery, Continue and the existing Following inbox.
+Following threads/replies use their currently disclosed board's native Space; adopted
+Subjects use the current publication and that Space's current Realm slot. A stale follow
+reason cannot establish membership. Collections have no native Space membership; contained
+Subjects do not change their primary identity. Initial and final selected Space authority,
+head and Realm slot must agree, including on empty pages. Kind, Space and available question
+selections apply as a literal conjunction to the same primary candidate in the mixed stream.
+Discovery retains the original public catalogue journey and intersects each bounded native
+candidate window with current Space membership before choosing the page, preserving the
+catalogue's name order and its existing `6D+3` work ceiling. Continue applies the owner
+eligible-progress population, then the same current Space membership and exact kind before
+choosing its six rows; its existing 39-key work ceiling and examined-key cursor remain in force.
+Accounts and Collections are outside Space membership. Both lane cursors bind the selected
+Space observation and kind so a continuation cannot broaden or silently change its selection.
+
+The native structural input is now `openSpaceSubjectPopulation` in
+`content/feed-subject-scope.ts`: the complete current adopted publication-head population
+of the selected Space's current Realm, with indexed Subject keysets and an unconsumed
+lookahead. Its retained observation binds the Space head, Realm head, partition epoch,
+Realm disclosure epoch and native publication generation. Publication-head writes advance
+that generation in their own transaction. Prefix and terminal reads revalidate the
+observation and current Space authority, including empty and Realm-less populations.
+Unrelated Realm growth neither advances that observation nor enters its prefix.
+Decision: retain structural membership separately from public catalogue and eligible-progress
+coverage. Discovery intersects its retained public catalogue and Continue intersects its eligible
+owner progress population with this scope before selecting a page. This input alone does not
+establish Subject disclosure, public Search freshness or owner progress readiness.
+
+Home accepts exact `spaceId` and `ratingQuestionId` request selections. Space selection
+uses the existing Following order and examined positions, including sparse continuation;
+Discovery and Continue intersect their original complete populations before page selection.
+An unknown or unreadable selected Space returns `not_found`. Question selection still
+returns `dependency_unavailable` before enumeration until its original population producer
+is composed; point review witnesses do not activate it. Failed source lanes
+remain omitted; only a ready lane with a native frontier enables Next, while Retry may
+retry a failed lane. The available default sources remain catalogue/Account discovery,
+recent Following and Continue. Adopted public Collection/review/Space discovery awaits the native producers
+above. Public Board/Realm/discussion discovery and Context membership remain outside those delivered sources.
+
+Home Space choice reads retain the resolved Space identity on point-read failure so a failed
+revalidation disables that selection; platform closure remains distinct from access denial.
+
+Home Next retains the current page while one same-selection request is pending; concurrent callers share
+its completion. The replacement page focuses and scrolls to the existing results boundary on desktop and
+phone. Decision: changing any selection or refreshing the head cancels a pending Next's focus intent.
+
+## Content reaction summaries
+
+Only selected, currently disclosed Content thread/post cards receive `summary.reactionTarget` and `summary.reactions`.
+The target uses the installed command spelling: `{targetKind:'thread',targetId:<thread id>}` for a thread and
+`{targetKind:'post',targetId:<post id>}` for a post. The feed verifies target, key and destination identities before
+projecting; an ambiguous identity makes Following unavailable rather than redirecting a reaction to a parent.
+Counts come from `withReactionCounts` and use all seven native `REACTION_KINDS`. Sparse `reactions` is the native
+positive-count map; `{}` is a successful empty map. `reactionsAsOf` is an optional page field with the helper's oldest
+count-row watermark, not feed `asOf`. A successful read with no count rows returns `reactionsAsOf:null`; it does not
+claim a converged source. The count source remains unavailable if the batch fails.
+
+The exported feed types are `FeedReactionTarget = { targetKind: 'thread' | 'post'; targetId: string }`,
+`FeedReactionCounts = Partial<Record<ViewerReactionKind, number>>`, and
+`FeedContentSummary` adds optional `reactionTarget`, `reactions`, and `viewerReaction: ViewerReactionKind | null`.
+`FeedPage.reactionsAsOf` is `ReactionCountFreshness | null` when present. The generated closed schema accepts only the
+installed seven reaction kinds, positive sparse counts, a current native target and the native freshness fields.
+
+`@rezics/client` exports `FeedPage` from the mounted `feedItems.get` response, `FeedItem`, and its Content-only
+`FeedContentItem` union. Consumers use these exports instead of declaring another feed DTO. The native factory exports
+`FeedReadQuery` and `FeedReads`; its `list` method returns the same closed `FeedPage`.
+The controller's `derivedFiles` rules generate the declaration closure and OpenAPI from `services/kernel/**`
+with `bun run --cwd services/kernel derived`; declaration emission can also share the Kernel compiler database
+through `bun run --cwd services/kernel typecheck --emit-client`.
+
+Decision: public feed types alias the mounted response so the Kernel generator remains their transport authority.
+
+Home experience acceptance requires its existing card owner to consume the installed response and review populated,
+concealed-parent, signed-out, retry and account-switch states. Transport compilation and native HTTP assertions
+alone do not close that acceptance gap. Home cards and the shared FeedActionBar own presentation and request retirement.
+
+Decision: review context exposes current permitted work and question meaning with the exact recorded vote units and
+vote revision; absent and concealed context stay distinct, while dependency failure rewinds the owning source for retry.
+
+An authenticated request also gets `summary.viewerReaction`, including explicit `null` after a successful slot read.
+Anonymous requests omit this private field. It is read in one batch for the current actor and is never cached across
+requests. `GET /v1/feedItems?stream=following&limit=20&kind=thread` can return:
+
+```json
+{
+  "feedItems": [
+    {
+      "id": "feed-event-id",
+      "source": "following",
+      "key": { "owner": "content", "kind": "thread", "route": 12, "id": "00000000-0000-7000-8000-000c00000000" },
+      "occurredAt": null,
+      "summary": {
+        "id": "00000000-0000-7000-8000-000c00000000",
+        "kind": "discussion",
+        "title": "A disclosed thread",
+        "createdAt": "2026-11-03T10:00:00.000Z",
+        "reactionTarget": { "targetKind": "thread", "targetId": "00000000-0000-7000-8000-000c00000000" },
+        "reactions": { "like": 3 },
+        "viewerReaction": null
+      },
+      "destination": { "kind": "thread", "id": "00000000-0000-7000-8000-000c00000000", "title": "A disclosed thread" }
+    }
+  ],
+  "next": null,
+  "asOf": "2026-11-03T10:01:00.000Z",
+  "reactionsAsOf": { "epoch": 4, "position": "812" },
+  "sources": { "discovery": "not_requested", "following": "ready", "continue": "not_requested" }
+}
+```
+
+When either native batch fails, the response marks Following unavailable (or retains the native `preparing` state),
+omits all Following items, and does not advance its input frontier; repeating the same request retries that page. It
+never returns a partial count/slot summary. Existing admission refusals remain their native problem response.
+Decision: keep reaction-summary failure lane-local and retryable by withholding the whole Following page, so mixed
+source positions cannot skip a content card or expose partial viewer state.
+
+### Cost: Content reaction summaries
+
+Let `P` be emitted rows (at most 20), `T` the distinct eligible Content target IDs among those rows, `H` the represented
+target partitions, `B` the existing raw candidate reservation (160), and `K=7` the installed `REACTION_KINDS` count.
+The merge and existing selection keep their original `B` meaning and candidate/author/Space reservation (123 for mixed
+Home and 104 for Following at `P=20`); reaction projection adds no candidate, refill, identity, Space or authority read.
+`T≤P≤20`; the existing helper cap remains 100 and targets are deduplicated before calling it.
+
+`withReactionCounts` groups those IDs by their actual route partition and runs one `reaction-count-page.sql` statement
+per represented partition, so there are at most `H≤T` count statements. Each requested `(route,target_id)` performs an
+ordered `reaction_total` primary-key seek on `(route,target_id,kind)` and reads at most `K` kind rows: at most `T×K`
+physical count rows and `O(T×K)` result memory, independent of total reaction history. The SQL uses an unnested finite
+target array and does not scan other partitions. A successful empty result has zero rows and null `reactionsAsOf`;
+freshness is the minimum stored `(source_epoch,source_position)` among rows actually read and adds no statement.
+
+For an account actor with `T>0`, `withViewerReactions` runs one current account-home statement, with one
+`reaction` primary-key seek on `(route,actor_account_id,target_id)` per target and at most `T` physical slot rows.
+Anonymous actors run no viewer statement and receive no viewer field. The projector uses `H` count-pool checkouts plus
+one viewer checkout when authenticated, no transaction-control
+statements, and linear map/serialization work bounded by `T×K`; no SQL, checkout or result memory grows with global
+reaction rows. A dependency failure discards the page's Content summaries as described above.
+
+The added call chain is the feed-local projector, `withReactionCounts` → one connection/query per represented target
+partition, then (for an account) `withViewerReactions` → one connection/query on the current actor home. It performs no
+new Access preparation or final authority check; existing Following support, Content disclosure and selected Space
+revalidation still run for the entire output before return. The native reaction command, relay and source watermark
+remain their existing authorities.
+
+## Selected Subject reaction composition
+
+`prepareFeedSubjectReactions(dependencies: ContentReadDependencies, actor: Actor, items: readonly FeedItem[],
+deadline: number): Promise<FeedSubjectReactionComposition>` prepares at most 20 displayed rows. Its `finish()`
+returns `Promise<readonly FeedItem[]>` after rechecking exact native Subject identity and the prepared Access/account
+observations. The bounded mixed Home composer installs it after foreign hydration for selected discovery, Following
+and Continue rows, repeats source and selected Space witnesses, and rewinds every represented lane to its exact input
+frontier on dependency failure. It does not replace `projectFeedReactions` or its thread/post/review fields.
+
+Operation-local cost uses `S` for the displayed feed page (`S <= 20`), `D` for distinct selected Semantic Subject IDs,
+`G` for their native partitions (`D <= S`, `G <= D`), and `A` for an authenticated reader. Preparation makes `D`
+native `subject:read` Access preparations and, when `A = 1`, one Global Context `reaction:set` preparation. Each
+prepared check is re-evaluated in both identity snapshots: each snapshot owns one pool checkout and repeatable-read
+transaction, one partition metadata read, one selected-identity seek per partition, at most `D` resource permission
+formulae, and at most one Global Context formula. The ordinary Access preparations retain their own bounded account,
+time, inverse, candidate, assignment and role reads/checkouts; they are not folded into the two page transactions or
+counted as one statement. The native Access owner bounds remain those in its [native work contract](../services/kernel/src/access/README.md#native-work-admission).
+
+After the first identity snapshot, aggregate coverage costs one native pool checkout and one `reaction_total` query
+per selected partition. Its lateral lookup is keyed by the selected target ID and yields at most five Subject kind
+rows. An authenticated viewer adds one `viewer_reactions` seek on the actor partition; anonymous composition adds
+none. The second identity snapshot repeats the exact identity and permission witnesses after these checkouts. There
+are no worker or external runner phases in this composer. The only retained native data are the bounded feed-row
+copies, selected identity observations and sparse five-kind projections; it does not load Subject document bodies.
+Measure retained/copy bytes from the actual selected summaries and measure response bytes with UTF-8 serialization of
+the mounted feed page. Output bytes and omitted zero counts do not establish the identity, Access, SQL, pool or
+transaction bounds.
+
+Only the three feed-local Semantic summary variants admit optional `subjectReactions: FeedSubjectReactions`.
+Semantic's `SubjectSummarySchema` and shared public summaries remain unchanged. `target` uses the native
+`{targetKind:'subject',targetId}` operand. `counts` is `{state:'available',values,asOf}` or `{state:'unavailable'}`;
+`values` admits only positive like/love/laugh/insightful/sad counts. A covered zero is an available empty map.
+`asOf` uses the native target's oldest count-row watermark and admits null without claiming source convergence.
+Missing aggregate coverage carries no values or watermark. A successful authenticated `viewer` is
+`{state:'available',kind:<native kind or null>}`; unavailable slots use `{state:'unavailable'}`. Anonymous reads omit
+`viewer` entirely. `action` is `sign_in`, `allowed`, `denied` or `unavailable`; advice comes from the writer's Global
+Context `reaction:set` operand and never authorizes a subsequent command. Missing count coverage disables advice.
+
+Decision: an exact selected Subject ID that redirects, changes type or loses readability is withheld without refill;
+its reaction slot is never rebound to a survivor card.
+
+The composition deduplicates selected IDs before count/slot reads, groups identity checks by represented home and
+uses the installed native coverage and viewer readers. It copies selected Subject cards before preparation and
+never mutates the source summary. A preparation is single-use and retires if its reader operands change; retries
+prepare again at the same source frontier. Counts and slots are loaded inside finish after foreign hydration,
+then current identity and Access are rechecked before disclosure. Initial and final identity checks include visibility, latest redirect, current
+type and security revision. Native reaction aggregation and merge reconciliation retain their existing owners.
+Dependency failure propagates to the page owner rather than returning a guessed count or authenticated null slot.
+
+### Cost: selected Subject reaction preparation and confirmation
+
+- **Touches:** S exact selected Subject Access preparations, one Global Context action preparation for an account,
+  two identity/readability observations, native count-home batches, one account-home viewer batch, two action advice
+  evaluations and final security-revision comparison. Each identity observation owns one physical Kernel pool RR
+  snapshot (`BEGIN`, statement timeout, partition binding and `COMMIT`, or `ROLLBACK`). Foreign Access preparation
+  releases its connections before either snapshot; include its native Account/Auth, grant/denial, scope, eligibility,
+  operator and client pool work from the installed Access producers, not just the outer Kernel statements. Retained
+  native Subject summaries, their copies, reader-operand snapshots, identity rows, sparse five-kind maps, target watermarks and viewer slots
+  all count toward materialized and serialized UTF-8 bytes. A failed preparation returns no partial projection and
+  a same-input retry repeats preparation, reads and confirmation; page source retry remains the assembler's work.
+- **Bound:** S <= 20 selected unique Subjects, H <= S represented partitions, five admitted Subject kinds, and the
+  existing 20 displayed / 160 raw / one-round selection ceilings. Each identity observation adds H SQL statements,
+  one batched partition statement and three transaction/control statements; across both that is 2H + 8 statements,
+  plus at most two first-use compiled-schema freshness probes from the native partition reader, H native count statements and at most one viewer statement. Exact identity prefixes read at most S Subject
+  and S latest-redirect rows per observation; the redirect primary key ends in sequence, so selected merge history
+  is sought backwards with LIMIT 1. Counts seek at most seven native total rows per ID (the shared native reader's
+  physical bound), admit only the five Subject kinds and preserve zero-row coverage. The authenticated viewer
+  statement seeks at most S slots; anonymous reads have no viewer or action-advice work. Add S Access preparations,
+  2S native read verifications, one account action preparation and two action verifications with their own nested
+  producer bounds; these are not zero-cost booleans. Concealed/redirected rows consume their selected slots and
+  reduce output without refill. Retained projection rows/bytes are O(S * 5) plus the already-admitted Subject
+  summaries and their copies; sparse serialized output does not prove examined-row bounds.
+- **Growth check:** the mounted-page acceptance must hold S, H, limits and admitted bytes fixed while
+  independently growing unrelated reactions, selected identity/merge history and account/authority history at
+  256/1024/4096. Capture actual plans, examined rows/blocks, SQL/control work, all native pool/runner phases and
+  materialized/serialized bytes for covered zero, unavailable, stale, denied and same-input retry. The composition's
+  focused native scenarios do not establish those growth bounds or mounted delivery.
+
+## Native review question witnesses
+
+Content's [native witness reader](../services/kernel/src/content/README.md#review-backed-question-witnesses)
+checks exact primary/review pairs against current question authority, opening citations and disclosure.
+Private vote changes preserve published citations. Opening edits and retirement affect the next witness
+read. These point reads supply no population coverage and do not activate candidate selection.
+
+Rating-question Context has an adopted meaning and a feed request surface; native
+candidate eligibility integration remains undelivered. It selects one exact native rating-question
+identity. A Subject qualifies when at least one live currently readable review of that
+exact Subject has a currently readable opening revision whose immutable citation names
+the selected question. A review thread requires its own current opening citation and a
+readable reviewed Subject; a reply/post requires that qualifying review thread and its
+own current disclosure. Catalogue Agents follow Subject membership. Native Accounts,
+Collections and ordinary discussions have no membership in this version. A Subject's
+Space witness and question-review witness may be different threads; membership does not
+claim that the cited review was posted in the selected Space.
+
+Private votes, aggregates, question applicability/grain, editorial Contexts and Realm
+populations are not membership witnesses. The separate future request-only `ratingQuestion.id`
+predicate shape remains uninstalled; it is not a stored-reference predicate, permission or rating threshold.
+Before exposing a Context selector, finish current native witnesses and lifecycle/Source
+coverage, definitions:read before enumeration, bounded real question choices with signed
+keysets and current metadata, signed selection/revision binding and the default feed
+composition. Preserve native candidate/frontier bounds and unavailable responses; no
+browser filter, downloaded-first-page directory or selectable placeholder supplies these
+dependencies. Kind and actual Space delivery need not wait for Context. The full dimensions
+outcome remains incomplete.
+
+## Home review and immediate-parent receiving
+
+The mounted method is `KernelClient.feedItems.get` (`GET /v1/feedItems`). Its response is
+`FeedPageSchema`; `FeedItemSchema` embeds the closed `FeedReviewContextSchema` and, for posts,
+`FeedParentContextSchema`. `@rezics/client` exports `FeedPage`, `FeedItem` and `FeedContentItem`
+from that mounted response. `createFeedReads(deps: FeedDependencies): FeedReads` exposes
+`list(actor: Actor, query: FeedReadQuery, deadline: number, languages: readonly string[]): Promise<FeedPage>`.
+`prepareFeedContentContext(dependencies: FeedContentContextDependencies, references: readonly FeedContentContextReference[],
+context: ReadContext, languages: readonly string[] = [], options: { observeThreads?: FeedThreadObserver } = {})`
+returns a single-use `FeedContentContextComposition.finish(): Promise<FeedContentContextFinished>`.
+`FeedContentContextDependencies` adds the required trusted service `routeKey` to `ContentReadDependencies`;
+both native Home and Subject-thread callers carry it into Semantic and Accounts summary reads.
+
+The composition admits at most 20 selected references, 20 Subject keys, 20 question keys and 60 author keys.
+Posts and their immediate parents use distinct `(threadId, postId)` keys; parent previews are capped at
+160 characters and 640 UTF-8 bytes. It does not emit an ancestor list. These output limits do not bound
+the native post reader's internal ancestry, revision or authority work.
+
+Repeated keys are deduplicated separately in each selected-post, immediate-parent and author batch; a post selected
+in both Content batches can be read twice in a pass. Conflicting
+initial observations are rejected before reads; a final observer returning a different thread, post or physical
+home fails the source as unavailable. Unavailable/erased post payloads supply no public author projection.
+An erased immediate parent contributes only its admitted ID and removed state. A taken-down ancestor may
+withhold the selected child under the ordinary native reader; context hydration does not bypass ancestry.
+
+Without initial observations, each of the two composition passes can read 20 selected threads, 20 posts and
+20 immediate parents. Supplied initial thread/post observations skip their initial Content lookup, but not
+the final disclosure or either owner pass. Each `readPost` observes the selected post and at most 32 ancestors,
+including the terminal root, under its own initial/final source and Access checks. These limits do not establish
+bounded grant-history work or replace measurement of nested rows, statements and bytes.
+
+Decision: Home uses the current native review target and question/vote revisions. Reply cards show only the exact
+immediate parent and its disclosed author, language and spoiler fields. Absent, withheld or unavailable context does
+not fall back to hidden bodies, citations or identities. Ratings keep their recorded units, and spoiler text requires
+an explicit reveal that retires with the page, target or account.
+
+The existing consumers are `apps/web/src/features/feed/home-feed-item.tsx` and
+`HomeFeedActions` / `FeedActionBar` in `apps/web/src/features/feed/action-bar.tsx`, mounted by
+`apps/web/src/features/pages/home-feed.tsx`. The current native review context is the sole authority for its
+reviewed work and citation; absent, concealed or unavailable context never falls back to discovery metadata.
+An available parent carries both the current exact post destination and an exact revision destination. Removed and
+withheld parents disclose only their respective admitted fields.
+
+Kernel generation owns declarations and OpenAPI. `tools/goal/defaults.json` already lists
+`packages/client/src/kernel/**` and `contracts/openapi.json` as promotion outputs of
+`bun run --cwd services/kernel derived`, with `services/kernel/**` as inputs. Home receives the generated response
+directly; no Web DTO is added.
+
+Home receiving now renders the current review target and citation, including question and question revision,
+recorded units and vote revision. It renders only a disclosed immediate parent, its current author and exact post and
+revision destinations; concealed and removed parent states reveal no body or identity. Spoiler-marked excerpts require
+an explicit reveal tied to the current page origin. Reaction receiving uses the exact native target, totals,
+viewer selection and page watermark through the existing shared action bar.
+
+Experience acceptance remains open until the existing Home owner reviews populated review/reply, concealed
+and removed parent, guest, denied/unavailable/successful advice, retry, language/spoiler and account-switch states
+against native responses.
+Native lifecycle and three-scale acceptance, and the Performance review of complete nested source observations
+(rows, statements, body/serialization bytes, physical homes, transaction/pool/runner phases and retry),
+remain required. In particular, two Content/owner passes plus the selected post/parent readers are not
+a constant physical-row cost claim. The current native fixed-size regression remains in place.
+
+OpenAPI publishes these closed native context shapes. Home receiving is wired to the mounted response without a
+Web DTO, but Kernel declaration generation still stops on retained Kernel type errors. Prepared Web cards and focused
+receiving tests do not establish native lifecycle, growth or full experience acceptance.
+
+## Current Home personal facts
+
+Authenticated Home adds optional `viewerPersonalActions` with the exact native
+`ViewerPersonalActionsPage` shape. `FeedViewerPersonalActionsSchema` extends the native
+facts schema with the mounted action state and is reachable through `FeedPageSchema` and
+`feed_item.list` OpenAPI. The complete-input publisher emits declarations and the installed
+client's existing `FeedPage` root alias; Web retains its existing receiver and writers.
+
+Decision: Home attaches one native page result keyed by original occurrence IDs, and
+withholds changed source occurrences without refill, retaining their original retry frontier.
+Only disclosed creative-work Subjects and explicit original review targets are candidates;
+replies, Collections and generic Subjects supply no inferred work operand. A fresh Semantic
+observation confirms exact identity, type and creative-work status. Repeated work references
+retain separate row keys, original Subjects and public citations.
+
+Each authenticated Home request calls the installed `viewerPersonalActions` reader once,
+including empty pages. Its native 100 raw-row, 16384 input-byte and 65536 response-byte bounds
+are independent; rows are not deduplicated before that reader. Three loaded pages prepare,
+read and finalize independently. Home then repeats selected source queries with the original
+cursor operands, original content contexts and selected Space/population admission. Changed
+or missing occurrences are withheld; changed Semantic observations make private facts unavailable.
+Neither successful facts nor mounted advice prove continued source disclosure.
+
+Entry present, absent and scope-unavailable, vote present (including zero), absent and
+unavailable, and actions current (including `allowed: []`) or unavailable retain native meaning.
+Only the standard question `00000000-0000-7000-8000-000000000001`, revision 1, scale 0..20 step 1
+can supply the current counted score. Missing owner identity authority remains unavailable;
+citations and historical votes do not supply scores. Entry absence does not deny creation.
+The helper preserves original writers and `atomic_guard_unavailable` for conditional adoption.
+Authenticated responses remain private/no-store and use the existing actor/client/credential cursor binding.
+
+### Cost: Home personal composition
+
+Every page charges full native facts preparation/read/currentness, mounted action initial/final
+preparation and evaluation, Auth and every represented pool, even on empty, denied and failed
+branches. Content adds one bounded Semantic summary observation/currentness cohort (at most
+20 occurrence references), a second exact selected-lane load at the original native widths,
+and a second selected content-context batch plus Space/population final admission. These
+loads include all native candidate, disclosure, account, Realm, Access, checkout and transaction
+costs of their owners, not merely successful facts reads. No refill or pooled multi-page batch
+is introduced. All work remains bounded by each page's existing lane widths and deadline;
+no operation scales with total Library or vote history.

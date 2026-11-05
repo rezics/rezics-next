@@ -1,11 +1,14 @@
 import type { Pool } from 'pg';
 import type { KernelClock } from '../clock.ts';
-import { accessCheck, type Access, type Actor } from '../request/access.ts';
+import type { AuthoritativeTime } from '../command/command.ts';
+import { accessCheck, type Access, type AccessContext, type Actor } from '../request/access.ts';
 import { deadlineFor } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { SubjectRedirectError } from '../semantic/merges.ts';
-import { readSubject } from '../semantic/subject.ts';
+import { readSubjectReference } from '../semantic/references.ts';
+import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
+import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 
 const MAX_SUBJECT_IDS = 100;
@@ -19,56 +22,93 @@ export type SubjectAnchorDependencies = {
 
 export type ResolvedSubject = { subjectId: string; requestedSubjectId: string | null };
 
+export class SubjectIdentityUnavailableError extends Error {
+  constructor(public readonly reason: 'bootstrap' | 'missing-owner' | 'moved-owner') {
+    super(`Current subject identity is unavailable: ${reason}`);
+  }
+}
+
 /** Resolve a subject on its own anchor using the semantic subject:read policy. */
 export async function resolveSubject(
   deps: SubjectAnchorDependencies,
   actor: Actor,
   subjectId: string,
+  at?: AuthoritativeTime,
+  context?: AccessContext,
 ): Promise<ResolvedSubject | null> {
-  async function readAnchor(id: string) {
+  if (routeOf(subjectId) === null) return null;
+  const mapping = await identityEpochStore().readMapping(deps.pool, subjectId);
+  return resolveMappedSubject(deps, actor, subjectId, mapping, at, context);
+}
+
+async function resolveMappedSubject(
+  deps: SubjectAnchorDependencies,
+  actor: Actor,
+  subjectId: string,
+  mapping: IdentityMapping,
+  at?: AuthoritativeTime,
+  context?: AccessContext,
+): Promise<ResolvedSubject | null> {
+  async function authorizeAnchor(id: string) {
     const route = routeOf(id);
     if (route === null) return null;
     const resource = { route, id, eligibility: subjectReadEligibility({ route, id }) };
-    const check = await accessCheck(deps.access, actor, 'subject:read', resource, {
-      pool: deps.pool,
-      deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
-    });
-    return readSubject(deps.pool, id, (client) => check(client));
+    const check = await accessCheck(
+      deps.access,
+      actor,
+      'subject:read',
+      resource,
+      context ?? {
+        pool: deps.pool,
+        deadline: deadlineFor(WORK_STEP_DEADLINE_MS),
+      },
+    );
+    return (client: Parameters<typeof check>[0]) => check(client, at);
   }
+  if (mapping.state === 'absent') return null;
+  if (mapping.state === 'pending') return null;
+  if (mapping.state === 'unavailable') throw new SubjectIdentityUnavailableError(mapping.reason);
+
+  const originalAuthorization = await authorizeAnchor(subjectId);
+  if (!originalAuthorization) return null;
+  const terminalAuthorization = await authorizeAnchor(mapping.terminal);
+  if (!terminalAuthorization) return null;
 
   try {
-    const result = await readAnchor(subjectId);
-    return result ? { subjectId, requestedSubjectId: null } : null;
+    const original = await readSubjectReference(deps.pool, subjectId, originalAuthorization);
+    if (!original || mapping.terminal !== subjectId) return null;
   } catch (error) {
     if (!(error instanceof SubjectRedirectError)) throw error;
-    if (error.from !== subjectId) return null;
-    try {
-      const survivor = await readAnchor(error.to);
-      return survivor ? { subjectId: error.to, requestedSubjectId: subjectId } : null;
-    } catch (survivorError) {
-      if (survivorError instanceof SubjectRedirectError) return null;
-      throw survivorError;
-    }
+    if (error.from !== subjectId || error.to !== mapping.terminal) return null;
   }
+  const terminal = await readSubjectReference(deps.pool, mapping.terminal, terminalAuthorization);
+  return terminal
+    ? {
+        subjectId: mapping.terminal,
+        requestedSubjectId: mapping.terminal === subjectId ? null : subjectId,
+      }
+    : null;
 }
 
-/** Keep stored IDs that resolve in one hop, preserving page identity and bounds. */
+/** Keep stored IDs that resolve, preserving page identity and bounds. */
 export async function readableSubjects(
   deps: SubjectAnchorDependencies,
   actor: Actor,
   subjectIds: readonly string[],
+  at?: AuthoritativeTime,
 ): Promise<string[]> {
   if (subjectIds.length > MAX_SUBJECT_IDS)
     throw new RangeError(`Subject page must contain at most ${MAX_SUBJECT_IDS} IDs`);
 
-  const distinctIds = [...new Set(subjectIds)];
+  const distinctIds = [...new Set(subjectIds)].filter((id) => routeOf(id) !== null);
+  const mappings = await identityEpochStore().readMappings(deps.pool, distinctIds);
   const resolved: (ResolvedSubject | null)[] = new Array(distinctIds.length);
   let nextIndex = 0;
   const outcomes = await Promise.allSettled(
     Array.from({ length: Math.min(MAX_CONCURRENT_SUBJECT_READS, distinctIds.length) }, async () => {
       while (nextIndex < distinctIds.length) {
         const index = nextIndex++;
-        resolved[index] = await resolveSubject(deps, actor, distinctIds[index]!);
+        resolved[index] = await resolveMappedSubject(deps, actor, distinctIds[index]!, mappings[index]!, at);
       }
     }),
   );

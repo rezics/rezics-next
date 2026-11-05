@@ -1,0 +1,465 @@
+import { memoizedValue } from '../memoized.ts';
+/** Static bounds for the retained finite selected-set publication command. */
+import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
+import { COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST } from './collection-source-native.ts';
+import { CANONICAL_SOURCE_RECEIVING_COST } from './canonical-source-bounds.ts';
+import { COLLECTION_SOURCE_WORK_GROUP_LIMIT } from './canonical-source-limits.ts';
+import {
+  OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT,
+  OWNER_FILTER_CLOSURE_REFERENCE_LIMIT,
+} from './owner-filter-native-closure.ts';
+import { MEMBERS_PREPARATION_SOURCE_COST } from '../search/scope-members-source-declaration.ts';
+import { WORK_EXECUTION_ATTEMPT_BOUND } from '../work/selected-runtime-cost.ts';
+import type { WorkAllowance, WorkDimensions, WorkReceipt } from './collection-source.ts';
+
+export const COLLECTION_SELECTED_PUBLICATION_LIMIT = 100;
+export function COLLECTION_SELECTED_PUBLICATION_ATTEMPTS() {
+  return memoizedValue(COLLECTION_SELECTED_PUBLICATION_ATTEMPTS, () => WORK_EXECUTION_ATTEMPT_BOUND);
+}
+
+const cost = (values: Omit<Bound, 'engineRequests'>): Bound => declareBound({ ...values, engineRequests: 0 });
+
+function maximumBounds(...values: readonly Bound[]): Bound {
+  const axes = Object.keys(values[0]!) as (keyof Bound)[];
+  return declareBound(Object.fromEntries(axes.map((axis) => [axis, Math.max(...values.map((value) => value[axis]))])));
+}
+
+/** Existing native resolveSubject ceiling, paid for every selected ID and each complete closure original. */
+export function COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST() {
+  return memoizedValue(COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST, () =>
+    cost({
+      candidateKeys: 1,
+      nativeRows: 8192,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 128,
+      witnessKeys: 0,
+      statements: 128,
+      bytes: 1024 * 1024,
+    }),
+  );
+}
+
+function scopeCurrentness() {
+  return memoizedValue(scopeCurrentness, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 32,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 2,
+      witnessKeys: 0,
+      statements: 6,
+      bytes: 16 * 1024,
+    }),
+  );
+}
+function commandAdmission() {
+  return memoizedValue(commandAdmission, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 8,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 2,
+      witnessKeys: 0,
+      statements: 2,
+      bytes: 2048,
+    }),
+  );
+}
+function privateAuthority() {
+  return memoizedValue(privateAuthority, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 8192,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 128,
+      witnessKeys: 0,
+      statements: 128,
+      bytes: 1024 * 1024,
+    }),
+  );
+}
+function compareHeaderRule() {
+  return memoizedValue(compareHeaderRule, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 64,
+      identityMetadataRows: 0,
+      emptySeeks: 2,
+      nativePoints: 8,
+      witnessKeys: 0,
+      statements: 2,
+      bytes: 65536,
+    }),
+  );
+}
+
+function sourcePrepare() {
+  return memoizedValue(sourcePrepare, () => CANONICAL_SOURCE_RECEIVING_COST().state);
+}
+function sourceMembership() {
+  return memoizedValue(sourceMembership, () =>
+    sumBounds(
+      repeatBound(sourcePrepare(), 2),
+      CANONICAL_SOURCE_RECEIVING_COST().group(COLLECTION_SOURCE_WORK_GROUP_LIMIT),
+      repeatBound(COLLECTION_SOURCE_NATIVE_SAVED_PROBE_COST(), COLLECTION_SOURCE_WORK_GROUP_LIMIT),
+    ),
+  );
+}
+function closureAndOwnerFacts() {
+  return memoizedValue(closureAndOwnerFacts, () =>
+    sumBounds(
+      MEMBERS_PREPARATION_SOURCE_COST(),
+      CANONICAL_SOURCE_RECEIVING_COST().group(OWNER_FILTER_CLOSURE_REFERENCE_LIMIT),
+    ),
+  );
+}
+function ownerFilterMatch() {
+  return memoizedValue(ownerFilterMatch, () => MEMBERS_PREPARATION_SOURCE_COST());
+}
+function canonicalDeduplicationFor(selectionCount: number) {
+  return cost({
+    candidateKeys: selectionCount,
+    nativeRows: 0,
+    identityMetadataRows: 0,
+    emptySeeks: 0,
+    nativePoints: 0,
+    witnessKeys: 0,
+    statements: 0,
+    bytes: Math.ceil((16 * 1024 * selectionCount) / COLLECTION_SELECTED_PUBLICATION_LIMIT),
+  });
+}
+function positiveMembership() {
+  return memoizedValue(positiveMembership, () =>
+    sumBounds(
+      sourceMembership(),
+      repeatBound(COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST(), OWNER_FILTER_CLOSURE_ORIGINAL_LIMIT),
+      closureAndOwnerFacts(),
+      ownerFilterMatch(),
+    ),
+  );
+}
+function negativeMembership() {
+  return memoizedValue(negativeMembership, () => sourceMembership());
+}
+function selectedBranch() {
+  return memoizedValue(selectedBranch, () =>
+    sumBounds(
+      COLLECTION_SELECTED_PUBLICATION_DISCLOSURE_COST(),
+      maximumBounds(positiveMembership(), negativeMembership()),
+    ),
+  );
+}
+
+function nativeOutputMetadata() {
+  return memoizedValue(nativeOutputMetadata, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 2048,
+      identityMetadataRows: 0,
+      emptySeeks: 32,
+      nativePoints: 128,
+      witnessKeys: 0,
+      statements: 64,
+      bytes: 65536,
+    }),
+  );
+}
+function nativeOutputRows(selectionCount: number) {
+  return cost({
+    candidateKeys: selectionCount,
+    nativeRows: 32 * selectionCount,
+    identityMetadataRows: 0,
+    emptySeeks: 0,
+    nativePoints: 8 * selectionCount,
+    witnessKeys: 0,
+    statements: 0,
+    bytes: 512 * selectionCount,
+  });
+}
+function outputActivation() {
+  return memoizedValue(outputActivation, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 256,
+      identityMetadataRows: 0,
+      emptySeeks: 8,
+      nativePoints: 32,
+      witnessKeys: 0,
+      statements: 32,
+      bytes: 32768,
+    }),
+  );
+}
+function metadataHistory() {
+  return memoizedValue(metadataHistory, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 128,
+      identityMetadataRows: 0,
+      emptySeeks: 4,
+      nativePoints: 32,
+      witnessKeys: 0,
+      statements: 24,
+      bytes: 32768,
+    }),
+  );
+}
+function historyEventCommit() {
+  return memoizedValue(historyEventCommit, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 128,
+      identityMetadataRows: 0,
+      emptySeeks: 8,
+      nativePoints: 32,
+      witnessKeys: 0,
+      statements: 32,
+      bytes: 65536,
+    }),
+  );
+}
+function receiptLookup() {
+  return memoizedValue(receiptLookup, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 16,
+      identityMetadataRows: 0,
+      emptySeeks: 1,
+      nativePoints: 2,
+      witnessKeys: 0,
+      statements: 2,
+      bytes: 8192,
+    }),
+  );
+}
+function receiptWrite() {
+  return memoizedValue(receiptWrite, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 32,
+      identityMetadataRows: 0,
+      emptySeeks: 2,
+      nativePoints: 8,
+      witnessKeys: 0,
+      statements: 8,
+      bytes: 16384,
+    }),
+  );
+}
+function serialization() {
+  return memoizedValue(serialization, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 32,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 0,
+      witnessKeys: 0,
+      statements: 0,
+      bytes: 65536,
+    }),
+  );
+}
+function events() {
+  return memoizedValue(events, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 32,
+      identityMetadataRows: 0,
+      emptySeeks: 2,
+      nativePoints: 8,
+      witnessKeys: 0,
+      statements: 8,
+      bytes: 16384,
+    }),
+  );
+}
+function rollback() {
+  return memoizedValue(rollback, () =>
+    cost({
+      candidateKeys: 0,
+      nativeRows: 64,
+      identityMetadataRows: 0,
+      emptySeeks: 4,
+      nativePoints: 16,
+      witnessKeys: 0,
+      statements: 16,
+      bytes: 32768,
+    }),
+  );
+}
+
+function binder() {
+  return memoizedValue(binder, () =>
+    sumBounds(
+      sourcePrepare(),
+      privateAuthority(),
+      MEMBERS_PREPARATION_SOURCE_COST(),
+      scopeCurrentness(),
+      commandAdmission(),
+    ),
+  );
+}
+function preparationFixed() {
+  return memoizedValue(preparationFixed, () =>
+    sumBounds(
+      repeatBound(sourcePrepare(), 2),
+      repeatBound(scopeCurrentness(), 2),
+      MEMBERS_PREPARATION_SOURCE_COST(),
+      privateAuthority(),
+    ),
+  );
+}
+function preReceipt() {
+  return memoizedValue(preReceipt, () =>
+    sumBounds(compareHeaderRule(), privateAuthority(), sourcePrepare(), scopeCurrentness(), commandAdmission()),
+  );
+}
+function nativeTransactionFor(selectionCount: number) {
+  return sumBounds(
+    nativeOutputMetadata(),
+    nativeOutputRows(selectionCount),
+    outputActivation(),
+    metadataHistory(),
+    historyEventCommit(),
+    receiptLookup(),
+    receiptWrite(),
+    serialization(),
+    events(),
+    rollback(),
+  );
+}
+
+export type CollectionSelectedPublicationPlan = Readonly<{
+  selectionCount: number;
+  terms: Readonly<{
+    binding: Bound;
+    selectedBranches: Bound;
+    selectedBranch: Bound;
+    positiveMembership: Bound;
+    negativeMembership: Bound;
+    sourceMembership: Bound;
+    closureAndOwnerFacts: Bound;
+    ownerFilterMatch: Bound;
+    scopeCurrentness: Bound;
+    sourcePreparation: Bound;
+    canonicalDeduplication: Bound;
+    ownerFilterReauthorization: Bound;
+    preparation: Bound;
+    preReceipt: Bound;
+    compareHeaderRule: Bound;
+    privateAuthority: Bound;
+    nativeTransaction: Bound;
+    outputReservation: Bound;
+    receiptLookup: Bound;
+    receiptWrite: Bound;
+    serialization: Bound;
+    rollback: Bound;
+    retries: Bound;
+  }>;
+  perAttempt: Bound;
+  ceiling: Bound;
+  bindingWork: WorkDimensions;
+}>;
+
+/** The complete original closure is bounded separately from the raw selection branch count. */
+export function collectionSelectedPublicationPlan(selectionCount: number): CollectionSelectedPublicationPlan {
+  if (
+    !Number.isSafeInteger(selectionCount) ||
+    selectionCount < 0 ||
+    selectionCount > COLLECTION_SELECTED_PUBLICATION_LIMIT
+  )
+    throw new RangeError('Invalid selected publication count');
+  const branches = repeatBound(selectedBranch(), selectionCount);
+  const canonicalDeduplication = canonicalDeduplicationFor(selectionCount);
+  const preparation = sumBounds(preparationFixed(), canonicalDeduplication, branches);
+  const nativeTransaction = nativeTransactionFor(selectionCount);
+  const perAttempt = sumBounds(binder(), preparation, preReceipt(), nativeTransaction);
+  const maxAttempt = sumBounds(
+    binder(),
+    preparationFixed(),
+    canonicalDeduplicationFor(COLLECTION_SELECTED_PUBLICATION_LIMIT),
+    repeatBound(selectedBranch(), COLLECTION_SELECTED_PUBLICATION_LIMIT),
+    preReceipt(),
+    nativeTransactionFor(COLLECTION_SELECTED_PUBLICATION_LIMIT),
+  );
+  const ceiling = repeatBound(maxAttempt, COLLECTION_SELECTED_PUBLICATION_ATTEMPTS());
+  if (!withinCeiling(perAttempt, ceiling)) throw new TypeError('Selected publication exceeds its native ceiling');
+  return Object.freeze({
+    selectionCount,
+    terms: Object.freeze({
+      binding: binder(),
+      selectedBranches: branches,
+      selectedBranch: selectedBranch(),
+      positiveMembership: positiveMembership(),
+      negativeMembership: negativeMembership(),
+      sourceMembership: sourceMembership(),
+      closureAndOwnerFacts: closureAndOwnerFacts(),
+      ownerFilterMatch: ownerFilterMatch(),
+      scopeCurrentness: scopeCurrentness(),
+      sourcePreparation: sourcePrepare(),
+      canonicalDeduplication,
+      ownerFilterReauthorization: sumBounds(MEMBERS_PREPARATION_SOURCE_COST(), privateAuthority()),
+      preparation,
+      preReceipt: preReceipt(),
+      compareHeaderRule: compareHeaderRule(),
+      privateAuthority: privateAuthority(),
+      nativeTransaction,
+      outputReservation: nativeTransaction,
+      receiptLookup: receiptLookup(),
+      receiptWrite: receiptWrite(),
+      serialization: serialization(),
+      rollback: rollback(),
+      retries: ceiling,
+    }),
+    perAttempt,
+    ceiling,
+    bindingWork: nativeWorkDimensions(binder()),
+  });
+}
+
+/** Named 9-axis to legacy native 8-axis translation; engine work cannot disappear at this boundary. */
+export function nativeWorkDimensions(value: Bound): WorkDimensions {
+  const bound = declareBound(value);
+  if (bound.engineRequests !== 0) throw new RangeError('Native Collection work cannot fund engine requests');
+  return Object.freeze({
+    candidateKeys: bound.candidateKeys,
+    identityMetadataRows: bound.identityMetadataRows,
+    nativeRows: bound.nativeRows,
+    nativePoints: bound.nativePoints,
+    witnessKeys: bound.witnessKeys,
+    statements: bound.statements,
+    bytes: bound.bytes,
+    emptySeeks: bound.emptySeeks,
+  });
+}
+
+export function nativeWorkAllowance(value: Bound, reservationId: string): WorkAllowance {
+  if (!reservationId) throw new TypeError('Missing native work reservation');
+  return Object.freeze({ reservationId, remaining: nativeWorkDimensions(value) });
+}
+
+/** Older native receipts are translated back with an explicit zero engine dimension. */
+export function nativeReceiptBound(receipt: WorkReceipt): Bound {
+  return declareBound({ ...receipt.used, engineRequests: 0 });
+}
+
+export function collectionSelectedPublicationOutputReservation(selectionCount: number): Bound {
+  if (
+    !Number.isSafeInteger(selectionCount) ||
+    selectionCount < 0 ||
+    selectionCount > COLLECTION_SELECTED_PUBLICATION_LIMIT
+  )
+    throw new RangeError('Invalid selected publication count');
+  return nativeTransactionFor(selectionCount);
+}
+export function COLLECTION_SELECTED_PUBLICATION_SOURCE_PREPARATION() {
+  return memoizedValue(COLLECTION_SELECTED_PUBLICATION_SOURCE_PREPARATION, () => sourcePrepare());
+}
+export function COLLECTION_SELECTED_PUBLICATION_SOURCE_MEMBERSHIP() {
+  return memoizedValue(COLLECTION_SELECTED_PUBLICATION_SOURCE_MEMBERSHIP, () => sourceMembership());
+}

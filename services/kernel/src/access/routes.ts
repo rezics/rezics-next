@@ -1,3 +1,7 @@
+import { memoizedValue } from '../memoized.ts';
+import { readLifecycleReview } from './lifecycle-review.ts';
+import { lifecycleReviewSchema } from './lifecycle-review-schema.ts';
+import { createManagementRead, managedAccountsSchema, accountManagementSchema } from './account-management.ts';
 import { createHash } from 'node:crypto';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
@@ -5,35 +9,534 @@ import type { Pool } from 'pg';
 import type { Static, TSchema } from 'typebox';
 import { Compile } from 'typebox/compile';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
+import { withConnection } from '../database/pool.ts';
+import { routeOf } from '../route/route.ts';
+import {
+  createPreferenceCommands,
+  readAccountPreferences,
+  withPreferencePage,
+  withReadingPreferencePage,
+  SHELF_GRID_SIZES,
+  SHELF_LAYOUTS,
+  SHELF_MAX_LAYOUTS,
+  SHELF_SCOPE_MAX_LENGTH,
+  SHELF_SCOPE_PATTERN,
+  SHELF_SORT_DIRECTIONS,
+  SHELF_SORT_FIELDS,
+  SHELF_TABLE_COLUMNS,
+  SHELF_TABS,
+} from './preferences.ts';
+import { throwAccessUnavailable } from './unavailable.ts';
+import { NOTIFICATION_KINDS, type Notifications, type NotificationsPatch } from './notification-kinds.ts';
 import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
-import { AuthenticationError, type Access } from '../request/access.ts';
-import { readPublicIdentities } from './account-data.ts';
+import { accessCheck, AuthenticationError, type Access, type AccessRealmRoleReader } from '../request/access.ts';
+import { HANDLE_LOOKUP_PATTERN } from './handle-policy.ts';
+import {
+  PROFILE_LINK_LABEL_MAX_LENGTH,
+  PROFILE_LINK_MAX_ITEMS,
+  PROFILE_LINK_URL_MAX_LENGTH,
+  PROFILE_TEXT_MAX_LENGTH,
+  readEditableAccountProfile,
+  type AccountProfileEditing,
+  type EditableAccountProfile,
+} from './account-edit-profile.ts';
+import { createLifecycleCommands, LifecycleDeniedError, normalizeLookupHandle } from './lifecycle.ts';
+import {
+  readAgentPages,
+  readPublicAccountByAgent,
+  readPublicAccountByHandle,
+  readPublicIdentities,
+  type PublicIdentity,
+  type PublicHandleIdentity,
+  type PublicAccountProfile,
+} from './account-data.ts';
 import { createGrantCommands, GrantDeniedError } from './grant-commands.ts';
+import { RealmLastOwnerError } from './resource-access-errors.ts';
+import { readResourceGrants, type GrantReadPage } from './grant-read.ts';
+import type { ViewerActionResources } from './viewer-actions.ts';
 import { createRateTierCommands, RateTierNotAppliedError } from './rate-tier.ts';
-import { createReinstatementCommands, ReinstatementNotAppliedError } from './reinstatement.ts';
-import { createSuspensionCommands } from './suspension.ts';
+import {
+  createReinstatementCommands,
+  reinstatementDeclaration,
+  ReinstatementNotAppliedError,
+} from './reinstatement.ts';
+import { createSuspensionCommands, suspensionDeclaration } from './suspension.ts';
+import { readOrganizationSpeakers, type OrganizationSpeakersPage } from './organization-speakers.ts';
+import { readAccountRealms, type AccountRealmsPage } from './account-realms.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import {
+  AgentVerificationConflictError,
+  AgentVerificationDeniedError,
+  createAgentVerificationCommands,
+  readAgentVerificationStatus,
+  readPendingAgentVerificationRequests,
+  type AgentVerificationRequest,
+  type PendingVerificationPage,
+} from './agent-verification.ts';
+
+const agentVerificationReversal = t.Object(
+  {
+    accountId: t.String({ format: 'uuid' }),
+    catalogueSubjectId: t.String({ format: 'uuid' }),
+    verificationReceiptId: t.String({ format: 'uuid' }),
+    receiptId: t.String({ format: 'uuid' }),
+    requestedBy: t.String({ format: 'uuid' }),
+    kind: t.Union([t.Literal('released'), t.Literal('revoked')]),
+    reason: t.Union([t.String({ maxLength: 500 }), t.Null()]),
+  },
+  { additionalProperties: false },
+);
 
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 const publicIdentity = t.Object(
   {
     id,
+    kind: t.Union([t.Literal('actor'), t.Literal('organization')]),
     handle: t.Union([t.String(), t.Null()]),
     displayName: t.Union([t.String(), t.Null()]),
-    state: t.Union([t.Literal('active'), t.Literal('deleted')]),
+    state: t.Literal('active'),
+    automated: t.Boolean(),
+    operatorId: t.Union([id, t.Null()]),
   },
   closed,
 );
+const deletedIdentity = t.Object(
+  { id, kind: t.Union([t.Literal('actor'), t.Literal('organization')]), state: t.Literal('deleted') },
+  closed,
+);
+const coverSummary = t.Object(
+  {
+    media: id,
+    width: t.Integer({ minimum: 1 }),
+    height: t.Integer({ minimum: 1 }),
+    placeholder: t.Object({ thumbhash: t.String(), color: t.String() }, closed),
+    variants: t.Array(
+      t.Object({ format: t.Union([t.Literal('avif'), t.Literal('webp')]), width: t.Integer({ minimum: 1 }) }, closed),
+    ),
+    focalPoint: t.Union([
+      t.Object({ x: t.Number({ minimum: 0, maximum: 1 }), y: t.Number({ minimum: 0, maximum: 1 }) }, closed),
+      t.Null(),
+    ]),
+    credit: t.Null(),
+  },
+  closed,
+);
+const publicProfile = t.Object(
+  {
+    ...publicIdentity.properties,
+    movedTo: t.Optional(t.String()),
+    bio: t.Union([t.String(), t.Null()]),
+    links: t.Array(
+      t.Object({ label: t.String({ minLength: 1, maxLength: 64 }), url: t.String({ maxLength: 2048 }) }, closed),
+      { maxItems: 5 },
+    ),
+    avatar: t.Union([coverSummary, t.Null()]),
+    publicViews: t.Object(
+      { posts: t.Boolean(), reviews: t.Boolean(), collections: t.Boolean(), realms: t.Boolean() },
+      closed,
+    ),
+    speakersListed: t.Optional(t.Boolean()),
+    subject: t.Union([t.Object({ id, label: t.String(), type: t.String() }, closed), t.Null()]),
+    verified: t.Boolean(),
+  },
+  closed,
+);
+const publicHandleIdentity = t.Object(
+  {
+    ...publicIdentity.properties,
+    movedTo: t.Optional(t.String()),
+    subject: t.Union([t.Object({ id, label: t.String(), type: t.String() }, closed), t.Null()]),
+    verified: t.Boolean(),
+  },
+  closed,
+);
+// Named item types keep the client declaration within the compiler's serialization bound.
+const publicAccountList = t.Unsafe<{
+  accounts: (PublicIdentity | PublicHandleIdentity | PublicAccountProfile)[];
+  next: null;
+}>(
+  t.Object(
+    {
+      accounts: t.Array(t.Union([publicProfile, publicHandleIdentity, publicIdentity, deletedIdentity])),
+      next: t.Null(),
+    },
+    closed,
+  ),
+);
+const agentVerificationLink = t.Object(
+  { label: t.String({ minLength: 1, maxLength: 64 }), url: t.String({ minLength: 1, maxLength: 2048 }) },
+  closed,
+);
+const agentVerificationProblem = t.Union([
+  t.Object({ type: t.String({ minLength: 1, maxLength: 128 }), detail: t.String({ maxLength: 512 }) }, closed),
+  t.Null(),
+]);
+const agentVerificationRequest = t.Unsafe<AgentVerificationRequest>(
+  t.Object(
+    {
+      id,
+      accountId: id,
+      accountKind: t.Union([t.Literal('actor'), t.Literal('organization')]),
+      requestedBy: t.Union([id, t.Null()]),
+      catalogueSubjectId: id,
+      statement: t.String({ minLength: 1, maxLength: 2000 }),
+      links: t.Array(agentVerificationLink, { maxItems: 5 }),
+      state: t.Union([
+        t.Literal('pending'),
+        t.Literal('approving'),
+        t.Literal('approved'),
+        t.Literal('rejected'),
+        t.Literal('withdrawn'),
+        t.Literal('failed'),
+      ]),
+      reason: t.Union([t.String({ maxLength: 500 }), t.Null()]),
+      problem: agentVerificationProblem,
+      decisionReceiptId: t.Union([id, t.Null()]),
+      decidedBy: t.Union([id, t.Null()]),
+      createdAt: t.String(),
+      updatedAt: t.String(),
+    },
+    closed,
+  ),
+);
+const agentVerificationViewerAction = t.Object(
+  { action: t.String(), operations: t.Array(t.String(), { minItems: 1, uniqueItems: true }) },
+  closed,
+);
+const agentVerificationRequestEnvelope = t.Object(
+  {
+    verificationRequest: t.Union([agentVerificationRequest, t.Null()]),
+    viewerActions: t.Array(agentVerificationViewerAction),
+  },
+  closed,
+);
+const pendingVerificationEnvelope = t.Unsafe<PendingVerificationPage>(
+  t.Object({ verificationRequests: t.Array(agentVerificationRequest), next: t.Union([t.String(), t.Null()]) }, closed),
+);
+const preferenceValues = {
+  spoilerLevel: t.Union([t.Literal(0), t.Literal(1), t.Literal(2)]),
+  suitability: t.Union([t.Literal('blur'), t.Literal('show')]),
+};
+const literals = <const V extends readonly string[]>(values: V) =>
+  t.Unsafe<V[number]>(t.Union(values.map((value) => t.Literal(value))));
+function shelfScope() {
+  return memoizedValue(shelfScope, () => t.String({ pattern: SHELF_SCOPE_PATTERN, maxLength: SHELF_SCOPE_MAX_LENGTH }));
+}
+const shelfTabs = <S extends TSchema>(entry: S) =>
+  t.Object(Object.fromEntries(SHELF_TABS.map((tab) => [tab, t.Optional(entry)])), closed);
+function shelfColumns() {
+  return memoizedValue(shelfColumns, () =>
+    t.Array(literals(SHELF_TABLE_COLUMNS), {
+      minItems: 1,
+      maxItems: SHELF_TABLE_COLUMNS.length,
+      uniqueItems: true,
+    }),
+  );
+}
+function shelf() {
+  return memoizedValue(shelf, () =>
+    t.Object(
+      {
+        layouts: t.Optional(t.Record(shelfScope(), literals(SHELF_LAYOUTS), { maxProperties: SHELF_MAX_LAYOUTS })),
+        sorts: t.Optional(
+          shelfTabs(
+            t.Object({ field: literals(SHELF_SORT_FIELDS), direction: literals(SHELF_SORT_DIRECTIONS) }, closed),
+          ),
+        ),
+        gridSize: t.Optional(literals(SHELF_GRID_SIZES)),
+        tableColumns: t.Optional(shelfColumns()),
+      },
+      closed,
+    ),
+  );
+}
+const nullable = <S extends TSchema>(schema: S) => t.Union([schema, t.Null()]);
+const editableProfileFields = {
+  id,
+  handle: nullable(t.String()),
+  displayName: nullable(t.String()),
+  bio: nullable(t.String()),
+  links: publicProfile.properties.links,
+  avatar: nullable(coverSummary),
+  publicViews: publicProfile.properties.publicViews,
+};
+const editableProfile = t.Unsafe<EditableAccountProfile>(
+  t.Union([
+    t.Object({ ...editableProfileFields, kind: t.Literal('actor') }, closed),
+    t.Object({ ...editableProfileFields, kind: t.Literal('organization'), speakersListed: t.Boolean() }, closed),
+  ]),
+);
+function textAdvice() {
+  return memoizedValue(textAdvice, () =>
+    t.Object({ applicable: t.Literal(true), maxLength: t.Literal(PROFILE_TEXT_MAX_LENGTH) }, closed),
+  );
+}
+const avatarAdvice = t.Object({ applicable: t.Literal(true) }, closed);
+function linksAdvice() {
+  return memoizedValue(linksAdvice, () =>
+    t.Object(
+      {
+        applicable: t.Literal(true),
+        maxItems: t.Literal(PROFILE_LINK_MAX_ITEMS),
+        labelMaxLength: t.Literal(PROFILE_LINK_LABEL_MAX_LENGTH),
+        urlMaxLength: t.Literal(PROFILE_LINK_URL_MAX_LENGTH),
+      },
+      closed,
+    ),
+  );
+}
+const publicViewsAdvice = t.Object(
+  {
+    applicable: t.Literal(true),
+    flags: t.Tuple([t.Literal('posts'), t.Literal('reviews'), t.Literal('collections'), t.Literal('realms')]),
+  },
+  closed,
+);
+function identityAdviceFields() {
+  return memoizedValue(identityAdviceFields, () => ({
+    displayName: textAdvice(),
+    biography: textAdvice(),
+    avatar: avatarAdvice,
+    links: linksAdvice(),
+    publicViews: publicViewsAdvice,
+  }));
+}
+function profileEditing() {
+  return memoizedValue(profileEditing, () =>
+    t.Unsafe<AccountProfileEditing>(
+      t.Union([
+        t.Object(
+          {
+            viewer: t.Object({ accountId: id }, closed),
+            target: t.Object({ accountId: id, kind: t.Literal('actor') }, closed),
+            fields: t.Object(identityAdviceFields(), closed),
+          },
+          closed,
+        ),
+        t.Object(
+          {
+            viewer: t.Object({ accountId: id }, closed),
+            target: t.Object({ accountId: id, kind: t.Literal('organization') }, closed),
+            fields: t.Object(
+              { ...identityAdviceFields(), speakersListed: t.Object({ applicable: t.Literal(true) }, closed) },
+              closed,
+            ),
+          },
+          closed,
+        ),
+      ]),
+    ),
+  );
+}
+const profilePatch = t.Object(
+  {
+    displayName: t.Optional(nullable(t.String({ maxLength: 4096 }))),
+    biography: t.Optional(nullable(t.String({ maxLength: 4096 }))),
+    avatar: t.Optional(
+      nullable(t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' })),
+    ),
+    links: t.Optional(
+      t.Array(
+        t.Object(
+          {
+            label: t.String({ minLength: 1, maxLength: 64 }),
+            url: t.String({
+              maxLength: 2048,
+              pattern: '^(?!.*[\\u0000-\\u0020\\u007f])[hH][tT][tT][pP][sS]://[^/@\\s]+(?:[/?#]|$)',
+              description: 'Absolute HTTPS URL without credentials.',
+            }),
+          },
+          closed,
+        ),
+        { maxItems: 5 },
+      ),
+    ),
+    publicViews: t.Optional(
+      t.Object(
+        {
+          posts: t.Optional(t.Boolean()),
+          reviews: t.Optional(t.Boolean()),
+          collections: t.Optional(t.Boolean()),
+          realms: t.Optional(t.Boolean()),
+        },
+        closed,
+      ),
+    ),
+    speakersListed: t.Optional(t.Boolean()),
+  },
+  { ...closed, minProperties: 1 },
+);
+function validProfilePatch(patch: Static<typeof profilePatch>): boolean {
+  // Lifecycle strings use UTF-16 length; links use characters and URL parsing.
+  if ([patch.displayName, patch.biography].some((value) => typeof value === 'string' && value.length > 4096))
+    return false;
+  return (patch.links ?? []).every(({ url }) => {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'https:' && Boolean(parsed.hostname) && !parsed.username && !parsed.password;
+    } catch {
+      return false;
+    }
+  });
+}
+// A JSON Merge Patch over the shelf: null removes a part or an entry, an array replaces.
+function shelfPatch() {
+  return memoizedValue(shelfPatch, () =>
+    t.Object(
+      {
+        layouts: t.Optional(nullable(t.Record(shelfScope(), nullable(literals(SHELF_LAYOUTS))))),
+        sorts: t.Optional(
+          nullable(
+            shelfTabs(
+              nullable(
+                t.Object(
+                  {
+                    field: t.Optional(nullable(literals(SHELF_SORT_FIELDS))),
+                    direction: t.Optional(nullable(literals(SHELF_SORT_DIRECTIONS))),
+                  },
+                  closed,
+                ),
+              ),
+            ),
+          ),
+        ),
+        gridSize: t.Optional(nullable(literals(SHELF_GRID_SIZES))),
+        tableColumns: t.Optional(nullable(shelfColumns())),
+      },
+      closed,
+    ),
+  );
+}
+const notificationFields = <S extends TSchema>(entry: S, optional = false) =>
+  Object.fromEntries(
+    NOTIFICATION_KINDS.filter((kind) => kind.optional).map(({ kind }) => [kind, optional ? t.Optional(entry) : entry]),
+  );
+function notifications() {
+  return memoizedValue(notifications, () => t.Unsafe<Notifications>(t.Object(notificationFields(t.Boolean()), closed)));
+}
+function notificationsPatch() {
+  return memoizedValue(notificationsPatch, () =>
+    t.Unsafe<NotificationsPatch>(t.Object(notificationFields(nullable(t.Boolean()), true), closed)),
+  );
+}
+const preferencePageKind = t.Object(
+  {
+    kind: t.String({ pattern: '^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$', minLength: 1, maxLength: 64 }),
+    optional: t.Boolean(),
+    default: t.Boolean(),
+    enabled: t.Boolean(),
+  },
+  closed,
+);
+const preferencePageAction = t.Object(
+  {
+    name: t.Union([t.Literal('edit'), t.Literal('reset')]),
+    expectedVersion: t.Integer({ minimum: 0 }),
+  },
+  closed,
+);
+const preferencePage = t.Object(
+  {
+    version: t.Integer({ minimum: 0 }),
+    kinds: t.Array(preferencePageKind, { minItems: 1, maxItems: 32 }),
+    actions: t.Array(preferencePageAction, { maxItems: 2 }),
+  },
+  closed,
+);
+const preferenceAction = t.Union([
+  t.Object({ allowed: t.Literal(true) }, closed),
+  t.Object({ allowed: t.Literal(false), reason: t.Literal('not_authorized') }, closed),
+]);
+function preferences() {
+  return memoizedValue(preferences, () =>
+    t.Object(
+      {
+        ...preferenceValues,
+        shelf: shelf(),
+        notifications: notifications(),
+        version: t.Integer({ minimum: 0 }),
+        page: preferencePage,
+        viewerState: t.Literal('current'),
+        allowedActions: t.Object({ read: preferenceAction, update: preferenceAction }, closed),
+        reading: t.Object(
+          {
+            supported: t.Object(
+              {
+                spoilerLevels: t.Array(preferenceValues.spoilerLevel, { minItems: 1, maxItems: 3, uniqueItems: true }),
+                suitability: t.Array(preferenceValues.suitability, { minItems: 1, maxItems: 2, uniqueItems: true }),
+              },
+              closed,
+            ),
+            effective: t.Object({ ...preferenceValues }, closed),
+            defaults: t.Object({ spoilerLevel: t.Literal(0), suitability: t.Literal('blur') }, closed),
+          },
+          closed,
+        ),
+        shelfAdvice: t.Object(
+          {
+            supported: t.Object(
+              {
+                layouts: t.Array(literals(SHELF_LAYOUTS), {
+                  minItems: 1,
+                  maxItems: SHELF_LAYOUTS.length,
+                  uniqueItems: true,
+                }),
+                tabs: t.Array(literals(SHELF_TABS), { minItems: 1, maxItems: SHELF_TABS.length, uniqueItems: true }),
+                sortFields: t.Array(literals(SHELF_SORT_FIELDS), {
+                  minItems: 1,
+                  maxItems: SHELF_SORT_FIELDS.length,
+                  uniqueItems: true,
+                }),
+                sortDirections: t.Array(literals(SHELF_SORT_DIRECTIONS), {
+                  minItems: 1,
+                  maxItems: SHELF_SORT_DIRECTIONS.length,
+                  uniqueItems: true,
+                }),
+                gridSizes: t.Array(literals(SHELF_GRID_SIZES), {
+                  minItems: 1,
+                  maxItems: SHELF_GRID_SIZES.length,
+                  uniqueItems: true,
+                }),
+                tableColumns: t.Array(literals(SHELF_TABLE_COLUMNS), {
+                  minItems: 1,
+                  maxItems: SHELF_TABLE_COLUMNS.length,
+                  uniqueItems: true,
+                }),
+              },
+              closed,
+            ),
+            limits: t.Object(
+              {
+                maxLayouts: t.Literal(SHELF_MAX_LAYOUTS),
+                scopeMaxLength: t.Literal(SHELF_SCOPE_MAX_LENGTH),
+                scopePattern: t.Literal(SHELF_SCOPE_PATTERN),
+              },
+              closed,
+            ),
+            effective: shelf(),
+            defaults: t.Object({}, closed),
+          },
+          closed,
+        ),
+      },
+      closed,
+    ),
+  );
+}
 const resource = t.Object({ route: t.Integer({ minimum: 0, maximum: 65535 }), id }, closed);
 const subject = t.Union([
   t.Object({ kind: t.Literal('active_accounts') }, closed),
   t.Object({ kind: t.Literal('account'), id }, closed),
   t.Object({ kind: t.Literal('organization'), id, role: t.Union([t.Literal('owner'), t.Literal('member')]) }, closed),
 ]);
-const actions = t.Array(t.String({ pattern: '^[a-z][a-z_]*:[a-z][a-z_]*$' }), { minItems: 1, maxItems: 1000 });
+const actions = t.Array(t.String({ pattern: '^(?:[a-z][a-z_]*:[a-z][a-z_]*|gate:[a-z][a-z_]{0,62})$' }), {
+  minItems: 1,
+  maxItems: 1000,
+});
 const valid = t.String();
 const direct = { resource, actions, valid };
 const canonical = { subject };
@@ -47,6 +550,43 @@ const grantChange = t.Union([
 const role = t.String();
 const roleGrant = t.Object({ resource, subject, role, valid }, closed);
 const roleChange = t.Object({ resource, subject, role, valid, previous: t.Object({ role, valid }, closed) }, closed);
+const grantReadPage = t.Unsafe<GrantReadPage>(
+  t.Object(
+    {
+      resource: t.Object({ ...resource.properties, type: t.String() }, closed),
+      authority: t.Object({ accountId: id, principalId: nullable(id), clientId: t.String() }, closed),
+      roles: t.Array(t.Object({ id: role, actions: t.Array(t.String()), delegable: t.Boolean() }, closed)),
+      actions: t.Array(t.String()),
+      grants: t.Array(
+        t.Object(
+          {
+            kind: t.Union([t.Literal('direct'), t.Literal('role')]),
+            state: t.Union([t.Literal('active'), t.Literal('scheduled')]),
+            subject: t.Union([
+              subject,
+              t.Object(
+                { kind: t.Literal('realm'), id, role: t.Union([t.Literal('owner'), t.Literal('member')]) },
+                closed,
+              ),
+            ]),
+            actions: t.Array(t.String()),
+            role: nullable(role),
+            valid,
+            startsAt: nullable(t.String()),
+            endsAt: nullable(t.String()),
+            manageable: t.Boolean(),
+          },
+          closed,
+        ),
+        { maxItems: 20 },
+      ),
+      identities: t.Array(t.Union([publicIdentity, deletedIdentity]), { maxItems: 22 }),
+      next: nullable(t.String()),
+      mutationState: t.Union([t.Literal('ready'), t.Literal('realm_guard_unavailable')]),
+    },
+    closed,
+  ),
+);
 
 function publicGrant(value: Static<typeof grant>): Static<typeof grant> {
   return {
@@ -68,7 +608,7 @@ function publicRoleGrant(value: Static<typeof roleGrant>): Static<typeof roleGra
 }
 
 /** Standard-schema validation preserves closed unions instead of sanitizing unknown fields. */
-function strict<S extends TSchema>(schema: S) {
+function strict<S extends TSchema>(schema: S, valid: (value: Static<S>) => boolean = () => true) {
   const validator = Compile(schema);
   return {
     '~standard': {
@@ -76,48 +616,64 @@ function strict<S extends TSchema>(schema: S) {
       vendor: 'typebox',
       types: undefined as { input: Static<S>; output: Static<S> } | undefined,
       validate(value: unknown) {
-        return validator.Check(value)
+        return validator.Check(value) && valid(value as Static<S>)
           ? { value: value as Static<S> }
-          : { issues: [{ message: 'Value does not match the grant schema' }] };
+          : { issues: [{ message: 'Value does not match the request schema' }] };
       },
-      jsonSchema: { input: () => schema, output: () => schema },
+      jsonSchema: { input: (): TSchema => schema, output: (): TSchema => schema },
     },
   };
 }
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() });
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  422: problemSchema('idempotency_conflict'),
-  429: problemSchema('rate_limited'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'rate_limit_unavailable',
-  ),
-};
-const publicReadFailures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  500: problemSchema('internal_error'),
-  503: problemSchema('overloaded', 'deadline_exceeded', 'partition_unavailable', 'transaction_retry_exhausted'),
-};
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String() }));
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    422: problemSchema('idempotency_conflict'),
+    429: problemSchema('rate_limited'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'rate_limit_unavailable',
+    ),
+  }));
+}
+function publicReadFailures() {
+  return memoizedValue(publicReadFailures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    500: problemSchema('internal_error'),
+    503: problemSchema('overloaded', 'deadline_exceeded', 'partition_unavailable', 'transaction_retry_exhausted'),
+  }));
+}
 const accountUuidPattern = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const accountIdPattern = new RegExp(`^${accountUuidPattern}$`);
-const publicIdentityQuery = t.Object(
-  {
-    ids: t.String({
-      minLength: 36,
-      maxLength: 3699,
-      pattern: `^${accountUuidPattern}(?:,${accountUuidPattern}){0,99}$`,
-    }),
-  },
-  closed,
-);
+function publicIdentityQuery() {
+  return memoizedValue(publicIdentityQuery, () =>
+    t.Unsafe<{ ids: string } | { handle: string } | { agent: string }>(
+      t.Union([
+        t.Object(
+          {
+            ids: t.String({
+              minLength: 36,
+              maxLength: 3699,
+              pattern: `^${accountUuidPattern}(?:,${accountUuidPattern}){0,99}$`,
+            }),
+          },
+          closed,
+        ),
+        t.Object({ handle: t.String({ minLength: 1, maxLength: 64, pattern: HANDLE_LOOKUP_PATTERN.source }) }, closed),
+        t.Object({ agent: t.String({ minLength: 36, maxLength: 36, pattern: accountUuidPattern }) }, closed),
+      ]),
+    ),
+  );
+}
 const response = <S extends TSchema>(schema: S) =>
   withHeaders(t.Object({ grant: schema }, closed), { [SESSION_HEADER]: t.String() });
 const detail = (operationId: string) => ({
@@ -128,16 +684,29 @@ const detail = (operationId: string) => ({
   security: [{ bearerAuth: [] }],
 });
 function denied(error: unknown): never {
+  if (error instanceof RealmLastOwnerError) throw error;
   // PostgreSQL rejects invalid temporal values/identities and conflicting grants.
   // Neither those failures nor native formula denials disclose stored grant state.
   const code = typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
   if (error instanceof GrantDeniedError || /^(?:22|23)/.test(code)) throw new ProblemError('forbidden');
   throw error;
 }
+function verificationDenied(error: unknown): never {
+  if (error instanceof AgentVerificationConflictError) throw new ProblemError('conflict');
+  if (error instanceof AgentVerificationDeniedError) throw new ProblemError('forbidden');
+  return denied(error);
+}
 
 export function accessRoutes(
   app: ReturnType<typeof definitionRoutes>,
-  dependencies: { pool: Pool; access: () => Access; clock: () => Date },
+  dependencies: {
+    pool: Pool;
+    access: () => Access;
+    clock: () => Date;
+    tokens: KeyRing;
+    realmRoleReader?: AccessRealmRoleReader;
+    grantResources?: () => ViewerActionResources;
+  },
 ) {
   let resolved: ReturnType<typeof createGrantCommands> | undefined;
   const commands = () =>
@@ -168,17 +737,595 @@ export function accessRoutes(
       access: dependencies.access(),
       clock: dependencies.clock,
     }));
+  let preference: ReturnType<typeof createPreferenceCommands> | undefined;
+  const preferenceCommands = () =>
+    (preference ??= createPreferenceCommands({
+      pool: dependencies.pool,
+      access: dependencies.access(),
+      clock: dependencies.clock,
+    }));
+  let agentVerification: ReturnType<typeof createAgentVerificationCommands> | undefined;
+  const agentVerificationCommands = () =>
+    (agentVerification ??= createAgentVerificationCommands({
+      pool: dependencies.pool,
+      access: dependencies.access(),
+      clock: dependencies.clock,
+    }));
+  let lifecycle: ReturnType<typeof createLifecycleCommands> | undefined;
+  const lifecycleCommands = () =>
+    (lifecycle ??= createLifecycleCommands({
+      pool: dependencies.pool,
+      access: dependencies.access(),
+      clock: dependencies.clock,
+    }));
   return app
+    .get(
+      '/v1/grants',
+      {
+        query: strict(t.Object({ resourceId: id, cursor: t.Optional(t.String({ maxLength: 4096 })) }, closed)),
+        response: {
+          200: grantReadPage,
+          ...publicReadFailures(),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          503: problemSchema('dependency_unavailable', 'overloaded', 'deadline_exceeded'),
+        },
+        detail: {
+          operationId: 'grant.read',
+          'x-action': 'access:grant',
+          'x-exposure': 'public',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ query, actor, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return readResourceGrants(
+          {
+            ...dependencies,
+            access: dependencies.access(),
+            resources: dependencies.grantResources?.() ?? new Map(),
+            commands: commands(),
+          },
+          actor,
+          query,
+          job.deadline,
+        );
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/profile',
+      {
+        params: strict(t.Object({ accountId: id }, closed)),
+        response: {
+          200: t.Object({ profile: editableProfile, editing: profileEditing() }, closed),
+          400: problemSchema('invalid_request'),
+          401: problemSchema('authentication_required', 'invalid_credentials'),
+          403: problemSchema('forbidden', 'platform_closed'),
+          503: publicReadFailures()[503],
+        },
+        detail: {
+          operationId: 'account.read_editable_profile',
+          'x-authority-resource-types': ['access.account'],
+          'x-account-authority': 'profile',
+          'x-action': 'account:update',
+          'x-exposure': 'public',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, actor, admission, job, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        return admission.run('normal', job, () =>
+          readEditableAccountProfile(
+            dependencies.access(),
+            { pool: dependencies.pool, actor, deadline: job.deadline },
+            params.accountId,
+          ),
+        );
+      },
+    )
+    .patch(
+      '/v1/accounts/:accountId',
+      {
+        headers: headers(),
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(profilePatch, validProfilePatch),
+        response: {
+          200: withHeaders(t.Object({ accountId: id }, closed), { [SESSION_HEADER]: t.String() }),
+          ...failures(),
+        },
+        detail: {
+          ...detail('account.update'),
+          'x-action': 'account:update',
+          'x-authority-resource-types': ['access.account'],
+          'x-account-authority': 'profile',
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const outcome = await admission.run('normal', job, () =>
+            lifecycleCommands().updateAccount(
+              { actor, deadline: job.deadline },
+              { accountId: params.accountId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), patch: body },
+            ),
+          );
+          session.record(outcome);
+          set.headers['cache-control'] = 'private, no-store';
+          return outcome.value;
+        } catch (error) {
+          if (error instanceof LifecycleDeniedError) throw new ProblemError('forbidden');
+          return denied(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/accounts/:accountId', 'requestVerification'),
+      {
+        headers: headers(),
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(
+          t.Object(
+            {
+              subject: id,
+              statement: t.String({ minLength: 1, maxLength: 2000 }),
+              links: t.Array(agentVerificationLink, { maxItems: 5 }),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          201: withHeaders(t.Object({ verificationRequest: agentVerificationRequest }, closed), {
+            [SESSION_HEADER]: t.String(),
+          }),
+          ...failures(),
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          ...detail('account.request_verification'),
+          'x-authority-resource-types': ['access.account'],
+          'x-account-authority': 'verification',
+          'x-action': 'account:update',
+          'x-exposure': 'gate:agent_verification',
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session, status }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const result = await admission.run('normal', job, () =>
+            agentVerificationCommands().request(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { ...body, accountId: params.accountId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]) },
+            ),
+          );
+          session.record(result);
+          return status(201, { verificationRequest: result.value });
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/verification',
+      {
+        params: strict(t.Object({ accountId: id }, closed)),
+        response: { 200: agentVerificationRequestEnvelope, ...publicReadFailures(), 403: problemSchema('forbidden') },
+        detail: {
+          operationId: 'account.read_verification_request',
+          'x-authority-resource-types': ['access.account'],
+          'x-account-authority': 'verification',
+          'x-action': 'account:read',
+          'x-exposure': 'gate:agent_verification',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, actor, admission, job, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const value = await admission.run('normal', job, () =>
+            readAgentVerificationStatus(
+              dependencies.pool,
+              dependencies.access(),
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              params.accountId,
+            ),
+          );
+          set.headers['cache-control'] = 'private, no-store';
+          return value;
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/accounts/:accountId', 'withdrawVerification'),
+      {
+        headers: headers(),
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(t.Object({}, closed)),
+        response: {
+          200: withHeaders(t.Object({ verificationRequest: agentVerificationRequest }, closed), {
+            [SESSION_HEADER]: t.String(),
+          }),
+          ...failures(),
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          ...detail('account.withdraw_verification'),
+          'x-authority-resource-types': ['access.account'],
+          'x-account-authority': 'verification',
+          'x-action': 'account:update',
+          'x-exposure': 'gate:agent_verification',
+        },
+      },
+      async ({ params, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const result = await admission.run('normal', job, () =>
+            agentVerificationCommands().withdraw(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { accountId: params.accountId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]) },
+            ),
+          );
+          session.record(result);
+          return { verificationRequest: result.value };
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .get(
+      '/v1/verification-requests',
+      {
+        query: strict(
+          t.Object(
+            {
+              state: t.Literal('pending'),
+              cursor: t.Optional(t.String({ maxLength: 4096 })),
+              limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          200: pendingVerificationEnvelope,
+          ...publicReadFailures(),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          403: problemSchema('forbidden'),
+        },
+        detail: {
+          operationId: 'verification_request.list_pending',
+          'x-action': 'account:verify_agent',
+          'x-exposure': 'gate:agent_verification',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ query, actor, admission, job, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const page = await admission.run('normal', job, () =>
+            readPendingAgentVerificationRequests(
+              dependencies.pool,
+              dependencies.access(),
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              dependencies.tokens,
+              {
+                ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+                ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+              },
+              dependencies.clock(),
+            ),
+          );
+          set.headers['cache-control'] = 'private, no-store';
+          return page;
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/verification-requests/:requestId', 'approve'),
+      {
+        headers: headers(),
+        params: strict(t.Object({ requestId: id }, closed)),
+        body: strict(t.Object({ reason: t.Optional(t.String({ maxLength: 500 })) }, closed)),
+        response: {
+          200: withHeaders(t.Object({ verificationRequest: agentVerificationRequest }, closed), {
+            [SESSION_HEADER]: t.String(),
+          }),
+          ...failures(),
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          ...detail('verification_request.approve'),
+          'x-action': 'account:verify_agent',
+          'x-exposure': 'gate:agent_verification',
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const result = await admission.run('normal', job, () =>
+            agentVerificationCommands().approve(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { requestId: params.requestId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), ...body },
+            ),
+          );
+          session.record(result);
+          return { verificationRequest: result.value };
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/verification-requests/:requestId', 'reject'),
+      {
+        headers: headers(),
+        params: strict(t.Object({ requestId: id }, closed)),
+        body: strict(t.Object({ reason: t.Optional(t.String({ maxLength: 500 })) }, closed)),
+        response: {
+          200: withHeaders(t.Object({ verificationRequest: agentVerificationRequest }, closed), {
+            [SESSION_HEADER]: t.String(),
+          }),
+          ...failures(),
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          ...detail('verification_request.reject'),
+          'x-action': 'account:verify_agent',
+          'x-exposure': 'gate:agent_verification',
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const result = await admission.run('normal', job, () =>
+            agentVerificationCommands().reject(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { requestId: params.requestId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), ...body },
+            ),
+          );
+          session.record(result);
+          return { verificationRequest: result.value };
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/accounts/:accountId', 'revokeVerification'),
+      {
+        headers: headers(),
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(t.Object({ reason: t.Optional(t.String({ maxLength: 500 })) }, closed)),
+        response: {
+          200: withHeaders(t.Object({ reversal: agentVerificationReversal }, closed), { [SESSION_HEADER]: t.String() }),
+          ...failures(),
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          ...detail('account.revoke_verification'),
+          'x-action': 'account:verify_agent',
+          'x-exposure': 'gate:agent_verification',
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const result = await admission.run('normal', job, () =>
+            agentVerificationCommands().revoke(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { accountId: params.accountId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]), ...body },
+            ),
+          );
+          session.record(result);
+          return { reversal: result.value };
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .post(
+      customMethod('/v1/accounts/:accountId', 'releaseVerification'),
+      {
+        headers: headers(),
+        params: strict(t.Object({ accountId: id }, closed)),
+        response: {
+          200: withHeaders(t.Object({ reversal: agentVerificationReversal }, closed), { [SESSION_HEADER]: t.String() }),
+          ...failures(),
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          ...detail('account.release_verification'),
+          'x-action': 'account:update',
+          'x-exposure': 'gate:agent_verification',
+        },
+      },
+      async ({ params, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        try {
+          const result = await admission.run('normal', job, () =>
+            agentVerificationCommands().release(
+              { pool: dependencies.pool, actor, deadline: job.deadline },
+              { accountId: params.accountId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]) },
+            ),
+          );
+          session.record(result);
+          return { reversal: result.value };
+        } catch (error) {
+          verificationDenied(error);
+        }
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/preferences',
+      {
+        params: strict(t.Object({ accountId: id }, closed)),
+        response: { 200: preferences(), ...failures() },
+        detail: {
+          operationId: 'account.read_preferences',
+          'x-authority-resource-types': ['access.account'],
+          'x-account-authority': 'self',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, actor, authorize, admission, job, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (actor.accountId !== params.accountId) throw new ProblemError('forbidden');
+        const resource = { route: routeOf(params.accountId)!, id: params.accountId };
+        const check = await authorize(resource);
+        let checkUpdate: Awaited<ReturnType<typeof accessCheck>>;
+        try {
+          checkUpdate = await accessCheck(dependencies.access(), actor, 'account:update', resource, {
+            pool: dependencies.pool,
+            deadline: job.deadline,
+          });
+        } catch (error) {
+          throwAccessUnavailable(error, job.deadline);
+          throw error;
+        }
+        const value = await admission.run('normal', job, () =>
+          withConnection(dependencies.pool, async (client) => {
+            if (!(await check(client))) throw new ProblemError('forbidden');
+            const preferences = await readAccountPreferences(client, params.accountId);
+            let writable: boolean;
+            try {
+              writable = await checkUpdate(client);
+            } catch (error) {
+              throwAccessUnavailable(error, job.deadline);
+              throw error;
+            }
+            return withReadingPreferencePage(preferences, { writable });
+          }),
+        );
+        set.headers['cache-control'] = 'private, no-store';
+        return value;
+      },
+    )
+    .patch(
+      '/v1/accounts/:accountId/preferences',
+      {
+        headers: headers(),
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(
+          t.Object(
+            {
+              expectedVersion: t.Integer({ minimum: 0, maximum: 2147483646 }),
+              spoilerLevel: t.Optional(preferenceValues.spoilerLevel),
+              suitability: t.Optional(preferenceValues.suitability),
+              shelf: t.Optional(nullable(shelfPatch())),
+              notifications: t.Optional(nullable(notificationsPatch())),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          200: withHeaders(preferences(), { [SESSION_HEADER]: t.String() }),
+          ...failures(),
+          409: problemSchema('conflict', { page: preferencePage }),
+          410: problemSchema('command_result_erased'),
+        },
+        detail: {
+          ...detail('account.set_preferences'),
+          'x-action': 'account:update',
+          'x-authority-resource-types': ['access.account'],
+          'x-account-authority': 'self',
+        },
+      },
+      async ({ params, body, headers, actor, admission, job, session, set }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        if (actor.accountId !== params.accountId) throw new ProblemError('forbidden');
+        try {
+          const outcome = await admission.run('normal', job, async () => {
+            try {
+              return await preferenceCommands().setPreferences(
+                { pool: dependencies.pool, actor, deadline: job.deadline },
+                { ...body, accountId: params.accountId, key: idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]) },
+              );
+            } catch (error) {
+              if (!(error instanceof ProblemError) || error.code !== 'conflict') throw error;
+              const current = await withConnection(dependencies.pool, (client) =>
+                readAccountPreferences(client, params.accountId),
+              );
+              // runCommand reached a conflict only after its current account:update check admitted this attempt.
+              throw new ProblemError('conflict', {
+                extensions: { page: withPreferencePage(current, { writable: true }).page },
+              });
+            }
+          });
+          session.record(outcome);
+          set.headers['cache-control'] = 'private, no-store';
+          return withReadingPreferencePage(outcome.value, { writable: true });
+        } catch (error) {
+          return denied(error);
+        }
+      },
+    )
+    .get(
+      '/v1/agent-pages',
+      {
+        query: strict(
+          t.Object(
+            {
+              cursor: t.Optional(t.String({ maxLength: 4096 })),
+              limit: t.Optional(t.Numeric({ minimum: 1, maximum: 1000, multipleOf: 1, default: 1000 })),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          200: t.Object(
+            {
+              agentPages: t.Array(
+                t.Object(
+                  {
+                    handle: t.String(),
+                    kind: t.Union([t.Literal('actor'), t.Literal('organization')]),
+                    lastModified: t.String(),
+                  },
+                  closed,
+                ),
+              ),
+              next: t.Union([t.String(), t.Null()]),
+            },
+            closed,
+          ),
+          ...publicReadFailures(),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+        },
+        detail: {
+          operationId: 'account.agent_pages',
+          'x-exposure': 'public',
+          'x-action': 'account:read_public_identity',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ query, actor, admission, job }) =>
+        admission.run('normal', job, () =>
+          readAgentPages(
+            dependencies.pool,
+            dependencies.tokens,
+            {
+              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+              ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+              viewer: actor.kind === 'account' ? actor.accountId : null,
+            },
+            dependencies.clock(),
+          ),
+        ),
+    )
     .get(
       '/v1/accounts',
       {
-        query: strict(publicIdentityQuery),
+        query: strict(publicIdentityQuery()),
         response: {
-          200: withHeaders(t.Object({ accounts: t.Array(publicIdentity) }, closed), {
+          200: withHeaders(publicAccountList, {
             etag: t.String(),
             'cache-control': t.String(),
           }),
-          ...publicReadFailures,
+          ...publicReadFailures(),
         },
         detail: {
           operationId: 'account.read_public_identity',
@@ -188,34 +1335,264 @@ export function accessRoutes(
         },
       },
       async ({ query, admission, job, set }) => {
-        const requested = query.ids.split(',');
-        if (
-          requested.length < 1 ||
-          requested.length > 100 ||
-          requested.some((accountId) => !accountIdPattern.test(accountId))
-        )
-          throw new ProblemError('invalid_request');
+        const accounts = await admission.run('normal', job, async () => {
+          if ('handle' in query)
+            return readPublicAccountByHandle(
+              dependencies.pool,
+              normalizeLookupHandle(query.handle),
+              dependencies.clock(),
+            );
+          if ('agent' in query) return readPublicAccountByAgent(dependencies.pool, query.agent);
+          const requested = query.ids.split(',');
+          if (
+            requested.length < 1 ||
+            requested.length > 100 ||
+            requested.some((accountId) => !accountIdPattern.test(accountId))
+          )
+            throw new ProblemError('invalid_request');
 
-        const seen = new Set<string>();
-        const accountIds = requested.filter((accountId) => {
-          if (seen.has(accountId)) return false;
-          seen.add(accountId);
-          return true;
+          const seen = new Set<string>();
+          const accountIds = requested.filter((accountId) => {
+            if (seen.has(accountId)) return false;
+            seen.add(accountId);
+            return true;
+          });
+          // Account routes are the two bytes at offsets 10 and 11, as enforced by account_check.
+          const routes = accountIds.map((accountId) => Number.parseInt(accountId.slice(24, 28), 16));
+          return readPublicIdentities(dependencies.pool, routes, accountIds);
         });
-        // Account routes are the two bytes at offsets 10 and 11, as enforced by account_check.
-        const routes = accountIds.map((accountId) => Number.parseInt(accountId.slice(24, 28), 16));
-        const accounts = await admission.run('normal', job, () =>
-          readPublicIdentities(dependencies.pool, routes, accountIds),
-        );
-        set.headers.etag = `"${createHash('sha256').update(JSON.stringify(accounts)).digest('base64url')}"`;
+        const body = { accounts, next: null };
+        set.headers.etag = `"${createHash('sha256').update(JSON.stringify(body)).digest('base64url')}"`;
         set.headers['cache-control'] = 'no-cache';
-        return { accounts };
+        return body;
+      },
+    )
+    .get(
+      '/v1/me/managedAccounts',
+      {
+        query: strict(
+          t.Object(
+            {
+              organizationsCursor: t.Optional(t.String({ maxLength: 4096 })),
+              operatorsCursor: t.Optional(t.String({ maxLength: 4096 })),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          200: managedAccountsSchema,
+          ...failures(),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+        },
+        detail: {
+          operationId: 'account.list_managed',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ query, actor, job, admission, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, async () =>
+          (await createManagementRead(dependencies, actor, job.deadline)).inventory(query),
+        );
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/management',
+      {
+        params: strict(t.Object({ accountId: id }, closed)),
+        query: strict(
+          t.Object(
+            {
+              membersCursor: t.Optional(t.String({ maxLength: 4096 })),
+              operatorsCursor: t.Optional(t.String({ maxLength: 4096 })),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          200: accountManagementSchema,
+          ...failures(),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+        },
+        detail: {
+          operationId: 'account.read_management',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, query, actor, job, admission, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, async () =>
+          (await createManagementRead(dependencies, actor, job.deadline)).detail(params.accountId, query),
+        );
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/realms',
+      {
+        params: strict(t.Object({ accountId: id }, closed)),
+        query: strict(
+          t.Object(
+            {
+              cursor: t.Optional(t.String({ maxLength: 4096 })),
+              limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          200: t.Unsafe<AccountRealmsPage>(
+            t.Object(
+              {
+                realms: t.Array(t.Object({ id, role: t.Union([t.Literal('owner'), t.Literal('member')]) }, closed)),
+                next: t.Union([t.String(), t.Null()]),
+              },
+              closed,
+            ),
+          ),
+          ...publicReadFailures(),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+          403: problemSchema('forbidden'),
+        },
+        detail: {
+          operationId: 'account.list_realms',
+          'x-exposure': 'public',
+          'x-action': 'account:read_public_identity',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, query, actor, admission, job, set }) => {
+        const realmRoleReader = dependencies.realmRoleReader;
+        if (!realmRoleReader) {
+          set.headers['cache-control'] = 'no-cache';
+          return { realms: [], next: null };
+        }
+        const at = dependencies.clock();
+        const page = await admission.run('normal', job, () =>
+          readAccountRealms(
+            {
+              pool: dependencies.pool,
+              tokens: dependencies.tokens,
+              access: dependencies.access(),
+              realmRoleReader,
+            },
+            actor,
+            params.accountId,
+            at,
+            job.deadline,
+            {
+              ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
+              ...(query.limit === undefined ? {} : { limit: Number(query.limit) }),
+            },
+          ),
+        );
+        set.headers['cache-control'] = 'no-cache';
+        return page;
+      },
+    )
+    .get(
+      '/v1/accounts/:accountId/speakers',
+      {
+        params: strict(t.Object({ accountId: id }, closed)),
+        query: t.Object(
+          {
+            cursor: t.Optional(t.String({ maxLength: 4096 })),
+            limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
+          },
+          closed,
+        ),
+        response: {
+          200: t.Unsafe<OrganizationSpeakersPage>(
+            t.Object(
+              {
+                speakers: t.Array(publicIdentity),
+                next: t.Union([t.String(), t.Null()]),
+              },
+              closed,
+            ),
+          ),
+          ...publicReadFailures(),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+        },
+        detail: {
+          operationId: 'account.list_speakers',
+          'x-exposure': 'public',
+          'x-action': 'account:read_public_identity',
+          security: [{ bearerAuth: [] }, {}],
+        },
+      },
+      async ({ params, query, actor, admission, job, set }) => {
+        const at = dependencies.clock();
+        const page = await admission.run('normal', job, () =>
+          readOrganizationSpeakers(dependencies.pool, dependencies.tokens, at, {
+            ...params,
+            ...query,
+            viewer: actor.kind === 'account' ? actor.accountId : null,
+          }),
+        );
+        set.headers['cache-control'] = 'no-cache';
+        return page;
+      },
+    )
+    .post(
+      '/v1/accounts/:accountId/lifecycleReview',
+      {
+        params: strict(t.Object({ accountId: id }, closed)),
+        body: strict(
+          t.Object(
+            {
+              operatorPageKey: t.Optional(t.String({ pattern: '^[0-9a-f]{64}$' })),
+              original: t.Optional(
+                t.Object(
+                  {
+                    operationId: t.Union([
+                      t.Literal(suspensionDeclaration.operationId),
+                      t.Literal(reinstatementDeclaration.operationId),
+                    ]),
+                    key: t.String({ minLength: 1, maxLength: 255 }),
+                    reason: t.Optional(t.String({ minLength: 1, maxLength: 2000 })),
+                  },
+                  closed,
+                ),
+              ),
+            },
+            closed,
+          ),
+        ),
+        response: {
+          200: lifecycleReviewSchema,
+          ...failures(),
+          404: problemSchema('not_found'),
+          503: problemSchema('dependency_unavailable', 'deadline_exceeded', 'partition_unavailable', 'overloaded'),
+        },
+        detail: {
+          operationId: 'account.lifecycle_review',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params, body, actor, job, admission, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        set.headers['pragma'] = 'no-cache';
+        set.headers['vary'] = 'Authorization';
+        return admission.run('normal', job, () =>
+          readLifecycleReview(
+            { pool: dependencies.pool, access: dependencies.access(), clock: dependencies.clock },
+            actor,
+            { accountId: params.accountId, ...body },
+            { deadline: job.deadline },
+          ),
+        );
       },
     )
     .post(
       customMethod('/v1/accounts/:accountId', 'suspend'),
       {
-        headers,
+        headers: headers(),
         params: strict(t.Object({ accountId: id }, closed)),
         body: strict(t.Object({ reason: t.Optional(t.String({ minLength: 1, maxLength: 2000 })) }, closed)),
         response: {
@@ -236,9 +1613,9 @@ export function accessRoutes(
             ),
             { [SESSION_HEADER]: t.String() },
           ),
-          ...failures,
+          ...failures(),
         },
-        detail: { ...detail('account.suspend'), 'x-action': 'account:suspend' },
+        detail: { ...detail(suspensionDeclaration.operationId), 'x-action': suspensionDeclaration.action },
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -261,7 +1638,7 @@ export function accessRoutes(
     .post(
       customMethod('/v1/accounts/:accountId', 'reinstate'),
       {
-        headers,
+        headers: headers(),
         params: strict(t.Object({ accountId: id }, closed)),
         body: strict(t.Object({ reason: t.Optional(t.String({ minLength: 1, maxLength: 2000 })) }, closed)),
         response: {
@@ -282,10 +1659,10 @@ export function accessRoutes(
             ),
             { [SESSION_HEADER]: t.String() },
           ),
-          ...failures,
+          ...failures(),
           409: problemSchema('conflict'),
         },
-        detail: { ...detail('account.reinstate'), 'x-action': 'account:reinstate' },
+        detail: { ...detail(reinstatementDeclaration.operationId), 'x-action': reinstatementDeclaration.action },
       },
       async ({ params, body, headers, actor, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -309,7 +1686,7 @@ export function accessRoutes(
     .post(
       customMethod('/v1/accounts/:accountId', 'setRateTier'),
       {
-        headers,
+        headers: headers(),
         params: strict(t.Object({ accountId: id }, closed)),
         body: strict(
           t.Object(
@@ -337,7 +1714,7 @@ export function accessRoutes(
             ),
             { [SESSION_HEADER]: t.String() },
           ),
-          ...failures,
+          ...failures(),
           409: problemSchema('conflict'),
         },
         detail: { ...detail('account.set_rate_tier'), 'x-action': 'account:set_rate_tier' },
@@ -364,7 +1741,12 @@ export function accessRoutes(
     )
     .post(
       '/v1/grants',
-      { headers, body: strict(grant), response: { 201: response(grant), ...failures }, detail: detail('grant.create') },
+      {
+        headers: headers(),
+        body: strict(grant),
+        response: { 201: response(grant), ...failures() },
+        detail: detail('grant.create'),
+      },
       async ({ body, headers, actor, admission, job, session, status }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
@@ -382,9 +1764,9 @@ export function accessRoutes(
     .post(
       customMethod('/v1/grants', 'change'),
       {
-        headers,
+        headers: headers(),
         body: strict(grantChange),
-        response: { 200: response(grant), ...failures },
+        response: { 200: response(grant), ...failures() },
         detail: detail('grant.change'),
       },
       async ({ body, headers, actor, admission, job, session }) => {
@@ -403,7 +1785,12 @@ export function accessRoutes(
     )
     .post(
       customMethod('/v1/grants', 'revoke'),
-      { headers, body: strict(grant), response: { 200: response(grant), ...failures }, detail: detail('grant.revoke') },
+      {
+        headers: headers(),
+        body: strict(grant),
+        response: { 200: response(grant), ...failures() },
+        detail: detail('grant.revoke'),
+      },
       async ({ body, headers, actor, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
@@ -421,9 +1808,9 @@ export function accessRoutes(
     .post(
       '/v1/roleGrants',
       {
-        headers,
+        headers: headers(),
         body: strict(roleGrant),
-        response: { 201: response(roleGrant), ...failures },
+        response: { 201: response(roleGrant), ...failures() },
         detail: detail('role_grant.create'),
       },
       async ({ body, headers, actor, admission, job, session, status }) => {
@@ -441,11 +1828,36 @@ export function accessRoutes(
       },
     )
     .post(
+      customMethod('/v1/roleGrants', 'transferRealmOwner'),
+      {
+        headers: headers(),
+        body: strict(t.Object({ resource, fromAccountId: id, toAccountId: id, previousValid: valid }, closed)),
+        response: {
+          200: withHeaders(t.Object({ roleGrant }, closed), { [SESSION_HEADER]: t.String() }),
+          ...failures(),
+        },
+        detail: detail('role_grant.transfer_realm_owner'),
+      },
+      async ({ body, headers, actor, admission, job, session }) => {
+        if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
+        const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
+        try {
+          const result = await admission.run('normal', job, () =>
+            commands().transferRealmOwner({ pool: dependencies.pool, actor, deadline: job.deadline }, { ...body, key }),
+          );
+          session.record(result);
+          return { roleGrant: publicRoleGrant(result.value) };
+        } catch (error) {
+          denied(error);
+        }
+      },
+    )
+    .post(
       customMethod('/v1/roleGrants', 'change'),
       {
-        headers,
+        headers: headers(),
         body: strict(roleChange),
-        response: { 200: response(roleGrant), ...failures },
+        response: { 200: response(roleGrant), ...failures(), 409: problemSchema('realm_last_owner') },
         detail: detail('role_grant.change'),
       },
       async ({ body, headers, actor, admission, job, session }) => {
@@ -465,9 +1877,9 @@ export function accessRoutes(
     .post(
       customMethod('/v1/roleGrants', 'revoke'),
       {
-        headers,
+        headers: headers(),
         body: strict(roleGrant),
-        response: { 200: response(roleGrant), ...failures },
+        response: { 200: response(roleGrant), ...failures(), 409: problemSchema('realm_last_owner') },
         detail: detail('role_grant.revoke'),
       },
       async ({ body, headers, actor, admission, job, session }) => {

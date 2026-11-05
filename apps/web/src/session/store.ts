@@ -72,7 +72,14 @@ export class SessionStore extends DurableObject<SessionEnv> {
     return this.refreshing;
   }
 
-  private async readCredential(): Promise<Credential> {
+  // Exposure controls are a progressive enhancement. They may use a currently
+  // valid token, but a page read must not refresh one or contact Auth.
+  async credentialIfFresh(): Promise<Credential> {
+    if (this.ending) return { status: 'absent' };
+    return this.readCredential(false);
+  }
+
+  private async readCredential(refresh = true): Promise<Credential> {
     const record = await this.ctx.storage.get<Login | Session>('record');
     if (record?.kind !== 'session') return { status: 'absent' };
     if (record.expiresAt <= Date.now()) {
@@ -81,6 +88,7 @@ export class SessionStore extends DurableObject<SessionEnv> {
       return { status: 'absent' };
     }
     if (record.accessExpiresAt - Date.now() < 60_000) {
+      if (!refresh) return { status: 'unavailable', csrfToken: record.csrfToken };
       try {
         const tokens = await oidc.refreshTokenGrant(await authClient(this.env), record.refreshToken, {
           resource: this.env.API_RESOURCE,

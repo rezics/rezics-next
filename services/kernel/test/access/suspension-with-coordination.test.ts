@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { createAuthHost, type AuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { readAccount } from '../../src/access/account-data.ts';
 import { createAuthBindings } from '../../src/access/auth-bindings.ts';
 import {
@@ -12,7 +12,7 @@ import {
   LifecycleDeniedError,
 } from '../../src/access/lifecycle.ts';
 import { createOperatorCommands, OperatorDeniedError } from '../../src/access/operator.ts';
-import { createAccess as createPermissionAccess } from '../../src/access/permission.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { createRegistrationProofBindings } from '../../src/access/registration-proof.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
@@ -21,9 +21,28 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
-import type { AccountActor } from '../../src/request/access.ts';
+import type { Access } from '../../src/request/access.ts';
 import { openGrowthDatabase } from '../support/growth.ts';
 import { createRegistrationPorts } from '../support/registration-ports.ts';
+
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `suspension_with_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
 
 const issuer = 'https://suspension-coordination.auth.test';
 const audience = 'https://suspension-coordination.api.test';
@@ -32,7 +51,7 @@ const routeKey = new Uint8Array(32).fill(81);
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(82)]]) };
 const operatorActions = new Map([...LIFECYCLE_ACTIONS, ['account:manage', { anonymous: false }] as const]);
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
-let authDatabase: ReturnType<typeof testDatabase>;
+let authDatabase: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let authPool: Pool;
 let host: Awaited<ReturnType<typeof createAuthHost>>;
 let service: AuthService;
@@ -45,7 +64,7 @@ let now = Date.now();
 let lifecycle: ReturnType<typeof createLifecycleInternals>;
 let operators: ReturnType<typeof createOperatorCommands>;
 let lifecycleCommands: ReturnType<typeof createLifecycleCommands>;
-let lifecycleAccess: ReturnType<typeof createPermissionAccess>;
+let lifecycleAccess: Access;
 
 async function issue(email: string) {
   const signed = await service.handler(
@@ -103,14 +122,17 @@ async function lifecycleContext(accountId: string) {
   const account = await withConnection(db.pool, (client) => readAccount(client, routeOf(accountId)!, accountId));
   if (!account) throw new Error('missing account');
   return {
-    actor: {
-      kind: 'account',
-      accountId,
-      clientId: 'verified-client',
-      requestedBy: null,
-      authnEpoch: Number(account.minimumAuthnEpoch),
-      scopes: [...LIFECYCLE_ACTIONS.keys()],
-    } as AccountActor,
+    actor: await authenticateAccount(
+      lifecycleAccess,
+      { pool: db.pool, deadline: Date.now() + 10_000 },
+      {
+        accountId,
+        clientId: 'verified-client',
+        requestedBy: null,
+        authnEpoch: Number(account.minimumAuthnEpoch),
+        scopes: [...LIFECYCLE_ACTIONS.keys()],
+      },
+    ),
     account,
     deadline: Date.now() + 10000,
   };
@@ -177,7 +199,7 @@ beforeAll(async () => {
   });
   const actions = actionCatalogue(kernel);
   scopes = [...actions.keys()].filter((action) => action !== 'media:complete');
-  authDatabase = testDatabase();
+  authDatabase = await cloneAuthDatabase();
   authPool = new Pool({ connectionString: authDatabase.url });
   signingKey = {
     ...(await exportJWK((await generateKeyPair('ES256', { extractable: true })).privateKey)),
@@ -192,10 +214,7 @@ beforeAll(async () => {
       fetch: async () => service.handler(new Request(`${issuer}/.well-known/jwks.json`)),
     },
   });
-  lifecycleAccess = createPermissionAccess({
-    actions: operatorActions,
-    accountEvidence: (_actor, evidence) => evidence.account ?? null,
-  });
+  lifecycleAccess = admittedAccess({ actions: operatorActions });
   operators = createOperatorCommands({
     pool: db.pool,
     access: lifecycleAccess,
@@ -241,7 +260,7 @@ beforeAll(async () => {
 }, 60000);
 afterAll(async () => {
   await host?.stop();
-  authDatabase?.close();
+  await authDatabase?.close();
   await db?.close();
 });
 

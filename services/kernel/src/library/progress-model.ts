@@ -1,3 +1,4 @@
+import type { LibraryCountForms } from '@rezics/definitions';
 import type { ProgressMode, ProgressState, ProgressUnit } from './progress.ts';
 
 export type { ProgressIntent, ProgressMode, ProgressState, ProgressUnit } from './progress.ts';
@@ -28,7 +29,21 @@ export type ProgressSession = Omit<ProgressSessionRow, 'route' | 'mode' | 'unit'
   mode: ProgressMode;
   unit: ProgressUnit;
   state: ProgressState;
+  measures?: ProgressScalarMeasure[];
 };
+
+export type {
+  ProgressSessionJournalDate,
+  ProgressSessionJournalAssessment,
+  ProgressSessionJournal,
+  ProgressSessionJournalPatch,
+  ProgressSessionJournalWrite,
+  ProgressScalarMeasure,
+  ProgressMeasureDraft,
+  ProgressInputRules,
+} from '@rezics/progress';
+import type { ProgressScalarMeasure, ProgressInputRules, ProgressMeasureDraft } from '@rezics/progress';
+export type ProgressMeasurePresentation = { unit: ProgressUnit; presentation: ProgressPresentation };
 
 export type ProgressSessionDraft = {
   id: string;
@@ -38,6 +53,7 @@ export type ProgressSessionDraft = {
   mode: ProgressMode;
   unit: ProgressUnit;
   total: string | null;
+  additionalMeasures?: readonly ProgressMeasureDraft[];
 };
 
 /** The next mode value and state. Columns that belong to another mode stay null, and the unit count stays 0. */
@@ -48,6 +64,7 @@ export type ProgressSessionUpdate = {
   completedUnitCount: number;
   state: ProgressState;
   completedAt: string | null;
+  measures?: ProgressScalarMeasure[];
 };
 
 export type ProgressSessionPage = {
@@ -89,3 +106,16 @@ export type ProgressChangePage = {
 
 export const MAX_PROGRESS_PAGE_SIZE = 100;
 export const MAX_PROGRESS_UNIT_IDS = 100;
+
+/** Opt-in owner detail only. No source identity or private accepting pin enters this DTO. */
+export type ProgressPresentation = Readonly<{
+  meaning: 'known' | 'unknown' | 'unavailable';
+  unitLabel?: string;
+  unitLabelLanguage?: string;
+  unitCountForms?: Readonly<LibraryCountForms>;
+  dimension?: string;
+  structure: 'unverified';
+  recording: Readonly<
+    { state: 'supported'; inputRules: ProgressInputRules } | { state: 'unsupported' | 'unavailable' }
+  >;
+}>;

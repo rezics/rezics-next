@@ -1,0 +1,81 @@
+import { accountHref, subjectHref } from '../../subject/subject-href';
+import { threadLocation } from '../../threads/thread-href';
+import { m } from '../../paraglide/messages.js';
+import type { Locale } from '../../paraglide/runtime.js';
+import type { FeedItem } from './home-feed-read';
+
+export function homeFeedTitle(item: FeedItem, locale: string): string {
+  if ('label' in item.summary)
+    return item.summary.label?.value || m.subject_value_unlabelled({}, { locale: locale as Locale });
+  if ('displayName' in item.summary)
+    return (
+      item.summary.displayName ||
+      (item.summary.handle ? `@${item.summary.handle}` : m.discovery_unnamed_account({}, { locale: locale as Locale }))
+    );
+  return item.summary.title || m.threads_untitled({}, { locale: locale as Locale });
+}
+
+/** Canonical local owner addresses, independent of source-provided URL strings. */
+export function homeFeedDestination(item: FeedItem, locale: string): string | undefined {
+  const destination = item.destination;
+  // Public owner links must name the exact disclosed owner, including retained activity rows.
+  if (
+    (destination.kind === 'collection' || destination.kind === 'space') &&
+    (item.key.id !== destination.id || item.summary.id !== destination.id)
+  )
+    return;
+  if (
+    destination.kind === 'space' &&
+    (item.key.owner !== 'content' ||
+      item.key.kind !== 'space' ||
+      !('address' in item.summary) ||
+      destination.address !== item.summary.address)
+  )
+    return;
+  switch (destination.kind) {
+    case 'subject':
+      return subjectHref({ id: destination.id, label: homeFeedTitle(item, locale) }, locale).href;
+    case 'account': {
+      const handle = 'handle' in item.summary ? item.summary.handle : null;
+      return handle && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(handle) ? accountHref(locale, handle) : undefined;
+    }
+    case 'thread':
+      return threadLocation(locale, destination);
+    case 'post':
+      // A fragment alone only selects posts already on the rendered page.
+      // Let Content locate this post before reading its bounded page.
+      return threadLocation(
+        locale,
+        { id: destination.threadId, title: destination.title },
+        undefined,
+        destination.postId,
+      );
+    case 'collection':
+      return `/${encodeURIComponent(locale)}/collections/${encodeURIComponent(destination.id)}`;
+    case 'space':
+      return destination.address
+        ? `/${encodeURIComponent(locale)}/spaces/${encodeURIComponent(destination.address)}`
+        : undefined;
+  }
+}
+
+/** A Realm link uses only the disclosed carrier on the exact native Space row. */
+export function homeFeedRealmDestination(item: FeedItem, locale: string): string | undefined {
+  const { destination, summary } = item;
+  if (
+    destination.kind !== 'space' ||
+    !homeFeedDestination(item, locale) ||
+    !('realm' in summary) ||
+    summary.realm == null
+  )
+    return;
+  return `/${encodeURIComponent(locale)}/realms/${encodeURIComponent(summary.realm.id)}`;
+}
+
+export function homeFeedResume(item: FeedItem, locale: string): string | undefined {
+  if (item.source !== 'continue') return;
+  const session = item.continue.activeProgressSession;
+  return session
+    ? `/${encodeURIComponent(locale)}/library/progress/${encodeURIComponent(session.id)}`
+    : `/${encodeURIComponent(locale)}/library/progress?subjectId=${encodeURIComponent(item.continue.subjectId)}`;
+}

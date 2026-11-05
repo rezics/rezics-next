@@ -1,8 +1,24 @@
+import { createAuthErasureLiveBindings } from './auth-erasure-live.ts';
+import { createAuthErasureObligationBindings } from './auth-erasure-obligations.ts';
+import { accessClock } from './access-clock.ts';
+import { systemClock } from '../clock.ts';
+import type { Access } from '../request/access.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
 import type {
+  AuthErasureProofPorts,
+  AuthReceivingClosurePorts,
+  AuthErasureLivePorts,
+  AuthErasureLiveReceiver,
+  AuthErasureObligationPorts,
   AccessAccount,
   ProvisioningReceiptMetadata,
   EffectAuthorization,
+  CredentialEffectAuthorization,
+  CredentialFloorPurpose,
+  CredentialPurpose,
+  PasskeyPurpose,
+  PasskeyAuthorizationInput,
+  PasskeyTrustedAccessPorts,
   InvalidationReceipt,
   TrustedAccessPorts,
 } from '@rezics/auth-contract';
@@ -13,14 +29,14 @@ import type { createLifecycleInternals, LifecycleFenceReceipt } from './lifecycl
 import type { OperatorOpening } from './operator.ts';
 import registrationRead from './auth-bindings-read.sql';
 
-type ConsumeInput = Parameters<NonNullable<TrustedAccessPorts['consumeAuthorization']>>[0];
+type ConsumeInput = Parameters<NonNullable<TrustedAccessPorts['consumeAuthorization']>>[0] | PasskeyAuthorizationInput;
 type InvalidateInput = Parameters<NonNullable<TrustedAccessPorts['invalidateAccount']>>[0];
 type RecoveryInput = Parameters<NonNullable<TrustedAccessPorts['authorizeRecovery']>>[0];
 export type AuthProvisioningReceipt = Awaited<
   ReturnType<ReturnType<typeof createLifecycleInternals>['createPending']>
 >['value'];
-export type AuthAuthorizationReceipt = {
-  authorization: EffectAuthorization;
+export type AuthAuthorizationReceipt<Purpose extends CredentialFloorPurpose = CredentialPurpose> = {
+  authorization: EffectAuthorization | CredentialEffectAuthorization<Purpose>;
   /** Required for automation; a broad native credential purpose never replaces the exact Auth purpose. */
   operatorOpening: OperatorOpening | null;
 };
@@ -29,24 +45,28 @@ export type AuthAuthorizationReceipt = {
  * epoch checks. These callbacks are capabilities, never request JSON or authorization flags.
  * Workflow/provider implementations can bind here without another account or policy authority.
  */
-export type AuthBindingCapabilities = {
-  /** Native pending reader, including verified original receipt metadata. The
-   * composition must also verify current workflow approval for automated chains. */
-  verifyPendingIdentity?: (reference: string) => Promise<
-    | (AccessAccount & {
-        operatorAccountId: string | null;
-        registrationId: string;
-        expiresAt: string;
-        receipt: ProvisioningReceiptMetadata;
-      })
-    | null
-  >;
-  verifyProvisioningReceipt?: (commandReference: string) => Promise<AuthProvisioningReceipt | null>;
-  consumeAuthAuthorization?: (input: ConsumeInput) => Promise<AuthAuthorizationReceipt | null>;
-  invalidateAccount?: (input: InvalidateInput) => Promise<LifecycleFenceReceipt | null>;
-  authorizeRecovery?: (input: RecoveryInput) => Promise<LifecycleFenceReceipt | null>;
-  completeRecovery?: TrustedAccessPorts['completeRecovery'];
-};
+export type AuthBindingCapabilities = AuthErasureProofPorts &
+  Partial<AuthReceivingClosurePorts> & {
+    /** Native pending reader, including verified original receipt metadata. The
+     * composition must also verify current workflow approval for automated chains. */
+    verifyPendingIdentity?: (reference: string) => Promise<
+      | (AccessAccount & {
+          operatorAccountId: string | null;
+          registrationId: string;
+          expiresAt: string;
+          receipt: ProvisioningReceiptMetadata;
+        })
+      | null
+    >;
+    verifyProvisioningReceipt?: (commandReference: string) => Promise<AuthProvisioningReceipt | null>;
+    consumeAuthAuthorization?: (
+      input: ConsumeInput,
+    ) => Promise<AuthAuthorizationReceipt<CredentialFloorPurpose> | null>;
+    invalidateAccount?: (input: InvalidateInput) => Promise<LifecycleFenceReceipt | null>;
+    authorizeRecovery?: (input: RecoveryInput) => Promise<LifecycleFenceReceipt | null>;
+    completeRecovery?: TrustedAccessPorts['completeRecovery'];
+    confirmBarrier?: TrustedAccessPorts['confirmBarrier'];
+  };
 export class AuthBindingUnavailableError extends Error {
   constructor(capability: keyof AuthBindingCapabilities) {
     super(`Auth binding capability unavailable: ${capability}`);
@@ -71,8 +91,8 @@ function floor(value: bigint): number {
   allowed(value > 0n && value <= BigInt(Number.MAX_SAFE_INTEGER));
   return Number(value);
 }
-function live(value: string): boolean {
-  return typeof value === 'string' && Number.isFinite(Date.parse(value)) && Date.parse(value) > Date.now();
+function live(value: string, at: number): boolean {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) && Date.parse(value) > at;
 }
 function scopes(left: string[], right: string[]): boolean {
   return (
@@ -82,12 +102,24 @@ function scopes(left: string[], right: string[]): boolean {
     JSON.stringify([...left].sort()) === JSON.stringify([...right].sort())
   );
 }
-function translate(account: Account | null, recovery = false): AccessAccount | null {
+/** `open` denies a fence; `recovery` admits a fenced human without an operator;
+ * `fenced` admits only a fenced account; `signin` additionally reports suspended humans privately. */
+type ReadMode = 'open' | 'recovery' | 'fenced' | 'signin';
+function admitted(account: Account, mode: ReadMode): boolean {
+  if (mode === 'recovery') return account.kind === 'actor' && account.operatorAccountId === null;
+  return mode === 'fenced' ? account.fenced : !account.fenced;
+}
+function translate(account: Account | null, mode: ReadMode = 'open'): AccessAccount | null {
+  const suspendedHuman =
+    mode === 'signin' &&
+    account?.state === 'suspended' &&
+    account.kind === 'actor' &&
+    account.operatorAccountId === null;
   if (
     !account ||
-    account.state !== 'active' ||
+    (!suspendedHuman && account.state !== 'active') ||
     (account.kind !== 'actor' && account.kind !== 'organization') ||
-    (recovery ? account.kind !== 'actor' || account.operatorAccountId !== null : account.fenced)
+    (!suspendedHuman && !admitted(account, mode))
   )
     return null;
   return {
@@ -104,7 +136,20 @@ function translate(account: Account | null, recovery = false): AccessAccount | n
  * account cache, policy evaluator, fence clearing or cross-account workflow runs here.
  * Callback fixtures establish this structural contract only, not product authorization.
  */
-export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilities): TrustedAccessPorts {
+type AuthBindingConfig = {
+  pool: Pool;
+  access?: Access;
+  authErasureLiveReceiver?: AuthErasureLiveReceiver;
+} & AuthBindingCapabilities;
+export function createAuthBindings(
+  config: AuthBindingConfig & { authErasureLiveReceiver: AuthErasureLiveReceiver },
+): PasskeyTrustedAccessPorts & AuthErasureObligationPorts & AuthErasureLivePorts;
+export function createAuthBindings(
+  config: AuthBindingConfig,
+): PasskeyTrustedAccessPorts & AuthErasureObligationPorts & Partial<AuthErasureLivePorts>;
+export function createAuthBindings(
+  config: AuthBindingConfig,
+): PasskeyTrustedAccessPorts & AuthErasureObligationPorts & Partial<AuthErasureLivePorts> {
   const {
     pool,
     verifyPendingIdentity,
@@ -113,6 +158,8 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
     invalidateAccount,
     authorizeRecovery,
   } = config;
+  const clock = config.access ? accessClock(config.access) : systemClock;
+  const liveAt = (value: string) => live(value, clock().getTime());
   async function account(id: string): Promise<Account | null> {
     const route = routeOf(id);
     if (route === null) return null;
@@ -123,9 +170,9 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
       return null;
     }
   }
-  async function read(id: string, recovery = false): Promise<AccessAccount | null> {
+  async function read(id: string, mode: ReadMode = 'open'): Promise<AccessAccount | null> {
     try {
-      return translate(await account(id), recovery);
+      return translate(await account(id), mode);
     } catch (error) {
       throwAccessUnavailable(error);
       return null;
@@ -134,12 +181,12 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
   async function provisioning(id: string | null, reference: string) {
     if (verifyPendingIdentity) {
       const pending = await verifyPendingIdentity(reference);
-      allowed(pending && (id === null || pending.accountId === id) && live(pending.expiresAt));
+      allowed(pending && (id === null || pending.accountId === id) && liveAt(pending.expiresAt));
       return pending;
     }
     if (!verifyProvisioningReceipt || typeof reference !== 'string' || reference.length === 0) return null;
     const receipt = await verifyProvisioningReceipt(reference);
-    allowed(receipt && (id === null || receipt.accountId === id) && live(receipt.expiresAt));
+    allowed(receipt && (id === null || receipt.accountId === id) && liveAt(receipt.expiresAt));
     const current = await account(receipt.accountId);
     allowed(current && current.kind === 'actor' && current.state === 'pending' && !current.fenced);
     const authnEpoch = floor(current.minimumAuthnEpoch);
@@ -148,6 +195,7 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
       route: routeOf(current.accountId)!,
       account_id: current.accountId,
       expires_at: receipt.expiresAt,
+      at: clock().toISOString(),
     });
     allowed(
       registration &&
@@ -155,7 +203,7 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
         typeof receipt.registrationId === 'string' &&
         receipt.registrationId.length > 0 &&
         registration.expiresAt &&
-        live(registration.expiresAt) &&
+        liveAt(registration.expiresAt) &&
         Date.parse(registration.expiresAt) === Date.parse(receipt.expiresAt),
     );
     return {
@@ -206,9 +254,115 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
       fenced: true,
     };
   }
+  async function consumeFloorAuthorization(input: ConsumeInput) {
+    if (input.purpose !== 'session' && (!input.operationKey || !input.effectReference))
+      throw new AuthBindingUnavailableError('consumeAuthAuthorization');
+    if (!consumeAuthAuthorization) throw new AuthBindingUnavailableError('consumeAuthAuthorization');
+    allowed(
+      ['session', 'set-password', 'remove-password', 'add-key', 'remove-key', 'add-passkey', 'remove-passkey'].includes(
+        input.purpose,
+      ) &&
+        typeof input.authorization === 'string' &&
+        input.authorization.length > 0 &&
+        epoch(input.human.authn_epoch),
+    );
+    const before = await account(input.subjectAccountId);
+    const human = await read(input.human.account_id, 'recovery');
+    allowed(
+      translate(before)?.kind === 'actor' && human && !human.fenced && input.human.authn_epoch >= human.authnEpoch,
+    );
+    if (input.purpose === 'add-passkey' || input.purpose === 'remove-passkey')
+      allowed(before?.operatorAccountId === null && input.subjectAccountId === input.human.account_id);
+    // Preserve Auth's actual SessionProof and caller evidence for the coordinator.
+    const consumed = await consumeAuthAuthorization(input);
+    const result = consumed?.authorization;
+    const current = await account(input.subjectAccountId);
+    const subject = translate(current);
+    allowed(
+      result &&
+        typeof result.receiptId === 'string' &&
+        result.receiptId.length > 0 &&
+        result.subjectAccountId === input.subjectAccountId &&
+        result.purpose === input.purpose &&
+        result.actingHumanId === input.human.account_id &&
+        result.humanEpoch === input.human.authn_epoch &&
+        result.clientId === input.human.client_id &&
+        scopes(result.scopes, input.human.scope) &&
+        liveAt(result.expiresAt) &&
+        subject &&
+        subject.kind === 'actor' &&
+        epoch(result.subjectEpoch) &&
+        result.subjectEpoch === subject.authnEpoch &&
+        current!.operatorAccountId === result.operatorAccountId,
+    );
+    if (input.purpose !== 'session')
+      allowed(
+        result.operationKey === input.operationKey &&
+          result.effectReference === input.effectReference &&
+          typeof result.effectDigest === 'string' &&
+          /^[a-f0-9]{64}$/.test(result.effectDigest),
+      );
+    const opening = consumed!.operatorOpening;
+    if (subject.automated) {
+      allowed(
+        opening &&
+          opening.receiptId === result.receiptId &&
+          opening.subjectAccountId === result.subjectAccountId &&
+          opening.operatorAccountId === result.operatorAccountId &&
+          opening.actingHumanId === result.actingHumanId &&
+          opening.clientId === result.clientId &&
+          scopes(opening.scopes, result.scopes) &&
+          opening.requestedBy === null &&
+          opening.purpose === (input.purpose === 'session' ? 'session' : 'credential-management') &&
+          liveAt(opening.expiresAt) &&
+          Date.parse(opening.expiresAt) === Date.parse(result.expiresAt),
+      );
+    } else allowed(!opening && result.operatorAccountId === null && result.actingHumanId === subject.accountId);
+    if (result.invalidation) {
+      allowed(
+        epoch(result.invalidation.minimumAuthnEpoch) &&
+          result.invalidation.receiptId &&
+          result.invalidation.accountId === subject.accountId &&
+          result.invalidation.minimumAuthnEpoch === subject.authnEpoch &&
+          result.invalidation.minimumAuthnEpoch > floor(before!.minimumAuthnEpoch),
+      );
+    }
+    return result;
+  }
   return {
+    ...createAuthErasureObligationBindings(pool),
+    ...(config.authErasureLiveReceiver ? createAuthErasureLiveBindings(pool, config.authErasureLiveReceiver) : {}),
+    passkeys: true,
+    async readAuthErasureBarrier(id) {
+      if (!config.readAuthErasureBarrier) throw new AuthBindingUnavailableError('readAuthErasureBarrier');
+      return config.readAuthErasureBarrier(id);
+    },
+    async readAuthErasureSource(input) {
+      if (!config.readAuthErasureSource) throw new AuthBindingUnavailableError('readAuthErasureSource');
+      return config.readAuthErasureSource(input);
+    },
+    async recordAuthNativeConsumption(source) {
+      if (!config.recordAuthNativeConsumption) throw new AuthBindingUnavailableError('recordAuthNativeConsumption');
+      return config.recordAuthNativeConsumption(source);
+    },
+    async recordAuthHistoryCompletion(barrier) {
+      if (!config.recordAuthHistoryCompletion) throw new AuthBindingUnavailableError('recordAuthHistoryCompletion');
+      return config.recordAuthHistoryCompletion(barrier);
+    },
+    ...(config.readAuthReceivingControl ? { readAuthReceivingControl: config.readAuthReceivingControl } : {}),
+    ...(config.registerAuthReceivingClosure
+      ? { registerAuthReceivingClosure: config.registerAuthReceivingClosure }
+      : {}),
+    ...(config.invalidateAuthReceivingClosure
+      ? { invalidateAuthReceivingClosure: config.invalidateAuthReceivingClosure }
+      : {}),
+    ...(config.publishAuthReceivingClosure ? { publishAuthReceivingClosure: config.publishAuthReceivingClosure } : {}),
     ...(config.completeRecovery ? { completeRecovery: config.completeRecovery } : {}),
-    readAccount: (id) => read(id),
+    async confirmBarrier(input) {
+      if (!config.confirmBarrier) throw new AuthBindingUnavailableError('confirmBarrier');
+      return config.confirmBarrier(input);
+    },
+    readAccount: (id, purpose) => read(id, purpose === 'signin' ? 'signin' : 'open'),
     readErasureAccount: async (id) => {
       try {
         return await erasure(id);
@@ -225,7 +379,8 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
         return null;
       }
     },
-    readRecoveryAccount: (id) => read(id, true),
+    readRecoveryAccount: (id) => read(id, 'recovery'),
+    readFencedAccount: (id) => read(id, 'fenced'),
     async authorizeProvisioning(reference) {
       if (!verifyProvisioningReceipt && !verifyPendingIdentity)
         throw new AuthBindingUnavailableError('verifyProvisioningReceipt');
@@ -235,75 +390,15 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
       return { accountId: current.accountId, ...('receipt' in current ? { receipt: current.receipt } : {}) };
     },
     async consumeAuthorization(input) {
-      if (input.purpose !== 'session' && (!input.operationKey || !input.effectReference))
-        throw new AuthBindingUnavailableError('consumeAuthAuthorization');
-      if (!consumeAuthAuthorization) throw new AuthBindingUnavailableError('consumeAuthAuthorization');
-      allowed(
-        ['session', 'set-password', 'remove-password', 'add-key', 'remove-key'].includes(input.purpose) &&
-          typeof input.authorization === 'string' &&
-          input.authorization.length > 0 &&
-          epoch(input.human.authn_epoch),
-      );
-      const before = await account(input.subjectAccountId);
-      const human = await read(input.human.account_id, true);
-      allowed(
-        translate(before)?.kind === 'actor' && human && !human.fenced && input.human.authn_epoch >= human.authnEpoch,
-      );
-      // Preserve Auth's actual SessionProof and caller evidence for the coordinator.
-      const consumed = await consumeAuthAuthorization(input);
-      const result = consumed?.authorization;
-      const current = await account(input.subjectAccountId);
-      const subject = translate(current);
-      allowed(
-        result &&
-          typeof result.receiptId === 'string' &&
-          result.receiptId.length > 0 &&
-          result.subjectAccountId === input.subjectAccountId &&
-          result.purpose === input.purpose &&
-          result.actingHumanId === input.human.account_id &&
-          result.humanEpoch === input.human.authn_epoch &&
-          result.clientId === input.human.client_id &&
-          scopes(result.scopes, input.human.scope) &&
-          live(result.expiresAt) &&
-          subject &&
-          subject.kind === 'actor' &&
-          epoch(result.subjectEpoch) &&
-          result.subjectEpoch === subject.authnEpoch &&
-          current!.operatorAccountId === result.operatorAccountId,
-      );
-      if (input.purpose !== 'session')
-        allowed(
-          result.operationKey === input.operationKey &&
-            result.effectReference === input.effectReference &&
-            typeof result.effectDigest === 'string' &&
-            /^[a-f0-9]{64}$/.test(result.effectDigest),
-        );
-      const opening = consumed!.operatorOpening;
-      if (subject.automated) {
-        allowed(
-          opening &&
-            opening.receiptId === result.receiptId &&
-            opening.subjectAccountId === result.subjectAccountId &&
-            opening.operatorAccountId === result.operatorAccountId &&
-            opening.actingHumanId === result.actingHumanId &&
-            opening.clientId === result.clientId &&
-            scopes(opening.scopes, result.scopes) &&
-            opening.requestedBy === null &&
-            opening.purpose === (input.purpose === 'session' ? 'session' : 'credential-management') &&
-            live(opening.expiresAt) &&
-            Date.parse(opening.expiresAt) === Date.parse(result.expiresAt),
-        );
-      } else allowed(!opening && result.operatorAccountId === null && result.actingHumanId === subject.accountId);
-      if (result.invalidation) {
-        allowed(
-          epoch(result.invalidation.minimumAuthnEpoch) &&
-            result.invalidation.receiptId &&
-            result.invalidation.accountId === subject.accountId &&
-            result.invalidation.minimumAuthnEpoch === subject.authnEpoch &&
-            result.invalidation.minimumAuthnEpoch > floor(before!.minimumAuthnEpoch),
-        );
-      }
-      return result;
+      const result = await consumeFloorAuthorization(input);
+      allowed(result.purpose !== 'add-passkey' && result.purpose !== 'remove-passkey');
+      return result as EffectAuthorization;
+    },
+    async consumePasskeyAuthorization(input) {
+      allowed(input.purpose === 'add-passkey' || input.purpose === 'remove-passkey');
+      allowed(input.subjectAccountId === input.human.account_id);
+      const result = await consumeFloorAuthorization(input);
+      return result as CredentialEffectAuthorization<PasskeyPurpose>;
     },
     async invalidateAccount(input) {
       if (!invalidateAccount) throw new AuthBindingUnavailableError('invalidateAccount');
@@ -320,7 +415,7 @@ export function createAuthBindings(config: { pool: Pool } & AuthBindingCapabilit
     async authorizeRecovery(input) {
       if (!authorizeRecovery) throw new AuthBindingUnavailableError('authorizeRecovery');
       const before = await account(input.accountId);
-      const human = translate(before, true);
+      const human = translate(before, 'recovery');
       allowed(human && epoch(input.proofEpoch) && human.authnEpoch === input.proofEpoch);
       return barrier(await authorizeRecovery(input), before!, input.proofEpoch);
     },

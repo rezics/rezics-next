@@ -1,0 +1,22 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as Stories from './edition-publication.stories';
+
+<Meta of={Stories} />
+
+# Edition publication
+
+The creator selects an actual own readable exact revision, previews its canonical document and licence, and chooses
+one original subject association. A separate confirmation publishes the fixed draft. Only native command confirmation
+and a bound current edition read expose the published ID and reader link. Commerce consumes that ID in its existing
+offer editor.
+
+Selection, Draft, Published, Refused, Conflict and Uncertain use the same controller, document renderer and component
+as `/editions/new`. Pages mount the actual creator route inside AppShell, which owns the main landmark. Selection
+plays through publication; Uncertain retries the original create intent with its selected subject and preview retained.
+These are two focused interaction cases. Use the existing phone390/desktop1280, locale and light/dark globals.
+
+The fixture transport constructs the producer's closed source, viewer-action, command and metadata responses. It is
+neither a native recording nor an authority fallback in the application. Current Content viewer-action registration
+is still missing from this checkout; the application reports typed admission unavailability. No document, permission
+or published ID is fabricated by the runtime. See the Web README for bounds and integration edges. Native, browser,
+physical and visual verification remain for integration and Web review.

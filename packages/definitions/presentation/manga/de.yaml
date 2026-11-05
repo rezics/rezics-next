@@ -1,3 +1,6 @@
 types:
   schema:ComicSeries: Mangaserie
   schema:PublicationVolume: Band
+typeDescriptions:
+  schema:ComicSeries: 'Ein Manga- oder Comicserienwerk unabhängig von seinen veröffentlichten Bänden; nicht auf japanische Herkunft beschränkt.'
+  schema:PublicationVolume: 'Ein eigenständig benennbarer veröffentlichter Band eines Manga-Werks; Reihe verknüpfen und Bandnummer als Position angeben.'

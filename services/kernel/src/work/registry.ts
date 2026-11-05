@@ -2,8 +2,17 @@ import { DBOS } from '@dbos-inc/dbos-sdk';
 import type { Pool } from 'pg';
 import { systemClock, type KernelClock } from '../clock.ts';
 import { DBOS_SCHEMA, WORK_APPLICATION, type WorkClient } from './client.ts';
-import { registerEffects, type Effect } from '../events/effects.ts';
+import { registerEffects, type Effect, type NativeEffect } from '../events/effects.ts';
 import { WORK_QUEUES } from './queues.ts';
+import { HistoryRegistry } from '../history/registry.ts';
+import type { KeyRing } from '../tokens/seal.ts';
+import { createWorkerAuthorization, type WorkerAuthorization } from './authorization.ts';
+import type { KindConsentParticipant } from '@rezics/auth-contract';
+import { bindIdentityOriginalEffect, IDENTITY_FX_EFFECT } from '../history/identity-original-association.ts';
+import { readAuthConsentConfig } from '../access/auth-consent.ts';
+import { createKindConsentParticipantTransport } from './kind-consent-transport.ts';
+
+import { composeSelectedRuntime, type SelectedRuntime } from './selected-runtime.ts';
 
 export type WorkService = { stop(): Promise<void> };
 
@@ -13,7 +22,12 @@ export type WorkContext = {
   readonly client: WorkClient;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly clock: KernelClock;
+  readonly history?: HistoryRegistry;
+  getAuthorization(): WorkerAuthorization;
+  getSelectedRuntime?(): SelectedRuntime;
+  getKindConsentParticipant?(deadline: number): KindConsentParticipant | undefined;
   addEffects(effects: Effect[]): void;
+  addNativeEffects?(effects: NativeEffect[]): void;
   addService(start: () => WorkService | Promise<WorkService>): void;
 };
 export type WorkModule = { name: string; register(context: WorkContext): void | Promise<void> };
@@ -25,6 +39,7 @@ export type WorkOptions = {
   env?: Readonly<Record<string, string | undefined>>;
   /** Trusted service composition only. */
   clock?: KernelClock;
+  receiptKeys?: KeyRing;
 };
 
 let composed = false;
@@ -39,6 +54,7 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
     names.add(module.name);
   }
   const clock = options.clock ?? systemClock;
+  const env = options.env ?? process.env;
   composed = true;
   DBOS.setConfig({
     name: WORK_APPLICATION,
@@ -54,18 +70,49 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
   for (const [name, parameters] of Object.entries(WORK_QUEUES)) {
     await options.client.registerQueue(name, parameters);
   }
-  const collectedEffects: Effect[] = [];
+  const collectedEffects: Array<Effect | NativeEffect> = [];
+  const history = new HistoryRegistry();
   const serviceStarters: Array<() => WorkService | Promise<WorkService>> = [];
   const started: WorkService[] = [];
   let accepting = true;
+  let authorization: WorkerAuthorization | undefined;
+  let selectedRuntime: SelectedRuntime | undefined;
   const context: WorkContext = Object.freeze({
     pool: options.pool,
     queues: WORK_QUEUES,
     client: options.client,
-    env: options.env ?? process.env,
+    env,
     clock,
+    history,
+    getSelectedRuntime() {
+      return (selectedRuntime ??= composeSelectedRuntime(options.pool, options.client));
+    },
+    getAuthorization() {
+      return (authorization ??= createWorkerAuthorization({
+        pool: options.pool,
+        client: options.client,
+        env,
+        clock,
+        ...(options.receiptKeys === undefined ? {} : { receiptKeys: options.receiptKeys }),
+      }));
+    },
+    getKindConsentParticipant(deadline) {
+      const config = readAuthConsentConfig(env);
+      if (!config) return undefined;
+      return createKindConsentParticipantTransport(config, deadline);
+    },
     addEffects(effects) {
       if (!accepting) throw new Error('Cannot add effects after work composition');
+      collectedEffects.push(
+        ...effects.map((effect) =>
+          effect.name === IDENTITY_FX_EFFECT
+            ? bindIdentityOriginalEffect(effect, { pool: options.pool, client: options.client })
+            : effect,
+        ),
+      );
+    },
+    addNativeEffects(effects) {
+      if (!accepting) throw new Error('Cannot add native effects after work composition');
       collectedEffects.push(...effects);
     },
     addService(start) {
@@ -78,7 +125,8 @@ export async function composeWork(modules: readonly WorkModule[], options: WorkO
   } finally {
     accepting = false;
   }
-  const effects = registerEffects(collectedEffects);
+  const effects = registerEffects(collectedEffects, options.pool);
+  history.seal();
 
   // Stop every service. One failure does not skip the rest; the first one is returned.
   const stopServices = async (services: readonly WorkService[]): Promise<unknown> => {

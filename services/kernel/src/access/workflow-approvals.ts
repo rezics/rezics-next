@@ -1,30 +1,43 @@
+import { memoizedValue } from '../memoized.ts';
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
+import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
+import { HANDLE_LOOKUP_PATTERN, isClaimHandle } from './handle-policy.ts';
+import { accessClock } from './access-clock.ts';
 import { accessEvidence, throwEvidenceFailure } from './evidence.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { createSuspensionCommands } from './suspension.ts';
-import type { CredentialEffectBinding } from '@rezics/auth-contract';
+import { createSessionRevocationCommands } from './session-revocation.ts';
+import type { CredentialFloorBinding as CredentialEffectBinding } from '@rezics/auth-contract';
 import credentialConsume from './workflow-approvals-credential-consume.sql';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type {
   AccountOperation as ContractAccountOperation,
   NativeWorkflowProofPorts,
+  NativeCreationContext,
   WorkflowResponsibility,
 } from '@rezics/auth-contract';
 import type { Pool } from 'pg';
 import type { Access, AccessContext, AccountActor, ActionCatalogue } from '../request/access.ts';
 import { seal, unseal, type KeyRing } from '../tokens/seal.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
-import { authoritativeTimeValue, runCommand, type CommandAuthorization } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  IdempotencyConflictError,
+  runCommand,
+  type CommandAuthorization,
+} from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
 import { deadlineClient, within } from './authenticate.ts';
 import { readAccount } from './account-data.ts';
 import {
   APPROVAL_REFERENCE_PURPOSE,
   approvalRowDigest,
-  approvalClock,
   readApprovedIdentity,
+  ApprovalIdentityDeniedError,
   ApprovalIdentityUnavailableError,
-  verifiedBearerExpiry,
+  verifiedKernelExpiry,
+  type ApprovalRow,
 } from './approved-identity.ts';
 import { resourceAuthorization } from './resource-authorization.ts';
 import { GrantDeniedError } from './grant-commands.ts';
@@ -34,6 +47,8 @@ import credentialRead from './auth-credential-capability-workflow-read.sql';
 import approvalInsert from './workflow-approvals-insert.sql';
 import approvalSweep from './workflow-approvals-sweep.sql';
 import clientManagementAnchor from './workflow-approvals-client-anchor.sql';
+import tombstoneOperator from './workflow-approvals-tombstone-operator.sql';
+import ownersRead from './lifecycle-owners.sql';
 import operatorAccount from './operator-account.sql';
 import operatorSlot from './operator-slot.sql';
 import { PLATFORM_RESOURCE } from './bootstrap-governance.ts';
@@ -49,6 +64,8 @@ export type CredentialOperation = Pick<
   'subjectAccountId' | 'purpose' | 'operationKey' | 'effectReference' | 'effectDigest'
 > & { kind: 'credential'; subjectEpoch: number; authorization: string };
 type TransferOperation = Extract<ContractAccountOperation, { kind: 'transfer' }> & { acceptance?: string };
+/** The contract's revoke carries no approval reference; this adapter binds one and denies a request without. */
+type RevokeOperation = { kind: 'revoke'; accountId: string; authorization?: string };
 type TransferAcceptanceOperation = {
   kind: 'transfer-acceptance';
   previous: WorkflowResponsibility;
@@ -57,20 +74,33 @@ type TransferAcceptanceOperation = {
   sourceOperationKey: string;
   authorization: string;
 };
-type AccountOperation =
-  | Exclude<ContractAccountOperation, { kind: 'transfer' }>
+type AccountOperation = (
+  | Exclude<ContractAccountOperation, { kind: 'transfer' | 'revoke' }>
+  | RevokeOperation
   | TransferOperation
-  | TransferAcceptanceOperation;
+  | TransferAcceptanceOperation
+) & { operationKey?: string };
 type NativeOperation = AccountOperation | CredentialOperation;
 export type WorkflowApprovalRequest = { operationKey: string; operation: AccountOperation };
 export type WorkflowApprovalBinding = Readonly<{
   operationKey: string;
   digest: string;
+  expiresAt: string;
   /** Stable across fresh approvals and DBOS attempts. Append a fixed native step
    * name, and keep the native command's complete input digest on every retry. */
   commandKeyPrefix: string;
 }>;
 const bindings = new WeakMap<LifecycleRequest, WorkflowApprovalBinding>();
+type CreationSource = Pick<NativeCreationContext, 'approvalReference' | 'operation' | 'operatorAccountId'>;
+const creationSources = new WeakMap<LifecycleRequest, { pool: Pool; source: Readonly<CreationSource> }>();
+/** Same native resolution as workflowApprovalBinding, with no business payload. */
+export function workflowApprovalCreationSource(
+  request: LifecycleRequest,
+  pool: Pool,
+): Readonly<CreationSource> | undefined {
+  const entry = creationSources.get(request);
+  return entry?.pool === pool ? entry.source : undefined;
+}
 /** Return only durable binding metadata; never serialize the resolved context. */
 export function workflowApprovalBinding(request: LifecycleRequest): WorkflowApprovalBinding | undefined {
   return bindings.get(request);
@@ -96,13 +126,16 @@ function requireAllowed(value: unknown): asserts value {
   if (!value) throw denied();
 }
 const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
-const handle = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value);
+function handle() {
+  return memoizedValue(handle, () => isClaimHandle);
+}
 const id = (value: unknown): value is string => typeof value === 'string' && routeOf(value) !== null;
 const text = (value: unknown, max = 255): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= max;
 
 type NativeKind =
   | 'fence-operator'
+  | 'revoke'
   | 'rename'
   | 'delete'
   | 'membership'
@@ -112,19 +145,43 @@ type NativeKind =
   | 'client-reduction'
   | 'transfer'
   | 'transfer-acceptance';
-type Descriptor = { action: string; target: string; targetKind: 'actor' | 'organization' | 'either' | 'global' };
+type Descriptor = {
+  action: NativeCreationContext['operation']['action'];
+  target: string;
+  targetKind: 'actor' | 'organization' | 'either' | 'global';
+};
+/** Shared native workflow identity only; payload validation remains in operationSnapshot. */
+export function managedAuthWorkflowDescriptor(
+  kind: 'rename' | 'membership' | 'transfer' | 'delete',
+  target: string,
+): Descriptor {
+  switch (kind) {
+    case 'rename':
+      return { action: 'account:update', target, targetKind: 'either' };
+    case 'membership':
+      return { action: 'organization:membership', target, targetKind: 'organization' };
+    case 'transfer':
+      return { action: 'account:manage', target, targetKind: 'either' };
+    case 'delete':
+      return { action: 'account:delete', target, targetKind: 'either' };
+  }
+}
 /** Server-owned closed descriptors. Missing adapters deny explicitly; a catalogue
  * entry alone can never manufacture native authority for one of these kinds. */
 const unavailableAdapters = {
-  revoke: 'Auth session revocation',
   consent: 'Auth consent reduction',
 } as const satisfies Record<Exclude<AccountOperation['kind'], NativeKind>, string>;
 
 function operationSnapshot(value: NativeOperation): { operation: NativeOperation; descriptor: Descriptor } {
   requireAllowed(value && typeof value === 'object' && !Array.isArray(value));
   const encoded = canonicalize(value);
-  requireAllowed(typeof encoded === 'string' && Buffer.byteLength(encoded) <= 12000);
+  const encodedLimit =
+    value.kind === 'client-reduction' ? MAX_CONSENTED_SCOPE_OCTETS + 2 * MAX_CONSENTED_SCOPES + 4096 : 12000;
+  requireAllowed(typeof encoded === 'string' && Buffer.byteLength(encoded) <= encodedLimit);
   const operation = JSON.parse(encoded) as NativeOperation;
+  // The requested workflow key is resolution metadata. Automated creation also
+  // binds it in its business input, so retain it for that operation's digest.
+  if (operation.kind !== 'automated' && operation.kind !== 'credential') delete operation.operationKey;
   if (Object.hasOwn(unavailableAdapters, operation.kind)) throw new WorkflowApprovalUnavailableError();
   let descriptor: Descriptor;
   let fields: string[];
@@ -134,12 +191,18 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
       fields = ['kind', 'accountId', 'authorization'];
       descriptor = { action: 'account:suspend', target: PLATFORM_RESOURCE.id, targetKind: 'global' };
       break;
+    case 'revoke':
+      requireAllowed(id(operation.accountId));
+      fields = ['kind', 'accountId', 'authorization'];
+      // Platform governance; the subject itself is chosen by operationDescriptor.
+      descriptor = { action: 'account:suspend', target: PLATFORM_RESOURCE.id, targetKind: 'global' };
+      break;
     case 'client-reduction':
       requireAllowed(
         text(operation.clientId, 1024) &&
           typeof operation.firstParty === 'boolean' &&
           Array.isArray(operation.scopes) &&
-          operation.scopes.length <= 100 &&
+          operation.scopes.length <= MAX_CONSENTED_SCOPES &&
           operation.scopes.every((scope) => text(scope, 128) && /^[\x21\x23-\x5b\x5d-\x7e]+$/.test(scope)),
       );
       fields = ['kind', 'clientId', 'firstParty', 'scopes', 'authorization'];
@@ -151,7 +214,9 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
           text(operation.operationKey) &&
           text(operation.effectReference, 4096) &&
           /^[a-f0-9]{64}$/.test(operation.effectDigest) &&
-          ['set-password', 'remove-password', 'add-key', 'remove-key'].includes(operation.purpose) &&
+          ['set-password', 'remove-password', 'add-key', 'remove-key', 'add-passkey', 'remove-passkey'].includes(
+            operation.purpose,
+          ) &&
           Number.isSafeInteger(operation.subjectEpoch) &&
           operation.subjectEpoch > 0,
       );
@@ -172,7 +237,7 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
         id(operation.operatorAccountId) &&
           typeof operation.registrationId === 'string' &&
           operation.registrationId.length <= 128 &&
-          handle(operation.handle) &&
+          handle()(operation.handle) &&
           text(operation.operationKey, 128),
       );
       fields = ['kind', 'registrationId', 'operatorAccountId', 'handle', 'operationKey', 'authorization'];
@@ -188,18 +253,19 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
       descriptor = { action: 'account:manage', target: operation.operatorAccountId, targetKind: 'either' };
       break;
     case 'organization':
-      requireAllowed(handle(operation.handle));
+      requireAllowed(handle()(operation.handle));
       fields = ['kind', 'handle', 'authorization'];
       descriptor = { action: 'organization:create', target: PLATFORM_RESOURCE.id, targetKind: 'global' };
       break;
     case 'rename':
       requireAllowed(
         id(operation.accountId) &&
-          handle(operation.handle) &&
-          (operation.expectedHandle === null || handle(operation.expectedHandle)),
+          handle()(operation.handle) &&
+          (operation.expectedHandle === null ||
+            (typeof operation.expectedHandle === 'string' && HANDLE_LOOKUP_PATTERN.test(operation.expectedHandle))),
       );
       fields = ['kind', 'accountId', 'handle', 'expectedHandle', 'authorization'];
-      descriptor = { action: 'account:update', target: operation.accountId, targetKind: 'either' };
+      descriptor = managedAuthWorkflowDescriptor('rename', operation.accountId);
       break;
     case 'delete':
       requireAllowed(id(operation.accountId));
@@ -215,7 +281,7 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
         requireAllowed(Object.keys(r).sort().join(',') === 'operatorAccountId,reservationId,subjectAccountId');
       }
       fields = ['kind', 'accountId', 'responsibility', 'authorization'];
-      descriptor = { action: 'account:delete', target: operation.accountId, targetKind: 'either' };
+      descriptor = managedAuthWorkflowDescriptor('delete', operation.accountId);
       break;
     case 'transfer':
       requireAllowed(
@@ -231,11 +297,7 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
           (operation.acceptance === undefined || text(operation.acceptance, 4096)),
       );
       fields = ['kind', 'previous', 'expectedVersion', 'operatorAccountId', 'acceptance', 'authorization'];
-      descriptor = {
-        action: 'account:manage',
-        target: operation.previous.operatorAccountId,
-        targetKind: 'either',
-      };
+      descriptor = managedAuthWorkflowDescriptor('transfer', operation.previous.operatorAccountId);
       break;
     case 'transfer-acceptance':
       requireAllowed(
@@ -261,7 +323,7 @@ function operationSnapshot(value: NativeOperation): { operation: NativeOperation
       );
       requireAllowed(operation.reservationId === undefined || text(operation.reservationId));
       fields = ['kind', 'organizationId', 'memberAccountId', 'role', 'reservationId', 'authorization'];
-      descriptor = { action: 'organization:membership', target: operation.organizationId, targetKind: 'organization' };
+      descriptor = managedAuthWorkflowDescriptor('membership', operation.organizationId);
       break;
     default:
       throw denied();
@@ -319,8 +381,12 @@ export function credentialWorkflowApprovals(api: ReturnType<typeof createWorkflo
   return native;
 }
 
-/** Native durable approval storage only. Resolve separately in every protected
- * step; the actual command must still authorize at its own T before receipts.
+/** Native durable approval storage only. Resolve once in each step that takes a
+ * new effect for the person, before that effect: every resolution prepares its
+ * own evidence at its own T and nothing is written before it passes. A step that
+ * only completes an effect already committed runs under that effect's record and
+ * is not resolved again; the actor is never re-authorized against state the
+ * operation itself changed. The actual command still authorizes at its own T.
  * Auth consent reductions invalidate these original scopes through the shared
  * Access epoch floor. No Auth database, introspection or runtime is consulted.
  */
@@ -371,9 +437,74 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       },
     };
   }
+  /** An automated account is deleted by the managers of its current operator; only the
+   * account itself holds its own delete action. The active relation is one anchored point
+   * read; a post-commit resolution matches the tombstone receipt to this operation's effect.
+   * A person's sessions are revoked by the person under its own account management or by
+   * platform governance, and by nobody else: no read decides it. */
+  async function operationDescriptor(
+    actor: AccountActor,
+    operation: NativeOperation,
+    descriptor: Descriptor,
+    deadline: number,
+    approval?: ApprovalRow,
+  ): Promise<Descriptor> {
+    if (operation.kind === 'revoke')
+      return actor.accountId === operation.accountId
+        ? { action: 'account:manage', target: operation.accountId, targetKind: 'actor' }
+        : descriptor;
+    if (operation.kind !== 'delete' || actor.accountId === operation.accountId) return descriptor;
+    const subject = await within(deadline, () =>
+      withConnection(config.pool, (client) =>
+        readAccount(deadlineClient(client, deadline), routeOf(operation.accountId)!, operation.accountId),
+      ),
+    );
+    if (subject?.kind === 'organization' && subject.state === 'active') {
+      const owners = await within(deadline, () =>
+        withConnection(config.pool, (client) =>
+          ownersRead.run(deadlineClient(client, deadline), {
+            route: routeOf(operation.accountId)!,
+            organization_id: operation.accountId,
+            member_id: actor.accountId,
+            at: accessClock(config.access)().toISOString(),
+          }),
+        ),
+      );
+      if (owners && owners.owners > 0)
+        return { action: 'account:manage', target: operation.accountId, targetKind: 'organization' };
+    }
+    if (subject?.kind === 'actor' && subject.state === 'active' && subject.operatorAccountId !== null)
+      return { action: 'account:manage', target: subject.operatorAccountId, targetKind: 'either' };
+    if (subject?.kind !== 'actor' || subject.state !== 'deleted' || !approval) return descriptor;
+    const subjectRoute = routeOf(operation.accountId)!;
+    const priorOperator = await within(deadline, () =>
+      withConnection(config.pool, (client) =>
+        tombstoneOperator.run(deadlineClient(client, deadline), {
+          route: subjectRoute,
+          account_id: operation.accountId,
+          approval_route: approval.route,
+          approval_id: approval.approvalId,
+          partition_no: partitionOf(subjectRoute),
+          actor_id: actor.accountId,
+          idempotency_keys: nativeReceiptKeyCandidates(
+            config.pool,
+            'access.account-tombstoned',
+            actor.accountId,
+            `${subjectRoute}:wf:${hash([actor.accountId, approval.operationKey])}:tombstone`,
+          ),
+        }),
+      ),
+    );
+    return priorOperator?.priorOperatorAccountId
+      ? { action: 'account:manage', target: priorOperator.priorOperatorAccountId, targetKind: 'either' }
+      : descriptor;
+  }
+  /** A person is an actor without an operator. It may act for a principal through a
+   * principal assignment: the approval stores that reference (`requestedBy`), and
+   * every step's formula rechecks the assignment and the principal's grant at its T. */
   async function requireHuman(actor: AccountActor) {
     const account = await readAccount(config.pool, routeOf(actor.accountId)!, actor.accountId);
-    requireAllowed(account?.kind === 'actor' && account.operatorAccountId === null && actor.requestedBy === null);
+    requireAllowed(account?.kind === 'actor' && account.operatorAccountId === null);
   }
 
   async function authorizeActor(
@@ -390,12 +521,24 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     });
     // The final native formula obtains authoritative SQL T. Identity/principal
     // preparation has released its connections before this resource checkout.
+    // The actor observation made when the approval was restored is older than
+    // this T: a consent reduction, raised floor or fence in between must deny, so
+    // the actor row is read again after the formula has fixed its T.
     const allowed = await within(deadline, () =>
       withConnection(config.pool, async (client) => {
         const boundedClient = deadlineClient(client, deadline);
+        if (
+          !(await accessEvidence(() => anchor(descriptor).validate(boundedClient), denied, deadline)) ||
+          !(await config.access.authorize(boundedClient, actor, descriptor.action, resourceOf(descriptor), evidence))
+        )
+          return false;
+        const current = await readAccount(boundedClient, routeOf(actor.accountId)!, actor.accountId);
         return (
-          (await accessEvidence(() => anchor(descriptor).validate(boundedClient), denied, deadline)) &&
-          (await config.access.authorize(boundedClient, actor, descriptor.action, resourceOf(descriptor), evidence))
+          !!current &&
+          current.kind === 'actor' &&
+          current.state === 'active' &&
+          !current.fenced &&
+          BigInt(actor.authnEpoch) >= current.minimumAuthnEpoch
         );
       }),
     );
@@ -464,10 +607,13 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
     caller?: AccountActor,
   ) {
     const bounded = boundary(context);
-    const { operation, descriptor } = operationSnapshot(input);
+    const { operation, descriptor: native } = operationSnapshot(input);
     const { row, actor } = await within(bounded.deadline, () =>
       readApprovedIdentity(config.access, config.referenceKeys, reference, bounded),
     );
+    // The reference binds the stored key; caller-supplied resolution metadata must match it.
+    requireAllowed(input.operationKey === undefined || input.operationKey === row.operationKey);
+    const descriptor = await operationDescriptor(actor, operation, native, bounded.deadline, row);
     requireAllowed(
       !caller ||
         (caller.accountId === actor.accountId &&
@@ -476,6 +622,9 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
           canonicalize([...caller.scopes].sort()) === canonicalize([...actor.scopes].sort())),
     );
     if (operation.kind === 'organization') await requireHuman(actor);
+    requireAllowed(
+      operation.kind !== 'revoke' || actor.accountId !== operation.accountId || actor.requestedBy === null,
+    );
     let approvedOperation = operation;
     if (operation.kind === 'automated' && operation.registrationId !== '') {
       if (!creationBinding) throw new WorkflowApprovalUnavailableError();
@@ -491,7 +640,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       hash([row.operationKey, businessOperation(approvedOperation)]) === row.digest &&
         canonicalize(row.operation) === canonicalize(businessOperation(approvedOperation)),
     );
-    const deadline = Math.min(bounded.deadline, Date.parse(row.expiresAt), Date.parse(row.jwtExpiresAt));
+    const deadline = bounded.deadline;
     await authorizeActor(actor, descriptor, bounded, deadline);
     // A resolved approval is a live, server-owned context. Expose the native
     // barrier only for this closed operation, bound to its target and stable
@@ -506,7 +655,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
                 await createSuspensionCommands({
                   pool: config.pool,
                   access: config.access,
-                  clock: approvalClock(config.access),
+                  clock: accessClock(config.access),
                 }).suspend(
                   { actor, pool: config.pool, deadline },
                   {
@@ -516,6 +665,31 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
                       operationKey: row.operationKey,
                       operationDigest: row.digest,
                       commandKeyPrefix: `wf:${hash([actor.accountId, row.operationKey])}`,
+                      approvalExpiresAt: row.expiresAt,
+                    },
+                  },
+                )
+              ).value,
+          }
+        : {}),
+      ...(operation.kind === 'revoke'
+        ? {
+            revokeSessions: async () =>
+              (
+                await createSessionRevocationCommands({
+                  pool: config.pool,
+                  access: config.access,
+                  clock: accessClock(config.access),
+                }).revoke(
+                  { actor, pool: config.pool, deadline },
+                  {
+                    accountId: operation.accountId,
+                    key: `wf:${hash([actor.accountId, row.operationKey])}:revoke`,
+                    continuation: {
+                      operationKey: row.operationKey,
+                      operationDigest: row.digest,
+                      commandKeyPrefix: `wf:${hash([actor.accountId, row.operationKey])}`,
+                      approvalExpiresAt: row.expiresAt,
                     },
                   },
                 )
@@ -528,9 +702,31 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       Object.freeze({
         operationKey: row.operationKey,
         digest: row.digest,
+        expiresAt: row.expiresAt,
         commandKeyPrefix: `wf:${hash([actor.accountId, row.operationKey])}`,
       }),
     );
+    if (operation.kind !== 'credential' && operation.kind !== 'transfer-acceptance' && operation.kind !== 'consent')
+      creationSources.set(request, {
+        pool: config.pool,
+        source: Object.freeze({
+          approvalReference: reference,
+          operatorAccountId:
+            operation.kind === 'automated' || operation.kind === 'opening' || operation.kind === 'transfer'
+              ? operation.operatorAccountId
+              : operation.kind === 'delete' &&
+                  descriptor.target !== operation.accountId &&
+                  descriptor.targetKind !== 'global'
+                ? descriptor.target
+                : null,
+          operation: Object.freeze({
+            kind: operation.kind,
+            action: descriptor.action,
+            targetResourceId: descriptor.target,
+            targetClientId: operation.kind === 'client-reduction' ? operation.clientId : null,
+          }),
+        }),
+      });
     return { request, row, actor, operation, descriptor };
   }
   async function resolve(
@@ -552,6 +748,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       if (source.operation.acceptance !== undefined) {
         const acceptance: AccountOperation = {
           kind: 'transfer-acceptance',
+          operationKey: source.row.operationKey,
           previous: source.operation.previous,
           expectedVersion: source.operation.expectedVersion,
           operatorAccountId: source.operation.operatorAccountId,
@@ -576,7 +773,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       requestDeadline = bounded.deadline;
       requireAllowed(input && text(input.operationKey));
       const operationKey = input.operationKey;
-      const { operation, descriptor } = operationSnapshot(input.operation);
+      const { operation, descriptor: native } = operationSnapshot(input.operation);
       requireAllowed(operation.kind !== 'transfer-acceptance' || operation.sourceOperationKey === operationKey);
       requireAllowed(
         operation.kind !== 'automated' || (operation.registrationId === '' && operation.operationKey === operationKey),
@@ -584,8 +781,11 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       const actor = typeof token === 'string' ? await config.access.authenticate(token, bounded) : token;
       if (operation.kind === 'credential')
         requireAllowed(actor.accountId === operation.subjectAccountId && actor.requestedBy === null);
-      const expires = verifiedBearerExpiry(config.access, actor, bounded);
-      const deadline = Math.min(bounded.deadline, expires);
+      if (operation.kind === 'revoke')
+        requireAllowed(actor.accountId !== operation.accountId || actor.requestedBy === null);
+      const expires = verifiedKernelExpiry(config.access, actor, bounded);
+      const deadline = bounded.deadline;
+      const descriptor = await operationDescriptor(actor, operation, native, deadline);
       const route = routeOf(actor.accountId)!;
       const digest = hash([operationKey, businessOperation(operation)]);
       // A fresh credential approval observes a new floor without changing Auth's
@@ -612,7 +812,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         config.pool,
         {
           partition: partitionOf(route),
-          clock: approvalClock(config.access),
+          clock: accessClock(config.access),
           deadline,
           basis,
           authorization: authorization(actor, descriptor, { pool: config.pool, deadline }),
@@ -634,7 +834,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         config.pool,
         {
           partition: partitionOf(route),
-          clock: approvalClock(config.access),
+          clock: accessClock(config.access),
           deadline,
           basis,
           authorization: authorization(
@@ -699,7 +899,13 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
       throwEvidenceFailure(error);
       if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
         throw error;
-      throw denied();
+      if (error instanceof ApprovalIdentityDeniedError) throw denied();
+      if (error instanceof GrantDeniedError) throw denied();
+      if (error instanceof IdempotencyConflictError) throw denied();
+      // Authorization guards above already emit WorkflowApprovalDeniedError.
+      // Preserve other failures so an internal or infrastructure error cannot
+      // be reclassified as an authorization refusal at this boundary.
+      throw error;
     }
   }
   const native: CredentialWorkflowPorts = {
@@ -709,7 +915,11 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         | { route: number; id: string; binding: string }
         | undefined;
       requireAllowed(located && routeOf(located.id) === located.route);
-      const row = await credentialRead.run(bounded.pool, { route: located.route, receipt_id: located.id });
+      const row = await credentialRead.run(bounded.pool, {
+        route: located.route,
+        receipt_id: located.id,
+        at: accessClock(config.access)().toISOString(),
+      });
       requireAllowed(row);
       const { data: _native, ...immutable } = row;
       requireAllowed(approvalRowDigest(immutable) === located.binding);
@@ -787,7 +997,7 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         config.pool,
         {
           partition: partitionOf(row.route),
-          clock: approvalClock(config.access),
+          clock: accessClock(config.access),
           deadline: bounded.deadline,
           basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
           authorization: authorization(actor, descriptor, bounded),
@@ -846,7 +1056,10 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         throwEvidenceFailure(error);
         if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
           throw error;
-        throw denied();
+        if (error instanceof ApprovalIdentityDeniedError) throw denied();
+        if (error instanceof GrantDeniedError) throw denied();
+        if (error instanceof IdempotencyConflictError) throw denied();
+        throw error;
       }
     },
     async resolveForCaller(
@@ -866,7 +1079,10 @@ export function createWorkflowApprovals<Config extends WorkflowApprovalConfig>(c
         throwEvidenceFailure(error);
         if (error instanceof WorkflowApprovalUnavailableError || error instanceof ApprovalIdentityUnavailableError)
           throw error;
-        throw denied();
+        if (error instanceof ApprovalIdentityDeniedError) throw denied();
+        if (error instanceof GrantDeniedError) throw denied();
+        if (error instanceof IdempotencyConflictError) throw denied();
+        throw error;
       }
     },
   };

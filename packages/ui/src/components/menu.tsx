@@ -1,311 +1,409 @@
-import { Portal } from '@ark-ui/react';
-import { ark } from '@ark-ui/react/factory';
-import { Menu as ArkMenu, type MenuContentProps, useMenuContext } from '@ark-ui/react/menu';
-import { CheckIcon, ChevronRight } from 'lucide-react';
-import type React from 'react';
-import { tv, type VariantProps } from 'tailwind-variants';
-import { cn } from '../utils.ts';
+import {
+  createContext,
+  isValidElement,
+  useContext,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactElement,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
+import * as D from '../shadcn/dropdown-menu.tsx';
+import { Popover, PopoverContent, PopoverTrigger } from '../shadcn/popover.tsx';
+import { BottomSheet } from './bottom-sheet.tsx';
+import { Button } from '../shadcn/button.tsx';
+import { Field, FieldLabel } from '../shadcn/field.tsx';
+import { RadioGroup, RadioGroupItem } from '../shadcn/radio-group.tsx';
 
-export const useMenu = useMenuContext;
+export type MenuEntry =
+  | {
+      type: 'item' | 'destructive';
+      label: string;
+      onSelect: () => void;
+      disabled?: boolean;
+      current?: boolean;
+      keepOpen?: boolean;
+    }
+  | { type: 'link'; label: string; href: string; disabled?: boolean; current?: boolean }
+  | { type: 'separator' }
+  | { type: 'submenu'; label: string; entries: MenuEntry[] }
+  | {
+      type: 'radio';
+      label: string;
+      value: string;
+      options: { label: string; value: string }[];
+      onValueChange: (value: string) => void;
+    };
 
-/**
- * A list of actions or options behind a button, such as the overflow menu at the end of a post’s
- * engagement bar, a Work’s “Add to shelf” menu, or feed sort and display options. Items support
- * icons, shortcuts, checkbox and radio items, groups and submenus, and full keyboard use (arrows,
- * typeahead, Enter, Escape). Destructive items use the text-safe red and sit last, after a
- * separator. For navigation between pages use links, not a menu.
- */
-export const Menu = (props: React.ComponentProps<typeof ArkMenu.Root>) => {
-  const { lazyMount = true, positioning = { placement: 'bottom-end' }, unmountOnExit = true, ...rest } = props;
-
-  return (
-    <ArkMenu.Root
-      data-slot="menu"
-      lazyMount={lazyMount}
-      positioning={positioning}
-      unmountOnExit={unmountOnExit}
-      {...rest}
-    />
-  );
-};
-
-export const MenuTrigger = (props: React.ComponentProps<typeof ArkMenu.Trigger>) => (
-  <ArkMenu.Trigger data-slot="menu-trigger" {...props} />
-);
-
-export const MenuPositioner = (props: React.ComponentProps<typeof ArkMenu.Positioner>) => {
-  const { className, ...rest } = props;
-
-  return <ArkMenu.Positioner className={cn('outline-none', className)} data-slot="menu-positioner" {...rest} />;
-};
-
-export const menuContentVariants = tv({
-  base: [
-    'z-[calc(50+var(--nested-layer-count,0))]',
-    "max-h-(--available-height) not-[class*='w-']:min-w-40",
-    'p-1.5',
-    'bg-popover',
-    'text-popover-foreground',
-    'rounded-2xl border border-border/60 shadow-(--aura-shadow-float)',
-    'origin-(--transform-origin)',
-    'outline-none',
-    'overflow-y-auto',
-    'duration-100',
-    'data-[state=open]:animate-in',
-    'data-[state=open]:fade-in-0',
-    'data-[state=open]:zoom-in-[98%]',
-    'data-[placement=bottom]:slide-in-from-top-2',
-    'data-[placement=left]:slide-in-from-end-2',
-    'data-[placement=right]:slide-in-from-start-2',
-    'data-[placement=top]:slide-in-from-bottom-2',
-    'motion-reduce:animate-none!',
-  ],
-});
-
-/**
- * `inline` keeps the menu inside its container instead of the document body, for menus opened from
- * a floating surface that must keep focus within itself, such as the editor's selection panel.
- */
-export const MenuContent = (props: MenuContentProps & { inline?: boolean }) => {
-  const { className, children, inline = false, ...rest } = props;
-
-  return (
-    <Portal disabled={inline}>
-      <MenuPositioner>
-        <ArkMenu.Content className={cn(menuContentVariants(), className)} data-slot="menu-content" {...rest}>
-          {children}
-        </ArkMenu.Content>
-      </MenuPositioner>
-    </Portal>
-  );
-};
-
-interface MenuGroupProps extends React.ComponentProps<typeof ArkMenu.ItemGroup> {
-  /**
-   * The heading of the menu item group.
-   */
-  heading?: string;
+export interface MenuProps {
+  entries?: MenuEntry[] | undefined;
+  content?: ReactNode;
+  trigger: ReactElement;
+  title: string;
+  backLabel?: string;
+  /** Close after an in-app link is followed from custom menu content. */
+  closeOnNavigation?: boolean;
+  children?: ReactNode;
+  triggerSlot?: boolean;
 }
 
-export const MenuGroup = (props: MenuGroupProps) => {
-  const { heading, children, ...rest } = props;
+const TriggerContext = createContext<ReactElement | null>(null);
+export function MenuTriggerSlot() {
+  return useContext(TriggerContext);
+}
 
-  return (
-    <ArkMenu.ItemGroup data-slot="menu-group" {...rest}>
-      {!!heading && <MenuGroupLabel>{heading}</MenuGroupLabel>}
+function legacyEntries(content: ReactNode): MenuEntry[] {
+  const output: MenuEntry[] = [];
+  for (const node of Array.isArray(content) ? content : [content]) {
+    if (!isValidElement<Record<string, unknown>>(node)) continue;
+    const name =
+      (node.type as { displayName?: string; name?: string }).displayName ?? (node.type as { name?: string }).name ?? '';
+    const props = node.props;
+    if (name.includes('Separator')) {
+      output.push({ type: 'separator' });
+      continue;
+    }
+    if (name.includes('RadioGroup')) {
+      const children = Array.isArray(props.children) ? props.children : [props.children];
+      const options = children
+        .filter(isValidElement<Record<string, unknown>>)
+        .map((child) => ({ value: String(child.props.value ?? ''), label: String(child.props.children ?? '') }));
+      output.push({
+        type: 'radio',
+        label: String(props['aria-label'] ?? ''),
+        value: String(props.value ?? ''),
+        options,
+        onValueChange: props.onValueChange as (value: string) => void,
+      });
+      continue;
+    }
+    if (name.includes('RadioItem')) continue;
+    if (name.includes('Item')) {
+      output.push({
+        type: props.variant === 'destructive' ? 'destructive' : 'item',
+        label: String(props.children ?? ''),
+        onSelect: (props.onClick as (() => void) | undefined) ?? (() => {}),
+        ...(props.disabled ? { disabled: true } : {}),
+      });
+      continue;
+    }
+    output.push(...legacyEntries(props.children as ReactNode));
+  }
+  return output;
+}
 
-      {children}
-    </ArkMenu.ItemGroup>
-  );
-};
-
-export const MenuSeparator = (props: React.ComponentProps<typeof ArkMenu.Separator>) => {
-  const { className, ...rest } = props;
-
-  return (
-    <ArkMenu.Separator
-      className={cn('-mx-1.5 my-1.5 h-px bg-border/60', className)}
-      data-slot="menu-separator"
-      {...rest}
-    />
-  );
-};
-
-const menuItemVariants = tv({
-  base: [
-    'group/menu-item',
-    'relative',
-    'w-full',
-    'px-3 py-2',
-    'flex items-center gap-2.5',
-    'select-none text-sm',
-    'rounded-xl',
-    'outline-hidden',
-    'data-[state=open]:bg-accent/60 data-[state=open]:text-accent-foreground',
-    'data-disabled:pointer-events-none data-disabled:opacity-64',
-    "[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
-  ],
-  variants: {
-    variant: {
-      default: ['data-highlighted:bg-accent data-highlighted:text-accent-foreground'],
-      // -foreground is the text-safe red; the --destructive fill is too light for small text.
-      destructive: [
-        'text-destructive-foreground',
-        'data-highlighted:bg-destructive/10',
-        '**:[svg]:text-destructive-foreground!',
-      ],
-    },
-  },
-  defaultVariants: {
-    variant: 'default',
-  },
-});
-
-interface MenuItemProps extends React.ComponentProps<typeof ArkMenu.Item>, VariantProps<typeof menuItemVariants> {}
-
-export const MenuItem = (props: MenuItemProps) => {
-  const { variant = 'default', className, ...rest } = props;
-
-  return (
-    <ArkMenu.Item
-      className={cn(menuItemVariants({ variant }), className)}
-      data-slot="menu-item"
-      data-variant={variant}
-      {...rest}
-    />
-  );
-};
-
-export const MenuQuickItem = (props: MenuItemProps) => {
-  const { variant = 'default', className, ...rest } = props;
-
-  return (
-    <ArkMenu.Item
-      className={cn(
-        menuItemVariants({ variant }),
-        'flex-col gap-1',
-        "[&_svg:not([class*='size-'])]:size-4.5",
-        className,
-      )}
-      {...rest}
-    />
-  );
-};
-
-export const MenuCheckboxItem = (props: React.ComponentProps<typeof ArkMenu.CheckboxItem>) => {
-  const { className, children, ...rest } = props;
-
-  return (
-    <ArkMenu.CheckboxItem
-      className={cn(menuItemVariants({ variant: 'default' }), 'ps-9', className)}
-      data-slot="menu-checkbox-item"
-      {...rest}
-    >
-      <ArkMenu.ItemIndicator
-        className={cn('absolute inset-s-3', 'size-4', 'flex items-center justify-center', 'pointer-events-none')}
+function DropdownEntries({
+  entries,
+  select,
+  close,
+}: {
+  entries: MenuEntry[];
+  select: (entry: MenuEntry) => void;
+  close: () => void;
+}) {
+  return entries.map((entry, index) => {
+    if (entry.type === 'separator') return <D.DropdownMenuSeparator key={index} />;
+    if (entry.type === 'radio')
+      return (
+        <D.DropdownMenuRadioGroup
+          key={index}
+          aria-label={entry.label}
+          value={entry.value}
+          onValueChange={(value) => {
+            entry.onValueChange(value);
+            close();
+          }}
+        >
+          {entry.options.map((option) => (
+            <D.DropdownMenuRadioItem key={option.value} value={option.value}>
+              {option.label}
+            </D.DropdownMenuRadioItem>
+          ))}
+        </D.DropdownMenuRadioGroup>
+      );
+    if (entry.type === 'submenu')
+      return (
+        <D.DropdownMenuSub key={index}>
+          <D.DropdownMenuSubTrigger>{entry.label}</D.DropdownMenuSubTrigger>
+          <D.DropdownMenuSubContent>
+            <DropdownEntries entries={entry.entries} select={select} close={close} />
+          </D.DropdownMenuSubContent>
+        </D.DropdownMenuSub>
+      );
+    if (entry.type === 'link')
+      return (
+        <D.DropdownMenuItem
+          key={index}
+          disabled={entry.disabled}
+          render={<a href={entry.href} aria-current={entry.current ? 'page' : undefined} />}
+        >
+          {entry.label}
+        </D.DropdownMenuItem>
+      );
+    return (
+      <D.DropdownMenuItem
+        key={index}
+        disabled={entry.disabled}
+        aria-current={entry.current ? 'page' : undefined}
+        variant={entry.type === 'destructive' ? 'destructive' : 'default'}
+        onClick={() => select(entry)}
       >
-        <CheckIcon />
-      </ArkMenu.ItemIndicator>
-
-      <ArkMenu.ItemText>{children}</ArkMenu.ItemText>
-    </ArkMenu.CheckboxItem>
-  );
-};
-
-interface MenuRadioGroupProps extends React.ComponentProps<typeof ArkMenu.RadioItemGroup> {
-  /**
-   * The heading of the menu radio item group.
-   */
-  heading?: string;
+        {entry.label}
+      </D.DropdownMenuItem>
+    );
+  });
 }
 
-export const MenuRadioGroup = (props: MenuRadioGroupProps) => {
-  const { heading, children, ...rest } = props;
-
-  return (
-    <ArkMenu.RadioItemGroup data-slot="menu-radio-group" {...rest}>
-      {!!heading && <MenuGroupLabel>{heading}</MenuGroupLabel>}
-
-      {children}
-    </ArkMenu.RadioItemGroup>
-  );
-};
-
-export const MenuGroupLabel = (props: React.ComponentProps<typeof ArkMenu.ItemGroupLabel>) => {
-  const { className, ...rest } = props;
-
-  return (
-    <ArkMenu.ItemGroupLabel
-      className={cn('px-3 py-1.5', 'font-medium text-muted-foreground text-xs', 'pointer-events-none', className)}
-      data-slot="menu-group-label"
-      {...rest}
-    />
-  );
-};
-
-export const MenuRadioItem = (props: React.ComponentProps<typeof ArkMenu.RadioItem>) => {
-  const { className, children, ...rest } = props;
-
-  return (
-    <ArkMenu.RadioItem
-      className={cn(menuItemVariants({ variant: 'default' }), 'ps-9', className)}
-      data-slot="menu-radio-item"
-      {...rest}
+export function Menu({
+  entries: entryProps,
+  content,
+  trigger,
+  title,
+  backLabel,
+  closeOnNavigation = false,
+  children,
+  triggerSlot = false,
+}: MenuProps) {
+  const entries = entryProps ?? legacyEntries(content);
+  const resolvedBackLabel =
+    backLabel ??
+    (
+      {
+        de: 'Zurück',
+        en: 'Back',
+        es: 'Atrás',
+        fr: 'Retour',
+        ja: '戻る',
+        ko: '뒤로',
+        'zh-Hans': '返回',
+        'zh-Hant': '返回',
+      } as const
+    )[
+      typeof document === 'undefined'
+        ? 'en'
+        : (document.documentElement.lang as 'de' | 'en' | 'es' | 'fr' | 'ja' | 'ko' | 'zh-Hans' | 'zh-Hant')
+    ] ??
+    'Back';
+  const [form, setForm] = useState<'sheet' | 'dropdown' | null>(null);
+  const [open, setOpen] = useState(false);
+  const [stack, setStack] = useState<{ label: string; entries: MenuEntry[] }[]>([]);
+  const radioName = useId();
+  const triggerRef = useRef<HTMLElement | null>(null);
+  const historyDepth = useRef(0);
+  const page = stack.at(-1);
+  const customContent = content !== undefined;
+  const openMenu = (event?: { preventDefault?: () => void }) => {
+    event?.preventDefault?.();
+    const sheet = window.matchMedia('(max-width: 767px)').matches || window.matchMedia('(pointer: coarse)').matches;
+    setForm(sheet ? 'sheet' : 'dropdown');
+    setOpen(true);
+    if (sheet && historyDepth.current === 0 && !closeOnNavigation) {
+      window.history.pushState({ rezicsMenu: true }, '', window.location.href);
+      historyDepth.current = 1;
+    }
+  };
+  const close = (fromHistory = false, restoreFocus = true) => {
+    setOpen(false);
+    setStack([]);
+    if (historyDepth.current && !fromHistory) window.history.go(-historyDepth.current);
+    historyDepth.current = 0;
+    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
+  };
+  useEffect(() => {
+    const back = () => {
+      if (!open || form !== 'sheet') return;
+      historyDepth.current = Math.max(0, historyDepth.current - 1);
+      if (stack.length) {
+        setStack((value) => value.slice(0, -1));
+      } else close(true);
+    };
+    window.addEventListener('popstate', back);
+    return () => window.removeEventListener('popstate', back);
+  }, [open, form, stack]);
+  const select = (entry: MenuEntry) => {
+    if (entry.type === 'item' || entry.type === 'destructive') {
+      if (!entry.keepOpen) close();
+      entry.onSelect();
+    }
+    if (entry.type === 'link') close();
+  };
+  const closeAfterNavigation = (event: MouseEvent<HTMLElement>) => {
+    if (closeOnNavigation && event.target instanceof Element && event.target.closest('a')) close();
+  };
+  const triggerNode = (
+    <span
+      ref={(node) => {
+        triggerRef.current = node?.querySelector('button, [role=button]') ?? node;
+      }}
+      onClick={openMenu}
     >
-      <ArkMenu.ItemIndicator className="pointer-events-none absolute inset-s-3 flex size-4 items-center justify-center">
-        <CheckIcon />
-      </ArkMenu.ItemIndicator>
-
-      <ArkMenu.ItemText data-slot="menu-radio-item-text">{children}</ArkMenu.ItemText>
-    </ArkMenu.RadioItem>
+      {trigger}
+    </span>
   );
-};
-
-export const MenuSub = (props: React.ComponentProps<typeof Menu>) => <Menu data-slot="menu-sub" {...props} />;
-
-export const MenuSubContent = (props: React.ComponentProps<typeof ArkMenu.Content> & { inline?: boolean }) => {
-  const { className, inline = false, ...rest } = props;
-
+  const slot = triggerSlot ? (
+    form === 'dropdown' ? (
+      <D.DropdownMenu open={open} onOpenChange={(value) => (value ? openMenu() : close())}>
+        <D.DropdownMenuTrigger
+          render={trigger}
+          onClick={(event) => {
+            triggerRef.current = event.currentTarget as HTMLElement;
+            openMenu(event);
+          }}
+        />
+        <D.DropdownMenuContent>
+          <DropdownEntries entries={entries} select={select} close={() => close()} />
+        </D.DropdownMenuContent>
+      </D.DropdownMenu>
+    ) : (
+      triggerNode
+    )
+  ) : null;
   return (
-    <Portal disabled={inline}>
-      <MenuPositioner data-slot="menu-sub-positioner">
-        <ArkMenu.Content className={cn(menuContentVariants(), className)} data-slot="menu-sub-content" {...rest} />
-      </MenuPositioner>
-    </Portal>
-  );
-};
-
-export const MenuSubTrigger = (props: React.ComponentProps<typeof ArkMenu.TriggerItem>) => {
-  const { className, children, ...rest } = props;
-
-  return (
-    <ArkMenu.TriggerItem
-      className={cn(menuItemVariants({ variant: 'default' }), className)}
-      data-slot="menu-sub-trigger"
-      {...rest}
-    >
+    <TriggerContext.Provider value={slot}>
       {children}
-
-      <MenuShortcut>
-        <ChevronRight />
-      </MenuShortcut>
-    </ArkMenu.TriggerItem>
-  );
-};
-
-export const MenuShortcut = (props: React.ComponentProps<typeof ark.span>) => {
-  const { className, ...rest } = props;
-
-  return (
-    <ark.span
-      className={cn(
-        'ms-auto rtl:me-auto',
-        'text-muted-foreground text-xs tracking-widest',
-        'group-data-[variant=destructive]/menu-item:text-destructive-foreground',
-        className,
+      {!triggerSlot &&
+        (customContent ? (
+          <Popover
+            open={open && form === 'dropdown'}
+            onOpenChange={(value, details) => {
+              if (value) {
+                openMenu();
+                return;
+              }
+              const target = details.event.target;
+              if (details.reason === 'outside-press' && target instanceof Element && target.closest('nav a[href]')) {
+                details.cancel();
+                return;
+              }
+              if (details.reason === 'outside-press') close(false, false);
+              else close();
+            }}
+          >
+            <PopoverTrigger
+              render={trigger}
+              onClick={(event) => {
+                triggerRef.current = event.currentTarget as HTMLElement;
+              }}
+            />
+            <PopoverContent
+              side="bottom"
+              align="start"
+              sideOffset={4}
+              role="dialog"
+              aria-label={title}
+              initialFocus
+              finalFocus={false}
+              onClickCapture={closeAfterNavigation}
+              className="max-h-[var(--available-height)] w-max min-w-[min(16rem,var(--available-width))] max-w-[min(32rem,var(--available-width))] overflow-x-hidden overflow-y-auto overscroll-contain rounded-2xl gap-1 p-2 text-popover-foreground ring-1 ring-foreground/5 dark:ring-foreground/10"
+            >
+              {content}
+            </PopoverContent>
+          </Popover>
+        ) : (
+          <D.DropdownMenu open={open && form === 'dropdown'} onOpenChange={(value) => (value ? openMenu() : close())}>
+            <D.DropdownMenuTrigger
+              render={trigger}
+              onClick={(event) => {
+                triggerRef.current = event.currentTarget as HTMLElement;
+                openMenu(event);
+              }}
+            />
+            {form === 'dropdown' && (
+              <D.DropdownMenuContent onClickCapture={closeAfterNavigation}>
+                {content ?? <DropdownEntries entries={entries} select={select} close={() => close()} />}
+              </D.DropdownMenuContent>
+            )}
+          </D.DropdownMenu>
+        ))}
+      {form === 'sheet' && (
+        <BottomSheet
+          open={open}
+          onOpenChange={(value) => (value ? openMenu() : close())}
+          title={page?.label ?? title}
+          before={
+            page ? (
+              <Button variant="ghost" className="min-h-11" onClick={() => window.history.back()}>
+                ‹ {resolvedBackLabel}
+              </Button>
+            ) : undefined
+          }
+        >
+          <div className="mt-2 flex min-w-0 max-w-full flex-col" onClickCapture={closeAfterNavigation}>
+            {content && entries.length === 0 && !page
+              ? content
+              : (page?.entries ?? entries).map((entry, index) => {
+                  if (entry.type === 'separator') return <hr key={index} className="my-2 border-border" />;
+                  if (entry.type === 'radio')
+                    return (
+                      <RadioGroup
+                        key={index}
+                        aria-label={entry.label}
+                        value={entry.value}
+                        onValueChange={(value) => {
+                          entry.onValueChange(value);
+                          close();
+                        }}
+                        className="gap-0"
+                      >
+                        {entry.options.map((option) => (
+                          <Field key={option.value} orientation="horizontal" className="min-h-11 items-center">
+                            <RadioGroupItem id={`${radioName}-${index}-${option.value}`} value={option.value} />
+                            <FieldLabel
+                              htmlFor={`${radioName}-${index}-${option.value}`}
+                              className="min-h-11 flex-1 items-center rounded-xl px-3 hover:bg-accent"
+                            >
+                              {option.label}
+                            </FieldLabel>
+                          </Field>
+                        ))}
+                      </RadioGroup>
+                    );
+                  if (entry.type === 'submenu')
+                    return (
+                      <Button
+                        key={index}
+                        variant="ghost"
+                        className="min-h-11 justify-between"
+                        onClick={() => {
+                          setStack((value) => [...value, entry]);
+                          window.history.pushState({ rezicsMenuPage: true }, '', window.location.href);
+                          historyDepth.current += 1;
+                        }}
+                      >
+                        {entry.label}
+                        <span aria-hidden>›</span>
+                      </Button>
+                    );
+                  if (entry.type === 'link')
+                    return (
+                      <a
+                        key={index}
+                        href={entry.href}
+                        aria-current={entry.current ? 'page' : undefined}
+                        className="flex min-h-11 items-center rounded-xl px-3 text-sm hover:bg-accent"
+                        onClick={() => close()}
+                      >
+                        {entry.label}
+                      </a>
+                    );
+                  return (
+                    <Button
+                      key={index}
+                      variant="ghost"
+                      className={`min-h-11 justify-start ${entry.type === 'destructive' ? 'text-destructive hover:text-destructive' : ''}`}
+                      disabled={entry.disabled}
+                      aria-current={entry.current ? 'page' : undefined}
+                      onClick={() => select(entry)}
+                    >
+                      {entry.label}
+                    </Button>
+                  );
+                })}
+          </div>
+        </BottomSheet>
       )}
-      data-slot="menu-shortcut"
-      {...rest}
-    />
+    </TriggerContext.Provider>
   );
-};
-
-export const MenuArrow = (props: React.ComponentProps<typeof ArkMenu.Arrow>) => {
-  const { style, ...rest } = props;
-
-  return (
-    <ArkMenu.Arrow
-      style={
-        {
-          '--arrow-background': 'var(--popover)',
-          '--arrow-size': 'calc(1.5 * var(--spacing))',
-          ...style,
-          left: '20px',
-        } as React.CSSProperties
-      }
-      {...rest}
-    >
-      <ArkMenu.ArrowTip className="border-s border-t" />
-    </ArkMenu.Arrow>
-  );
-};
+}

@@ -8,17 +8,19 @@ import { ConversionError } from '../src/index.ts';
 import { convertOpenLibrary } from '../src/open-library.ts';
 
 const subjectId = '00000000-0000-4000-8000-000000000001';
+const calendar = 'http://www.wikidata.org/entity/Q1985727';
 // The source module's declared relation cap is 64 and record byte cap is 2 MiB.
 const fieldCap = 64;
 const byteCap = 2 * 1024 * 1024;
 
-function seed(fields: number) {
+function seed(fields: number, first_publish_date?: string) {
   return {
     type: { key: '/type/work' },
     key: '/works/OL1W',
     revision: 1,
     last_modified: { type: '/type/datetime', value: '2025-01-02T03:04:05.123456' },
     title: 'A bounded book',
+    ...(first_publish_date === undefined ? {} : { first_publish_date }),
     authors: Array.from({ length: fields }, (_, i) => ({ author: { key: `/authors/OL${i + 1}A` } })),
   };
 }
@@ -54,8 +56,26 @@ test('fixed conversion touches zero SQL and network across unrelated catalogue a
       }) as never),
     );
   };
-  const record = seed(8);
+  const record = seed(8, '1853');
   const baseline = convertOpenLibrary(input(record), { subjectId });
+  const withoutDateRecord = { ...record };
+  delete withoutDateRecord.first_publish_date;
+  const withoutDate = convertOpenLibrary(input(withoutDateRecord), { subjectId });
+  expect(baseline.normalizedRecord.first_publish_date).toBe('1853');
+  expect(
+    Buffer.byteLength(JSON.stringify(baseline.normalizedRecord)) -
+      Buffer.byteLength(JSON.stringify(withoutDate.normalizedRecord)),
+  ).toBe(Buffer.byteLength(',"first_publish_date":"1853"'));
+  expect(
+    baseline.proposals.filter(
+      (command) =>
+        command.op === 'propose' &&
+        command.statement.property.id === 'schema:datePublished' &&
+        command.statement.value.type === 'value' &&
+        JSON.stringify(command.statement.value.content) ===
+          JSON.stringify({ time: '+1853-00-00T00:00:00Z', precision: 9, calendarmodel: calendar }),
+    ),
+  ).toHaveLength(1);
   try {
     guard(globalThis, 'fetch');
     for (const key of ['query', 'prepare', 'run', 'exec'] as const) guard(Database.prototype, key);

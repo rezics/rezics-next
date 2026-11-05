@@ -1,3 +1,5 @@
+import type { SourceClassificationProjection } from './source-classification.ts';
+
 export type SourceId = 'bangumi' | 'vndb' | 'openlibrary' | 'wikidata';
 
 export type SourceRecord<T = Record<string, unknown>> = {
@@ -16,7 +18,25 @@ export type ConversionInput<T = unknown> = {
 export type ConversionDiagnostic = {
   pointer: string;
   code: string;
+  sourceVocabularyGap?: import('./source-vocabulary.ts').SourceVocabularyGap;
 };
+
+export type {
+  BangumiVocabularyRow,
+  NativeIdentity,
+  ResolvedConcept,
+  ResolvedScheme,
+  SourceRowOrigin,
+  SourceVocabularyBindings,
+  SourceVocabularyGap,
+  SourceVocabularyInput,
+  SourceVocabularyMetadata,
+  SourceVocabularyProvider,
+  SourceVocabularyRequest,
+  SourceVocabularyResult,
+  SourceVocabularyRow,
+  VndbVocabularyRow,
+} from './source-vocabulary.ts';
 
 export type ConvertedRecord<Proposal = unknown> = {
   source: SourceId;
@@ -25,7 +45,22 @@ export type ConvertedRecord<Proposal = unknown> = {
   converter_revision: string;
   proposals: readonly Proposal[];
   diagnostics: readonly ConversionDiagnostic[];
+  sourceClassification?: SourceClassificationProjection;
 };
+
+export {
+  classificationObservedInstant,
+  classificationSourceVersion,
+  projectSourceClassification,
+  validateSourceClassificationProjection,
+} from './source-classification.ts';
+export type {
+  ClassificationSourceVersion,
+  SourceClassificationCoverage,
+  SourceClassificationProjection,
+  SourceClassificationProvenance,
+  SourceClassificationValue,
+} from './source-classification.ts';
 
 export class ConversionError extends Error {
   readonly code: string;

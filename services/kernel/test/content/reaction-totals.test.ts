@@ -149,19 +149,32 @@ function envelope(partition: number, position: bigint, item: CloudEvent): Envelo
   return { partition, epoch: 1, position, events: [item] };
 }
 
-test('single-target and page reads stay within seven rows as 2048, 8192 and 32768 contributors accumulate', async () => {
+// Contribution rows and totals are seeded in bulk; a few real events prove the projection writes the rows the reads use.
+async function seedContributions(route: number, targetId: string, partitions: readonly number[]): Promise<void> {
+  if (partitions.length === 0) return;
+  await db.admin.query(
+    `INSERT INTO content.reaction_count (route, target_id, source_partition, kind, count, source_epoch, source_position)
+     SELECT $1::integer, $2::uuid, partition, 'upvote', 1, 1, 1 FROM unnest($3::integer[]) AS partition`,
+    [route, targetId, partitions],
+  );
+  await db.admin.query(
+    `INSERT INTO content.reaction_total AS stored (route, target_id, kind, count, source_epoch, source_position)
+     VALUES ($1::integer, $2::uuid, 'upvote', $3::integer, 1, 1)
+     ON CONFLICT (route, target_id, kind) DO UPDATE SET count = stored.count + EXCLUDED.count`,
+    [route, targetId, partitions.length],
+  );
+}
+
+test('single-target and page reads stay within seven rows as 256, 1024 and 4096 contributors accumulate', async () => {
   const targetRoute = 0x4700;
   const targetId = newId(targetRoute);
   const sourcePositions = new Map<number, bigint>();
-  const totalsTargets = Array.from({ length: 2047 }, () => newId(targetRoute));
   const anchorActor = newId(targetRoute);
   // Commands establish the target partition through the owning command path.
   await append(anchorActor, targetId, null, null);
 
   async function apply(items: readonly Envelope[]): Promise<void> {
-    for (let offset = 0; offset < items.length; offset += 256) {
-      await applyReactionCountEnvelopes(db.pool, items.slice(offset, offset + 256));
-    }
+    await applyReactionCountEnvelopes(db.pool, items);
   }
 
   function next(partition: number, itemTarget: string): Envelope {
@@ -172,26 +185,35 @@ test('single-target and page reads stay within seven rows as 2048, 8192 and 3276
   }
 
   // Keep the totals relation large enough to test its indexed read plan from the first scale.
-  await apply(totalsTargets.map((id, index) => next(index, id)));
+  const otherTargets = Array.from({ length: 2047 }, () => newId(targetRoute));
+  await db.admin.query(
+    `INSERT INTO content.reaction_count (route, target_id, source_partition, kind, count, source_epoch, source_position)
+     SELECT $1::integer, id, ordinal - 1, 'upvote', 1, 1, 1 FROM unnest($2::uuid[]) WITH ORDINALITY AS t(id, ordinal)`,
+    [targetRoute, otherTargets],
+  );
+  await db.admin.query(
+    `INSERT INTO content.reaction_total (route, target_id, kind, count, source_epoch, source_position)
+     SELECT $1::integer, id, 'upvote', 1, 1, 1 FROM unnest($2::uuid[]) AS id`,
+    [targetRoute, otherTargets],
+  );
   const samples: Array<{ scale: number; single: number; page: number; statements: number }> = [];
-  const scales = [2048, 8192, 32768] as const;
+  const scales = [256, 1024, 4096] as const;
+  const realPerScale = 3;
+  let seeded = 0;
+  let real = 0;
   for (const scale of scales) {
+    // Real events take the highest source partitions, so the bulk range below never overlaps them.
     const events: Envelope[] = [];
-    if (scale === 2048) {
-      for (let partition = 2048; partition < 4096; partition++) events.push(next(partition, targetId));
-    } else if (scale === 8192) {
-      for (let partition = 2048; partition < 4096; partition++) {
-        events.push(next(partition, targetId), next(partition, targetId), next(partition, targetId));
-      }
-    } else {
-      for (let partition = 0; partition < 2048; partition++) {
-        for (let count = 0; count < 8; count++) events.push(next(partition, targetId));
-      }
-      for (let partition = 2048; partition < 4096; partition++) {
-        for (let count = 0; count < 4; count++) events.push(next(partition, targetId));
-      }
-    }
+    for (let count = 0; count < realPerScale; count++) events.push(next(4095 - real - count, targetId));
+    real += realPerScale;
     await apply(events);
+    const bulkEnd = scale - real;
+    await seedContributions(
+      targetRoute,
+      targetId,
+      Array.from({ length: bulkEnd - seeded }, (_, index) => seeded + index),
+    );
+    seeded = bulkEnd;
 
     const read = await readCounts(targetId);
     expect(read.counts).toEqual([{ kind: 'upvote', count: scale }]);
@@ -216,7 +238,7 @@ test('single-target and page reads stay within seven rows as 2048, 8192 and 3276
       statements: pageCost.statements,
     });
   }
-  expect(samples.map((sample) => sample.scale)).toEqual([2048, 8192, 32768]);
+  expect(samples.map((sample) => sample.scale)).toEqual([256, 1024, 4096]);
   expect(samples.map((sample) => sample.single)).toEqual([samples[0]!.single, samples[0]!.single, samples[0]!.single]);
   expect(samples.map((sample) => sample.page)).toEqual([samples[0]!.page, samples[0]!.page, samples[0]!.page]);
   expect(samples.map((sample) => sample.statements)).toEqual([

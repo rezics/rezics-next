@@ -10,7 +10,15 @@ import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue } from '../../src/http/request.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
-import { checkGrowth, openGrowthDatabase, seed, type GrowthDatabase } from '../support/growth.ts';
+import {
+  capture,
+  checkGrowth,
+  costOf,
+  openGrowthDatabase,
+  seed,
+  type GrowthDatabase,
+  type Row,
+} from '../support/growth.ts';
 import { startFakeStripe } from './support/fake-stripe.ts';
 
 let db: GrowthDatabase;
@@ -43,10 +51,16 @@ const input = () => ({
   taxCode: 'txcd_10302000',
 });
 const key = () => Bun.randomUUIDv7();
-async function request(path: string, account: string | null = buyer, body?: unknown, requestKey = key()) {
+async function request(
+  path: string,
+  account: string | null = buyer,
+  body?: unknown,
+  requestKey = key(),
+  method = body === undefined ? 'GET' : 'POST',
+) {
   return app.handle(
     new Request(`http://kernel.test${path}`, {
-      method: body === undefined ? 'GET' : 'POST',
+      method,
       headers: {
         'x-request-id': 'commerce-http',
         ...(account ? { authorization: `Bearer ${tokens.get(account)!}` } : {}),
@@ -58,13 +72,23 @@ async function request(path: string, account: string | null = buyer, body?: unkn
     }),
   );
 }
+const observedRevisions = new Map<string, number>();
 async function offer(): Promise<Offer> {
   const response = await request('/v1/offers', seller, input());
   expect(response.status).toBe(201);
-  return (await response.json()).offer;
+  const created = (await response.json()).offer;
+  const review = await request(`/v1/offers/${created.id}`, null);
+  expect(review.status).toBe(200);
+  observedRevisions.set(created.id, (await review.json()).offer.revision);
+  return created;
 }
 async function order(offerId: string, requestKey = key()): Promise<Order> {
-  const response = await request('/v1/orders', buyer, { offerId }, requestKey);
+  const response = await request(
+    '/v1/orders',
+    buyer,
+    { offerId, expectedOfferRevision: observedRevisions.get(offerId)! },
+    requestKey,
+  );
   expect(response.status).toBe(201);
   return (await response.json()).order;
 }
@@ -209,14 +233,19 @@ test('buyers open inline priced hosted Checkout, replay the order, and conflict 
     'currency',
     'id',
     'state',
+    'summary',
     'targetSubjectId',
     'title',
     'unitAmountMinor',
   ]);
   const publicRead = await request(`/v1/offers/${selling.id}`, null);
-  expect([publicRead.status, await publicRead.json()]).toEqual([200, { offer: selling }]);
+  const { summary, ...offerFields } = selling as Offer & { summary: unknown };
+  expect([publicRead.status, await publicRead.json()]).toEqual([
+    200,
+    { offer: { ...offerFields, revision: 1, subject: summary } },
+  ]);
   const requestKey = key();
-  const response = await request('/v1/orders', buyer, { offerId: selling.id }, requestKey);
+  const response = await request('/v1/orders', buyer, { offerId: selling.id, expectedOfferRevision: 1 }, requestKey);
   expect(response.status).toBe(201);
   const created = (await response.json()).order;
   expect(response.headers.get('location')).toBe(`/v1/orders/${created.id}`);
@@ -250,23 +279,101 @@ test('buyers open inline priced hosted Checkout, replay the order, and conflict 
   expect(Number(sent.params.get('expires_at'))).toBe(Math.floor(Date.parse(created.createdAt) / 1000) + 3600);
   expect(await order(selling.id, requestKey)).toEqual(created);
   expect(fake.requests).toHaveLength(1);
-  const changed = await request('/v1/orders', buyer, { offerId: (await offer()).id }, requestKey);
+  const changed = await request(
+    '/v1/orders',
+    buyer,
+    { offerId: (await offer()).id, expectedOfferRevision: 1 },
+    requestKey,
+  );
   expect(changed.status).toBe(422);
   expect((await changed.json()).code).toBe('idempotency_conflict');
 });
 
 test('unknown offers are hidden and delisted offers conflict, while existing orders replay', async () => {
-  expect((await request('/v1/orders', buyer, { offerId: newId(0x2200) })).status).toBe(404);
+  expect((await request('/v1/orders', buyer, { offerId: newId(0x2200), expectedOfferRevision: 1 })).status).toBe(404);
   const selling = await offer(),
     requestKey = key();
   const created = await order(selling.id, requestKey);
-  const delist = await request(`/v1/offers/${selling.id}:delist`, seller, {});
+  const delist = await request(`/v1/offers/${selling.id}:delist`, seller, { expectedRevision: 1 });
   expect(delist.status).toBe(200);
   expect((await delist.json()).offer.state).toBe('delisted');
-  const refused = await request('/v1/orders', buyer, { offerId: selling.id });
+  const refused = await request('/v1/orders', buyer, { offerId: selling.id, expectedOfferRevision: 1 });
   expect(refused.status).toBe(409);
   expect(await refused.json()).toMatchObject({ code: 'offer_unavailable', retryable: false });
   expect(await order(selling.id, requestKey)).toEqual(created);
+});
+
+test('delisted public offers are concealed as unknown while captured purchases and entitlements remain usable', async () => {
+  const selling = await offer();
+  const active = await capture(db, () => request(`/v1/offers/${selling.id}`, null));
+  expect(active.value.status).toBe(200);
+  expect((await active.value.json()).offer).toMatchObject({ id: selling.id, state: 'active', subject: null });
+  expect(active.capture.statements.some((sql) => /semantic\./.test(sql))).toBe(true);
+
+  const entitlement = await paid(selling.id);
+  const captured = (await store.readOrder(db.pool, routeOf(entitlement.orderId)!, entitlement.orderId))!;
+  expect(captured).toMatchObject({
+    offerId: selling.id,
+    targetSubjectId: selling.targetSubjectId,
+    title: selling.title,
+    currency: selling.currency,
+    unitAmountMinor: selling.unitAmountMinor,
+    settlement: 'paid',
+  });
+  const orderBefore = await request(`/v1/orders/${captured.id}`);
+  const entitlementBefore = await request(`/v1/entitlements/${entitlement.id}`);
+  expect(orderBefore.status).toBe(200);
+  expect(entitlementBefore.status).toBe(200);
+  const orderBody = await orderBefore.json();
+  const entitlementBody = await entitlementBefore.json();
+  expect(orderBody.order).toMatchObject({
+    id: captured.id,
+    title: captured.title,
+    targetSubjectId: captured.targetSubjectId,
+    settlement: 'paid',
+    entitlementId: entitlement.id,
+  });
+  expect(entitlementBody.entitlement).toMatchObject({
+    offerId: selling.id,
+    orderId: captured.id,
+    targetSubjectId: captured.targetSubjectId,
+    active: true,
+    revokedAt: null,
+    revokeReason: null,
+  });
+
+  const delisted = await request(`/v1/offers/${selling.id}:delist`, seller, { expectedRevision: 1 });
+  expect(delisted.status).toBe(200);
+  expect((await delisted.json()).offer).toMatchObject({ id: selling.id, state: 'delisted' });
+  const unknownId = newId(routeOf(selling.id)!);
+  for (const account of [null, buyer, seller]) {
+    const unknown = await capture(db, () => request(`/v1/offers/${unknownId}`, account));
+    const concealed = await capture(db, () => request(`/v1/offers/${selling.id}`, account));
+    for (const result of [unknown, concealed]) {
+      expect(result.value.status).toBe(404);
+      expect(result.value.headers.get('content-type')).toBe('application/problem+json');
+      expect(result.capture.statements.some((sql) => /commerce\.offer\b/.test(sql))).toBe(true);
+      expect(result.capture.statements.some((sql) => /semantic\./.test(sql))).toBe(false);
+    }
+    const problem = stableProblem(await unknown.value.json());
+    expect(problem).toMatchObject({ code: 'not_found', effect_status: 'not_applicable' });
+    expect(stableProblem(await concealed.value.json())).toEqual(problem);
+  }
+
+  const providerCalls = fake.requests.length;
+  const refused = await request('/v1/orders', buyer, { offerId: selling.id, expectedOfferRevision: 1 });
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({ code: 'offer_unavailable', retryable: false });
+  expect(fake.requests).toHaveLength(providerCalls);
+  const orderAfter = await request(`/v1/orders/${captured.id}`);
+  const entitlementAfter = await request(`/v1/entitlements/${entitlement.id}`);
+  expect(orderAfter.status).toBe(200);
+  expect(await orderAfter.json()).toEqual(orderBody);
+  expect(entitlementAfter.status).toBe(200);
+  expect(await entitlementAfter.json()).toEqual(entitlementBody);
+  expect(await store.readOrder(db.pool, routeOf(captured.id)!, captured.id)).toEqual(captured);
+  expect(await store.readEntitlement(db.pool, routeOf(entitlement.id)!, entitlement.id)).toEqual(entitlement);
+  expect(await store.readOffer(db.pool, routeOf(selling.id)!, selling.id)).toMatchObject({ state: 'delisted' });
 });
 
 test('rejected Checkout settles failed and lost creates settle unknown then reconcile under the same key', async () => {
@@ -279,7 +386,7 @@ test('rejected Checkout settles failed and lost creates settle unknown then reco
   expect(fake.requests).toHaveLength(1);
   fake.nextCreateFault = 'lost';
   const lostKey = key();
-  const lost = await request('/v1/orders', buyer, { offerId: selling.id }, lostKey);
+  const lost = await request('/v1/orders', buyer, { offerId: selling.id, expectedOfferRevision: 1 }, lostKey);
   expect(lost.status).toBe(503);
   expect(await lost.json()).toMatchObject({ code: 'dependency_unavailable', retryable: true });
   const unknown = (
@@ -327,6 +434,7 @@ test('single reads hide unknown, malformed UUID, other-account and anonymous IDs
     'orderId',
     'revokeReason',
     'revokedAt',
+    'summary',
     'targetSubjectId',
   ]);
   expect(read.active).toBe(true);
@@ -357,7 +465,192 @@ test('entitlement pages stay in the buyer partition and reject tampering and oth
   for (const query of ['limit=0', 'limit=101', 'limit=1.5'])
     expect((await request(`/v1/entitlements?${query}`)).status).toBe(400);
   expect((await request('/v1/entitlements', null)).status).toBe(401);
-  expect((await request('/v1/orders', null, { offerId: selling.id })).status).toBe(401);
+  expect((await request('/v1/orders', null, { offerId: selling.id, expectedOfferRevision: 1 })).status).toBe(401);
+});
+
+test('order creation proves its constant native point prefix row cost under the calibrated series rule after production-shaped neighbours and framework history are seeded before the first scale', async () => {
+  const selling = await offer();
+  await order(selling.id);
+  // Clone only committed native envelopes, never Access or semantic/business evidence.
+  const templates = (
+    await db.admin.query<{ receipt: Row; events: Row[]; basis: Row | null }>(
+      `SELECT to_jsonb(r) - 'actor_account_id' AS receipt,
+         (SELECT jsonb_agg(to_jsonb(o)) FROM core.outbox o
+          WHERE o.partition_no=r.partition_no AND o.position=r.position) AS events,
+         (SELECT to_jsonb(b) - 'actor_account_id' FROM editorial.write_basis b
+          WHERE b.partition_no=r.partition_no AND b.transaction_id=r.transaction_id) AS basis
+       FROM core.receipt r ORDER BY partition_no, position`,
+    )
+  ).rows;
+  expect(templates.map(({ receipt }) => receipt.command_kind).sort()).toEqual([
+    'commerce.checkout.record',
+    'commerce.offer.create',
+    'commerce.order.create',
+  ]);
+  expect(templates.filter(({ basis }) => basis !== null)).toHaveLength(2);
+  const neighboursPerScale = 2048;
+  const operation = async () => {
+    const calls = fake.requests.length;
+    const created = await order(selling.id, key());
+    expect(created).toMatchObject({ settlement: 'pending' });
+    expect(created.checkoutUrl).toStartWith('https://');
+    expect(fake.requests).toHaveLength(calls + 1);
+  };
+  const report = await checkGrowth(db, {
+    name: 'order creation: 2048/8192/32768 offer and order neighbours; 6144/24576/98304 native receipt and outbox neighbours; 4096/16384/65536 write bases',
+    rule: 'series',
+    scales: [1, 4, 16],
+    // Commerce Cost: one parent offer point, one order insert; checkout reads/updates
+    // one order and counts its c<=2 receipt prefix. Two k=1 command envelopes add
+    // fixed rows/statements and B-tree depth per probe: R/S O(1), B O(L(N)).
+    bounds: { statements: 'constant', rows: 'constant', blocks: 'logarithmic' },
+    async grow(database, scale, previous) {
+      const range = { from: previous * neighboursPerScale, to: scale * neighboursPerScale };
+      await seed(
+        database,
+        {
+          name: 'commerce-http-order-neighbours',
+          hotPartition: partitionOf(routeOf(buyer)!),
+          async write(target, placement) {
+            const sellerRoute = routeOf(seller)!;
+            const buyerRoute = routeOf(buyer)!;
+            const tx = { transactionId: newId(sellerRoute), time: new Date().toISOString() };
+            const neighbour = await store.insertOffer(
+              target.admin,
+              sellerRoute,
+              {
+                ...input(),
+                targetSubjectId: selling.targetSubjectId,
+                id: newId(sellerRoute),
+                creatorAccountId: seller,
+                royaltyBasisPoints: 9000,
+              },
+              tx,
+            );
+            await store.insertOrder(
+              target.admin,
+              buyerRoute,
+              {
+                id: newId(buyerRoute),
+                buyerAccountId: placement.hot ? buyer : other,
+                offer: neighbour,
+              },
+              { ...tx, transactionId: newId(buyerRoute) },
+            );
+          },
+        },
+        range,
+      );
+      const heads = new Map(
+        (
+          await database.admin.query<{ partition_no: number; epoch: number; position: string }>(
+            'SELECT partition_no, epoch, position::text FROM core.partition WHERE partition_no=ANY($1::integer[])',
+            [[partitionOf(routeOf(seller)!), partitionOf(routeOf(buyer)!)]],
+          )
+        ).rows.map((head) => [head.partition_no, head]),
+      );
+      await seed(
+        database,
+        {
+          name: 'commerce-http-native-envelopes',
+          hotPartition: partitionOf(routeOf(buyer)!),
+          rows({ ordinal }) {
+            const receipts: Row[] = [],
+              events: Row[] = [],
+              bases: Row[] = [];
+            for (const [index, template] of templates.entries()) {
+              const head = heads.get(Number(template.receipt.partition_no))!;
+              const position = (
+                BigInt(head.position) + BigInt((ordinal - range.from) * templates.length + index + 1)
+              ).toString();
+              const transactionId = newId(head.partition_no * 16);
+              const requestKey =
+                template.receipt.command_kind === 'commerce.checkout.record'
+                  ? `order:${newId(routeOf(buyer)!)}:checkout:0`
+                  : `history:${key()}`;
+              receipts.push({
+                ...template.receipt,
+                epoch: head.epoch,
+                position,
+                transaction_id: transactionId,
+                idempotency_key: requestKey,
+              });
+              events.push(
+                ...template.events.map((event) => ({
+                  ...event,
+                  epoch: head.epoch,
+                  position,
+                  id: newId(head.partition_no * 16),
+                })),
+              );
+              if (template.basis)
+                bases.push({ ...template.basis, epoch: head.epoch, position, transaction_id: transactionId });
+            }
+            return { 'core.receipt': receipts, 'core.outbox': events, 'editorial.write_basis': bases };
+          },
+          async finish(admin) {
+            // The next real command must append after the cloned committed positions.
+            for (const head of heads.values())
+              await admin.query('UPDATE core.partition SET position=$2 WHERE partition_no=$1', [
+                head.partition_no,
+                (BigInt(head.position) + BigInt((range.to - range.from) * templates.length)).toString(),
+              ]);
+          },
+        },
+        range,
+      );
+    },
+    async warmup(_, scale) {
+      const warmed = await capture(db, operation);
+      const nodes = (value: unknown): Record<string, unknown>[] => {
+        if (Array.isArray(value)) return value.flatMap(nodes);
+        if (!value || typeof value !== 'object') return [];
+        const node = value as Record<string, unknown>;
+        return [node, ...Object.values(node).flatMap(nodes)];
+      };
+      const plans = nodes(warmed.capture.plans);
+      const prefix = plans.filter(
+        (node) => typeof node['Index Cond'] === 'string' && /idempotency_key >=/.test(node['Index Cond']),
+      );
+      console.info(
+        'commerce order creation native access',
+        JSON.stringify({
+          neighbours: scale * neighboursPerScale,
+          cost: costOf(warmed.capture),
+          prefix,
+        }),
+      );
+      expect(prefix).toHaveLength(1);
+      expect(prefix[0]!['Index Name']).toBe('receipt_pkey');
+      for (const column of ['partition_no', 'command_kind', 'idempotency_key'])
+        expect(prefix[0]!['Index Cond']).toContain(column);
+      expect(prefix[0]!['Index Cond']).toContain('commerce.checkout.record');
+      expect(prefix[0]!['Index Cond']).toContain('idempotency_key <');
+      expect(prefix[0]!['Actual Rows']).toBe(0);
+      expect(prefix[0]!['Rows Removed by Filter']).toBe(0);
+      for (const [index, columns] of [
+        ['offer_pkey', ['route', 'offer_id']],
+        ['purchase_order_pkey', ['route', 'order_id']],
+        ['receipt_pkey', ['partition_no', 'principal_kind', 'principal_id', 'command_kind', 'idempotency_key']],
+        ['partition_pkey', ['partition_no']],
+      ] as const) {
+        const point = plans.find((node) => node['Index Name'] === index && !prefix.includes(node));
+        expect(point).toBeDefined();
+        for (const column of columns) expect(point!['Index Cond']).toContain(`${column} =`);
+      }
+    },
+    operation,
+  });
+  console.info('commerce order creation series', JSON.stringify(report));
+  for (const sample of report.samples)
+    for (const cost of sample.repetitions) {
+      for (const relation of ['commerce.offer', 'commerce.purchase_order', 'core.receipt'])
+        expect(cost.relations[relation]!.sequentialScans).toBe(0);
+      // Per-relation Cost includes ModifyTable RETURNING rows: the create and
+      // checkout envelopes insert two receipts. Fresh keys read no prior receipt.
+      expect(cost.relations['core.receipt']!.rows).toBe(2);
+    }
+  expect(new Set(report.samples.flatMap((sample) => sample.repetitions.map((cost) => cost.statements))).size).toBe(1);
 });
 
 test('commerce request statement counts stay constant as total and buyer history grow', async () => {
@@ -396,12 +689,6 @@ test('commerce request statement counts stay constant as total and buyer history
     );
   for (const [name, operation] of [
     [
-      'order creation',
-      async () => {
-        expect((await request('/v1/orders', buyer, { offerId: selling.id })).status).toBe(201);
-      },
-    ],
-    [
       'order read',
       async () => {
         expect((await request(`/v1/orders/${entitlement.orderId}`)).status).toBe(200);
@@ -422,5 +709,90 @@ test('commerce request statement counts stay constant as total and buyer history
       operation,
     });
     expect(new Set(report.samples.map((s) => s.cost.statements)).size).toBe(1);
+  }
+});
+
+test('native edition selector cannot create access or provider calls without the actual Content producer', async () => {
+  const { targetSubjectId: _historicSubject, ...terms } = input();
+  const before = fake.requests.length;
+  const response = await request('/v1/offers', seller, { ...terms, contentEditionId: newId(0x5500) });
+  expect(response.status).toBe(503);
+  expect((await response.json()).code).toBe('dependency_unavailable');
+  expect(fake.requests.length).toBe(before);
+});
+
+async function consentFootprint() {
+  return (
+    await db.pool.query(`SELECT
+    (SELECT count(*)::int FROM commerce.purchase_order) AS orders,
+    (SELECT count(*)::int FROM commerce.entitlement) AS entitlements,
+    (SELECT count(*)::int FROM commerce.checkout_creation_attempt) AS attempts,
+    (SELECT count(*)::int FROM core.receipt) AS receipts,
+    (SELECT count(*)::int FROM core.outbox) AS events`)
+  ).rows[0];
+}
+
+test('A buyer can start Checkout only for the displayed offer revision and a repriced offer requests new explicit consent without a provider call or new order', async () => {
+  const selling = await offer();
+  const review = await request(`/v1/offers/${selling.id}`, null);
+  expect(review.status).toBe(200);
+  const displayed = (await review.json()).offer;
+  expect(displayed.revision).toBe(1);
+  const intent = { offerId: displayed.id, expectedOfferRevision: displayed.revision };
+  const requestKey = key();
+  const accepted = await request('/v1/orders', buyer, intent, requestKey);
+  expect(accepted.status).toBe(201);
+  const original = await accepted.json();
+  const captured = await store.readOrder(db.pool, routeOf(original.order.id)!, original.order.id);
+  expect(captured).toMatchObject({ offerRevision: displayed.revision, unitAmountMinor: displayed.unitAmountMinor });
+
+  const reprice = await request(`/v1/offers/${selling.id}`, seller, { unitAmountMinor: 2400 }, key(), 'PATCH');
+  expect(reprice.status).toBe(200);
+  const before = await consentFootprint();
+  const calls = fake.requests.length;
+  const refused = await request('/v1/orders', buyer, intent);
+  expect(refused.status).toBe(409);
+  const conflict = await refused.json();
+  expect(conflict).toMatchObject({ code: 'offer_revision_conflict', retryable: false });
+  for (const privateField of ['offer', 'revision', 'currency', 'unitAmountMinor', 'expectedOfferRevision'])
+    expect(conflict).not.toHaveProperty(privateField);
+  expect(await consentFootprint()).toEqual(before);
+  expect(fake.requests).toHaveLength(calls);
+
+  const replay = await request('/v1/orders', buyer, intent, requestKey);
+  expect(replay.status).toBe(201);
+  expect(await replay.json()).toEqual(original);
+  const nextReview = (await (await request(`/v1/offers/${selling.id}`, null)).json()).offer;
+  const changed = await request(
+    '/v1/orders',
+    buyer,
+    { offerId: selling.id, expectedOfferRevision: nextReview.revision },
+    requestKey,
+  );
+  expect(changed.status).toBe(422);
+  expect((await changed.json()).code).toBe('idempotency_conflict');
+  expect(await consentFootprint()).toEqual(before);
+  expect(fake.requests).toHaveLength(calls);
+
+  const consented = await request('/v1/orders', buyer, {
+    offerId: selling.id,
+    expectedOfferRevision: nextReview.revision,
+  });
+  expect(consented.status).toBe(201);
+  expect((await consented.json()).order.id).not.toBe(original.order.id);
+  expect(fake.requests).toHaveLength(calls + 1);
+  expect(fake.requests.at(-1)!.params.get('line_items[0][price_data][unit_amount]')).toBe('2400');
+});
+
+test('fresh order requests require a positive integer expected offer revision without creation effects', async () => {
+  const selling = await offer();
+  const before = await consentFootprint();
+  const calls = fake.requests.length;
+  for (const expectedOfferRevision of [undefined, null, 0, -1, 1.5, '1', Number.MAX_SAFE_INTEGER + 1]) {
+    const response = await request('/v1/orders', buyer, { offerId: selling.id, expectedOfferRevision });
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe('invalid_request');
+    expect(await consentFootprint()).toEqual(before);
+    expect(fake.requests).toHaveLength(calls);
   }
 });

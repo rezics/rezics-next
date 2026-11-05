@@ -1,0 +1,173 @@
+# Delivery efficiency
+
+## Output and flow
+
+Two measures run together, and neither replaces the other:
+
+- **Accepted journeys measure what is delivered.** A journey is a user-visible path in the
+  [first public scope](../scope.md). The list is fixed in owner documents before work starts, so splitting work
+  cannot create journeys. A journey is accepted only when it works end to end on the integrated revision, seen in the
+  running-product walkthrough, which runs at least every three hours, or by a native receipt. Track the burn-down of
+  the remaining journeys and the projected finish date.
+- **Landed product lines measure throughput**, against the hourly floor below. They show whether the work system is
+  producing at the rate the burn-down needs.
+
+Landings and attempts are diagnostics; allowance and worker occupancy explain cost.
+
+Throughput target: product code landed on the integrated branch, held steadily at 20,000 lines an hour and aiming
+for 40,000. Lines measure throughput; they are not the goal. The target is a lot of good code: quality comes first,
+never write code to raise the count, and never lower throughput to gain quality. Count added product lines only.
+Deleted lines are ignored and never offset output, so deleting bad code (duplicates, dead code, wrong abstractions)
+is encouraged.
+
+Size each brief as one complete user journey of about 2,000–3,000 lines, backend and interface together, which a
+worker finishes in under an hour. The controller returns a product brief estimating under 1,200 lines or with a body
+over 4,000 characters (`brief.minimumEstimateLines` / `brief.maximumBodyCharacters`) instead of dispatching it. With 32 workers, that gives 30,000–40,000 lines an hour. Split a journey only
+where a real dependency forces it. A worker writes a continuation only for what remains after it has built most of
+the brief. Small slices, measurement-only tasks and proof-only tasks spend more attempts, setup and landings than
+they deliver.
+Padding, duplication, speculative abstraction and test or fixture bulk counted as product all work against the Goal,
+and the efficiency review reports quality signals (reverts, review findings, repeated failures) beside the count.
+
+Measure flow with `goal report --flow`. The manager host must alarm hourly against these absolute targets:
+
+- Flow efficiency (working time divided by dispatch-to-integration time) is at least 40%.
+- No queue's oldest entry is older than 60 minutes.
+- Landing p90 is under 30 minutes.
+- Attempts per integrated task are at most 1.5.
+
+Handle a breached target the same day. Separate measured timestamps and durations from estimates; do not invent
+missing timing.
+
+Decision: The hourly report reads each UTC bucket once, normalizes landing targets during aggregation, and reports conflicting task attribution as unknown; lifecycle and other window policies remain unchanged.
+
+The control plane exists to cut the cost of each landed outcome, and agents are its resolvers. A problem an agent
+can fix where it appears goes to an agent at that point, and the pipeline continues. Such problems include a merge
+conflict, a stale base, a formatting or derived-file failure, and a brief that disagrees with the code. Ending an
+attempt is allowed only when no agent can fix the problem there. Every path that ends an attempt without landing is
+measured in attempts, worker hours and tokens, and the hourly report names the three largest causes.
+
+## Daily improvement
+
+Audit every pipeline step from dispatch to promotion daily. Justify each step by the failures it actually catches
+against its cost. Move, merge or remove steps with low catches and high cost. For example, dev landings re-ran every
+check even though dev is the unstable branch; those checks moved to post-merge verification.
+
+Decision: check-result planning batch-reads committed workspace manifests into one cached tree projection for closure, package tree IDs and global inputs; the default reuse policy stays unchanged.
+
+Trust agents. In the delivery workflow, efficiency outranks defensive safety: REZICS is a community product, and a
+mistake on dev is caught and returned after integration. A guard that distrusts agent work is defensive programming
+against the agents, and it must earn its cost. Such guards refuse, reject, fail an attempt, forbid a check or
+re-verify trusted work. A guard is kept only when its measured catches of real defects outweigh the attempts, hours
+and tokens it costs, and when no agent could repair the problem in place. Money movement is the exception, and keeps
+its guards: payments, payouts and balances. The efficiency review covers guards like any other step. A new guard
+states the defect it prevents and is measured from its first firing.
+
+Decision: guard rewrite and landed shares use observed immediate next attempts for firings in the trailing seven days; hours are summed, and token totals add input and output because cached input is already included in input.
+
+Decision: the trailing-seven-day guard ledger builds call-local attempt indexes once and aggregates each record's distinct known guards in one pass; the firing window and immediate-next metrics remain unchanged.
+
+Guards are written into briefs before they are written into code: most control-plane refusals were specified by
+brief writers after one incident, and workers built exactly what they were asked. Prohibitions in briefs and prompts
+turn mismatches into stopped attempts. The evidence is in the
+[defensive programming research](../research/gpt-defensive-programming-opus-5-5.md). The efficiency owner prices
+every guard from the guard ledger each day.
+
+Make one structural change per day aimed at the current bottleneck stage: identify it, exploit its capacity,
+subordinate other stages to it, then elevate it where needed. Measure before and after on comparable work and
+record the effect, including when it is not yet observable.
+
+## Planning
+
+- Plan a few complete journeys at a time, each with one integrating owner and a native demo receipt.
+- Write consumer-first briefs: name the caller, the export or route it needs and one failing native outcome.
+  Implement a missing port together with its binding in the same task; do not create a contract-only tier.
+- Make a task one useful behaviour: one implementation plus its caller. Group symmetric readers or adapters.
+- Commission research only for a named open choice with a consumer task; use one report by default.
+- Send a handoff as one message containing the revision, remaining question, proposed decision and affected consumer.
+  Co-owner review answers accept or one counterexample.
+
+These rules were adopted on 2026-10-29. The
+[delivery report on main](https://github.com/rezics/rezics-next/blob/main/tools/goal/reports/delivery-efficiency-20261029.md)
+provides the evidence.
+
+## Operating discipline
+
+Codex runs on the Standard tier (`serviceTier: "default"`). Fast requires the maintainer's explicit permission.
+Keep allowance balances, account selection and operating ceilings in private configuration.
+
+Token efficiency is a primary measure, beside output: allowance spent per landed product line and per landed
+outcome, tracked per Goal, task class and model profile. It improves in three ways:
+
+- **Clear prompts.** Briefs and role prompts are short, current and free of contradiction, as set out in
+  [instructions and documentation](documentation.md).
+- **The simplest model that does the work.** A well-specified implementation journey runs on GPT-6 Luna at max
+  effort. Stronger models are kept for the work that needs them: review-prone or citation-heavy work, hard
+  debugging, and design. Change a routing default only after comparing profiles on representative accepted work.
+- **No rework.** Attempts that end without landing are the largest token cost. Remove their causes, as set out under
+  "Output and flow".
+
+Each attempt carries a fixed cost: reading context, orienting and running checks. A brief therefore carries a
+complete outcome, and its estimate is the lines its worker is expected to land, not a label. Fold repairs into the
+journey or broken path they serve, with every fix it needs. Do not dispatch small finish, recover or refuse slivers.
+A brief whose outcome is a new refusal, bound or guard needs its price line ([agent conduct](agent-conduct.md#briefs)).
+
+The brief writer picks the model by the task's difficulty. A simple, well-specified brief pins `model: gpt-6-luna` and
+`effort: max` in its front matter. Examples: exact edits the brief names, fixture, data or translation work, and wiring
+that follows an existing pattern. Judgment work keeps the routed default: debugging an unknown cause, design,
+cross-module contracts, security and money.
+
+Decision: the cross-module evidence and admission work for one reviewed Person across VN and anime retains the routed
+model default.
+
+Record attempts and accepted landings by Goal, task class and model profile. Include failed, replaced and abandoned
+attempts. Count resumed cumulative usage by deltas, once.
+
+Maintain an hourly diagnostic ledger of allowance, wait requests, replacement input, compactions and acceptance
+failures alongside the flow report. Use it to locate avoidable costs in briefs, exploration, rereads, polling,
+retries, conflicts, checks and idle capacity; apply the daily bottleneck change above.
+
+Product work integrating into dev retries without a limit or an approval: retry it, with an amended brief when that
+helps, and keep it moving. For a task needing a third attempt, classify each lost attempt as infrastructure, contract,
+rebase or model failure, fix the class and record the evidence alongside those retries, not before them; a retry is
+not a repair. Control-plane, stabilize and verification work keep the controller's retry limits and wait for that
+investigation before a further retry.
+
+“Selected model is at capacity” and an ambiguous “usage limit” with fresh allowance remaining are provider faults.
+Use the controller's bounded retry policy; never switch service tier or mark an allowance exhausted on that evidence
+alone. Keep private readings outside Git.
+
+Keep instructions short and contexts focused. Prefer reusable evidence and owner links to repeated repository
+exploration. Use event-driven waits and fresh continuations rather than polling through model turns.
+
+Apply the [brief preflight](delivery.md#brief-preflight) before spending an attempt. Keep independent and overlapping
+work moving under the delivery dependency rules; remove artificial dependencies. Avoid restarting unchanged work or repeating checks without new evidence.
+
+Set concurrency from measured worker memory, check capacity, queueing and journey throughput. Worker and heavy-check
+admission are separate controls. More workers are useful only when journey throughput justifies their cost.
+
+Keep routing policy in tracked configuration and private allowance settings locally. Compare profiles on representative
+accepted work before changing defaults.
+
+Decision: This cross-module imports seed and franchise journey keeps the routed default because it requires debugging
+unknown causes and cross-module contract and security judgment.
+
+A model pin changes routing, not authorization to exceed an operating budget. Pause and pacing policy must be enforced
+by the controller.
+
+Do not spend allowance merely to exhaust it before a reset. Preserve explicit pauses and spending limits.
+
+## Incident method
+
+When work slows or an attempt is lost, enumerate every evidenced cause from task states, attempt records, run logs
+and `failure.json`. Name the class of each cause: for example, shared-file holds, wrong brief premises, oversized
+checks, unnoticed long attempts, unvalidated integration configuration, or branch and propagation gaps. Distinguish
+observations from hypotheses; do not invent missing timing or claim a fix without evidence.
+
+Repair each class where it appears: give the problem to an agent at that point (resolver, same-session fix,
+regeneration), so the pipeline continues. Add a check that refuses or ends work only when no agent can repair the
+problem in place. Register that check in the guard ledger with the defect it prevents, and price it from its first
+firing. Tell every manager the adopted rule and its owner link. Verify its effect in the next hourly
+report using comparable evidence; if the effect is not yet observable, record that limit and the next observation.
+Use the [worked incident procedure](../../.agents/skills/rezics-workflow/references/efficiency.md#incident-analysis)
+when preparing the cause-to-fix record.

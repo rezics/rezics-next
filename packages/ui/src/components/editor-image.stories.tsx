@@ -1,4 +1,5 @@
 import { checkDocument, fromPlainText, type DocumentSnapshot } from '@rezics/document';
+import { Button } from '@rezics/ui/shadcn/button';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
@@ -36,11 +37,13 @@ function demo(profile: 'blocks' | 'text' = 'blocks', delayed = false) {
               states.push({ state, count });
               setState(state);
             }}
+            actions={
+              <Button type="button" disabled={state !== 'ready'}>
+                Send
+              </Button>
+            }
           />
         ) : null}
-        <button type="button" disabled={state !== 'ready'}>
-          Send
-        </button>
         <button type="button" onClick={() => setShown(false)}>
           Remove editor
         </button>
@@ -107,7 +110,7 @@ function drop(textbox: HTMLElement, files: File[], offset = 0) {
   );
 }
 const meta = {
-  title: 'Rezics UI/Editor Image',
+  title: 'Components/Editor Image',
   component: RichTextEditor,
   args: { value: fromPlainText('', 'blocks'), onChange: () => undefined, label: 'Post' },
   parameters: { layout: 'padded' },
@@ -121,52 +124,11 @@ const meta = {
 } satisfies Meta<typeof RichTextEditor>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-const insert = demo('blocks', true);
 const altText = demo();
 const pasted = demo('blocks', true);
 const dropped = demo('blocks', true);
 const failure = demo('blocks', true);
 const text = demo('text');
-
-export const UploadImage: Story = {
-  render: () => <insert.Demo />,
-  async play({ canvasElement }) {
-    const canvas = await choose(canvasElement, 'A mountain at dawn');
-    expect(canvas.getByRole('status', { name: 'Uploading image' })).toHaveTextContent('landscape.png');
-    expect(canvas.getByRole('button', { name: 'Send' })).toBeDisabled();
-    expect(insert.calls).toHaveLength(1);
-    expect(insert.calls[0]!.file.name).toBe('landscape.png');
-    expect(insert.calls[0]!.signal.aborted).toBe(false);
-    expect(images(insert.latest.current)).toHaveLength(0);
-    // Move the caret and edit before the requested insertion point while the upload is pending.
-    await caret(canvasElement, 0);
-    await userEvent.keyboard('New ');
-    insert.calls[0]!.resolve({ src: 'media-landscape', width: 640, height: 480 });
-    await canvas.findByRole('img', { name: 'A mountain at dawn' });
-    await waitFor(() => {
-      expect(images(insert.latest.current)[0]?.attrs).toMatchObject({
-        src: 'media-landscape',
-        alt: 'A mountain at dawn',
-        width: 640,
-        height: 480,
-      });
-      expect(checked(insert.latest.current)[0]?.content?.[0]?.text).toBe('New Before ');
-      expect(canvas.getByRole('button', { name: 'Send' })).toBeEnabled();
-    });
-    expect(insert.states).toContainEqual({ state: 'pending', count: 1 });
-    expect(insert.states.at(-1)).toEqual({ state: 'ready', count: 0 });
-    // Removing the editor aborts a second upload and late completions cannot change the snapshot.
-    paste(await caret(canvasElement, 0), [file('cancel.png')]);
-    await waitFor(() => expect(insert.calls).toHaveLength(2));
-    const before = insert.latest.current;
-    await userEvent.click(canvas.getByRole('button', { name: 'Remove editor' }));
-    expect(insert.calls[1]!.signal.aborted).toBe(true);
-    insert.calls[1]!.resolve({ src: 'cancelled' });
-    await Promise.resolve();
-    expect(insert.latest.current).toEqual(before);
-    checked(insert.latest.current);
-  },
-};
 
 export const AltText: Story = {
   render: () => <altText.Demo />,
@@ -288,5 +250,374 @@ export const TextProfileHasNoImages: Story = {
     expect(images(text.latest.current)).toHaveLength(0);
     expect(noUpload).toHaveTextContent('Plain');
     checked(text.latest.current);
+  },
+};
+
+type DeferredUpload = {
+  file: File;
+  signal: AbortSignal;
+  uploaderToken: symbol;
+  resolve: (image: UploadedImage) => void;
+  reject: () => void;
+};
+
+const uploadLifetime = {
+  initial: fromPlainText('Before after', 'blocks'),
+  value: { current: fromPlainText('Before after', 'blocks') },
+  calls: [] as DeferredUpload[],
+  changes: [] as DocumentSnapshot[],
+  states: [] as { state: UploadState; count: number }[],
+  reset() {
+    this.value.current = this.initial;
+    this.calls.length = 0;
+    this.changes.length = 0;
+    this.states.length = 0;
+  },
+};
+
+function UploadLifetimeDemo() {
+  const [value, setValue] = useState(uploadLifetime.initial);
+  const [uploadState, setUploadState] = useState<UploadState>('ready');
+  const [disabled, setDisabled] = useState(false);
+  const [readOnly, setReadOnly] = useState(false);
+  const [shown, setShown] = useState(true);
+  const uploaderToken = Symbol('render upload callback');
+  uploadLifetime.value.current = value;
+
+  const upload: ImageUploader = (file, signal) =>
+    new Promise((resolve, reject) => {
+      uploadLifetime.calls.push({
+        file,
+        signal,
+        uploaderToken,
+        resolve,
+        reject: () => reject(new Error('Offline')),
+      });
+    });
+  const onChange = (next: DocumentSnapshot) => {
+    uploadLifetime.changes.push(next);
+    const echo: DocumentSnapshot = {
+      ...next,
+      doc: { ...next.doc, content: [...(next.doc.content ?? [])] },
+    };
+    uploadLifetime.value.current = echo;
+    setValue(echo);
+  };
+  const onUploadState = (state: UploadState, count: number) => {
+    uploadLifetime.states.push({ state, count });
+    setUploadState(state);
+  };
+
+  return (
+    <div className="space-y-3">
+      {shown ? (
+        <RichTextEditor
+          compact
+          value={value}
+          label="Lifetime post"
+          disabled={disabled}
+          readOnly={readOnly}
+          toolbar="never"
+          upload={(file, signal) => upload(file, signal)}
+          onChange={onChange}
+          onUploadState={onUploadState}
+          actions={
+            <Button type="button" disabled={uploadState !== 'ready'}>
+              Send
+            </Button>
+          }
+        />
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" onClick={() => setDisabled((current) => !current)}>
+          {disabled ? 'Enable editor' : 'Disable editor'}
+        </Button>
+        <Button type="button" onClick={() => setReadOnly((current) => !current)}>
+          {readOnly ? 'Allow editing' : 'Make read only'}
+        </Button>
+        <Button type="button" onClick={() => setValue(fromPlainText('Replacement', 'blocks'))}>
+          Replace document
+        </Button>
+        <Button type="button" onClick={() => setValue(fromPlainText('Text profile', 'text'))}>
+          Use text profile
+        </Button>
+        <Button type="button" onClick={() => setValue(fromPlainText('Fresh blocks', 'blocks'))}>
+          Use blocks profile
+        </Button>
+        <Button type="button" onClick={() => setShown((current) => !current)}>
+          {shown ? 'Remove editor' : 'Restore editor'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+async function lifetimeCaret(canvasElement: HTMLElement, offset = 7) {
+  const textbox = within(canvasElement).getByRole('textbox', { name: 'Lifetime post' });
+  await userEvent.click(textbox);
+  const text = textbox.querySelector('p')?.firstChild;
+  if (text?.nodeType === Node.TEXT_NODE) {
+    window.getSelection()?.collapse(text, Math.min(offset, text.textContent?.length ?? 0));
+    document.dispatchEvent(new Event('selectionchange'));
+  }
+  return textbox;
+}
+
+async function chooseLifetimeFile(canvasElement: HTMLElement, name: string, alt: string, slash = false) {
+  const canvas = within(canvasElement);
+  let textbox = await lifetimeCaret(canvasElement, slash ? Number.MAX_SAFE_INTEGER : 7);
+  if (slash) {
+    await userEvent.type(textbox, '/i');
+    await canvas.findByRole('option', { name: 'Image' });
+    await userEvent.keyboard('{Enter}');
+  } else {
+    await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
+  }
+  const panel = within(await canvas.findByRole('dialog', { name: 'Image' }));
+  await userEvent.upload(panel.getByLabelText('Choose image file'), file(name));
+  if (alt) await userEvent.type(panel.getByRole('textbox', { name: 'Alt text' }), alt);
+  await userEvent.click(panel.getByRole('button', { name: 'Insert image' }));
+  textbox = await lifetimeCaret(canvasElement);
+  return textbox;
+}
+
+async function settleStoryMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+export const UploadImage: Story = {
+  render: () => <UploadLifetimeDemo />,
+  async play({ canvasElement }) {
+    uploadLifetime.reset();
+    const canvas = within(canvasElement);
+
+    await lifetimeCaret(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
+    await canvas.findByRole('dialog', { name: 'Image' });
+    await userEvent.click(canvas.getByRole('button', { name: 'Disable editor' }));
+    expect(canvas.queryByRole('dialog', { name: 'Image' })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Enable editor' }));
+    await lifetimeCaret(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Image' }));
+    await canvas.findByRole('dialog', { name: 'Image' });
+    await userEvent.click(canvas.getByRole('button', { name: 'Make read only' }));
+    expect(canvas.queryByRole('dialog', { name: 'Image' })).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Allow editing' }));
+
+    let textbox = await chooseLifetimeFile(canvasElement, 'button.png', 'Button description');
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(1));
+    expect(canvas.getByRole('status', { name: 'Uploading image' })).toHaveTextContent('button.png');
+    expect(canvas.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(uploadLifetime.calls[0]!.file.name).toBe('button.png');
+    expect(uploadLifetime.calls[0]!.signal.aborted).toBe(false);
+    expect(images(uploadLifetime.value.current)).toHaveLength(0);
+    await lifetimeCaret(canvasElement, 0);
+    await userEvent.keyboard('New ');
+    await waitFor(() => expect(uploadLifetime.changes.length).toBeGreaterThan(0));
+    expect(uploadLifetime.calls[0]!.signal.aborted).toBe(false);
+    expect(checked(uploadLifetime.value.current)[0]?.content?.[0]?.text).toBe('New Before after');
+    const changesBeforeButtonImage = uploadLifetime.changes.length;
+    uploadLifetime.calls[0]!.resolve({ src: 'opaque-button', width: 640, height: 480 });
+    await canvas.findByRole('img', { name: 'Button description' });
+    await waitFor(() => expect(uploadLifetime.changes).toHaveLength(changesBeforeButtonImage + 1));
+    expect(images(uploadLifetime.value.current)[0]?.attrs).toMatchObject({
+      src: 'opaque-button',
+      alt: 'Button description',
+      width: 640,
+      height: 480,
+    });
+    expect(uploadLifetime.states.slice(0, 2)).toEqual([
+      { state: 'pending', count: 1 },
+      { state: 'ready', count: 0 },
+    ]);
+
+    textbox = await chooseLifetimeFile(canvasElement, 'slash.png', 'Slash description', true);
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(2));
+    uploadLifetime.calls[1]!.resolve({ src: 'opaque-slash' });
+    await canvas.findByRole('img', { name: 'Slash description' });
+
+    textbox = await lifetimeCaret(canvasElement, 0);
+    paste(textbox, [file('paste.png')]);
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(3));
+    uploadLifetime.calls[2]!.resolve({ src: 'opaque-paste' });
+    await canvas.findByRole('img', { name: 'Image' });
+
+    textbox = await lifetimeCaret(canvasElement, 0);
+    drop(textbox, [file('drop.png')], 0);
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(4));
+    uploadLifetime.calls[3]!.resolve({ src: 'opaque-drop' });
+    await waitFor(() => expect(images(uploadLifetime.value.current)).toHaveLength(4));
+
+    paste(await lifetimeCaret(canvasElement, 0), [file('unsafe.svg', 'image/svg+xml')]);
+    expect(await canvas.findByRole('status', { name: 'Image' })).toHaveTextContent(
+      'Choose a PNG, JPEG, WebP, GIF or AVIF image.',
+    );
+    expect(uploadLifetime.calls).toHaveLength(4);
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Replace document' }));
+    await waitFor(() => expect(uploadLifetime.value.current.doc.content?.[0]?.content?.[0]?.text).toBe('Replacement'));
+    textbox = await lifetimeCaret(canvasElement, 0);
+    paste(
+      textbox,
+      Array.from({ length: 33 }, (_, index) => file(`batch-${index}.png`)),
+    );
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(36));
+    expect(uploadLifetime.calls.slice(4)).toHaveLength(32);
+    expect(uploadLifetime.states.at(-1)).toEqual({ state: 'pending', count: 32 });
+    expect(await canvas.findByRole('status', { name: 'Image' })).toHaveTextContent(
+      'A post can contain up to 32 media files.',
+    );
+    uploadLifetime.calls.slice(4).forEach((call, index) => call.resolve({ src: `opaque-batch-${index}` }));
+    await waitFor(() => expect(images(uploadLifetime.value.current)).toHaveLength(32));
+    expect(uploadLifetime.states.at(-1)).toEqual({ state: 'ready', count: 0 });
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Replace document' }));
+    textbox = await lifetimeCaret(canvasElement, 0);
+    paste(textbox, [file('invalid-dimension.png')]);
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(37));
+    uploadLifetime.calls[36]!.resolve({ src: 'opaque-invalid-dimension', width: 0 });
+    await canvas.findByRole('alert', { name: 'Image upload failed' });
+    expect(uploadLifetime.states.at(-1)).toEqual({ state: 'failed', count: 0 });
+    await userEvent.click(canvas.getByRole('button', { name: 'Retry upload' }));
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(38));
+    expect(uploadLifetime.calls[37]!.file).toBe(uploadLifetime.calls[36]!.file);
+    expect(uploadLifetime.calls[37]!.uploaderToken).toBe(uploadLifetime.calls[36]!.uploaderToken);
+    uploadLifetime.calls[37]!.resolve({ src: 'opaque-retried', width: 20, height: 10 });
+    await canvas.findByRole('img', { name: 'Image' });
+
+    textbox = await lifetimeCaret(canvasElement, 0);
+    paste(textbox, [file('dismiss.png')]);
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(39));
+    const beforeDismiss = uploadLifetime.value.current;
+    uploadLifetime.calls[38]!.reject();
+    await canvas.findByRole('alert', { name: 'Image upload failed' });
+    await userEvent.click(canvas.getByRole('button', { name: 'Dismiss upload' }));
+    expect(uploadLifetime.value.current).toEqual(beforeDismiss);
+    expect(canvas.getByRole('button', { name: 'Send' })).toBeEnabled();
+
+    textbox = await lifetimeCaret(canvasElement, 0);
+    paste(textbox, [file('retired-success.png')]);
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(40));
+    const retiredSuccess = uploadLifetime.calls[39]!;
+    const changesBeforeReplacement = uploadLifetime.changes.length;
+    await userEvent.click(canvas.getByRole('button', { name: 'Replace document' }));
+    await waitFor(() => expect(uploadLifetime.value.current.doc.content?.[0]?.content?.[0]?.text).toBe('Replacement'));
+    expect(retiredSuccess.signal.aborted).toBe(true);
+    textbox = await lifetimeCaret(canvasElement, 0);
+    paste(textbox, [file('fresh-replacement.png')]);
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(41));
+    const freshReplacement = uploadLifetime.calls[40]!;
+    const replacementValue = uploadLifetime.value.current;
+    const replacementStates = [...uploadLifetime.states];
+    retiredSuccess.resolve({ src: 'late-replacement-success' });
+    await settleStoryMicrotasks();
+    expect(uploadLifetime.value.current).toBe(replacementValue);
+    expect(uploadLifetime.changes).toHaveLength(changesBeforeReplacement);
+    expect(uploadLifetime.states).toEqual(replacementStates);
+    expect(canvas.getByRole('button', { name: 'Send' })).toBeDisabled();
+    freshReplacement.resolve({ src: 'opaque-fresh-replacement' });
+    await waitFor(() => expect(images(uploadLifetime.value.current)).toHaveLength(1));
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Disable editor' }));
+    const callsBeforeDisabledPaste = uploadLifetime.calls.length;
+    paste(canvas.getByRole('textbox', { name: 'Lifetime post' }), [file('disabled-before-entry.png')]);
+    expect(uploadLifetime.calls).toHaveLength(callsBeforeDisabledPaste);
+    await userEvent.click(canvas.getByRole('button', { name: 'Enable editor' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Make read only' }));
+    const callsBeforeReadOnlyPaste = uploadLifetime.calls.length;
+    paste(canvas.getByRole('textbox', { name: 'Lifetime post' }), [file('readonly-before-entry.png')]);
+    expect(uploadLifetime.calls).toHaveLength(callsBeforeReadOnlyPaste);
+    await userEvent.click(canvas.getByRole('button', { name: 'Allow editing' }));
+
+    textbox = await lifetimeCaret(canvasElement, 0);
+    paste(textbox, [file('disabled-before-completion.png')]);
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(42));
+    const disabledCompletion = uploadLifetime.calls[41]!;
+    await userEvent.click(canvas.getByRole('button', { name: 'Disable editor' }));
+    expect(disabledCompletion.signal.aborted).toBe(true);
+    await userEvent.click(canvas.getByRole('button', { name: 'Enable editor' }));
+    textbox = await lifetimeCaret(canvasElement, 0);
+    paste(textbox, [file('fresh-after-disabled.png')]);
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(43));
+    const freshAfterDisabled = uploadLifetime.calls[42]!;
+    const disabledStates = [...uploadLifetime.states];
+    const disabledValue = uploadLifetime.value.current;
+    const disabledChanges = uploadLifetime.changes.length;
+    disabledCompletion.reject();
+    await settleStoryMicrotasks();
+    expect(uploadLifetime.value.current).toBe(disabledValue);
+    expect(uploadLifetime.changes).toHaveLength(disabledChanges);
+    expect(uploadLifetime.states).toEqual(disabledStates);
+    expect(canvas.getByRole('button', { name: 'Send' })).toBeDisabled();
+    freshAfterDisabled.resolve({ src: 'opaque-fresh-after-disabled' });
+    await waitFor(() => expect(images(uploadLifetime.value.current)).toHaveLength(2));
+
+    textbox = await lifetimeCaret(canvasElement, 0);
+    paste(textbox, [file('readonly-before-completion.png')]);
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(44));
+    const readOnlyCompletion = uploadLifetime.calls[43]!;
+    await userEvent.click(canvas.getByRole('button', { name: 'Make read only' }));
+    expect(readOnlyCompletion.signal.aborted).toBe(true);
+    await userEvent.click(canvas.getByRole('button', { name: 'Allow editing' }));
+    textbox = await lifetimeCaret(canvasElement, 0);
+    paste(textbox, [file('fresh-after-readonly.png')]);
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(45));
+    const freshAfterReadOnly = uploadLifetime.calls[44]!;
+    const readOnlyStates = [...uploadLifetime.states];
+    const readOnlyValue = uploadLifetime.value.current;
+    const readOnlyChanges = uploadLifetime.changes.length;
+    readOnlyCompletion.resolve({ src: 'late-readonly-success' });
+    await settleStoryMicrotasks();
+    expect(uploadLifetime.value.current).toBe(readOnlyValue);
+    expect(uploadLifetime.changes).toHaveLength(readOnlyChanges);
+    expect(uploadLifetime.states).toEqual(readOnlyStates);
+    expect(canvas.getByRole('button', { name: 'Send' })).toBeDisabled();
+    freshAfterReadOnly.resolve({ src: 'opaque-fresh-after-readonly' });
+    await waitFor(() => expect(images(uploadLifetime.value.current)).toHaveLength(3));
+
+    textbox = await lifetimeCaret(canvasElement, 0);
+    paste(textbox, [file('profile-retired.png')]);
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(46));
+    const profileRetired = uploadLifetime.calls[45]!;
+    const profileChanges = uploadLifetime.changes.length;
+    await userEvent.click(canvas.getByRole('button', { name: 'Use text profile' }));
+    await waitFor(() =>
+      expect(canvas.getByRole('textbox', { name: 'Lifetime post' })).toHaveTextContent('Text profile'),
+    );
+    expect(profileRetired.signal.aborted).toBe(true);
+    const profileValue = uploadLifetime.value.current;
+    const profileStates = [...uploadLifetime.states];
+    profileRetired.resolve({ src: 'late-profile-success' });
+    await settleStoryMicrotasks();
+    expect(uploadLifetime.value.current).toBe(profileValue);
+    expect(uploadLifetime.changes).toHaveLength(profileChanges);
+    expect(uploadLifetime.states).toEqual(profileStates);
+    expect(images(uploadLifetime.value.current)).toHaveLength(0);
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Use blocks profile' }));
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Image' })).toBeInTheDocument());
+    textbox = await lifetimeCaret(canvasElement, 0);
+    paste(textbox, [file('fresh-profile.png')]);
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(47));
+    uploadLifetime.calls[46]!.resolve({ src: 'opaque-fresh-profile' });
+    await waitFor(() => expect(images(uploadLifetime.value.current)).toHaveLength(1));
+
+    textbox = await lifetimeCaret(canvasElement, 0);
+    paste(textbox, [file('unmounted.png')]);
+    await waitFor(() => expect(uploadLifetime.calls).toHaveLength(48));
+    const unmounted = uploadLifetime.calls[47]!;
+    await userEvent.click(canvas.getByRole('button', { name: 'Remove editor' }));
+    expect(unmounted.signal.aborted).toBe(true);
+    const unmountedValue = uploadLifetime.value.current;
+    const unmountedChanges = uploadLifetime.changes.length;
+    const unmountedStates = [...uploadLifetime.states];
+    unmounted.resolve({ src: 'late-unmounted-success' });
+    await settleStoryMicrotasks();
+    expect(uploadLifetime.value.current).toBe(unmountedValue);
+    expect(uploadLifetime.changes).toHaveLength(unmountedChanges);
+    expect(uploadLifetime.states).toEqual(unmountedStates);
+    checked(uploadLifetime.value.current);
   },
 };

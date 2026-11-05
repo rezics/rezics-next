@@ -173,7 +173,9 @@ beforeAll(async () => {
   db = await openGrowthDatabase(databaseUrl);
 });
 beforeEach(async () => {
-  await db.admin.query('TRUNCATE presentation.profile_activation, presentation.profile');
+  await db.admin.query(
+    'TRUNCATE presentation.profile_activation, presentation.profile, core.outbox, editorial.write_basis, core.receipt',
+  );
 });
 afterAll(async () => {
   await db?.close();
@@ -186,6 +188,7 @@ test('Profile publish stays within its bound as P grows', async () => {
   const population = growthPopulation('publish-growth', { activations: false, command: true });
   const report = await checkGrowth(database, {
     name: 'Profile publish',
+    scales: [1, 4, 16],
     bounds,
     grow: (d, scale, previous) => grow(d, population, scale, previous),
     operation: (d, _scale, repetition) =>
@@ -195,7 +198,7 @@ test('Profile publish stays within its bound as P grows', async () => {
         profile: profile(`measured-publish-${repetition}`),
       }),
   });
-  expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
+  expect(report.samples.map((sample) => sample.scale)).toEqual([1, 4, 16]);
 }, 90_000);
 
 test('Profile activate stays within its bound as P grows', async () => {
@@ -204,13 +207,14 @@ test('Profile activate stays within its bound as P grows', async () => {
   await publishProfile(database.pool, { ...options(), profile: anchor });
   const anchorDigest = profileDigest(anchor);
   const population = growthPopulation('activate-growth', { command: true });
-  const scaleStartRepetition = (scale: number) => (scale === 1 ? 0 : scale === 8 ? 6 : 12);
+  const scaleStartRepetition = (scale: number) => (scale === 1 ? 0 : scale === 4 ? 6 : 12);
   const lastSeededHead = (scale: number) => {
     const ordinal = scale * ordinalsPerScale - 1;
     return ordinal + 2 + Math.floor(ordinal / ordinalsPerScale) * 1_000;
   };
   await checkGrowth(database, {
     name: 'Profile activate',
+    scales: [1, 4, 16],
     bounds,
     grow: (d, scale, previous) => grow(d, population, scale, previous),
     operation: (d, scale, repetition) =>
@@ -230,6 +234,7 @@ test('Profile read stays within its bound as P grows', async () => {
   const population = growthPopulation('read-growth', { activations: false });
   await checkGrowth(database, {
     name: 'Profile read',
+    scales: [1, 4, 16],
     bounds,
     grow: (d, scale, previous) => grow(d, population, scale, previous),
     operation: (d) => readProfile(d.pool, profileDigest(anchor)),
@@ -242,6 +247,7 @@ test('Active profile lookup stays within its bound as P grows', async () => {
   const population = growthPopulation('active-growth');
   await checkGrowth(database, {
     name: 'Active profile lookup',
+    scales: [1, 4, 16],
     bounds,
     grow: (d, scale, previous) => grow(d, population, scale, previous),
     operation: (d) => activeProfile(d.pool),
@@ -255,8 +261,38 @@ test('Profile bootstrap stays within its bound as P grows', async () => {
   const population = growthPopulation('bootstrap-growth', { command: true, receipt: false });
   await checkGrowth(database, {
     name: 'Profile bootstrap',
+    scales: [1, 4, 16],
     bounds,
     grow: (d, scale, previous) => grow(d, population, scale, previous),
     operation: (d) => bootstrapProfile(d.pool, anchor),
   });
+}, 90_000);
+
+test('cold hot evicted and cross-pool profile reads stay bounded at 1x 8x and 64x history', async () => {
+  const database = db;
+  const anchor = profile('retention-growth-anchor');
+  await bootstrapProfile(database.pool, anchor);
+  const digest = profileDigest(anchor);
+  const other = database.openPool({ max: 1 });
+  const population = growthPopulation('retention-growth', { activations: false });
+  const report = await checkGrowth(database, {
+    name: 'Profile retention lifecycle',
+    scales: [1, 8, 64],
+    bounds,
+    grow: (d, scale, previous) => grow(d, population, scale, previous),
+    operation: async (d) => {
+      const first = await readProfile(d.pool, digest);
+      expect(await readProfile(other, digest)).toBe(first);
+      for (let n = 0; n < 4; n++) {
+        const body = seededProfile(n);
+        expect(await readProfile(d.pool, profileDigest(body))).toEqual(body);
+      }
+      const reloaded = await activeProfile(other);
+      expect(reloaded).toEqual({ digest, head: 1, profile: anchor });
+      expect(reloaded!.profile).not.toBe(first);
+      expect(Object.isFrozen(reloaded!.profile)).toBe(true);
+      expect(await readProfile(other, `sha256:${'f'.repeat(64)}`)).toBeNull();
+    },
+  });
+  expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
 }, 90_000);

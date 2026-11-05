@@ -1,3 +1,5 @@
+import { MAX_CONSENTED_SCOPES } from '@rezics/auth-contract';
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createRequire } from 'node:module';
 import { setImmediate } from 'node:timers/promises';
@@ -129,7 +131,7 @@ test('durable consent point reader honors native pending reduction ceiling befor
       audience: 'https://current-consent.api.test',
       secret: 'current-consent-native-test-secret-32-bytes',
       signing: { activeKid: key.kid, privateKeys: [key] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
         ...bindings,
         async authorizeProvisioning(reference: string) {
           const approval = await bindings.authorizeProvisioning(reference);
@@ -147,7 +149,7 @@ test('durable consent point reader honors native pending reduction ceiling befor
           };
         },
         ...barriers.trustedAccess,
-      },
+      }),
     };
     let auth = await createAuthService(options);
     const request = (path: string, body: unknown, cookie = '') =>
@@ -330,9 +332,17 @@ test('durable consent point reader honors native pending reduction ceiling befor
       WHERE "userId"=$1 AND "clientId"='web'`,
       [accountId],
     );
+    let abandoned!: Parameters<typeof barriers.trustedAccess.completeBarrier>[0];
     options.trustedAccess.invalidateAccount = async (actual) => {
       reference = actual.proofReference!;
-      await barriers.trustedAccess.invalidateAccount!(actual);
+      const receipt = await barriers.trustedAccess.invalidateAccount!(actual);
+      abandoned = {
+        accountId,
+        purpose: 'consent-reduction',
+        operationKey: actual.operationKey!,
+        receiptId: receipt.receiptId,
+        minimumAuthnEpoch: receipt.minimumAuthnEpoch,
+      };
       throw new Error('Lost acknowledgement');
     };
     expect((await grant(['read'])).status).toBe(503);
@@ -356,6 +366,12 @@ test('durable consent point reader honors native pending reduction ceiling befor
     expect((await marker()).pending_reference).toBe(reference);
     expect(await read()).toEqual({ ...selected, scopes: ['read'] });
     expect((await grant(['read'])).status).toBe(401);
+    // The abandoned barrier fenced the account: it signs in again only once Auth completes the barrier.
+    expect(
+      (await request('/signin', { account_id: accountId, password, client_id: 'web', scope: scopes })).status,
+    ).toBe(401);
+    await barriers.trustedAccess.completeBarrier(abandoned);
+    expect((await lifecycle.readFenceState(accountId))?.fenced).toBe(false);
     session = await login();
     expect((await grant(scopes)).status).toBe(200);
     expect((await marker()).pending_reference).toBeNull();
@@ -367,3 +383,37 @@ test('durable consent point reader honors native pending reduction ceiling befor
     fixture.close();
   }
 }, 120000);
+
+test('current consent keeps one point statement and fixed rows at 8, 64 and 512 scopes', async () => {
+  const fixture = testDatabase();
+  const db = await openGrowthDatabase(fixture.url);
+  try {
+    await db.admin.query(`INSERT INTO auth_client VALUES ('scope-bound',false,ARRAY['read']);
+      INSERT INTO auth_client_coverage (client_id,ready) VALUES ('scope-bound',true);
+      INSERT INTO auth_consent (account_id,client_id,scopes) VALUES ('person','scope-bound',ARRAY['read'])`);
+    const read = createCurrentConsentReader({ database: db.pool }).readCurrentConsent;
+    const costs: [number, number][] = [];
+    for (const count of [8, 64, MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPES + 1]) {
+      const scopes = Array.from({ length: count }, (_, i) => `scope:${i}:`.padEnd(128, 'a'));
+      await db.admin.query("UPDATE auth_client SET scopes=$1 WHERE client_id='scope-bound'", [scopes]);
+      await db.admin.query("UPDATE auth_consent SET scopes=$1 WHERE client_id='scope-bound'", [scopes]);
+      const sample = await capture(db, () => read({ actorAccountId: 'person', clientId: 'scope-bound' }));
+      expect(sample.value).toEqual(
+        count > MAX_CONSENTED_SCOPES
+          ? null
+          : {
+              actorAccountId: 'person',
+              clientId: 'scope-bound',
+              scopes: [...scopes].sort(),
+            },
+      );
+      const cost = costOf(sample.capture);
+      costs.push([cost.statements, cost.rows]);
+    }
+    expect(costs[0]![0]).toBe(1);
+    expect(costs).toEqual([costs[0]!, costs[0]!, costs[0]!, costs[0]!]);
+  } finally {
+    await db.close();
+    fixture.close();
+  }
+});

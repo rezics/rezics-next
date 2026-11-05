@@ -1,6 +1,43 @@
 types:
   schema:Recipe: recette de cuisine
 properties:
+  schema:suitableForDiet: 'convient au régime alimentaire'
+  schema:recipeInstructions: instructions
   schema:recipeIngredient: ingrédient
   schema:cookTime: temps de cuisson
   schema:recipeYield: portions
+inverseProperties:
+  schema:suitableForDiet: 'Recettes pour ce régime alimentaire'
+libraryProfiles:
+  recipe.cooking:
+    states:
+      planned: 'Prévu'
+      in_progress: 'En cours'
+      completed: 'Terminé'
+      paused: 'En pause'
+      dropped: 'Abandonné'
+    units:
+      scalar_amount:
+        minute:
+          label: 'minute'
+          countForms:
+            one: 'minute'
+            other: 'minutes'
+            many: 'minutes'
+    copyKinds:
+      physical: 'Physique'
+      digital: 'Numérique'
+    copyStatuses:
+      physical:
+        owned: 'Possédé'
+        disposed: 'Cédé'
+      digital:
+        owned: 'Possédé'
+typeDescriptions:
+  schema:Recipe: 'Des instructions et ingrédients pour préparer un aliment ; distincts de l’aliment lui-même et d’une séance personnelle de cuisine.'
+propertyDescriptions:
+  schema:suitableForDiet: 'Un concept indiquant le régime auquel convient la recette, par exemple végétarien ; ne pas le déduire des noms d’ingrédients.'
+  schema:recipeInstructions: 'Un document rédigé décrivant les étapes de préparation ; fournir un document, pas une chaîne simple ni une URL.'
+  schema:recipeIngredient: 'Un ingrédient en texte avec indication de langue, par exemple 200 g de farine ; les liens structurés vers des aliments utilisent la relation de matériau.'
+  schema:cookTime: 'Durée de cuisson effective en nombre entier non négatif de minutes (wd:Q7727), par exemple 25 ; ni une heure de la journée ni le temps total de préparation et de repos.'
+  schema:recipeYield: 'Nombre de portions, sous forme de quantité entière sans unité d’au moins 1, par exemple 4 ; pas une consigne de portion en texte libre.'

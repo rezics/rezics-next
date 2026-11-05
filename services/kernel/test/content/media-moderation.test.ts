@@ -1,3 +1,5 @@
+import { AuthenticationError } from '../../src/request/access.ts';
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createAuthService, type AuthService } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -21,6 +23,7 @@ import type { Access, Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { checkGrowth, openGrowthDatabase, seed, type Population } from '../support/growth.ts';
 import { observeSql } from './support/sql-observer.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const url = process.env.DATABASE_URL;
@@ -82,7 +85,7 @@ beforeAll(async () => {
     audience,
     secret: 'test-media-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(admin, routeOf(id)!, id);
         return (
@@ -99,7 +102,7 @@ beforeAll(async () => {
         if (!approvals.delete(reference)) throw new Error('Missing fixture provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({
     clientId: 'web',
@@ -318,25 +321,21 @@ test('anonymous uploader author and suspended denials preserve state; bytes and 
   const unscoped = await f.authenticate(moderatorId, false);
   expect(unscoped.scopes).toEqual(['subject:read']);
   await grant(admin, f.mediaId, suspendedId);
-  await admin.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(suspendedId),
-    suspendedId,
-  ]);
+  await suspendAccount(admin, suspendedId);
   const before = await facts(admin, f.mediaId);
   const anchor = await readPartition(admin, partition);
   try {
     for (const actor of [{ kind: 'anonymous' } as const, author, suspended, unscoped]) {
       const start = observer.records.length;
-      await expect(f.execute(input(f.mediaId), context(), actor)).rejects.toBeInstanceOf(GrantDeniedError);
+      await expect(f.execute(input(f.mediaId), context(), actor)).rejects.toBeInstanceOf(
+        actor === suspended ? AuthenticationError : GrantDeniedError,
+      );
       expect(observer.records.slice(start).some((r) => /core.receipt/.test(r.statement))).toBe(false);
       expect(await facts(admin, f.mediaId)).toEqual(before);
       expect(await readPartition(admin, partition)).toEqual(anchor);
     }
   } finally {
-    await admin.query("UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2", [
-      routeOf(suspendedId),
-      suspendedId,
-    ]);
+    await reinstateAccount(admin, suspendedId);
   }
   const wrong = await insertMedia(admin);
   await expect(f.execute(input(wrong))).rejects.toBeInstanceOf(GrantDeniedError);
@@ -418,9 +417,9 @@ test('rightsTakedown invokes both real APIs independently; the closed media even
       securityRevision: fence.value.securityRevision,
     },
   ]);
-  expect(CONTENT_EVENTS[eventType]).toBe(MEDIA_MODERATION_EVENTS[eventType]);
-  for (const [name, schema] of Object.entries(MEDIA_EVENTS)) expect(Reflect.get(CONTENT_EVENTS, name)).toBe(schema);
-  expect(Value.Check(CONTENT_EVENTS[eventType], media.value)).toBe(true);
+  expect(CONTENT_EVENTS()[eventType]).toBe(MEDIA_MODERATION_EVENTS[eventType]);
+  for (const [name, schema] of Object.entries(MEDIA_EVENTS)) expect(Reflect.get(CONTENT_EVENTS(), name)).toBe(schema);
+  expect(Value.Check(CONTENT_EVENTS()[eventType], media.value)).toBe(true);
   for (const patch of [
     { reason: 'text' },
     { credit: 'text' },
@@ -428,7 +427,7 @@ test('rightsTakedown invokes both real APIs independently; the closed media even
     { securityRevision: '01' },
     { securityRevision: '0' },
   ])
-    expect(Value.Check(CONTENT_EVENTS[eventType], { ...media.value, ...patch })).toBe(false);
+    expect(Value.Check(CONTENT_EVENTS()[eventType], { ...media.value, ...patch })).toBe(false);
   const rows = (
     await admin.query('SELECT * FROM core.outbox WHERE partition_no=$1 AND position=$2', [
       media.partition,

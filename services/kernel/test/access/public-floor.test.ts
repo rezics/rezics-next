@@ -1,3 +1,4 @@
+import { reinstateAccount, suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createAuthService, type AuthService } from '@rezics/auth';
@@ -17,6 +18,7 @@ import {
   type Actor,
   type Resource,
 } from '../../src/request/access.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const url = process.env.DATABASE_URL;
@@ -158,7 +160,7 @@ beforeAll(async () => {
     audience,
     secret: 'test-only-better-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid!, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(pool, routeOf(id), id);
         return (
@@ -175,7 +177,7 @@ beforeAll(async () => {
         if (![person, robot].includes(reference)) throw new Error('Unknown provisioning reference');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await service.internal.registerClient({
     clientId: 'web',
@@ -251,7 +253,7 @@ test('unknown actions, invalid bearer and inactive or fenced accounts cannot acq
   await expect(
     actorOf(access, new Request(audience, { headers: { authorization: 'Bearer invalid' } }), context()),
   ).rejects.toBeInstanceOf(AuthenticationError);
-  for (const update of ["state='suspended'", 'authn_fenced=true', 'minimum_authn_epoch=2']) {
+  for (const update of ['authn_fenced=true', 'minimum_authn_epoch=2']) {
     await pool.query('BEGIN');
     try {
       await pool.query(`UPDATE access.account SET ${update} WHERE route=$1 AND account_id=$2`, [
@@ -262,6 +264,15 @@ test('unknown actions, invalid bearer and inactive or fenced accounts cannot acq
     } finally {
       await pool.query('ROLLBACK');
     }
+  }
+  await suspendAccount(pool, person);
+  try {
+    await expect(access.authenticate(personToken, context())).rejects.toBeInstanceOf(AuthenticationError);
+  } finally {
+    await reinstateAccount(pool, person);
+    personToken = await token(person, []);
+    scopedToken = await token(person, [read, report, protectedAction]);
+    mixedToken = await token(person, ['openid', 'offline_access', 'other:read', read]);
   }
 });
 

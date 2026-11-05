@@ -1,7 +1,13 @@
 import { expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { readFileSync } from 'node:fs';
-import { assertGrowth, type GrowthSample } from '../../kernel/test/support/growth-bound.ts';
+import {
+  countedSample,
+  countedViolations,
+  type CountedCheck,
+  type CountedSample,
+  type CountedValues,
+} from '../../kernel/test/support/growth-counters.ts';
 import { DEFAULT_DUMP_CHUNK_BYTES, MAX_DUMP_CHUNK_BYTES, observeDumpRetention } from '../src/dumps-bytes.ts';
 import { VndbTablesStore } from '../src/vndb-tables.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
@@ -10,6 +16,24 @@ const names = ['vn.header', 'vn', 'vn_titles.header', 'vn_titles', 'entry_meta.h
 const encode = (text: string) => new TextEncoder().encode(text);
 const fixture = (name: string) =>
   readFileSync(new URL(`../../../specs/fixtures/imports/vndb-tables/db/${name}`, import.meta.url), 'utf8');
+type Sample = { scale: number; counted: CountedSample };
+const sqlCheck: CountedCheck = {
+  read: (value) => value as CountedValues,
+  bounds: { 'sqlite returned rows': 'constant', 'sqlite statements': 'constant' },
+  slack: {
+    'sqlite returned rows': { absolute: 2, relative: 0.1 },
+    'sqlite statements': { absolute: 0, relative: 0 },
+  },
+};
+const inputCheck: CountedCheck = {
+  read: (value) => value as CountedValues,
+  bounds: { 'input byte visits': 'linear', 'input chunks': 'linear', 'admitted input bytes': 'linear' },
+  slack: {
+    'input byte visits': { absolute: 2, relative: 0.1 },
+    'input chunks': { absolute: 0, relative: 0 },
+    'admitted input bytes': { absolute: 4, relative: 0.5 },
+  },
+};
 type Entry = Parameters<VndbTablesStore['stage']>[2] extends AsyncIterable<infer T> ? T : never;
 function entry(path: string, bytes: AsyncIterable<Uint8Array>, declaredBytes: number): Entry {
   return { path, kind: 'file', declaredBytes, bytes };
@@ -46,12 +70,12 @@ function stageProbe(db: Database) {
     growingTables: ['vndb_table_runs', 'vndb_table_rows', 'vndb_table_spool'],
   });
   let active = false;
-  let cost = { rows: 0, statements: 0, blocks: 0 as const };
+  let counts = { 'sqlite returned rows': 0, 'sqlite statements': 0 };
   const capture = <T>(operation: () => T): T => {
     if (!active) return operation();
     const sample = probe.measure(operation);
-    cost.rows += sample.cost.rows;
-    cost.statements += sample.cost.statements;
+    counts['sqlite returned rows'] += sample.counts['sqlite returned rows'];
+    counts['sqlite statements'] += sample.counts['sqlite statements'];
     return sample.value;
   };
   const seen = new WeakSet<object>();
@@ -84,15 +108,15 @@ function stageProbe(db: Database) {
   }
   return {
     async measure(operation: () => Promise<void>) {
-      cost = { rows: 0, statements: 0, blocks: 0 };
+      counts = { 'sqlite returned rows': 0, 'sqlite statements': 0 };
       const before = probe.verifyPlans().length;
       active = true;
       try {
         await operation();
-        expect(cost.rows).toBeGreaterThan(0);
-        expect(cost.statements).toBeGreaterThan(0);
-        expect(probe.verifyPlans().length - before).toBe(cost.statements);
-        return { ...cost };
+        expect(counts['sqlite returned rows']).toBeGreaterThan(0);
+        expect(counts['sqlite statements']).toBeGreaterThan(0);
+        expect(probe.verifyPlans().length - before).toBe(counts['sqlite statements']);
+        return { ...counts };
       } finally {
         active = false;
       }
@@ -104,7 +128,7 @@ test('raw six-entry staging SQL stays constant across accumulated native keys an
   const db = new Database(':memory:');
   const probe = stageProbe(db);
   const store = new VndbTablesStore(db);
-  const samples: GrowthSample[] = [];
+  const samples: Sample[] = [];
   try {
     let previous = 0;
     for (const scale of [32, 128, 512]) {
@@ -119,12 +143,11 @@ test('raw six-entry staging SQL stays constant across accumulated native keys an
       const run = `measured-${scale}`;
       store.begin('vndb', run);
       db.exec('ANALYZE');
-      const cost = await probe.measure(() => store.stage('vndb', run, archive()));
+      const counts = await probe.measure(() => store.stage('vndb', run, archive()));
       expect(store.inspect('vndb', run)).toMatchObject({ state: 'ready', stagedRows: 7 });
-      samples.push({ scale, cost });
+      samples.push({ scale, counted: countedSample([sqlCheck.read(counts, scale)]) });
     }
-    // blocks:0 records unavailable SQLite buffer counters, not zero physical IO.
-    assertGrowth(samples, { rows: 'constant', statements: 'constant', blocks: 'constant' });
+    expect(countedViolations(sqlCheck, samples)).toEqual([]);
   } finally {
     db.close();
   }
@@ -134,8 +157,8 @@ test('native input visits grow linearly over 1/8/64 owned chunks with bounded ad
   const db = new Database(':memory:');
   const probe = stageProbe(db);
   const store = new VndbTablesStore(db, { maxChunkBytes: 512 });
-  const input: GrowthSample[] = [];
-  const sql: GrowthSample[] = [];
+  const input: Sample[] = [];
+  const sql: Sample[] = [];
   try {
     for (const scale of [1, 8, 64]) {
       const original = fixture('vn');
@@ -160,24 +183,22 @@ test('native input visits grow linearly over 1/8/64 owned chunks with bounded ad
       store.begin('vndb', run);
       db.exec('ANALYZE');
       try {
-        sql.push({
-          scale,
-          cost: await probe.measure(() =>
-            store.stage(
-              'vndb',
-              run,
-              archive(
-                vn,
-                512,
-                () => visits++,
-                (bytes) => {
-                  pulls++;
-                  pulledBytes += bytes;
-                },
-              ),
+        const counts = await probe.measure(() =>
+          store.stage(
+            'vndb',
+            run,
+            archive(
+              vn,
+              512,
+              () => visits++,
+              (bytes) => {
+                pulls++;
+                pulledBytes += bytes;
+              },
             ),
           ),
-        });
+        );
+        sql.push({ scale, counted: countedSample([sqlCheck.read(counts, scale)]) });
       } finally {
         restore();
       }
@@ -189,12 +210,18 @@ test('native input visits grow linearly over 1/8/64 owned chunks with bounded ad
       expect(chunks).toBe(scale + 5);
       expect(peak).toBe(512);
       expect(store.page('vndb', run, { after: null, limit: 16 }).records).toHaveLength(2);
-      input.push({ scale, cost: { rows: visits, statements: chunks, blocks: admitted } });
+      input.push({
+        scale,
+        counted: countedSample([
+          inputCheck.read(
+            { 'input byte visits': visits, 'input chunks': chunks, 'admitted input bytes': admitted },
+            scale,
+          ),
+        ]),
+      });
     }
-    // Here the generic metrics represent actual byte visits, pulls and admitted
-    // backing bytes. SQL metrics retain their usual meaning below.
-    assertGrowth(input, { rows: 'linear', statements: 'linear', blocks: 'linear' });
-    assertGrowth(sql, { rows: 'constant', statements: 'constant', blocks: 'constant' });
+    expect(countedViolations(inputCheck, input)).toEqual([]);
+    expect(countedViolations(sqlCheck, sql)).toEqual([]);
   } finally {
     db.close();
   }

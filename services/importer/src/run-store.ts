@@ -1,6 +1,10 @@
 import { Database, type SQLQueryBindings, type Statement } from 'bun:sqlite';
 import { randomBytes } from 'node:crypto';
-import type { SourceId } from '@rezics/conversion';
+import {
+  validateSourceClassificationProjection,
+  type SourceClassificationProjection,
+  type SourceId,
+} from '@rezics/conversion';
 import {
   BatchStatementSchema,
   FIELD_GROUPS,
@@ -9,13 +13,59 @@ import {
   type FieldGroup,
 } from '@rezics/definitions/bulk';
 import { checkBatch, checkResult } from './accepted-checks.ts';
-import type { ImportBatchRequest, ImportBatchResult } from './import-contract.ts';
+import type {
+  ImportBatchRequest,
+  ImportBatchResult,
+  ImportSourceRecord,
+  ImportSourceStatistic,
+  ImportSourceStatisticClear,
+} from './import-contract.ts';
+import {
+  SOURCE_OBSERVATION_PAGE_MAX,
+  type AggregateOperationStatus,
+  type IntendedObservation,
+  type RetainedObservationHead,
+} from './source-observation.ts';
+import {
+  isIntendedClassification,
+  type IntendedClassification,
+  type RetainedClassificationHead,
+} from './source-classification.ts';
 import type { RecordRow } from './record-store.ts';
+import type { SourceVocabularyRequest } from '../../../packages/conversion/src/source-vocabulary.ts';
 import { MAX_DUMP_RECORD_BYTES } from './dumps-bytes.ts';
+import {
+  admitStagingCheckpoint,
+  emptyPrefixDigest,
+  encodeStagingIdentityJson,
+  extendPrefixDigest,
+  type StagingCaptureIdentity,
+  type StagingCheckpoint,
+  type StagingPrefixRecord,
+} from './staging-checkpoint.ts';
+import {
+  ConversionDiagnosticError,
+  admitDigest,
+  admitRevision,
+  isConversionDiagnosticPhase,
+  sanitizeConversionDiagnostics,
+  type ConversionDiagnosticPhase,
+} from './conversion-diagnostics.ts';
+import { SOURCE_DESTINATION_DDL } from './source-destination.ts';
 
 export type Run = { source: string; id: string; lease: string };
 /** Callers supply only the pure converter's sanitized normalized record, never raw dump data. */
-export type SourceProjection = { sourceKind: SourceId; normalizedRecord: unknown };
+export type SourceProjection = {
+  sourceKind: SourceId;
+  normalizedRecord: unknown;
+  sourceVocabulary?: SourceVocabularyRequest;
+  /** Reviewed descriptor snapshot, separate from semantic revisions and envelopes. */
+  sourceRecordMetadata?: ImportSourceRecord;
+  sourceClassification?: SourceClassificationProjection;
+  /** Acquisition-derived intent must survive replacement input and converter reopening. */
+  sourceStatistic?: ImportSourceStatistic;
+  sourceStatisticClear?: ImportSourceStatisticClear;
+};
 export type Staged<Projection = BatchStatement[]> = { row: RecordRow; projection: Projection };
 export type Omission = { field_group: FieldGroup; disposition: 'fenced'; securityRevision: string };
 export type Pending = { after: string; recordKey: string; bytes: string; keys: string[] };
@@ -52,6 +102,10 @@ type Generation = {
   changed: number;
   prepared: number;
   cursor: string;
+  skipped?: number;
+  diagnostics_recorded?: number;
+  diagnostic_records?: number;
+  diagnostic_entries?: number;
 };
 type Entry = {
   source: string;
@@ -67,6 +121,7 @@ type Entry = {
   pending: number;
   remaining: number;
   cover_pending: number;
+  reference_signature: string | null;
 };
 type Member = { source: string; record_key: string; active: number; seen: number; row_json: string };
 type Command = {
@@ -87,6 +142,9 @@ type Envelope = {
   keys_json: string;
 };
 
+/** Generation-scoped children for API68 retention; pruned evidence is unavailable. */
+export const DISAPPEARANCE_EVIDENCE_TABLES = ['run_disappearance_stops', 'run_disappearance_missing'] as const;
+
 export const RUN_TABLES = [
   'run_sources',
   'run_generations',
@@ -96,11 +154,287 @@ export const RUN_TABLES = [
   'run_commands',
   'run_payloads',
   'run_envelopes',
+  'run_conversion_diagnostics',
+  'run_conversion_diagnostic_records',
+  'run_aggregate_operations',
+  'run_aggregate_heads',
+  'run_classification_heads',
+  'run_staging_checkpoints',
+  'run_staging_prefix',
+  'run_retention_work',
+  ...DISAPPEARANCE_EVIDENCE_TABLES,
 ] as const;
+
+const REQUIRED_EXISTING_COLUMNS: Record<(typeof RUN_TABLES)[number], readonly string[]> = {
+  run_sources: ['source', 'sequence', 'lease_run', 'generation', 'present_count'],
+  run_generations: [
+    'source',
+    'id',
+    'seq',
+    'lease',
+    'status',
+    'threshold',
+    'prior',
+    'supplied',
+    'survivors',
+    'invalid',
+    'classified',
+    'resolved',
+    'expected',
+    'changed',
+    'prepared',
+    'cursor',
+  ],
+  run_entries: [
+    'source',
+    'run_id',
+    'record_key',
+    'row_json',
+    'projection_json',
+    'kind',
+    'resolved',
+    'bytes',
+    'keys_json',
+    'omissions_json',
+    'pending',
+    'remaining',
+    'cover_pending',
+  ],
+  run_members: ['source', 'record_key', 'active', 'seen', 'row_json'],
+  run_acknowledged: ['source', 'record_key', 'row_json', 'projection_json'],
+  run_commands: ['source', 'run_id', 'command_key', 'record_key', 'field_group', 'op', 'envelope_index', 'done'],
+  run_payloads: ['source', 'command_key', 'body'],
+  run_envelopes: [
+    'source',
+    'run_id',
+    'record_key',
+    'envelope_index',
+    'multi',
+    'bytes',
+    'keys_json',
+    'remaining',
+    'pending',
+  ],
+  run_conversion_diagnostics: [
+    'source',
+    'run_id',
+    'record_key',
+    'phase',
+    'digest',
+    'converter_revision',
+    'record_revision',
+    'diagnostic_count',
+    'diagnostics_json',
+  ],
+  run_conversion_diagnostic_records: ['source', 'run_id', 'record_key'],
+  run_aggregate_operations: [
+    'source',
+    'run_id',
+    'operation_id',
+    'record_key',
+    'subject_id',
+    'provider',
+    'source_alias',
+    'source_record_id',
+    'kind',
+    'command_key',
+    'request_bytes',
+    'intended_json',
+    'status',
+  ],
+  run_aggregate_heads: ['source', 'subject_id', 'provider', 'digest', 'head_json'],
+  run_classification_heads: ['source', 'subject_id', 'association_key', 'digest', 'head_json'],
+  run_staging_checkpoints: [
+    'source',
+    'run_id',
+    'version',
+    'sha256',
+    'bytes',
+    'source_alias',
+    'source_kind',
+    'converter_revision',
+    'decoder_id',
+    'disappearance_threshold',
+    'committed_ordinal',
+    'skipped',
+    'rolling_digest',
+  ],
+  run_staging_prefix: ['source', 'run_id', 'ordinal', 'record_key', 'digest'],
+  run_retention_work: [
+    'plan_id',
+    'source',
+    'selected_json',
+    'bound_json',
+    'status',
+    'generation_id',
+    'phase',
+    'cursor',
+    'result_json',
+    'created_at',
+  ],
+  run_disappearance_stops: [
+    'source',
+    'run_id',
+    'evidence_id',
+    'baseline_generation',
+    'supplied',
+    'survivors',
+    'prior',
+    'missing',
+    'threshold',
+    'input_complete',
+  ],
+  run_disappearance_missing: ['source', 'run_id', 'record_key', 'record_revision', 'digest', 'converter_revision'],
+};
+
+const REQUIRED_EXISTING_INDEXES = [
+  ['run_pending', 'run_entries'],
+  ['run_cover_pending', 'run_entries'],
+  ['run_envelope_pending', 'run_envelopes'],
+] as const;
+
+/** Existing resume must not create missing run tables; a gap is damaged storage, not an empty source. */
+export function assertExistingRunSchema(database: Database): void {
+  for (const table of RUN_TABLES) {
+    const found = database
+      .query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=?')
+      .get('table', table) as { found: number } | null;
+    if (!found) throw new Error(`Importer state schema is missing table ${table}.`);
+    const columns = REQUIRED_EXISTING_COLUMNS[table];
+    const actual = new Set(
+      database
+        .query(`PRAGMA table_info(${table})`)
+        .all()
+        .map((row) => (row as { name: string }).name),
+    );
+    const missing = columns.find((column) => !actual.has(column));
+    if (missing) throw new Error(`Importer state schema is missing column ${table}.${missing}.`);
+  }
+  for (const [index, table] of REQUIRED_EXISTING_INDEXES) {
+    const found = database
+      .query('SELECT 1 AS found FROM sqlite_schema WHERE type=? AND name=? AND tbl_name=?')
+      .get('index', index, table) as { found: number } | null;
+    if (!found) throw new Error(`Importer state schema is missing index ${index}.`);
+  }
+}
+
+export type AggregateOperation = Readonly<{
+  operationId: string;
+  recordKey: string;
+  subjectId: string;
+  provider: 'vndb';
+  sourceAlias: string;
+  sourceRecordId: string;
+  kind: IntendedObservation['kind'] | IntendedClassification['kind'];
+  commandKey: string;
+  requestBytes: string;
+  intended: IntendedObservation | IntendedClassification;
+  reviewedHead: RetainedObservationHead | RetainedClassificationHead | null;
+  expectedObservation: string | null;
+  status: AggregateOperationStatus;
+  nativeReason: string | null;
+  outcome: unknown;
+}>;
 
 function fail(): never {
   throw new TypeError('Invalid run-store input');
 }
+
+function sourceVocabularyOriginMatches(
+  command: BatchCommand,
+  recordKey: string,
+  recordRevision: string,
+  request: SourceVocabularyRequest | undefined,
+): boolean {
+  if (!request || command.op !== 'propose' || command.source.field_group !== 'facts') return false;
+  return request.rows.some((row) => {
+    const origin = row.origin;
+    if (
+      row.kind === 'person-career' &&
+      origin &&
+      /^person:[1-9][0-9]*$/u.test(recordKey) &&
+      origin.externalId === recordKey &&
+      origin.url === `https://api.bgm.tv/v0/persons/${recordKey.slice('person:'.length)}` &&
+      row.path === '/career' &&
+      row.person?.id === command.subject &&
+      row.person.type === 'schema:Person' &&
+      command.statement.property.id === 'wdt:P106' &&
+      origin.revision !== undefined &&
+      typeof origin.digest === 'string' &&
+      /^[0-9a-f]{64}$/u.test(origin.digest) &&
+      command.source.record_revision === origin.revision &&
+      command.source.digest === origin.digest &&
+      typeof origin.converterRevision === 'string' &&
+      /^cross-media-entities@[0-9]+\+bangumi@[0-9]+$/u.test(origin.converterRevision) &&
+      command.source.converter_revision === origin.converterRevision
+    ) {
+      try {
+        const parsed = new URL(origin.url);
+        parsed.hash = row.path;
+        const sourceUrl = parsed.href;
+        return (
+          command.statement.references?.some((reference) => {
+            let citedUrl = false;
+            let citedRevision = false;
+            for (const part of reference.parts) {
+              if (part.property.id === 'schema:url' && part.value.type === 'value' && part.value.content === sourceUrl)
+                citedUrl = true;
+              if (
+                part.property.id === 'schema:version' &&
+                part.value.type === 'value' &&
+                part.value.content === (origin.revision ?? 'unversioned')
+              )
+                citedRevision = true;
+            }
+            return citedUrl && citedRevision;
+          }) ?? false
+        );
+      } catch {
+        return false;
+      }
+    }
+    if (
+      !origin ||
+      origin.externalId !== recordKey ||
+      (origin.revision !== null && origin.revision !== recordRevision) ||
+      command.source.record_revision !== (origin.revision ?? 'unversioned') ||
+      typeof origin.digest !== 'string' ||
+      !/^[0-9a-f]{64}$/u.test(origin.digest) ||
+      command.source.digest !== origin.digest ||
+      typeof origin.converterRevision !== 'string' ||
+      command.source.converter_revision !== origin.converterRevision ||
+      typeof origin.url !== 'string' ||
+      typeof row.path !== 'string'
+    )
+      return false;
+    let sourceUrl: string;
+    try {
+      const parsed = new URL(origin.url);
+      parsed.hash = row.path;
+      sourceUrl = parsed.href;
+    } catch {
+      return false;
+    }
+    return (
+      command.statement.references?.some((reference) => {
+        let citedUrl = false;
+        let citedRevision = false;
+        for (const part of reference.parts) {
+          if (part.property.id === 'schema:url' && part.value.type === 'value' && part.value.content === sourceUrl)
+            citedUrl = true;
+          if (
+            part.property.id === 'schema:version' &&
+            part.value.type === 'value' &&
+            part.value.content === command.source.record_revision
+          )
+            citedRevision = true;
+        }
+        return citedUrl && citedRevision;
+      }) ?? false
+    );
+  });
+}
+
 function exact(
   value: unknown,
   required: readonly string[],
@@ -296,16 +630,32 @@ export class RunStore<Projection = BatchStatement[]> {
     options: {
       instrumentDatabase?: (database: Database) => Database;
       projectionMode?: 'source-record';
+      create?: boolean;
+      /** Open a retained file without creating tables; resume uses this after inode admission. */
+      existing?: boolean;
     } = {},
   ) {
     if (options.projectionMode !== undefined && options.projectionMode !== 'source-record') fail();
+    if (options.existing !== undefined && options.existing !== true) fail();
+    if (options.existing && options.create === true) fail();
     this.projectionMode = options.projectionMode;
-    const db = typeof path === 'string' ? new Database(path, { create: true, strict: true }) : path;
+    const db =
+      typeof path === 'string'
+        ? new Database(path, { create: options.existing || options.create === false ? false : true, strict: true })
+        : path;
     try {
       this.database = options.instrumentDatabase?.(db) ?? db;
       this.database.exec('PRAGMA journal_mode=WAL');
       this.database.exec('PRAGMA busy_timeout=5000');
       this.database.exec('PRAGMA synchronous=NORMAL');
+      if (options.existing) {
+        this.database.exec(`CREATE TABLE IF NOT EXISTS run_classification_heads (
+          source TEXT NOT NULL, subject_id TEXT NOT NULL, association_key TEXT NOT NULL,
+          digest TEXT NOT NULL, head_json TEXT NOT NULL,
+          PRIMARY KEY(source, subject_id, association_key)) WITHOUT ROWID`);
+        assertExistingRunSchema(this.database);
+        return;
+      }
       // Schema initialization happens once per connection, never in a run operation.
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_sources (
         source TEXT PRIMARY KEY, sequence INTEGER NOT NULL, lease_run TEXT,
@@ -317,7 +667,18 @@ export class RunStore<Projection = BatchStatement[]> {
         invalid INTEGER NOT NULL DEFAULT 0, classified INTEGER NOT NULL DEFAULT 0,
         resolved INTEGER NOT NULL DEFAULT 0, expected INTEGER NOT NULL DEFAULT 0,
         changed INTEGER NOT NULL DEFAULT 0, prepared INTEGER NOT NULL DEFAULT 0,
-        cursor TEXT NOT NULL DEFAULT '', PRIMARY KEY(source,id)) WITHOUT ROWID`);
+        cursor TEXT NOT NULL DEFAULT '', skipped INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(source,id)) WITHOUT ROWID`);
+      // Additive migration leaves existing run journals and immutable prepared work intact.
+      const generationColumns = this.all<{ name: string }>('PRAGMA table_info(run_generations)');
+      if (!generationColumns.some(({ name }) => name === 'skipped'))
+        this.database.exec('ALTER TABLE run_generations ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0');
+      if (!generationColumns.some(({ name }) => name === 'diagnostics_recorded'))
+        this.database.exec('ALTER TABLE run_generations ADD COLUMN diagnostics_recorded INTEGER NOT NULL DEFAULT 0');
+      if (!generationColumns.some(({ name }) => name === 'diagnostic_records'))
+        this.database.exec('ALTER TABLE run_generations ADD COLUMN diagnostic_records INTEGER NOT NULL DEFAULT 0');
+      if (!generationColumns.some(({ name }) => name === 'diagnostic_entries'))
+        this.database.exec('ALTER TABLE run_generations ADD COLUMN diagnostic_entries INTEGER NOT NULL DEFAULT 0');
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_entries (
         source TEXT NOT NULL, run_id TEXT NOT NULL, record_key TEXT NOT NULL,
         row_json TEXT NOT NULL, projection_json TEXT NOT NULL, kind TEXT,
@@ -328,6 +689,8 @@ export class RunStore<Projection = BatchStatement[]> {
       const entryColumns = this.database.query('PRAGMA table_info(run_entries)').all() as { name: string }[];
       if (!entryColumns.some((column) => column.name === 'cover_pending'))
         this.database.exec('ALTER TABLE run_entries ADD COLUMN cover_pending INTEGER NOT NULL DEFAULT 0');
+      if (!entryColumns.some((column) => column.name === 'reference_signature'))
+        this.database.exec('ALTER TABLE run_entries ADD COLUMN reference_signature TEXT');
       this.database.exec(`CREATE INDEX IF NOT EXISTS run_pending ON run_entries(source,run_id,pending,record_key)`);
       this.database.exec(
         'CREATE INDEX IF NOT EXISTS run_cover_pending ON run_entries(source,run_id,cover_pending,record_key)',
@@ -341,6 +704,9 @@ export class RunStore<Projection = BatchStatement[]> {
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_acknowledged (
         source TEXT NOT NULL, record_key TEXT NOT NULL, row_json TEXT NOT NULL,
         projection_json TEXT NOT NULL, PRIMARY KEY(source,record_key)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_reference_signatures (
+        source TEXT NOT NULL, record_key TEXT NOT NULL, signature TEXT NOT NULL,
+        PRIMARY KEY(source,record_key)) WITHOUT ROWID`);
       this.database.exec(`CREATE TABLE IF NOT EXISTS run_commands (
         source TEXT NOT NULL, run_id TEXT NOT NULL, command_key TEXT NOT NULL,
         record_key TEXT NOT NULL, field_group TEXT NOT NULL, op TEXT NOT NULL,
@@ -356,6 +722,84 @@ export class RunStore<Projection = BatchStatement[]> {
         pending INTEGER NOT NULL, PRIMARY KEY(source,run_id,record_key,envelope_index)) WITHOUT ROWID`);
       this.database.exec(`CREATE INDEX IF NOT EXISTS run_envelope_pending
         ON run_envelopes(source,run_id,pending,record_key,envelope_index)`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_conversion_diagnostics (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, record_key TEXT NOT NULL, phase TEXT NOT NULL,
+        digest TEXT NOT NULL, converter_revision TEXT NOT NULL, record_revision TEXT NOT NULL,
+        diagnostic_count INTEGER NOT NULL, diagnostics_json TEXT NOT NULL,
+        PRIMARY KEY(source,run_id,record_key,phase)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_conversion_diagnostic_records (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, record_key TEXT NOT NULL,
+        PRIMARY KEY(source,run_id,record_key)) WITHOUT ROWID`);
+      this.database.exec(`CREATE INDEX IF NOT EXISTS run_conversion_diagnostics_phase_review
+        ON run_conversion_diagnostics(source,run_id,phase,record_key) WHERE diagnostic_count>0`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_aggregate_operations (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, operation_id TEXT NOT NULL,
+        record_key TEXT NOT NULL, subject_id TEXT NOT NULL, provider TEXT NOT NULL,
+        source_alias TEXT NOT NULL, source_record_id TEXT NOT NULL, kind TEXT NOT NULL,
+        command_key TEXT NOT NULL, request_bytes TEXT NOT NULL, intended_json TEXT NOT NULL,
+        reviewed_head_json TEXT, expected_observation TEXT, status TEXT NOT NULL,
+        native_reason TEXT, outcome_json TEXT,
+        PRIMARY KEY(source, run_id, operation_id)) WITHOUT ROWID`);
+      this.database.exec(`CREATE INDEX IF NOT EXISTS run_aggregate_pending
+        ON run_aggregate_operations(source, run_id, operation_id)
+        WHERE status IN ('prepared','uncertain','conflict','refused')`);
+      this.database.exec(`CREATE INDEX IF NOT EXISTS run_aggregate_record
+        ON run_aggregate_operations(source, run_id, record_key, operation_id)`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_aggregate_heads (
+        source TEXT NOT NULL, subject_id TEXT NOT NULL, provider TEXT NOT NULL,
+        digest TEXT NOT NULL, head_json TEXT NOT NULL,
+        PRIMARY KEY(source, subject_id, provider)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_classification_heads (
+        source TEXT NOT NULL, subject_id TEXT NOT NULL, association_key TEXT NOT NULL,
+        digest TEXT NOT NULL, head_json TEXT NOT NULL,
+        PRIMARY KEY(source, subject_id, association_key)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_staging_checkpoints (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, version INTEGER NOT NULL,
+        sha256 TEXT NOT NULL, bytes INTEGER NOT NULL, source_alias TEXT NOT NULL,
+        source_kind TEXT NOT NULL, converter_revision TEXT NOT NULL, decoder_id TEXT NOT NULL,
+        disappearance_threshold REAL NOT NULL, committed_ordinal INTEGER NOT NULL,
+        skipped INTEGER NOT NULL, rolling_digest TEXT NOT NULL,
+        identity_json TEXT, completed_members INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(source, run_id)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_staging_prefix (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, ordinal INTEGER NOT NULL,
+        record_key TEXT NOT NULL, digest TEXT NOT NULL, member_index INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(source, run_id, ordinal)) WITHOUT ROWID`);
+      const checkpointColumns = this.all<{ name: string }>('PRAGMA table_info(run_staging_checkpoints)');
+      if (checkpointColumns.length && !checkpointColumns.some(({ name }) => name === 'identity_json'))
+        this.database.exec('ALTER TABLE run_staging_checkpoints ADD COLUMN identity_json TEXT');
+      if (checkpointColumns.length && !checkpointColumns.some(({ name }) => name === 'completed_members'))
+        this.database.exec(
+          'ALTER TABLE run_staging_checkpoints ADD COLUMN completed_members INTEGER NOT NULL DEFAULT 0',
+        );
+      const prefixColumns = this.all<{ name: string }>('PRAGMA table_info(run_staging_prefix)');
+      if (prefixColumns.length && !prefixColumns.some(({ name }) => name === 'member_index'))
+        this.database.exec('ALTER TABLE run_staging_prefix ADD COLUMN member_index INTEGER NOT NULL DEFAULT 0');
+      this.database.exec('CREATE INDEX IF NOT EXISTS run_generation_seq ON run_generations(source, seq)');
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_retention_work (
+        plan_id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        selected_json TEXT NOT NULL,
+        bound_json TEXT NOT NULL,
+        status TEXT NOT NULL,
+        generation_id TEXT NOT NULL DEFAULT '',
+        phase TEXT NOT NULL DEFAULT '',
+        cursor TEXT NOT NULL DEFAULT '',
+        result_json TEXT,
+        created_at TEXT NOT NULL
+      ) WITHOUT ROWID`);
+      // Immutable stop evidence is generation-scoped. API68 deletes these children with the generation.
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_disappearance_stops (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, evidence_id TEXT NOT NULL,
+        baseline_generation TEXT, supplied INTEGER NOT NULL, survivors INTEGER NOT NULL,
+        prior INTEGER NOT NULL, missing INTEGER NOT NULL, threshold REAL NOT NULL,
+        input_complete INTEGER NOT NULL,
+        PRIMARY KEY(source, run_id)) WITHOUT ROWID`);
+      this.database.exec(`CREATE TABLE IF NOT EXISTS run_disappearance_missing (
+        source TEXT NOT NULL, run_id TEXT NOT NULL, record_key TEXT NOT NULL,
+        record_revision TEXT NOT NULL, digest TEXT NOT NULL, converter_revision TEXT NOT NULL,
+        PRIMARY KEY(source, run_id, record_key)) WITHOUT ROWID`);
+      this.database.exec(SOURCE_DESTINATION_DDL);
     } catch (error) {
       db.close();
       throw error;
@@ -412,6 +856,46 @@ export class RunStore<Projection = BatchStatement[]> {
     this.write('UPDATE run_generations SET status=? WHERE source=? AND id=?', status, run.source, run.id);
     this.write('UPDATE run_sources SET lease_run=NULL WHERE source=? AND lease_run=?', run.source, run.id);
   }
+  /**
+   * Snapshot the compared missing population before the capability is released.
+   * One indexed INSERT...SELECT plus one header insert; failure rolls the seal back.
+   */
+  private captureDisappearanceEvidence(run: Run, g: Generation, missing: number): void {
+    const sourceRow = this.get<Source>('SELECT * FROM run_sources WHERE source=?', run.source);
+    const inserted = this.write(
+      `INSERT INTO run_disappearance_missing(source,run_id,record_key,record_revision,digest,converter_revision)
+      SELECT m.source,?,m.record_key,
+        json_extract(m.row_json,'$.recordRevision'),
+        json_extract(m.row_json,'$.digest'),
+        json_extract(m.row_json,'$.converter_revision')
+      FROM run_members AS m INDEXED BY run_missing
+      WHERE m.source=? AND m.active=1 AND m.seen<?
+        AND json_extract(m.row_json,'$.source')=m.source
+        AND json_extract(m.row_json,'$.recordKey')=m.record_key
+        AND json_extract(m.row_json,'$.state')='present'
+        AND typeof(json_extract(m.row_json,'$.recordRevision'))='text'
+        AND typeof(json_extract(m.row_json,'$.digest'))='text'
+        AND typeof(json_extract(m.row_json,'$.converter_revision'))='text'`,
+      run.id,
+      run.source,
+      g.seq,
+    );
+    if (inserted.changes !== missing) throw new Error('Disappearance evidence is incomplete');
+    this.write(
+      `INSERT INTO run_disappearance_stops(
+        source,run_id,evidence_id,baseline_generation,supplied,survivors,prior,missing,threshold,input_complete)
+      VALUES(?,?,?,?,?,?,?,?,?,1)`,
+      run.source,
+      run.id,
+      token(),
+      sourceRow?.generation ?? null,
+      g.supplied,
+      g.survivors,
+      g.prior,
+      missing,
+      g.threshold,
+    );
+  }
   begin(source: string, options: { disappearanceThreshold?: number } = {}): Run | 'busy' {
     sourceId(source);
     exact(options, [], ['disappearanceThreshold']);
@@ -445,6 +929,185 @@ export class RunStore<Projection = BatchStatement[]> {
       return run;
     });
   }
+  beginCheckpointed(
+    source: string,
+    identity: StagingCaptureIdentity,
+    options: { disappearanceThreshold?: number } = {},
+  ): Run | 'busy' {
+    const threshold = options.disappearanceThreshold ?? identity.disappearanceThreshold;
+    if (threshold !== identity.disappearanceThreshold) fail();
+    return this.transaction(() => {
+      const run = this.begin(source, options);
+      if (run === 'busy') return 'busy';
+      this.write(
+        `INSERT INTO run_staging_checkpoints(
+          source,run_id,version,sha256,bytes,source_alias,source_kind,converter_revision,decoder_id,
+          disappearance_threshold,committed_ordinal,skipped,rolling_digest,identity_json,completed_members)
+        VALUES(?,?,?,?,?,?,?,?,?,?,0,0,?,?,0)`,
+        run.source,
+        run.id,
+        identity.checkpointVersion,
+        identity.sha256,
+        identity.bytes,
+        identity.sourceAlias,
+        identity.sourceKind,
+        identity.converterRevision,
+        identity.decoderId,
+        identity.disappearanceThreshold,
+        emptyPrefixDigest(),
+        encodeStagingIdentityJson(identity),
+      );
+      return run;
+    });
+  }
+  stagingCheckpoint(source: string, id: string): StagingCheckpoint | null {
+    sourceId(source);
+    identifier(id, 32, /^[1-9][0-9]*$/u);
+    const row = this.get<{
+      version: number;
+      sha256: string;
+      bytes: number;
+      source_alias: string;
+      source_kind: string;
+      converter_revision: string;
+      decoder_id: string;
+      disappearance_threshold: number;
+      committed_ordinal: number;
+      skipped: number;
+      rolling_digest: string;
+      identity_json: string | null;
+      completed_members: number;
+    }>(
+      `SELECT version,sha256,bytes,source_alias,source_kind,converter_revision,decoder_id,
+        disappearance_threshold,committed_ordinal,skipped,rolling_digest,identity_json,completed_members
+      FROM run_staging_checkpoints WHERE source=? AND run_id=?`,
+      source,
+      id,
+    );
+    if (!row) return null;
+    return admitStagingCheckpoint({
+      version: row.version,
+      sha256: row.sha256,
+      bytes: row.bytes,
+      sourceAlias: row.source_alias,
+      sourceKind: row.source_kind,
+      converterRevision: row.converter_revision,
+      decoderId: row.decoder_id,
+      disappearanceThreshold: row.disappearance_threshold,
+      committedOrdinal: row.committed_ordinal,
+      skipped: row.skipped,
+      rollingDigest: row.rolling_digest,
+      completedMembers: row.completed_members ?? 0,
+      identityJson: row.identity_json,
+    });
+  }
+  stagingResumeState(run: Run): {
+    status: string;
+    prepared: number;
+    pending: boolean;
+    covers: boolean;
+  } {
+    const g = this.generation(run);
+    const pending = this.get<{ n: number }>(
+      'SELECT 1 AS n FROM run_envelopes WHERE source=? AND run_id=? AND pending=1 LIMIT 1',
+      run.source,
+      run.id,
+    );
+    const covers = this.get<{ n: number }>(
+      'SELECT 1 AS n FROM run_entries WHERE source=? AND run_id=? AND cover_pending=1 LIMIT 1',
+      run.source,
+      run.id,
+    );
+    return { status: g.status, prepared: g.prepared, pending: pending !== null, covers: covers !== null };
+  }
+  prefixRecord(run: Run, ordinal: number): StagingPrefixRecord | null {
+    validateRun(run);
+    if (!Number.isSafeInteger(ordinal) || ordinal < 1) fail();
+    const row = this.get<{ record_key: string; digest: string; member_index: number }>(
+      'SELECT record_key,digest,member_index FROM run_staging_prefix WHERE source=? AND run_id=? AND ordinal=?',
+      run.source,
+      run.id,
+      ordinal,
+    );
+    return row ? { ordinal, recordKey: row.record_key, digest: row.digest, memberIndex: row.member_index ?? 0 } : null;
+  }
+  stagedIdentity(run: Run, recordKey: string): { digest: string; projection: string } | null {
+    validateRun(run);
+    keyId(recordKey);
+    const row = this.get<{ row_json: string; projection_json: string }>(
+      'SELECT row_json,projection_json FROM run_entries WHERE source=? AND run_id=? AND record_key=?',
+      run.source,
+      run.id,
+      recordKey,
+    );
+    if (!row) return null;
+    const parsed = JSON.parse(row.row_json) as { digest?: string };
+    if (typeof parsed.digest !== 'string') fail();
+    return { digest: parsed.digest, projection: row.projection_json };
+  }
+  commitStagingRecord(run: Run, record: StagingPrefixRecord, skippedDelta = 0): StagingCheckpoint {
+    validateRun(run);
+    keyId(record.recordKey);
+    identifier(record.digest, 64, /^[a-f0-9]{64}$/u);
+    if (!Number.isSafeInteger(record.ordinal) || record.ordinal < 1) fail();
+    const memberIndex = record.memberIndex ?? 0;
+    if (!Number.isSafeInteger(memberIndex) || memberIndex < 0) fail();
+    if (skippedDelta !== 0 && skippedDelta !== 1) fail();
+    return this.transaction(() => {
+      this.generation(run);
+      const current = this.stagingCheckpoint(run.source, run.id);
+      if (!current) throw new Error('Staging checkpoint is missing');
+      if (record.ordinal !== current.committedOrdinal + 1) throw new Error('Staging checkpoint ordinal jumped');
+      const rolling = extendPrefixDigest(current.rollingDigest, record, current.version);
+      this.write(
+        'INSERT INTO run_staging_prefix(source,run_id,ordinal,record_key,digest,member_index) VALUES(?,?,?,?,?,?)',
+        run.source,
+        run.id,
+        record.ordinal,
+        record.recordKey,
+        record.digest,
+        memberIndex,
+      );
+      this.write(
+        `UPDATE run_staging_checkpoints SET committed_ordinal=?,skipped=skipped+?,rolling_digest=?
+        WHERE source=? AND run_id=?`,
+        record.ordinal,
+        skippedDelta,
+        rolling,
+        run.source,
+        run.id,
+      );
+      const next = this.stagingCheckpoint(run.source, run.id);
+      if (!next) throw new Error('Staging checkpoint is missing');
+      return next;
+    });
+  }
+  commitStagingMember(run: Run, memberIndex: number): StagingCheckpoint {
+    validateRun(run);
+    if (!Number.isSafeInteger(memberIndex) || memberIndex < 0) fail();
+    return this.transaction(() => {
+      this.generation(run);
+      const current = this.stagingCheckpoint(run.source, run.id);
+      if (!current) throw new Error('Staging checkpoint is missing');
+      if (memberIndex < current.completedMembers) return current;
+      if (memberIndex !== current.completedMembers) throw new Error('Staging checkpoint member jumped');
+      this.write(
+        'UPDATE run_staging_checkpoints SET completed_members=? WHERE source=? AND run_id=?',
+        memberIndex + 1,
+        run.source,
+        run.id,
+      );
+      const next = this.stagingCheckpoint(run.source, run.id);
+      if (!next) throw new Error('Staging checkpoint is missing');
+      return next;
+    });
+  }
+  clearStagingCheckpoint(run: Run): void {
+    this.transaction(() => {
+      this.write('DELETE FROM run_staging_prefix WHERE source=? AND run_id=?', run.source, run.id);
+      this.write('DELETE FROM run_staging_checkpoints WHERE source=? AND run_id=?', run.source, run.id);
+    });
+  }
   activeRun(source: string): Run | null {
     sourceId(source);
     const active = this.get<{ lease_run: string; id: string; lease: string }>(
@@ -455,6 +1118,27 @@ export class RunStore<Projection = BatchStatement[]> {
       source,
     );
     return active ? { source, id: active.id, lease: active.lease } : null;
+  }
+  /**
+   * Exact-source active generation without rotating its lease. Admission uses this
+   * after exclusive ownership so a staging probe cannot mint a replacement capability.
+   */
+  peekActive(source: string): { run: Run; status: string; skipped: number } | null {
+    sourceId(source);
+    const active = this.get<{ id: string; lease: string; status: string; skipped: number | null }>(
+      `SELECT g.id,g.lease,g.status,g.skipped FROM run_sources AS s
+      JOIN run_generations AS g ON g.source=s.source AND g.id=s.lease_run
+      WHERE s.source=? AND s.lease_run IS NOT NULL`,
+      source,
+    );
+    return active
+      ? { run: { source, id: active.id, lease: active.lease }, status: active.status, skipped: active.skipped ?? 0 }
+      : null;
+  }
+  /** Exact identity lookup for the bounded count sealed with this acquisition. */
+  skipped(run: Run): number {
+    const g = this.generation(run, true);
+    return g.skipped ?? 0;
   }
   pageStaged(run: Run, options: { after?: string; limit: number }): Staged<Projection>[] {
     exact(options, ['limit'], ['after']);
@@ -526,6 +1210,57 @@ export class RunStore<Projection = BatchStatement[]> {
       return 'abandoned';
     });
   }
+  /** Exact generation header without requiring an active lease. */
+  peekGeneration(source: string, id: string): { status: string; prepared: number } | null {
+    sourceId(source);
+    identifier(id, 32, /^[1-9][0-9]*$/u);
+    return this.get<{ status: string; prepared: number }>(
+      'SELECT status,prepared FROM run_generations WHERE source=? AND id=?',
+      source,
+      id,
+    );
+  }
+  /**
+   * Source-correct unpublished staging release for deliberate retirement.
+   * Clears the active lease without synthesizing a successful generation or using abandon.
+   */
+  releaseStagingForRetirement(source: string, id: string): void {
+    sourceId(source);
+    identifier(id, 32, /^[1-9][0-9]*$/u);
+    this.transaction(() => {
+      const g = this.get<Generation>('SELECT * FROM run_generations WHERE source=? AND id=?', source, id);
+      if (!g || g.status !== 'staging' || g.prepared)
+        throw new Error('Generation is not an unpublished staging capture');
+      const updated = this.write(
+        'UPDATE run_generations SET status=? WHERE source=? AND id=? AND status=?',
+        'retiring',
+        source,
+        id,
+        'staging',
+      );
+      if (!updated.changes) throw new Error('Generation is not an unpublished staging capture');
+      this.write('UPDATE run_sources SET lease_run=NULL WHERE source=? AND lease_run=?', source, id);
+    });
+  }
+  /**
+   * Incomplete local retirement/retention cleanup with no live generation lease.
+   * A live recoverable generation stays independently usable.
+   */
+  localMaintenanceWork(source: string): { planId: string; generationId: string } | null {
+    sourceId(source);
+    const live = this.get<{ lease_run: string | null }>('SELECT lease_run FROM run_sources WHERE source=?', source);
+    if (live?.lease_run) return null;
+    const found = this.get<{ found: number }>(
+      "SELECT 1 AS found FROM sqlite_schema WHERE type='table' AND name='run_retention_work'",
+    );
+    if (!found) return null;
+    const work = this.get<{ plan_id: string; generation_id: string }>(
+      'SELECT plan_id,generation_id FROM run_retention_work WHERE source=? AND status=? LIMIT 1',
+      source,
+      'applying',
+    );
+    return work ? { planId: work.plan_id, generationId: work.generation_id } : null;
+  }
   stage(run: Run, record: Staged<Projection>): void {
     exact(record, ['row', 'projection']);
     validateRow(record.row);
@@ -533,11 +1268,37 @@ export class RunStore<Projection = BatchStatement[]> {
     let projection: string;
     if (this.projectionMode === 'source-record') {
       const sourceProjection: unknown = record.projection;
-      exact(sourceProjection, ['sourceKind', 'normalizedRecord']);
+      exact(
+        sourceProjection,
+        ['sourceKind', 'normalizedRecord'],
+        ['sourceRecordMetadata', 'sourceClassification', 'sourceVocabulary', 'sourceStatistic', 'sourceStatisticClear'],
+      );
       if (!['bangumi', 'vndb', 'openlibrary', 'wikidata'].includes(sourceProjection.sourceKind as string)) fail();
       // Only the caller's sanitized converter input is retained; row metadata stays separate.
       const normalizedRecord = boundedJson(sourceProjection.normalizedRecord, MAX_DUMP_RECORD_BYTES);
-      projection = `{"sourceKind":${JSON.stringify(sourceProjection.sourceKind)},"normalizedRecord":${normalizedRecord}}`;
+      const metadata =
+        sourceProjection.sourceRecordMetadata === undefined
+          ? ''
+          : `,"sourceRecordMetadata":${boundedJson(sourceProjection.sourceRecordMetadata, 8192)}`;
+      const classification =
+        sourceProjection.sourceClassification === undefined
+          ? ''
+          : `,"sourceClassification":${boundedJson(
+              validateSourceClassificationProjection(sourceProjection.sourceClassification),
+              8192,
+            )}`;
+      const sourceVocabulary =
+        sourceProjection.sourceVocabulary === undefined
+          ? ''
+          : `,"sourceVocabulary":${boundedJson(sourceProjection.sourceVocabulary, MAX_DUMP_RECORD_BYTES)}`;
+      const statistics = ['sourceStatistic', 'sourceStatisticClear']
+        .map((field) =>
+          sourceProjection[field] === undefined
+            ? ''
+            : `,${JSON.stringify(field)}:${boundedJson(sourceProjection[field], 8192)}`,
+        )
+        .join('');
+      projection = `{"sourceKind":${JSON.stringify(sourceProjection.sourceKind)},"normalizedRecord":${normalizedRecord}${metadata}${classification}${sourceVocabulary}${statistics}}`;
     } else {
       if (!Array.isArray(record.projection)) fail();
       projection = boundedJson(record.projection);
@@ -582,15 +1343,22 @@ export class RunStore<Projection = BatchStatement[]> {
     });
     if (duplicate) throw new Error('Duplicate staged key invalidates input');
   }
-  seal(run: Run, input: { complete: true } | { complete: false; reason: 'malformed' | 'truncated' }): Seal {
-    if (input.complete === true) exact(input, ['complete']);
-    else {
+  seal(
+    run: Run,
+    input: { complete: true; skipped?: number } | { complete: false; reason: 'malformed' | 'truncated' },
+  ): Seal {
+    if (input.complete === true) {
+      exact(input, ['complete'], ['skipped']);
+      const skipped = input.skipped ?? 0;
+      if (!Number.isSafeInteger(skipped) || skipped < 0) fail();
+    } else {
       exact(input, ['complete', 'reason']);
       if (input.complete !== false || !['malformed', 'truncated'].includes(input.reason)) fail();
     }
     return this.transaction(() => {
       const g = this.generation(run);
       if (g.status !== 'staging') throw new Error('Run is already sealed');
+      const skippedCount = input.complete === true ? (input.skipped ?? 0) : 0;
       const missing = g.prior - g.survivors;
       const status =
         !input.complete || g.invalid
@@ -598,15 +1366,19 @@ export class RunStore<Projection = BatchStatement[]> {
           : g.prior > 0 && (missing === g.prior || missing / g.prior > g.threshold)
             ? 'mass-disappearance'
             : 'ready';
+      if (status === 'mass-disappearance') this.captureDisappearanceEvidence(run, g, missing);
       if (status !== 'ready') this.release(run, status);
       else
         this.write(
-          'UPDATE run_generations SET status=?,expected=? WHERE source=? AND id=?',
+          'UPDATE run_generations SET status=?,expected=?,skipped=? WHERE source=? AND id=?',
           'ready',
           g.supplied + missing,
+          skippedCount,
           run.source,
           run.id,
         );
+      this.write('DELETE FROM run_staging_prefix WHERE source=? AND run_id=?', run.source, run.id);
+      this.write('DELETE FROM run_staging_checkpoints WHERE source=? AND run_id=?', run.source, run.id);
       return {
         status,
         prior: g.prior,
@@ -629,6 +1401,24 @@ export class RunStore<Projection = BatchStatement[]> {
       key,
     );
   }
+  private sameProjection(left: string, right: string): boolean {
+    if (left === right) return true;
+    if (this.projectionMode !== 'source-record') return false;
+    // The reviewed descriptor is a separate HTTP intent, never a semantic input
+    // revision or a reason to advance the complete source-generation pointer.
+    const semantic = (bytes: string) => {
+      const projection = JSON.parse(bytes) as SourceProjection;
+      return JSON.stringify([
+        projection.sourceKind,
+        projection.normalizedRecord,
+        projection.sourceClassification ?? null,
+        projection.sourceVocabulary ?? null,
+        projection.sourceStatistic ?? null,
+        projection.sourceStatisticClear ?? null,
+      ]);
+    };
+    return semantic(left) === semantic(right);
+  }
   private resolve(run: Run, entry: Entry) {
     if (entry.resolved || entry.remaining || entry.cover_pending) return;
     this.write(
@@ -645,21 +1435,74 @@ export class RunStore<Projection = BatchStatement[]> {
       entry.row_json,
       entry.projection_json,
     );
+    if (entry.reference_signature !== null)
+      this.write(
+        `INSERT INTO run_reference_signatures(source,record_key,signature) VALUES(?,?,?)
+        ON CONFLICT(source,record_key) DO UPDATE SET signature=excluded.signature`,
+        run.source,
+        entry.record_key,
+        entry.reference_signature,
+      );
     this.write('UPDATE run_generations SET resolved=resolved+1 WHERE source=? AND id=?', run.source, run.id);
   }
   classify(run: Run, key: string, input: { commands: BatchCommand[]; omissions?: Omission[] }): Kind {
-    return this.plan(run, key, input, false);
+    return this.plan(run, key, input, false).kind;
+  }
+  referenceSignature(source: string, key: string): string | null {
+    sourceId(source);
+    keyId(key);
+    return (
+      this.get<{ signature: string }>(
+        'SELECT signature FROM run_reference_signatures WHERE source=? AND record_key=?',
+        source,
+        key,
+      )?.signature ?? null
+    );
+  }
+  stageReferenceSignature(run: Run, key: string, signature: string): void {
+    validateRun(run);
+    keyId(key);
+    if (!/^[a-f0-9]{64}$/u.test(signature)) fail();
+    this.transaction(() => {
+      if (!this.entry(run, key)) throw new Error('Reference signature requires a staged record');
+      this.write(
+        'UPDATE run_entries SET reference_signature=? WHERE source=? AND run_id=? AND record_key=?',
+        signature,
+        run.source,
+        run.id,
+        key,
+      );
+    });
   }
   /**
    * Trusted coordinator disposition after classification: only a pure converter ignored
    * outcome or an exact current candidate lookup can establish no owned effects.
    * This is neither a receipt nor fence evidence; every refresh must still check all tuple fences.
    */
-  acknowledgeNoEffects(run: Run, key: string, input: { reason: 'converter-ignored' | 'no-owned-candidates' }): void {
+  acknowledgeNoEffects(
+    run: Run,
+    key: string,
+    input: { reason: 'converter-ignored' | 'no-owned-candidates' | 'retained-candidates' },
+  ): void {
+    exact(input, ['reason']);
+    if (
+      input.reason !== 'converter-ignored' &&
+      input.reason !== 'no-owned-candidates' &&
+      input.reason !== 'retained-candidates'
+    )
+      fail();
+    this.acknowledgeEmpty(run, key, false);
+  }
+  /** Trusted coordinator proof: a confirmed VNDB statistic write/removal or source-specific omission, and exhaustive
+   * bounded comparison retained every current semantic candidate and proposal.
+   * This acknowledges only the staged input projection, never a server receipt.
+   */
+  acknowledgeStatisticRefresh(run: Run, key: string): void {
+    this.acknowledgeEmpty(run, key, true);
+  }
+  private acknowledgeEmpty(run: Run, key: string, statisticRefresh: boolean): void {
     validateRun(run);
     keyId(key);
-    exact(input, ['reason']);
-    if (input.reason !== 'converter-ignored' && input.reason !== 'no-owned-candidates') fail();
     this.transaction(() => {
       const live = this.get<{ id: string }>(
         `SELECT g.id FROM run_sources AS s
@@ -675,25 +1518,365 @@ export class RunStore<Projection = BatchStatement[]> {
       // Original keys/bytes are immutable even after commands are acknowledged or fenced.
       if (!entry?.kind || entry.bytes !== null || entry.keys_json !== '[]' || entry.remaining || entry.pending)
         throw new Error('No-effect acknowledgement requires a classified empty command plan');
+      if (statisticRefresh) {
+        if (
+          this.projectionMode !== 'source-record' ||
+          JSON.parse(entry.projection_json).sourceKind !== 'vndb' ||
+          JSON.parse(entry.row_json).state !== 'present' ||
+          entry.cover_pending ||
+          this.unresolvedAggregate(run, key) ||
+          !this.get('SELECT record_key FROM run_acknowledged WHERE source=? AND record_key=?', run.source, key)
+        )
+          throw new Error('Statistic refresh requires an existing present VNDB record without deferred work');
+      }
       this.resolve(run, entry);
     });
+  }
+  private parseAggregate(row: {
+    operation_id: string;
+    record_key: string;
+    subject_id: string;
+    provider: string;
+    source_alias: string;
+    source_record_id: string;
+    kind: string;
+    command_key: string;
+    request_bytes: string;
+    intended_json: string;
+    reviewed_head_json: string | null;
+    expected_observation: string | null;
+    status: string;
+    native_reason: string | null;
+    outcome_json: string | null;
+  }): AggregateOperation {
+    return {
+      operationId: row.operation_id,
+      recordKey: row.record_key,
+      subjectId: row.subject_id,
+      provider: 'vndb',
+      sourceAlias: row.source_alias,
+      sourceRecordId: row.source_record_id,
+      kind: row.kind as IntendedObservation['kind'],
+      commandKey: row.command_key,
+      requestBytes: row.request_bytes,
+      intended: JSON.parse(row.intended_json) as IntendedObservation | IntendedClassification,
+      reviewedHead: row.reviewed_head_json
+        ? (JSON.parse(row.reviewed_head_json) as RetainedObservationHead | RetainedClassificationHead)
+        : null,
+      expectedObservation: row.expected_observation,
+      status: row.status as AggregateOperationStatus,
+      nativeReason: row.native_reason,
+      outcome: row.outcome_json ? JSON.parse(row.outcome_json) : null,
+    };
+  }
+  prepareAggregate(
+    run: Run,
+    input: {
+      operationId: string;
+      recordKey: string;
+      subjectId: string;
+      sourceAlias: string;
+      intended: IntendedObservation | IntendedClassification;
+      commandKey: string;
+      requestBytes: string;
+      reviewedHead: RetainedObservationHead | RetainedClassificationHead | null;
+      expectedObservation?: string | null;
+      status: AggregateOperationStatus;
+      nativeReason?: string | null;
+    },
+  ): AggregateOperation {
+    validateRun(run);
+    identifier(input.operationId, 64, /^[0-9a-f]{64}$/u);
+    keyId(input.recordKey);
+    identifier(input.subjectId, 36, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
+    identifier(input.commandKey, 255, /^[\x20-\x7e]+$/u);
+    if (input.intended.kind !== 'write' && input.intended.kind !== 'clear') fail();
+    if (isIntendedClassification(input.intended) && input.intended.family !== 'classification') fail();
+    const intendedJson = boundedJson(input.intended, 65536);
+    const requestBytes = boundedJson(JSON.parse(input.requestBytes), 65536);
+    const headJson = input.reviewedHead ? boundedJson(input.reviewedHead, 65536) : null;
+    this.transaction(() => {
+      this.write(
+        `INSERT INTO run_aggregate_operations(
+          source,run_id,operation_id,record_key,subject_id,provider,source_alias,source_record_id,kind,
+          command_key,request_bytes,intended_json,reviewed_head_json,expected_observation,status,native_reason,outcome_json)
+        VALUES(?,?,?,?,?,'vndb',?,?,?,?,?,?,?,?,?,?,NULL)
+        ON CONFLICT(source,run_id,operation_id) DO UPDATE SET
+          status=excluded.status, native_reason=excluded.native_reason,
+          reviewed_head_json=excluded.reviewed_head_json, expected_observation=excluded.expected_observation,
+          request_bytes=CASE WHEN run_aggregate_operations.status IN ('uncertain','delivered')
+            THEN run_aggregate_operations.request_bytes ELSE excluded.request_bytes END,
+          command_key=CASE WHEN run_aggregate_operations.status IN ('uncertain','delivered')
+            THEN run_aggregate_operations.command_key ELSE excluded.command_key END`,
+        run.source,
+        run.id,
+        input.operationId,
+        input.recordKey,
+        input.subjectId,
+        input.sourceAlias,
+        input.intended.sourceRecordId,
+        input.intended.kind,
+        input.commandKey,
+        requestBytes,
+        intendedJson,
+        headJson,
+        input.expectedObservation ?? null,
+        input.status,
+        input.nativeReason ?? null,
+      );
+    });
+    return this.aggregateOperation(run, input.operationId)!;
+  }
+  markAggregate(
+    run: Run,
+    operationId: string,
+    update: {
+      status: AggregateOperationStatus;
+      nativeReason?: string | null;
+      expectedObservation?: string | null;
+      requestBytes?: string;
+      commandKey?: string;
+      reviewedHead?: RetainedObservationHead | RetainedClassificationHead | null;
+      outcome?: unknown;
+    },
+  ): AggregateOperation {
+    validateRun(run);
+    identifier(operationId, 64, /^[0-9a-f]{64}$/u);
+    this.transaction(() => {
+      const current = this.get<{
+        status: string;
+        request_bytes: string;
+        command_key: string;
+        expected_observation: string | null;
+        native_reason: string | null;
+        reviewed_head_json: string | null;
+        outcome_json: string | null;
+      }>(
+        `SELECT status, request_bytes, command_key, expected_observation, native_reason,
+          reviewed_head_json, outcome_json
+         FROM run_aggregate_operations WHERE source=? AND run_id=? AND operation_id=?`,
+        run.source,
+        run.id,
+        operationId,
+      );
+      if (!current) fail();
+      const sealed = current.status === 'uncertain' || current.status === 'delivered';
+      this.write(
+        `UPDATE run_aggregate_operations SET status=?, native_reason=?, expected_observation=?,
+          request_bytes=?, command_key=?, reviewed_head_json=?, outcome_json=?
+        WHERE source=? AND run_id=? AND operation_id=?`,
+        update.status,
+        update.nativeReason !== undefined ? update.nativeReason : current.native_reason,
+        update.expectedObservation !== undefined ? update.expectedObservation : current.expected_observation,
+        sealed ? current.request_bytes : (update.requestBytes ?? current.request_bytes),
+        sealed ? current.command_key : (update.commandKey ?? current.command_key),
+        update.reviewedHead === undefined
+          ? current.reviewed_head_json
+          : update.reviewedHead
+            ? boundedJson(update.reviewedHead, 65536)
+            : null,
+        update.outcome === undefined ? current.outcome_json : boundedJson(update.outcome, 65536),
+        run.source,
+        run.id,
+        operationId,
+      );
+    });
+    return this.aggregateOperation(run, operationId)!;
+  }
+  supersedeWithSuccessor(
+    run: Run,
+    priorId: string,
+    successor: Parameters<RunStore['prepareAggregate']>[1],
+  ): AggregateOperation {
+    return this.transaction(() => {
+      this.markAggregate(run, priorId, { status: 'superseded' });
+      return this.prepareAggregate(run, successor);
+    });
+  }
+  aggregateOperation(run: Run, operationId: string): AggregateOperation | null {
+    validateRun(run);
+    identifier(operationId, 64, /^[0-9a-f]{64}$/u);
+    const row = this.get<Parameters<RunStore['parseAggregate']>[0]>(
+      `SELECT operation_id, record_key, subject_id, provider, source_alias, source_record_id, kind,
+        command_key, request_bytes, intended_json, reviewed_head_json, expected_observation, status,
+        native_reason, outcome_json
+       FROM run_aggregate_operations WHERE source=? AND run_id=? AND operation_id=?`,
+      run.source,
+      run.id,
+      operationId,
+    );
+    return row ? this.parseAggregate(row) : null;
+  }
+  unresolvedAggregate(run: Run, recordKey: string, family?: 'statistic' | 'classification'): AggregateOperation | null {
+    validateRun(run);
+    keyId(recordKey);
+    const familyClause =
+      family === 'classification'
+        ? " AND json_extract(intended_json, '$.family')='classification'"
+        : family === 'statistic'
+          ? " AND ifnull(json_extract(intended_json, '$.family'),'statistic')!='classification'"
+          : '';
+    const row = this.get<Parameters<RunStore['parseAggregate']>[0]>(
+      `SELECT operation_id, record_key, subject_id, provider, source_alias, source_record_id, kind,
+        command_key, request_bytes, intended_json, reviewed_head_json, expected_observation, status,
+        native_reason, outcome_json
+       FROM run_aggregate_operations
+       WHERE source=? AND run_id=? AND record_key=? AND status IN ('prepared','uncertain','conflict','refused')${familyClause}
+       ORDER BY operation_id LIMIT 1`,
+      run.source,
+      run.id,
+      recordKey,
+    );
+    return row ? this.parseAggregate(row) : null;
+  }
+  pageUnresolvedAggregates(
+    run: Run,
+    input: { after?: string; limit?: number; family?: 'statistic' | 'classification' } = {},
+  ): { operations: AggregateOperation[]; next: string | null } {
+    validateRun(run);
+    const limit = input.limit ?? SOURCE_OBSERVATION_PAGE_MAX;
+    if (!Number.isInteger(limit) || limit < 1 || limit > SOURCE_OBSERVATION_PAGE_MAX) fail();
+    if (input.after !== undefined) identifier(input.after, 64, /^[0-9a-f]{64}$/u);
+    const familyClause =
+      input.family === 'classification'
+        ? " AND json_extract(intended_json, '$.family')='classification'"
+        : input.family === 'statistic'
+          ? " AND ifnull(json_extract(intended_json, '$.family'),'statistic')!='classification'"
+          : '';
+    const rows = this.all<Parameters<RunStore['parseAggregate']>[0]>(
+      input.after
+        ? `SELECT operation_id, record_key, subject_id, provider, source_alias, source_record_id, kind,
+            command_key, request_bytes, intended_json, reviewed_head_json, expected_observation, status,
+            native_reason, outcome_json
+           FROM run_aggregate_operations
+           WHERE source=? AND run_id=? AND status IN ('prepared','uncertain','conflict','refused') AND operation_id>?${familyClause}
+           ORDER BY operation_id LIMIT ?`
+        : `SELECT operation_id, record_key, subject_id, provider, source_alias, source_record_id, kind,
+            command_key, request_bytes, intended_json, reviewed_head_json, expected_observation, status,
+            native_reason, outcome_json
+           FROM run_aggregate_operations
+           WHERE source=? AND run_id=? AND status IN ('prepared','uncertain','conflict','refused')${familyClause}
+           ORDER BY operation_id LIMIT ?`,
+      ...(input.after ? [run.source, run.id, input.after, limit] : [run.source, run.id, limit]),
+    );
+    const operations = rows.map((row) => this.parseAggregate(row));
+    return { operations, next: operations.length === limit ? operations.at(-1)!.operationId : null };
+  }
+  hasUnresolvedAggregates(run: Run): boolean {
+    validateRun(run);
+    return Boolean(
+      this.get(
+        `SELECT operation_id FROM run_aggregate_operations
+         WHERE source=? AND run_id=? AND status IN ('prepared','uncertain','conflict','refused') LIMIT 1`,
+        run.source,
+        run.id,
+      ),
+    );
+  }
+  hasObservationConflicts(run: Run): boolean {
+    validateRun(run);
+    return Boolean(
+      this.get(
+        `SELECT operation_id FROM run_aggregate_operations
+         WHERE source=? AND run_id=? AND status IN ('conflict','refused') LIMIT 1`,
+        run.source,
+        run.id,
+      ),
+    );
+  }
+  retainAggregateHead(source: string, head: RetainedObservationHead & { subjectId: string }): void {
+    sourceId(source);
+    identifier(head.subjectId, 36, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
+    this.write(
+      `INSERT INTO run_aggregate_heads(source,subject_id,provider,digest,head_json) VALUES(?,?,?,?,?)
+       ON CONFLICT(source,subject_id,provider) DO UPDATE SET digest=excluded.digest, head_json=excluded.head_json`,
+      source,
+      head.subjectId,
+      'vndb',
+      head.digest,
+      boundedJson(head, 65536),
+    );
+  }
+  retainClassificationHead(source: string, head: RetainedClassificationHead & { subjectId: string }): void {
+    sourceId(source);
+    identifier(head.subjectId, 36, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
+    identifier(head.associationKey, 64, /^[0-9a-f]{64}$/u);
+    this.write(
+      `INSERT INTO run_classification_heads(source,subject_id,association_key,digest,head_json) VALUES(?,?,?,?,?)
+       ON CONFLICT(source,subject_id,association_key) DO UPDATE SET digest=excluded.digest, head_json=excluded.head_json`,
+      source,
+      head.subjectId,
+      head.associationKey,
+      head.digest,
+      boundedJson(head, 65536),
+    );
+  }
+  retainedClassificationHead(
+    source: string,
+    subjectId: string,
+    associationKey: string,
+  ): RetainedClassificationHead | null {
+    sourceId(source);
+    identifier(subjectId, 36, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
+    identifier(associationKey, 64, /^[0-9a-f]{64}$/u);
+    const row = this.get<{ head_json: string }>(
+      'SELECT head_json FROM run_classification_heads WHERE source=? AND subject_id=? AND association_key=?',
+      source,
+      subjectId,
+      associationKey,
+    );
+    return row ? (JSON.parse(row.head_json) as RetainedClassificationHead) : null;
+  }
+  retainedAggregateHead(source: string, subjectId: string): RetainedObservationHead | null {
+    sourceId(source);
+    identifier(subjectId, 36, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
+    const row = this.get<{ head_json: string }>(
+      'SELECT head_json FROM run_aggregate_heads WHERE source=? AND subject_id=? AND provider=?',
+      source,
+      subjectId,
+      'vndb',
+    );
+    return row ? (JSON.parse(row.head_json) as RetainedObservationHead) : null;
   }
   /** Private record plan; every dispatch still uses the portable one-envelope contract. */
   prepare(
     run: Run,
     key: string,
-    input: { commands: BatchCommand[]; omissions?: Omission[]; deferredCover?: boolean },
+    input: {
+      commands: BatchCommand[];
+      omissions?: Omission[];
+      deferredCover?: boolean;
+      sourceVocabulary?: SourceVocabularyRequest;
+    },
   ): Kind {
+    return this.plan(run, key, input, true).kind;
+  }
+  /** @internal Prepare a dispatch omission proof and return its durable union in the same transaction. */
+  prepareWithOmissions(
+    run: Run,
+    key: string,
+    input: {
+      commands: BatchCommand[];
+      omissions?: Omission[];
+      deferredCover?: boolean;
+      sourceVocabulary?: SourceVocabularyRequest;
+    },
+  ): { kind: Kind; omissions: Omission[] } {
     return this.plan(run, key, input, true);
   }
   private plan(
     run: Run,
     key: string,
-    input: { commands: BatchCommand[]; omissions?: Omission[]; deferredCover?: boolean },
+    input: {
+      commands: BatchCommand[];
+      omissions?: Omission[];
+      deferredCover?: boolean;
+      sourceVocabulary?: SourceVocabularyRequest;
+    },
     multi: boolean,
-  ): Kind {
+  ): { kind: Kind; omissions: Omission[] } {
     keyId(key);
-    exact(input, ['commands'], ['omissions', 'deferredCover']);
+    exact(input, ['commands'], ['omissions', 'deferredCover', 'sourceVocabulary']);
     if (input.deferredCover !== undefined && typeof input.deferredCover !== 'boolean') fail();
     if (!Array.isArray(input.commands) || input.commands.length > (multi ? 300 : 100)) fail();
     const request: ImportBatchRequest = { commands: input.commands };
@@ -765,9 +1948,10 @@ export class RunStore<Projection = BatchStatement[]> {
         if (
           c.source.source !== run.source ||
           c.source.external_id !== key ||
-          c.source.digest !== row.digest ||
-          c.source.record_revision !== row.recordRevision ||
-          c.source.converter_revision !== row.converter_revision
+          ((c.source.digest !== row.digest ||
+            c.source.record_revision !== row.recordRevision ||
+            c.source.converter_revision !== row.converter_revision) &&
+            !sourceVocabularyOriginMatches(c, row.recordKey, row.recordRevision, input.sourceVocabulary))
         )
           fail();
       }
@@ -783,7 +1967,7 @@ export class RunStore<Projection = BatchStatement[]> {
             ? 'vanished'
             : !current
               ? 'new'
-              : current.row_json === e.row_json && current.projection_json === e.projection_json
+              : current.row_json === e.row_json && this.sameProjection(current.projection_json, e.projection_json)
                 ? 'unchanged'
                 : 'changed';
         if (multi && !commands.length && !omissions.length && !input.deferredCover && e.kind !== 'unchanged')
@@ -798,7 +1982,9 @@ export class RunStore<Projection = BatchStatement[]> {
           key,
         );
         const snapshotChanged =
-          !baseline || baseline.row_json !== e.row_json || baseline.projection_json !== e.projection_json;
+          !baseline ||
+          baseline.row_json !== e.row_json ||
+          !this.sameProjection(baseline.projection_json, e.projection_json);
         const keys: string[] = [];
         // Each original request envelope is stored before this transaction returns to a caller/transport.
         for (let i = 0; i < commands.length; i++) {
@@ -913,7 +2099,7 @@ export class RunStore<Projection = BatchStatement[]> {
         );
       }
       if (e.bytes || e.kind === 'unchanged' || saved.length) this.resolve(run, e);
-      return e.kind;
+      return { kind: e.kind, omissions: saved };
     });
   }
   pageDeferredCovers(run: Run, page: { after?: string; limit: number }): DeferredCover<Projection>[] {
@@ -1159,7 +2345,8 @@ export class RunStore<Projection = BatchStatement[]> {
       const g = this.generation(run, true);
       if (g.status === 'complete') return 'complete';
       if (!['ready', 'finalizing'].includes(g.status)) throw new Error('Run cannot finalize');
-      if (g.classified !== g.expected || g.resolved !== g.expected) return 'incomplete';
+      if (g.classified !== g.expected || g.resolved !== g.expected || this.hasUnresolvedAggregates(run))
+        return 'incomplete';
       const entries = this.all<Entry>(
         `SELECT * FROM run_entries WHERE source=? AND run_id=? AND record_key>?
         ORDER BY record_key LIMIT ?`,
@@ -1218,17 +2405,19 @@ export class RunStore<Projection = BatchStatement[]> {
   ): {
     baseline: RecordRow | null;
     acknowledged: RecordRow | null;
+    acknowledgedProjection: Projection | null;
     staged: Staged<Projection> | null;
     omissions: Omission[];
     coverPending: boolean;
+    resolved: boolean;
     kind: Kind | null;
   } {
     sourceId(source);
     keyId(key);
     const s = this.source(source);
     const baseline = s.generation ? this.entry({ source, id: s.generation, lease: '' }, key) : null;
-    const ack = this.get<{ row_json: string }>(
-      'SELECT row_json FROM run_acknowledged WHERE source=? AND record_key=?',
+    const ack = this.get<{ row_json: string; projection_json: string }>(
+      'SELECT row_json,projection_json FROM run_acknowledged WHERE source=? AND record_key=?',
       source,
       key,
     );
@@ -1241,11 +2430,89 @@ export class RunStore<Projection = BatchStatement[]> {
     return {
       baseline: baseline ? JSON.parse(baseline.row_json) : null,
       acknowledged: ack ? JSON.parse(ack.row_json) : null,
+      acknowledgedProjection: ack ? JSON.parse(ack.projection_json) : null,
       staged: e ? { row: JSON.parse(e.row_json), projection: JSON.parse(e.projection_json) } : null,
       omissions: e ? JSON.parse(e.omissions_json) : [],
       coverPending: e?.cover_pending === 1,
+      resolved: e?.resolved === 1,
       kind: e?.kind ?? null,
     };
+  }
+  retainConversionDiagnostics(
+    run: Run,
+    input: {
+      recordKey: string;
+      digest: string;
+      converterRevision: string;
+      recordRevision: string;
+      phase: ConversionDiagnosticPhase;
+      diagnostics: unknown;
+    },
+  ): void {
+    exact(input, ['recordKey', 'digest', 'converterRevision', 'recordRevision', 'phase', 'diagnostics']);
+    keyId(input.recordKey);
+    admitDigest(input.digest);
+    admitRevision(input.converterRevision, 128);
+    admitRevision(input.recordRevision, 256);
+    if (!isConversionDiagnosticPhase(input.phase)) throw new ConversionDiagnosticError();
+    const diagnostics = sanitizeConversionDiagnostics(input.diagnostics);
+    const payload = JSON.stringify(diagnostics);
+    this.transaction(() => {
+      this.generation(run);
+      const existing = this.get<{
+        digest: string;
+        converter_revision: string;
+        record_revision: string;
+      }>(
+        `SELECT digest,converter_revision,record_revision FROM run_conversion_diagnostics
+        WHERE source=? AND run_id=? AND record_key=? AND phase=?`,
+        run.source,
+        run.id,
+        input.recordKey,
+        input.phase,
+      );
+      if (existing) {
+        if (
+          existing.digest !== input.digest ||
+          existing.converter_revision !== input.converterRevision ||
+          existing.record_revision !== input.recordRevision
+        )
+          throw new ConversionDiagnosticError('Conversion diagnostic identity does not match the retained attempt');
+        return;
+      }
+      this.write(
+        `INSERT INTO run_conversion_diagnostics(
+          source,run_id,record_key,phase,digest,converter_revision,record_revision,diagnostic_count,diagnostics_json
+        ) VALUES(?,?,?,?,?,?,?,?,?)`,
+        run.source,
+        run.id,
+        input.recordKey,
+        input.phase,
+        input.digest,
+        input.converterRevision,
+        input.recordRevision,
+        diagnostics.length,
+        payload,
+      );
+      const review =
+        diagnostics.length === 0
+          ? { changes: 0 }
+          : this.write(
+              `INSERT OR IGNORE INTO run_conversion_diagnostic_records(source,run_id,record_key) VALUES(?,?,?)`,
+              run.source,
+              run.id,
+              input.recordKey,
+            );
+      this.write(
+        `UPDATE run_generations SET diagnostics_recorded=1,
+        diagnostic_records=diagnostic_records+?,diagnostic_entries=diagnostic_entries+?
+        WHERE source=? AND id=?`,
+        review.changes,
+        diagnostics.length,
+        run.source,
+        run.id,
+      );
+    });
   }
   close(): void {
     if (!this.closed) {

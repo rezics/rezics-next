@@ -1,13 +1,13 @@
 'use client';
 
+import { Command, CommandItem, CommandList } from '@rezics/ui/shadcn/command';
 import { Extension, type Editor as TiptapEditor } from '@tiptap/core';
 import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
-import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { cn } from '../utils.ts';
-import { availableCommands, insertCommands, type EditorCommand } from './editor-commands.ts';
+import { memo, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { availableCommands, runEditorCommand, slashCommands, type EditorCommand } from './editor-commands.ts';
 import type { RichTextEditorLabels } from './editor-labels.ts';
 
-interface SlashRange {
+export interface SlashRange {
   from: number;
   to: number;
   query: string;
@@ -154,12 +154,17 @@ export function matchCommands(
 }
 
 interface OpenMenu {
+  id: number;
   query: string;
   range: SlashRange;
   rect: DOMRect | null;
+  visit: number;
 }
 
-/** Lists insert commands for the slash before the caret. Focus stays in the editor. */
+/**
+ * Lists insert and inline commands for the slash before the caret. Focus stays in the editor, so the list is a
+ * `command` whose highlighted item the editor drives from its own key handler, with no search field of its own.
+ */
 export const SlashMenu = memo(function SlashMenu({
   editor,
   labels,
@@ -167,6 +172,8 @@ export const SlashMenu = memo(function SlashMenu({
   handlers,
   onLink,
   onImage,
+  visit,
+  isCurrent,
 }: {
   editor: TiptapEditor;
   labels: RichTextEditorLabels;
@@ -174,29 +181,49 @@ export const SlashMenu = memo(function SlashMenu({
   handlers: RefObject<SlashHandlers>;
   onLink: () => void;
   onImage: () => void;
+  visit: number;
+  isCurrent: () => boolean;
 }) {
   const [open, setOpen] = useState<OpenMenu | null>(null);
   const [index, setIndex] = useState(0);
   const [place, setPlace] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
   const list = useRef<HTMLDivElement>(null);
-  const listId = useId();
-  const commands = availableCommands(insertCommands, editor).filter((command) => command.id !== 'image' || upload);
+  const nextOpenId = useRef(0);
+  const commands = availableCommands(slashCommands, editor).filter((command) => command.id !== 'image' || upload);
   const items = open ? matchCommands(commands, labels, open.query) : [];
   const activeIndex = items.length ? index % items.length : 0;
   const active = items[activeIndex];
   const latest = useRef({ open, index, commands, labels, onLink, onImage });
   latest.current = { open, index, commands, labels, onLink, onImage };
 
-  function choose(command: EditorCommand) {
+  function choose(command: EditorCommand, admitted: OpenMenu | null) {
+    if (!isCurrent() || editor.isDestroyed || !editor.isEditable || !admitted || admitted.visit !== visit) return;
+    if (latest.current.open?.id !== admitted.id) return;
     const plugin = slashPluginKey.getState(editor.state);
-    if (!plugin?.active) return;
-    editor.chain().focus().deleteRange({ from: plugin.from, to: plugin.to }).run();
-    command.run(editor, latest.current.onLink, latest.current.onImage);
+    if (
+      !plugin?.active ||
+      plugin.from !== admitted.range.from ||
+      plugin.to !== admitted.range.to ||
+      plugin.query !== admitted.range.query ||
+      !latest.current.commands.some((current) => current === command)
+    )
+      return;
+    editor.chain().deleteRange({ from: plugin.from, to: plugin.to }).run();
+    if (!isCurrent() || editor.isDestroyed || !editor.isEditable) return;
+    runEditorCommand(command, editor, latest.current.onLink, latest.current.onImage, isCurrent);
   }
 
   const publish = (query: string, range: SlashRange, rect: DOMRect | null, reset: boolean) => {
+    if (!isCurrent()) return;
     const previous = latest.current.open;
-    const next = { query, range, rect };
+    const sameAdmission = Boolean(
+      previous &&
+      previous.visit === visit &&
+      previous.query === query &&
+      previous.range.from === range.from &&
+      previous.range.to === range.to,
+    );
+    const next = { id: sameAdmission ? previous!.id : ++nextOpenId.current, query, range, rect, visit };
     latest.current.open = next;
     if (reset) {
       latest.current.index = 0;
@@ -205,6 +232,7 @@ export const SlashMenu = memo(function SlashMenu({
     if (
       !previous ||
       previous.query !== query ||
+      previous.visit !== visit ||
       previous.range.from !== range.from ||
       previous.range.to !== range.to ||
       previous.rect?.top !== rect?.top ||
@@ -213,16 +241,18 @@ export const SlashMenu = memo(function SlashMenu({
       setOpen(next);
     }
   };
-  handlers.current = {
-    filter: (query) => matchCommands(latest.current.commands, latest.current.labels, query),
+  const currentHandlers: SlashHandlers = {
+    filter: (query) => (isCurrent() ? matchCommands(latest.current.commands, latest.current.labels, query) : []),
     start: (query, range, rect) => publish(query, range, rect, true),
     update: (query, range, rect) =>
       publish(query, range, rect, !latest.current.open || latest.current.open.query !== query),
     exit: () => {
+      if (!isCurrent() || latest.current.open?.visit !== visit) return;
       latest.current.open = null;
       setOpen(null);
     },
     key: (event) => {
+      if (!isCurrent()) return false;
       const current = latest.current;
       if (!current.open) return false;
       const choices = matchCommands(current.commands, current.labels, current.open.query);
@@ -239,14 +269,39 @@ export const SlashMenu = memo(function SlashMenu({
       }
       if (event.key === 'Enter' || event.key === 'Tab') {
         const command = choices[selected];
-        if (command) choose(command);
+        if (command) choose(command, current.open);
         return true;
       }
       return false;
     },
   };
+  handlers.current = currentHandlers;
+  const latestHandlers = useRef(currentHandlers);
+  latestHandlers.current = currentHandlers;
 
   useLayoutEffect(() => {
+    if (!isCurrent()) return;
+    const current = slashPluginKey.getState(editor.state);
+    if (!current?.active) return;
+    let rect: DOMRect | null = null;
+    try {
+      const coords = editor.view.coordsAtPos(current.to);
+      rect = new DOMRect(coords.left, coords.top, 0, coords.bottom - coords.top);
+    } catch {
+      rect = null;
+    }
+    handlers.current.start(current.query, { from: current.from, to: current.to, query: current.query }, rect);
+  }, [editor, handlers, isCurrent, visit]);
+
+  useLayoutEffect(() => {
+    handlers.current = latestHandlers.current;
+    return () => {
+      if (handlers.current === latestHandlers.current) handlers.current = idleSlashHandlers;
+    };
+  }, [handlers, visit]);
+
+  useLayoutEffect(() => {
+    if (!isCurrent() || !open || open.visit !== visit) return;
     if (!open?.rect) {
       setPlace(null);
       return;
@@ -263,61 +318,69 @@ export const SlashMenu = memo(function SlashMenu({
         ? { left, top: open.rect.bottom + 4 }
         : { left, bottom: window.innerHeight - open.rect.top + 4 },
     );
-  }, [open]);
+  }, [isCurrent, open, visit]);
 
-  useEffect(() => {
-    list.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
-  }, [activeIndex, open]);
-
-  useEffect(() => {
+  // The list names its options, so the editor points at whichever one carries the highlight.
+  useLayoutEffect(() => {
     const dom = editor.view.dom;
-    if (!open) return;
-    dom.setAttribute('aria-controls', listId);
+    if (!isCurrent() || !open || open.visit !== visit) return;
+    const option = list.current?.querySelector<HTMLElement>(`[role="option"][data-value="${active?.id}"]`);
+    const listbox = list.current?.querySelector<HTMLElement>('[role="listbox"]');
+    const owner = String(visit);
+    const previous = new Map<string, string | null>();
+    for (const name of ['aria-controls', 'aria-expanded', 'aria-activedescendant'])
+      previous.set(name, dom.getAttribute(name));
+    dom.setAttribute('data-slash-aria-owner', owner);
+    if (listbox) dom.setAttribute('aria-controls', listbox.id);
     dom.setAttribute('aria-expanded', 'true');
-    if (active) dom.setAttribute('aria-activedescendant', `${listId}-${active.id}`);
+    if (option?.id) dom.setAttribute('aria-activedescendant', option.id);
     else dom.removeAttribute('aria-activedescendant');
     return () => {
-      dom.removeAttribute('aria-controls');
-      dom.removeAttribute('aria-expanded');
-      dom.removeAttribute('aria-activedescendant');
+      if (dom.getAttribute('data-slash-aria-owner') !== owner) return;
+      dom.removeAttribute('data-slash-aria-owner');
+      for (const [name, value] of previous) {
+        if (value === null) dom.removeAttribute(name);
+        else dom.setAttribute(name, value);
+      }
     };
-  }, [editor, open, active, listId]);
+  }, [editor, isCurrent, open, active, items.length, visit]);
 
-  if (!open) return null;
+  if (!isCurrent() || !open || open.visit !== visit) return null;
   const position = place?.bottom === undefined ? { left: place?.left ?? 8, top: place?.top ?? 8 } : place;
   return (
     <div
       ref={list}
-      id={listId}
-      role="listbox"
-      aria-label={labels.insertBlock}
       data-slot="editor-slash-menu"
       onMouseDown={(event) => event.preventDefault()}
       style={{ position: 'fixed', ...position }}
-      className="z-50 max-h-72 w-64 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-xl border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+      className="z-50 w-64 max-w-[calc(100vw-1rem)]"
     >
-      {items.length ? (
-        items.map((command, position) => (
-          <div
-            key={command.id}
-            id={`${listId}-${command.id}`}
-            role="option"
-            aria-selected={position === activeIndex}
-            className={cn(
-              'flex min-h-9 cursor-default items-center rounded-lg px-2 text-sm',
-              position === activeIndex && 'bg-accent text-accent-foreground',
-            )}
-            onMouseMove={() => {
-              if (position !== activeIndex) setIndex(position);
-            }}
-            onClick={() => choose(command)}
-          >
-            {labels[command.label]}
-          </div>
-        ))
-      ) : (
-        <p className="px-2 py-1.5 text-sm text-muted-foreground">{labels.slashEmpty}</p>
-      )}
+      <Command
+        shouldFilter={false}
+        loop
+        label={labels.insertBlock}
+        value={active?.id ?? ''}
+        onValueChange={(id) => {
+          const next = items.findIndex((command) => command.id === id);
+          if (next >= 0 && next !== activeIndex) {
+            latest.current.index = next;
+            setIndex(next);
+          }
+        }}
+        className="rounded-2xl p-1 shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
+      >
+        <CommandList label={labels.insertBlock}>
+          {items.length ? (
+            items.map((command) => (
+              <CommandItem key={command.id} value={command.id} onSelect={() => choose(command, open)}>
+                {labels[command.label]}
+              </CommandItem>
+            ))
+          ) : (
+            <p className="px-2 py-1.5 text-sm text-muted-foreground">{labels.slashEmpty}</p>
+          )}
+        </CommandList>
+      </Command>
     </div>
   );
 });

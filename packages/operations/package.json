@@ -1,0 +1,13 @@
+{
+  "name": "@rezics/operations",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "exports": {
+    ".": "./src/index.ts",
+    "./protocol": "./src/protocol.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check --no-script -p tsconfig.json"
+  }
+}

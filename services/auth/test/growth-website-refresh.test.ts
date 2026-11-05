@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomBytes } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -38,7 +39,10 @@ beforeAll(async () => {
     audience,
     secret: 'refresh-growth-secret-with-at-least-32-bytes',
     signing: { activeKid: 'refresh-growth-signing', privateKeys: [{ ...signing, kid: 'refresh-growth-signing' }] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount(accountId) {
         return accountId === person ? { ...account } : null;
       },
@@ -50,7 +54,7 @@ beforeAll(async () => {
         account.authnEpoch++;
         return { accountId, minimumAuthnEpoch: account.authnEpoch, receiptId: `floor-${account.authnEpoch}` };
       },
-    },
+    }),
   });
   await service.internal.registerWebsiteClient({
     publicJwks: {

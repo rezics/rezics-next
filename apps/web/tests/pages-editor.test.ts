@@ -25,6 +25,7 @@ test("the editor's fields come from the registry", () => {
   expect(fields('Heading').level).toMatchObject({
     type: 'select',
     options: [
+      { label: '1', value: 1 },
       { label: '2', value: 2 },
       { label: '3', value: 3 },
       { label: '4', value: 4 },
@@ -62,7 +63,7 @@ test('an edited page becomes a composition document', () => {
       content: [{ type: 'Heading', props: { id: 'h', text: { en: 'Hi', fr: '' }, level: 3 } }],
     }),
   );
-  expect(blanks.content[0]!.props.text).toEqual({ en: 'Hi' });
+  expect(blanks.content[0]!.props.text).toEqual({ en: 'Hi', fr: '' });
 });
 
 test('publishing refuses a document the platform would refuse', () => {

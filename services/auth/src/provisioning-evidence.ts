@@ -87,27 +87,29 @@ export function createProvisioningEvidenceVerifier({ database }: { database: Poo
      * idempotency key. This verifies Auth commit only; pending authorization must
      * still be verified by the trusted Access binding before publication. */
     async createReference(input: ProvisioningEvidenceLocator): Promise<ProvisioningEvidenceReference | null> {
+      let original: ProvisioningEvidenceLocator;
       try {
-        const original = snapshot(input);
-        const credentialId = await lookup(original);
-        return credentialId ? { version: 1, ...original, credentialId } : null;
+        original = snapshot(input);
       } catch {
         return null;
       }
+      const credentialId = await lookup(original);
+      return credentialId ? { version: 1, ...original, credentialId } : null;
     },
     async resolve(reference: unknown): Promise<ProvisioningEvidence | null> {
+      let input: ProvisioningEvidenceReference | null;
       try {
-        const input = decode(reference);
-        if (!input || (await lookup(input)) !== input.credentialId) return null;
-        return {
-          accountId: input.accountId,
-          registrationId: input.registrationId,
-          authIdentityId: input.accountId,
-          authnEpoch: input.authnEpoch,
-        };
+        input = decode(reference);
       } catch {
         return null;
       }
+      if (!input || (await lookup(input)) !== input.credentialId) return null;
+      return {
+        accountId: input.accountId,
+        registrationId: input.registrationId,
+        authIdentityId: input.accountId,
+        authnEpoch: input.authnEpoch,
+      };
     },
   };
 }

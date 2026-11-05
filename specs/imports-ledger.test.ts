@@ -9,7 +9,7 @@ import {
 } from '@rezics/definitions/bulk';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type {
   CommandObservation,

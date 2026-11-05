@@ -1,0 +1,379 @@
+import type { KernelClient } from '@rezics/client';
+import { decodeJwt } from 'jose';
+import { createServerFn } from '@tanstack/react-start';
+import { notFound } from '@tanstack/react-router';
+import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
+import { env } from 'cloudflare:workers';
+import { kernelClient } from '../kernel/client';
+import type { SessionEnv } from '../session/client';
+import { prepareSession, viewerCredential } from '../session/request';
+import { preparedPrivateReaderOrigin, type PrivateReaderOrigin } from './private-reader-origin';
+import type { ResolvedReportTarget as ModerationTarget } from './reports-read';
+import { appealReadKey, type AppealReadInput, type PrivateAppealPage } from './appeals-read-model';
+import { isPlatformClosedError } from '../kernel/platform-closed';
+
+export const MODERATION_APPEALS_PAGE_SIZE = 20;
+/** Use the installed declaration, including every field its producer supplies. */
+type NativeAppealPage = NonNullable<Awaited<ReturnType<ReturnType<KernelClient['boards']>['appeals']['get']>>['data']>;
+export type AppealAppellantIdentity =
+  | {
+      state: 'available';
+      kind: 'actor' | 'organization';
+      handle: string | null;
+      displayName: string | null;
+      automated: boolean;
+    }
+  | { state: 'deleted' }
+  | { state: 'concealed' }
+  | { state: 'unavailable' };
+export type AppealTargetContext =
+  | {
+      state: 'available';
+      destination: { kind: 'board'; id: string } | { kind: 'thread'; id: string; boardId: string };
+    }
+  | { state: 'concealed' }
+  | { state: 'unavailable' };
+export type AppealResolutionSnapshot = {
+  outcome: 'upheld' | 'reversed';
+  statement: string;
+  resolvedAt: string;
+};
+export type AppealSource = NativeAppealPage['provenance']['source'];
+export type AppealProvenance = NativeAppealPage['provenance'];
+export type AppealResolutionCommand = {
+  operationId: 'moderation_appeal.resolve';
+  method: 'POST';
+  path: string;
+};
+export type Appeal = {
+  id: string;
+  decisionId: string;
+  appellantId: string;
+  appellantIdentity?: AppealAppellantIdentity;
+  statement: string;
+  createdAt: string;
+  targetContext?: AppealTargetContext;
+  resolution?: AppealResolutionSnapshot | null;
+  resolutionCommand?: AppealResolutionCommand;
+  source?: AppealSource;
+  decision: {
+    statement: string;
+    target?: { kind: 'board' | 'post' | 'thread'; id: string };
+    targetKind?: 'board' | 'post' | 'thread';
+    targetId?: string;
+    /** Retained for existing component fixtures; native lists expose only canResolve. */
+    deciderId?: string;
+    appeal?: { outcome: 'reversed' | 'upheld'; statement: string; resolvedAt: string } | null;
+  };
+  canResolve?: boolean;
+};
+/** Consumer presentation, independent of the pending page. */
+export type AppealPage = {
+  appeals: Appeal[];
+  next: string | null;
+  selectedAppeal?: Appeal;
+  provenance?: AppealProvenance;
+  /** Opaque native response token; retained only by the private read and original command. */
+  nativeSession?: string;
+};
+export type AppealReadSource = {
+  boardAppeals: (id: string, cursor?: string, inspect?: string) => Promise<AppealPage>;
+  threadAppeals: (id: string, cursor?: string, inspect?: string) => Promise<AppealPage>;
+};
+export type AppealTargetReads = {
+  post: (id: string) => Promise<ModerationTarget['value']>;
+  thread: (id: string) => Promise<ModerationTarget['value']>;
+};
+
+function boundedAppealPage(page: NativeAppealPage | null | undefined): AppealPage {
+  if (!page || !Array.isArray(page.appeals) || page.appeals.length > MODERATION_APPEALS_PAGE_SIZE)
+    throw new Error('Invalid appeals page');
+  if (page.next !== null && typeof page.next !== 'string') throw new Error('Invalid appeals continuation');
+  return page;
+}
+
+/** One bounded native page; optional context belongs to its native producer. */
+export async function readModerationAppeals(source: AppealReadSource, input: AppealReadInput): Promise<AppealPage> {
+  return input.threadId
+    ? source.threadAppeals(input.threadId, input.cursor, input.inspect)
+    : source.boardAppeals(input.boardId, input.cursor, input.inspect);
+}
+
+export async function resolveAppealTargets(appeals: Appeal[], reads: AppealTargetReads): Promise<ModerationTarget[]> {
+  const unique = new Map<string, NonNullable<Appeal['decision']['target']>>();
+  for (const appeal of appeals) {
+    const target = appealTarget(appeal);
+    if (target && target.kind !== 'board') unique.set(`${target.kind}:${target.id}`, target);
+  }
+  return Promise.all(
+    [...unique].map(async ([key, target]) => ({
+      key,
+      kind: target.kind,
+      value: target.kind === 'board' ? null : await reads[target.kind](target.id).catch(() => null),
+    })),
+  );
+}
+
+export function appealTarget(appeal: Appeal): Appeal['decision']['target'] {
+  return (
+    appeal.decision.target ??
+    (appeal.decision.targetKind && appeal.decision.targetId
+      ? { kind: appeal.decision.targetKind, id: appeal.decision.targetId }
+      : undefined)
+  );
+}
+
+const auth = (authorization: string, signal?: AbortSignal) => ({
+  headers: { authorization },
+  fetch: { cache: 'no-store' as const, ...(signal ? { signal } : {}) },
+});
+
+export const loadModerationAppeals = createServerFn({ method: 'GET' })
+  .validator((input: unknown) => {
+    if (!input || typeof input !== 'object') throw notFound();
+    const value = input as Record<string, unknown>;
+    if (typeof value.boardId !== 'string' || value.boardId.length > 128) throw notFound();
+    if (value.threadId !== undefined && (typeof value.threadId !== 'string' || value.threadId.length > 128))
+      throw notFound();
+    if (value.postId !== undefined && (typeof value.postId !== 'string' || value.postId.length > 128)) throw notFound();
+    if (value.cursor !== undefined && (typeof value.cursor !== 'string' || value.cursor.length > 4096))
+      throw notFound();
+    if (
+      value.inspect !== undefined &&
+      (typeof value.inspect !== 'string' || value.inspect.length === 0 || value.inspect.length > 128)
+    )
+      throw notFound();
+    return {
+      boardId: value.boardId,
+      ...(typeof value.inspect === 'string' ? { inspect: value.inspect } : {}),
+      ...(typeof value.threadId === 'string' ? { threadId: value.threadId } : {}),
+      ...(typeof value.postId === 'string' ? { postId: value.postId } : {}),
+      ...(typeof value.cursor === 'string' && value.cursor ? { cursor: value.cursor } : {}),
+    };
+  })
+  .handler(async ({ data }): Promise<PrivateAppealPage> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    return loadModerationAppealsRequest(getRequest(), env as Partial<SessionEnv>, data);
+  });
+
+export async function loadModerationAppealsRequest(
+  request: Request,
+  sessionEnv: Partial<SessionEnv>,
+  data: AppealReadInput,
+  client: () => KernelClient = kernelClient,
+): Promise<PrivateAppealPage> {
+  const identity = {
+    readKey: appealReadKey(data),
+    viewerId: null,
+    readerOrigin: null,
+    generation: crypto.randomUUID(),
+  };
+  try {
+    await prepareSession(request, sessionEnv);
+  } catch {
+    return { ...identity, appeals: [], targets: [], next: null, state: 'unavailable' };
+  }
+  const authorization = viewerCredential(request);
+  const readerOrigin = await preparedPrivateReaderOrigin(request, authorization);
+  if (!authorization || !readerOrigin) return { ...identity, appeals: [], targets: [], next: null, state: 'closed' };
+  return readModerationAppealPage(client(), data, authorization, readerOrigin.subject, readerOrigin);
+}
+
+class AppealReadFailure extends Error {
+  constructor(readonly state: 'closed' | 'unavailable' | 'stale') {
+    super(state);
+  }
+}
+function appealResult(result: {
+  data?: NativeAppealPage | null;
+  error?: { status: number; value: unknown } | null;
+}): AppealPage {
+  if (result.error) {
+    const { status, value } = result.error;
+    if (
+      value &&
+      typeof value === 'object' &&
+      'code' in value &&
+      ((status === 400 && value.code === 'invalid_cursor') || (status === 409 && value.code === 'stale_cursor'))
+    )
+      throw new AppealReadFailure('stale');
+    throw new AppealReadFailure([401, 403, 404].includes(status) ? 'closed' : 'unavailable');
+  }
+  return boundedAppealPage(result.data);
+}
+
+/** One installed composed operation owns both the captured page and exact selection. */
+export async function readModerationAppealPage(
+  client: KernelClient,
+  input: AppealReadInput,
+  authorization: string,
+  viewerId: string,
+  readerOrigin?: PrivateReaderOrigin | null,
+  signal?: AbortSignal,
+): Promise<PrivateAppealPage> {
+  const identity = {
+    readKey: appealReadKey(input),
+    viewerId,
+    readerOrigin: readerOrigin ?? null,
+    generation: crypto.randomUUID(),
+  };
+  try {
+    signal?.throwIfAborted();
+    const headers = auth(authorization, signal);
+    const page = await readModerationAppeals(
+      {
+        boardAppeals: async (id, cursor, inspect) => {
+          const result = await client.boards({ id }).appeals.get({
+            ...headers,
+            query: {
+              limit: MODERATION_APPEALS_PAGE_SIZE,
+              ...(cursor ? { cursor } : {}),
+              ...(inspect ? { inspect } : {}),
+            },
+          });
+          const page = appealResult(result);
+          return inspect
+            ? admitAppealInspection(
+                page,
+                inspect,
+                authorization,
+                viewerId,
+                readerOrigin,
+                new Headers(result.headers).get('rezics-session-token'),
+              )
+            : page;
+        },
+        threadAppeals: async (id, cursor, inspect) => {
+          const result = await client.threads({ id }).appeals.get({
+            ...headers,
+            query: {
+              limit: MODERATION_APPEALS_PAGE_SIZE,
+              ...(cursor ? { cursor } : {}),
+              ...(inspect ? { inspect } : {}),
+            },
+          });
+          const page = appealResult(result);
+          return inspect
+            ? admitAppealInspection(
+                page,
+                inspect,
+                authorization,
+                viewerId,
+                readerOrigin,
+                new Headers(result.headers).get('rezics-session-token'),
+              )
+            : page;
+        },
+      },
+      input,
+    );
+    return { ...page, targets: [], ...identity, state: 'ready' };
+  } catch (error) {
+    return {
+      ...identity,
+      appeals: [],
+      targets: [],
+      next: null,
+      state: error instanceof AppealReadFailure ? error.state : isPlatformClosedError(error) ? 'closed' : 'unavailable',
+    };
+  }
+}
+
+/** Composed producer seam: final page provenance must cover every retained row and exact selection. */
+function validSource(source: AppealSource | undefined): source is AppealSource {
+  return (
+    !!source &&
+    Number.isSafeInteger(source.partition) &&
+    source.partition >= 0 &&
+    Number.isSafeInteger(source.epoch) &&
+    source.epoch > 0 &&
+    typeof source.position === 'string' &&
+    source.position.length <= 32 &&
+    /^(0|[1-9][0-9]*)$/.test(source.position)
+  );
+}
+
+function sourceObservationKey(appealId: string, source: AppealSource): string {
+  return JSON.stringify([appealId, source.partition, source.epoch, source.position]);
+}
+
+export function admitAppealInspection(
+  page: AppealPage,
+  inspect: string,
+  authorization: string,
+  viewerId: string,
+  origin: PrivateReaderOrigin | null | undefined,
+  nativeSession: string | null,
+) {
+  // Comparison only: the successful native operation authenticates this same credential.
+  // The opaque native session token is never decoded or used as authorization.
+  const credential = decodeJwt(authorization.replace(/^Bearer /i, ''));
+  const provenance = page.provenance;
+  const selected = page.selectedAppeal;
+  if (
+    !Array.isArray(page.appeals) ||
+    page.appeals.length > MODERATION_APPEALS_PAGE_SIZE ||
+    (page.next !== null && typeof page.next !== 'string') ||
+    !origin ||
+    origin.subject !== viewerId ||
+    !origin.csrfFingerprint ||
+    !nativeSession ||
+    nativeSession.length > 65536 ||
+    /[\r\n]/.test(nativeSession) ||
+    !provenance ||
+    provenance.actorId !== viewerId ||
+    credential.sub !== viewerId ||
+    !provenance.session ||
+    typeof provenance.session.clientId !== 'string' ||
+    !provenance.session.clientId ||
+    provenance.session.clientId !== credential.client_id ||
+    provenance.session.authnEpoch !== credential.authn_epoch ||
+    !Number.isSafeInteger(provenance.session.authnEpoch) ||
+    provenance.session.authnEpoch <= 0 ||
+    !validSource(provenance.source) ||
+    !selected ||
+    selected.id !== inspect ||
+    !Object.hasOwn(selected, 'resolution') ||
+    (selected.resolution !== null &&
+      (!selected.resolution ||
+        !['upheld', 'reversed'].includes(selected.resolution.outcome) ||
+        typeof selected.resolution.statement !== 'string' ||
+        !Number.isFinite(Date.parse(selected.resolution.resolvedAt))))
+  )
+    throw new AppealReadFailure('unavailable');
+  // The publisher's generated declaration may lag the producer. Keep its provenance type intact;
+  // runtime evidence must still be present and valid, with no parent-anchor fallback.
+  if (
+    !Object.hasOwn(provenance, 'sourceObservations') ||
+    !('sourceObservations' in provenance) ||
+    !Array.isArray(provenance.sourceObservations)
+  )
+    throw new AppealReadFailure('unavailable');
+  const retained = [...page.appeals, selected];
+  if (provenance.sourceObservations.length > retained.length) throw new AppealReadFailure('unavailable');
+  const expected = new Set<string>();
+  for (const appeal of retained) {
+    if (!validSource(appeal.source)) throw new AppealReadFailure('unavailable');
+    expected.add(sourceObservationKey(appeal.id, appeal.source));
+  }
+  const observed = new Set<string>();
+  for (const observation of provenance.sourceObservations) {
+    if (!observation || typeof observation.appealId !== 'string' || !validSource(observation.source))
+      throw new AppealReadFailure('unavailable');
+    const key = sourceObservationKey(observation.appealId, observation.source);
+    if (!expected.has(key)) throw new AppealReadFailure('unavailable');
+    observed.add(key);
+  }
+  for (const appeal of retained) {
+    const source = appeal.source;
+    if (!validSource(source)) throw new AppealReadFailure('unavailable');
+    if (
+      !observed.has(sourceObservationKey(appeal.id, source)) ||
+      appeal.resolutionCommand?.operationId !== 'moderation_appeal.resolve' ||
+      appeal.resolutionCommand.method !== 'POST' ||
+      appeal.resolutionCommand.path !== `/v1/moderation-appeals/${appeal.id}:resolve`
+    )
+      throw new AppealReadFailure('unavailable');
+  }
+  return { ...page, nativeSession: nativeSession! };
+}

@@ -1,3 +1,4 @@
+import { reinstateAccount, suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool, type QueryConfig } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -118,8 +119,12 @@ test('current native lifecycle, relation and exact epoch floor govern the provis
     "registration_expires_at='2000-01-01'",
     "registration_expires_at=registration_expires_at + interval '1 microsecond'",
   ]) {
-    await update(fields);
+    if (fields === "state='suspended'") {
+      await update("state='active'");
+      await suspendAccount(pool, receipt.accountId);
+    } else await update(fields);
     expect(await bindings.readProvisioningAccount!(receipt.accountId, reference)).toBeNull();
+    if (fields === "state='suspended'") await reinstateAccount(pool, receipt.accountId);
     await update("state='pending', authn_fenced=false, registration_id=$3, registration_expires_at=$4", [
       receipt.registrationId,
       receipt.expiresAt,

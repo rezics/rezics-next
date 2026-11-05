@@ -1,0 +1,52 @@
+import { Meta, Canvas } from '@storybook/addon-docs/blocks';
+import * as Community from './board-community.stories';
+
+<Meta of={Community} name="Community feed" />
+
+# Community feed
+
+The board route uses `BoardCommunity` and `BoardFeed`: a banner fallback and initials, the native board title,
+optional Realm summary, current participation, sort links, disclosed opening text and supplied activity counts.
+The shared shell owns navigation. The About column follows the feed on a phone and sits alongside it on desktop.
+Each Discussion row uses the shared `ContentItem` with a visible level-three title and a localized thread destination.
+Its supplied byline, disclosed preview, activity time and nullable counts remain in the row; author, reaction, reply and
+adaptive overflow controls keep separate targets above the primary link. Copy feedback remains local to its row.
+
+Plays open the actual thread and composer routes, change sort and continue the exact returned page. Overflow uses
+the shared dropdown or phone sheet. Feed checks confirm the visible thread heading and localized primary route. Use
+the same IDs at phone390/desktop1280, with locale and theme globals.
+Loading, empty, error, protected and closed are separate states. SourceUnavailable removes optional Realm metadata,
+without creating Global authority. These recorded-response states do not prove native permissions or signing.
+
+Global boards offer the existing composer path after sign-in and have no Join. Realm creation entry waits for the
+existing private membership/participation query. A refused or unavailable read offers no creation permission;
+accepted membership commands still wait for the native standing refresh. The composer retains native refusal,
+CSRF and unchanged-intent retry behavior.
+
+The board source consumes the adopted closed community presentation when supplied, with an isolated unavailable
+adapter until the native producer is installed. Realm name/description are independent of Space and account owners;
+an authored empty description stays empty. Current counts, selected Realm derivatives and exact native rules use
+only supplied data. Unknown counts and unavailable rules have helpful explanations; none rules have separate copy.
+Decorative token surfaces and initials are image fallbacks; no owner image stands in for a community.
+Presentation and NoOptionals use explicit producer-contract fixtures through the actual loader; they do not claim
+that the pending native producer or member aggregate is installed. Join/Leave keeps fresh native personal standing,
+bounded settlement and command refusal, with supplied presentation admission restricting actions when available.
+The identity batch currently supplies no avatar summary. No media thumbnail is guessed from a
+post's media ids, and no per-card detail/profile/media request is added. Counts absent from a response stay absent.
+Ranking time lives in the optional order help, with no invented freshness claim when missing.
+
+<Canvas of={Community.Feed} />
+<Canvas of={Community.Realm} />
+<Canvas of={Community.Overflow} />
+<Canvas of={Community.Sort} />
+<Canvas of={Community.OpenThread} />
+<Canvas of={Community.StartThread} />
+<Canvas of={Community.ContinueHot} />
+<Canvas of={Community.Empty} />
+<Canvas of={Community.Protected} />
+<Canvas of={Community.SourceUnavailable} />
+<Canvas of={Community.Presentation} />
+<Canvas of={Community.NoOptionals} />
+<Canvas of={Community.Loading} />
+<Canvas of={Community.Error} />
+<Canvas of={Community.Closed} />

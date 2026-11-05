@@ -1,11 +1,25 @@
 import { Database } from 'bun:sqlite';
 import { randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import type { FileHandle } from 'node:fs/promises';
 import { RecordBindings } from './record-bindings.ts';
+import { closeExistingImporterState, openExistingImporterState, ResumeStateError } from './resume-state.ts';
 import { RunStore, type Run, type SourceProjection } from './run-store.ts';
+import { evaluateAdmission, insertSourceDestination, type SourceDestinationRefusal } from './source-destination.ts';
 
 type Ownership = { pid: number; birth: string; capability: string };
 export type ImportOwnership = Readonly<{ source: string; capability: string }>;
+export type ImportSessionOptions = {
+  instrumentDatabase?: (database: Database) => Database;
+  create?: boolean;
+  existing?: boolean;
+  descriptor?: FileHandle;
+};
+export type ActiveGenerationPeek = Readonly<{
+  run: Run;
+  status: 'staging' | 'ready' | 'finalizing' | 'unsupported';
+  skipped: number;
+}>;
 
 // Linux start time is a process birth identity, including across PID reuse. A boot
 // identity also prevents an old database owner from matching after a host reboot.
@@ -20,15 +34,45 @@ function processIdentity(pid: number): { birth: string; live: boolean } {
   };
 }
 
-function alive(owner: Ownership): boolean {
+function wellFormedOwner(owner: { pid: number; birth: string }): boolean {
+  return (
+    Number.isInteger(owner.pid) &&
+    owner.pid > 0 &&
+    typeof owner.birth === 'string' &&
+    /^[0-9a-f-]+:[0-9]+$/i.test(owner.birth)
+  );
+}
+
+/** Linux /proc birth+boot identity. Unverifiable evidence is busy; this is not an ownership rotation. */
+export function importOwnerAvailability(
+  owner: Readonly<{ pid: number; birth: string }>,
+): 'live' | 'stale' | 'uninspectable' {
+  if (!wellFormedOwner(owner)) return 'uninspectable';
   try {
     const identity = processIdentity(owner.pid);
-    return identity.live && identity.birth === owner.birth;
+    if (identity.live && identity.birth === owner.birth) return 'live';
+    return 'stale';
   } catch (error) {
-    // Failure to inspect a live owner is not permission to steal its guard.
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-    return true;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'stale';
+    return 'uninspectable';
   }
+}
+
+export function importOwnerIsBusy(owner: Readonly<{ pid: number; birth: string }>): boolean {
+  return importOwnerAvailability(owner) !== 'stale';
+}
+
+/** Missing owner table means no live holder; declaration must not create it while refusing. */
+export function readImportOwner(database: Database, source: string): { pid: number; birth: string } | null {
+  const table = database
+    .query("SELECT 1 AS found FROM sqlite_schema WHERE type='table' AND name='import_owners'")
+    .get() as { found: number } | null;
+  if (!table) return null;
+  const row = database.prepare('SELECT pid,birth FROM import_owners WHERE source=?').get(source) as {
+    pid: number;
+    birth: string;
+  } | null;
+  return row ? { pid: row.pid, birth: row.birth } : null;
 }
 
 /** Same-file, exact-source ownership protects RunStore's capability rotation. */
@@ -37,10 +81,21 @@ export class ImportSession {
   readonly bindings: RecordBindings;
   private readonly identity = processIdentity(process.pid).birth;
   private readonly held = new Map<string, ImportOwnership>();
+  private readonly descriptor: FileHandle | undefined;
   private closed = false;
 
-  constructor(path: string | Database, options: { instrumentDatabase?: (database: Database) => Database } = {}) {
-    this.store = new RunStore<SourceProjection>(path, { ...options, projectionMode: 'source-record' });
+  constructor(path: string | Database, options: ImportSessionOptions = {}) {
+    if ((options.create === false || options.existing) && typeof path === 'string') {
+      if (!existsSync(path) || !statSync(path).isFile())
+        throw new Error('No importer state database exists at the given path.');
+    }
+    this.store = new RunStore<SourceProjection>(path, {
+      ...(options.instrumentDatabase ? { instrumentDatabase: options.instrumentDatabase } : {}),
+      projectionMode: 'source-record',
+      ...(options.create === false ? { create: false } : {}),
+      ...(options.existing ? { existing: true } : {}),
+    });
+    this.descriptor = options.descriptor;
     try {
       this.bindings = new RecordBindings(this.store.database);
       this.store.database.exec(`CREATE TABLE IF NOT EXISTS import_owners (
@@ -50,6 +105,57 @@ export class ImportSession {
       this.store.close();
       throw error;
     }
+  }
+
+  /** Writable existing-state factory; a missing path does not create a database. */
+  static async openExisting(path: string, options: ImportSessionOptions = {}): Promise<ImportSession> {
+    const opened = await openExistingImporterState(path);
+    try {
+      return new ImportSession(opened.database, {
+        ...options,
+        existing: true,
+        descriptor: opened.descriptor,
+      });
+    } catch (error) {
+      await closeExistingImporterState(opened);
+      throw error instanceof ResumeStateError
+        ? error
+        : new ResumeStateError('unavailable', 'Importer state is damaged or unavailable.');
+    }
+  }
+
+  /**
+   * Existing-state handle for destination declaration. Admits a retained file and does not
+   * construct RunStore or RecordBindings, so ordinary run and binding migrations cannot run.
+   */
+  static async openDestinationDeclaration(
+    path: string,
+    options: Pick<ImportSessionOptions, 'instrumentDatabase'> = {},
+  ): Promise<{ database: Database; close(): void }> {
+    const opened = await openExistingImporterState(path);
+    try {
+      const database = options.instrumentDatabase?.(opened.database) ?? opened.database;
+      return {
+        database,
+        close() {
+          try {
+            database.close();
+          } catch {
+            // The caller may already have closed this handle.
+          }
+          void opened.descriptor.close().catch(() => {});
+        },
+      };
+    } catch (error) {
+      await closeExistingImporterState(opened);
+      throw error instanceof ResumeStateError
+        ? error
+        : new ResumeStateError('unavailable', 'Importer state is damaged or unavailable.');
+    }
+  }
+
+  heldOwnership(source: string): ImportOwnership | undefined {
+    return this.held.get(source);
   }
 
   acquire(source: string): ImportOwnership | 'busy' {
@@ -62,7 +168,7 @@ export class ImportSession {
         const prior = db
           .prepare('SELECT pid,birth,capability FROM import_owners WHERE source=?')
           .get(source) as Ownership | null;
-        if (prior && alive(prior)) return 'busy' as const;
+        if (prior && importOwnerIsBusy(prior)) return 'busy' as const;
         const capability = randomBytes(24).toString('hex');
         db.prepare(`INSERT INTO import_owners(source,pid,birth,capability) VALUES(?,?,?,?)
         ON CONFLICT(source) DO UPDATE SET pid=excluded.pid,birth=excluded.birth,capability=excluded.capability`).run(
@@ -78,11 +184,63 @@ export class ImportSession {
     return ownership;
   }
 
+  /**
+   * Bind or recheck one exact source destination under the same-source owner lock.
+   * Mismatch and unbound legacy history leave the owner row, staging and baseline unchanged.
+   */
+  admit(
+    source: string,
+    origin: string,
+    options: { recordFirstUse?: boolean } = {},
+  ): ImportOwnership | 'busy' | SourceDestinationRefusal {
+    if (this.closed) throw new Error('Import session is closed');
+    if (!/^[a-z][a-z0-9_-]{0,31}$/.test(source)) throw new TypeError('Invalid import source');
+    if (this.held.has(source)) return 'busy';
+    const db = this.store.database;
+    const ownership = db
+      .transaction(() => {
+        const decision = evaluateAdmission(db, source, origin);
+        if (decision !== 'first-use' && decision !== 'match') return decision;
+        const prior = db
+          .prepare('SELECT pid,birth,capability FROM import_owners WHERE source=?')
+          .get(source) as Ownership | null;
+        if (prior && importOwnerIsBusy(prior)) return 'busy' as const;
+        const capability = randomBytes(24).toString('hex');
+        db.prepare(`INSERT INTO import_owners(source,pid,birth,capability) VALUES(?,?,?,?)
+        ON CONFLICT(source) DO UPDATE SET pid=excluded.pid,birth=excluded.birth,capability=excluded.capability`).run(
+          source,
+          process.pid,
+          this.identity,
+          capability,
+        );
+        if (decision === 'first-use' && options.recordFirstUse !== false)
+          insertSourceDestination(db, source, origin, 'first-use');
+        return { source, capability };
+      })
+      .immediate();
+    if (ownership === 'busy') return 'busy';
+    if ('kind' in ownership) return ownership;
+    this.held.set(source, ownership);
+    return ownership;
+  }
+
   /** Only the holder may obtain and rotate the durable run's previous lease. */
   reopen(ownership: ImportOwnership): Run | null {
     this.check(ownership);
     const active = this.store.activeRun(ownership.source);
     return active ? this.store.reopen(active) : null;
+  }
+
+  /** Status under this owner; never rotates a staging generation's lease. */
+  peekActive(ownership: ImportOwnership): ActiveGenerationPeek | null {
+    this.check(ownership);
+    const active = this.store.peekActive(ownership.source);
+    if (!active) return null;
+    const status =
+      active.status === 'staging' || active.status === 'ready' || active.status === 'finalizing'
+        ? active.status
+        : 'unsupported';
+    return { run: active.run, status, skipped: active.skipped };
   }
 
   private check(ownership: ImportOwnership): void {
@@ -91,6 +249,16 @@ export class ImportSession {
       .prepare('SELECT capability FROM import_owners WHERE source=?')
       .get(ownership.source) as { capability: string } | null;
     if (row?.capability !== ownership.capability) throw new Error('Stale import ownership');
+  }
+
+  /** Exact source capability still held by this session; used inside a later SQLite transaction. */
+  assertHeld(ownership: ImportOwnership): void {
+    this.check(ownership);
+  }
+
+  readOwner(source: string): { pid: number; birth: string } | null {
+    if (!/^[a-z][a-z0-9_-]{0,31}$/.test(source)) throw new TypeError('Invalid import source');
+    return readImportOwner(this.store.database, source);
   }
 
   release(ownership: ImportOwnership): void {
@@ -108,5 +276,6 @@ export class ImportSession {
     this.bindings.close();
     this.store.close();
     this.closed = true;
+    void this.descriptor?.close().catch(() => {});
   }
 }

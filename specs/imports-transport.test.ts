@@ -488,7 +488,7 @@ test('later takedown refresh performs fresh fence lookup and prevents next media
     const path = new URL(exchange.request.url).pathname;
     if (path === '/v1/sourceFences:check') {
       checks++;
-      return ok({ fenced: checks > 1, securityRevision: String(checks) });
+      return ok({ fenced: checks > 1, securityRevision: checks > 1 ? String(checks) : null });
     }
     if (path === '/v1/media:importFromUrl') {
       uploads++;

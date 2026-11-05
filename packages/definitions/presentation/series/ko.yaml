@@ -4,3 +4,11 @@ types:
 properties:
   wdt:P2635: '작품의 부수'
   wdt:P1433: '다음에 실림'
+inverseProperties:
+  wdt:P1433: '게재 작품'
+typeDescriptions:
+  wd:Q7725310: '논픽션이나 여러 매체를 아우를 수 있는 이름 있는 작품 시리즈입니다. 개인이 고른 목록은 컬렉션으로 다룹니다.'
+  schema:BookSeries: '책 시리즈입니다. 각 구성원이 시리즈 소속 관계로 연결하며 필요하면 순번을 기록합니다.'
+propertyDescriptions:
+  wdt:P2635: '명시된 시리즈의 부분 수입니다. 권(wd:Q1238720) 또는 장(wd:Q1980247) 단위의 0 이상 정수 수량입니다.'
+  wdt:P1433: '이 시리즈가 게재된 잡지 같은 더 큰 창작 작품입니다.'

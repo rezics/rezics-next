@@ -1,3 +1,7 @@
+import { AuthenticationError } from '../../src/request/access.ts';
+import { reinstateAccount, suspendAccount } from '../support/native-suspension-driver.ts';
+import { configureTestReceiptKeys, testReceiptKeys } from '../support/receipt-keys.ts';
+import { encodeReceiptKey } from '../../src/command/receipt-key.ts';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import type { QueryConfig } from 'pg';
@@ -11,13 +15,18 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { EVENT_TYPES } from '../../src/events/log.ts';
 import { COMMERCE_EVENTS } from '../../src/commerce/events.ts';
-import { createCommerceCommands, OfferUnavailableError } from '../../src/commerce/commands.ts';
+import {
+  createCommerceCommands,
+  OfferRevisionConflictError,
+  OfferUnavailableError,
+} from '../../src/commerce/commands.ts';
 import type { CheckoutSnapshot, Order, StripeTransaction } from '../../src/commerce/model.ts';
 import * as store from '../../src/commerce/store.ts';
 
 const url = process.env.DATABASE_URL;
 if (!url) throw new Error('DATABASE_URL must name the migrated test database');
 const pool = createPool(url);
+configureTestReceiptKeys(pool);
 pool.options.max = 1;
 const operator = newId(0x1100);
 const seller = newId(0x2200);
@@ -39,10 +48,14 @@ const input = () => ({
   taxCode: 'txcd_10302000',
 });
 async function actor(id: string): Promise<Actor> {
+  const current = await pool.query(
+    'SELECT minimum_authn_epoch::text AS epoch FROM access.account WHERE route=$1 AND account_id=$2',
+    [routeOf(id), id],
+  );
   const token = await new SignJWT({
     client_id: 'web',
     scope: actions.join(' '),
-    authn_epoch: 1,
+    authn_epoch: Number(current.rows[0].epoch),
     auth_time: Math.floor(Date.now() / 1000),
     amr: ['pwd'],
   })
@@ -103,7 +116,8 @@ async function offer() {
   return (await commands.createOffer(await actor(seller), input(), key())).value;
 }
 async function order() {
-  return (await commands.createOrder(await actor(buyer), (await offer()).id, key())).value;
+  const selected = await offer();
+  return (await commands.createOrder(await actor(buyer), selected.id, selected.revision, key())).value;
 }
 async function footprint() {
   return (
@@ -204,7 +218,7 @@ test('offers are created by approved sellers and orders by any active account on
   }
   for (const id of [buyer, other]) {
     await expect(commands.createOffer(await actor(id), input(), key())).rejects.toBeInstanceOf(GrantDeniedError);
-    const purchase = (await commands.createOrder(await actor(id), o.id, key())).value;
+    const purchase = (await commands.createOrder(await actor(id), o.id, o.revision, key())).value;
     expect(routeOf(purchase.id)).toBe(routeOf(id));
     expect(purchase).toMatchObject({
       offerId: o.id,
@@ -218,11 +232,17 @@ test('offers are created by approved sellers and orders by any active account on
     });
   }
   const suspendedActor = await actor(suspended);
-  await pool.query("UPDATE access.account SET state='suspended' WHERE account_id=$1", [suspended]);
+  await suspendAccount(pool, suspended);
   const before = await footprint();
-  await expect(commands.createOrder(suspendedActor, o.id, key())).rejects.toBeInstanceOf(GrantDeniedError);
-  await expect(commands.createOrder({ kind: 'anonymous' }, o.id, key())).rejects.toBeInstanceOf(GrantDeniedError);
-  await expect(commands.createOrder(await actor(buyer), newId(0x2200), key())).rejects.toBeInstanceOf(GrantDeniedError);
+  await expect(commands.createOrder(suspendedActor, o.id, o.revision, key())).rejects.toBeInstanceOf(
+    AuthenticationError,
+  );
+  await expect(commands.createOrder({ kind: 'anonymous' }, o.id, o.revision, key())).rejects.toBeInstanceOf(
+    GrantDeniedError,
+  );
+  await expect(commands.createOrder(await actor(buyer), newId(0x2200), 1, key())).rejects.toBeInstanceOf(
+    GrantDeniedError,
+  );
   expect(await footprint()).toEqual(before);
   expect(await commands.readOffer(o.id)).toEqual(o);
   expect(await commands.readOffer(newId(0x2200))).toBeNull();
@@ -234,28 +254,33 @@ test('order creation and checkout recording are idempotent and authorized before
   const o = await offer();
   const a = await actor(buyer);
   const requestKey = key();
-  const first = await commands.createOrder(a, o.id, requestKey);
+  const first = await commands.createOrder(a, o.id, o.revision, requestKey);
   const before = await footprint();
-  expect(await commands.createOrder(a, o.id, requestKey)).toEqual({ ...first, replayed: true });
+  expect(await commands.createOrder(a, o.id, o.revision, requestKey)).toEqual({ ...first, replayed: true });
   expect(await footprint()).toEqual(before);
-  await expect(commands.createOrder(a, (await offer()).id, requestKey)).rejects.toBeInstanceOf(
+  const another = await offer();
+  await expect(commands.createOrder(a, another.id, another.revision, requestKey)).rejects.toBeInstanceOf(
     IdempotencyConflictError,
   );
-  await pool.query("UPDATE access.account SET state='suspended' WHERE account_id=$1", [buyer]);
-  await expect(commands.createOrder(a, o.id, requestKey)).rejects.toBeInstanceOf(GrantDeniedError);
-  await pool.query("UPDATE access.account SET state='active' WHERE account_id=$1", [buyer]);
+  await suspendAccount(pool, buyer);
+  await expect(commands.createOrder(a, o.id, o.revision, requestKey)).rejects.toBeInstanceOf(AuthenticationError);
+  await reinstateAccount(pool, buyer);
   const delisted = await commands.delistOffer(await actor(seller), o.id, key());
   expect(delisted.value).toMatchObject({ state: 'delisted', revision: 2 });
   expect(await events(delisted.transactionId)).toEqual([event('offer.delisted', { offerId: o.id })]);
   // Delisting removes availability, not the standing order:create grant. Replay is authorized, then returns its receipt.
-  expect((await commands.createOrder(await actor(buyer), o.id, requestKey)).value).toEqual(first.value);
-  await expect(commands.createOrder(await actor(buyer), o.id, key())).rejects.toBeInstanceOf(OfferUnavailableError);
+  expect((await commands.createOrder(await actor(buyer), o.id, o.revision, requestKey)).value).toEqual(first.value);
+  await expect(commands.createOrder(await actor(buyer), o.id, o.revision, key())).rejects.toBeInstanceOf(
+    OfferUnavailableError,
+  );
   await expect(commands.delistOffer(await actor(other), o.id, key())).rejects.toBeInstanceOf(GrantDeniedError);
   await pool.query(
     "INSERT INTO access.resource_denial(route,resource_id,subject_id,action,reason,valid,transaction_id) VALUES ($1,$2,$3,'order:create','resource','(,)',$3)",
     [routeOf(o.id), o.id, buyer],
   );
-  await expect(commands.createOrder(await actor(buyer), o.id, requestKey)).rejects.toBeInstanceOf(GrantDeniedError);
+  await expect(commands.createOrder(await actor(buyer), o.id, o.revision, requestKey)).rejects.toBeInstanceOf(
+    GrantDeniedError,
+  );
   const id = first.value.id;
   await commands.recordCheckout(id, { kind: 'unknown' });
   expect(await commands.readOrderForAccount(buyer, id)).toMatchObject({ settlement: 'unknown', revision: 2 });
@@ -275,16 +300,22 @@ test('order creation and checkout recording are idempotent and authorized before
   ] as const)
     await commands.recordCheckout(id, outcome);
   expect(await footprint()).toEqual(recorded);
-  expect(
-    (
-      await pool.query(
-        "SELECT actor_account_id,idempotency_key FROM core.receipt WHERE command_kind='commerce.checkout.record' ORDER BY idempotency_key",
+  const rawKeys = [0, 1].map((outcome) => `order:${id}:checkout:${outcome}`);
+  const stored = (
+    await pool.query(
+      "SELECT principal_id::text,idempotency_key FROM core.receipt WHERE principal_kind='account' AND principal_id=$1 AND command_kind='commerce.checkout.record' ORDER BY idempotency_key",
+      [buyer],
+    )
+  ).rows;
+  expect(stored).toEqual(
+    rawKeys
+      .map((raw) =>
+        encodeReceiptKey(testReceiptKeys(), 'commerce.checkout.record', { kind: 'account', id: buyer }, raw),
       )
-    ).rows,
-  ).toEqual([
-    { actor_account_id: buyer, idempotency_key: `order:${id}:checkout:0` },
-    { actor_account_id: buyer, idempotency_key: `order:${id}:checkout:1` },
-  ]);
+      .sort()
+      .map((token) => ({ principal_id: buyer, idempotency_key: token })),
+  );
+  for (const row of stored) expect(rawKeys).not.toContain(row.idempotency_key);
   const rejected = await order();
   await commands.recordCheckout(rejected.id, { kind: 'failed' });
   const rejectedBefore = await footprint();
@@ -401,7 +432,7 @@ test('a fulfilment command writes order state transactions and entitlement toget
   const persisted = await pool.query("SELECT type,data FROM core.outbox WHERE type LIKE 'com.rezics.commerce.%'");
   for (const row of persisted.rows) {
     const schema = COMMERCE_EVENTS[row.type as keyof typeof COMMERCE_EVENTS];
-    expect(EVENT_TYPES[row.type as keyof typeof EVENT_TYPES]).toBe(schema);
+    expect(EVENT_TYPES()[row.type as keyof ReturnType<typeof EVENT_TYPES>]).toBe(schema);
     expect(Value.Check(schema, row.data)).toBe(true);
     expect(Value.Check(schema, { ...row.data, title: 'unexpected' })).toBe(false);
   }
@@ -441,7 +472,7 @@ test('command statement counts do not grow with unrelated rows', async () => {
       const o = await offer();
       const a = await actor(buyer);
       captured = [];
-      const created = await commands.createOrder(a, o.id, key());
+      const created = await commands.createOrder(a, o.id, o.revision, key());
       const createStatements = captured;
       captured = undefined;
       expect(createStatements.filter((q) => /FROM commerce.offer WHERE/.test(q.text))).toHaveLength(1);
@@ -470,4 +501,211 @@ test('command statement counts do not grow with unrelated rows', async () => {
   expect(counts[1]).toEqual(counts[0]);
   expect(counts[2]).toEqual(counts[0]);
   expect(buffers[2]!).toBeLessThanOrEqual(buffers[1]! + 24);
+});
+
+test('fresh native edition offer remains unavailable without Content authority and has no effects', async () => {
+  const { ContentEditionUnavailableError: ContentEditionUnavailableErrorGetter } =
+    await import('../../src/commerce/benefit.ts');
+  const ContentEditionUnavailableError = ContentEditionUnavailableErrorGetter();
+  const before = await footprint();
+  const { targetSubjectId: _historicalSubject, ...terms } = input();
+  await expect(
+    commands.createOffer(await actor(seller), { ...terms, contentEditionId: newId(0x5500) }, key()),
+  ).rejects.toBeInstanceOf(ContentEditionUnavailableError);
+  expect(await footprint()).toEqual(before);
+});
+
+test('historical subject-only paid truth survives unavailable target without minting or restoring access', async () => {
+  // Explicit pre-edition historical rows, not a synthetic Content publication or sale authority.
+  const context = { time: new Date().toISOString(), transactionId: key() };
+  const historicalOffer = await store.insertOffer(
+    pool,
+    routeOf(seller)!,
+    {
+      ...input(),
+      id: newId(routeOf(seller)!),
+      creatorAccountId: seller,
+      royaltyBasisPoints: 9000,
+    },
+    context,
+  );
+  const historicalOrder = await store.insertOrder(
+    pool,
+    routeOf(buyer)!,
+    {
+      id: newId(routeOf(buyer)!),
+      buyerAccountId: buyer,
+      offer: historicalOffer,
+    },
+    context,
+  );
+  expect(historicalOffer.contentEdition).toBeNull();
+  expect(historicalOrder.contentEdition).toBeNull();
+  await commands.recordCheckout(historicalOrder.id, {
+    session: { id: 'cs_test_paid', url: 'https://checkout.example.test', expiresAt: '2026-01-02T00:00:00.000Z' },
+  });
+  const paid = snapshot(historicalOrder);
+  await commands.applyCheckoutSnapshot(paid, key());
+  expect(await commands.readOrderForAccount(buyer, historicalOrder.id)).toMatchObject({
+    settlement: 'paid',
+    contentEdition: null,
+  });
+  expect(await store.readOrderEntitlement(pool, routeOf(buyer)!, historicalOrder.id)).toBeNull();
+  const entitlementId = newId(routeOf(buyer)!);
+  // Retain an independently existing last-verified legacy entitlement across availability failure.
+  await pool.query(
+    `INSERT INTO commerce.entitlement
+    (route,entitlement_id,account_id,order_id,offer_id,target_subject_id,granted_at,revision,transaction_id)
+    VALUES ($1,$2,$3,$4,$5,$6,now(),1,$2)`,
+    [routeOf(buyer), entitlementId, buyer, historicalOrder.id, historicalOffer.id, historicalOffer.targetSubjectId],
+  );
+  await commands.applyCheckoutSnapshot({ ...paid, observedAt: '2026-01-01T02:00:00.000Z' }, key());
+  expect(await store.readEntitlement(pool, routeOf(buyer)!, entitlementId)).toMatchObject({
+    revokedAt: null,
+    contentEdition: null,
+  });
+  const refund = {
+    ...paid,
+    observedAt: '2026-01-01T03:00:00.000Z',
+    refunds: [{ id: 're_refund', status: 'succeeded', amountMinor: 1320 }],
+    transactions: [
+      ...paid.transactions,
+      { ...transaction('txn_refund', 'refund'), amountMinor: -1320, netMinor: -1320 },
+    ],
+  };
+  await commands.applyCheckoutSnapshot(refund, key());
+  const revoked = await store.readEntitlement(pool, routeOf(buyer)!, entitlementId);
+  expect(revoked).toMatchObject({ revokeReason: 'refund', contentEdition: null });
+  await commands.applyCheckoutSnapshot(
+    {
+      ...refund,
+      observedAt: '2026-01-01T04:00:00.000Z',
+      refunds: [{ id: 're_refund', status: 'failed', amountMinor: 1320 }],
+      transactions: [...refund.transactions, transaction('txn_restore', 'refund_reversal')],
+    },
+    key(),
+  );
+  expect(await store.readEntitlement(pool, routeOf(buyer)!, entitlementId)).toEqual(revoked);
+  expect(await commands.readOrderForAccount(buyer, historicalOrder.id)).toMatchObject({
+    settlement: 'paid',
+    contentEdition: null,
+  });
+});
+
+test('displayed offer revision binds fresh order consent while exact authorized replay retains captured terms', async () => {
+  const displayed = await offer();
+  const buyerActor = await actor(buyer);
+  const requestKey = key();
+  const accepted = await commands.createOrder(buyerActor, displayed.id, displayed.revision, requestKey);
+  expect(accepted.value).toMatchObject({
+    offerRevision: displayed.revision,
+    unitAmountMinor: displayed.unitAmountMinor,
+  });
+  const revised = await commands.reviseOffer(await actor(seller), displayed.id, { unitAmountMinor: 2400 }, key());
+  const before = await footprint();
+
+  await expect(commands.createOrder(buyerActor, displayed.id, displayed.revision, key())).rejects.toBeInstanceOf(
+    OfferRevisionConflictError,
+  );
+  expect(await footprint()).toEqual(before);
+  expect(await commands.createOrder(buyerActor, displayed.id, displayed.revision, requestKey)).toEqual({
+    ...accepted,
+    replayed: true,
+  });
+  await expect(
+    commands.createOrder(buyerActor, displayed.id, revised.value.revision, requestKey),
+  ).rejects.toBeInstanceOf(IdempotencyConflictError);
+  expect(await footprint()).toEqual(before);
+  const reviewed = await commands.createOrder(buyerActor, displayed.id, revised.value.revision, key());
+  expect(reviewed.value).toMatchObject({ offerRevision: revised.value.revision, unitAmountMinor: 2400 });
+});
+
+test('explicit same-price reprice adopts unknown money in a new revision without rewriting an old order or receipt', async () => {
+  const sellerActor = await actor(seller);
+  const id = newId(routeOf(seller)!);
+  const time = new Date().toISOString();
+  const historical = await store.insertOffer(
+    pool,
+    routeOf(seller)!,
+    {
+      ...input(),
+      id,
+      creatorAccountId: seller,
+      royaltyBasisPoints: 9000,
+    },
+    { transactionId: key(), time },
+  );
+  expect(historical.moneyUnit).toBeNull();
+  expect(historical.taxBehavior).toBeNull();
+  await pool.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES ($1,$2,$3,'offer:manage','(,)',$3)`,
+    [routeOf(id), id, seller],
+  );
+  const old = await store.insertOrder(
+    pool,
+    routeOf(buyer)!,
+    { id: newId(routeOf(buyer)!), buyerAccountId: buyer, offer: historical },
+    { transactionId: key(), time },
+  );
+  expect(
+    await commands.beginCheckoutCreation(old.id, {
+      successUrl: 'https://checkout.test/success',
+      cancelUrl: 'https://checkout.test/cancel',
+      managedPayments: false,
+    }),
+  ).toEqual({ kind: 'unknown' });
+  expect(
+    (
+      await pool.query('SELECT order_id FROM commerce.checkout_creation_attempt WHERE route=$1 AND order_id=$2', [
+        routeOf(old.id),
+        old.id,
+      ])
+    ).rows,
+  ).toEqual([]);
+  const requestKey = key();
+  const adopted = await commands.reviseOffer(
+    sellerActor,
+    id,
+    { unitAmountMinor: historical.unitAmountMinor },
+    requestKey,
+  );
+  expect(adopted.value).toEqual({
+    ...historical,
+    revision: historical.revision + 1,
+    moneyUnit: { system: 'stripe-api', exponent: 2, factsVersion: 'stripe-money-v1' },
+    taxBehavior: 'exclusive',
+  });
+  expect(
+    await commands.reviseOffer(sellerActor, id, { unitAmountMinor: historical.unitAmountMinor }, requestKey),
+  ).toEqual({ ...adopted, replayed: true });
+  expect(await store.readOrder(pool, routeOf(buyer)!, old.id)).toEqual(old);
+  expect(old.moneyUnit).toBeNull();
+  expect(old.taxBehavior).toBeNull();
+  await expect(commands.reviseOffer(sellerActor, id, { unitAmountMinor: 49 }, key())).rejects.toBeInstanceOf(
+    RangeError,
+  );
+  expect((await store.readOffer(pool, routeOf(id)!, id))?.revision).toBe(adopted.value.revision);
+  const unsupportedId = newId(routeOf(seller)!);
+  const unsupported = await store.insertOffer(
+    pool,
+    routeOf(seller)!,
+    {
+      ...input(),
+      currency: 'jpy',
+      id: unsupportedId,
+      creatorAccountId: seller,
+      royaltyBasisPoints: 9000,
+    },
+    { transactionId: key(), time },
+  );
+  await pool.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES ($1,$2,$3,'offer:manage','(,)',$3)`,
+    [routeOf(unsupportedId), unsupportedId, seller],
+  );
+  await expect(
+    commands.reviseOffer(sellerActor, unsupportedId, { unitAmountMinor: unsupported.unitAmountMinor }, key()),
+  ).rejects.toBeInstanceOf(RangeError);
+  expect(await store.readOffer(pool, routeOf(unsupportedId)!, unsupportedId)).toEqual(unsupported);
 });

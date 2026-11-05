@@ -1,0 +1,397 @@
+import { chmodSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { expect, test } from 'bun:test';
+import { COST_CITATION_SOURCE_LIMITS, costTableProblems, expectCostTable, readCostTable } from './growth-cost-table';
+
+const actualRepositoryRoot = resolve(import.meta.dir, '../../../../');
+const temporaryRoot = join(actualRepositoryRoot, '.temp');
+
+type Fixture = {
+  root: string;
+  repositoryRoot: string;
+  testRoot: string;
+  options: { testRoot: string; repositoryRoot: string };
+  cleanup: () => void;
+};
+
+function fixture(): Fixture {
+  mkdirSync(temporaryRoot, { recursive: true });
+  const root = mkdtempSync(join(temporaryRoot, 'growth-cost-table-'));
+  const repositoryRoot = join(root, 'repository');
+  const testRoot = join(root, 'tests');
+  mkdirSync(repositoryRoot, { recursive: true });
+  mkdirSync(testRoot, { recursive: true });
+  return {
+    root,
+    repositoryRoot,
+    testRoot,
+    options: { testRoot, repositoryRoot },
+    cleanup: () => rmSync(root, { recursive: true, force: true }),
+  };
+}
+
+function writeReadme(f: Fixture, name: string, body: string): string {
+  const path = join(f.repositoryRoot, `${name}.md`);
+  writeFileSync(path, body, 'utf8');
+  return path;
+}
+
+function writeTestFile(f: Fixture, root: string, path: string, source: string): string {
+  const absolutePath = join(root, path);
+  mkdirSync(dirname(absolutePath), { recursive: true });
+  writeFileSync(absolutePath, source, 'utf8');
+  return absolutePath;
+}
+
+function writeCitedSource(f: Fixture, path: string, title: string, bytes: number): string {
+  const prefix = `test(${JSON.stringify(title)}, () => {});\n`;
+  return writeTestFile(f, f.testRoot, path, prefix + ' '.repeat(bytes - prefix.length));
+}
+
+function citationRows(count: number, check: string): string[] {
+  return Array.from({ length: count }, (_, index) => `| Repeat ${index} | one request | constant work | ${check} |`);
+}
+
+function costReadme(
+  rows: string[],
+  heading = '## Cost',
+  header = '| Operation | Touches | Bound | Growth check |',
+): string {
+  return ['# Module', '', heading, '', header, '| --- | --- | --- | --- |', ...rows, '', '## Next section', ''].join(
+    '\n',
+  );
+}
+
+test('a Cost table whose every row cites an existing check passes', () => {
+  const f = fixture();
+  try {
+    writeTestFile(
+      f,
+      f.testRoot,
+      'first.test.ts',
+      'test("first valid growth check", () => {}); test("first additional valid growth check", () => {});',
+    );
+    writeTestFile(f, f.testRoot, 'second.test.ts', 'test("second valid growth check", () => {});');
+    const readmePath = writeReadme(
+      f,
+      'valid',
+      costReadme([
+        '| Read records | indexed reads | logarithmic blocks | `first.test.ts`: “first valid growth check”; “first additional valid growth check” commentary before another citation `second.test.ts`: `second valid growth check` |',
+        '| Write records | changed rows | constant work | `second.test.ts`: `second valid growth check` |',
+      ]),
+    );
+
+    expect(costTableProblems(readmePath, f.options)).toEqual([]);
+    expectCostTable(readmePath, f.options);
+    expect(readCostTable(readmePath)).toEqual([
+      {
+        operation: 'Read records',
+        touches: 'indexed reads',
+        bound: 'logarithmic blocks',
+        check:
+          '`first.test.ts`: “first valid growth check”; “first additional valid growth check” commentary before another citation `second.test.ts`: `second valid growth check`',
+      },
+      {
+        operation: 'Write records',
+        touches: 'changed rows',
+        bound: 'constant work',
+        check: '`second.test.ts`: `second valid growth check`',
+      },
+    ]);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a README without one Cost section and the four-column table is refused', () => {
+  const f = fixture();
+  try {
+    const missingSection = writeReadme(f, 'missing-section', '# Module\n\nThere is no cost table.\n');
+    const wrongHeader = writeReadme(
+      f,
+      'wrong-header',
+      costReadme([], '## Cost', '| Operation | Touches | Bound | Check |'),
+    );
+    const duplicateSection = writeReadme(
+      f,
+      'duplicate-section',
+      `${costReadme([], '## Cost')}\n## Cost\n\nNo second table.\n`,
+    );
+
+    for (const path of [missingSection, wrongHeader, duplicateSection]) {
+      const problems = costTableProblems(path, f.options);
+      expect(problems.length).toBeGreaterThan(0);
+      expect(problems.join('\n')).toContain(path);
+      expect(problems.join('\n')).toContain('<table>');
+    }
+    expect(costTableProblems(missingSection, f.options).join('\n')).toContain('exactly one');
+    expect(costTableProblems(wrongHeader, f.options).join('\n')).toContain('header');
+    expect(costTableProblems(duplicateSection, f.options).join('\n')).toContain('exactly one');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a citation of a missing file or of a name the file does not contain is refused and named', () => {
+  const f = fixture();
+  try {
+    writeTestFile(f, f.testRoot, 'present.test.ts', 'test("a different title", () => {});');
+    const readmePath = writeReadme(
+      f,
+      'missing-checks',
+      costReadme([
+        '| Missing file row | one request | linear work | `missing.test.ts`: “missing growth title” |',
+        '| Missing title row | one request | linear work | `present.test.ts`: “missing title from file” |',
+        '| Malformed list row | one request | linear work | `present.test.ts`: “a different title” “a different title” |',
+      ]),
+    );
+
+    const problems = costTableProblems(readmePath, f.options).join('\n');
+    expect(problems).toContain('Missing file row');
+    expect(problems).toContain('missing.test.ts');
+    expect(problems).toContain('Missing title row');
+    expect(problems).toContain('missing title from file');
+    expect(problems).toContain('present.test.ts');
+    expect(problems).toContain('Malformed list row');
+    expect(problems).toContain('must name one or more checks');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a citation must match a declared test title rather than source text', () => {
+  const f = fixture();
+  try {
+    writeTestFile(
+      f,
+      f.testRoot,
+      'titles.test.ts',
+      [
+        '// test("comment-only title", () => {});',
+        'const unrelated = "string-only title";',
+        'const unrelatedTemplate = `template-only ${mode} title remains bounded`;',
+        'test.skip("skipped title", () => {});',
+        'test.serial(`generated check for ${mode} at every supported scale`, () => {});',
+      ].join('\n'),
+    );
+    const readmePath = writeReadme(
+      f,
+      'declared-titles',
+      costReadme([
+        '| Comment row | one request | constant work | `titles.test.ts`: “comment-only title” |',
+        '| String row | one request | constant work | `titles.test.ts`: “string-only title” |',
+        '| Template row | one request | constant work | `titles.test.ts`: “template-only other title remains bounded” |',
+        '| Skipped row | one request | constant work | `titles.test.ts`: “skipped title” |',
+        '| Declared generated row | one request | constant work | `titles.test.ts`: “generated check for parallel at every supported scale” |',
+      ]),
+    );
+
+    const problems = costTableProblems(readmePath, f.options).join('\n');
+    expect(problems).toContain('comment-only title');
+    expect(problems).toContain('string-only title');
+    expect(problems).toContain('template-only other title remains bounded');
+    expect(problems).toContain('skipped title');
+    expect(problems).toContain('was not found in a declared test');
+    expect(problems).not.toContain('Declared generated row');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a generated check title is found from its template', () => {
+  const f = fixture();
+  try {
+    writeTestFile(
+      f,
+      f.testRoot,
+      'generated.test.ts',
+      'test(`passkey ${path} remains bounded as unrelated credentials grow`, () => {});',
+    );
+    const readmePath = writeReadme(
+      f,
+      'generated',
+      costReadme([
+        '| Passkey removal | one passkey | constant work | `generated.test.ts`: “passkey removal remains bounded as unrelated credentials grow” |',
+      ]),
+    );
+
+    expect(costTableProblems(readmePath, f.options)).toEqual([]);
+
+    writeTestFile(f, f.testRoot, 'empty-template.test.ts', 'test(`${a} ${b}`, () => {});');
+    const noFixedText = writeReadme(
+      f,
+      'empty-template',
+      costReadme([
+        '| Generated title | one request | constant work | `empty-template.test.ts`: “a generated title that is not present” |',
+      ]),
+    );
+    expect(costTableProblems(noFixedText, f.options).join('\n')).toContain('not present');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a repeated generated title delimiter rejects a missing suffix without backtracking', () => {
+  const f = fixture();
+  try {
+    const delimiters = Array.from({ length: 24 }, (_, index) => '${part' + index + '}').join('a');
+    writeTestFile(f, f.testRoot, 'repeated.test.ts', 'test(`generated prefix' + delimiters + 'z`, () => {});');
+    const readmePath = writeReadme(
+      f,
+      'repeated-generated',
+      costReadme([
+        `| Repeated template | one request | constant work | \`repeated.test.ts\`: “generated prefix${'a'.repeat(72)}” |`,
+      ]),
+    );
+
+    const problems = costTableProblems(readmePath, f.options).join('\n');
+    expect(problems).toContain('Repeated template');
+    expect(problems).toContain('was not found in a declared test');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a None row needs a reason and no row may have an empty cell', () => {
+  const f = fixture();
+  try {
+    const readmePath = writeReadme(
+      f,
+      'none-and-empty',
+      costReadme([
+        '| No-op operation | no I/O | constant work | None: validates a local value without database or engine I/O |',
+        '| Short reason | no I/O | constant work | None: too short |',
+        '| Empty touches |  | constant work | None: this operation validates local data without database or engine I/O |',
+        '| Three cells | touches | constant work |',
+        '| Repeated operation | touches | constant work | None: this operation validates local data without database or engine I/O |',
+        '| Repeated operation | touches | constant work | None: this operation validates local data without database or engine I/O |',
+      ]),
+    );
+
+    const problems = costTableProblems(readmePath, f.options).join('\n');
+    expect(problems).toContain('Short reason');
+    expect(problems).toContain('at least 20 characters');
+    expect(problems).toContain('Empty touches');
+    expect(problems).toContain('every cell must be non-empty');
+    expect(problems).toContain('Three cells');
+    expect(problems).toContain('expected four cells, found 3');
+    expect(problems).toContain('Repeated operation');
+    expect(problems).toContain('operation is duplicated');
+    expect(problems).not.toContain('No-op operation');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('a bound must name constant, logarithmic or linear', () => {
+  const f = fixture();
+  try {
+    const readmePath = writeReadme(
+      f,
+      'bounds',
+      costReadme([
+        '| Constant bound | one item | CONSTANT rows | None: this operation performs no database or engine I/O |',
+        '| Logarithmic bound | one item | logarithmic probes | None: this operation performs no database or engine I/O |',
+        '| Linear bound | all items | linear rows | None: this operation performs no database or engine I/O |',
+        '| Unknown bound | growing items | quadratic | None: this operation performs no database or engine I/O |',
+      ]),
+    );
+
+    const problems = costTableProblems(readmePath, f.options).join('\n');
+    expect(problems).toContain('Unknown bound');
+    expect(problems).toContain('bound must contain "constant", "logarithmic" or "linear"');
+    expect(problems).not.toContain('Constant bound');
+    expect(problems).not.toContain('Logarithmic bound');
+    expect(problems).not.toContain('Linear bound');
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('paths under services/ resolve from the repository root and other paths from the test root', () => {
+  const f = fixture();
+  try {
+    writeTestFile(
+      f,
+      f.repositoryRoot,
+      'services/kernel/test/root-growth.test.ts',
+      'test("repository root check title", () => {});',
+    );
+    writeTestFile(f, f.testRoot, 'services/kernel/test/root-growth.test.ts', 'test("wrong root title", () => {});');
+    writeTestFile(f, f.testRoot, 'local-growth.test.ts', 'test("test root check title", () => {});');
+    writeTestFile(f, f.repositoryRoot, 'local-growth.test.ts', 'test("wrong local title", () => {});');
+    const readmePath = writeReadme(
+      f,
+      'path-roots',
+      costReadme([
+        '| Repository rooted check | one item | constant work | `services/kernel/test/root-growth.test.ts`: “repository root check title” |',
+        '| Test rooted check | one item | constant work | `local-growth.test.ts`: “test root check title” |',
+      ]),
+    );
+
+    expect(costTableProblems(readmePath, f.options)).toEqual([]);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('repeated citations reuse one source snapshot for one validation', () => {
+  const f = fixture();
+  try {
+    const bytes = Math.floor(COST_CITATION_SOURCE_LIMITS.sourceBytes / 2);
+    writeCitedSource(f, 'shared.test.ts', 'shared title', bytes);
+    const sharedCheck = '`shared.test.ts`: “shared title” `./shared.test.ts`: “shared title”';
+    const first = writeReadme(f, 'shared-first', costReadme(citationRows(20, sharedCheck)));
+    expect(costTableProblems(first, f.options)).toEqual([]);
+
+    writeCitedSource(f, 'shared.test.ts', 'rewritten title', bytes);
+    expect(costTableProblems(first, f.options).join('\n')).toContain('shared title');
+    const second = writeReadme(f, 'shared-second', costReadme(citationRows(20, '`shared.test.ts`: “rewritten title”')));
+    expect(costTableProblems(second, f.options)).toEqual([]);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test('cited sources that exceed limits or cannot be read are named', () => {
+  const f = fixture();
+  try {
+    writeCitedSource(f, 'huge.test.ts', 'oversized title', COST_CITATION_SOURCE_LIMITS.sourceBytes + 1);
+    const oversized = writeReadme(
+      f,
+      'oversized',
+      costReadme(['| Oversized source | one request | constant work | `huge.test.ts`: “oversized title” |']),
+    );
+    const oversizedProblems = costTableProblems(oversized, f.options).join('\n');
+    expect(oversizedProblems).toContain('huge.test.ts');
+    expect(oversizedProblems).toContain(`${COST_CITATION_SOURCE_LIMITS.sourceBytes} byte source limit`);
+
+    const unreadablePath = writeCitedSource(f, 'locked.test.ts', 'locked title', 64);
+    chmodSync(unreadablePath, 0);
+    try {
+      const unreadable = writeReadme(
+        f,
+        'unreadable',
+        costReadme(['| Unreadable source | one request | constant work | `locked.test.ts`: “locked title” |']),
+      );
+      const unreadableProblems = costTableProblems(unreadable, f.options).join('\n');
+      expect(unreadableProblems).toContain('locked.test.ts');
+      expect(unreadableProblems).toContain('could not be read');
+    } finally {
+      chmodSync(unreadablePath, 0o644);
+    }
+
+    const distinctChecks = Array.from({ length: 9 }, (_, index) => {
+      const path = `bulk-${index}.test.ts`;
+      writeCitedSource(f, path, `bulk title ${index}`, COST_CITATION_SOURCE_LIMITS.sourceBytes);
+      return `| Bulk ${index} | one request | constant work | \`${path}\`: “bulk title ${index}” |`;
+    });
+    const inspection = writeReadme(f, 'inspection', costReadme(distinctChecks));
+    const inspectionProblems = costTableProblems(inspection, f.options).join('\n');
+    expect(inspectionProblems).toContain(`${COST_CITATION_SOURCE_LIMITS.inspectionBytes} byte inspection-work limit`);
+    expect(inspectionProblems).toContain('bulk-8.test.ts');
+    expect(inspectionProblems).not.toContain('Bulk 0');
+  } finally {
+    f.cleanup();
+  }
+});

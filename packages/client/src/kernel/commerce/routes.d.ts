@@ -1,6 +1,8 @@
+import { type CommerceMoneyPolicy } from './money.ts';
+import { type SubjectSummary } from '../semantic/summaries.ts';
 import type { Pool } from 'pg';
 import type { definitionRoutes } from '../semantic/http/definitions.ts';
-import { type Access, type Actor } from '../request/access.ts';
+import { type Access } from '../request/access.ts';
 import type { KeyRing } from '../tokens/seal.ts';
 import { type StripePort } from './model.ts';
 import type { CommerceWork } from './work-contract.ts';
@@ -13,9 +15,11 @@ export type CommerceDependencies = {
 };
 type Dependencies = {
     pool: Pool;
+    routeKey: Uint8Array;
     tokens: KeyRing;
     access: () => Access;
     commerce?: CommerceDependencies;
+    moneyPolicy?: CommerceMoneyPolicy;
 };
 /** Mounted even for contract generation; provider operations require explicit dependencies. */
 export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: Dependencies): import("elysia/types").AddRoute<"", "local", import("elysia").DefaultSingleton, {
@@ -77,6 +81,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             release: string;
                             context: string;
                             resolution: Record<string, any>;
+                            relationCounts: Record<string, number>;
                             labels: Record<string, string>;
                             descriptions: Record<string, string>;
                             aliases: Record<string, string[]>;
@@ -131,9 +136,18 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     revision: number;
                                 };
                             }[]>;
+                            sourceRecords: {
+                                name: string;
+                                url: string;
+                                licence?: {
+                                    id: string;
+                                    url?: string;
+                                };
+                                attribution?: string;
+                            }[];
                         };
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -141,13 +155,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -155,13 +166,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -169,11 +177,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
                     422: Response | {
                         type: unknown;
@@ -183,13 +188,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -197,14 +199,119 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
                 };
                 error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                terms: {
+                    patch: {
+                        body: {
+                            labels?: Record<string, string | null>;
+                            descriptions?: Record<string, string | null>;
+                            aliases?: Record<string, string[] | null>;
+                        };
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                            'if-match': string;
+                        };
+                        response: {
+                            200: {
+                                subject: string;
+                                revision: number;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            412: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
             };
         };
     };
@@ -227,7 +334,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             redirected: string;
                             revision: number;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -235,13 +342,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -249,13 +353,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -263,13 +364,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -277,13 +375,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
-                        409: {
+                        409: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -291,11 +386,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                         422: Response | {
                             type: unknown;
@@ -305,13 +397,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -319,11 +408,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                     };
                     error: never;
@@ -342,6 +428,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     };
                     query: {
                         context?: string;
+                        language?: string;
                     };
                     headers: unknown;
                     response: {
@@ -353,6 +440,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 release: string;
                                 context: string;
                                 resolution: Record<string, any>;
+                                relationCounts: Record<string, number>;
                                 labels: Record<string, string>;
                                 descriptions: Record<string, string>;
                                 aliases: Record<string, string[]>;
@@ -407,10 +495,86 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         revision: number;
                                     };
                                 }[]>;
+                                sourceRecords: {
+                                    name: string;
+                                    url: string;
+                                    licence?: {
+                                        id: string;
+                                        url?: string;
+                                    };
+                                    attribution?: string;
+                                }[];
                             };
+                            account: {
+                                id: string;
+                            } | null;
+                            summary: {
+                                id: string;
+                                type: string;
+                                types: string[];
+                                label: {
+                                    value: string;
+                                    language: string;
+                                } | null;
+                                creativeWork: boolean;
+                                cover: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                            } | null;
                             related: Record<string, {
                                 labels: Record<string, string>;
                                 redirect?: string;
+                                type?: string;
+                                types?: string[];
+                                cover?: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
                             }>;
                         };
                         308: {
@@ -419,7 +583,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 to: string;
                             };
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -427,13 +591,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -441,11 +602,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                         422: Response | {
                             type: 'validation';
@@ -456,9 +614,13 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             on: string;
                             found?: unknown;
                             property?: string;
-                            expected?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -466,11 +628,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                     };
                     error: never;
@@ -500,7 +659,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -508,13 +667,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -522,13 +678,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -536,13 +689,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -550,13 +700,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -564,11 +711,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: unknown;
@@ -578,13 +722,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -592,11 +733,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -631,7 +769,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -639,13 +777,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -653,13 +788,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -667,13 +799,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -681,13 +810,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -695,11 +821,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: unknown;
@@ -709,13 +832,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -723,11 +843,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -758,7 +875,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 visibility: "hidden" | "taken_down" | "visible";
                                 security_revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -766,13 +883,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -780,13 +894,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -794,13 +905,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -808,13 +916,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -822,11 +927,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: unknown;
@@ -836,13 +938,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -850,11 +949,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -888,7 +984,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 candidate: string;
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -896,13 +992,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -910,13 +1003,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -924,13 +1014,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -938,11 +1025,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: unknown;
@@ -952,13 +1036,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -966,14 +1047,205 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                candidates: {
+                    ":candidate": {
+                        delete: {
+                            body: object | null | undefined;
+                            params: {
+                                id: string;
+                                candidate: string;
+                            };
+                            query: unknown;
+                            headers: {
+                                "idempotency-key": string;
+                            };
+                            response: {
+                                200: {
+                                    subject: string;
+                                    candidate: string;
+                                    deleted: boolean;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                409: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                candidates: {
+                    ":candidate": {
+                        $restoreDeleted: {
+                            post: {
+                                body: object;
+                                params: {
+                                    id: string;
+                                    candidate: string;
+                                };
+                                query: unknown;
+                                headers: {
+                                    "idempotency-key": string;
+                                };
+                                response: {
+                                    200: {
+                                        subject: string;
+                                        candidate: string;
+                                        deleted: boolean;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    403: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    409: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
                     };
                 };
             };
@@ -1009,7 +1281,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1017,13 +1289,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1031,13 +1300,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1045,13 +1311,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1059,13 +1322,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1073,11 +1333,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     422: Response | {
                                         type: unknown;
@@ -1087,13 +1344,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1101,11 +1355,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                 };
                                 error: never;
@@ -1146,7 +1397,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         };
                                         revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1154,13 +1405,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1168,13 +1416,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1182,13 +1427,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1196,13 +1438,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1210,11 +1449,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     422: Response | {
                                         type: unknown;
@@ -1224,13 +1460,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1238,11 +1471,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                 };
                                 error: never;
@@ -1279,7 +1509,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1287,13 +1517,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1301,13 +1528,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1315,13 +1539,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1329,13 +1550,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1343,11 +1561,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     422: Response | {
                                         type: unknown;
@@ -1357,13 +1572,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1371,11 +1583,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                 };
                                 error: never;
@@ -1416,7 +1625,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1424,13 +1633,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1438,13 +1644,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1452,13 +1655,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1466,13 +1666,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1480,11 +1677,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     422: Response | {
                                         type: unknown;
@@ -1494,13 +1688,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1508,11 +1699,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                 };
                                 error: never;
@@ -1549,7 +1737,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         visibility: "hidden" | "taken_down" | "visible";
                                         security_revision: number;
                                     };
-                                    400: {
+                                    400: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1557,13 +1745,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    401: {
+                                    401: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1571,13 +1756,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    403: {
+                                    403: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1585,13 +1767,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    404: {
+                                    404: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1599,13 +1778,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    409: {
+                                    409: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1613,11 +1789,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                     422: Response | {
                                         type: unknown;
@@ -1627,13 +1800,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
-                                    503: {
+                                    503: Response | {
                                         type: unknown;
                                         title: unknown;
                                         status: number;
@@ -1641,11 +1811,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         retryable: unknown;
                                         effect_status: "not_applicable" | "not_applied";
                                         request_id: string;
-                                        detail?: string;
-                                        errors?: {
-                                            pointer: string;
-                                            code: never;
-                                        }[];
+                                        detail: unknown;
+                                        errors: unknown;
                                     };
                                 };
                                 error: never;
@@ -1665,6 +1832,9 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         body: {
                             context: string;
                             property: string;
+                            target?: string;
+                            sameAs?: string;
+                            key?: string;
                             mode: "inherit" | "replace" | "suppress";
                             selection: {
                                 candidate: string;
@@ -1687,13 +1857,13 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     mode: "inherit" | "replace" | "suppress";
                                     selection: {
                                         candidate: string;
-                                        rank: "normal" | "preferred";
+                                        rank: "deprecated" | "normal" | "preferred";
                                     }[];
                                     head: number;
                                 };
                                 revision: number;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1701,13 +1871,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1715,13 +1882,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            403: {
+                            403: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1729,13 +1893,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1743,13 +1904,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            409: {
+                            409: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1757,11 +1915,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: unknown;
@@ -1771,13 +1926,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1785,11 +1937,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -1813,11 +1962,17 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             cursor?: string;
                             property: string;
                             context?: string;
+                            target?: string;
+                            sameAs?: string;
+                            key?: string;
                         };
                         headers: unknown;
                         response: {
                             200: {
-                                candidates: {
+                                candidates: ({
+                                    id: string;
+                                    deleted: true;
+                                } | {
                                     id: string;
                                     source: {
                                         source: string;
@@ -1826,6 +1981,9 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         digest: string;
                                         converter_revision: string;
                                         field_group: "cover" | "facts" | "summary";
+                                    } | {
+                                        kind: "agent";
+                                        subject: string;
                                     } | null;
                                     retracted: number | null;
                                     retraction: {
@@ -1836,6 +1994,9 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                             digest: string;
                                             converter_revision: string;
                                             field_group: "cover" | "facts" | "summary";
+                                        } | {
+                                            kind: "agent";
+                                            subject: string;
                                         };
                                         references: {
                                             parts: ({
@@ -1858,6 +2019,17 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                             })[];
                                         }[];
                                     } | null;
+                                    consentIdentity?: {
+                                        subject: {
+                                            id: string;
+                                            labels: Record<string, string>;
+                                        } | null;
+                                        target: {
+                                            id: string;
+                                            labels: Record<string, string>;
+                                            redirect?: string;
+                                        } | null;
+                                    };
                                     statement: {
                                         id: string;
                                         rank: "deprecated" | "normal" | "preferred";
@@ -1911,17 +2083,17 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     };
                                     release: string;
                                     revision: number;
-                                    decision: "accepted" | "rejected" | null;
+                                    decision: "abstained" | "accepted" | "rejected" | null;
                                     head: number | null;
                                     rank: "deprecated" | "normal" | "preferred" | null;
-                                }[];
+                                })[];
                                 adoption: {
                                     mode: "inherit" | "replace" | "suppress";
                                     head: number;
                                 } | null;
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1929,13 +2101,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1943,13 +2112,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1957,11 +2123,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: 'validation';
@@ -1972,9 +2135,13 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -1982,14 +2149,150 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                revisions: {
+                    ":revision": {
+                        get: {
+                            body: unknown;
+                            params: {
+                                id: string;
+                                revision: number;
+                            };
+                            query: unknown;
+                            headers: unknown;
+                            response: {
+                                200: {
+                                    subject: string;
+                                    revision: {
+                                        revision: number;
+                                        kind: string;
+                                        release: string;
+                                    };
+                                    change: {
+                                        kind: "record";
+                                    } | {
+                                        kind: "terms";
+                                        fields: {
+                                            field: "aliases" | "descriptions" | "labels";
+                                            languages: string[];
+                                        }[];
+                                    } | {
+                                        candidate: string;
+                                        property: string;
+                                        context: string;
+                                        reading: {
+                                            decision: {
+                                                head: number;
+                                                verdict: "abstain" | "accept" | "reject";
+                                                revision: number;
+                                            } | null;
+                                            selected: boolean;
+                                            rank: "deprecated" | "normal" | "preferred" | null;
+                                        };
+                                        kind: "candidate";
+                                    } | {
+                                        candidate: string;
+                                        property: string;
+                                        context: string;
+                                        reading: {
+                                            decision: {
+                                                head: number;
+                                                verdict: "abstain" | "accept" | "reject";
+                                                revision: number;
+                                            } | null;
+                                            selected: boolean;
+                                            rank: "deprecated" | "normal" | "preferred" | null;
+                                        };
+                                        kind: "decision";
+                                        head: number;
+                                        verdict: "abstain" | "accept" | "reject";
+                                    } | {
+                                        kind: "adoption";
+                                        property: string;
+                                        context: string;
+                                        head: number;
+                                        mode: "inherit" | "replace" | "suppress";
+                                        selection: {
+                                            candidate: string;
+                                            rank: "deprecated" | "normal" | "preferred";
+                                        }[];
+                                    };
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: 'validation';
+                                    code: 'validation';
+                                    title: 'Validation Error';
+                                    status: 422;
+                                    detail?: string;
+                                    on: string;
+                                    found?: unknown;
+                                    property?: string;
+                                    expected?: unknown;
+                                    errors?: {
+                                        message?: string;
+                                        [key: string]: unknown;
+                                    }[];
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
                     };
                 };
             };
@@ -2023,11 +2326,14 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                         digest: string;
                                         converter_revision: string;
                                         field_group: "cover" | "facts" | "summary";
+                                    } | {
+                                        kind: "agent";
+                                        subject: string;
                                     } | null;
                                 }[];
                                 next: string | null;
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2035,13 +2341,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2049,13 +2352,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2063,11 +2363,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: 'validation';
@@ -2078,9 +2375,13 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2088,11 +2389,267 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            graph: {
+                get: {
+                    body: unknown;
+                    params: {};
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                graph: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            property: string[];
+                            direction: "both" | "in" | "out";
+                            depth: string | number;
+                            limit?: string | number;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                nodes: {
+                                    id: string;
+                                    type: string;
+                                    label: string;
+                                    summary: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    };
                                 }[];
+                                edges: {
+                                    from: string;
+                                    property: string;
+                                    to: string;
+                                    statement: string;
+                                }[];
+                                truncated: {
+                                    node: string;
+                                    property: string;
+                                    direction: "in" | "out";
+                                    count?: number;
+                                    cursor: string;
+                                }[];
+                            };
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                counts: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: import("../semantic/counts.ts").SubjectRelationCountResponse;
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -2114,7 +2671,11 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         query: {
                             limit?: string | number;
                             cursor?: string;
+                            context?: string;
                             property?: string;
+                            filter?: string;
+                            type?: string;
+                            language?: string;
                         };
                         headers: unknown;
                         response: {
@@ -2123,7 +2684,136 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     subject: string;
                                     property: string;
                                     statement: string;
+                                    assertion?: {
+                                        id: string;
+                                        rank: "deprecated" | "normal" | "preferred";
+                                        property: {
+                                            id: string;
+                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                        };
+                                        value: {
+                                            type: "value";
+                                            content: any;
+                                        } | {
+                                            type: "somevalue";
+                                        } | {
+                                            type: "novalue";
+                                        };
+                                        qualifiers: {
+                                            property: {
+                                                id: string;
+                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                            };
+                                            value: {
+                                                type: "value";
+                                                content: any;
+                                            } | {
+                                                type: "somevalue";
+                                            } | {
+                                                type: "novalue";
+                                            };
+                                        }[];
+                                        references: {
+                                            parts: {
+                                                property: {
+                                                    id: string;
+                                                    data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                };
+                                                value: {
+                                                    type: "value";
+                                                    content: any;
+                                                } | {
+                                                    type: "somevalue";
+                                                } | {
+                                                    type: "novalue";
+                                                };
+                                            }[];
+                                            hash: string;
+                                        }[];
+                                        rezics: {
+                                            release: string;
+                                            revision: number;
+                                        };
+                                    };
+                                    related?: Record<string, {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    }>;
+                                    type: string;
+                                    label: string;
+                                    summary: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    };
                                 }[];
+                                count?: {
+                                    value: number;
+                                    exact: boolean;
+                                };
                                 freshness: {
                                     consistency: "eventual";
                                     target_seconds: 10;
@@ -2137,7 +2827,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     to: string;
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2145,13 +2835,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2159,13 +2846,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2173,11 +2857,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: 'validation';
@@ -2188,9 +2869,13 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 on: string;
                                 found?: unknown;
                                 property?: string;
-                                expected?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2198,14 +2883,1697 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                relations: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            cursor?: string;
+                            limit?: string | number;
+                            property: string;
+                            filter?: string;
+                            type?: string;
+                            context?: string;
+                            language?: string;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                relations: {
+                                    statement: {
+                                        id: string;
+                                        rank: "deprecated" | "normal" | "preferred";
+                                        property: {
+                                            id: string;
+                                            data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                        };
+                                        value: {
+                                            type: "value";
+                                            content: any;
+                                        } | {
+                                            type: "somevalue";
+                                        } | {
+                                            type: "novalue";
+                                        };
+                                        qualifiers: {
+                                            property: {
+                                                id: string;
+                                                data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                            };
+                                            value: {
+                                                type: "value";
+                                                content: any;
+                                            } | {
+                                                type: "somevalue";
+                                            } | {
+                                                type: "novalue";
+                                            };
+                                        }[];
+                                        references: {
+                                            parts: {
+                                                property: {
+                                                    id: string;
+                                                    data_type: "document" | "external-id" | "media" | "monolingualtext" | "quantity" | "string" | "time" | "url" | "wikibase-item";
+                                                };
+                                                value: {
+                                                    type: "value";
+                                                    content: any;
+                                                } | {
+                                                    type: "somevalue";
+                                                } | {
+                                                    type: "novalue";
+                                                };
+                                            }[];
+                                            hash: string;
+                                        }[];
+                                        rezics: {
+                                            release: string;
+                                            revision: number;
+                                        };
+                                    };
+                                    related?: Record<string, {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    }>;
+                                    target: string | null;
+                                    external: string | null;
+                                    type?: string;
+                                    label?: string;
+                                    summary: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
+                                }[];
+                                count?: {
+                                    value: number;
+                                    exact: boolean;
+                                };
+                                freshness: {
+                                    consistency: "eventual";
+                                    target_seconds: 10;
+                                    caught_up: boolean;
+                                };
+                                next: string | null;
+                            };
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        statements: {
+            ":id": {
+                disclose: {
+                    post: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                candidate: string;
+                                disclosed: true;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        statements: {
+            ":id": {
+                retract: {
+                    post: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                candidate: string;
+                                retracted: true;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                reactions: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                counts: {
+                                    kind: "downvote" | "insightful" | "laugh" | "like" | "love" | "sad" | "upvote";
+                                    count: number;
+                                }[];
+                                watermark: {
+                                    epoch: number;
+                                    position: string;
+                                } | null;
+                            };
+                            308: {
+                                redirect: {
+                                    from: string;
+                                    to: string;
+                                };
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitionTypes: {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    query?: string;
+                    typeId?: string;
+                    locale?: never;
+                    limit?: number;
+                    cursor?: string;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        types: {
+                            typeId: string;
+                            releaseDigest: string;
+                            label: string;
+                            language: string | null;
+                            parents: string[];
+                            description: string | null;
+                            descriptionLanguage: string | null;
+                        }[];
+                        next: string | null;
+                    };
+                    400: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    404: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    409: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    422: Response | {
+                        type: 'validation';
+                        code: 'validation';
+                        title: 'Validation Error';
+                        status: 422;
+                        detail?: string;
+                        on: string;
+                        found?: unknown;
+                        property?: string;
+                        expected?: unknown;
+                        errors?: {
+                            message?: string;
+                            [key: string]: unknown;
+                        }[];
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        definitionTypes: {
+            ":typeId": {
+                get: {
+                    body: unknown;
+                    params: {
+                        typeId: string;
+                    };
+                    query: {
+                        locale?: never;
+                    };
+                    headers: unknown;
+                    response: {
+                        200: {
+                            typeId: string;
+                            releaseDigest: string;
+                            label: string;
+                            language: string | null;
+                            parents: string[];
+                            description: string | null;
+                            descriptionLanguage: string | null;
+                            definition: Record<string, any>;
+                            properties: Record<string, Record<string, any>>;
+                        };
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        409: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
+                            detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
+                            errors?: {
+                                message?: string;
+                                [key: string]: unknown;
+                            }[];
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
+            catalogue: {
+                artifacts: {
+                    post: {
+                        body: {
+                            kind: "declaration" | "node" | "release" | "root";
+                            artifact: Record<string, any>;
+                        };
+                        params: {};
+                        query: unknown;
+                        headers: {
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: {
+                                digest: string;
+                            };
+                            201: {
+                                digest: string;
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
+            catalogues: {
+                post: {
+                    body: {
+                        pin: {
+                            format: "https://rezics.com/definitions/catalogue/2";
+                            rootDigest: string;
+                            kindSpec: "https://rezics.com/definitions/kind/1";
+                            reduction: "https://rezics.com/definitions/kind-reduction/1";
+                        };
+                    };
+                    params: {};
+                    query: unknown;
+                    headers: {
+                        "idempotency-key": string;
+                    };
+                    response: {
+                        200: {
+                            pin: {
+                                format: "https://rezics.com/definitions/catalogue/2";
+                                rootDigest: string;
+                                kindSpec: "https://rezics.com/definitions/kind/1";
+                                reduction: "https://rezics.com/definitions/kind-reduction/1";
+                            };
+                            state: "building" | "incomplete" | "ready" | "refused";
+                            phase: "declaration" | "node" | "release";
+                            steps: string;
+                            nodes: string;
+                            releases: string;
+                            declarations: string;
+                            indexed_rows: string;
+                            examined_bytes: string;
+                            missing_digest: string | null;
+                            error: string | null;
+                        };
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        409: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
+            catalogues: {
+                ":root": {
+                    $step: {
+                        post: {
+                            body: object;
+                            params: {
+                                root: string;
+                            };
+                            query: unknown;
+                            headers: {
+                                "idempotency-key": string;
+                            };
+                            response: {
+                                200: {
+                                    pin: {
+                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        rootDigest: string;
+                                        kindSpec: "https://rezics.com/definitions/kind/1";
+                                        reduction: "https://rezics.com/definitions/kind-reduction/1";
+                                    };
+                                    state: "building" | "incomplete" | "ready" | "refused";
+                                    phase: "declaration" | "node" | "release";
+                                    steps: string;
+                                    nodes: string;
+                                    releases: string;
+                                    declarations: string;
+                                    indexed_rows: string;
+                                    examined_bytes: string;
+                                    missing_digest: string | null;
+                                    error: string | null;
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                409: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
+            catalogues: {
+                ":root": {
+                    $activate: {
+                        post: {
+                            body: {
+                                expected_head: number | null;
+                            };
+                            params: {
+                                root: string;
+                            };
+                            query: unknown;
+                            headers: {
+                                "idempotency-key": string;
+                            };
+                            response: {
+                                200: {
+                                    pin: {
+                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        rootDigest: string;
+                                        kindSpec: "https://rezics.com/definitions/kind/1";
+                                        reduction: "https://rezics.com/definitions/kind-reduction/1";
+                                    };
+                                    head: number;
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                409: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
+            catalogue: {
+                get: {
+                    body: unknown;
+                    params: {};
+                    query: unknown;
+                    headers: unknown;
+                    response: {
+                        200: {
+                            pin: {
+                                format: "https://rezics.com/definitions/catalogue/2";
+                                rootDigest: string;
+                                kindSpec: "https://rezics.com/definitions/kind/1";
+                                reduction: "https://rezics.com/definitions/kind-reduction/1";
+                            };
+                            head: number;
+                        } | null;
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
+            catalogues: {
+                ":root": {
+                    build: {
+                        get: {
+                            body: unknown;
+                            params: {
+                                root: string;
+                            };
+                            query: unknown;
+                            headers: unknown;
+                            response: {
+                                200: {
+                                    pin: {
+                                        format: "https://rezics.com/definitions/catalogue/2";
+                                        rootDigest: string;
+                                        kindSpec: "https://rezics.com/definitions/kind/1";
+                                        reduction: "https://rezics.com/definitions/kind-reduction/1";
+                                    };
+                                    state: "building" | "incomplete" | "ready" | "refused";
+                                    phase: "declaration" | "node" | "release";
+                                    steps: string;
+                                    nodes: string;
+                                    releases: string;
+                                    declarations: string;
+                                    indexed_rows: string;
+                                    examined_bytes: string;
+                                    missing_digest: string | null;
+                                    error: string | null;
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: 'validation';
+                                    code: 'validation';
+                                    title: 'Validation Error';
+                                    status: 422;
+                                    detail?: string;
+                                    on: string;
+                                    found?: unknown;
+                                    property?: string;
+                                    expected?: unknown;
+                                    errors?: {
+                                        message?: string;
+                                        [key: string]: unknown;
+                                    }[];
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
+            catalogues: {
+                ":root": {
+                    kinds: {
+                        $resolve: {
+                            post: {
+                                body: {
+                                    ids: string[];
+                                };
+                                params: {
+                                    root: string;
+                                };
+                                query: unknown;
+                                headers: unknown;
+                                response: {
+                                    200: readonly Readonly<{
+                                        id: string;
+                                        value: import("@rezics/definitions").PinnedKindDeclaration | null;
+                                    }>[];
+                                    400: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    401: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    403: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    404: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                    422: Response | {
+                                        type: 'validation';
+                                        code: 'validation';
+                                        title: 'Validation Error';
+                                        status: 422;
+                                        detail?: string;
+                                        on: string;
+                                        found?: unknown;
+                                        property?: string;
+                                        expected?: unknown;
+                                        errors?: {
+                                            message?: string;
+                                            [key: string]: unknown;
+                                        }[];
+                                    };
+                                    503: Response | {
+                                        type: unknown;
+                                        title: unknown;
+                                        status: number;
+                                        code: unknown;
+                                        retryable: unknown;
+                                        effect_status: "not_applicable" | "not_applied";
+                                        request_id: string;
+                                        detail: unknown;
+                                        errors: unknown;
+                                    };
+                                };
+                                error: never;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
+            catalogues: {
+                ":root": {
+                    kinds: {
+                        get: {
+                            body: unknown;
+                            params: {
+                                root: string;
+                            };
+                            query: {
+                                query?: string;
+                                language?: string;
+                                limit?: string | number;
+                                cursor?: string;
+                            };
+                            headers: unknown;
+                            response: {
+                                200: Readonly<{
+                                    kinds: readonly import("@rezics/definitions").PinnedKindDeclaration[];
+                                    next: string | null;
+                                }>;
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: 'validation';
+                                    code: 'validation';
+                                    title: 'Validation Error';
+                                    status: 422;
+                                    detail?: string;
+                                    on: string;
+                                    found?: unknown;
+                                    property?: string;
+                                    expected?: unknown;
+                                    errors?: {
+                                        message?: string;
+                                        [key: string]: unknown;
+                                    }[];
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        definitions: {
+            catalogues: {
+                ":root": {
+                    candidates: {
+                        get: {
+                            body: unknown;
+                            params: {
+                                root: string;
+                            };
+                            query: {
+                                exact_type_id: string;
+                                limit?: string | number;
+                                cursor?: string;
+                            };
+                            headers: unknown;
+                            response: {
+                                200: Readonly<{
+                                    candidates: readonly import("@rezics/definitions").PinnedKindDeclaration[];
+                                    next: string | null;
+                                }>;
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: 'validation';
+                                    code: 'validation';
+                                    title: 'Validation Error';
+                                    status: 422;
+                                    detail?: string;
+                                    on: string;
+                                    found?: unknown;
+                                    property?: string;
+                                    expected?: unknown;
+                                    errors?: {
+                                        message?: string;
+                                        [key: string]: unknown;
+                                    }[];
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
                     };
                 };
             };
@@ -2231,7 +4599,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         201: {
                             digest: string;
                         };
-                        400: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2239,13 +4607,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2253,13 +4618,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
-                        403: {
+                        403: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2267,11 +4629,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                         422: Response | {
                             type: unknown;
@@ -2281,13 +4640,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2295,11 +4651,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                     };
                     error: never;
@@ -2324,7 +4677,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 digest: string;
                                 release: Record<string, any>;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2332,13 +4685,36 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
                                 detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
                                 errors?: {
-                                    pointer: string;
-                                    code: never;
+                                    message?: string;
+                                    [key: string]: unknown;
                                 }[];
                             };
-                            404: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2346,25 +4722,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
-                            };
-                            503: {
-                                type: unknown;
-                                title: unknown;
-                                status: number;
-                                code: unknown;
-                                retryable: unknown;
-                                effect_status: "not_applicable" | "not_applied";
-                                request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -2387,7 +4746,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             digest: string;
                             head: number;
                         };
-                        401: {
+                        401: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2395,13 +4754,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
-                        404: {
+                        404: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2409,13 +4765,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
-                        503: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2423,11 +4776,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                     };
                     error: never;
@@ -2457,7 +4807,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     digest: string;
                                     head: number;
                                 };
-                                400: {
+                                400: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2465,13 +4815,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     retryable: unknown;
                                     effect_status: "not_applicable" | "not_applied";
                                     request_id: string;
-                                    detail?: string;
-                                    errors?: {
-                                        pointer: string;
-                                        code: never;
-                                    }[];
+                                    detail: unknown;
+                                    errors: unknown;
                                 };
-                                401: {
+                                401: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2479,13 +4826,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     retryable: unknown;
                                     effect_status: "not_applicable" | "not_applied";
                                     request_id: string;
-                                    detail?: string;
-                                    errors?: {
-                                        pointer: string;
-                                        code: never;
-                                    }[];
+                                    detail: unknown;
+                                    errors: unknown;
                                 };
-                                403: {
+                                403: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2493,13 +4837,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     retryable: unknown;
                                     effect_status: "not_applicable" | "not_applied";
                                     request_id: string;
-                                    detail?: string;
-                                    errors?: {
-                                        pointer: string;
-                                        code: never;
-                                    }[];
+                                    detail: unknown;
+                                    errors: unknown;
                                 };
-                                404: {
+                                404: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2507,13 +4848,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     retryable: unknown;
                                     effect_status: "not_applicable" | "not_applied";
                                     request_id: string;
-                                    detail?: string;
-                                    errors?: {
-                                        pointer: string;
-                                        code: never;
-                                    }[];
+                                    detail: unknown;
+                                    errors: unknown;
                                 };
-                                409: {
+                                409: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2521,11 +4859,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     retryable: unknown;
                                     effect_status: "not_applicable" | "not_applied";
                                     request_id: string;
-                                    detail?: string;
-                                    errors?: {
-                                        pointer: string;
-                                        code: never;
-                                    }[];
+                                    detail: unknown;
+                                    errors: unknown;
                                 };
                                 422: Response | {
                                     type: unknown;
@@ -2535,13 +4870,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     retryable: unknown;
                                     effect_status: "not_applicable" | "not_applied";
                                     request_id: string;
-                                    detail?: string;
-                                    errors?: {
-                                        pointer: string;
-                                        code: never;
-                                    }[];
+                                    detail: unknown;
+                                    errors: unknown;
                                 };
-                                503: {
+                                503: Response | {
                                     type: unknown;
                                     title: unknown;
                                     status: number;
@@ -2549,17 +4881,722 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                     retryable: unknown;
                                     effect_status: "not_applicable" | "not_applied";
                                     request_id: string;
-                                    detail?: string;
-                                    errors?: {
-                                        pointer: string;
-                                        code: never;
-                                    }[];
+                                    detail: unknown;
+                                    errors: unknown;
                                 };
                             };
                             error: never;
                         };
                     };
                 };
+            };
+        };
+    };
+} & {
+    v1: {
+        contexts: {
+            ":id": {
+                definitions: {
+                    extensions: {
+                        post: {
+                            body: {
+                                extension: Record<string, any>;
+                            };
+                            params: {
+                                id: string;
+                            };
+                            query: unknown;
+                            headers: {
+                                "idempotency-key": string;
+                            };
+                            response: {
+                                200: {
+                                    digest: string;
+                                };
+                                201: {
+                                    digest: string;
+                                };
+                                400: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                401: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                403: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                404: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                422: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                                503: Response | {
+                                    type: unknown;
+                                    title: unknown;
+                                    status: number;
+                                    code: unknown;
+                                    retryable: unknown;
+                                    effect_status: "not_applicable" | "not_applied";
+                                    request_id: string;
+                                    detail: unknown;
+                                    errors: unknown;
+                                };
+                            };
+                            error: never;
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        contexts: {
+            ":id": {
+                definitions: {
+                    extensions: {
+                        ":digest": {
+                            $activate: {
+                                post: {
+                                    body: {
+                                        expected_head: number | null;
+                                    };
+                                    params: {
+                                        id: string;
+                                        digest: string;
+                                    };
+                                    query: unknown;
+                                    headers: {
+                                        "idempotency-key": string;
+                                    };
+                                    response: {
+                                        200: {
+                                            digest: string;
+                                            head: number;
+                                        };
+                                        400: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        401: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        403: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        404: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        409: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        422: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                        503: Response | {
+                                            type: unknown;
+                                            title: unknown;
+                                            status: number;
+                                            code: unknown;
+                                            retryable: unknown;
+                                            effect_status: "not_applicable" | "not_applied";
+                                            request_id: string;
+                                            detail: unknown;
+                                            errors: unknown;
+                                        };
+                                    };
+                                    error: never;
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        contexts: {
+            ":id": {
+                definitions: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: unknown;
+                        headers: unknown;
+                        response: {
+                            200: {
+                                context: string;
+                                digest: string | null;
+                                head: number;
+                                extension: Record<string, any> | null;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        subjects: {
+            ":id": {
+                offers: {
+                    get: {
+                        body: unknown;
+                        params: {
+                            id: string;
+                        };
+                        query: {
+                            cursor?: string;
+                            limit?: number;
+                        };
+                        headers: unknown;
+                        response: {
+                            200: {
+                                offers: {
+                                    moneyUnit: {
+                                        system: "stripe-api";
+                                        exponent: 0 | 2;
+                                        factsVersion: "stripe-money-v1";
+                                    } | null;
+                                    taxBehavior: "exclusive" | null;
+                                    id: string;
+                                    targetSubjectId: string;
+                                    title: string;
+                                    currency: string;
+                                    unitAmountMinor: number;
+                                    revision: number;
+                                    contentEdition: {
+                                        benefit: {
+                                            kind: "content-edition";
+                                            resourceType: "content.edition";
+                                            resource: {
+                                                route: number;
+                                                id: string;
+                                            };
+                                            version: {
+                                                revisionId: string;
+                                                sha256: string;
+                                            };
+                                            action: "edition:read";
+                                        };
+                                        creatorAccountId: string;
+                                        targetSubjectId: string;
+                                        source: {
+                                            licence: string;
+                                        };
+                                        saleTermsReference: string;
+                                        delivery: "fixed-content-edition";
+                                        acquisition: "one-time-account-bound";
+                                        quantity: 1;
+                                    } | null;
+                                }[];
+                                next: string | null;
+                                projectionState: "preparing" | "ready";
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: 'validation';
+                                code: 'validation';
+                                title: 'Validation Error';
+                                status: 422;
+                                detail?: string;
+                                on: string;
+                                found?: unknown;
+                                property?: string;
+                                expected?: unknown;
+                                errors?: {
+                                    message?: string;
+                                    [key: string]: unknown;
+                                }[];
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        commerceMoney: {
+            get: {
+                body: unknown;
+                params: {};
+                query: unknown;
+                headers: unknown;
+                response: {
+                    200: {
+                        factsVersion: "stripe-money-v1";
+                        taxBehavior: "exclusive";
+                        configuredSaleCurrencies: {
+                            currency: "eur" | "usd";
+                            unit: {
+                                system: "stripe-api";
+                                exponent: 0 | 2;
+                                factsVersion: "stripe-money-v1";
+                            };
+                            minAmountMinor: 50;
+                            maxAmountMinor: 99999999;
+                            chargeMultiple: 1;
+                        }[];
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        commerceSales: {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    cursor?: string;
+                    limit?: number;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        sales: {
+                            moneyUnit: {
+                                system: "stripe-api";
+                                exponent: 0 | 2;
+                                factsVersion: "stripe-money-v1";
+                            } | null;
+                            taxBehavior: "exclusive" | null;
+                            orderId: string;
+                            offerId: string;
+                            title: string;
+                            targetSubjectId: string;
+                            currency: string;
+                            unitAmountMinor: number;
+                            settlement: "failed" | "paid" | "pending" | "unknown";
+                            createdAt: string;
+                        }[];
+                        next: string | null;
+                        projectionState: "preparing" | "ready";
+                    };
+                    400: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    403: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    409: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    422: Response | {
+                        type: 'validation';
+                        code: 'validation';
+                        title: 'Validation Error';
+                        status: 422;
+                        detail?: string;
+                        on: string;
+                        found?: unknown;
+                        property?: string;
+                        expected?: unknown;
+                        errors?: {
+                            message?: string;
+                            [key: string]: unknown;
+                        }[];
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        offers: {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    cursor?: string;
+                    limit?: number;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        offers: {
+                            moneyUnit: {
+                                system: "stripe-api";
+                                exponent: 0 | 2;
+                                factsVersion: "stripe-money-v1";
+                            } | null;
+                            taxBehavior: "exclusive" | null;
+                            id: string;
+                            targetSubjectId: string;
+                            title: string;
+                            currency: string;
+                            unitAmountMinor: number;
+                            taxCode: string;
+                            royaltyBasisPoints: number;
+                            state: "active" | "delisted";
+                            revision: number;
+                            contentEdition: {
+                                benefit: {
+                                    kind: "content-edition";
+                                    resourceType: "content.edition";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    version: {
+                                        revisionId: string;
+                                        sha256: string;
+                                    };
+                                    action: "edition:read";
+                                };
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                source: {
+                                    licence: string;
+                                };
+                                saleTermsReference: string;
+                                delivery: "fixed-content-edition";
+                                acquisition: "one-time-account-bound";
+                                quantity: 1;
+                            } | null;
+                        }[];
+                        next: string | null;
+                    };
+                    400: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    403: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    409: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    422: Response | {
+                        type: 'validation';
+                        code: 'validation';
+                        title: 'Validation Error';
+                        status: 422;
+                        detail?: string;
+                        on: string;
+                        found?: unknown;
+                        property?: string;
+                        expected?: unknown;
+                        errors?: {
+                            message?: string;
+                            [key: string]: unknown;
+                        }[];
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
             };
         };
     };
@@ -2572,20 +5609,89 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     params: {
                         offerId: string;
                     };
-                    query: unknown;
+                    query: {
+                        languages?: string;
+                    };
                     headers: unknown;
                     response: {
                         200: {
                             offer: {
+                                moneyUnit: {
+                                    system: "stripe-api";
+                                    exponent: 0 | 2;
+                                    factsVersion: "stripe-money-v1";
+                                } | null;
+                                taxBehavior: "exclusive" | null;
+                                contentEdition: {
+                                    benefit: {
+                                        kind: "content-edition";
+                                        resourceType: "content.edition";
+                                        resource: {
+                                            route: number;
+                                            id: string;
+                                        };
+                                        version: {
+                                            revisionId: string;
+                                            sha256: string;
+                                        };
+                                        action: "edition:read";
+                                    };
+                                    creatorAccountId: string;
+                                    targetSubjectId: string;
+                                    source: {
+                                        licence: string;
+                                    };
+                                    saleTermsReference: string;
+                                    delivery: "fixed-content-edition";
+                                    acquisition: "one-time-account-bound";
+                                    quantity: 1;
+                                } | null;
                                 id: string;
+                                revision: number;
                                 targetSubjectId: string;
+                                subject: {
+                                    id: string;
+                                    type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                } | null;
                                 title: string;
                                 currency: string;
                                 unitAmountMinor: number;
                                 state: "active" | "delisted";
                             };
                         };
-                        401: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2593,13 +5699,47 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
                             detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
                             errors?: {
-                                pointer: string;
-                                code: never;
+                                message?: string;
+                                [key: string]: unknown;
                             }[];
                         };
-                        404: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -2607,25 +5747,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
-                        };
-                        503: {
-                            type: unknown;
-                            title: unknown;
-                            status: number;
-                            code: unknown;
-                            retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
-                            request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                     };
                     error: never;
@@ -2638,6 +5761,12 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         offers: {
             post: {
                 body: {
+                    contentEditionId: string;
+                    title: string;
+                    currency: string;
+                    unitAmountMinor: number;
+                    taxCode: string;
+                } | {
                     targetSubjectId: string;
                     title: string;
                     currency: string;
@@ -2658,19 +5787,104 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             currency: string;
                             unitAmountMinor: number;
                             state: "active" | "delisted";
+                            summary: SubjectSummary | null;
+                            moneyUnit: Readonly<{
+                                system: 'stripe-api';
+                                exponent: 0 | 2;
+                                factsVersion: 'stripe-money-v1';
+                            }> | null;
+                            taxBehavior: "exclusive" | null;
+                            contentEdition: {
+                                source: {
+                                    licence: string;
+                                };
+                                benefit: import("./model.ts").ContentEditionBenefit;
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                saleTermsReference: string;
+                                delivery: 'fixed-content-edition';
+                                acquisition: 'one-time-account-bound';
+                                quantity: 1;
+                            } | null;
                         };
                     };
                     201: {
                         offer: {
+                            moneyUnit: {
+                                system: "stripe-api";
+                                exponent: 0 | 2;
+                                factsVersion: "stripe-money-v1";
+                            } | null;
+                            taxBehavior: "exclusive" | null;
+                            contentEdition: {
+                                benefit: {
+                                    kind: "content-edition";
+                                    resourceType: "content.edition";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    version: {
+                                        revisionId: string;
+                                        sha256: string;
+                                    };
+                                    action: "edition:read";
+                                };
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                source: {
+                                    licence: string;
+                                };
+                                saleTermsReference: string;
+                                delivery: "fixed-content-edition";
+                                acquisition: "one-time-account-bound";
+                                quantity: 1;
+                            } | null;
                             id: string;
                             targetSubjectId: string;
+                            summary: {
+                                id: string;
+                                type: string;
+                                types: string[];
+                                label: {
+                                    value: string;
+                                    language: string;
+                                } | null;
+                                creativeWork: boolean;
+                                cover: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                            } | null;
                             title: string;
                             currency: string;
                             unitAmountMinor: number;
                             state: "active" | "delisted";
                         };
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -2678,13 +5892,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -2692,13 +5903,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -2706,11 +5914,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
                     422: Response | {
                         type: unknown;
@@ -2720,13 +5925,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -2734,11 +5936,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
                 };
                 error: never;
@@ -2749,9 +5948,187 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     v1: {
         offers: {
             ":offerId": {
+                patch: {
+                    body: {
+                        unitAmountMinor: number;
+                        expectedRevision: number;
+                    };
+                    params: {
+                        offerId: string;
+                    };
+                    query: unknown;
+                    headers: {
+                        "idempotency-key": string;
+                    };
+                    response: {
+                        200: {
+                            offer: {
+                                moneyUnit: {
+                                    system: "stripe-api";
+                                    exponent: 0 | 2;
+                                    factsVersion: "stripe-money-v1";
+                                } | null;
+                                taxBehavior: "exclusive" | null;
+                                contentEdition: {
+                                    benefit: {
+                                        kind: "content-edition";
+                                        resourceType: "content.edition";
+                                        resource: {
+                                            route: number;
+                                            id: string;
+                                        };
+                                        version: {
+                                            revisionId: string;
+                                            sha256: string;
+                                        };
+                                        action: "edition:read";
+                                    };
+                                    creatorAccountId: string;
+                                    targetSubjectId: string;
+                                    source: {
+                                        licence: string;
+                                    };
+                                    saleTermsReference: string;
+                                    delivery: "fixed-content-edition";
+                                    acquisition: "one-time-account-bound";
+                                    quantity: 1;
+                                } | null;
+                                id: string;
+                                targetSubjectId: string;
+                                summary: {
+                                    id: string;
+                                    type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                } | null;
+                                title: string;
+                                currency: string;
+                                unitAmountMinor: number;
+                                state: "active" | "delisted";
+                            };
+                        };
+                        400: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        403: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        409: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        503: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                    };
+                    error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        offers: {
+            ":offerId": {
                 $delist: {
                     post: {
-                        body: unknown;
+                        body: {
+                            expectedRevision: number;
+                        };
                         params: {
                             offerId: string;
                         };
@@ -2762,15 +6139,81 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         response: {
                             200: {
                                 offer: {
+                                    moneyUnit: {
+                                        system: "stripe-api";
+                                        exponent: 0 | 2;
+                                        factsVersion: "stripe-money-v1";
+                                    } | null;
+                                    taxBehavior: "exclusive" | null;
+                                    contentEdition: {
+                                        benefit: {
+                                            kind: "content-edition";
+                                            resourceType: "content.edition";
+                                            resource: {
+                                                route: number;
+                                                id: string;
+                                            };
+                                            version: {
+                                                revisionId: string;
+                                                sha256: string;
+                                            };
+                                            action: "edition:read";
+                                        };
+                                        creatorAccountId: string;
+                                        targetSubjectId: string;
+                                        source: {
+                                            licence: string;
+                                        };
+                                        saleTermsReference: string;
+                                        delivery: "fixed-content-edition";
+                                        acquisition: "one-time-account-bound";
+                                        quantity: 1;
+                                    } | null;
                                     id: string;
                                     targetSubjectId: string;
+                                    summary: {
+                                        id: string;
+                                        type: string;
+                                        types: string[];
+                                        label: {
+                                            value: string;
+                                            language: string;
+                                        } | null;
+                                        creativeWork: boolean;
+                                        cover: {
+                                            media: string;
+                                            width: number;
+                                            height: number;
+                                            placeholder: {
+                                                thumbhash: string;
+                                                color: string;
+                                            };
+                                            variants: {
+                                                format: "avif" | "webp";
+                                                width: number;
+                                            }[];
+                                            focalPoint: {
+                                                x: number;
+                                                y: number;
+                                            } | null;
+                                            credit: {
+                                                rightsHolder: string;
+                                                via: {
+                                                    name: string;
+                                                    url: string;
+                                                };
+                                                license: string;
+                                                obligations: string[];
+                                            };
+                                        } | null;
+                                    } | null;
                                     title: string;
                                     currency: string;
                                     unitAmountMinor: number;
                                     state: "active" | "delisted";
                                 };
                             };
-                            400: {
+                            400: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2778,13 +6221,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            401: {
+                            401: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2792,13 +6232,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            404: {
+                            404: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2806,11 +6243,19 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            409: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
                             };
                             422: Response | {
                                 type: unknown;
@@ -2820,13 +6265,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
-                            503: {
+                            503: Response | {
                                 type: unknown;
                                 title: unknown;
                                 status: number;
@@ -2834,11 +6276,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 retryable: unknown;
                                 effect_status: "not_applicable" | "not_applied";
                                 request_id: string;
-                                detail?: string;
-                                errors?: {
-                                    pointer: string;
-                                    code: never;
-                                }[];
+                                detail: unknown;
+                                errors: unknown;
                             };
                         };
                         error: never;
@@ -2853,6 +6292,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             post: {
                 body: {
                     offerId: string;
+                    expectedOfferRevision: number;
                 };
                 params: {};
                 query: unknown;
@@ -2868,11 +6308,59 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             checkoutUrl: string | null;
                             checkoutExpiresAt: string | null;
                             entitlementId: string | null;
+                            moneyUnit: Readonly<{
+                                system: 'stripe-api';
+                                exponent: 0 | 2;
+                                factsVersion: 'stripe-money-v1';
+                            }> | null;
+                            taxBehavior: "exclusive" | null;
+                            contentEdition: {
+                                source: {
+                                    licence: string;
+                                };
+                                benefit: import("./model.ts").ContentEditionBenefit;
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                saleTermsReference: string;
+                                delivery: 'fixed-content-edition';
+                                acquisition: 'one-time-account-bound';
+                                quantity: 1;
+                            } | null;
                             createdAt: string;
                         };
                     };
                     201: {
                         order: {
+                            moneyUnit: {
+                                system: "stripe-api";
+                                exponent: 0 | 2;
+                                factsVersion: "stripe-money-v1";
+                            } | null;
+                            taxBehavior: "exclusive" | null;
+                            contentEdition: {
+                                benefit: {
+                                    kind: "content-edition";
+                                    resourceType: "content.edition";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    version: {
+                                        revisionId: string;
+                                        sha256: string;
+                                    };
+                                    action: "edition:read";
+                                };
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                source: {
+                                    licence: string;
+                                };
+                                saleTermsReference: string;
+                                delivery: "fixed-content-edition";
+                                acquisition: "one-time-account-bound";
+                                quantity: 1;
+                            } | null;
                             id: string;
                             offerId: string;
                             settlement: "failed" | "paid" | "pending" | "unknown";
@@ -2882,7 +6370,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             createdAt: string;
                         };
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -2890,13 +6378,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -2904,13 +6389,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
-                    404: {
+                    404: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -2918,25 +6400,42 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
-                    409: {
+                    409: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
-                        code: unknown;
+                        retryable: unknown;
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                        code: "acquisition_pending";
+                        effect_status: "not_applied";
+                        orderId?: string;
+                    } | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        retryable: unknown;
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                        code: "benefit_already_owned";
+                        effect_status: "not_applied";
+                        orderId?: string;
+                        entitlementId?: string;
+                    } | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
+                        code: "offer_revision_conflict" | "offer_unavailable";
                     };
                     422: Response | {
                         type: unknown;
@@ -2946,13 +6445,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -2960,11 +6456,144 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                };
+                error: never;
+            };
+        };
+    };
+} & {
+    v1: {
+        orders: {
+            get: {
+                body: unknown;
+                params: {};
+                query: {
+                    limit?: number;
+                    cursor?: string;
+                };
+                headers: unknown;
+                response: {
+                    200: {
+                        orders: {
+                            moneyUnit: {
+                                system: "stripe-api";
+                                exponent: 0 | 2;
+                                factsVersion: "stripe-money-v1";
+                            } | null;
+                            taxBehavior: "exclusive" | null;
+                            contentEdition: {
+                                benefit: {
+                                    kind: "content-edition";
+                                    resourceType: "content.edition";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    version: {
+                                        revisionId: string;
+                                        sha256: string;
+                                    };
+                                    action: "edition:read";
+                                };
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                source: {
+                                    licence: string;
+                                };
+                                saleTermsReference: string;
+                                delivery: "fixed-content-edition";
+                                acquisition: "one-time-account-bound";
+                                quantity: 1;
+                            } | null;
+                            id: string;
+                            offerId: string;
+                            settlement: "failed" | "paid" | "pending" | "unknown";
+                            checkoutUrl: string | null;
+                            checkoutExpiresAt: string | null;
+                            entitlementId: string | null;
+                            createdAt: string;
+                            title: string;
+                            targetSubjectId: string;
+                            offerRevision: number;
+                            currency: string;
+                            unitAmountMinor: number;
+                            taxCode: string;
+                            amountTaxMinor: number | null;
                         }[];
+                        next: string | null;
+                    };
+                    400: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    401: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    403: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    409: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
+                    };
+                    422: Response | {
+                        type: 'validation';
+                        code: 'validation';
+                        title: 'Validation Error';
+                        status: 422;
+                        detail?: string;
+                        on: string;
+                        found?: unknown;
+                        property?: string;
+                        expected?: unknown;
+                        errors?: {
+                            message?: string;
+                            [key: string]: unknown;
+                        }[];
+                    };
+                    503: Response | {
+                        type: unknown;
+                        title: unknown;
+                        status: number;
+                        code: unknown;
+                        retryable: unknown;
+                        effect_status: "not_applicable" | "not_applied";
+                        request_id: string;
+                        detail: unknown;
+                        errors: unknown;
                     };
                 };
                 error: never;
@@ -2980,13 +6609,106 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                     params: {
                         orderId: string;
                     };
-                    query: unknown;
+                    query: {
+                        languages?: string;
+                    };
                     headers: unknown;
                     response: {
                         200: {
                             order: {
+                                moneyUnit: {
+                                    system: "stripe-api";
+                                    exponent: 0 | 2;
+                                    factsVersion: "stripe-money-v1";
+                                } | null;
+                                taxBehavior: "exclusive" | null;
+                                contentEdition: {
+                                    benefit: {
+                                        kind: "content-edition";
+                                        resourceType: "content.edition";
+                                        resource: {
+                                            route: number;
+                                            id: string;
+                                        };
+                                        version: {
+                                            revisionId: string;
+                                            sha256: string;
+                                        };
+                                        action: "edition:read";
+                                    };
+                                    creatorAccountId: string;
+                                    targetSubjectId: string;
+                                    source: {
+                                        licence: string;
+                                    };
+                                    saleTermsReference: string;
+                                    delivery: "fixed-content-edition";
+                                    acquisition: "one-time-account-bound";
+                                    quantity: 1;
+                                } | null;
                                 id: string;
                                 offerId: string;
+                                title: string;
+                                currency: string;
+                                unitAmountMinor: number;
+                                taxCode: string;
+                                amountTaxMinor: number | null;
+                                recordedCharge: {
+                                    currency: string;
+                                    moneyUnit: {
+                                        system: "stripe-api";
+                                        exponent: 0 | 2;
+                                        factsVersion: "stripe-money-v1";
+                                    };
+                                    amountTotalMinor: number;
+                                    amountTaxMinor: number | null;
+                                } | null;
+                                recordedPresentment: {
+                                    currency: string;
+                                    moneyUnit: {
+                                        system: "stripe-api";
+                                        exponent: 0 | 2;
+                                        factsVersion: "stripe-money-v1";
+                                    };
+                                    amountTotalMinor: number;
+                                } | null;
+                                targetSubjectId: string;
+                                subject: {
+                                    id: string;
+                                    type: string;
+                                    types: string[];
+                                    label: {
+                                        value: string;
+                                        language: string;
+                                    } | null;
+                                    creativeWork: boolean;
+                                    cover: {
+                                        media: string;
+                                        width: number;
+                                        height: number;
+                                        placeholder: {
+                                            thumbhash: string;
+                                            color: string;
+                                        };
+                                        variants: {
+                                            format: "avif" | "webp";
+                                            width: number;
+                                        }[];
+                                        focalPoint: {
+                                            x: number;
+                                            y: number;
+                                        } | null;
+                                        credit: {
+                                            rightsHolder: string;
+                                            via: {
+                                                name: string;
+                                                url: string;
+                                            };
+                                            license: string;
+                                            obligations: string[];
+                                        };
+                                    } | null;
+                                } | null;
                                 settlement: "failed" | "paid" | "pending" | "unknown";
                                 checkoutUrl: string | null;
                                 checkoutExpiresAt: string | null;
@@ -2994,7 +6716,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                                 createdAt: string;
                             };
                         };
-                        401: {
+                        400: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3002,13 +6724,47 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        401: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        404: Response | {
+                            type: unknown;
+                            title: unknown;
+                            status: number;
+                            code: unknown;
+                            retryable: unknown;
+                            effect_status: "not_applicable" | "not_applied";
+                            request_id: string;
+                            detail: unknown;
+                            errors: unknown;
+                        };
+                        422: Response | {
+                            type: 'validation';
+                            code: 'validation';
+                            title: 'Validation Error';
+                            status: 422;
                             detail?: string;
+                            on: string;
+                            found?: unknown;
+                            property?: string;
+                            expected?: unknown;
                             errors?: {
-                                pointer: string;
-                                code: never;
+                                message?: string;
+                                [key: string]: unknown;
                             }[];
                         };
-                        404: {
+                        503: Response | {
                             type: unknown;
                             title: unknown;
                             status: number;
@@ -3016,28 +6772,108 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                             retryable: unknown;
                             effect_status: "not_applicable" | "not_applied";
                             request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
-                        };
-                        503: {
-                            type: unknown;
-                            title: unknown;
-                            status: number;
-                            code: unknown;
-                            retryable: unknown;
-                            effect_status: "not_applicable" | "not_applied";
-                            request_id: string;
-                            detail?: string;
-                            errors?: {
-                                pointer: string;
-                                code: never;
-                            }[];
+                            detail: unknown;
+                            errors: unknown;
                         };
                     };
                     error: never;
+                };
+            };
+        };
+    };
+} & {
+    v1: {
+        orders: {
+            ":orderId": {
+                $reconcile: {
+                    post: {
+                        body: object;
+                        params: {
+                            orderId: string;
+                        };
+                        query: unknown;
+                        headers: {
+                            authorization: string;
+                            "idempotency-key": string;
+                        };
+                        response: {
+                            200: Readonly<{
+                                orderId: string;
+                                reconciliation: 'queued';
+                            }>;
+                            202: {
+                                orderId: string;
+                                reconciliation: "queued";
+                            };
+                            400: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            401: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            403: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            404: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            422: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                            503: Response | {
+                                type: unknown;
+                                title: unknown;
+                                status: number;
+                                code: unknown;
+                                retryable: unknown;
+                                effect_status: "not_applicable" | "not_applied";
+                                request_id: string;
+                                detail: unknown;
+                                errors: unknown;
+                            };
+                        };
+                        error: never;
+                    };
                 };
             };
         };
@@ -3056,10 +6892,70 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 response: {
                     200: {
                         entitlements: {
+                            contentEdition: {
+                                benefit: {
+                                    kind: "content-edition";
+                                    resourceType: "content.edition";
+                                    resource: {
+                                        route: number;
+                                        id: string;
+                                    };
+                                    version: {
+                                        revisionId: string;
+                                        sha256: string;
+                                    };
+                                    action: "edition:read";
+                                };
+                                creatorAccountId: string;
+                                targetSubjectId: string;
+                                source: {
+                                    licence: string;
+                                };
+                                saleTermsReference: string;
+                                delivery: "fixed-content-edition";
+                                acquisition: "one-time-account-bound";
+                                quantity: 1;
+                            } | null;
                             id: string;
                             offerId: string;
                             orderId: string;
                             targetSubjectId: string;
+                            summary: {
+                                id: string;
+                                type: string;
+                                types: string[];
+                                label: {
+                                    value: string;
+                                    language: string;
+                                } | null;
+                                creativeWork: boolean;
+                                cover: {
+                                    media: string;
+                                    width: number;
+                                    height: number;
+                                    placeholder: {
+                                        thumbhash: string;
+                                        color: string;
+                                    };
+                                    variants: {
+                                        format: "avif" | "webp";
+                                        width: number;
+                                    }[];
+                                    focalPoint: {
+                                        x: number;
+                                        y: number;
+                                    } | null;
+                                    credit: {
+                                        rightsHolder: string;
+                                        via: {
+                                            name: string;
+                                            url: string;
+                                        };
+                                        license: string;
+                                        obligations: string[];
+                                    };
+                                } | null;
+                            } | null;
                             grantedAt: string;
                             revokedAt: string | null;
                             revokeReason: "dispute" | "refund" | null;
@@ -3067,7 +6963,7 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         }[];
                         next: string | null;
                     };
-                    400: {
+                    400: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -3075,13 +6971,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
-                    401: {
+                    401: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -3089,13 +6982,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
-                    403: {
+                    403: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -3103,13 +6993,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
-                    409: {
+                    409: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -3117,11 +7004,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
                     422: Response | {
                         type: 'validation';
@@ -3132,9 +7016,13 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         on: string;
                         found?: unknown;
                         property?: string;
-                        expected?: string;
+                        expected?: unknown;
+                        errors?: {
+                            message?: string;
+                            [key: string]: unknown;
+                        }[];
                     };
-                    503: {
+                    503: Response | {
                         type: unknown;
                         title: unknown;
                         status: number;
@@ -3142,11 +7030,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                         retryable: unknown;
                         effect_status: "not_applicable" | "not_applied";
                         request_id: string;
-                        detail?: string;
-                        errors?: {
-                            pointer: string;
-                            code: never;
-                        }[];
+                        detail: unknown;
+                        errors: unknown;
                     };
                 };
                 error: never;
@@ -3160,7 +7045,9 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: Actor;
+        readonly actor: import("../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -3179,10 +7066,70 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     response: {
         200: import("typebox").TObject<{
             entitlement: import("typebox").TObject<{
+                contentEdition: import("typebox").TUnion<[import("typebox").TNull, import("typebox").TObject<{
+                    benefit: import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"content-edition">;
+                        resourceType: import("typebox").TLiteral<"content.edition">;
+                        resource: import("typebox").TObject<{
+                            route: import("typebox").TInteger;
+                            id: import("typebox").TString;
+                        }>;
+                        version: import("typebox").TObject<{
+                            revisionId: import("typebox").TString;
+                            sha256: import("typebox").TString;
+                        }>;
+                        action: import("typebox").TLiteral<"edition:read">;
+                    }>;
+                    creatorAccountId: import("typebox").TString;
+                    targetSubjectId: import("typebox").TString;
+                    source: import("typebox").TObject<{
+                        licence: import("typebox").TString;
+                    }>;
+                    saleTermsReference: import("typebox").TString;
+                    delivery: import("typebox").TLiteral<"fixed-content-edition">;
+                    acquisition: import("typebox").TLiteral<"one-time-account-bound">;
+                    quantity: import("typebox").TLiteral<1>;
+                }>]>;
                 id: import("typebox").TString;
                 offerId: import("typebox").TString;
                 orderId: import("typebox").TString;
                 targetSubjectId: import("typebox").TString;
+                summary: import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    type: import("typebox").TString;
+                    types: import("typebox").TArray<import("typebox").TString>;
+                    label: import("typebox").TUnion<[import("typebox").TObject<{
+                        value: import("typebox").TString;
+                        language: import("typebox").TString;
+                    }>, import("typebox").TNull]>;
+                    creativeWork: import("typebox").TBoolean;
+                    cover: import("typebox").TUnion<[import("typebox").TObject<{
+                        media: import("typebox").TString;
+                        width: import("typebox").TInteger;
+                        height: import("typebox").TInteger;
+                        placeholder: import("typebox").TObject<{
+                            thumbhash: import("typebox").TString;
+                            color: import("typebox").TString;
+                        }>;
+                        variants: import("typebox").TArray<import("typebox").TObject<{
+                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                            width: import("typebox").TInteger;
+                        }>>;
+                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                            x: import("typebox").TNumber;
+                            y: import("typebox").TNumber;
+                        }>, import("typebox").TNull]>;
+                        credit: import("typebox").TObject<{
+                            rightsHolder: import("typebox").TString;
+                            via: import("typebox").TObject<{
+                                name: import("typebox").TString;
+                                url: import("typebox").TString;
+                            }>;
+                            license: import("typebox").TString;
+                            obligations: import("typebox").TArray<import("typebox").TString>;
+                        }>;
+                    }>, import("typebox").TNull]>;
+                }>, import("typebox").TNull]>;
                 grantedAt: import("typebox").TString;
                 revokedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 revokeReason: import("typebox").TUnion<[import("typebox").TLiteral<"refund">, import("typebox").TLiteral<"dispute">, import("typebox").TNull]>;
@@ -3195,10 +7142,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3209,10 +7156,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3223,10 +7170,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3250,10 +7197,70 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     status: import("elysia").SelectiveStatus<{
         200: {
             entitlement: {
+                contentEdition: {
+                    benefit: {
+                        kind: "content-edition";
+                        resourceType: "content.edition";
+                        resource: {
+                            route: number;
+                            id: string;
+                        };
+                        version: {
+                            revisionId: string;
+                            sha256: string;
+                        };
+                        action: "edition:read";
+                    };
+                    creatorAccountId: string;
+                    targetSubjectId: string;
+                    source: {
+                        licence: string;
+                    };
+                    saleTermsReference: string;
+                    delivery: "fixed-content-edition";
+                    acquisition: "one-time-account-bound";
+                    quantity: 1;
+                } | null;
                 id: string;
                 offerId: string;
                 orderId: string;
                 targetSubjectId: string;
+                summary: {
+                    id: string;
+                    type: string;
+                    types: string[];
+                    label: {
+                        value: string;
+                        language: string;
+                    } | null;
+                    creativeWork: boolean;
+                    cover: {
+                        media: string;
+                        width: number;
+                        height: number;
+                        placeholder: {
+                            thumbhash: string;
+                            color: string;
+                        };
+                        variants: {
+                            format: "avif" | "webp";
+                            width: number;
+                        }[];
+                        focalPoint: {
+                            x: number;
+                            y: number;
+                        } | null;
+                        credit: {
+                            rightsHolder: string;
+                            via: {
+                                name: string;
+                                url: string;
+                            };
+                            license: string;
+                            obligations: string[];
+                        };
+                    } | null;
+                } | null;
                 grantedAt: string;
                 revokedAt: string | null;
                 revokeReason: "dispute" | "refund" | null;
@@ -3268,11 +7275,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
         404: {
             type: unknown;
@@ -3282,11 +7286,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
         503: {
             type: unknown;
@@ -3296,20 +7297,77 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
     }>;
     problem: import("elysia").SelectiveProblem<{
         200: {
             entitlement: {
+                contentEdition: {
+                    benefit: {
+                        kind: "content-edition";
+                        resourceType: "content.edition";
+                        resource: {
+                            route: number;
+                            id: string;
+                        };
+                        version: {
+                            revisionId: string;
+                            sha256: string;
+                        };
+                        action: "edition:read";
+                    };
+                    creatorAccountId: string;
+                    targetSubjectId: string;
+                    source: {
+                        licence: string;
+                    };
+                    saleTermsReference: string;
+                    delivery: "fixed-content-edition";
+                    acquisition: "one-time-account-bound";
+                    quantity: 1;
+                } | null;
                 id: string;
                 offerId: string;
                 orderId: string;
                 targetSubjectId: string;
+                summary: {
+                    id: string;
+                    type: string;
+                    types: string[];
+                    label: {
+                        value: string;
+                        language: string;
+                    } | null;
+                    creativeWork: boolean;
+                    cover: {
+                        media: string;
+                        width: number;
+                        height: number;
+                        placeholder: {
+                            thumbhash: string;
+                            color: string;
+                        };
+                        variants: {
+                            format: "avif" | "webp";
+                            width: number;
+                        }[];
+                        focalPoint: {
+                            x: number;
+                            y: number;
+                        } | null;
+                        credit: {
+                            rightsHolder: string;
+                            via: {
+                                name: string;
+                                url: string;
+                            };
+                            license: string;
+                            obligations: string[];
+                        };
+                    } | null;
+                } | null;
                 grantedAt: string;
                 revokedAt: string | null;
                 revokeReason: "dispute" | "refund" | null;
@@ -3324,11 +7382,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
         404: {
             type: unknown;
@@ -3338,11 +7393,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
         503: {
             type: unknown;
@@ -3352,11 +7404,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
@@ -3366,10 +7415,70 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         response: {
             200: import("typebox").TObject<{
                 entitlement: import("typebox").TObject<{
+                    contentEdition: import("typebox").TUnion<[import("typebox").TNull, import("typebox").TObject<{
+                        benefit: import("typebox").TObject<{
+                            kind: import("typebox").TLiteral<"content-edition">;
+                            resourceType: import("typebox").TLiteral<"content.edition">;
+                            resource: import("typebox").TObject<{
+                                route: import("typebox").TInteger;
+                                id: import("typebox").TString;
+                            }>;
+                            version: import("typebox").TObject<{
+                                revisionId: import("typebox").TString;
+                                sha256: import("typebox").TString;
+                            }>;
+                            action: import("typebox").TLiteral<"edition:read">;
+                        }>;
+                        creatorAccountId: import("typebox").TString;
+                        targetSubjectId: import("typebox").TString;
+                        source: import("typebox").TObject<{
+                            licence: import("typebox").TString;
+                        }>;
+                        saleTermsReference: import("typebox").TString;
+                        delivery: import("typebox").TLiteral<"fixed-content-edition">;
+                        acquisition: import("typebox").TLiteral<"one-time-account-bound">;
+                        quantity: import("typebox").TLiteral<1>;
+                    }>]>;
                     id: import("typebox").TString;
                     offerId: import("typebox").TString;
                     orderId: import("typebox").TString;
                     targetSubjectId: import("typebox").TString;
+                    summary: import("typebox").TUnion<[import("typebox").TObject<{
+                        id: import("typebox").TString;
+                        type: import("typebox").TString;
+                        types: import("typebox").TArray<import("typebox").TString>;
+                        label: import("typebox").TUnion<[import("typebox").TObject<{
+                            value: import("typebox").TString;
+                            language: import("typebox").TString;
+                        }>, import("typebox").TNull]>;
+                        creativeWork: import("typebox").TBoolean;
+                        cover: import("typebox").TUnion<[import("typebox").TObject<{
+                            media: import("typebox").TString;
+                            width: import("typebox").TInteger;
+                            height: import("typebox").TInteger;
+                            placeholder: import("typebox").TObject<{
+                                thumbhash: import("typebox").TString;
+                                color: import("typebox").TString;
+                            }>;
+                            variants: import("typebox").TArray<import("typebox").TObject<{
+                                format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                                width: import("typebox").TInteger;
+                            }>>;
+                            focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                                x: import("typebox").TNumber;
+                                y: import("typebox").TNumber;
+                            }>, import("typebox").TNull]>;
+                            credit: import("typebox").TObject<{
+                                rightsHolder: import("typebox").TString;
+                                via: import("typebox").TObject<{
+                                    name: import("typebox").TString;
+                                    url: import("typebox").TString;
+                                }>;
+                                license: import("typebox").TString;
+                                obligations: import("typebox").TArray<import("typebox").TString>;
+                            }>;
+                        }>, import("typebox").TNull]>;
+                    }>, import("typebox").TNull]>;
                     grantedAt: import("typebox").TString;
                     revokedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                     revokeReason: import("typebox").TUnion<[import("typebox").TLiteral<"refund">, import("typebox").TLiteral<"dispute">, import("typebox").TNull]>;
@@ -3382,10 +7491,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
@@ -3396,10 +7505,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
@@ -3410,10 +7519,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
@@ -3432,7 +7541,9 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: Actor;
+            readonly actor: import("../request/access.ts").AccountActor | {
+                kind: 'anonymous';
+            };
             readonly session: {
                 readonly components: import("../tokens/session.ts").SessionComponent[];
                 record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -3458,7 +7569,9 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: Actor;
+    readonly actor: import("../request/access.ts").AccountActor | {
+        kind: 'anonymous';
+    };
     readonly session: {
         readonly components: import("../tokens/session.ts").SessionComponent[];
         record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -3475,6 +7588,19 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         revokedAt: string | null;
         revokeReason: import("./model.ts").RevokeReason | null;
         active: boolean;
+        contentEdition: {
+            source: {
+                licence: string;
+            };
+            benefit: import("./model.ts").ContentEditionBenefit;
+            creatorAccountId: string;
+            targetSubjectId: string;
+            saleTermsReference: string;
+            delivery: 'fixed-content-edition';
+            acquisition: 'one-time-account-bound';
+            quantity: 1;
+        } | null;
+        summary: SubjectSummary | null;
     };
 }>, {
     params: import("typebox").TObject<{
@@ -3483,10 +7609,70 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
     response: {
         200: import("typebox").TObject<{
             entitlement: import("typebox").TObject<{
+                contentEdition: import("typebox").TUnion<[import("typebox").TNull, import("typebox").TObject<{
+                    benefit: import("typebox").TObject<{
+                        kind: import("typebox").TLiteral<"content-edition">;
+                        resourceType: import("typebox").TLiteral<"content.edition">;
+                        resource: import("typebox").TObject<{
+                            route: import("typebox").TInteger;
+                            id: import("typebox").TString;
+                        }>;
+                        version: import("typebox").TObject<{
+                            revisionId: import("typebox").TString;
+                            sha256: import("typebox").TString;
+                        }>;
+                        action: import("typebox").TLiteral<"edition:read">;
+                    }>;
+                    creatorAccountId: import("typebox").TString;
+                    targetSubjectId: import("typebox").TString;
+                    source: import("typebox").TObject<{
+                        licence: import("typebox").TString;
+                    }>;
+                    saleTermsReference: import("typebox").TString;
+                    delivery: import("typebox").TLiteral<"fixed-content-edition">;
+                    acquisition: import("typebox").TLiteral<"one-time-account-bound">;
+                    quantity: import("typebox").TLiteral<1>;
+                }>]>;
                 id: import("typebox").TString;
                 offerId: import("typebox").TString;
                 orderId: import("typebox").TString;
                 targetSubjectId: import("typebox").TString;
+                summary: import("typebox").TUnion<[import("typebox").TObject<{
+                    id: import("typebox").TString;
+                    type: import("typebox").TString;
+                    types: import("typebox").TArray<import("typebox").TString>;
+                    label: import("typebox").TUnion<[import("typebox").TObject<{
+                        value: import("typebox").TString;
+                        language: import("typebox").TString;
+                    }>, import("typebox").TNull]>;
+                    creativeWork: import("typebox").TBoolean;
+                    cover: import("typebox").TUnion<[import("typebox").TObject<{
+                        media: import("typebox").TString;
+                        width: import("typebox").TInteger;
+                        height: import("typebox").TInteger;
+                        placeholder: import("typebox").TObject<{
+                            thumbhash: import("typebox").TString;
+                            color: import("typebox").TString;
+                        }>;
+                        variants: import("typebox").TArray<import("typebox").TObject<{
+                            format: import("typebox").TUnion<[import("typebox").TLiteral<"avif">, import("typebox").TLiteral<"webp">]>;
+                            width: import("typebox").TInteger;
+                        }>>;
+                        focalPoint: import("typebox").TUnion<[import("typebox").TObject<{
+                            x: import("typebox").TNumber;
+                            y: import("typebox").TNumber;
+                        }>, import("typebox").TNull]>;
+                        credit: import("typebox").TObject<{
+                            rightsHolder: import("typebox").TString;
+                            via: import("typebox").TObject<{
+                                name: import("typebox").TString;
+                                url: import("typebox").TString;
+                            }>;
+                            license: import("typebox").TString;
+                            obligations: import("typebox").TArray<import("typebox").TString>;
+                        }>;
+                    }>, import("typebox").TNull]>;
+                }>, import("typebox").TNull]>;
                 grantedAt: import("typebox").TString;
                 revokedAt: import("typebox").TUnion<[import("typebox").TString, import("typebox").TNull]>;
                 revokeReason: import("typebox").TUnion<[import("typebox").TLiteral<"refund">, import("typebox").TLiteral<"dispute">, import("typebox").TNull]>;
@@ -3499,10 +7685,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3513,10 +7699,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3527,10 +7713,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3580,7 +7766,9 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             deadline: number;
             signal: AbortSignal;
         };
-        readonly actor: Actor;
+        readonly actor: import("../request/access.ts").AccountActor | {
+            kind: 'anonymous';
+        };
         readonly session: {
             readonly components: import("../tokens/session.ts").SessionComponent[];
             record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -3608,10 +7796,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3622,10 +7810,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3652,11 +7840,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
         503: {
             type: unknown;
@@ -3666,11 +7851,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
     }>;
     problem: import("elysia").SelectiveProblem<{
@@ -3685,11 +7867,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
         503: {
             type: unknown;
@@ -3699,11 +7878,8 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             retryable: unknown;
             effect_status: "not_applicable" | "not_applied";
             request_id: string;
-            detail?: string;
-            errors?: {
-                pointer: string;
-                code: never;
-            }[];
+            detail: unknown;
+            errors: unknown;
         };
     }>;
     defer: (fn: import("elysia/types").AfterResponseHandler<NoInfer<import("elysia/types").IntersectIfObjectSchema<import("elysia").UnwrapRoute<{
@@ -3722,10 +7898,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
@@ -3736,10 +7912,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 status: import("typebox").TLiteral<number>;
                 code: import("typebox").TSchema;
                 retryable: import("typebox").TSchema;
-                effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+                effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
                 request_id: import("typebox").TString;
-                detail: import("typebox").TOptional<import("typebox").TString>;
-                errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+                detail?: import("typebox").TOptional<import("typebox").TString>;
+                errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                     pointer: import("typebox").TString;
                     code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
                 }>>>;
@@ -3752,7 +7928,9 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
                 deadline: number;
                 signal: AbortSignal;
             };
-            readonly actor: Actor;
+            readonly actor: import("../request/access.ts").AccountActor | {
+                kind: 'anonymous';
+            };
             readonly session: {
                 readonly components: import("../tokens/session.ts").SessionComponent[];
                 record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -3776,7 +7954,9 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
         deadline: number;
         signal: AbortSignal;
     };
-    readonly actor: Actor;
+    readonly actor: import("../request/access.ts").AccountActor | {
+        kind: 'anonymous';
+    };
     readonly session: {
         readonly components: import("../tokens/session.ts").SessionComponent[];
         record(component: import("../tokens/session.ts").SessionComponent): void;
@@ -3801,10 +7981,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;
@@ -3815,10 +7995,10 @@ export declare function commerceRoutes(app: ReturnType<typeof definitionRoutes>,
             status: import("typebox").TLiteral<number>;
             code: import("typebox").TSchema;
             retryable: import("typebox").TSchema;
-            effect_status: import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
+            effect_status: import("typebox").TLiteral<"not_applied"> | import("typebox").TUnion<[import("typebox").TLiteral<"not_applicable">, import("typebox").TLiteral<"not_applied">]>;
             request_id: import("typebox").TString;
-            detail: import("typebox").TOptional<import("typebox").TString>;
-            errors: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
+            detail?: import("typebox").TOptional<import("typebox").TString>;
+            errors?: import("typebox").TOptional<import("typebox").TArray<import("typebox").TObject<{
                 pointer: import("typebox").TString;
                 code: import("typebox").TUnion<import("typebox").TLiteral<string>[]>;
             }>>>;

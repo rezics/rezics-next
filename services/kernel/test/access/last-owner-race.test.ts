@@ -2,12 +2,13 @@ import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { MembershipWorkInput, MembershipWorkReservation } from '@rezics/auth-contract';
 import { createPool } from '../../src/database/pool.ts';
-import { createLifecycleInternals, LifecycleDeniedError } from '../../src/access/lifecycle.ts';
+import { createLifecycleInternals, LIFECYCLE_ACTIONS, LifecycleDeniedError } from '../../src/access/lifecycle.ts';
 import { createMembershipWorkPorts } from '../../src/access/membership-work.ts';
 import ownersRead from '../../src/access/lifecycle-owners.sql';
 import commandTime from '../../src/command/time.sql';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { authenticated } from './membership-work-fixture.ts';
+import { admittedAccess } from '../support/admitted-access.ts';
 
 const pool = createPool(process.env.DATABASE_URL!);
 const env = { KERNEL_ROUTE_KEY: Buffer.alloc(32, 59).toString('base64url') };
@@ -19,8 +20,12 @@ const native = createLifecycleInternals({
 });
 const key = () => randomUUID();
 
-function ports(connection: typeof pool, actor: string) {
-  return createMembershipWorkPorts({ pool: connection, env }, { authorize: async () => authenticated(pool, actor) });
+function ports(connection: typeof pool, actor: string, scopes?: readonly string[]) {
+  const access = admittedAccess({ actions: new Map(LIFECYCLE_ACTIONS) });
+  return createMembershipWorkPorts(
+    { pool: connection, env },
+    { access, authorize: async () => authenticated(connection, actor, access, scopes) },
+  );
 }
 
 async function fixture(twoOwners = true) {
@@ -73,7 +78,11 @@ async function fixture(twoOwners = true) {
 // Like the process-death fixture, wrap the real native publication boundary.
 // Observe SQL results on its real client so a barrier can hold the transaction
 // after its owner check without replacing any check, write or lock.
-function boundaryPool(hooks: { sampled?(at: string): Promise<void>; checked?(): Promise<void> }) {
+function boundaryPool(hooks: {
+  attempt?(at: string): void;
+  sampled?(at: string): Promise<void>;
+  checked?(): Promise<void>;
+}) {
   const connection = createPool(process.env.DATABASE_URL!);
   connection.on('connect', (client) => {
     client.query = new Proxy(client.query, {
@@ -83,6 +92,7 @@ function boundaryPool(hooks: { sampled?(at: string): Promise<void>; checked?(): 
         if (sql !== commandTime.sql && sql !== ownersRead.sql) return Reflect.apply(query, receiver, args);
         return (async () => {
           const result = await Reflect.apply(query, receiver, args);
+          if (sql === commandTime.sql) hooks.attempt?.(result.rows[0].at);
           if (sql === commandTime.sql && hooks.sampled) {
             const sampled = hooks.sampled;
             delete hooks.sampled;
@@ -178,4 +188,39 @@ test('a sole owner cannot leave, including a repeated native attempt', async () 
     await expect(f.publish(boundary, f.held, null)).rejects.toBeInstanceOf(LifecycleDeniedError);
     expect(await f.owners()).toEqual([{ member_account_id: f.first }]);
   }
+});
+
+test('a lifecycle retry is admitted with fresh evidence and commits its membership change once', async () => {
+  const f = await fixture();
+  const times: string[] = [];
+  const connection = boundaryPool({
+    attempt: (at) => times.push(at),
+    async checked() {
+      // The real admission, permission formula, locks and owner check succeeded.
+      // Roll back that attempt through the executor's serialization retry path.
+      throw Object.assign(new Error('Retry membership publication'), { code: '40001' });
+    },
+  });
+  try {
+    await f.publish(ports(connection, f.first), f.other, 'member');
+    expect(times).toHaveLength(2);
+    expect(times[0]).not.toBe(times[1]);
+    expect(await f.owners()).toEqual([{ member_account_id: f.first }]);
+    const result = await pool.query(
+      `SELECT role FROM access.organization_member
+       WHERE route=$1 AND organization_id=$2 AND member_account_id=$3 ORDER BY lower(valid)`,
+      [routeOf(f.organizationId), f.organizationId, f.second],
+    );
+    expect(result.rows).toEqual([{ role: 'owner' }, { role: 'member' }]);
+  } finally {
+    await connection.end();
+  }
+});
+
+test('an authenticated owner without the membership permission is still denied', async () => {
+  const f = await fixture();
+  await expect(f.publish(ports(pool, f.first, ['account:read']), f.other, 'member')).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  expect(await f.owners()).toHaveLength(2);
 });

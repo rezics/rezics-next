@@ -1,3 +1,4 @@
+import { systemClock, type KernelClock } from '../clock.ts';
 import type { AccessClient } from '../request/access.ts';
 import { normalizeHandle } from './lifecycle.ts';
 import read from './handle-holder.sql';
@@ -11,9 +12,10 @@ function handleRoute(normalized: string): number {
 export async function handleHolder(
   client: AccessClient,
   normalized: string,
+  clock: KernelClock = systemClock,
 ): Promise<Readonly<{ accountId: string; state: 'active' | 'reserved' }> | null> {
   if (normalizeHandle(normalized) !== normalized) throw new TypeError('A normalized handle is required');
-  const row = await read.run(client, { route: handleRoute(normalized), handle: normalized });
-  if (!row || row.state === 'pending') return null;
+  const row = await read.run(client, { route: handleRoute(normalized), handle: normalized, at: clock().toISOString() });
+  if (!row || row.accountId === null || (row.state !== 'active' && row.state !== 'reserved')) return null;
   return { accountId: row.accountId, state: row.state };
 }

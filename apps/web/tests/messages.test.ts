@@ -26,5 +26,9 @@ test("every locale's site messages have the same keys, sorted by key", () => {
     const keys = Object.keys(messages);
     expect(keys, `${locale} keys are sorted`).toEqual(sortedKeys(keys));
     expect(sortedKeys(keys), `${locale} keys match English`).toEqual(expectedKeys);
+    expect(
+      typeof messages.library_copy_more_actions === 'string' && Boolean(messages.library_copy_more_actions.trim()),
+      `${locale} copy more-actions label`,
+    ).toBe(true);
   }
 });

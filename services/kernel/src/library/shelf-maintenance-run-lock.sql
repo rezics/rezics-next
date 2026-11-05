@@ -1,0 +1,1 @@
+SELECT run_id AS "runId",epoch,sequence,segment,kind,phase,cursor,build_generation AS "buildGeneration",enqueue_pending AS "enqueuePending",cancelled FROM library.shelf_maintenance_run WHERE route=:route::integer AND account_id=:account_id::uuid AND run_id=:run_id::uuid FOR UPDATE;

@@ -1,8 +1,59 @@
+import {
+  checkedAdd,
+  checkedMultiply,
+  checkedSubtract,
+  requireDenseArray,
+  requireNonNegativeFiniteNumber,
+  sumFinite,
+} from './growth-numeric.ts';
+import { indexCteScopes, unscannedCteBlocks, type CteBlocks } from './growth-cte-cost.ts';
+import {
+  createPlanWalkSession,
+  explainPlanEntries,
+  walkPlanTree,
+  type PlanNode,
+  type PlanWalkSession,
+} from './growth-plan-walk.ts';
+import { classifyGrowthSql } from './growth-sql-kind.ts';
+import { validateCaptureEvidence } from './growth-capture-evidence.ts';
+import {
+  keyedRelationEntries,
+  relationIdentityKey,
+  relationIdentityLabel,
+  relationRecordKeys,
+  type RelationIdentity,
+} from './growth-relation-identity.ts';
+import type { CostFoldedCapture } from './growth-cost-fold.ts';
+
 export type Capture = {
   readonly statements: readonly string[];
+  /** Elapsed operation time, including outstanding queries drained before capture returns. */
+  readonly elapsedMs?: number;
+  readonly requestBytes?: readonly number[];
+  readonly responseBytes?: readonly number[];
   readonly plans: readonly unknown[];
+  /** Statement occurrence index parallel to each plan. */
+  readonly planStatements?: readonly (number | undefined)[];
+  readonly statementErrors?: readonly (string | null)[];
+  readonly statementErrorMessages?: readonly (string | null)[];
+  /** Backend process ID parallel to each statement and plan when capture(..., { includeBackends: true }) is used. */
+  readonly statementBackends?: readonly (number | undefined)[];
+  readonly planBackends?: readonly (number | undefined)[];
+  /** PostgreSQL database name parallel to each plan, retained by the capture harness. */
+  readonly planDatabases?: readonly (string | undefined)[];
   readonly backgroundStatements?: readonly string[];
+  readonly backgroundRequestBytes?: readonly number[];
+  readonly backgroundResponseBytes?: readonly number[];
   readonly backgroundPlans?: readonly unknown[];
+  /** Background statement occurrence index parallel to each background plan. */
+  readonly backgroundPlanStatements?: readonly (number | undefined)[];
+  readonly backgroundStatementErrors?: readonly (string | null)[];
+  readonly backgroundStatementErrorMessages?: readonly (string | null)[];
+  /** Backend process ID parallel to each background statement and plan, when backends are included. */
+  readonly backgroundStatementBackends?: readonly (number | undefined)[];
+  readonly backgroundPlanBackends?: readonly (number | undefined)[];
+  /** PostgreSQL database name parallel to each background plan. */
+  readonly backgroundPlanDatabases?: readonly (string | undefined)[];
 };
 
 export type RelationCost = {
@@ -10,10 +61,14 @@ export type RelationCost = {
   readonly blocks: number;
   readonly nodes: number;
   readonly sequentialScans: number;
+  readonly identity?: RelationIdentity;
 };
 
 export type Cost = {
   readonly statements: number;
+  readonly requestBytes?: number;
+  readonly responseBytes?: number;
+  readonly failedStatements?: Readonly<Record<string, number>>;
   readonly controlStatements: number;
   readonly catalogStatements: number;
   readonly plans: number;
@@ -21,21 +76,51 @@ export type Cost = {
   readonly blocks: number;
   readonly sharedHit: number;
   readonly sharedRead: number;
+  /** Native CTE scan relationships that could not be paired safely during buffer accounting. */
+  readonly limitations?: readonly string[];
   readonly relations: Readonly<Record<string, RelationCost>>;
   readonly backgroundStatements?: number;
+  readonly backgroundRequestBytes?: number;
+  readonly backgroundResponseBytes?: number;
   readonly backgroundRows?: number;
   readonly backgroundBlocks?: number;
   readonly backgroundCosts?: Readonly<
-    Record<string, { readonly rows: number; readonly blocks: number; readonly bounded: boolean }>
+    Record<
+      string,
+      {
+        readonly rows: number;
+        readonly blocks: number;
+        readonly bounded: boolean;
+        readonly relationIdentities?: readonly RelationIdentity[];
+      }
+    >
   >;
 };
 
-type PlanNode = Record<string, unknown>;
 type NodeTotals = { readonly rows: number; readonly inclusiveHit: number; readonly inclusiveRead: number };
-type MutableRelationCost = { rows: number; blocks: number; nodes: number; sequentialScans: number };
-type Blocks = { hit: number; read: number };
-/** Per CTE name: the producer's inclusive blocks, and the exclusive blocks of the `CTE Scan` nodes that read it. */
-type CteBlocks = { readonly producers: Map<string, Blocks>; readonly scans: Map<string, Blocks> };
+type MutableRelationCost = {
+  readonly identity: RelationIdentity;
+  rows: number;
+  blocks: number;
+  nodes: number;
+  sequentialScans: number;
+};
+type RelationContext = { readonly schema?: string };
+type Blame = { blocks: number; rows: number; name: string | undefined };
+
+export type PlanCostProjection = {
+  readonly rows: number;
+  readonly blocks: number;
+  readonly sharedHit: number;
+  readonly sharedRead: number;
+  readonly limitations: readonly string[];
+  readonly relationIdentities: readonly RelationIdentity[];
+  readonly node?: string;
+};
+
+export type PlanCostEvidence = PlanCostProjection & {
+  readonly relationCosts: readonly RelationCost[];
+};
 
 const rowScans = new Set([
   'Seq Scan',
@@ -48,9 +133,7 @@ const rowScans = new Set([
 ]);
 
 export function isControlStatement(text: string): boolean {
-  return /^\s*(?:BEGIN|START\s+TRANSACTION|COMMIT|END|ABORT|ROLLBACK|SAVEPOINT|RELEASE|SET\s+LOCAL|SET\s+TRANSACTION)\b/i.test(
-    text,
-  );
+  return classifyGrowthSql(text) !== 'statement';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -59,252 +142,830 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function requiredNumber(node: PlanNode, field: string): number {
   const value = node[field];
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw new TypeError(`Plan node is missing ${field}`);
+  requireNonNegativeFiniteNumber(value, `Plan node ${field}`);
   return value;
 }
 
 function optionalNumber(node: PlanNode, field: string, fallback = 0): number {
   const value = node[field];
   if (value === undefined) return fallback;
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw new TypeError(`Plan node has invalid ${field}`);
+  requireNonNegativeFiniteNumber(value, `Plan node ${field}`);
   return value;
 }
 
-type PlanEntry = { readonly queryText: string | undefined; readonly plan: PlanNode };
-
-function documentEntries(document: unknown): PlanEntry[] {
-  if (Array.isArray(document)) {
-    if (document.length === 0) throw new TypeError('EXPLAIN plan document is empty');
-    return document.map((entry) => {
-      if (!isRecord(entry) || !isRecord(entry.Plan)) throw new TypeError('EXPLAIN plan document has no Plan');
-      return {
-        queryText: typeof entry['Query Text'] === 'string' ? entry['Query Text'] : undefined,
-        plan: entry.Plan,
-      };
-    });
-  }
-  if (isRecord(document) && typeof document['Query Text'] === 'string' && isRecord(document.Plan))
-    return [{ queryText: document['Query Text'], plan: document.Plan }];
-  throw new TypeError('Unrecognized plan document');
-}
-
-function isCatalogOnlyPlan(root: PlanNode): boolean {
+export function isCatalogOnlyPlan(root: PlanNode, location: string, session: PlanWalkSession): boolean {
   let hasRelation = false;
   let catalogOnly = true;
-  const visit = (node: PlanNode): void => {
+  for (const { node } of walkPlanTree(root, location, 'preorder', session)) {
     if (typeof node['Relation Name'] === 'string') {
       hasRelation = true;
       catalogOnly = catalogOnly && (node.Schema === 'pg_catalog' || node.Schema === 'information_schema');
     }
-    const children = node.Plans;
-    if (children !== undefined && !Array.isArray(children)) throw new TypeError('Plan node Plans must be an array');
-    for (const child of children ?? []) {
-      if (!isRecord(child)) throw new TypeError('Plan child must be an object');
-      visit(child);
-    }
-  };
-  visit(root);
+  }
   return hasRelation && catalogOnly;
 }
 
 export type CatalogClassification = {
   readonly catalogTexts: ReadonlySet<string>;
+  /** JSON encoded [backend PID, query text] keys; used when backend metadata is present. */
+  readonly catalogKeys: ReadonlySet<string>;
+  readonly backendAware: boolean;
   readonly catalogStatements: number;
+  readonly freshnessProbes: number;
   readonly allowedStatements: number;
   readonly firstCatalogStatement: string | undefined;
 };
+const nativeCatalogOccurrences = new WeakMap<CatalogClassification, ReadonlySet<number>>();
 
-function classifyCatalogStatements(capture: Capture): CatalogClassification {
-  const entries = capture.plans.flatMap((document) => documentEntries(document));
-  const nonControlStatements = capture.statements.filter((statement) => !isControlStatement(statement));
-  const clientTexts = new Set(nonControlStatements);
-  const plansByText = new Map<string, PlanEntry[]>();
-  for (const entry of entries) {
-    if (entry.queryText === undefined || !clientTexts.has(entry.queryText)) continue;
-    const plans = plansByText.get(entry.queryText) ?? [];
-    plans.push(entry);
-    plansByText.set(entry.queryText, plans);
-  }
-
-  const catalogTexts = new Set<string>();
-  for (const [text, plans] of plansByText) {
-    if (plans.length > 0 && plans.every(({ plan }) => isCatalogOnlyPlan(plan))) catalogTexts.add(text);
-  }
-
-  const catalogStatements = nonControlStatements.filter((statement) => catalogTexts.has(statement)).length;
-  const nonCatalogTexts = new Set(nonControlStatements.filter((statement) => !catalogTexts.has(statement)));
-  const firstCatalogStatement = nonControlStatements.find((statement) => catalogTexts.has(statement));
-  return {
-    catalogTexts,
-    catalogStatements,
-    allowedStatements: nonCatalogTexts.size,
-    firstCatalogStatement,
-  };
+function isFreshnessProbeText(text: string): boolean {
+  return [/\bAS\s+fresh_table\b/i, /\bAS\s+fresh_column\b/i, /\bAS\s+fresh_type\b/i].every((alias) => alias.test(text));
 }
 
-export function catalogStatementBound(capture: Capture): CatalogClassification {
+const reyloFreshnessIntervalMs = 60_000;
+
+function isCostFoldedCapture(capture: Capture | CostFoldedCapture): capture is CostFoldedCapture {
+  return 'kind' in capture && capture.kind === 'growth-cost-folded';
+}
+
+function classifyFoldedCatalogStatements(capture: CostFoldedCapture): CatalogClassification {
+  const backendAware = capture.statementBackends !== undefined;
+  const catalogIndexes = new Set(
+    capture.foregroundOccurrences
+      .filter(({ catalogOnly, index }) => catalogOnly && !isControlStatement(capture.statements[index] ?? ''))
+      .map(({ index }) => index),
+  );
+  const catalogTexts = new Set<string>();
+  const catalogKeys = new Set<string>();
+  const catalogOnlyByText = new Map<string, boolean>();
+  const catalogOnlyByKey = new Map<string, boolean>();
+  const textByKey = new Map<string, string>();
+  const nonCatalogTexts = new Set<string>();
+  const nonCatalogTextsByBackend = new Map<number | undefined, Set<string>>();
+  for (let index = 0; index < capture.statements.length; index++) {
+    const text = capture.statements[index]!;
+    if (isControlStatement(text)) continue;
+    const backend = capture.statementBackends?.[index];
+    const key = catalogKey(backendAware, backend, text);
+    const catalogOnly = catalogIndexes.has(index);
+    catalogOnlyByText.set(text, (catalogOnlyByText.get(text) ?? true) && catalogOnly);
+    catalogOnlyByKey.set(key, (catalogOnlyByKey.get(key) ?? true) && catalogOnly);
+    textByKey.set(key, text);
+    if (!catalogOnly) {
+      nonCatalogTexts.add(text);
+      const texts = nonCatalogTextsByBackend.get(backendAware ? backend : undefined) ?? new Set<string>();
+      texts.add(text);
+      nonCatalogTextsByBackend.set(backendAware ? backend : undefined, texts);
+    }
+  }
+  for (const [key, catalogOnly] of catalogOnlyByKey) if (catalogOnly) catalogKeys.add(key);
+  for (const [text, catalogOnly] of catalogOnlyByText) if (catalogOnly) catalogTexts.add(text);
+  if (capture.elapsedMs !== undefined) requireNonNegativeFiniteNumber(capture.elapsedMs, 'Capture duration');
+  const freshnessWindows = Math.floor(capture.elapsedMs / reyloFreshnessIntervalMs) + 1;
+  const freshnessAllowance = [...nonCatalogTextsByBackend.values()].reduce(
+    (total, texts) =>
+      checkedAdd(
+        total,
+        checkedMultiply(texts.size, freshnessWindows, 'Reylo freshness allowance'),
+        'Allowed catalog statements',
+      ),
+    0,
+  );
+  const catalogStatements = capture.statements.filter((_, index) => catalogIndexes.has(index)).length;
+  const freshnessProbes = capture.statements.filter(
+    (text, index) => catalogIndexes.has(index) && isFreshnessProbeText(text),
+  ).length;
+  const firstCatalogStatement = capture.statements.find((_, index) => catalogIndexes.has(index));
+  const classification: CatalogClassification = {
+    catalogTexts,
+    catalogKeys,
+    backendAware,
+    catalogStatements,
+    freshnessProbes,
+    allowedStatements: checkedAdd(nonCatalogTexts.size, freshnessAllowance, 'Allowed catalog statements'),
+    firstCatalogStatement,
+  };
+  nativeCatalogOccurrences.set(classification, catalogIndexes);
+  return classification;
+}
+
+function classifyCatalogStatements(
+  capture: Capture,
+  planCollection = 'plans',
+  session = createPlanWalkSession(),
+): CatalogClassification {
+  const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
+  const statementEntries = capture.statements.flatMap((text, index) =>
+    !isControlStatement(text) ? [{ index, text, backend: capture.statementBackends?.[index] }] : [],
+  );
+  const catalogTexts = new Set<string>();
+  const catalogKeys = new Set<string>();
+  const catalogStatementIndexes = new Set<number>();
+  const freshnessProbeKeys = new Set<string>();
+  const catalogOnlyByText = new Map<string, boolean>();
+  if (capture.planStatements !== undefined) {
+    const plansByStatement = new Map<number, ReturnType<typeof explainPlanEntries>>();
+    const catalogOnlyByKey = new Map<string, boolean>();
+    const textByKey = new Map<string, string>();
+    for (let planIndex = 0; planIndex < capture.plans.length; planIndex++) {
+      const owner = capture.planStatements[planIndex];
+      if (owner === undefined || !Number.isInteger(owner) || owner < 0 || owner >= capture.statements.length) continue;
+      const plans = plansByStatement.get(owner) ?? [];
+      plans.push(...explainPlanEntries(capture.plans[planIndex], `${planCollection}[${planIndex}]`));
+      plansByStatement.set(owner, plans);
+    }
+    for (const { index, text, backend } of statementEntries) {
+      const plans = plansByStatement.get(index);
+      const key = catalogKey(backendAware, backend, text);
+      const catalogOnly =
+        plans !== undefined &&
+        plans.length > 0 &&
+        plans.every(({ plan, location }) => isCatalogOnlyPlan(plan, location, session));
+      catalogOnlyByText.set(text, (catalogOnlyByText.get(text) ?? true) && catalogOnly);
+      catalogOnlyByKey.set(key, (catalogOnlyByKey.get(key) ?? true) && catalogOnly);
+      textByKey.set(key, text);
+      if (catalogOnly) {
+        catalogStatementIndexes.add(index);
+      }
+    }
+    for (const [key, catalogOnly] of catalogOnlyByKey)
+      if (catalogOnly) {
+        catalogKeys.add(key);
+        if (isFreshnessProbeText(textByKey.get(key)!)) freshnessProbeKeys.add(key);
+      }
+    for (const [text, catalogOnly] of catalogOnlyByText) if (catalogOnly) catalogTexts.add(text);
+  } else {
+    const clientKeys = new Set(statementEntries.map(({ text, backend }) => catalogKey(backendAware, backend, text)));
+    const plansByKey = new Map<string, ReturnType<typeof explainPlanEntries>>();
+    for (let index = 0; index < capture.plans.length; index++) {
+      const backend = capture.planBackends?.[index];
+      for (const entry of explainPlanEntries(capture.plans[index], `${planCollection}[${index}]`)) {
+        if (entry.queryText === undefined) continue;
+        const key = catalogKey(backendAware, backend, entry.queryText);
+        if (!clientKeys.has(key)) continue;
+        const plans = plansByKey.get(key) ?? [];
+        plans.push(entry);
+        plansByKey.set(key, plans);
+      }
+    }
+    for (const [key, plans] of plansByKey) {
+      const queryText = plans[0]!.queryText!;
+      const catalogOnly =
+        plans.length > 0 && plans.every(({ plan, location }) => isCatalogOnlyPlan(plan, location, session));
+      if (catalogOnly) {
+        catalogKeys.add(key);
+        if (isFreshnessProbeText(queryText)) freshnessProbeKeys.add(key);
+      }
+      catalogOnlyByText.set(queryText, (catalogOnlyByText.get(queryText) ?? true) && catalogOnly);
+    }
+    for (const [text, catalogOnly] of catalogOnlyByText) if (catalogOnly) catalogTexts.add(text);
+    for (const { index, text, backend } of statementEntries)
+      if (catalogKeys.has(catalogKey(backendAware, backend, text))) catalogStatementIndexes.add(index);
+  }
+
+  const isCatalogOccurrence = ({ index, text, backend }: (typeof statementEntries)[number]) =>
+    capture.planStatements !== undefined
+      ? catalogStatementIndexes.has(index)
+      : catalogKeys.has(catalogKey(backendAware, backend, text));
+  const nonCatalogTexts = new Set<string>();
+  const nonCatalogTextsByBackend = new Map<number | undefined, Set<string>>();
+  for (const entry of statementEntries) {
+    if (isCatalogOccurrence(entry)) continue;
+    nonCatalogTexts.add(entry.text);
+    const backend = backendAware ? entry.backend : undefined;
+    const texts = nonCatalogTextsByBackend.get(backend) ?? new Set<string>();
+    texts.add(entry.text);
+    nonCatalogTextsByBackend.set(backend, texts);
+  }
+  if (capture.elapsedMs !== undefined) requireNonNegativeFiniteNumber(capture.elapsedMs, 'Capture duration');
+  const elapsedMs = capture.elapsedMs ?? 0;
+  const freshnessWindows = Math.floor(elapsedMs / reyloFreshnessIntervalMs) + 1;
+  const freshnessAllowance = [...nonCatalogTextsByBackend.values()].reduce(
+    (total, texts) =>
+      checkedAdd(
+        total,
+        checkedMultiply(texts.size, freshnessWindows, 'Reylo freshness allowance'),
+        'Reylo freshness allowance',
+      ),
+    0,
+  );
+  const catalogStatements = statementEntries.filter(isCatalogOccurrence).length;
+  const freshnessProbes = statementEntries.filter(({ index, text, backend }) =>
+    capture.planStatements !== undefined
+      ? catalogStatementIndexes.has(index) && isFreshnessProbeText(text)
+      : freshnessProbeKeys.has(catalogKey(backendAware, backend, text)),
+  ).length;
+  const firstCatalogStatement = statementEntries.find(isCatalogOccurrence)?.text;
+  const classification: CatalogClassification = {
+    catalogTexts,
+    catalogKeys,
+    backendAware,
+    catalogStatements,
+    freshnessProbes,
+    allowedStatements: checkedAdd(nonCatalogTexts.size, freshnessAllowance, 'Allowed catalog statements'),
+    firstCatalogStatement,
+  };
+  nativeCatalogOccurrences.set(classification, catalogStatementIndexes);
+  return classification;
+}
+
+function catalogKey(backendAware: boolean, backend: number | undefined, text: string): string {
+  return backendAware ? JSON.stringify([backend ?? null, text]) : text;
+}
+
+function isCatalogQuery(classification: CatalogClassification, text: string, backend: number | undefined): boolean {
+  return classification.catalogKeys.has(catalogKey(classification.backendAware, backend, text));
+}
+
+function statementKeys(
+  statements: readonly string[],
+  statementBackends: readonly (number | undefined)[] | undefined,
+  backendAware: boolean,
+): Set<string> {
+  return new Set(statements.map((statement, index) => catalogKey(backendAware, statementBackends?.[index], statement)));
+}
+
+function hasMatchingStatement(
+  keys: ReadonlySet<string>,
+  backendAware: boolean,
+  queryText: string | undefined,
+  backend: number | undefined,
+): boolean {
+  if (!backendAware) return true;
+  if (queryText === undefined) return false;
+  return keys.has(catalogKey(true, backend, queryText));
+}
+
+export function catalogStatementBound(capture: Capture | CostFoldedCapture): CatalogClassification {
+  if (isCostFoldedCapture(capture)) return classifyFoldedCatalogStatements(capture);
+  validateCaptureEvidence(capture);
   return classifyCatalogStatements(capture);
 }
 
-/** The capture without the statements in `catalogTexts` and the plan documents that explain only those statements. */
-export function withoutCatalogTexts(capture: Capture, catalogTexts: ReadonlySet<string>): Capture {
+/** The capture without catalog statements and the plan documents that explain only those statements. */
+export function withoutCatalogTexts(
+  capture: Capture,
+  classification: CatalogClassification | ReadonlySet<string>,
+): Capture {
+  validateCaptureEvidence(capture);
+  const catalog: CatalogClassification =
+    'catalogKeys' in classification
+      ? classification
+      : {
+          catalogTexts: classification,
+          catalogKeys: classification,
+          backendAware: false,
+          catalogStatements: 0,
+          freshnessProbes: 0,
+          allowedStatements: 0,
+          firstCatalogStatement: undefined,
+        };
+  const nativeCatalogIndexes = nativeCatalogOccurrences.get(catalog);
+  const statements = capture.statements.flatMap((statement, index) => {
+    const excluded =
+      capture.planStatements !== undefined
+        ? nativeCatalogIndexes?.has(index) === true
+        : isCatalogQuery(catalog, statement, capture.statementBackends?.[index]);
+    return excluded ? [] : [index];
+  });
+  const remappedStatements = new Map<number, number>();
+  statements.forEach((original, index) => remappedStatements.set(original, index));
+  const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
+  const matchingStatements = statementKeys(capture.statements, capture.statementBackends, backendAware);
+  const plans = capture.plans.flatMap((document, index) => {
+    const backend = capture.planBackends?.[index];
+    const owner = capture.planStatements?.[index];
+    if (capture.planStatements !== undefined) {
+      if (owner === undefined || owner < 0 || owner >= capture.statements.length) return [index];
+      return remappedStatements.has(owner) ? [index] : [];
+    }
+    if (owner !== undefined && !remappedStatements.has(owner)) return [];
+    return explainPlanEntries(document).some(
+      ({ queryText }) =>
+        hasMatchingStatement(matchingStatements, backendAware, queryText, backend) &&
+        (queryText === undefined || !isCatalogQuery(catalog, queryText, backend)),
+    )
+      ? [index]
+      : [];
+  });
   return {
-    statements: capture.statements.filter((statement) => !catalogTexts.has(statement)),
-    plans: capture.plans.filter((document) =>
-      documentEntries(document).some(({ queryText }) => queryText === undefined || !catalogTexts.has(queryText)),
-    ),
+    statements: statements.map((index) => capture.statements[index]!),
+    ...(capture.requestBytes === undefined
+      ? {}
+      : { requestBytes: statements.map((index) => capture.requestBytes![index]!) }),
+    ...(capture.responseBytes === undefined
+      ? {}
+      : { responseBytes: statements.map((index) => capture.responseBytes![index]!) }),
+    plans: plans.map((index) => capture.plans[index]!),
+    ...(capture.statementErrors === undefined
+      ? {}
+      : { statementErrors: statements.map((index) => capture.statementErrors![index]!) }),
+    ...(capture.statementErrorMessages === undefined
+      ? {}
+      : { statementErrorMessages: statements.map((index) => capture.statementErrorMessages![index]!) }),
+    ...(capture.statementBackends === undefined
+      ? {}
+      : { statementBackends: statements.map((index) => capture.statementBackends![index]) }),
+    ...(capture.planDatabases === undefined
+      ? {}
+      : { planDatabases: plans.map((index) => capture.planDatabases![index]) }),
+    ...(capture.planBackends === undefined ? {} : { planBackends: plans.map((index) => capture.planBackends![index]) }),
+    ...(capture.planStatements === undefined
+      ? {}
+      : {
+          planStatements: plans.map((index) => {
+            const original = capture.planStatements![index];
+            if (original === undefined) return undefined;
+            return remappedStatements.get(original);
+          }),
+        }),
+    ...(capture.backgroundStatements === undefined ? {} : { backgroundStatements: capture.backgroundStatements }),
+    ...(capture.backgroundRequestBytes === undefined ? {} : { backgroundRequestBytes: capture.backgroundRequestBytes }),
+    ...(capture.backgroundResponseBytes === undefined
+      ? {}
+      : { backgroundResponseBytes: capture.backgroundResponseBytes }),
+    ...(capture.backgroundPlans === undefined ? {} : { backgroundPlans: capture.backgroundPlans }),
+    ...(capture.backgroundPlanStatements === undefined
+      ? {}
+      : { backgroundPlanStatements: capture.backgroundPlanStatements }),
+    ...(capture.backgroundStatementErrors === undefined
+      ? {}
+      : { backgroundStatementErrors: capture.backgroundStatementErrors }),
+    ...(capture.backgroundStatementErrorMessages === undefined
+      ? {}
+      : { backgroundStatementErrorMessages: capture.backgroundStatementErrorMessages }),
+    ...(capture.backgroundStatementBackends === undefined
+      ? {}
+      : { backgroundStatementBackends: capture.backgroundStatementBackends }),
+    ...(capture.backgroundPlanBackends === undefined ? {} : { backgroundPlanBackends: capture.backgroundPlanBackends }),
+    ...(capture.backgroundPlanDatabases === undefined
+      ? {}
+      : { backgroundPlanDatabases: capture.backgroundPlanDatabases }),
   };
 }
 
-function addBlocks(blocks: Map<string, Blocks>, name: string, hit: number, read: number): void {
-  const total = blocks.get(name) ?? { hit: 0, read: 0 };
-  total.hit += hit;
-  total.read += read;
-  blocks.set(name, total);
+function addCteScanBlocks(blocks: Map<PlanNode, CteBlocks>, producer: PlanNode, hit: number, read: number): void {
+  const total = blocks.get(producer) ?? { hit: 0, read: 0 };
+  blocks.set(producer, {
+    hit: checkedAdd(total.hit, hit, 'CTE Scan shared hit blocks'),
+    read: checkedAdd(total.read, read, 'CTE Scan shared read blocks'),
+  });
+}
+
+function considerBlame(current: Blame, blocks: number, rows: number, name: string): Blame {
+  return blocks > current.blocks || (blocks === current.blocks && rows > current.rows)
+    ? { blocks, rows, name }
+    : current;
 }
 
 function costNode(
-  node: PlanNode,
-  root: boolean,
+  root: PlanNode,
   relations: Map<string, MutableRelationCost>,
-  ctes: CteBlocks,
-): NodeTotals {
-  const nodeType = typeof node['Node Type'] === 'string' ? node['Node Type'] : '';
-  const actualRows = requiredNumber(node, 'Actual Rows');
-  const loops = optionalNumber(node, 'Actual Loops', 1);
-  const hit = optionalNumber(node, 'Shared Hit Blocks');
-  const read = optionalNumber(node, 'Shared Read Blocks');
+  location: string,
+  session: PlanWalkSession,
+  database?: string,
+): {
+  readonly totals: NodeTotals;
+  readonly cteBlocks: CteBlocks;
+  readonly cteLimitations: readonly string[];
+  readonly node?: string;
+} {
+  const cteScopes = indexCteScopes(root, location, session);
+  const producerBlocks = new Map<PlanNode, CteBlocks>();
+  const scanBlocks = new Map<PlanNode, CteBlocks>();
+  const relationContexts = new Map<PlanNode, RelationContext | undefined>();
+  const parentContexts: (RelationContext | undefined)[] = [];
+  for (const { node, depth } of walkPlanTree(root, location, 'preorder', session)) {
+    const parent = depth === 0 ? undefined : parentContexts[depth - 1];
+    relationContexts.set(node, parent);
+    const hasRelation = typeof node['Relation Name'] === 'string';
+    const schema = typeof node.Schema === 'string' ? node.Schema : undefined;
+    parentContexts[depth] = hasRelation ? (schema === undefined ? {} : { schema }) : parent;
+  }
+  const totalsByNode = new Map<PlanNode, NodeTotals>();
+  let costliest: Blame = { blocks: -1, rows: -1, name: undefined };
+  let costliestNamed: Blame = { blocks: -1, rows: -1, name: undefined };
+  for (const { node, depth } of walkPlanTree(root, location, 'postorder', session)) {
+    const nodeType = typeof node['Node Type'] === 'string' ? node['Node Type'] : 'Unknown';
+    const actualRows = requiredNumber(node, 'Actual Rows');
+    const loops = optionalNumber(node, 'Actual Loops', 1);
+    const hit = optionalNumber(node, 'Shared Hit Blocks');
+    const read = optionalNumber(node, 'Shared Read Blocks');
+    if (depth === 0 && node['Shared Hit Blocks'] === undefined)
+      throw new TypeError('Plan root is missing Shared Hit Blocks');
 
-  if (root && node['Shared Hit Blocks'] === undefined) throw new TypeError('Plan root is missing Shared Hit Blocks');
-
-  const childNodes = node.Plans;
-  if (childNodes !== undefined && !Array.isArray(childNodes)) throw new TypeError('Plan node Plans must be an array');
-  const children =
-    (childNodes as unknown[] | undefined)?.map((child) => {
-      if (!isRecord(child)) throw new TypeError('Plan child must be an object');
-      return costNode(child, false, relations, ctes);
-    }) ?? [];
-
-  const childHit = children.reduce((sum, child) => sum + child.inclusiveHit, 0);
-  const childRead = children.reduce((sum, child) => sum + child.inclusiveRead, 0);
-  const exclusiveHit = Math.max(0, hit - childHit);
-  const exclusiveRead = Math.max(0, read - childRead);
-  const producer = typeof node['Subplan Name'] === 'string' ? /^CTE (.+)$/.exec(node['Subplan Name']) : null;
-  if (producer) addBlocks(ctes.producers, producer[1]!, hit, read);
-  if (nodeType === 'CTE Scan' && typeof node['CTE Name'] === 'string')
-    addBlocks(ctes.scans, node['CTE Name'], exclusiveHit, exclusiveRead);
-  const removedByFilter = optionalNumber(node, 'Rows Removed by Filter');
-  const removedByRecheck = optionalNumber(node, 'Rows Removed by Index Recheck');
-  const examined = rowScans.has(nodeType) ? (actualRows + removedByFilter + removedByRecheck) * loops : 0;
-
-  if (rowScans.has(nodeType) || nodeType === 'ModifyTable') {
+    const childNodes = (node.Plans as PlanNode[] | undefined) ?? [];
+    const children = childNodes.map((child) => totalsByNode.get(child)!);
+    const childHit = children.reduce((sum, child) => checkedAdd(sum, child.inclusiveHit, 'Child shared hit blocks'), 0);
+    const childRead = children.reduce(
+      (sum, child) => checkedAdd(sum, child.inclusiveRead, 'Child shared read blocks'),
+      0,
+    );
+    const exclusiveHit = Math.max(0, checkedSubtract(hit, childHit, 'Exclusive shared hit blocks'));
+    const exclusiveRead = Math.max(0, checkedSubtract(read, childRead, 'Exclusive shared read blocks'));
+    if (cteScopes.producers.has(node)) producerBlocks.set(node, { hit, read });
+    const scanProducer = cteScopes.scanProducers.get(node);
+    if (scanProducer !== undefined) addCteScanBlocks(scanBlocks, scanProducer, exclusiveHit, exclusiveRead);
+    const removedByFilter = optionalNumber(node, 'Rows Removed by Filter');
+    const removedByRecheck = optionalNumber(node, 'Rows Removed by Index Recheck');
+    const rowsPerLoop = rowScans.has(nodeType)
+      ? checkedAdd(
+          checkedAdd(actualRows, removedByFilter, 'Rows examined before recheck'),
+          removedByRecheck,
+          'Rows examined per loop',
+        )
+      : 0;
+    const examined = rowScans.has(nodeType) && loops > 0 ? checkedMultiply(rowsPerLoop, loops, 'Rows examined') : 0;
+    const modified = nodeType === 'ModifyTable' && loops > 0 ? checkedMultiply(actualRows, loops, 'Rows modified') : 0;
+    const exclusiveBlocks = checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive node blocks');
     const relationName = node['Relation Name'];
-    if (typeof relationName === 'string') {
-      const schema = node.Schema;
-      const key = typeof schema === 'string' ? `${schema}.${relationName}` : relationName;
+    const indexName = node['Index Name'];
+    const relation =
+      typeof relationName === 'string'
+        ? `${typeof node.Schema === 'string' ? `${node.Schema}.` : ''}${relationName}`
+        : typeof indexName === 'string'
+          ? `index:${indexName}`
+          : undefined;
+    const blameName = `${nodeType}${relation ? ` ${relation}` : ''}`;
+    const blameRows = nodeType === 'ModifyTable' ? modified : examined;
+    costliest = considerBlame(costliest, exclusiveBlocks, blameRows, blameName);
+    if (relation !== undefined) costliestNamed = considerBlame(costliestNamed, exclusiveBlocks, blameRows, blameName);
+
+    if ((rowScans.has(nodeType) || nodeType === 'ModifyTable') && typeof relationName === 'string') {
+      const schema = typeof node.Schema === 'string' ? node.Schema : undefined;
       addRelation(
         relations,
-        key,
-        nodeType === 'ModifyTable' ? actualRows * loops : examined,
-        exclusiveHit + exclusiveRead,
-        nodeType === 'Seq Scan' ? 1 : 0,
+        {
+          ...(database === undefined ? {} : { database }),
+          ...(schema === undefined ? {} : { schema }),
+          kind: 'relation',
+          name: relationName,
+        },
+        nodeType === 'ModifyTable' ? modified : examined,
+        checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive relation blocks'),
+        nodeType === 'Seq Scan' && loops > 0 ? 1 : 0,
+      );
+    } else if (nodeType === 'Bitmap Index Scan' && typeof indexName === 'string') {
+      const schema = (typeof node.Schema === 'string' ? node.Schema : undefined) ?? relationContexts.get(node)?.schema;
+      addRelation(
+        relations,
+        {
+          ...(database === undefined ? {} : { database }),
+          ...(schema === undefined ? {} : { schema }),
+          kind: 'index',
+          name: indexName,
+        },
+        0,
+        checkedAdd(exclusiveHit, exclusiveRead, 'Exclusive index blocks'),
       );
     }
-  } else if (nodeType === 'Bitmap Index Scan') {
-    const indexName = node['Index Name'];
-    if (typeof indexName === 'string') addRelation(relations, `index:${indexName}`, 0, exclusiveHit + exclusiveRead);
-  }
 
+    totalsByNode.set(node, {
+      rows: children.reduce((sum, child) => checkedAdd(sum, child.rows, 'Child rows examined'), examined),
+      inclusiveHit: hit,
+      inclusiveRead: read,
+    });
+  }
+  const node = costliestNamed.name ?? costliest.name;
   return {
-    rows: examined + children.reduce((sum, child) => sum + child.rows, 0),
-    inclusiveHit: hit,
-    inclusiveRead: read,
+    totals: totalsByNode.get(root)!,
+    cteBlocks: unscannedCteBlocks(cteScopes, producerBlocks, scanBlocks),
+    cteLimitations: cteScopes.limitations,
+    ...(node === undefined ? {} : { node }),
   };
+}
+
+/** Rows, blocks and blame node for one native plan, using the same accounting as costOf. */
+export function costOfPlan(
+  root: PlanNode,
+  location: string,
+  database?: string,
+  session = createPlanWalkSession(),
+): PlanCostProjection {
+  const { relationCosts: _relationCosts, ...projection } = costOfPlanEvidence(root, location, database, session);
+  return projection;
+}
+
+/** Foldable per-plan evidence from the same numeric, CTE and relation walker used by costOf. */
+export function costOfPlanEvidence(
+  root: PlanNode,
+  location: string,
+  database?: string,
+  session = createPlanWalkSession(),
+): PlanCostEvidence {
+  const relations = new Map<string, MutableRelationCost>();
+  const projection = projectPlanCost(root, location, relations, session, database);
+  return {
+    ...projection,
+    relationCosts: [...relations.values()].map((relation) => ({
+      rows: relation.rows,
+      blocks: relation.blocks,
+      nodes: relation.nodes,
+      sequentialScans: relation.sequentialScans,
+      identity: relation.identity,
+    })),
+  };
+}
+
+function projectPlanCost(
+  root: PlanNode,
+  location: string,
+  relations: Map<string, MutableRelationCost>,
+  session: PlanWalkSession,
+  database?: string,
+): PlanCostProjection {
+  const nodeCost = costNode(root, relations, location, session, database);
+  const sharedHit = checkedAdd(
+    nodeCost.totals.inclusiveHit,
+    nodeCost.cteBlocks.hit,
+    'Total shared hit blocks including CTE work',
+  );
+  const sharedRead = checkedAdd(
+    nodeCost.totals.inclusiveRead,
+    nodeCost.cteBlocks.read,
+    'Total shared read blocks including CTE work',
+  );
+  return {
+    rows: nodeCost.totals.rows,
+    sharedHit,
+    sharedRead,
+    blocks: checkedAdd(sharedHit, sharedRead, 'Total shared blocks'),
+    limitations: nodeCost.cteLimitations,
+    relationIdentities: [...relations.values()].map((relation) => relation.identity),
+    ...(nodeCost.node === undefined ? {} : { node: nodeCost.node }),
+  };
+}
+
+type BackgroundStatementCost = {
+  rows: number;
+  blocks: number;
+  bounded: boolean;
+  relationIdentities: readonly RelationIdentity[];
+};
+
+export function backgroundPlanBounded(relations: Cost['relations']): boolean {
+  // DBOS history is not seeded by grow(), so its accumulated rows do not represent scale growth.
+  return Object.entries(relations).some(([relation, cost]) =>
+    cost.identity?.schema === undefined
+      ? !/^(?:dbos|auth_dbos)\./.test(relation)
+      : !/^(?:dbos|auth_dbos)$/.test(cost.identity.schema),
+  );
+}
+
+function addBackgroundExecutionCost(prior: BackgroundStatementCost, planCost: Cost): BackgroundStatementCost {
+  const relationIdentities = new Map(
+    [...prior.relationIdentities, ...Object.values(planCost.relations).flatMap(({ identity }) => identity ?? [])].map(
+      (identity) => [relationIdentityKey(identity), identity],
+    ),
+  );
+  return {
+    rows: checkedAdd(prior.rows, planCost.rows, 'Background execution examined rows'),
+    blocks: checkedAdd(prior.blocks, planCost.blocks, 'Background execution blocks'),
+    bounded: prior.bounded && backgroundPlanBounded(planCost.relations),
+    relationIdentities: [...relationIdentities.values()],
+  };
+}
+
+function raiseBackgroundHighWater(
+  prior: BackgroundStatementCost | undefined,
+  execution: BackgroundStatementCost,
+): BackgroundStatementCost {
+  if (prior === undefined) return execution;
+  return {
+    rows: Math.max(prior.rows, execution.rows),
+    blocks: Math.max(prior.blocks, execution.blocks),
+    bounded: prior.bounded && execution.bounded,
+    relationIdentities: [
+      ...new Map(
+        [...prior.relationIdentities, ...execution.relationIdentities].map((identity) => [
+          relationIdentityKey(identity),
+          identity,
+        ]),
+      ).values(),
+    ],
+  };
+}
+
+function backgroundExecutionKey(
+  hasOccurrenceCustody: boolean,
+  owner: number | undefined,
+  queryText: string,
+  planIndex: number,
+  entryIndex: number,
+): string {
+  if (!hasOccurrenceCustody) return queryText;
+  if (owner !== undefined) return `${owner}\0${queryText}`;
+  return `unowned:${planIndex}:${entryIndex}\0${queryText}`;
 }
 
 function addRelation(
   relations: Map<string, MutableRelationCost>,
-  key: string,
+  identity: RelationIdentity,
   rows: number,
   blocks: number,
   sequentialScans = 0,
 ): void {
-  const relation = relations.get(key) ?? { rows: 0, blocks: 0, nodes: 0, sequentialScans: 0 };
-  relation.rows += rows;
-  relation.blocks += blocks;
+  const key = relationIdentityKey(identity);
+  const label = relationIdentityLabel(identity);
+  const relation = relations.get(key) ?? { identity, rows: 0, blocks: 0, nodes: 0, sequentialScans: 0 };
+  relation.rows = checkedAdd(relation.rows, rows, `Rows for relation ${label}`);
+  relation.blocks = checkedAdd(relation.blocks, blocks, `Blocks for relation ${label}`);
   relation.nodes++;
-  relation.sequentialScans += sequentialScans;
+  relation.sequentialScans = checkedAdd(
+    relation.sequentialScans,
+    sequentialScans,
+    `Sequential scans for relation ${label}`,
+  );
   relations.set(key, relation);
 }
 
-export function costOf(capture: Capture): Cost {
+function validateByteMeasurements(values: readonly number[] | undefined, expected: number, label: string): void {
+  if (values === undefined) return;
+  requireDenseArray(values, label);
+  if (values.length !== expected) throw new TypeError(`${label} must have one value per statement`);
+  for (let index = 0; index < values.length; index += 1)
+    requireNonNegativeFiniteNumber(values[index], `${label} at index ${index}`);
+}
+
+export function costOf(capture: Capture | CostFoldedCapture): Cost {
+  if (isCostFoldedCapture(capture)) return capture.cost;
+  return costOfAt(capture, 'plans');
+}
+
+function costOfAt(capture: Capture, planCollection: string, session = createPlanWalkSession()): Cost {
+  validateCaptureEvidence(capture);
+  validateByteMeasurements(capture.requestBytes, capture.statements.length, 'Request bytes');
+  validateByteMeasurements(capture.responseBytes, capture.statements.length, 'Response bytes');
+  validateByteMeasurements(
+    capture.backgroundRequestBytes,
+    capture.backgroundStatements?.length ?? 0,
+    'Background request bytes',
+  );
+  validateByteMeasurements(
+    capture.backgroundResponseBytes,
+    capture.backgroundStatements?.length ?? 0,
+    'Background response bytes',
+  );
   const relations = new Map<string, MutableRelationCost>();
   let rows = 0;
   let sharedHit = 0;
   let sharedRead = 0;
-  const catalog = classifyCatalogStatements(capture);
+  const limitations: string[] = [];
+  const catalog = classifyCatalogStatements(capture, planCollection, session);
+  const nativeCatalogIndexes = nativeCatalogOccurrences.get(catalog);
+  const backendAware = capture.statementBackends !== undefined && capture.planBackends !== undefined;
+  const matchingStatements = statementKeys(capture.statements, capture.statementBackends, backendAware);
   let plans = 0;
 
-  for (const document of capture.plans) {
-    for (const { queryText, plan } of documentEntries(document)) {
-      if (queryText !== undefined && catalog.catalogTexts.has(queryText)) continue;
-      plans++;
-      const ctes: CteBlocks = { producers: new Map(), scans: new Map() };
-      const totals = costNode(plan, true, relations, ctes);
-      rows += totals.rows;
-      sharedHit += totals.inclusiveHit;
-      sharedRead += totals.inclusiveRead;
-      // A producer runs lazily inside the scans that read it, so those buffers are already in the root. What no scan
-      // pulled (a data-modifying CTE that runs at the end of the statement) is not.
-      for (const [name, producer] of ctes.producers) {
-        const scans = ctes.scans.get(name);
-        sharedHit += Math.max(0, producer.hit - (scans?.hit ?? 0));
-        sharedRead += Math.max(0, producer.read - (scans?.read ?? 0));
+  for (let index = 0; index < capture.plans.length; index++) {
+    const document = capture.plans[index];
+    const backend = capture.planBackends?.[index];
+    const owner = capture.planStatements?.[index];
+    for (const { queryText, plan, location } of explainPlanEntries(document, `${planCollection}[${index}]`)) {
+      let included = true;
+      if (capture.planStatements !== undefined) {
+        if (
+          owner !== undefined &&
+          Number.isInteger(owner) &&
+          owner >= 0 &&
+          owner < capture.statements.length &&
+          nativeCatalogIndexes?.has(owner) === true
+        )
+          included = false;
+      } else {
+        if (backendAware && !hasMatchingStatement(matchingStatements, true, queryText, backend)) included = false;
+        if (queryText !== undefined && isCatalogQuery(catalog, queryText, backend)) included = false;
       }
+      const nodeCost = projectPlanCost(
+        plan,
+        location,
+        included ? relations : new Map<string, MutableRelationCost>(),
+        session,
+        capture.planDatabases?.[index],
+      );
+      if (!included) continue;
+      plans++;
+      rows = checkedAdd(rows, nodeCost.rows, 'Total examined rows');
+      sharedHit = checkedAdd(sharedHit, nodeCost.sharedHit, 'Total shared hit blocks');
+      sharedRead = checkedAdd(sharedRead, nodeCost.sharedRead, 'Total shared read blocks');
+      limitations.push(...nodeCost.limitations);
     }
   }
 
-  const backgroundCosts = new Map<string, { rows: number; blocks: number; bounded: boolean }>();
+  const backgroundCosts = new Map<string, BackgroundStatementCost>();
+  const backgroundExecutions = new Map<string, BackgroundStatementCost>();
+  const backgroundExecutionTexts = new Map<string, string>();
   let backgroundRows = 0;
   let backgroundBlocks = 0;
-  for (const document of capture.backgroundPlans ?? []) {
-    for (const entry of documentEntries(document)) {
+  const hasBackgroundOccurrenceCustody = capture.backgroundPlanStatements !== undefined;
+  const backgroundBackendAware =
+    capture.backgroundStatementBackends !== undefined && capture.backgroundPlanBackends !== undefined;
+  const backgroundStatementKeys = statementKeys(
+    capture.backgroundStatements ?? [],
+    capture.backgroundStatementBackends,
+    backgroundBackendAware,
+  );
+  for (let index = 0; index < (capture.backgroundPlans ?? []).length; index++) {
+    const document = capture.backgroundPlans![index];
+    const backend = capture.backgroundPlanBackends?.[index];
+    const owner = capture.backgroundPlanStatements?.[index];
+    const entries = explainPlanEntries(document, `backgroundPlans[${index}]`);
+    for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+      const entry = entries[entryIndex]!;
+      const included = !(
+        !hasBackgroundOccurrenceCustody &&
+        backgroundBackendAware &&
+        !hasMatchingStatement(backgroundStatementKeys, true, entry.queryText, backend)
+      );
       const key = entry.queryText ?? '<unknown background statement>';
-      const planCost = costOf({
-        statements: [],
-        plans: [{ Plan: entry.plan, 'Query Text': entry.queryText }],
-      });
-      backgroundRows += planCost.rows;
-      backgroundBlocks += planCost.blocks;
-      const prior = backgroundCosts.get(key) ?? { rows: 0, blocks: 0, bounded: true };
-      backgroundCosts.set(key, {
-        rows: Math.max(prior.rows, planCost.rows),
-        blocks: Math.max(prior.blocks, planCost.blocks),
-        // DBOS history is not seeded by grow(), so its accumulated rows do not represent scale growth.
-        bounded:
-          prior.bounded && Object.keys(planCost.relations).some((relation) => !/^(?:dbos|auth_dbos)\./.test(relation)),
-      });
+      const planCost = costOfAt(
+        {
+          statements: [],
+          plans: [[{ Plan: entry.plan, ...(entry.queryText === undefined ? {} : { 'Query Text': entry.queryText }) }]],
+          ...(capture.backgroundPlanDatabases?.[index] === undefined
+            ? {}
+            : { planDatabases: [capture.backgroundPlanDatabases[index]] }),
+        },
+        `backgroundPlans[${index}]`,
+        session,
+      );
+      if (!included) continue;
+      const statementOccurrence = capture.backgroundPlanStatements?.[index];
+      const backgroundProvenance =
+        statementOccurrence === undefined
+          ? `Background plan backgroundPlans[${index}] (statement occurrence unavailable)`
+          : `Background plan backgroundPlans[${index}] for background statement occurrence ${statementOccurrence}`;
+      limitations.push(...(planCost.limitations ?? []).map((limitation) => `${backgroundProvenance}: ${limitation}`));
+      backgroundRows = checkedAdd(backgroundRows, planCost.rows, 'Total background examined rows');
+      backgroundBlocks = checkedAdd(backgroundBlocks, planCost.blocks, 'Total background blocks');
+      const executionKey = backgroundExecutionKey(hasBackgroundOccurrenceCustody, owner, key, index, entryIndex);
+      const prior = backgroundExecutions.get(executionKey) ?? {
+        rows: 0,
+        blocks: 0,
+        bounded: true,
+        relationIdentities: [],
+      };
+      backgroundExecutions.set(executionKey, addBackgroundExecutionCost(prior, planCost));
+      backgroundExecutionTexts.set(executionKey, key);
     }
   }
+  for (const [executionKey, execution] of backgroundExecutions) {
+    const statement = backgroundExecutionTexts.get(executionKey)!;
+    backgroundCosts.set(statement, raiseBackgroundHighWater(backgroundCosts.get(statement), execution));
+  }
 
+  const totalBlocks = checkedAdd(sharedHit, sharedRead, 'Total shared blocks');
   const cost = {
     statements: capture.statements.filter(
-      (statement) => !isControlStatement(statement) && !catalog.catalogTexts.has(statement),
+      (statement, index) =>
+        !isControlStatement(statement) &&
+        (capture.planStatements !== undefined
+          ? nativeCatalogIndexes?.has(index) !== true
+          : !isCatalogQuery(catalog, statement, capture.statementBackends?.[index])),
     ).length,
     controlStatements: capture.statements.filter(isControlStatement).length,
     catalogStatements: catalog.catalogStatements,
     plans,
     rows: Math.round(rows),
-    blocks: sharedHit + sharedRead,
+    blocks: totalBlocks,
     sharedHit,
     sharedRead,
-    relations: Object.fromEntries(relations),
+    ...(limitations.length === 0 ? {} : { limitations: [...new Set(limitations)] }),
+    relations: keyedRelationEntries(
+      [...relations.values()].map((relation) => ({ identity: relation.identity, value: relation })),
+    ),
   };
+  const requestBytes =
+    capture.requestBytes === undefined ? undefined : sumFinite(capture.requestBytes, 'Request bytes');
+  const responseBytes =
+    capture.responseBytes === undefined ? undefined : sumFinite(capture.responseBytes, 'Response bytes');
+  const hasBackgroundWork =
+    (capture.backgroundStatements?.length ?? 0) > 0 ||
+    (capture.backgroundRequestBytes?.length ?? 0) > 0 ||
+    (capture.backgroundResponseBytes?.length ?? 0) > 0;
+  const backgroundRequestBytes =
+    capture.backgroundRequestBytes === undefined
+      ? undefined
+      : sumFinite(capture.backgroundRequestBytes, 'Background request bytes');
+  const backgroundResponseBytes =
+    capture.backgroundResponseBytes === undefined
+      ? undefined
+      : sumFinite(capture.backgroundResponseBytes, 'Background response bytes');
+  const failedStatements = new Map<string, number>();
+  for (const error of capture.statementErrors ?? [])
+    if (error !== null) failedStatements.set(error, (failedStatements.get(error) ?? 0) + 1);
   return {
     ...cost,
-    ...(capture.backgroundStatements !== undefined || capture.backgroundPlans !== undefined
+    ...(requestBytes === undefined ? {} : { requestBytes }),
+    ...(responseBytes === undefined ? {} : { responseBytes }),
+    ...(failedStatements.size === 0 ? {} : { failedStatements: Object.fromEntries(failedStatements) }),
+    ...(capture.backgroundStatements !== undefined ||
+    capture.backgroundPlans !== undefined ||
+    capture.backgroundRequestBytes !== undefined ||
+    capture.backgroundResponseBytes !== undefined
       ? {
           backgroundStatements: (capture.backgroundStatements ?? []).length,
+          ...(hasBackgroundWork && backgroundRequestBytes !== undefined ? { backgroundRequestBytes } : {}),
+          ...(hasBackgroundWork && backgroundResponseBytes !== undefined ? { backgroundResponseBytes } : {}),
           backgroundRows,
           backgroundBlocks,
           backgroundCosts: Object.fromEntries(backgroundCosts),
@@ -314,16 +975,183 @@ export function costOf(capture: Capture): Cost {
 }
 
 function lowerMedian(values: readonly number[]): number {
+  if (values.length === 0) throw new RangeError('Cannot take the median of no values');
   return [...values].sort((left, right) => left - right)[(values.length - 1) >> 1]!;
 }
 
+function ownedRelationCosts(relations: Cost['relations']): Cost['relations'] {
+  return Object.fromEntries(
+    Object.entries(relations).map(([name, relation]) => [
+      name,
+      {
+        rows: relation.rows,
+        blocks: relation.blocks,
+        nodes: relation.nodes,
+        sequentialScans: relation.sequentialScans,
+        ...(relation.identity === undefined ? {} : { identity: relation.identity }),
+      },
+    ]),
+  );
+}
+
+type OptionalCostField =
+  | 'requestBytes'
+  | 'responseBytes'
+  | 'backgroundStatements'
+  | 'backgroundRequestBytes'
+  | 'backgroundResponseBytes'
+  | 'backgroundRows'
+  | 'backgroundBlocks'
+  | 'backgroundCosts';
+
+function hasConsistentCoverage(costs: readonly Cost[], field: OptionalCostField, indexes: readonly number[]): boolean {
+  if (indexes.length === 0) return false;
+  const present = indexes.filter((index) => costs[index]![field] !== undefined);
+  if (present.length !== 0 && present.length !== indexes.length) {
+    const missing = indexes.filter((index) => costs[index]![field] === undefined);
+    throw new TypeError(
+      `Inconsistent telemetry for ${field}: present in repetitions ${present.join(', ')}; missing in repetitions ${missing.join(', ')}`,
+    );
+  }
+  return present.length === indexes.length;
+}
+
+function anyCoverage(costs: readonly Cost[], field: OptionalCostField): boolean {
+  return costs.some((cost) => cost[field] !== undefined);
+}
+
+function validateCostEvidence(cost: Cost, index: number): void {
+  if (!isRecord(cost)) throw new TypeError(`Cost repetition ${index} must be an object`);
+  const coreFields = [
+    'statements',
+    'controlStatements',
+    'catalogStatements',
+    'plans',
+    'rows',
+    'blocks',
+    'sharedHit',
+    'sharedRead',
+  ] as const;
+  for (const field of coreFields) requireNonNegativeFiniteNumber(cost[field], `Cost ${field} at repetition ${index}`);
+  const optionalFields = [
+    'requestBytes',
+    'responseBytes',
+    'backgroundStatements',
+    'backgroundRequestBytes',
+    'backgroundResponseBytes',
+    'backgroundRows',
+    'backgroundBlocks',
+  ] as const;
+  for (const field of optionalFields)
+    if (cost[field] !== undefined) requireNonNegativeFiniteNumber(cost[field], `Cost ${field} at repetition ${index}`);
+
+  if (!isRecord(cost.relations)) throw new TypeError(`Cost relations at repetition ${index} must be an object`);
+  for (const [name, relation] of Object.entries(cost.relations)) {
+    if (!isRecord(relation)) throw new TypeError(`Cost relation ${name} at repetition ${index} must be an object`);
+    for (const field of ['rows', 'blocks', 'nodes', 'sequentialScans'] as const)
+      requireNonNegativeFiniteNumber(relation[field], `Cost relation ${name} ${field} at repetition ${index}`);
+  }
+
+  if (cost.failedStatements !== undefined) {
+    if (!isRecord(cost.failedStatements))
+      throw new TypeError(`Cost failed statement counts at repetition ${index} must be an object`);
+    for (const [sqlstate, value] of Object.entries(cost.failedStatements))
+      requireNonNegativeFiniteNumber(value, `Failed statement count ${sqlstate} at repetition ${index}`);
+  }
+  if (cost.limitations !== undefined) {
+    requireDenseArray(cost.limitations, `Cost limitations at repetition ${index}`);
+    for (const limitation of cost.limitations)
+      if (typeof limitation !== 'string')
+        throw new TypeError(`Cost limitation at repetition ${index} must be a string`);
+  }
+  if (cost.backgroundCosts !== undefined) {
+    if (!isRecord(cost.backgroundCosts))
+      throw new TypeError(`Cost background costs at repetition ${index} must be an object`);
+    for (const [name, background] of Object.entries(cost.backgroundCosts)) {
+      if (!isRecord(background))
+        throw new TypeError(`Background cost ${name} at repetition ${index} must be an object`);
+      requireNonNegativeFiniteNumber(background.rows, `Background rows for ${name} at repetition ${index}`);
+      requireNonNegativeFiniteNumber(background.blocks, `Background blocks for ${name} at repetition ${index}`);
+      if (typeof background.bounded !== 'boolean')
+        throw new TypeError(`Background bounded flag for ${name} at repetition ${index} must be boolean`);
+    }
+  }
+}
+
 export function medianCost(costs: readonly Cost[]): Cost {
+  requireDenseArray(costs, 'Cost repetitions');
   if (costs.length === 0) throw new RangeError('Cannot take the median of no costs');
+  costs.forEach(validateCostEvidence);
+  const allIndexes = costs.map((_, index) => index);
+  const foregroundWork = allIndexes.filter(
+    (index) => costs[index]!.statements + costs[index]!.controlStatements + costs[index]!.catalogStatements > 0,
+  );
+  const requestBytesAvailable =
+    hasConsistentCoverage(costs, 'requestBytes', foregroundWork) ||
+    (foregroundWork.length === 0 && anyCoverage(costs, 'requestBytes'));
+  const responseBytesAvailable =
+    hasConsistentCoverage(costs, 'responseBytes', foregroundWork) ||
+    (foregroundWork.length === 0 && anyCoverage(costs, 'responseBytes'));
+
+  const backgroundFields: OptionalCostField[] = [
+    'backgroundRequestBytes',
+    'backgroundResponseBytes',
+    'backgroundRows',
+    'backgroundBlocks',
+    'backgroundCosts',
+  ];
+  const hasBackgroundDetails = backgroundFields.some((field) => anyCoverage(costs, field));
+  const backgroundStatementsAvailable = hasConsistentCoverage(costs, 'backgroundStatements', allIndexes);
+  if (!backgroundStatementsAvailable && hasBackgroundDetails) {
+    const missing = allIndexes.filter((index) => costs[index]!.backgroundStatements === undefined);
+    throw new TypeError(
+      `Inconsistent telemetry for backgroundStatements: background activity is reported but the execution count is missing in repetitions ${missing.join(', ')}`,
+    );
+  }
+  const backgroundWork = backgroundStatementsAvailable
+    ? allIndexes.filter((index) => costs[index]!.backgroundStatements! > 0)
+    : [];
+  const backgroundRequestBytesAvailable =
+    backgroundStatementsAvailable &&
+    (hasConsistentCoverage(costs, 'backgroundRequestBytes', backgroundWork) ||
+      (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundRequestBytes')));
+  const backgroundResponseBytesAvailable =
+    backgroundStatementsAvailable &&
+    (hasConsistentCoverage(costs, 'backgroundResponseBytes', backgroundWork) ||
+      (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundResponseBytes')));
+  const backgroundRowsAvailable =
+    backgroundStatementsAvailable &&
+    (hasConsistentCoverage(costs, 'backgroundRows', backgroundWork) ||
+      (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundRows')));
+  const backgroundBlocksAvailable =
+    backgroundStatementsAvailable &&
+    (hasConsistentCoverage(costs, 'backgroundBlocks', backgroundWork) ||
+      (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundBlocks')));
+  const backgroundCostsAvailable =
+    backgroundStatementsAvailable &&
+    (hasConsistentCoverage(costs, 'backgroundCosts', backgroundWork) ||
+      (backgroundWork.length === 0 && anyCoverage(costs, 'backgroundCosts')));
+
   const blocks = lowerMedian(costs.map((cost) => cost.blocks));
   const representative = costs.find((cost) => cost.blocks === blocks)!;
+  const limitations = [...new Set(costs.flatMap((cost) => cost.limitations ?? []))];
+  const relationEvidence = costs.flatMap((cost) => Object.values(cost.relations));
+  const normalizedRelations = relationEvidence.every(({ identity }) => identity !== undefined)
+    ? (() => {
+        const keys = relationRecordKeys(relationEvidence.map((relation) => relation.identity!));
+        return Object.fromEntries(
+          Object.values(representative.relations).map((relation) => [
+            keys.get(relationIdentityKey(relation.identity!))!,
+            relation,
+          ]),
+        );
+      })()
+    : representative.relations;
 
   const median = {
     statements: lowerMedian(costs.map((cost) => cost.statements)),
+    ...(requestBytesAvailable ? { requestBytes: lowerMedian(costs.map((cost) => cost.requestBytes ?? 0)) } : {}),
+    ...(responseBytesAvailable ? { responseBytes: lowerMedian(costs.map((cost) => cost.responseBytes ?? 0)) } : {}),
     controlStatements: lowerMedian(costs.map((cost) => cost.controlStatements)),
     catalogStatements: lowerMedian(costs.map((cost) => cost.catalogStatements)),
     plans: lowerMedian(costs.map((cost) => cost.plans)),
@@ -331,25 +1159,54 @@ export function medianCost(costs: readonly Cost[]): Cost {
     blocks,
     sharedHit: lowerMedian(costs.map((cost) => cost.sharedHit)),
     sharedRead: lowerMedian(costs.map((cost) => cost.sharedRead)),
-    relations: representative.relations,
+    ...(limitations.length === 0 ? {} : { limitations }),
+    relations: ownedRelationCosts(normalizedRelations),
   };
+  const failedStatements = new Map<string, number>();
+  for (const code of new Set(costs.flatMap((cost) => Object.keys(cost.failedStatements ?? {}))))
+    failedStatements.set(code, lowerMedian(costs.map((cost) => cost.failedStatements?.[code] ?? 0)));
   return {
     ...median,
-    ...(costs.some((cost) => cost.backgroundStatements !== undefined)
+    ...(failedStatements.size === 0 ? {} : { failedStatements: Object.fromEntries(failedStatements) }),
+    ...(backgroundStatementsAvailable
       ? {
-          backgroundStatements: lowerMedian(costs.map((cost) => cost.backgroundStatements ?? 0)),
-          backgroundRows: lowerMedian(costs.map((cost) => cost.backgroundRows ?? 0)),
-          backgroundBlocks: lowerMedian(costs.map((cost) => cost.backgroundBlocks ?? 0)),
-          backgroundCosts: Object.fromEntries(
-            [...new Set(costs.flatMap((cost) => Object.keys(cost.backgroundCosts ?? {})))].map((statement) => [
-              statement,
-              {
-                rows: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.rows ?? 0)),
-                blocks: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.blocks ?? 0)),
-                bounded: costs.some((cost) => cost.backgroundCosts?.[statement]?.bounded ?? false),
-              },
-            ]),
-          ),
+          backgroundStatements: lowerMedian(costs.map((cost) => cost.backgroundStatements!)),
+          ...(backgroundRequestBytesAvailable
+            ? { backgroundRequestBytes: lowerMedian(costs.map((cost) => cost.backgroundRequestBytes ?? 0)) }
+            : {}),
+          ...(backgroundResponseBytesAvailable
+            ? { backgroundResponseBytes: lowerMedian(costs.map((cost) => cost.backgroundResponseBytes ?? 0)) }
+            : {}),
+          ...(backgroundRowsAvailable
+            ? { backgroundRows: lowerMedian(costs.map((cost) => cost.backgroundRows ?? 0)) }
+            : {}),
+          ...(backgroundBlocksAvailable
+            ? { backgroundBlocks: lowerMedian(costs.map((cost) => cost.backgroundBlocks ?? 0)) }
+            : {}),
+          ...(backgroundCostsAvailable
+            ? {
+                backgroundCosts: Object.fromEntries(
+                  [...new Set(costs.flatMap((cost) => Object.keys(cost.backgroundCosts ?? {})))].map((statement) => {
+                    const relationIdentities = new Map(
+                      costs
+                        .flatMap((cost) => cost.backgroundCosts?.[statement]?.relationIdentities ?? [])
+                        .map((identity) => [relationIdentityKey(identity), identity]),
+                    );
+                    return [
+                      statement,
+                      {
+                        rows: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.rows ?? 0)),
+                        blocks: lowerMedian(costs.map((cost) => cost.backgroundCosts?.[statement]?.blocks ?? 0)),
+                        bounded: costs.some((cost) => cost.backgroundCosts?.[statement]?.bounded ?? false),
+                        ...(relationIdentities.size === 0
+                          ? {}
+                          : { relationIdentities: [...relationIdentities.values()] }),
+                      },
+                    ];
+                  }),
+                ),
+              }
+            : {}),
         }
       : {}),
   };

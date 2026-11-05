@@ -3,11 +3,13 @@ import { Pool, type QueryConfig } from 'pg';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT, type JWK } from 'jose';
 import { createAuthService, type AuthService } from '@rezics/auth';
 import { readAccount, readPublicAccount } from '../../src/access/account-data.ts';
+import accountRead from '../../src/access/account-read.sql';
 import { createAccess } from '../../src/access/index.ts';
 import { createAccess as permissionAccess } from '../../src/access/permission.ts';
 import { createLifecycleInternals, type RecoveryEvidence } from '../../src/access/lifecycle.ts';
 import { accessCheck, AuthenticationError, type AccountActor } from '../../src/request/access.ts';
 import { delegatedAssignmentFixture } from './delegated-auth-fixture.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const url = process.env.DATABASE_URL;
@@ -185,13 +187,13 @@ beforeAll(async () => {
     audience,
     secret: 'test-only-fence-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid!, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       readAccount: trustedAccount,
       async authorizeProvisioning(reference) {
         if (!approvals.delete(reference)) throw new Error('No provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await service.internal.registerClient({ clientId: 'web', firstParty: true, scopes: [action] });
   await account(person, 'pending');
@@ -349,7 +351,8 @@ test('one actor anchor reads state floor and fence; separate evidence precedes c
   const actor = await access.authenticate(await delegatedToken(), ctx);
   expect(Object.isFrozen(actor)).toBe(true);
   const check = await accessCheck(access, actor, action, resource, ctx);
-  const actorReads = queries.filter((q) => /FROM access.account/.test(q.text));
+  // The organization anchor also reads access.account; identify the native actor statement exactly.
+  const actorReads = queries.filter((q) => q.text === accountRead.sql);
   expect(actorReads).toHaveLength(1);
   expect(actorReads[0]!.values).toEqual([routeOf(person), person]);
   for (const column of ['state', 'minimum_authn_epoch', 'authn_fenced']) expect(actorReads[0]!.text).toContain(column);

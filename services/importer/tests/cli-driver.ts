@@ -1,10 +1,11 @@
 import { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
-import { resolve } from 'node:path';
 import type { BatchWriteRequest } from '@rezics/definitions/bulk';
+import { IMPORTER_SCOPES, VNDB_IMPORTER_SCOPES } from '../src/credentials.ts';
 import { ImportSession } from '../src/import-session.ts';
 import { RUN_TABLES, type RunStore, type SourceProjection } from '../src/run-store.ts';
 import { runImportCli, type ImportCliObserver } from '../src/cli.ts';
+import type { ImportProgressSink } from '../src/import-progress.ts';
 import { createSqliteProbe } from './support/sqlite-growth.ts';
 import type { CliDriver, Command, Execution, Options, Source } from '../../../specs/imports-cli-driver.ts';
 
@@ -26,7 +27,7 @@ type SqliteCapture = {
   database: Database;
   start(): void;
   attachCoordinator(importer: Parameters<NonNullable<ImportCliObserver['onCoordinator']>>[0]['importer']): void;
-  finish(): { sql: Execution['sql']; cost: Execution['cost'] };
+  finish(): { sql: Execution['sql']; counts: Execution['counts'] };
 };
 
 function createSqliteCapture(database: Database): SqliteCapture {
@@ -36,7 +37,7 @@ function createSqliteCapture(database: Database): SqliteCapture {
   let verified = false;
   let verificationFailure: unknown;
   const statementProxies = new WeakMap<object, object>();
-  let cachedFinish: { sql: Execution['sql']; cost: Execution['cost'] } | undefined;
+  let cachedFinish: { sql: Execution['sql']; counts: Execution['counts'] } | undefined;
 
   const measure = <T>(operation: () => T): T => {
     if (!enabled || depth > 0) return operation();
@@ -148,10 +149,9 @@ function createSqliteCapture(database: Database): SqliteCapture {
         }));
         cachedFinish = {
           sql,
-          cost: {
-            statements: sql.length,
-            rows: sql.reduce((sum, statement) => sum + statement.rows, 0),
-            blocks: 0,
+          counts: {
+            'sqlite statements': sql.length,
+            'sqlite returned rows': sql.reduce((sum, statement) => sum + statement.rows, 0),
           },
         };
       }
@@ -281,6 +281,26 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
         if (url.pathname === '/signin/key') {
           signins++;
           if (signins > 1) return new Response('', { status: 401 });
+          const sourceIndex = argv.indexOf('--source');
+          const source = sourceIndex < 0 ? undefined : argv[sourceIndex + 1];
+          const expectedScopes =
+            source === 'vndb'
+              ? VNDB_IMPORTER_SCOPES
+              : source === 'bangumi'
+                ? [...IMPORTER_SCOPES, 'subject:read']
+                : IMPORTER_SCOPES;
+          let body: unknown;
+          try {
+            body = JSON.parse(await request.clone().text());
+          } catch {
+            return new Response('', { status: 401 });
+          }
+          if (
+            typeof body !== 'object' ||
+            body === null ||
+            JSON.stringify(Reflect.get(body, 'scope')) !== JSON.stringify(expectedScopes)
+          )
+            return new Response('', { status: 401 });
           session = `imports-cli-session-${issuedTokens + 1}`;
           return Response.json({}, { headers: { 'set-cookie': `session=${session}; HttpOnly; Secure` } });
         }
@@ -297,6 +317,22 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
       const captured = await boundedRequest(request);
       const authorization = request.headers.get('authorization');
       requests.push({ url: request.url, authorization, bytes: captured.bytes });
+      if (request.method === 'PUT' && /^\/v1\/subjects\/[0-9a-f-]{36}\/source-statistics\/vndb$/.test(url.pathname)) {
+        let body: unknown;
+        try {
+          body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(captured.body));
+        } catch {
+          return new Response('', { status: 400 });
+        }
+        if (
+          typeof body === 'object' &&
+          body !== null &&
+          !Array.isArray(body) &&
+          (request.headers.get('idempotency-key')?.length ?? 0) > 0
+        )
+          return Response.json({ source: 'vndb', ...(body as Record<string, unknown>) });
+        return new Response('', { status: 400 });
+      }
       if (url.pathname === '/v1/subjects:batchWrite') {
         try {
           const body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(captured.body)) as BatchWriteRequest;
@@ -313,11 +349,17 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
       return options.fetch(request);
     };
 
+    const progressBoundaries = boundaries as typeof boundaries & {
+      progressSink?: ImportProgressSink;
+      progressTty?: boolean;
+    };
     const pending = runImportCli(argv, {
       ...(boundaries.stdin === undefined ? {} : { stdin: boundaries.stdin }),
       ...(boundaries.entries === undefined ? {} : { entries: boundaries.entries as never }),
       ...(boundaries.signal === undefined ? {} : { signal: boundaries.signal }),
       ...(boundaries.testOrigin === undefined ? {} : { testOrigin: boundaries.testOrigin }),
+      ...(progressBoundaries.progressSink ? { progressSink: progressBoundaries.progressSink } : {}),
+      ...(progressBoundaries.progressTty === undefined ? {} : { progressTty: progressBoundaries.progressTty }),
       fetch: fetch as typeof globalThis.fetch,
       clock: options.clock,
       instrumentDatabase(database) {
@@ -334,6 +376,15 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
       active.delete(pending);
     }
     const evidence = capture?.finish();
+    if (
+      !evidence &&
+      (fileWrites.size > 0 ||
+        runners.length > 0 ||
+        tokenReads.length > 0 ||
+        requests.length > 0 ||
+        Object.values(input).some((value) => value !== 0))
+    )
+      throw new Error('Missing SQLite capture outside observed no-I/O preflight');
     return {
       code: result.code,
       stdout: result.stdout,
@@ -345,7 +396,8 @@ export async function createImportCliDriver(options: Options): Promise<CliDriver
       requests,
       openHandles: result.openHandles,
       input,
-      cost: evidence?.cost ?? { rows: 0, statements: 0, blocks: 0 },
+      // Only the observed no-I/O preflight above can have no capture.
+      counts: evidence?.counts ?? { 'sqlite statements': 0, 'sqlite returned rows': 0 },
     };
   };
 

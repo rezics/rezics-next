@@ -1,5 +1,8 @@
+import type { AccessWorkAccounting, AccessWorkProducer } from '../access/work.ts';
+import type { ContentEditionBenefit, ContentEditionBuyerFactReader } from '../access/authenticated-benefit.ts';
+import { AccessUnavailableError, throwAccessUnavailable } from '../access/unavailable.ts';
 import { accessRoot } from '../access/derived-access.ts';
-import { throwAccessUnavailable } from '../access/unavailable.ts';
+import { hasOriginalAuthenticator } from '../access/authentication-work.ts';
 import type { Pool, PoolClient } from 'pg';
 import { commandAccessContext, requireCommandAdmission } from '../access/command-admission.ts';
 import type { ResourceRoleCatalogue } from '../access/resource-roles.ts';
@@ -12,6 +15,11 @@ import {
 } from '../command/command.ts';
 import type { ResourceEligibility } from '../access/eligibility.ts';
 import { routeOf } from '../route/route.ts';
+import { permissionHistoryAccounts } from '../access/permission.ts';
+import { bindCommandHistoryEvidence } from '../history/record.ts';
+import type { AccountReference } from '../history/locator.ts';
+import type { KindAudienceAccess } from '../access/kind-audience.ts';
+export type * from '../access/kind-audience.ts';
 
 export type AccountActor = {
   kind: 'account';
@@ -28,6 +36,8 @@ export type Actor = AccountActor | { kind: 'anonymous' };
 export type Resource = {
   route: number;
   id: string;
+  /** Server-only exact selector, never entitlement evidence. */
+  authenticatedBenefit?: ContentEditionBenefit;
   eligibility?: ResourceEligibility;
   /** Compatibility spelling; uses the same opaque capability and evaluator. */
   anonymousEligibility?: ResourceEligibility;
@@ -44,6 +54,7 @@ export type ResourcePage = Readonly<{
 export function resourcePage(page: ResourcePage): ResourcePage {
   if (
     !page ||
+    'authenticatedBenefit' in page ||
     !Number.isInteger(page.route) ||
     page.route < 0 ||
     page.route > 65535 ||
@@ -66,6 +77,8 @@ export function resourcePage(page: ResourcePage): ResourcePage {
 export type ActionMetadata = {
   anonymous: boolean;
   replay?: 'self-account-read';
+  /** Mounted personal actions use the verified acting account's native owner authority. */
+  authority?: 'own-account';
   /** Resource types the command initializes. Absent means it initializes none. */
   'x-resource-types'?: readonly string[];
 };
@@ -74,16 +87,39 @@ export type ActionCatalogue = ReadonlyMap<string, ActionMetadata>;
 /** Server-owned Realm membership proofs. The permission formula calls this on the
  * released Realm anchor; a missing reader denies Realm group matches.
  */
-export type AccessRealmRoleReader = (
+export type AccessRealmRoleReader = ((
   client: AccessClient,
   input: { realmId: string; accountId: string; at: string },
-) => Promise<readonly { role: 'owner' | 'member'; member: boolean; valid: string }[] | null>;
+) => Promise<readonly { role: 'owner' | 'member'; member: boolean; valid: string }[] | null>) & {
+  work?: AccessWorkProducer<
+    { realmId: string; accountId: string; at: string },
+    readonly { role: 'owner' | 'member'; member: boolean; valid: string }[] | null
+  >;
+  batchWork?: AccessWorkProducer<
+    { pairs: readonly { realmId: string; accountId: string }[]; at: string },
+    readonly { realmId: string; accountId: string; role: 'owner' | 'member'; member: boolean; valid: string }[] | null
+  >;
+  /** One trusted statement for all admitted Realm/member anchors. */
+  batch?: (
+    client: AccessClient,
+    input: { pairs: readonly { realmId: string; accountId: string }[]; at: string },
+  ) => Promise<
+    readonly { realmId: string; accountId: string; role: 'owner' | 'member'; member: boolean; valid: string }[] | null
+  >;
+};
 
 /** Actions available to an access implementation for one application. */
 export type AccessConfig = {
   actions: ActionCatalogue;
   resourceRoles?: ResourceRoleCatalogue;
   realmRoleReader?: AccessRealmRoleReader;
+  /** Trusted Commerce current native reader; never supplied by HTTP input. */
+  contentEditionBuyerFactReader?: ContentEditionBuyerFactReader;
+  /** Commerce owns the finite footprint and actual receipt of its callback. */
+  contentEditionBuyerFactWork?: AccessWorkProducer<
+    Parameters<ContentEditionBuyerFactReader>[0],
+    Awaited<ReturnType<ContentEditionBuyerFactReader>>
+  >;
   /** Outside a command, permission checks bind this instant. Absent uses PostgreSQL clock_timestamp(). */
   clock?: () => Date;
 };
@@ -91,17 +127,125 @@ export type AccessConfig = {
 /** Builds an access implementation from an application's configuration. */
 export type AccessFactory = (config: AccessConfig) => Access;
 
-export type AccessContext = { pool: Pool; deadline: number };
+export type AccessContext = {
+  pool: Pool;
+  deadline: number;
+  time?: AuthoritativeTime;
+  /** Trusted accounting only; never permission, identity or an extra allowance. */
+  work?: AccessWorkAccounting;
+};
 
 export type AccessClient = Pick<PoolClient, 'query'>;
 /** Ordinary permission plus the same formula with public floor and grant roles disabled. */
 export type AccessDecision = Readonly<{ allowed: boolean; explicit: boolean }>;
 export type AccessExplicitCheck = (client: AccessClient, time?: AuthoritativeTime) => Promise<AccessDecision>;
-export type AccessCheck = (client: AccessClient, time?: AuthoritativeTime) => Promise<boolean>;
+/** Trusted owner callback, evaluated at the formula's snapshot instant. UUIDs have no
+ * resource-kind tag: the owner supplies the homogeneous resourceType and ids. */
+export type ReadDecisionEligibility = ((
+  client: AccessClient,
+  ids: readonly string[],
+  at: string,
+) => Promise<Readonly<Record<string, boolean>>>) & {
+  work?: AccessWorkProducer<
+    Readonly<{ client: AccessClient; ids: readonly string[]; at: string }>,
+    Readonly<Record<string, boolean>>
+  >;
+};
+export type ReadDecisionInput = Readonly<{
+  action: string;
+  resourceType: string;
+  ids: readonly string[];
+  eligibility?: ReadDecisionEligibility;
+}>;
+/** Native, server-only operation binding. Only the installed evaluator produces
+ * this handle; no request field, callback or authorization boolean is accepted. */
+export type AccountAuthorityKind = 'profile' | 'self' | 'verification';
+export type AccountAuthorityDecision = AccessDecision & { action: string };
+export type AccountAuthority = Readonly<{
+  decide(
+    client: AccessClient,
+    input: { kind: AccountAuthorityKind; action: string; ids: readonly string[] },
+    time?: AuthoritativeTime,
+  ): Promise<Readonly<Record<string, AccountAuthorityDecision>>>;
+}>;
+export type ReadDecisions = Readonly<{
+  /** Prepare native Account/foreign-operator formula pages before target checkout. */
+  prepareAccountAuthority?(ids: readonly string[]): Promise<AccountAuthority>;
+  decide(
+    client: AccessClient,
+    input: ReadDecisionInput,
+    time?: AuthoritativeTime,
+  ): Promise<Readonly<Record<string, AccessDecision>>>;
+}>;
+export type PrepareReadDecisionsInput = {
+  actor: Actor;
+  actions: ReadonlySet<string>;
+  /** Composed candidate sets for a mixed-type read; each type remains bounded to 64. */
+  typeActions?: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Shared authoritative instant for a personal batch. */
+  time?: AuthoritativeTime;
+  context: AccessContext;
+};
+/** Validate the bounded catalogue before reading any authority dependency. */
+export function validReadDecisionActions(input: PrepareReadDecisionsInput, catalogue: ActionCatalogue): boolean {
+  if (!input.actions.size || [...input.actions].some((action) => !catalogue.has(action))) return false;
+  if (!input.typeActions) return input.actions.size <= 64;
+  if (!input.typeActions.size || input.typeActions.size > 100) return false;
+  const union = new Set<string>();
+  for (const [type, actions] of input.typeActions) {
+    if (!type.length || !actions.size || actions.size > 64) return false;
+    for (const action of actions) union.add(action);
+  }
+  return union.size === input.actions.size && [...union].every((action) => input.actions.has(action));
+}
+export type PreparedAccessCheckInvocation = Readonly<{
+  client: AccessClient;
+  time: AuthoritativeTime;
+  work: AccessWorkAccounting;
+}>;
+export type PreparedAccessCheckWork = AccessWorkProducer<PreparedAccessCheckInvocation, boolean> &
+  Readonly<{
+    run(input: PreparedAccessCheckInvocation): Promise<boolean>;
+  }>;
+export type AccessCheck = ((client: AccessClient, time?: AuthoritativeTime) => Promise<boolean>) &
+  Readonly<{
+    work?: PreparedAccessCheckWork;
+  }>;
+type PreparedWorkFactory = (
+  actor: Actor,
+  action: string,
+  resource: Resource,
+  evidence: unknown,
+  dispatch: (input: PreparedAccessCheckInvocation) => Promise<boolean>,
+) => PreparedAccessCheckWork | undefined;
+// The standalone native evaluator may install during cyclic module loading.
+// A hoisted, lazily initialized registry retains that installation without a TDZ
+// or a later module initializer replacing it.
+var preparedWorkFactories: WeakMap<Access, PreparedWorkFactory> | undefined;
+/** Installed only by the original native evaluator and its original wrapper. */
+export function installPreparedAccessCheckWork(access: Access, factory: PreparedWorkFactory): void {
+  (preparedWorkFactories ??= new WeakMap()).set(access, factory);
+}
+export function nativePreparedAccessCheckWork(
+  access: Access,
+  actor: Actor,
+  action: string,
+  resource: Resource,
+  evidence: unknown,
+  dispatch: (input: PreparedAccessCheckInvocation) => Promise<boolean>,
+): PreparedAccessCheckWork | undefined {
+  return preparedWorkFactories?.get(access)?.(actor, action, resource, evidence, dispatch);
+}
 export type AccessCommandAuthorization = CommandAuthorization & { readonly check: AccessCheck };
 
 export interface Access {
-  authenticate(token: string, context: AccessContext): Promise<AccountActor>;
+  /** Native Kind origin/evidence only; optional for existing mocks/adapters.
+   * The original factory is staged unavailable before IO until owner bodies exist.
+   */
+  readonly kindAudience?: KindAudienceAccess;
+  /** Authentication has no authorization-time input; preserve its native request contract. */
+  authenticate(token: string, context: { pool: Pool; deadline: number }): Promise<AccountActor>;
+  prepareReadDecisions?(input: PrepareReadDecisionsInput): Promise<ReadDecisions>;
   prepare?(actor: Actor, action: string, resource: Resource, context: AccessContext): Promise<unknown>;
   preparePage?(actor: Actor, action: string, page: ResourcePage, context: AccessContext): Promise<unknown>;
   authorizePage?(
@@ -141,7 +285,12 @@ export async function accessCheck(
   context: AccessContext,
 ): Promise<AccessCheck> {
   const evidence = access.prepare ? await access.prepare(actor, action, resource, context) : null;
-  return (client, time = commandTime(client)) => access.authorize(client, actor, action, resource, evidence, time);
+  const check: AccessCheck = (client, time = commandTime(client)) =>
+    access.authorize(client, actor, action, resource, evidence, time);
+  const work = nativePreparedAccessCheckWork(access, actor, action, resource, evidence, ({ client, time }) =>
+    check(client, time),
+  );
+  return work ? Object.assign(check, { work }) : check;
 }
 
 /** Resolve the installed port through derived adapters; never infer explicit
@@ -160,10 +309,20 @@ export async function accessExplicitCheck(
     root.authorizeExplicit!(client, actor, action, resource, evidence, time);
 }
 
-/** Recheck command admission on every live attempt before resource checkout.
- * Each attempt prepares fresh action and self-read evidence at its own T, with
- * its own evidence budget capped by the original request deadline and JWT expiry.
- * A retry never renews those caps. Self-read permits receipt lookup only, never a body.
+/** The installed root owns the sole batch read formula, including through adapters. */
+export async function prepareReadDecisions(access: Access, input: PrepareReadDecisionsInput): Promise<ReadDecisions> {
+  const root = accessRoot(access);
+  if (!root.prepareReadDecisions) throw new AccessUnavailableError('overloaded');
+  return root.prepareReadDecisions(input);
+}
+
+/** Recheck command admission and prepare fresh evidence on every live attempt
+ * before resource checkout. The stable check wrapper always uses the current
+ * attempt's evidence, including body checks captured before execution. A retry
+ * does not renew the request: each attempt's context copies the fixed request
+ * deadline, and its evidence budget is capped by it and by JWT expiry, so no
+ * attempt's evidence outlives the request. Self-read permits receipt lookup
+ * only, never a body.
  */
 export async function accessCommandAuthorization(
   access: Access,
@@ -174,7 +333,12 @@ export async function accessCommandAuthorization(
   denied: () => Error,
 ): Promise<AccessCommandAuthorization> {
   const target = Object.freeze({ ...resource });
-  type Prepared = { attempt: CommandAttempt; check: AccessCheck; selfRead?: AccessCheck };
+  type Prepared = {
+    attempt: CommandAttempt;
+    check: AccessCheck;
+    selfRead?: AccessCheck;
+    historyAccounts: readonly AccountReference[] | undefined;
+  };
   const proofs = new WeakMap<object, Prepared>();
   let current: Prepared | undefined;
   const check: AccessCheck = async (client, time = commandTime(client)) => {
@@ -192,21 +356,24 @@ export async function accessCommandAuthorization(
       try {
         const preparation = commandAccessContext(context, attempt);
         await requireCommandAdmission(access, actor, preparation);
-        const check = await accessCheck(access, actor, action, target, preparation);
-        const selfRead =
-          actor.kind === 'account' && access.replayAuthorization?.(action) === 'self-account-read'
-            ? await accessCheck(
-                access,
-                actor,
-                'account:read',
-                {
-                  route: Number.parseInt(actor.accountId.slice(24, 28), 16),
-                  id: actor.accountId,
-                },
-                preparation,
-              )
-            : undefined;
-        const prepared: Prepared = { attempt, check, ...(selfRead ? { selfRead } : {}) };
+        const evidence = access.prepare ? await access.prepare(actor, action, target, preparation) : null;
+        const prepared: Prepared = {
+          attempt,
+          check: (client, time) => access.authorize(client, actor, action, target, evidence, time),
+          historyAccounts: permissionHistoryAccounts(evidence, actor, action, target),
+        };
+        if (actor.kind === 'account' && access.replayAuthorization?.(action) === 'self-account-read') {
+          prepared.selfRead = await accessCheck(
+            access,
+            actor,
+            'account:read',
+            {
+              route: Number.parseInt(actor.accountId.slice(24, 28), 16),
+              id: actor.accountId,
+            },
+            preparation,
+          );
+        }
         const proof = Object.freeze({});
         proofs.set(proof, prepared);
         return proof;
@@ -238,7 +405,10 @@ export async function accessCommandAuthorization(
       )
         throw denied();
       current = prepared;
-      if (await check(tx, attempt.time)) return 'execute';
+      if (await check(tx, attempt.time)) {
+        if (prepared.historyAccounts) bindCommandHistoryEvidence(tx, prepared.historyAccounts);
+        return 'execute';
+      }
       if (prepared.selfRead && (await prepared.selfRead(tx, attempt.time))) return 'receipt-only';
       throw denied();
     },
@@ -270,6 +440,8 @@ export async function actorOf(access: Access, request: Request, context: AccessC
 
   const credentials = /^Bearer[ \t]+([A-Za-z0-9\-._~+/]+=*)$/i.exec(authorization);
   if (!credentials) throw invalidRequest();
+  if (context.work && !hasOriginalAuthenticator(access.authenticate))
+    context.work.unavailable('Auth bearer authentication native work producer');
   return access.authenticate(credentials[1]!, context);
 }
 

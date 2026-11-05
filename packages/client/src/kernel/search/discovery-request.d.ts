@@ -1,0 +1,37 @@
+import { type DiscoveryFilterDocument, type FilterRelease } from '@rezics/filter';
+import type { DiscoveryOwnerRegistry, DiscoveryRegistry, DiscoveryRequest } from './discovery.ts';
+export type MixedDiscoveryRequest = DiscoveryRequest & {
+    kindPage?: {
+        limit: number;
+        cursor?: string;
+    };
+    kindCountLeaf?: number;
+};
+/** Copy bounded caller fields before the first await. Omitted keys stay omitted. */
+export declare function ownDiscoveryRequest(request: MixedDiscoveryRequest): MixedDiscoveryRequest;
+/** Admission precedes any native enumeration. Saved/private domains remain closed here. */
+export declare function admitDiscoveryRequest(request: MixedDiscoveryRequest, registry: DiscoveryRegistry & Partial<DiscoveryOwnerRegistry>, release: FilterRelease): {
+    text: import("./text.ts").TextNode | undefined;
+    filter: DiscoveryFilterDocument | undefined;
+    countFilter: DiscoveryFilterDocument | undefined;
+    sort: "id" | "name" | "relevance";
+    limit: number;
+    kindLimit: number;
+    options: import("./hits.ts").HitOptions;
+    languages: readonly string[];
+    bindingRequest: {
+        representation: string;
+        text: string | null;
+        filter: DiscoveryFilterDocument | null;
+        sort: "id" | "name" | "relevance";
+        limit: number;
+        languages: string[];
+        descriptions: boolean;
+        properties: string[];
+        kindLimit: number;
+        kindCountLeaf: number | null;
+        spaceId: string | null;
+    };
+};
+/** Classify the opt-in grammar at the existing gate; the legacy parser must never see kind.in. */
+export declare function requiresAdvancedDiscoverySearch(request: MixedDiscoveryRequest): boolean;

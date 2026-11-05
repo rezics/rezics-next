@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import {
   BATCH_LIMIT,
@@ -20,6 +21,7 @@ import { customMethod } from '../../http/custom-method.ts';
 import {
   PROBLEM_TYPE_BASE,
   ProblemError,
+  logInternalError,
   problemResponse,
   problemSchema,
   type FieldError,
@@ -50,17 +52,46 @@ import type { subjectRoutes } from './subjects.ts';
 
 // A malformed command key still needs its own result. Keep the portable success
 // shapes while allowing the diagnostic result to echo an empty or invalid key.
-const portableResult = BatchWriteResultSchema.properties.results.items.anyOf;
-const responseSchema = t.Object({
-  results: t.Array(t.Union([portableResult[0], t.Object({ ...portableResult[1].properties, key: t.String() })]), {
-    minItems: 1,
-    maxItems: BATCH_LIMIT,
-  }),
-});
+function portableResult() {
+  return memoizedValue(portableResult, () => BatchWriteResultSchema.properties.results.items.anyOf);
+}
+function responseSchema() {
+  return memoizedValue(responseSchema, () =>
+    t.Object({
+      results: t.Array(
+        t.Union([portableResult()[0], t.Object({ ...portableResult()[1].properties, key: t.String() })]),
+        {
+          minItems: 1,
+          maxItems: BATCH_LIMIT,
+        },
+      ),
+    }),
+  );
+}
 
-type Pending = { index: number; route: number | null; command: BatchCommand; errors: FieldError[] };
+/** `unavailable` is an availability verdict. It is raised only after the command's authorization and source fence. */
+type Pending = {
+  index: number;
+  route: number | null;
+  command: BatchCommand;
+  errors: FieldError[];
+  unavailable?: FieldError;
+};
 
 const served = new Set(['facts', 'summary', 'cover']);
+const BULK_WRITE_ROUTE = '/v1/subjects:batchWrite';
+
+export function logPendingFenceFailure(requestId: string, commandIndex: number): Error {
+  const cause = new Error('Source fence was still pending after the retry pass');
+  logInternalError({
+    requestId,
+    method: 'POST',
+    route: BULK_WRITE_ROUTE,
+    cause,
+    commandIndex,
+  });
+  return cause;
+}
 
 function fencedProblem(requestId: string) {
   return {
@@ -124,7 +155,7 @@ export function bulkRoutes(
         { additionalProperties: false },
       ),
       response: {
-        200: withHeaders(responseSchema, { [SESSION_HEADER]: t.String() }),
+        200: withHeaders(responseSchema(), { [SESSION_HEADER]: t.String() }),
         400: problemSchema('invalid_request'),
         401: problemSchema('authentication_required', 'invalid_credentials'),
         403: problemSchema('forbidden'),
@@ -216,10 +247,10 @@ export function bulkRoutes(
             for (const group of groups.values()) {
               const pending = group.find((row) => row.index === item.index);
               if (!pending) continue;
-              pending.errors.push({
+              pending.unavailable = {
                 pointer: `/commands/${item.index}/statement/value/content`,
                 code: 'out_of_range',
-              });
+              };
               break;
             }
           }
@@ -271,16 +302,19 @@ export function bulkRoutes(
                     }),
                 pending.command,
                 pending.route,
-                (tx) =>
-                  enforceSourceFence(
+                async (tx) => {
+                  await enforceSourceFence(
                     tx,
                     plan,
                     partitionOf(pending.route!),
                     sourceTuple(routeKey, pending.command.source),
-                  ),
+                  );
+                  if (pending.unavailable) throw new ProblemError('invalid_request', { errors: [pending.unavailable] });
+                },
               );
               const { component, ...result } = await admission.run('normal', job, () =>
                 batchCommand(pool, {
+                  routeKey,
                   command: pending.command,
                   route: pending.route!,
                   actor,
@@ -319,6 +353,14 @@ export function bulkRoutes(
                 id: requestId,
                 action: pending.command?.op === 'create' ? 'subject:create' : 'statement:propose',
               });
+              if (response.status === 500)
+                logInternalError({
+                  requestId,
+                  method: 'POST',
+                  route: BULK_WRITE_ROUTE,
+                  cause: error,
+                  commandIndex: pending.index,
+                });
               const payload = await response.json();
               if (error instanceof SubjectRedirectError) payload.redirect = { from: error.from, to: error.to };
               results[pending.index] = { key, status: response.status, problem: payload };
@@ -347,7 +389,8 @@ export function bulkRoutes(
       for (const [, jobs] of remaining) {
         for (const pending of jobs) {
           const key = typeof pending.command?.key === 'string' ? pending.command.key : '';
-          const response = problemResponse(new ProblemError('internal_error'), {
+          const cause = logPendingFenceFailure(requestId, pending.index);
+          const response = problemResponse(cause, {
             method: 'POST',
             id: requestId,
             action: pending.command?.op === 'create' ? 'subject:create' : 'statement:propose',

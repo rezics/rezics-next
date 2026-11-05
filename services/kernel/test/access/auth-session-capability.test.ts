@@ -1,4 +1,5 @@
-import { createAuthService, type AuthService } from '@rezics/auth';
+import { suspendAccount, reinstateAccount } from '../support/native-suspension-driver.ts';
+import { createAuthService, type AuthService, type SessionProof } from '@rezics/auth';
 import { exportJWK, generateKeyPair } from 'jose';
 import type { Pool, PoolClient } from 'pg';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
@@ -271,14 +272,27 @@ test('proof substitution, reference substitution and credential purposes preserv
     ).rejects.toThrow();
   const credential = await f.opening(headers, human, subject, 'credential-management');
   await expect(f.open(credential.reference, subject, headers)).rejects.toThrow();
-  await expect(
-    f.service.internal.setCredential({
-      authorization: reference,
-      subjectAccountId: subject,
-      headers,
-      credential: { kind: 'password', password },
-    }),
-  ).rejects.toThrow('unavailable');
+  const proof = (await (await f.request('/session', undefined, headers)).json()) as SessionProof;
+  const credentialAttempts = await Promise.allSettled(
+    (['set-password', 'remove-password', 'add-key', 'remove-key'] as const).map((purpose) =>
+      f.capability.consumeAuthAuthorization({
+        authorization: reference,
+        subjectAccountId: subject,
+        purpose,
+        operationKey: f.key(),
+        effectReference: f.key(),
+        human: proof,
+      }),
+    ),
+  );
+  expect(
+    credentialAttempts.every(
+      (attempt) =>
+        attempt.status === 'rejected' &&
+        attempt.reason instanceof Error &&
+        attempt.reason.message.includes('unavailable'),
+    ),
+  ).toBe(true);
   // A public proof has identical JSON, but has no live Auth object capability.
   const publicProof = await (await f.request('/session', undefined, headers)).json();
   await expect(
@@ -303,14 +317,21 @@ test('current account barriers, native expiry/epochs/relation and revoked manage
   ]) {
     const opening = await f.opening(headers, human, subject);
     const before = await counts();
-    await authPool.query(`UPDATE access.account SET ${sql} WHERE account_id=$1`, [id]);
+    if (sql === "state='suspended'") await suspendAccount(authPool, id!);
+    else await authPool.query(`UPDATE access.account SET ${sql} WHERE account_id=$1`, [id]);
     try {
       await expect(f.open(opening.reference, subject, headers)).rejects.toThrow();
     } finally {
-      await authPool.query(`UPDATE access.account SET ${restore} WHERE account_id=$1`, [id]);
+      if (sql === "state='suspended'") {
+        await reinstateAccount(authPool, id!);
+        if (id === human) headers = await f.login(human);
+      } else await authPool.query(`UPDATE access.account SET ${restore} WHERE account_id=$1`, [id]);
     }
     expect(await counts()).toEqual(before);
   }
+  human = await f.person();
+  subject = await f.automate(human);
+  headers = await f.login(human);
   for (const sql of [
     "expires_at=clock_timestamp()-interval '1 second'",
     'subject_epoch_floor=2',

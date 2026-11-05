@@ -1,34 +1,19 @@
-import { createAuthConsentReader, type CurrentConsentReader } from '../access/auth-consent.ts';
 import { createInitiatorRestorer } from '../access/durable-initiator.ts';
-import { createAccess } from '../access/index.ts';
+import { erasureWorkModule } from '../access/erasure.ts';
+import { sharedHistoryWorkModule } from '../history/work.ts';
 import { createAccountsWorkModule } from '../access/membership-work.ts';
 import { readMembershipWorkConfig } from '../access/membership-work-config.ts';
-import roles from '../access/resource-roles.json';
 import { createRealmMembership, readMembershipInitiator } from '../community/membership.ts';
 import { communityWorkModule } from '../community/work.ts';
 import { registerContent } from '../content/register.ts';
-import { readContentWorkConfig } from '../content/work-config.ts';
 import type { WorkModule } from './registry.ts';
 import { commerceWorkModule } from '../commerce/work-module.ts';
 import { libraryWorkModule } from '../library/work-module.ts';
-import { searchWorkModule } from '../search/work.ts';
-
-/** Every action named by a resource role. A missing action drops the whole role. */
-function realmActionCatalogue() {
-  const names = new Set<string>();
-  for (const actions of Object.values(roles.roles)) for (const action of actions) names.add(action);
-  return new Map([...names].map((action) => [action, { anonymous: false }]));
-}
-
-/** The kernel's one Auth consent configuration. Absent, restoration is unavailable and its steps fail. */
-function consentReader(env: Readonly<Record<string, string | undefined>>): CurrentConsentReader {
-  const consent = readContentWorkConfig(env).consent;
-  return consent === null
-    ? async () => {
-        throw new Error('Auth consent is not configured');
-      }
-    : createAuthConsentReader(consent);
-}
+import { semanticWorkModule } from '../semantic/work-module.ts';
+import { createSearchWorkModule } from '../search/work.ts';
+import { ratingWorkModule } from '../rating/work-module.ts';
+import { workflowRetentionWorkModule } from './retention.ts';
+import { importsWorkModule } from '../imports/erasure.ts';
 
 /** Accounts registration installs the Realm adapter before any Realm workflow runs.
  * Its Access is the production composition, so a step authorizes only the initiator
@@ -38,17 +23,8 @@ const accountsWorkModule: WorkModule = {
   name: 'accounts',
   async register(context) {
     const config = readMembershipWorkConfig(context.env);
-    let membership: ReturnType<typeof createRealmMembership> | undefined;
-    const access = createAccess({
-      actions: realmActionCatalogue(),
-      auth: config.auth,
-      realmRoleReader: (client, input) => {
-        if (!membership) throw new Error('Realm membership role reader is not installed');
-        return membership.roleReader(client, input);
-      },
-      clock: context.clock,
-    });
-    membership = createRealmMembership({
+    const { access, readConsent } = context.getAuthorization();
+    const membership = createRealmMembership({
       pool: context.pool,
       access,
       referenceKeys: config.referenceKeys,
@@ -57,7 +33,7 @@ const accountsWorkModule: WorkModule = {
         pool: context.pool,
         access,
         readOperation: readMembershipInitiator,
-        readConsent: consentReader(context.env),
+        readConsent,
       }),
     });
     await createAccountsWorkModule({ realm: membership }).register(context);
@@ -65,11 +41,23 @@ const accountsWorkModule: WorkModule = {
 };
 
 /** Add each module's registration here, in dependency order, once. */
-export const KERNEL_WORK_MODULES: readonly WorkModule[] = [
-  accountsWorkModule,
-  commerceWorkModule,
-  libraryWorkModule,
-  communityWorkModule,
-  searchWorkModule,
-  registerContent,
-];
+export function createKernelWorkModules(
+  composeDiscovery: Parameters<typeof createSearchWorkModule>[0],
+  composeRuntimeDefaults: Parameters<typeof createSearchWorkModule>[1],
+): readonly WorkModule[] {
+  const searchWorkModule = createSearchWorkModule(composeDiscovery, composeRuntimeDefaults);
+  return [
+    accountsWorkModule,
+    erasureWorkModule,
+    sharedHistoryWorkModule,
+    ratingWorkModule,
+    commerceWorkModule,
+    libraryWorkModule,
+    communityWorkModule,
+    semanticWorkModule,
+    searchWorkModule,
+    importsWorkModule,
+    registerContent,
+    workflowRetentionWorkModule,
+  ];
+}

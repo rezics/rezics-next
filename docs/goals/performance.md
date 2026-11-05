@@ -1,0 +1,70 @@
+# Performance
+
+## Outcome
+
+People and API consumers receive predictable work bounds as catalogue, history and tenant populations grow.
+Contributors demonstrate those bounds with shared native evidence, rather than machine speed.
+
+## Done when
+
+- Every owned read, write, authorization, validation, projection and cleanup derivation names its anchors, examined
+  work, admitted expansion and complete nested native cost, and links to a native growth check.
+- The shared harness measures statements, examined rows, buffers and other relevant engine work at three seeded
+  scales. It grows unrelated data and history independently of the selected neighbourhood, including Auth workflow
+  and request history at 256, 1,024 and 4,096 records.
+- Kernel command execution, keyset reads, receipts, outbox and relays, Access/Auth, semantic/content, search, library,
+  commerce, imports, lifecycle jobs including Auth workflow-history retention, and control-plane operations meet
+  their stated bounds.
+- Large jobs make bounded resumable progress. Denied, empty, deep-page and cleanup paths obey the same principle,
+  including Auth zero-eligible and post-drain repeated-empty retention batches.
+- Filter, source and order plans have derived budgets in honest work units, including preparation, rereads, discarded
+  candidates and native disclosure. A shorter returned page or deduplicated terminal set cannot reprice raw work.
+- Every violated derivation or growth assertion is corrected with its owner and verified through native acceptance.
+  Load-sensitive classification and background-work attribution preserve visible diagnostic evidence.
+
+## Scope
+
+Includes the shared native growth harness, fixtures, operation derivations, hot-path corrections and cross-owner
+receiving across [public scope](../scope.md). Slow engine constants are distinct from work growing with unrelated
+data. Wall-clock thresholds alone do not prove asymptotic behavior.
+
+The assigned website work covers signed-in account Settings, notices, preferences, section navigation, safety, and
+the assigned Profile/Watches journeys through the existing real typed Web shell. M1 is the signed-in Settings
+Profile/Watches path. Product owners retain policy, database schema and SQL semantics, Source contracts and admission
+authority. Do not enlarge production exposure or native/browser admission.
+
+## Ownership
+
+Performance owns `services/kernel/test/support/growth*`, growth suites under module test directories, shared bounds
+and cross-owner receiving. [Kernel performance](../../services/kernel/performance-contract.md) owns shared harness
+and native evidence rules; [Library performance](../../services/kernel/src/library/performance-contract.md) owns
+Collection derivations and custody. [Work](../../services/kernel/src/work/README.md#selected-execution-producer)
+and [History](../../services/kernel/src/history/README.md#selected-native-executor-binding) own their execution
+adapters. [Architecture](../architecture.md#modules-and-boundaries) owns pure-package and adapter direction, and
+[verification](../development/verification.md#native-growth-evidence) owns evidence and check placement.
+
+Performance owns the assigned Settings/Profile/Watches interface journeys. [Settings](../../apps/web/src/settings/README.md),
+[Inbox](../../apps/web/src/inbox/README.md) and the [profile editor](../../apps/web/src/accounts/profile-editor/README.md)
+own their recovery semantics. Web owns the shared shell, patterns and visual acceptance. Accounts, Auth and Content
+retain their native backends.
+
+## Dependencies
+
+Native owner operations and realistic fixtures with isolated resources are required. Other Goals own their local
+derivations and consume the common harness. Semantic supplies disclosure dependencies; Search and Commerce expose
+concrete admitted plans. Performance derives and verifies their budgets without reproducing owner logic in a
+benchmark.
+
+## Acceptance
+
+The [capability acceptance](performance.capabilities.md) owns user cases and frozen scenarios. Use the
+[shared growth harness](../../services/kernel/performance-contract.md) and module suites through their owning check
+runners. Measure at three scales, such as 1×, 8× and 64×, against constant, logarithmic or change-proportional bounds
+derived before implementation; use the prescribed Auth scales above where applicable. Count native examined work,
+not only calls, and observe projection or worker work within its operation context. Report independently owned
+background work separately.
+
+Root, module and native evidence retain separate meaning. Root SQL acceptance uses the supported Reylo types through
+the affected Web/root checks; fast copy-on-write preparation does not establish SQL closure. Infrastructure failure
+or unavailable evidence is neither denial nor a product pass. Use [verification](../development/verification.md)
+for evidence and check-host placement.

@@ -8,6 +8,7 @@ import { GrantDeniedError } from '../access/grant-commands.ts';
 import {
   authoritativeTimeValue,
   principalCommandIdentity,
+  mintReadTime,
   runCommand,
   type AuthoritativeTime,
 } from '../command/command.ts';
@@ -20,6 +21,8 @@ import { decodeCursor, encodeCursor, type CursorBinding } from '../tokens/cursor
 import type { KeyRing } from '../tokens/seal.ts';
 import type { SpaceDependencies } from './space.ts';
 import { realmReadEligibility } from './realm.ts';
+import { readContainerBinding, revalidateContainerBinding } from './container-lifecycle.ts';
+import { realmGovernanceAuthorization } from './realm-continuity.ts';
 import realmActive from './publication-realm.sql';
 import insertRecord from './publication-insert.sql';
 import insertHead from './publication-head-insert.sql';
@@ -29,7 +32,7 @@ import readHead from './publication-read.sql';
 
 export type PublicationDependencies = SpaceDependencies;
 export type PublicationContext = Readonly<{ idempotencyKey: string; deadline: number }>;
-export type PublicationReadContext = Readonly<{ actor: Actor; deadline: number }>;
+export type PublicationReadContext = Readonly<{ actor: Actor; deadline: number; languages?: readonly string[] }>;
 export type PublicationInput = Readonly<{ realmId: string; subjectId: string; expectedHead?: string }>;
 export type PublicationVerdict = 'adopt' | 'reject' | 'withdraw';
 export type PublicationResult = Readonly<{
@@ -52,6 +55,13 @@ export type PublicationHead = Readonly<{
 }>;
 export type PublicationPage = Readonly<{ items: readonly PublicationHead[]; next: string | null }>;
 export type PublicationQuery = Readonly<{ cursor?: string; limit?: number }>;
+/** Trusted composition handle. The raw window and its cursor are selected once;
+ * current() checks those exact heads without selecting another window.
+ */
+export type PublicationSelection = Readonly<{
+  page: PublicationPage;
+  current: () => Promise<boolean>;
+}>;
 
 const PAGE = { default: 20, max: 100 } as const;
 const LIST = 'community.publication.list';
@@ -275,7 +285,7 @@ function decide(
           .update(canonicalize([identity, verdict, body])!)
           .digest(),
       },
-      authorization,
+      authorization: realmGovernanceAuthorization(authorization, { route: realmRoute, id: input.realmId }),
     },
     async (tx, command) => {
       const at = authoritativeTimeValue(command.time);
@@ -346,12 +356,26 @@ export async function readPublication(
   if (route === null || routeOf(subjectId) === null || !open(context.deadline)) return null;
   const realmCheck = await prepareRealm(deps, context.actor, realmId, context.deadline);
   if (!realmCheck) return null;
+  const before = await withConnection(deps.pool, async (client) => {
+    const bounded = deadlineClient(client, context.deadline);
+    const at = await mintReadTime(bounded, deps.clock);
+    return readContainerBinding(bounded, { realmId, subjectId, at });
+  });
+  if (!before || before.publicationId === null) return null;
   const subjectCheck = await prepareSubject(deps, context.actor, subjectId, context.deadline);
-  return snapshot(deps.pool, context.deadline, async (client) => {
+  const result = await snapshot(deps.pool, context.deadline, async (client) => {
     if (!(await realmCheck(client))) return null;
     const head = await readHead.run(client, { route, realm: realmId, subject: subjectId });
     if (!head?.publishedAt || !(await subjectCheck(client))) return null;
     return view(realmId, subjectId, head.publicationId, head.publishedAt);
+  });
+  if (!result || result.publicationId !== before.publicationId) return null;
+  // The earlier repeatable-read snapshot is released before the current disclosure fence.
+  return withConnection(deps.pool, async (client) => {
+    const bounded = deadlineClient(client, context.deadline);
+    const at = await mintReadTime(bounded, deps.clock);
+    if (!(await realmCheck(bounded, at)) || !(await revalidateContainerBinding(bounded, before, at))) return null;
+    return result;
   });
 }
 
@@ -361,6 +385,20 @@ export async function listPublications(
   context: PublicationReadContext,
   query: PublicationQuery = {},
 ): Promise<PublicationPage | null> {
+  const selection = await preparePublicationPage(deps, realmId, context, query);
+  return selection && (await selection.current()) ? selection.page : null;
+}
+
+/** Release the origin connection before a consumer hydrates selected Subjects.
+ * The consumer must call current() after hydration and withhold the entire
+ * observation when it fails. A replacement head cannot reuse the old summary.
+ */
+export async function preparePublicationPage(
+  deps: PublicationDependencies,
+  realmId: string,
+  context: PublicationReadContext,
+  query: PublicationQuery = {},
+): Promise<PublicationSelection | null> {
   const route = routeOf(realmId);
   if (route === null || !open(context.deadline)) return null;
   const limit = query.limit === undefined ? PAGE.default : query.limit;
@@ -394,6 +432,12 @@ export async function listPublications(
   }
   const realmCheck = await prepareRealm(deps, context.actor, realmId, context.deadline);
   if (!realmCheck) return null;
+  const before = await withConnection(deps.pool, async (client) => {
+    const bounded = deadlineClient(client, context.deadline);
+    const at = await mintReadTime(bounded, deps.clock);
+    return readContainerBinding(bounded, { realmId, at });
+  });
+  if (!before) return null;
   // One keyset seek chooses the window. Disclosure then revalidates each head at T.
   const fetched = await withConnection(deps.pool, (client) =>
     within(context.deadline, () =>
@@ -405,7 +449,7 @@ export async function listPublications(
   const subjects = new Map<string, AccessCheck>();
   for (const row of window)
     subjects.set(row.subjectId, await prepareSubject(deps, context.actor, row.subjectId, context.deadline));
-  return snapshot(deps.pool, context.deadline, async (client) => {
+  const result = await snapshot(deps.pool, context.deadline, async (client) => {
     const partition = await readPartition(client, partitionOf(route));
     if (!partition || !(await realmCheck(client))) return null;
     if (cursorEpoch !== null && cursorEpoch !== partition.epoch) throw new PublicationCursorError('stale');
@@ -426,4 +470,28 @@ export async function listPublications(
         : null;
     return { items, next };
   });
+  if (!result) return null;
+  return {
+    page: result,
+    async current() {
+      // Preparation can address other homes. Never perform it while holding
+      // the publication connection, including with a one-connection pool.
+      const finalRealm = await prepareRealm(deps, context.actor, realmId, context.deadline);
+      if (!finalRealm) return false;
+      const finalSubjects = new Map<string, AccessCheck>();
+      for (const item of result.items)
+        finalSubjects.set(item.subjectId, await prepareSubject(deps, context.actor, item.subjectId, context.deadline));
+      return withConnection(deps.pool, async (client) => {
+        const bounded = deadlineClient(client, context.deadline);
+        const at = await mintReadTime(bounded, deps.clock);
+        // Exact selected keys, never a second page or a publication-history scan.
+        for (const item of result.items) {
+          const head = await readHead.run(bounded, { route, realm: realmId, subject: item.subjectId });
+          if (head?.publicationId !== item.publicationId || !(await finalSubjects.get(item.subjectId)!(bounded, at)))
+            return false;
+        }
+        return (await finalRealm(bounded, at)) && (await revalidateContainerBinding(bounded, before, at));
+      });
+    },
+  };
 }

@@ -1,3 +1,4 @@
+import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { Pool, type QueryConfig } from 'pg';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -92,7 +93,7 @@ test('ordinary reads translate the real account anchor once and retain stored ki
   expect(await bindings.readAccount(organization)).toMatchObject({ kind: 'organization', automated: false });
   for (const id of ['invalid', subject.toUpperCase(), receiptId]) expect(await bindings.readAccount(id)).toBeNull();
   for (const state of ['pending', 'suspended', 'deleted']) {
-    await update(human, 'state=$3', [state]);
+    await setFixtureAccountState(pool, human, state);
     expect(await bindings.readAccount(human)).toBeNull();
     expect(await bindings.readRecoveryAccount!(human)).toBeNull();
   }

@@ -1,19 +1,46 @@
 import { checkDocument, hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
+import { threadTitleCodeUnitLimit } from './authoring-limits';
 import type { KernelClient } from '@rezics/client';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest, setResponseHeader } from '@tanstack/react-start/server';
 import { env } from 'cloudflare:workers';
 import { kernelClient } from '../kernel/client';
-import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed.ts';
+import { isPlatformClosedProblem } from '../kernel/platform-closed.ts';
 import type { SessionEnv } from '../session/client.ts';
 import { prepareSession, viewerCredential } from '../session/request.ts';
-import { erasePostRequest, revisePostRequest, startThreadRequest } from './post-writes';
+import type { DraftMediaState } from './media-state';
+import { replyParentId } from './reply-context-intent';
+import { replyToThreadRequest } from './reply-context-request';
+import {
+  erasePostRequest,
+  discussionSubjectIds,
+  findExistingReview,
+  restorePostRequest,
+  revisePostRequest,
+  startThreadRequest,
+  type StartThreadInput,
+  type VoteCitation,
+} from './post-writes';
+import { forgetThreadSlug, rememberThreadSlug } from './thread-href';
 
-const licence = 'LicenseRef-rezics-terms';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type FailureReason = 'closed' | 'forbidden' | 'not-found' | 'conflict' | 'invalid' | 'rate-limited' | 'unavailable';
-export type WriteFailure = { ok: false; reason: FailureReason; retryAfter?: number };
+type FailureReason =
+  | 'closed'
+  | 'forbidden'
+  | 'not-found'
+  | 'conflict'
+  | 'media-unavailable'
+  | 'invalid'
+  | 'rate-limited'
+  | 'unavailable';
+export type WriteFailure = {
+  ok: false;
+  reason: FailureReason;
+  retryAfter?: number;
+  existingReviewId?: string;
+  media?: DraftMediaState[];
+};
 export type ThreadResource = ReturnType<KernelClient['threads']>;
 export type PostResource = ReturnType<KernelClient['posts']>;
 export type ThreadCreated = NonNullable<Awaited<ReturnType<KernelClient['threads']['post']>>['data']>;
@@ -56,13 +83,30 @@ function validateDraft(input: unknown): { body: DocumentSnapshot; idempotencyKey
   };
 }
 
-function validateThreadDraft(input: unknown): {
-  boardId: string;
-  title: string;
-  body: DocumentSnapshot;
-  idempotencyKey: string;
-  mediaIds?: string[];
-} {
+function validateVoteCitation(value: unknown): VoteCitation | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !('questionId' in value) ||
+    typeof value.questionId !== 'string' ||
+    !uuid.test(value.questionId) ||
+    !('units' in value) ||
+    typeof value.units !== 'number' ||
+    !Number.isInteger(value.units) ||
+    value.units < 0 ||
+    value.units > 20 ||
+    !('revision' in value) ||
+    typeof value.revision !== 'number' ||
+    !Number.isInteger(value.revision) ||
+    value.revision < 1 ||
+    value.revision > 2_147_483_647
+  )
+    throw new Error('Invalid review vote citation');
+  return { questionId: value.questionId, units: value.units as number, revision: value.revision as number };
+}
+
+function validateThreadDraft(input: unknown): StartThreadInput {
   const draft = validateDraft(input);
   if (
     !input ||
@@ -74,10 +118,48 @@ function validateThreadDraft(input: unknown): {
     !('title' in input) ||
     typeof input.title !== 'string' ||
     !input.title.trim() ||
-    input.title.length > 512
+    input.title.length > threadTitleCodeUnitLimit
   )
     throw new Error('Invalid thread draft');
-  return { ...draft, boardId: input.boardId, title: input.title };
+  const base = { ...draft, boardId: input.boardId, title: input.title };
+  if ('kind' in input && input.kind === 'rules') {
+    if (
+      'subjectIds' in input ||
+      'subjectId' in input ||
+      'voteCitation' in input ||
+      !('licence' in input) ||
+      input.licence !== 'LicenseRef-rezics-terms'
+    )
+      throw new Error('Invalid rules draft');
+    return { ...base, kind: 'rules', licence: input.licence };
+  }
+  if ('kind' in input && input.kind !== undefined) {
+    if (
+      input.kind !== 'review' ||
+      'subjectIds' in input ||
+      !('subjectId' in input) ||
+      typeof input.subjectId !== 'string' ||
+      !uuid.test(input.subjectId)
+    )
+      throw new Error('Invalid review draft');
+    const voteCitation = 'voteCitation' in input ? validateVoteCitation(input.voteCitation) : undefined;
+    return {
+      ...base,
+      kind: 'review',
+      subjectId: input.subjectId,
+      ...(voteCitation ? { voteCitation } : {}),
+    };
+  }
+  if ('voteCitation' in input && input.voteCitation !== undefined) throw new Error('Invalid discussion draft');
+  const subjectIds = discussionSubjectIds(input);
+  return {
+    ...base,
+    ...('subjectIds' in input
+      ? { subjectIds }
+      : 'subjectId' in input && typeof input.subjectId === 'string'
+        ? { subjectId: subjectIds[0]! }
+        : {}),
+  };
 }
 
 function parseRetryAfter(value: unknown): number | undefined {
@@ -93,7 +175,12 @@ function refusal(status: number, headers: HeadersInit | undefined, body?: unknow
   if (isPlatformClosedProblem(status, body)) return { ok: false, reason: 'closed' };
   if (status === 403 || status === 401) return { ok: false, reason: 'forbidden' };
   if (status === 404) return { ok: false, reason: 'not-found' };
-  if (status === 409) return { ok: false, reason: 'conflict' };
+  if (status === 409) {
+    const code = body && typeof body === 'object' && 'code' in body ? body.code : undefined;
+    if (code === 'media_unavailable') return { ok: false, reason: 'media-unavailable' };
+    const existingReviewId = findExistingReview(body);
+    return { ok: false, reason: 'conflict', ...(existingReviewId ? { existingReviewId } : {}) };
+  }
   if (status === 400 || status === 413 || status === 422) return { ok: false, reason: 'invalid' };
   if (status === 429) {
     const retryAfter = parseRetryAfter(new Headers(headers).get('retry-after'));
@@ -114,7 +201,9 @@ export const startThread = createServerFn({ method: 'POST' })
   .validator(validateThreadDraft)
   .handler(async ({ data }): Promise<{ ok: true; thread: ThreadCreated['thread'] } | WriteFailure> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return startThreadRequest(data, getRequest(), env as Partial<SessionEnv>, kernelClient(), refusal);
+    const result = await startThreadRequest(data, getRequest(), env as Partial<SessionEnv>, kernelClient(), refusal);
+    if (result.ok) rememberThreadSlug(result.thread.id, result.thread.title);
+    return result;
   });
 
 export const replyToThread = createServerFn({ method: 'POST' })
@@ -129,30 +218,13 @@ export const replyToThread = createServerFn({ method: 'POST' })
       input.threadId.length > 128
     )
       throw new Error('Invalid thread id');
-    return { ...draft, threadId: input.threadId };
+    const parentId = replyParentId(input);
+    return { ...draft, threadId: input.threadId, ...(parentId === undefined ? {} : { parentId }) };
   })
   .handler(async ({ data }): Promise<{ ok: true; post: CreatedPost } | WriteFailure> => {
     setResponseHeader('cache-control', 'private, no-store');
     const authorization = await sessionBearer();
-    try {
-      const result = await kernelClient()
-        .threads({ id: data.threadId })
-        .posts.post(
-          {
-            body: data.body,
-            licence,
-            ...(data.mediaIds === undefined || data.mediaIds.length === 0 ? {} : { mediaIds: data.mediaIds }),
-          },
-          {
-            headers: { authorization, 'idempotency-key': data.idempotencyKey } as { 'idempotency-key': string },
-          },
-        );
-      if (result.error) return refusal(result.status, result.headers, result.error.value);
-      return { ok: true, post: result.data.post };
-    } catch (error) {
-      if (isPlatformClosedError(error)) return { ok: false, reason: 'closed' };
-      return { ok: false, reason: 'unavailable' };
-    }
+    return replyToThreadRequest(data, kernelClient(), authorization, refusal);
   });
 
 function validatePostId(input: unknown): { postId: string } {
@@ -207,9 +279,40 @@ export const erasePost = createServerFn({ method: 'POST' })
       !uuid.test(input.idempotencyKey)
     )
       throw new Error('Invalid post deletion');
+    if (
+      'openingThreadId' in input &&
+      (typeof input.openingThreadId !== 'string' || !input.openingThreadId || input.openingThreadId.length > 128)
+    )
+      throw new Error('Invalid opening thread id');
+    return {
+      postId,
+      idempotencyKey: input.idempotencyKey,
+      ...('openingThreadId' in input && typeof input.openingThreadId === 'string'
+        ? { openingThreadId: input.openingThreadId }
+        : {}),
+    };
+  })
+  .handler(async ({ data }): Promise<{ ok: true } | WriteFailure> => {
+    setResponseHeader('cache-control', 'private, no-store');
+    const result = await erasePostRequest(data, getRequest(), env as Partial<SessionEnv>, kernelClient(), refusal);
+    if (result.ok && data.openingThreadId) forgetThreadSlug(data.openingThreadId);
+    return result;
+  });
+
+export const restorePost = createServerFn({ method: 'POST' })
+  .validator((input: unknown) => {
+    const { postId } = validatePostId(input);
+    if (
+      !input ||
+      typeof input !== 'object' ||
+      !('idempotencyKey' in input) ||
+      typeof input.idempotencyKey !== 'string' ||
+      !uuid.test(input.idempotencyKey)
+    )
+      throw new Error('Invalid post restoration');
     return { postId, idempotencyKey: input.idempotencyKey };
   })
   .handler(async ({ data }): Promise<{ ok: true } | WriteFailure> => {
     setResponseHeader('cache-control', 'private, no-store');
-    return erasePostRequest(data, getRequest(), env as Partial<SessionEnv>, kernelClient(), refusal);
+    return restorePostRequest(data, getRequest(), env as Partial<SessionEnv>, kernelClient(), refusal);
   });

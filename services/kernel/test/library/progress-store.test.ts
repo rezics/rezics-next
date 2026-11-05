@@ -3,11 +3,11 @@ import pg, { type Pool, type PoolClient } from 'pg';
 import type { ProgressSessionDraft, ProgressSessionUpdate, ProgressState } from '../../src/library/progress-model.ts';
 import * as store from '../../src/library/progress-store.ts';
 import {
-  assertGrowth,
-  measure,
+  checkGrowth,
   openGrowthDatabase,
+  placement,
   seed,
-  type GrowthSample,
+  type GrowthDatabase,
   type Population,
 } from '../support/growth.ts';
 
@@ -579,14 +579,45 @@ const population: Population = {
   },
 };
 
+function seededRows(): { readonly sessionIds: string[] } {
+  return {
+    sessionIds: Array.from({ length: 8_000 }, (_, ordinal) => {
+      const place = placement(population, ordinal);
+      return routed('20000000', place.route, place.ordinal);
+    }),
+  };
+}
+
+async function clearSeededRows(database: GrowthDatabase): Promise<void> {
+  const { sessionIds } = seededRows();
+  await database.admin.query('DELETE FROM library.progress_unit WHERE session_id = ANY($1::uuid[])', [sessionIds]);
+  await database.admin.query('DELETE FROM library.progress_change WHERE session_id = ANY($1::uuid[])', [sessionIds]);
+  await database.admin.query('DELETE FROM library.progress_session WHERE session_id = ANY($1::uuid[])', [sessionIds]);
+}
+
+type GrowthReport = Awaited<ReturnType<typeof checkGrowth>>;
+
+function expectGrowthReport(report: GrowthReport, relation: string): void {
+  expect(report.samples.map(({ scale }) => scale)).toEqual([1, 4, 16]);
+  expect(report.samples.map(({ cost }) => cost.statements)).toEqual([1, 1, 1]);
+  const relationRows = report.samples.map((sample) => sample.cost.relations?.[relation]?.rows ?? 0);
+  expect(relationRows.every((rows) => rows === relationRows[0] && rows > 0)).toBe(true);
+  const totalRows = report.samples.map(({ cost }) => cost.rows);
+  expect(totalRows.every((rows) => rows === totalRows[0] && rows > 0)).toBe(true);
+  expect(
+    report.samples.every(({ cost }) =>
+      Object.entries(cost.relations ?? {})
+        .filter(([name]) => name.startsWith('library.'))
+        .every(([, relationCost]) => relationCost.sequentialScans === 0),
+    ),
+  ).toBe(true);
+}
+
 test('unit add, unit page and change page touch the same rows and statements at three scales', async () => {
   const database = await openGrowthDatabase();
   const owner = id(900_000);
   const subjectId = id(900_001);
   const sessionId = id(900_002);
-  const scales = [256, 1_024, 4_096] as const;
-  // A table of a few hundred rows is cheaper to scan than to probe, so pin the planner to the indexes the pages are built on.
-  const planned = database.openPool({ options: '-c enable_seqscan=off' });
   try {
     await database.admin.query(
       `INSERT INTO library.progress_session (${sessionColumns})
@@ -604,72 +635,52 @@ test('unit add, unit page and change page touch the same rows and statements at 
       [route, sessionId, JSON.stringify({ add: ['1'] }), time, id(900_011), JSON.stringify({ add: ['3'] })],
     );
 
-    const addSamples: GrowthSample[] = [];
-    const unitPageSamples: GrowthSample[] = [];
-    const changePageSamples: GrowthSample[] = [];
-    let previous = 0;
-    for (const scale of scales) {
-      await seed(database, population, { from: previous, to: scale });
-
-      const added = await measure(database, () =>
-        inTransaction(planned, (client) => store.addUnits(client, route, sessionId, ['9'], context(900_100))),
-      );
-      expect(added.value).toBe(1);
-      expect(added.cost.statements).toBe(1);
-      expect(added.cost.relations?.['library.progress_unit']?.sequentialScans ?? 0).toBe(0);
-      addSamples.push({ scale, cost: added.cost });
-
-      const unitPage = await measure(database, () =>
-        inTransaction(planned, (client) => store.pageUnits(client, route, sessionId, { after: null, limit: 1 })),
-      );
-      expect(unitPage.value).toMatchObject([{ sessionId, unitId: '1' }]);
-      expect(unitPage.cost.statements).toBe(1);
-      expect(unitPage.cost.relations?.['library.progress_unit']?.sequentialScans ?? 0).toBe(0);
-      unitPageSamples.push({ scale, cost: unitPage.cost });
-
-      const changePage = await measure(database, () =>
-        inTransaction(planned, (client) => store.pageChanges(client, route, sessionId, { after: null, limit: 1 })),
-      );
-      expect(changePage.value).toMatchObject([{ sessionId, changeNo: 1, intent: { add: ['1'] } }]);
-      expect(changePage.cost.statements).toBe(1);
-      expect(changePage.cost.relations?.['library.progress_change']?.sequentialScans ?? 0).toBe(0);
-      changePageSamples.push({ scale, cost: changePage.cost });
-      previous = scale;
-    }
-
-    const relationRows = (samples: GrowthSample[], relation: string) =>
-      samples.map((sample) => sample.cost.relations?.[relation]?.rows ?? 0);
-    const same = (values: number[]) => values.every((value) => value === values[0] && value > 0);
-    expect(addSamples.map((sample) => sample.cost.statements)).toEqual([1, 1, 1]);
-    expect(unitPageSamples.map((sample) => sample.cost.statements)).toEqual([1, 1, 1]);
-    expect(changePageSamples.map((sample) => sample.cost.statements)).toEqual([1, 1, 1]);
-    expect(same(relationRows(addSamples, 'library.progress_unit'))).toBe(true);
-    expect(same(relationRows(unitPageSamples, 'library.progress_unit'))).toBe(true);
-    expect(same(relationRows(changePageSamples, 'library.progress_change'))).toBe(true);
-    expect(same(addSamples.map((sample) => sample.cost.rows))).toBe(true);
-    expect(same(unitPageSamples.map((sample) => sample.cost.rows))).toBe(true);
-    expect(same(changePageSamples.map((sample) => sample.cost.rows))).toBe(true);
-
-    const bounded = (samples: GrowthSample[], relation: string): GrowthSample[] =>
-      samples.map((sample) => ({
-        scale: sample.scale,
-        cost: { ...sample.cost, rows: sample.cost.relations?.[relation]?.rows ?? 0 },
-      }));
-    assertGrowth(bounded(addSamples, 'library.progress_unit'), {
-      rows: 'constant',
-      blocks: 'logarithmic',
-      statements: 'constant',
+    const add = await checkGrowth(database, {
+      name: 'Library unit add',
+      scales: [1, 4, 16],
+      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      grow: (growthDatabase, scale, previous) =>
+        seed(growthDatabase, population, { from: 500 * previous, to: 500 * scale }),
+      operation: (growthDatabase) =>
+        inTransaction(growthDatabase.pool, async (client) => {
+          const added = await store.addUnits(client, route, sessionId, ['9'], context(900_100));
+          expect(added).toBe(1);
+          return added;
+        }),
     });
-    assertGrowth(bounded(unitPageSamples, 'library.progress_unit'), {
-      rows: 'constant',
-      blocks: 'logarithmic',
-      statements: 'constant',
+    expectGrowthReport(add, 'library.progress_unit');
+
+    await clearSeededRows(database);
+    const unitPage = await checkGrowth(database, {
+      name: 'Library unit page',
+      scales: [1, 4, 16],
+      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      grow: (growthDatabase, scale, previous) =>
+        seed(growthDatabase, population, { from: 500 * previous, to: 500 * scale }),
+      operation: (growthDatabase) =>
+        inTransaction(growthDatabase.pool, async (client) => {
+          const page = await store.pageUnits(client, route, sessionId, { after: null, limit: 1 });
+          expect(page).toMatchObject([{ sessionId, unitId: '1' }]);
+          return page;
+        }),
     });
-    assertGrowth(bounded(changePageSamples, 'library.progress_change'), {
-      rows: 'constant',
-      blocks: 'logarithmic',
-      statements: 'constant',
+    expectGrowthReport(unitPage, 'library.progress_unit');
+
+    await clearSeededRows(database);
+    const changePage = await checkGrowth(database, {
+      name: 'Library change page',
+      scales: [1, 4, 16],
+      bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
+      grow: (growthDatabase, scale, previous) =>
+        seed(growthDatabase, population, { from: 500 * previous, to: 500 * scale }),
+      operation: (growthDatabase) =>
+        inTransaction(growthDatabase.pool, async (client) => {
+          const page = await store.pageChanges(client, route, sessionId, { after: null, limit: 1 });
+          expect(page).toMatchObject([{ sessionId, changeNo: 1, intent: { add: ['1'] } }]);
+          return page;
+        }),
     });
+    expectGrowthReport(changePage, 'library.progress_change');
   } finally {
     await database.close();
   }

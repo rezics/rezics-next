@@ -1,0 +1,317 @@
+# Collection presentation and editor
+
+This page owns the joint Collection presentation and editor contract. It selects additive fields and operations;
+it does **not** claim runtime, generated API or UI delivery. [Library and Collections](library-and-collections.md),
+[Dynamic Collections](dynamic-collections.md), [Collection source](collection-source.md),
+[Filtered lists](filtered-lists.md), [Scope](scope.md) and [Deletion](deletion.md) retain membership, admission,
+privacy, cost and lifecycle authority. Second-scope saved-query authoring is in Web's interface scope. Native
+execution, publication and generated API delivery remain Commerce obligations; this page does not claim they are
+present.
+
+## Model and definitions
+
+Collection `presentationKind` is a definitions TypeId, never a fixed vertical enum, Concept/public tag or private
+Label. Members keep their own actual Type. An owner override wins; null uses mixed presentation. Native discovery
+represents this as `{kind:'owner',id:<TypeId>}` or `{kind:'mixed'}` so mixed remains explicit and is not inferred
+from a short preview. This `presentationKind` is distinct from the curated/dynamic `membershipKind`. Presentation
+changes no membership, profile pin, query predicate, source authority or permission. Grid/list/table remain client
+layout choices. The Collection kind guides Collection presentation; each member still uses its own Type's hints.
+
+The selected release field is exactly:
+
+```ts
+Release.types[typeId].listPresentation?: {
+  imageAspect: 'portrait' | 'landscape' | 'square';
+  keyFacts: string[];
+}
+```
+
+`portrait` means 5:7, `landscape` 16:9 and `square` 1:1 for list/card frames. `keyFacts` is an ordered unique array
+of 0–4 effective property CURIEs of that Type. They are property identifiers, not formatter functions, JSON paths,
+private Library facts or labels. Existing localized property/value labels and unit metadata supply wording.
+The nearest explicit base supplies the **whole object**, replaced as a whole by a nearer explicit declaration;
+an explicit `keyFacts: []` clears inherited facts. The compiler emits the effective object on every applicable
+Type, so clients do not traverse ancestors. Unknown fields, image ratios, unknown/out-of-Type properties and
+duplicate keys fail compilation and release validation. Older releases without the object remain valid.
+Existing `coverRatio`, stored media dimensions, cover metadata and accepted personal profile semantics stay intact.
+
+keyFacts may select ONLY effective properties representable by the EXISTING Fact projection: wikibase-item, time, quantity, or an existing admitted patterned-code string.
+Document/media/free-text properties are rejected at authoring/compilation; they never silently become fake code or
+complete-empty facts. No new Fact variant, engine or endpoint is introduced.
+
+Every default catalogue kind uses portrait 5:7, including book/edition/manga, anime/film/series/episode,
+game, album, recipe, person, character, organization and unknown or retired Types. Current effective released
+annotations, standalone Cover and list/card/Collection fallbacks agree. A missing or retired Collection kind
+never converts member Types or changes the default. No label, substring, loaded member sample or source image
+orientation decides geometry. Explicit configured list aspects and valid `coverRatio`/composition ratios remain
+supported; released list presentation wins over a composition fallback. Historical releases stay immutable.
+Landscape and square artwork remains whole in the reserved portrait frame through Cover's contain treatment
+and its own image/placeholder backdrop. Loading, withheld/reveal, failed and missing images reserve that frame.
+Facts remain absent without a delivered producer; no guessed author, runtime, episode or page count fills a row.
+
+## Collection kind reads and writes
+
+Selected list/detail read fields:
+
+```ts
+presentationKind: string | null;
+presentationKindSource: 'owner' | 'mixed';
+```
+
+POST and PATCH accept optional `presentationKind: string | null`. Absence preserves an existing override on PATCH
+and defaults to mixed on create; null clears the override to mixed. PATCH retains the **required current numeric
+revision** and native `collection:update` authorization. A newly selected override must name a Type actually
+present in the current release. If a later release lacks a stored choice, retain it as presentation data with
+source `owner` and render the explicit fallback. An override requires no membership sweep.
+
+An unset kind returns `presentationKind: null` and source `mixed` for empty, curated and logical dynamic
+Collections alike. Each member uses its own Type's released hints immediately. An explicitly selected kind supplies
+Collection presentation with source `owner`; it does not replace member Types or hints. Neither read nor selection
+waits for member enumeration, automatic derivation, per-viewer audience evidence, Kind preparation or kind
+currentness. No dominant Type is inferred from member counts, previews or complete populations. Real Collection
+and member disclosure and authorization, explicit Type/catalogue publication and independent cover readiness retain
+their existing contracts.
+
+The public directory matches this accepted explicit kind directly. Its `mixed` choice means an unset
+`presentationKind`; it is distinct from omitting the kind filter, and neither value is derived from membership.
+
+Private [Collection archive recovery](library-archive-collection-recovery.md) now exposes an explicit receiving
+choice through the native create command. Mixed stays the default; archived or alternative Type IDs require current
+admission and deliberate review. Recovery binds the chosen current release digest and original canonical create
+operands to its immutable confirmation. A changed release refuses a new create; an accepted receipt replays without
+readmitting its historical choice. Later Type disappearance retains the stored override and existing fallback.
+Archived raw identifiers remain evidence, alternatives are new choices, and `fullRestoration:false` remains explicit.
+
+## FULL member key fact values
+
+Existing Semantic `SubjectSummary` has no facts. The selected common FULL member response may add optional
+`facts: Record<PropertyId, Fact[]>` **beside** `subject`, using the member's own Type's effective `keyFacts`.
+Reuse the actual `Fact` union in `services/kernel/src/search/hits.ts`:
+
+```ts
+type Fact =
+  | { kind: 'item'; id: string; labels: Record<string, string> }
+  | { kind: 'time'; year: number }
+  | { kind: 'quantity'; amount: number; unit: string }
+  | { kind: 'code'; value: string };
+```
+
+At most four configured properties and three actual values per property are returned. Hints are not data.
+Absent `facts` means capability not delivered or not requested; `{}` means a complete visible no-facts outcome.
+A null subject or denied entry stays concealed, without sibling facts leaking its contents. Unproved requested
+fact readiness returns standard 503, never a false empty map. No browser per-row subject-detail requests.
+
+The selected **new, not callable yet** Semantic helper in `semantic/list-presentation.ts` is:
+
+```ts
+readListPresentationFacts(
+  deps: { pool: Pool; access: Access; actor: Actor; routeKey: Uint8Array; deadline: number },
+  originals: readonly string[],
+  options?: { languages?: readonly string[] },
+): Promise<Map<string, { id: string; facts: Record<string, Fact[]> } | null>>
+```
+
+One bounded server batch accepts at most 100 ORIGINAL IDs. The map is keyed by original; returned `id` is the
+actual terminal. Commerce verifies equality with the member's current terminal identity before projection.
+Semantic owns the native producer and current original/terminal/source/related-item authorization and field/tuple
+fences. Neither index nor fact cache supplies authority. Commerce owns FULL integration and final currentness.
+Existing raw-key/source budgets remain intact; enrichment is explicitly charged, never free hydration.
+
+## Existing-media Collection cover reference
+
+Create/PATCH select optional `coverMediaId: string | null`; null clears the configured cover, absence preserves
+on PATCH or defaults to no configured cover on create. This references only an existing available imported cover
+under its original media subject/container. No Collection upload, container, claim or arbitrary-image picker is
+delivered. Selection validates actual current editor/native media authority; Collection access grants no media
+visibility, ownership or retention rights.
+
+Use actual Content `checkMediaObject`/`checkMediaObjects` in `content/cover-reference.ts` as low-level reference
+facts, plus `decideDownload` from `content/media.ts` with the real viewer Actor, Access, pool, trusted routeKey
+and deadline in the native download context and the real trusted clock. Select an actual returned AVIF or WebP variant, never original.
+Each read independently rechecks current media/container, tuple, source and variant rights. Release Collection
+checkout before visiting a foreign media home and retain Collection final disclosure/currentness checks.
+
+Selected read fields are optional `cover: CoverSummary | null` (the existing Semantic descriptor) and
+`coverSource: 'owner' | 'member' | 'none' | 'pending'`. A chosen currently readable cover wins; otherwise use the
+first current admitted member's authorized readable cover in actual member order. Skip members with no readable
+image; do not use a cached hidden first row. Complete absence yields null/`none`; incomplete fallback search yields
+null/`pending`, never fabricated empty. The authorized owner editor may receive its stored `coverMediaId`; public
+reads disclose only an actually authorized descriptor. Never return storage keys, original URLs or external image
+URLs, or invent source, credit, container or retention claims. The existing served-media ID+variant path owns bytes.
+
+The Collection identity frame always renders from its own `cover` summary, including a placeholder when that
+summary is absent, null, denied or pending. The client never derives it from the loaded first member or unrelated
+hero art. It preserves the native `coverSource`, dimensions and rights; this frame contract adds no media producer,
+selection scan or upload/claim API.
+
+## Editor endpoints and delivery inventory
+
+The table separates current dev operations from selected missing runtime. Existing write idempotency, native
+current grants and response envelopes remain; selected additions do not make the current closed schemas accept them.
+
+| Endpoint and body                                                                                                                   | Existing dev                                  | Missing runtime / selected result                                                        |
+| ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `POST /v1/collections {title,description?,visibility}`                                                                              | Metadata create, `201 {collection}`           | Optional `presentationKind`, `coverMediaId`; dynamic create below                        |
+| `GET /v1/collections?curatorAccountId=...` and `GET /v1/collections/{collectionId}`                                                 | Paged list and detail                         | Kind/cover projections above                                                             |
+| `PATCH /v1/collections/{collectionId} {revision,title?,description?,visibility?}`                                                   | `200 {collection}`, required numeric revision | Optional `presentationKind`, `coverMediaId`, same current authorization/CAS              |
+| `POST /v1/collections/{collectionId}/members {subjectId,note?,after?}`                                                              | `201 {member}`                                | Current parent revision/lifecycle integration                                            |
+| `PATCH /v1/collections/{collectionId}/members/{memberId} {note}`                                                                    | `200 {member}`                                | Current parent revision/lifecycle integration                                            |
+| `DELETE /v1/collections/{collectionId}/members/{memberId}`                                                                          | `204`                                         | Current parent revision/deletion headers and exact Undo are in-flight, not delivered     |
+| `POST /v1/collections/{collectionId}/members/{memberId}:move {after}`                                                               | `200 {member}`; intra-Collection reorder      | Not cross-Collection transfer; current parent CAS/lifecycle integration remains required |
+| `POST /v1/collections/{collectionId}/members:batchRemove {revision,memberIds}`                                                      | Absent                                        | `200 {collection,removed:[{memberId,deletionId,revision}]}`                              |
+| `POST /v1/collections/{collectionId}/members:move {revision,memberIds,destinationCollectionId,destinationRevision,after}`           | Absent                                        | `200 {source,destination,members}`                                                       |
+| `POST /v1/collections {membershipKind:'dynamic',title,description?,visibility,rule:{filter,sort?},presentationKind?,coverMediaId?}` | Web private create caller; native may `503`   | Saved-dynamic create, `201 {collection}`                                                 |
+| `PUT /v1/collections/{collectionId}/rule {revision,filter,sort?}`                                                                   | Web CAS caller; native may `503`/`409`        | `200 {collection}`                                                                       |
+
+All curated editing preserves occurrence IDs, notes, added times and duplicates, existing ordinal bounds,
+parent CAS, replay and current grants. Consume the sole actual member lifecycle implementation once it lands;
+its selected parent revision/deletion headers and exact Undo are not evidence of current delivery.
+
+Decision: Collection title/description/occurrence-note inputs explain native limits of 200/2,000/1,000 Unicode scalar values, preserve whitespace and optional empty/null meaning, and show field corrections for overflow or NUL before capturing a new command; a new multi-step Save validates all staged text before any write, while uncertain commands replay their original capture. Controls allow correction without UTF-16 truncation.
+
+Decision: Collection description and occurrence-note readers retain a focused collapsed disclosure through resize until deliberate blur remeasures its need; expanded text keeps its collapse action, and occurrence expansion remains parent-authoritative when controlled.
+
+Decision: ordinary curated drafts guard page departure against the loaded edit baseline; unresolved commands offer only Stay, confirmed saves clear loss guidance even if refresh fails, and explicit editor Cancel/reload keep their existing behavior.
+
+Decision: a definitive CAS conflict keeps the remaining draft and reads a current owner basis separately; an explicit re-review applies only unconfirmed intent to that accepted basis, shows a fresh plan before Save, and never reissues confirmed effects. Unknown commands settle only through replay of their original captured request.
+
+### Selected-publication recovery
+
+After an uncertain selected-publication response, retain the exact request, source revision and review selection
+until verified completion; a refused retry or source reload cannot authorize a replacement intent.
+The review retains the dispatched title, description and unique canonical subject labels, in the native
+selected-set producer's lexical ID order. It is private review context, never evidence of the active public
+generation. Curated occurrences and notes require their own snapshot integration; they cannot use selected-set
+publication, whose contract deliberately excludes them. A verified completion must return the requested
+Collection with exactly the source revision plus one, COMPLETE generation and exact selected count.
+Review is local to the current owner/address lifetime. It performs no additional native reads or writes and
+retains at most 100 selected summaries from one loaded page, independently of account/history growth.
+
+### Batch removal and cross-Collection move
+
+`memberIds` is a distinct array of 1–100 occurrence IDs for both new batch commands. Batch remove uses current
+native parent CAS in one atomic owning-partition command. A foreign or missing member returns 404 with no effects;
+stale revision returns 409. Preserve exact 720-hour retained deletion, Undo and source-count semantics. No hard-delete
+substitute or swallowed failure. Reuse the same actual lifecycle producer after it lands.
+
+Batch move requires two distinct live curated Collections of the **same curator**, hence the same owning route.
+Authorize both current updates and compare both revisions. Preserve member IDs, notes, `addedAt` and selected source
+relative order regardless of request ID order. Place the block after the destination occurrence `after`, or first
+when `after: null`. Respect the destination 5,000-occurrence cap and existing ordinal/respace constraints.
+One same-partition transaction owns both sides; no cross-home join/write. Cross-curator transfer returns explicit
+409 unsupported. This is neither same-Collection reorder nor silent copy+delete. Copy no scopes or grants.
+The editor offers first position or after a paged destination occurrence and keeps that anchor through Save;
+cross-curator transfer uses the explicit `collection_move_unsupported` result.
+Source/destination visibility-dependent membership, counts, public listing and fact generation effects change
+exactly once through actual native producers; rollback and receipt replay leave no partial or repeated transfer.
+
+### Dynamic editor boundary
+
+Dynamic rules use shared `FilterDocument` and its admitted sort, never another Boolean language. Logical
+Everything/state/Liked identities and rules stay immutable; member edit commands return 409
+`dynamic_membership_immutable`. A saved dynamic ID is an ordinary created Collection, never a rewritten built-in.
+Its rule is visible only to an authorized owner/editor, never in public DTOs or URLs.
+
+Rule create/update require native current family scopes/gates, admitted indexed plans, complete dependencies,
+bounded retained preparation and current disclosure. Public membership requires explicit complete Publication and
+current subject disclosure; never evaluate curator-private facts for public readers. Pending/unbuilt dynamic
+sources cannot report exact counts as zero. Existing dynamic DTO count omissions remain in force.
+Second-scope authoring is admitted. Native saved-source execution, complete publication and member pages remain
+Commerce; Web shows unavailable at that boundary and never invents a successful native response, occurrence IDs
+or count/time fields. A Library state ID without profile and state set stays unsaved with correction.
+Decision: Save query transfers an admitted filter and displayed type through a one-use browser-memory handoff bound
+to the initiating viewer, with `id` order; private predicates never enter the destination URL, browser storage or
+shared hydration. Text, resource and non-`id` sort selections stay on the source with an explanation; reload discards
+the handoff and shows guidance. New handoffs use the current release; reopened rules retain their accepted release,
+and explicit edits are readmitted under the current release with the draft kept on incompatibility.
+The create/reopen journey is `/library/rules/new` and `/collections/$id/rule`. The existing editor reviews title and
+rule before private create; confirmed creation offers members and rule destinations. Web stories use recorded GET
+rule/release data; any Saved state backed by a local write response is labeled an illustration because native member
+execution remains Commerce-owned. Built-in identities have no rule editor.
+
+## Current source inventory
+
+- `services/kernel/src/library/collection-model.ts` has title, description, visibility, count and revision;
+  no presentation or cover fields. `collection-routes.ts` exposes metadata/member/reorder operations, not the
+  selected bulk transfer/removal or saved-rule editor. `collections.ts` owns native commands and the 5,000 cap;
+  `collection-reads.ts` projects current metadata/member reads without kind/cover enrichment.
+- `packages/definitions/src/index.ts` (`TypeDefinition`), `src/compile.ts` and `schema/release.json`
+  (the release schema) have no `listPresentation` today. The names above are selected contracts, not released types.
+- `services/kernel/src/semantic/summaries.ts` and `semantic/http/summaries.ts` define `SubjectSummary` with
+  id/type/types/label/creativeWork/cover, no facts. `services/kernel/src/search/hits.ts` has opt-in facts;
+  that existing Search capability is not a Collection FULL producer. The new helper is not implemented.
+- Content's imported-cover reference facts and download authorization exist; their combined Collection integration
+  does not. Unrelated stubs establish no saved dynamic editing, cross-Collection move, bulk remove or Collection
+  upload capability. New fields stay optional for Web until actual generated API handoff.
+
+## Ownership and required proof
+
+Semantic owns whole definitions/compiler/schema/configuration/release delivery and native fact batch producers.
+Commerce owns whole kind/cover/FULL projection and editor mutation/rule slices. Content owns native image authority.
+Web owns one actual Collection browse/editor, the independent renderer, screenshots and visual review. No path-only
+serialization or duplicate writers replace those whole producers.
+Decision: routed Collection filter states enter `/collections/$id` through PageStory (`library-collection-filters.stories.tsx#ActualCombined`) with explicit `f.`/`l.`/`r.` search; long property labels stay a pattern overlay because the Collection reader takes property labels from the definitions release. CombinedFilters remains pattern coverage.
+Decision: the owner browse-route editor join is `library-collection-editor.stories.tsx#OwnerEdit` (PageStory in AppShell) so existing Pattern IDs stay; Details and Reordering remain pattern coverage. A source/type document or scoped test proves
+neither full native/API/UI delivery nor integrated root/main behavior.
+
+Required outcomes include owner, other account, anonymous and suspended credentials; hidden original/member and
+terminal; mixed defaults across member Type changes; override/clear and retired Type fallback; denied cover and
+current ordered fallback; CAS, receipt replay, batch rollback, destination cap and cross-curator rejection;
+active/removal/Undo/public-source
+changes and terminal no-resurrection. Suspension uses actual invalidated bearer behavior under Library authority.
+Native growth evidence uses 1/8/64 homes, extending to 4,096 where the existing source/dependency contract requires,
+with unrelated population/history, duplicates and identity churn. These are future implementation acceptance
+obligations; this documentation acceptance proves publication of the joint contract only.
+
+## Cost
+
+Existing Cost authorities and allowances remain unchanged. Fixed request/output caps below do not promise physical
+bounds: each implementation must produce native inclusive receipts/captures for rows, removed rows, statements,
+buffers, connections, keys, bytes, engine work and control probes. Charge actual worker, receipt, outbox, repair,
+replay, custody and minimization work, not only the visible response or a hidden callback/planner estimate.
+
+### Metadata/cover read and write
+
+- Touches: Collection metadata/source/current grant and account probes; configured media and ordered member-cover
+  candidates; actual Content reference/download/variant/tuple-source probes, final currentness; write receipts/events.
+- Bound: existing raw pages cap at 100; preview emits at most 3 members, never a complete observation. Media reference
+  batches are 1–256 natively, not an allowance increase. Release Collection before foreign homes. Incomplete ordered
+  cover search stays pending under admitted source budgets; no synchronous scan of all 5,000 members to find an image.
+- Growth check: 1/8/64 homes through applicable 4,096-home dependencies, denied/late readable covers, privacy changes,
+  first/deep preview pages and unrelated history; include foreign visits, write rollback/replay and native receipts.
+
+### Mixed or explicit kind
+
+- Touches: the already authorized Collection metadata and, for a newly selected explicit kind, the active Type release.
+- Bound: constant-size metadata projection; no member sweep, observation, audience evidence or retained preparation.
+  Member Type hints and cover/fact producers keep their independent read and disclosure bounds.
+
+### FULL fact batch
+
+- Touches: one Semantic server batch over original IDs, actual terminal/type/release/property facts,
+  related-item labels, native source/field/tuple Access and final currentness, including discarded enrichment.
+- Bound: at most 100 originals, 4 configured properties each and 3 actual values each; these bound output, not
+  examined native work. Charge all related-item/foreign probes under existing raw-key/source/page budgets;
+  release before foreign-home visits. No per-row detail hydration, permission cache or allowance change.
+- Growth check: native 1/8/64 through applicable 4,096 dependencies, unrelated facts/history, denied related items,
+  original-to-terminal changes and readiness; capture inclusive probes/bytes and verify no fabricated empty facts.
+
+### Selected batch remove/move
+
+- Touches: one owning-partition command, one or two current parents/grants/CAS, 1–100 selected occurrences,
+  ordinal neighbors/respace, retained deletion/Undo and actual count/listing/source/fact producers, receipts/events.
+- Bound: distinct IDs 1–100; same-curator route only; destination cap 5,000 and existing ordinal bounds. Account
+  for any native respace and lifecycle retention/custody work rather than claiming only 100 touched rows. Both
+  parents and all producer effects commit atomically; receipt replay adds none, and failures roll back all work.
+- Growth check: native small/full-cap Collections, 1/8/64-home unrelated population through applicable 4,096-source
+  dependencies, CAS races, partial invalid selection, capacity/ordinal failure, replay and exact Undo/public effects.
+
+### Saved dynamic rule
+
+- Touches: native Collection/rule and editor scopes/gates, shared filter/release admission, complete source and
+  disclosure dependencies, retained preparation/work intents, actual Publication and lifecycle/custody producers.
+- Bound: existing admitted indexed source plans and page/raw100/three-preview output limits apply in their own units;
+  no full-account synchronous evaluation, second Boolean engine, free workers or new allowance. Charge all rule
+  invalidation, preparation, receipts and retained-copy cleanup; pending is not zero and public reads use complete output.
+- Growth check: native 1/8/64 through applicable 4,096 homes, sparse rules, private fact changes, complete A/pending B,
+  crash/replay, source revocation and terminal cleanup. Require finite retained progress and current safe disclosure.

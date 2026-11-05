@@ -1,17 +1,115 @@
+import type { KernelClient } from '@rezics/client';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult, FieldGroup } from '@rezics/definitions/bulk';
 import type { ConversionInput, ConvertedRecord, SourceId } from '@rezics/conversion';
 import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
+import type { SourceVocabularyRequest } from '../../../packages/conversion/src/source-vocabulary.ts';
 
 export type ImportBatchRequest = BatchWriteRequest;
 export type ImportBatchResult = BatchWriteResult;
 
+// Consume the public generated operation, without importing a kernel runtime writer.
+type MetadataClient = KernelClient['source-records']['$setMetadata'];
+export type ImportSourceRecordMetadataCommand = Parameters<MetadataClient['post']>[0];
+export type ImportSourceRecordMetadataResult = NonNullable<Awaited<ReturnType<MetadataClient['post']>>['data']>;
+export type ImportSourceRecord = ImportSourceRecordMetadataCommand['metadata'];
+
+// Consume the installed generated client bodies for both statistic operations.
+type SourceStatisticsClient = ReturnType<ReturnType<KernelClient['subjects']>['source-statistics']>;
+type GeneratedStatisticValue = Readonly<Parameters<SourceStatisticsClient['put']>[0]>;
+type GeneratedClearValue = Readonly<Parameters<SourceStatisticsClient['$clear']['post']>[0]>;
+type GeneratedStatisticList = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['subjects']>['source-statistics']['get']>>['data']
+>;
+type GeneratedPublicFigure = NonNullable<
+  Awaited<ReturnType<ReturnType<KernelClient['subjects']>['figure']['get']>>['data']
+>;
+/** Content's observation CAS is additive on the generated VNDB bodies. */
+export type ImportObservationToken = Readonly<{ expectedObservation?: string | null }>;
+export type ImportSourceStatisticValue = GeneratedStatisticValue & ImportObservationToken;
+export type ImportSourceStatistic = ImportSourceStatisticValue & Readonly<{ source: 'vndb' }>;
+export type ImportSourceStatisticClearValue = GeneratedClearValue & ImportObservationToken;
+export type ImportSourceStatisticClear = ImportSourceStatisticClearValue & Readonly<{ source: 'vndb' }>;
+export type ImportSourceStatisticFigure = GeneratedStatisticList[number] &
+  Readonly<{ observation?: { kind: 'unversioned'; digest: string } }>;
+export type ImportPublicFigure = GeneratedPublicFigure extends { figure: infer Figure }
+  ? Figure
+  : GeneratedPublicFigure;
+
+type SourceClassificationsClient = ReturnType<KernelClient['subjects']>['source-classifications'];
+type GeneratedClassificationPut = Readonly<Parameters<SourceClassificationsClient['$put']['post']>[0]>;
+type GeneratedClassificationClear = Readonly<Parameters<SourceClassificationsClient['$clear']['post']>[0]>;
+type GeneratedClassificationBatch = NonNullable<
+  Awaited<ReturnType<SourceClassificationsClient['$read']['post']>>['data']
+>;
+export type ImportSourceClassificationPutResult = NonNullable<
+  Awaited<ReturnType<SourceClassificationsClient['$put']['post']>>['data']
+>;
+export type ImportSourceClassificationClearResult = NonNullable<
+  Awaited<ReturnType<SourceClassificationsClient['$clear']['post']>>['data']
+>;
+export type ClassificationAssociation = GeneratedClassificationPut['association'];
+export type ClassificationObservation = GeneratedClassificationPut['value'];
+export type ClassificationClear = GeneratedClassificationClear['value'];
+export type SourceClassificationRead = GeneratedClassificationBatch['items'][number];
+
 export interface ImportTransport {
   batchWrite(request: ImportBatchRequest): Promise<ImportBatchResult>;
+  setSourceRecordMetadata?(
+    input: { command: ImportSourceRecordMetadataCommand; idempotencyKey: string },
+    signal?: AbortSignal,
+  ): Promise<ImportSourceRecordMetadataResult>;
   readFence(tuple: {
     source: string;
     external_id: string;
     field_group: FieldGroup;
   }): Promise<{ fenced: boolean; securityRevision: string | null }>;
+  clearSourceStatistic?(
+    input: {
+      subjectId: string;
+      source: 'vndb';
+      value: ImportSourceStatisticClearValue;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<void>;
+  writeSourceStatistic?(
+    input: {
+      subjectId: string;
+      source: ImportSourceStatistic['source'];
+      value: ImportSourceStatisticValue;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<void>;
+  readSourceStatistics?(
+    input: { subjectId: string },
+    signal?: AbortSignal,
+  ): Promise<readonly ImportSourceStatisticFigure[]>;
+  readPublicFigure?(input: { subjectId: string }, signal?: AbortSignal): Promise<ImportPublicFigure>;
+  readSourceClassifications?(
+    input: { subjectId: string; associations: readonly ClassificationAssociation[] },
+    signal?: AbortSignal,
+  ): Promise<readonly SourceClassificationRead[]>;
+  writeSourceClassification?(
+    input: {
+      subjectId: string;
+      association: ClassificationAssociation;
+      value: ClassificationObservation;
+      expectedObservation: string | null;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<ImportSourceClassificationPutResult>;
+  clearSourceClassification?(
+    input: {
+      subjectId: string;
+      association: ClassificationAssociation;
+      value: ClassificationClear;
+      expectedObservation: string | null;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<ImportSourceClassificationClearResult>;
 }
 
 export type ImportConversionContext = Omit<ConversionContext, 'source'> & { readonly source: string };
@@ -21,6 +119,8 @@ export type SourceRegistration<Extra extends object = {}> = Readonly<{
   source: string;
   sourceKind: SourceId;
   converter_revision: string;
+  /** Reviewed application descriptor. Community registrations have no implicit writer. */
+  describeSourceRecord?(externalId: string): ImportSourceRecord;
   convert(input: ConversionInput, context: ImportConversionContext): ImportConversion<Extra>;
 }>;
 
@@ -29,7 +129,39 @@ export type ImportConversion<Extra extends object = {}> = ConvertedRecord<BatchC
   digest: string;
   normalized: unknown;
   sourceMetadata?: unknown;
+  sourceVocabulary?: SourceVocabularyRequest;
+  sourceStatistic?: ImportSourceStatistic;
+  sourceStatisticClear?: ImportSourceStatisticClear;
 } & Extra;
+
+export type StagingMemberIdentity = Readonly<{
+  index: number;
+  family: 'author' | 'work' | 'edition' | null;
+  compression: 'none' | 'gzip' | 'zstd';
+  sha256: string;
+  bytes: number;
+}>;
+
+export type StagingCaptureIdentity = Readonly<{
+  sha256: string;
+  bytes: number;
+  sourceAlias: string;
+  sourceKind: SourceId;
+  converterRevision: string;
+  decoderId: string;
+  checkpointVersion: number;
+  disappearanceThreshold: number;
+  decodeBudget?: number;
+  inputKind?: 'file' | 'dump-set';
+  manifestVersion?: 1 | 2;
+  members?: readonly StagingMemberIdentity[];
+}>;
+
+export type StagingCheckpointRequest = Readonly<{
+  action: 'acquire' | 'resume';
+  generation?: string;
+  identity: StagingCaptureIdentity;
+}>;
 
 export type RunOptions = Readonly<{
   source: string;
@@ -37,7 +169,22 @@ export type RunOptions = Readonly<{
   disappearanceThreshold?: number;
 }>;
 
-export type RunStatus = 'committed' | 'invalid-dump' | 'mass-disappearance' | 'bulk-failed' | 'interrupted' | 'busy';
+export type SourceDestinationProvenance = 'first-use' | 'operator-declared';
+export type ImportDestination = Readonly<{ origin: string }>;
+export type { SourceDestinationBinding } from './source-destination.ts';
+
+export type { ConversionDiagnosticPhase, SanitizedConversionDiagnostic } from './conversion-diagnostics.ts';
+export type { OpenLibraryDumpSetAdmission, OpenLibraryDumpSetMember } from './open-library-dump-set.ts';
+export type { OpenLibraryDumpFamily } from './dumps.ts';
+
+export type RunStatus =
+  | 'committed'
+  | 'invalid-dump'
+  | 'mass-disappearance'
+  | 'bulk-failed'
+  | 'interrupted'
+  | 'busy'
+  | 'observation-conflict';
 
 /** Per-record state acknowledges one source record; a baseline describes the whole completed source run. */
 export type RunResult = Readonly<{
@@ -60,4 +207,42 @@ export type RunResultSink = Readonly<{
 export type RunResultCollection = Readonly<{
   collect?: boolean;
   sink?: RunResultSink;
+}>;
+
+export type ImportProgressPhase =
+  | 'acquiring'
+  | 'verifying'
+  | 'loading'
+  | 'validating'
+  | 'publishing'
+  | 'materializing'
+  | 'verifying'
+  | 'staging'
+  | 'resuming'
+  | 'reconciling'
+  | 'deferred-media'
+  | 'finalizing'
+  | 'committed'
+  | 'invalid-input'
+  | 'mass-disappearance'
+  | 'busy'
+  | 'interrupted'
+  | 'denied'
+  | 'failed'
+  | 'observation-conflict';
+
+export type ImportProgressKind = 'new' | 'changed' | 'unchanged' | 'vanished';
+export type ImportMediaProgress = 'deferred' | 'rejected';
+
+/** In-memory hooks at real source, run-store and acknowledgement transitions. */
+export type ImportProgressObserver = Readonly<{
+  onPhase?(phase: ImportProgressPhase): void | Promise<void>;
+  onRun?(runId: string, resumed: boolean): void;
+  onStaged?(count: number): void;
+  onVerifiedPrefix?(count: number): void;
+  onSourceCompleted?(): void;
+  onAcknowledgedEffects?(count: number): void;
+  onClassified?(kind: ImportProgressKind): void;
+  onSkipped?(count: number): void;
+  onMedia?(outcome: ImportMediaProgress): void;
 }>;

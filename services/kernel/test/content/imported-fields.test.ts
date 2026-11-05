@@ -5,10 +5,14 @@ import { appendImportedField, readImportedField, type ImportedFieldView } from '
 import type { ImportedFieldInput } from '../../src/content/imported-contract.ts';
 import { runCommand, type CommandTransaction } from '../../src/command/command.ts';
 import { accessCommandAuthorization, type AccountActor } from '../../src/request/access.ts';
-import { createAccess } from '../../src/access/permission.ts';
-import { readAccount } from '../../src/access/account-data.ts';
+import { currentCommand, type CommandAuthorization } from '../../src/command/command.ts';
+import { resourceAuthorization } from '../../src/access/resource-authorization.ts';
+import { globalContextAnchor } from '../../src/semantic/context.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
+import { capture, checkGrowth, openGrowthDatabase, seed } from '../support/growth.ts';
+import { assertGrowthPointPlans, seedMediaCommandHistory } from './support/media-fixtures.ts';
 
 setDefaultTimeout(120_000);
 
@@ -25,7 +29,7 @@ const actor: AccountActor = {
   requestedBy: null,
 };
 let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
-let access: ReturnType<typeof createAccess>;
+let access: ReturnType<typeof admittedAccess>;
 class Denied extends Error {}
 const hash = (body: Uint8Array) => createHash('sha256').update(body).digest('hex');
 function input(): ImportedFieldInput {
@@ -62,13 +66,15 @@ function input(): ImportedFieldInput {
   };
 }
 async function command<T>(work: (tx: CommandTransaction) => Promise<T>, target = subject) {
+  const context = { pool: db.pool, deadline: Date.now() + 5000 };
+  const freshActor = await authenticateAccount(access, context, actor);
   const resource = { route: routeOf(target)!, id: target };
   const authorization = await accessCommandAuthorization(
     access,
-    actor,
+    freshActor,
     action,
     resource,
-    { pool: db.pool, deadline: Date.now() + 5000 },
+    context,
     () => new Denied(),
   );
   return runCommand(
@@ -77,7 +83,11 @@ async function command<T>(work: (tx: CommandTransaction) => Promise<T>, target =
       partition: partitionOf(resource.route),
       deadline: Date.now() + 120_000,
       authorization,
-      basis: { actorAccountId: actorId, clientId: actor.clientId, requestedBy: null },
+      basis: {
+        actorAccountId: freshActor.accountId,
+        clientId: freshActor.clientId,
+        requestedBy: freshActor.requestedBy,
+      },
     },
     async (tx) => ({ value: await work(tx), events: [{ type: 'com.rezics.test.imported.v1', data: {} }] }),
   );
@@ -96,11 +106,43 @@ beforeAll(async () => {
     VALUES ($1,$2,$3,$4,'(,)',$3)`,
     [route, subject, actorId, action],
   );
-  const account = await readAccount(db.admin, routeOf(actorId)!, actorId);
-  access = createAccess({ actions: new Map([[action, { anonymous: false }]]), accountEvidence: () => account });
+  access = admittedAccess({ actions: new Map([[action, { anonymous: false }]]) });
 });
 afterAll(async () => {
   await db?.close();
+});
+
+test('new commands reauthenticate after an earlier observation expires and expired contexts stay refused', async () => {
+  const earlierContext = { pool: db.pool, deadline: Date.now() + 1000 };
+  const earlier = await authenticateAccount(access, earlierContext, actor);
+  await new Promise((resolve) => setTimeout(resolve, Math.max(1, earlierContext.deadline - Date.now() + 1)));
+  const authorization = await accessCommandAuthorization(
+    access,
+    earlier,
+    action,
+    { route, id: subject },
+    { pool: db.pool, deadline: Date.now() + 5000 },
+    () => new Denied(),
+  );
+  let executed = false;
+  await expect(
+    runCommand(
+      db.pool,
+      {
+        partition: partitionOf(route),
+        authorization,
+        basis: { actorAccountId: earlier.accountId, clientId: earlier.clientId, requestedBy: earlier.requestedBy },
+      },
+      async () => {
+        executed = true;
+        return { value: null, events: [] };
+      },
+    ),
+  ).rejects.toThrow();
+  expect(executed).toBe(false);
+  await expect(authenticateAccount(access, earlierContext, actor)).rejects.toThrow();
+  const result = await command((tx) => appendImportedField(tx, input()));
+  expect(await readImportedField(db.pool, route, result.value.id)).not.toBeNull();
 });
 
 test('append uses the real authorized command and exact canonical document bytes with immutable per-field evidence', async () => {
@@ -327,71 +369,108 @@ test('canonical Unicode and numeric extension payloads match the real document s
 });
 
 test('intentional changed-document and input-byte growth is linear', async () => {
-  await command(async (tx) =>
-    checkGrowth(db, {
-      name: 'imported changed documents',
-      scales: [1, 8, 64],
-      repetitions: 1,
-      bounds: { rows: 'linear', statements: 'linear', blocks: 'linear' },
-      async grow() {},
-      async operation(_target, scale) {
-        for (let change = 0; change < scale; change++) {
-          const result = await appendImportedField(tx, input());
-          expect((await readImportedField(tx, route, result.id))?.digest).toBe(result.digest);
-        }
-      },
-    }),
-  );
+  const value = input();
+  const bytes = Buffer.from(serializeDocument(value.document as ReturnType<typeof fromPlainText>));
+  const operation = async (_target: typeof db, scale: number) =>
+    command(async (tx) => {
+      for (let change = 0; change < scale; change++) {
+        const result = await appendImportedField(tx, input());
+        expect((await readImportedField(tx, route, result.id))?.digest).toBe(result.digest);
+      }
+    });
+  const report = await checkGrowth(db, {
+    name: 'imported changed documents',
+    rule: 'series',
+    scales: [1, 8, 64],
+    repetitions: 1,
+    bounds: { rows: 'linear', statements: 'linear', blocks: 'linear' },
+    async grow(target, _scale, previous) {
+      if (previous !== 0) return;
+      // Hold committed H fixed while varying k: rows/statements O(k), blocks O(k log H).
+      // A fresh command per warm-up/repetition keeps prior scales out of the live transaction.
+      await seed(
+        target,
+        {
+          name: 'fixed committed imported document history',
+          hotPartition: partitionOf(route),
+          hotShare: 1,
+          rows: ({ route: other }) => ({
+            'content.imported_field': [
+              {
+                route: other,
+                id: newId(other),
+                subject: newId(other),
+                candidate: newId(other),
+                revision: 1,
+                body: bytes,
+                body_sha256: Buffer.from(hash(bytes), 'hex'),
+                source: value.source,
+                rights: value.rights,
+                language: value.language,
+                availability: 'available',
+              },
+            ],
+          }),
+        },
+        { from: 0, to: 8192 },
+      );
+      await seedMediaCommandHistory(target, route, actorId, 'test.imported-field', 0, 8192);
+    },
+    operation,
+    async warmup(target, scale) {
+      const measured = await capture(target, () => operation(target, scale));
+      assertGrowthPointPlans(measured.capture, { 'content.imported_field': ['route', 'id'] });
+    },
+  });
+  expect(report.samples.map((sample) => sample.scale)).toEqual([1, 8, 64]);
 });
 
 test('checkGrowth captures actual append and exact read at fixed bytes with same-partition unrelated history', async () => {
   const value = input();
   // This measures the hook after real authorization, not the final public Access formula.
   // The prior resource-grant enumeration failure remains in .temp/imported-fields/focused-final.log.
-  const report = (
-    await command(async (tx) =>
-      checkGrowth(db, {
-        name: 'imported field append/read',
-        scales: [32, 256, 2048],
-        bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
-        async grow(target, scale, previous) {
-          const bytes = Buffer.from(serializeDocument(value.document as ReturnType<typeof fromPlainText>));
-          await seed(
-            target,
-            {
-              name: 'unrelated imported fields',
-              hotPartition: partitionOf(route),
-              hotShare: 1,
-              rows: ({ route: other }) => {
-                return {
-                  'content.imported_field': [
-                    {
-                      route: other,
-                      id: newId(other),
-                      subject: newId(other),
-                      candidate: newId(other),
-                      revision: 1,
-                      body: bytes,
-                      body_sha256: Buffer.from(hash(bytes), 'hex'),
-                      source: value.source,
-                      rights: value.rights,
-                      language: value.language,
-                      availability: 'available',
-                    },
-                  ],
-                };
-              },
-            },
-            { from: previous, to: scale },
-          );
+  const report = await checkGrowth(db, {
+    name: 'imported field append/read',
+    scales: [32, 256, 2048],
+    bounds: { rows: 'constant', statements: 'constant', blocks: 'logarithmic' },
+    async grow(target, scale, previous) {
+      const bytes = Buffer.from(serializeDocument(value.document as ReturnType<typeof fromPlainText>));
+      await seed(
+        target,
+        {
+          name: 'unrelated imported fields',
+          hotPartition: partitionOf(route),
+          hotShare: 1,
+          rows: ({ route: other }) => {
+            return {
+              'content.imported_field': [
+                {
+                  route: other,
+                  id: newId(other),
+                  subject: newId(other),
+                  candidate: newId(other),
+                  revision: 1,
+                  body: bytes,
+                  body_sha256: Buffer.from(hash(bytes), 'hex'),
+                  source: value.source,
+                  rights: value.rights,
+                  language: value.language,
+                  availability: 'available',
+                },
+              ],
+            };
+          },
         },
-        async operation() {
-          const result = await appendImportedField(tx, value);
-          expect((await readImportedField(tx, route, result.id))?.digest).toBe(result.digest);
-        },
-      }),
-    )
-  ).value;
+        { from: previous, to: scale },
+      );
+    },
+    async operation() {
+      await command(async (tx) => {
+        const result = await appendImportedField(tx, value);
+        expect((await readImportedField(tx, route, result.id))?.digest).toBe(result.digest);
+      });
+    },
+  });
   expect(report.samples).toHaveLength(3);
   for (const sample of report.samples) {
     expect(sample.cost.statements).toBeGreaterThan(0);
@@ -447,4 +526,86 @@ test('imported summary rejects user posts and third-party media without writing 
     for (const bad of invalid) await expect(appendImportedField(tx, bad)).rejects.toThrow();
   });
   expect((await db.admin.query('SELECT count(*) FROM content.post')).rows).toEqual(before.rows);
+});
+
+test('an imported field is admitted under statement:propose or subject:create evaluated on the Global Context, and refused under any other action or resource', async () => {
+  const actions = ['statement:propose', 'subject:create', 'subject:update'];
+  const access = admittedAccess({ actions: new Map(actions.map((action) => [action, { anonymous: false }])) });
+  const importer = await authenticateAccount(
+    access,
+    { pool: db.pool, deadline: Date.now() + 10_000 },
+    {
+      ...actor,
+      scopes: actions,
+    },
+  );
+  const global = { route: routeOf(GLOBAL_CONTEXT)!, id: GLOBAL_CONTEXT };
+  for (const targetRoute of [route, 1]) {
+    const target = newId(targetRoute);
+    const other = { route: targetRoute, id: newId(targetRoute) };
+    for (const resource of [global, other]) {
+      for (const action of actions) {
+        await db.admin.query(
+          `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+           VALUES ($1,$2,$3,$4,'(,)',$3) ON CONFLICT DO NOTHING`,
+          [resource.route, resource.id, actorId, action],
+        );
+      }
+    }
+    async function attempt(action: string, resource = global, outside = false, receiptOnly = false) {
+      const partition = partitionOf(targetRoute);
+      const context = { pool: db.pool, deadline: Date.now() + 10_000, partition };
+      const authorization =
+        resource.id === GLOBAL_CONTEXT && partitionOf(global.route) !== partition
+          ? resourceAuthorization({ access, actor: importer, action, anchor: globalContextAnchor, context })
+          : await accessCommandAuthorization(access, importer, action, resource, context, () => new Denied());
+      const binding: CommandAuthorization = receiptOnly
+        ? {
+            ...authorization,
+            async authorize(tx, attempt, evidence) {
+              await authorization.authorize(tx, attempt, evidence);
+              return 'receipt-only';
+            },
+          }
+        : authorization;
+      const value = {
+        ...input(),
+        subject: outside ? newId(targetRoute + 16) : target,
+        candidate: newId(outside ? targetRoute + 16 : targetRoute),
+      };
+      return runCommand(
+        db.pool,
+        {
+          partition,
+          authorization: binding,
+          basis: { actorAccountId: actorId, clientId: importer.clientId, requestedBy: null },
+        },
+        async (tx) => {
+          expect(currentCommand(tx).authorization).toMatchObject({ action, resource, mode: 'execute' });
+          return {
+            value: await appendImportedField(tx, value),
+            events: [{ type: 'com.rezics.test.imported.v1', data: {} }],
+          };
+        },
+      );
+    }
+    for (const action of actions.slice(0, 2)) {
+      const result = await attempt(action);
+      expect(await readImportedField(db.pool, result.value.id)).toMatchObject({ subject: target });
+    }
+    const before = (await db.admin.query('SELECT count(*) FROM content.imported_field')).rows;
+    await expect(attempt(actions[2]!)).rejects.toThrow(
+      'Imported summary requires current subject command authorization',
+    );
+    for (const action of actions.slice(0, 2)) {
+      await expect(attempt(action, other)).rejects.toThrow(
+        'Imported summary requires current subject command authorization',
+      );
+      await expect(attempt(action, global, true)).rejects.toThrow(
+        'Imported subject must belong to the current command partition',
+      );
+      await expect(attempt(action, global, false, true)).rejects.toThrow();
+    }
+    expect((await db.admin.query('SELECT count(*) FROM content.imported_field')).rows).toEqual(before);
+  }
 });

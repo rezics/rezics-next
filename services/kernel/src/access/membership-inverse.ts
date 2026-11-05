@@ -1,11 +1,20 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { accessEvidence } from './evidence.ts';
 import type { AccessClient } from '../request/access.ts';
 import { derivedId, routeOf } from '../route/route.ts';
 import { withConnection } from '../database/pool.ts';
 import { LifecycleDeniedError, lifecycleExecutor } from './lifecycle-20261025094010-command.ts';
+import transitionAcquire from './realm-membership-transition-acquire.sql';
+import {
+  first,
+  createRealmMembershipTransitions,
+  type RealmMembershipTransition,
+  type RealmTransitionAuthority,
+} from './realm-membership-transition.ts';
 import accountRead from './lifecycle-account.sql';
 import read from './membership-inverse-20261025093747-read.sql';
+import ready from './membership-inverse-ready.sql';
 import reserve from './membership-inverse-20261025093747-reserve.sql';
 import release from './membership-inverse-20261025093747-release.sql';
 import terminal from './membership-inverse-20261025093747-terminal.sql';
@@ -18,6 +27,7 @@ export type MembershipReservation = {
   accountId: string;
   principal: MembershipPrincipal;
   reservationId: string;
+  transition?: { generationId: string; operationId: string };
 };
 export type MembershipAdmission = { accountId: string; principal: MembershipPrincipal; key: string };
 export type MembershipRelease = MembershipReservation & { key: string };
@@ -34,14 +44,21 @@ export class MembershipLimitError extends Error {
 }
 export const MEMBERSHIP_INVERSE_DEPLOYMENT_BARRIER =
   'Stop all old membership writers before migration; backfill each authoritative membership change through stable source cursors, reconcile outstanding reservations, then certify each actor anchor complete before enabling inverse reads. Mixed-version writers are forbidden.';
-export class MembershipInverseIncompleteError extends LifecycleDeniedError {
-  readonly code = 'membership_inverse_incomplete';
-  constructor() {
-    super();
-    this.name = 'MembershipInverseIncompleteError';
-    this.message = MEMBERSHIP_INVERSE_DEPLOYMENT_BARRIER;
-  }
+export function MembershipInverseIncompleteError() {
+  return memoizedValue(
+    MembershipInverseIncompleteError,
+    () =>
+      class MembershipInverseIncompleteError extends LifecycleDeniedError {
+        readonly code = 'membership_inverse_incomplete';
+        constructor() {
+          super();
+          this.name = 'MembershipInverseIncompleteError';
+          this.message = MEMBERSHIP_INVERSE_DEPLOYMENT_BARRIER;
+        }
+      },
+  );
 }
+export type MembershipInverseIncompleteError = InstanceType<ReturnType<typeof MembershipInverseIncompleteError>>;
 const NAMESPACE = '8c058b06-1993-8bb2-81f8-15f709707fa1';
 function requireAllowed(value: unknown): asserts value {
   if (!value) throw new LifecycleDeniedError();
@@ -61,6 +78,42 @@ function admission(input: MembershipAdmission) {
   return { accountId: input.accountId, principal, key: input.key };
 }
 
+function requireCompleteAnchor(
+  account:
+    | {
+        accountKind: string;
+        state: string;
+        fenced: boolean;
+        operatorAccountId: string | null;
+        complete: boolean;
+      }
+    | null
+    | undefined,
+): asserts account {
+  requireAllowed(
+    account &&
+      account.accountKind === 'actor' &&
+      account.state === 'active' &&
+      !account.fenced &&
+      account.operatorAccountId === null,
+  );
+  if (!account.complete) throw new (MembershipInverseIncompleteError())();
+}
+
+/** Point-read the same registration/cut barrier without expanding the inverse.
+ * A bounded personal inventory must check this even when its raw page is empty.
+ */
+export async function requireMembershipInverseReady(
+  client: AccessClient,
+  input: { accountId: string; authnEpoch: number },
+): Promise<void> {
+  const account = await ready.run(client, { route: route(input.accountId), account_id: input.accountId });
+  requireCompleteAnchor(account);
+  requireAllowed(
+    Number.isSafeInteger(input.authnEpoch) && BigInt(input.authnEpoch) >= BigInt(account.minimumAuthnEpoch),
+  );
+}
+
 /** Exact actor-anchor superset read: never use its rows to prove membership.
  * Authorization must separately verify matched authoritative group memberships
  * at the attempt's T. Missing coverage, malformed rows and overflow deny access;
@@ -72,14 +125,7 @@ export async function readMembershipInverse(
 ): Promise<readonly MembershipPrincipal[]> {
   const rows = await read.run(client, { route: route(input.accountId), account_id: input.accountId });
   const account = rows[0];
-  requireAllowed(
-    account &&
-      account.accountKind === 'actor' &&
-      account.state === 'active' &&
-      !account.fenced &&
-      account.operatorAccountId === null,
-  );
-  if (!account.complete) throw new MembershipInverseIncompleteError();
+  requireCompleteAnchor(account);
   const result: MembershipPrincipal[] = [];
   for (const row of rows) {
     if (row.kind === null && row.id === null) continue;
@@ -98,7 +144,7 @@ export async function readMembershipInverse(
  * termination. A Realm module must install this adapter before Realm release or
  * bootstrap is available. Reserve itself needs no Realm checkout or placement.
  */
-export type RealmMembershipAuthority = {
+export type RealmMembershipAuthority = Partial<RealmTransitionAuthority> & {
   readTerminal(
     client: AccessClient,
     input: MembershipReservation,
@@ -188,7 +234,8 @@ export function createMembershipInverseCommands(config: {
             account.operatorAccountId === null,
         );
         requireAllowed(!sourceTransactionId || sourceProof);
-        if (!sourceTransactionId && !account.membershipInverseComplete) throw new MembershipInverseIncompleteError();
+        if (!sourceTransactionId && !account.membershipInverseComplete)
+          throw new (MembershipInverseIncompleteError())();
         const priorReservationId = sourceProof?.reservationId;
         if (priorReservationId) requireAllowed(route(priorReservationId) === route(input.accountId));
         const rows = await reserve.run(tx, {
@@ -206,10 +253,28 @@ export function createMembershipInverseCommands(config: {
         if (!rows[0]) throw new MembershipLimitError();
         requireAllowed(rows[0].provenanceValid);
         requireAllowed(rows[0].admitted <= MEMBERSHIP_LIMIT);
+        let transition: MembershipReservation['transition'];
+        if (input.principal.kind === 'realm' && !sourceTransactionId) {
+          const generationId = derivedId(NAMESPACE, `${transactionId}:transition`, route(input.accountId));
+          const acquired = first(
+            await transitionAcquire.run(tx, {
+              route: route(input.accountId),
+              account_id: input.accountId,
+              realm_id: input.principal.id,
+              reservation_id: rows[0].reservationId,
+              generation_id: generationId,
+              operation_id: input.key,
+              transaction_id: transactionId,
+            }),
+          );
+          requireAllowed(acquired);
+          transition = { generationId, operationId: input.key };
+        }
         return {
           accountId: input.accountId,
           principal: input.principal,
           reservationId: rows[0].reservationId,
+          ...(transition ? { transition } : {}),
           ...(sourceTransactionId ? { sourceTransactionId } : {}),
         };
       },
@@ -247,6 +312,14 @@ export function createMembershipInverseCommands(config: {
           ? value
           : null;
       });
+      if (identity.principal.kind === 'realm' && input.transition) {
+        requireAllowed(config.realmAuthority?.readTransition);
+        await createRealmMembershipTransitions({
+          pool: config.pool,
+          authority: { readTransition: config.realmAuthority.readTransition },
+          ...(config.clock ? { clock: config.clock } : {}),
+        }).consume({ ...(input as RealmMembershipTransition), key: `${identity.key}:transition` });
+      }
       return execute(
         {
           route: route(identity.accountId),

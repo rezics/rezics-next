@@ -1,3 +1,5 @@
+import { memoizedValue } from '../memoized.ts';
+import { MoneyInterpretationUnavailable } from './royalty.ts';
 import { randomBytes } from 'node:crypto';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
@@ -17,12 +19,26 @@ import { createPayouts, listPayoutLines, listPayoutStatements, readPayoutStateme
 
 const amount = t.Integer({ minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER });
 const id = t.String({ format: 'uuid' });
+const moneyUnit = t.Optional(
+  t.Union([
+    t.Object(
+      {
+        system: t.Literal('stripe-api'),
+        exponent: t.Union([t.Literal(0), t.Literal(2)]),
+        factsVersion: t.Literal('stripe-money-v1'),
+      },
+      { additionalProperties: false },
+    ),
+    t.Null(),
+  ]),
+);
 const statement = t.Object(
   {
     id,
     creatorAccountId: id,
     period: t.String({ pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$' }),
     currency: t.String(),
+    moneyUnit,
     grossMinor: amount,
     taxMinor: amount,
     feeMinor: amount,
@@ -57,6 +73,7 @@ const line = t.Object(
     offerId: id,
     creatorAccountId: id,
     currency: t.String(),
+    moneyUnit,
     kind: t.Union([
       t.Literal('charge'),
       t.Literal('refund'),
@@ -82,18 +99,25 @@ const pageQuery = t.Object({
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
 });
 const params = t.Object({ statementId: t.String() });
-const unavailable = problemSchema(
-  'overloaded',
-  'partition_unavailable',
-  'transaction_retry_exhausted',
-  'deadline_exceeded',
-);
-const errors = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  503: unavailable,
-};
+function unavailable() {
+  return memoizedValue(unavailable, () =>
+    problemSchema(
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+      'dependency_unavailable',
+    ),
+  );
+}
+function errors() {
+  return memoizedValue(errors, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    503: unavailable(),
+  }));
+}
 const security = [{ bearerAuth: [] }];
 function accountAnchor(actor: Actor) {
   if (actor.kind !== 'account') throw new ProblemError('not_found');
@@ -116,7 +140,7 @@ export function payoutRoutes(
         query: pageQuery,
         response: {
           200: t.Object({ payoutStatements: t.Array(statement), next: t.Union([t.String(), t.Null()]) }),
-          ...errors,
+          ...errors(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           409: problemSchema('stale_cursor'),
         },
@@ -138,7 +162,7 @@ export function payoutRoutes(
       '/v1/payoutStatements/:statementId',
       {
         params,
-        response: { 200: t.Object({ statement }), ...errors },
+        response: { 200: t.Object({ statement }), ...errors() },
         detail: {
           operationId: 'payout_statement.get',
           'x-exposure': 'gate:selling',
@@ -162,7 +186,7 @@ export function payoutRoutes(
         query: pageQuery,
         response: {
           200: t.Object({ lines: t.Array(line), next: t.Union([t.String(), t.Null()]) }),
-          ...errors,
+          ...errors(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           409: problemSchema('stale_cursor'),
         },
@@ -191,7 +215,7 @@ export function payoutRoutes(
         body: t.Object({ paidReference: t.String({ minLength: 1, maxLength: 256 }) }, { additionalProperties: false }),
         response: {
           200: t.Object({ statement: payment }),
-          ...errors,
+          ...errors(),
           409: problemSchema('conflict'),
           422: problemSchema('idempotency_conflict'),
         },
@@ -230,6 +254,7 @@ export function payoutRoutes(
             ),
           )
           .catch((error: unknown) => {
+            if (error instanceof MoneyInterpretationUnavailable) throw new ProblemError('dependency_unavailable');
             if (error instanceof GrantDeniedError) throw new ProblemError('not_found');
             throw error;
           });

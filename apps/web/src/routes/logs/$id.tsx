@@ -1,13 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { PublishedLogPageView } from '../../library/log-page';
-import { readPublishedLog } from '../../library/logs-server';
+import { CurrentPublishedLog } from '../../library/log-current';
+import { readPublishedLogCurrent } from '../../library/logs-server';
 import { m } from '../../paraglide/messages.js';
 
 export const Route = createFileRoute('/logs/$id')({
-  loader: ({ params }) => readPublishedLog({ data: { id: params.id } }),
-  staleTime: 60_000,
+  loader: ({ params }) => readPublishedLogCurrent({ data: { id: params.id } }),
+  staleTime: 0,
   head: () => ({ meta: [{ title: m.library_logs_page_heading() }] }),
   component: function PublishedLogRoute() {
-    return <PublishedLogPageView {...Route.useLoaderData()} />;
+    const page = Route.useLoaderData();
+    const { id } = Route.useParams();
+    return <CurrentPublishedLog loaded={page} id={id} />;
   },
 });

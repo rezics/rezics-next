@@ -37,6 +37,10 @@ const actor: AccountActor = {
 };
 const tokens: KeyRing = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(7)]]) };
 const anchorTransactionIds = Array.from({ length: 8 }, (_, index) => `txn_growth${String(index + 1).padStart(3, '0')}`);
+// One warmup and five measured recordings per scale, each consuming eight fresh keys.
+const recordingTransactionIds = Array.from({ length: 18 }, (_, run) =>
+  Array.from({ length: 8 }, (_, index) => `txn_record${run}n${index}`),
+);
 let partitionEpoch = 1;
 // Same binding and epoch the payout list seals: operation, account, and statement when paging lines.
 function signedCursor(
@@ -318,7 +322,7 @@ beforeAll(async () => {
   const partition = await readPartition(database.admin, hotPartition);
   if (!partition) throw new Error('Growth payout partition was not created');
   partitionEpoch = partition.epoch;
-  // This paid order and its fixed eight transactions mirror the commerce write projections read by recordTransactions.
+  // Fixed source history includes eight anchor lines and eight fresh keys for every growth recording.
   await database.admin.query(
     `INSERT INTO commerce.purchase_order
       (route,order_id,buyer_account_id,offer_id,offer_revision,target_subject_id,creator_account_id,title,currency,
@@ -333,7 +337,7 @@ beforeAll(async () => {
        fee_details,stripe_created,recorded_at,transaction_id)
      SELECT $1,$2,id,'charge','ch_growth','usd',1000,0,1000,'[]'::jsonb,
        '2025-12-01','2026-01-01',$3 FROM unnest($4::text[]) AS id`,
-    [hotRoute, anchorOrder, newId(hotRoute), anchorTransactionIds],
+    [hotRoute, anchorOrder, newId(hotRoute), [...anchorTransactionIds, ...recordingTransactionIds.flat()]],
   );
   const recorded = await createPayouts({
     pool: database.pool,
@@ -361,14 +365,17 @@ afterAll(async () => {
 });
 
 test('Royalty computation and payout record stays within its bound as q grows', async () => {
-  // The bounded-case fixture holds source history at 8 transactions; q is represented by unrelated seller statements.
+  // Source history is fixed at 152 keys; each recording reads eight. Unrelated seller statements grow q.
   const payouts = createPayouts({ pool: db!.pool, clock: () => new Date('2026-01-20T12:00:00Z') });
   const report = await grow(
     db!,
     'Royalty computation and payout record stays within its bound as q grows',
     true,
     async (_growthDb, _scale, repetition) => {
-      await payouts.recordTransactions(anchorOrder, anchorTransactionIds, `royalty-growth-${repetition}`);
+      const ids = recordingTransactionIds[repetition];
+      if (!ids) throw new Error(`No fresh royalty keys for repetition ${repetition}`);
+      const recorded = await payouts.recordTransactions(anchorOrder, ids, `royalty-growth-${repetition}`);
+      expect('changed' in recorded).toBe(false);
     },
   );
   expect(report.samples.map(({ scale }) => scale)).toEqual([1, 8, 64]);

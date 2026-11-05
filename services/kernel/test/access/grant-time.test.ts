@@ -150,7 +150,6 @@ test('transaction policy time cannot extend an elapsed real database evidence de
       principal_id: '',
       anonymous: false,
       roles: [],
-      evidence_valid: '(,)',
       deadline,
     });
     expect(result).toHaveLength(1);

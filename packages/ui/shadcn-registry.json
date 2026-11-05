@@ -1,0 +1,1809 @@
+{
+  "source": "https://ui.shadcn.com/r/styles/base-rhea/registry.json",
+  "style": "base-rhea",
+  "items": [
+    {
+      "name": "index",
+      "type": "registry:style"
+    },
+    {
+      "name": "style",
+      "type": "registry:style"
+    },
+    {
+      "name": "accordion",
+      "type": "registry:ui",
+      "description": "A vertically stacked set of interactive headings that each reveal a section of content.",
+      "files": [
+        "registry/base-rhea/ui/accordion.tsx"
+      ]
+    },
+    {
+      "name": "alert",
+      "type": "registry:ui",
+      "description": "Displays a callout for user attention.",
+      "files": [
+        "registry/base-rhea/ui/alert.tsx"
+      ]
+    },
+    {
+      "name": "alert-dialog",
+      "type": "registry:ui",
+      "description": "A modal dialog that interrupts the user with important content and expects a response.",
+      "files": [
+        "registry/base-rhea/ui/alert-dialog.tsx"
+      ]
+    },
+    {
+      "name": "aspect-ratio",
+      "type": "registry:ui",
+      "description": "Displays content within a desired ratio.",
+      "files": [
+        "registry/base-rhea/ui/aspect-ratio.tsx"
+      ]
+    },
+    {
+      "name": "avatar",
+      "type": "registry:ui",
+      "description": "An image element with a fallback for representing the user.",
+      "files": [
+        "registry/base-rhea/ui/avatar.tsx"
+      ]
+    },
+    {
+      "name": "badge",
+      "type": "registry:ui",
+      "description": "Displays a badge or a component that looks like a badge.",
+      "files": [
+        "registry/base-rhea/ui/badge.tsx"
+      ]
+    },
+    {
+      "name": "breadcrumb",
+      "type": "registry:ui",
+      "description": "Displays the path to the current resource using a hierarchy of links.",
+      "files": [
+        "registry/base-rhea/ui/breadcrumb.tsx"
+      ]
+    },
+    {
+      "name": "button",
+      "type": "registry:ui",
+      "description": "Displays a button or a component that looks like a button.",
+      "files": [
+        "registry/base-rhea/ui/button.tsx"
+      ]
+    },
+    {
+      "name": "button-group",
+      "type": "registry:ui",
+      "description": "A container that groups related buttons together with consistent styling.",
+      "files": [
+        "registry/base-rhea/ui/button-group.tsx"
+      ]
+    },
+    {
+      "name": "calendar",
+      "type": "registry:ui",
+      "description": "A calendar component that allows users to select a date or a range of dates.",
+      "files": [
+        "registry/base-rhea/ui/calendar.tsx"
+      ]
+    },
+    {
+      "name": "card",
+      "type": "registry:ui",
+      "description": "Displays a card with header, content, and footer.",
+      "files": [
+        "registry/base-rhea/ui/card.tsx"
+      ]
+    },
+    {
+      "name": "carousel",
+      "type": "registry:ui",
+      "description": "A carousel with motion and swipe built using Embla.",
+      "files": [
+        "registry/base-rhea/ui/carousel.tsx"
+      ]
+    },
+    {
+      "name": "chart",
+      "type": "registry:ui",
+      "description": "Beautiful charts. Built using Recharts. Copy and paste into your apps.",
+      "files": [
+        "registry/base-rhea/ui/chart.tsx"
+      ]
+    },
+    {
+      "name": "checkbox",
+      "type": "registry:ui",
+      "description": "A control that allows the user to toggle between checked and not checked.",
+      "files": [
+        "registry/base-rhea/ui/checkbox.tsx"
+      ]
+    },
+    {
+      "name": "collapsible",
+      "type": "registry:ui",
+      "description": "An interactive component which expands/collapses a panel.",
+      "files": [
+        "registry/base-rhea/ui/collapsible.tsx"
+      ]
+    },
+    {
+      "name": "combobox",
+      "type": "registry:ui",
+      "description": "Autocomplete input with a list of suggestions.",
+      "files": [
+        "registry/base-rhea/ui/combobox.tsx"
+      ]
+    },
+    {
+      "name": "command",
+      "type": "registry:ui",
+      "description": "Command menu for search and quick actions.",
+      "files": [
+        "registry/base-rhea/ui/command.tsx"
+      ]
+    },
+    {
+      "name": "context-menu",
+      "type": "registry:ui",
+      "description": "Displays a menu of actions triggered by a right click.",
+      "files": [
+        "registry/base-rhea/ui/context-menu.tsx"
+      ]
+    },
+    {
+      "name": "dialog",
+      "type": "registry:ui",
+      "description": "A window overlaid on either the primary window or another dialog window, rendering the content underneath inert.",
+      "files": [
+        "registry/base-rhea/ui/dialog.tsx"
+      ]
+    },
+    {
+      "name": "drawer",
+      "type": "registry:ui",
+      "description": "A drawer component for React.",
+      "files": [
+        "registry/base-rhea/ui/drawer.tsx"
+      ]
+    },
+    {
+      "name": "dropdown-menu",
+      "type": "registry:ui",
+      "description": "Displays a menu to the user — such as a set of actions or functions — triggered by a button.",
+      "files": [
+        "registry/base-rhea/ui/dropdown-menu.tsx"
+      ]
+    },
+    {
+      "name": "empty",
+      "type": "registry:ui",
+      "description": "Use the Empty component to display an empty state.",
+      "files": [
+        "registry/base-rhea/ui/empty.tsx"
+      ]
+    },
+    {
+      "name": "field",
+      "type": "registry:ui",
+      "description": "Combine labels, controls, and help text to compose accessible form fields and grouped inputs.",
+      "files": [
+        "registry/base-rhea/ui/field.tsx"
+      ]
+    },
+    {
+      "name": "form",
+      "type": "registry:ui"
+    },
+    {
+      "name": "hover-card",
+      "type": "registry:ui",
+      "description": "For sighted users to preview content available behind a link.",
+      "files": [
+        "registry/base-rhea/ui/hover-card.tsx"
+      ]
+    },
+    {
+      "name": "input",
+      "type": "registry:ui",
+      "description": "A text input component for forms and user data entry with built-in styling and accessibility features.",
+      "files": [
+        "registry/base-rhea/ui/input.tsx"
+      ]
+    },
+    {
+      "name": "input-group",
+      "type": "registry:ui",
+      "description": "Add addons, buttons, and helper content to inputs.",
+      "files": [
+        "registry/base-rhea/ui/input-group.tsx"
+      ]
+    },
+    {
+      "name": "input-otp",
+      "type": "registry:ui",
+      "description": "Accessible one-time password component with copy-paste functionality.",
+      "files": [
+        "registry/base-rhea/ui/input-otp.tsx"
+      ]
+    },
+    {
+      "name": "item",
+      "type": "registry:ui",
+      "description": "A versatile component for displaying content with media, title, description, and actions.",
+      "files": [
+        "registry/base-rhea/ui/item.tsx"
+      ]
+    },
+    {
+      "name": "label",
+      "type": "registry:ui",
+      "description": "Renders an accessible label associated with controls.",
+      "files": [
+        "registry/base-rhea/ui/label.tsx"
+      ]
+    },
+    {
+      "name": "menubar",
+      "type": "registry:ui",
+      "description": "A visually persistent menu common in desktop applications that provides quick access to a consistent set of commands.",
+      "files": [
+        "registry/base-rhea/ui/menubar.tsx"
+      ]
+    },
+    {
+      "name": "navigation-menu",
+      "type": "registry:ui",
+      "description": "A collection of links for navigating websites.",
+      "files": [
+        "registry/base-rhea/ui/navigation-menu.tsx"
+      ]
+    },
+    {
+      "name": "pagination",
+      "type": "registry:ui",
+      "description": "Pagination with page navigation, next and previous links.",
+      "files": [
+        "registry/base-rhea/ui/pagination.tsx"
+      ]
+    },
+    {
+      "name": "popover",
+      "type": "registry:ui",
+      "description": "Displays rich content in a portal, triggered by a button.",
+      "files": [
+        "registry/base-rhea/ui/popover.tsx"
+      ]
+    },
+    {
+      "name": "progress",
+      "type": "registry:ui",
+      "description": "Displays an indicator showing the completion progress of a task, typically displayed as a progress bar.",
+      "files": [
+        "registry/base-rhea/ui/progress.tsx"
+      ]
+    },
+    {
+      "name": "radio-group",
+      "type": "registry:ui",
+      "description": "A set of checkable buttons—known as radio buttons—where no more than one of the buttons can be checked at a time.",
+      "files": [
+        "registry/base-rhea/ui/radio-group.tsx"
+      ]
+    },
+    {
+      "name": "resizable",
+      "type": "registry:ui",
+      "description": "Accessible resizable panel groups and layouts with keyboard support.",
+      "files": [
+        "registry/base-rhea/ui/resizable.tsx"
+      ]
+    },
+    {
+      "name": "scroll-area",
+      "type": "registry:ui",
+      "description": "Augments native scroll functionality for custom, cross-browser styling.",
+      "files": [
+        "registry/base-rhea/ui/scroll-area.tsx"
+      ]
+    },
+    {
+      "name": "select",
+      "type": "registry:ui",
+      "description": "Displays a list of options for the user to pick from—triggered by a button.",
+      "files": [
+        "registry/base-rhea/ui/select.tsx"
+      ]
+    },
+    {
+      "name": "separator",
+      "type": "registry:ui",
+      "description": "Visually or semantically separates content.",
+      "files": [
+        "registry/base-rhea/ui/separator.tsx"
+      ]
+    },
+    {
+      "name": "sheet",
+      "type": "registry:ui",
+      "description": "Extends the Dialog component to display content that complements the main content of the screen.",
+      "files": [
+        "registry/base-rhea/ui/sheet.tsx"
+      ]
+    },
+    {
+      "name": "sidebar",
+      "type": "registry:ui",
+      "description": "A composable, themeable and customizable sidebar component.",
+      "files": [
+        "registry/base-rhea/ui/sidebar.tsx"
+      ]
+    },
+    {
+      "name": "skeleton",
+      "type": "registry:ui",
+      "description": "Use to show a placeholder while content is loading.",
+      "files": [
+        "registry/base-rhea/ui/skeleton.tsx"
+      ]
+    },
+    {
+      "name": "slider",
+      "type": "registry:ui",
+      "description": "An input where the user selects a value from within a given range.",
+      "files": [
+        "registry/base-rhea/ui/slider.tsx"
+      ]
+    },
+    {
+      "name": "sonner",
+      "type": "registry:ui",
+      "description": "A succinct message that is displayed temporarily.",
+      "files": [
+        "registry/base-rhea/ui/sonner.tsx"
+      ]
+    },
+    {
+      "name": "spinner",
+      "type": "registry:ui",
+      "description": "An indicator that can be used to show a loading state.",
+      "files": [
+        "registry/base-rhea/ui/spinner.tsx"
+      ]
+    },
+    {
+      "name": "switch",
+      "type": "registry:ui",
+      "description": "A control that allows the user to toggle between checked and not checked.",
+      "files": [
+        "registry/base-rhea/ui/switch.tsx"
+      ]
+    },
+    {
+      "name": "table",
+      "type": "registry:ui",
+      "description": "A responsive table component.",
+      "files": [
+        "registry/base-rhea/ui/table.tsx"
+      ]
+    },
+    {
+      "name": "tabs",
+      "type": "registry:ui",
+      "description": "A set of layered sections of content—known as tab panels—that are displayed one at a time.",
+      "files": [
+        "registry/base-rhea/ui/tabs.tsx"
+      ]
+    },
+    {
+      "name": "textarea",
+      "type": "registry:ui",
+      "description": "Displays a form textarea or a component that looks like a textarea.",
+      "files": [
+        "registry/base-rhea/ui/textarea.tsx"
+      ]
+    },
+    {
+      "name": "toast",
+      "type": "registry:ui",
+      "description": "A succinct message that is displayed temporarily.",
+      "files": [
+        "registry/base-rhea/ui/toast.tsx"
+      ]
+    },
+    {
+      "name": "toggle",
+      "type": "registry:ui",
+      "description": "A two-state button that can be either on or off.",
+      "files": [
+        "registry/base-rhea/ui/toggle.tsx"
+      ]
+    },
+    {
+      "name": "toggle-group",
+      "type": "registry:ui",
+      "description": "A set of two-state buttons that can be toggled on or off.",
+      "files": [
+        "registry/base-rhea/ui/toggle-group.tsx"
+      ]
+    },
+    {
+      "name": "tooltip",
+      "type": "registry:ui",
+      "description": "A popup that displays information related to an element when the element receives keyboard focus or the mouse hovers over it.",
+      "files": [
+        "registry/base-rhea/ui/tooltip.tsx"
+      ]
+    },
+    {
+      "name": "kbd",
+      "type": "registry:ui",
+      "description": "Used to display textual user input from keyboard.",
+      "files": [
+        "registry/base-rhea/ui/kbd.tsx"
+      ]
+    },
+    {
+      "name": "native-select",
+      "type": "registry:ui",
+      "description": "A styled native HTML select element with consistent design system integration.",
+      "files": [
+        "registry/base-rhea/ui/native-select.tsx"
+      ]
+    },
+    {
+      "name": "direction",
+      "type": "registry:ui",
+      "description": "A provider component that sets the text direction for your application.",
+      "files": [
+        "registry/base-rhea/ui/direction.tsx"
+      ]
+    },
+    {
+      "name": "attachment",
+      "type": "registry:ui",
+      "files": [
+        "registry/base-rhea/ui/attachment.tsx"
+      ]
+    },
+    {
+      "name": "bubble",
+      "type": "registry:ui",
+      "files": [
+        "registry/base-rhea/ui/bubble.tsx"
+      ]
+    },
+    {
+      "name": "message-scroller",
+      "type": "registry:ui",
+      "files": [
+        "registry/base-rhea/ui/message-scroller.tsx"
+      ]
+    },
+    {
+      "name": "questionnaire",
+      "type": "registry:ui",
+      "description": "A multi-step questionnaire with single-choice, multiple-choice, freeform, and skippable questions.",
+      "files": [
+        "registry/base-rhea/ui/questionnaire.tsx"
+      ]
+    },
+    {
+      "name": "marker",
+      "type": "registry:ui",
+      "files": [
+        "registry/base-rhea/ui/marker.tsx"
+      ]
+    },
+    {
+      "name": "trace",
+      "type": "registry:ui",
+      "description": "The building block for reasoning, tool calls, sources and more.",
+      "files": [
+        "registry/base-rhea/ui/trace.tsx"
+      ]
+    },
+    {
+      "name": "code-block",
+      "type": "registry:ui",
+      "description": "Displays code, terminal output and diffs with an optional header, line numbers and a copy button.",
+      "files": [
+        "registry/base-rhea/ui/code-block.tsx"
+      ]
+    },
+    {
+      "name": "message",
+      "type": "registry:ui",
+      "files": [
+        "registry/base-rhea/ui/message.tsx"
+      ]
+    },
+    {
+      "name": "accordion-example",
+      "type": "registry:example",
+      "title": "Accordion",
+      "files": [
+        "registry/base-rhea/examples/accordion-example.tsx"
+      ]
+    },
+    {
+      "name": "alert-example",
+      "type": "registry:example",
+      "title": "Alert",
+      "files": [
+        "registry/base-rhea/examples/alert-example.tsx"
+      ]
+    },
+    {
+      "name": "alert-dialog-example",
+      "type": "registry:example",
+      "title": "Alert Dialog",
+      "files": [
+        "registry/base-rhea/examples/alert-dialog-example.tsx"
+      ]
+    },
+    {
+      "name": "aspect-ratio-example",
+      "type": "registry:example",
+      "title": "Aspect Ratio",
+      "files": [
+        "registry/base-rhea/examples/aspect-ratio-example.tsx"
+      ]
+    },
+    {
+      "name": "avatar-example",
+      "type": "registry:example",
+      "title": "Avatar",
+      "files": [
+        "registry/base-rhea/examples/avatar-example.tsx"
+      ]
+    },
+    {
+      "name": "badge-example",
+      "type": "registry:example",
+      "title": "Badge",
+      "files": [
+        "registry/base-rhea/examples/badge-example.tsx"
+      ]
+    },
+    {
+      "name": "breadcrumb-example",
+      "type": "registry:example",
+      "title": "Breadcrumb",
+      "files": [
+        "registry/base-rhea/examples/breadcrumb-example.tsx"
+      ]
+    },
+    {
+      "name": "button-example",
+      "type": "registry:example",
+      "title": "Button",
+      "files": [
+        "registry/base-rhea/examples/button-example.tsx"
+      ]
+    },
+    {
+      "name": "button-group-example",
+      "type": "registry:example",
+      "title": "Button Group",
+      "files": [
+        "registry/base-rhea/examples/button-group-example.tsx"
+      ]
+    },
+    {
+      "name": "calendar-example",
+      "type": "registry:example",
+      "title": "Calendar",
+      "files": [
+        "registry/base-rhea/examples/calendar-example.tsx"
+      ]
+    },
+    {
+      "name": "card-example",
+      "type": "registry:example",
+      "title": "Card",
+      "files": [
+        "registry/base-rhea/examples/card-example.tsx"
+      ]
+    },
+    {
+      "name": "carousel-example",
+      "type": "registry:example",
+      "title": "Carousel",
+      "files": [
+        "registry/base-rhea/examples/carousel-example.tsx"
+      ]
+    },
+    {
+      "name": "chart-example",
+      "type": "registry:example",
+      "title": "Chart",
+      "files": [
+        "registry/base-rhea/examples/chart-example.tsx"
+      ]
+    },
+    {
+      "name": "checkbox-example",
+      "type": "registry:example",
+      "title": "Checkbox",
+      "files": [
+        "registry/base-rhea/examples/checkbox-example.tsx"
+      ]
+    },
+    {
+      "name": "collapsible-example",
+      "type": "registry:example",
+      "title": "Collapsible",
+      "files": [
+        "registry/base-rhea/examples/collapsible-example.tsx"
+      ]
+    },
+    {
+      "name": "combobox-example",
+      "type": "registry:example",
+      "title": "Combobox",
+      "files": [
+        "registry/base-rhea/examples/combobox-example.tsx"
+      ]
+    },
+    {
+      "name": "command-example",
+      "type": "registry:example",
+      "title": "Command",
+      "files": [
+        "registry/base-rhea/examples/command-example.tsx"
+      ]
+    },
+    {
+      "name": "context-menu-example",
+      "type": "registry:example",
+      "title": "Context Menu",
+      "files": [
+        "registry/base-rhea/examples/context-menu-example.tsx"
+      ]
+    },
+    {
+      "name": "dialog-example",
+      "type": "registry:example",
+      "title": "Dialog",
+      "files": [
+        "registry/base-rhea/examples/dialog-example.tsx"
+      ]
+    },
+    {
+      "name": "drawer-example",
+      "type": "registry:example",
+      "title": "Drawer",
+      "files": [
+        "registry/base-rhea/examples/drawer-example.tsx"
+      ]
+    },
+    {
+      "name": "dropdown-menu-example",
+      "type": "registry:example",
+      "title": "Dropdown Menu",
+      "files": [
+        "registry/base-rhea/examples/dropdown-menu-example.tsx"
+      ]
+    },
+    {
+      "name": "empty-example",
+      "type": "registry:example",
+      "title": "Empty",
+      "files": [
+        "registry/base-rhea/examples/empty-example.tsx"
+      ]
+    },
+    {
+      "name": "field-example",
+      "type": "registry:example",
+      "title": "Field",
+      "files": [
+        "registry/base-rhea/examples/field-example.tsx"
+      ]
+    },
+    {
+      "name": "hover-card-example",
+      "type": "registry:example",
+      "title": "Hover Card",
+      "files": [
+        "registry/base-rhea/examples/hover-card-example.tsx"
+      ]
+    },
+    {
+      "name": "input-example",
+      "type": "registry:example",
+      "title": "Input",
+      "files": [
+        "registry/base-rhea/examples/input-example.tsx"
+      ]
+    },
+    {
+      "name": "input-group-example",
+      "type": "registry:example",
+      "title": "Input Group",
+      "files": [
+        "registry/base-rhea/examples/input-group-example.tsx"
+      ]
+    },
+    {
+      "name": "input-otp-example",
+      "type": "registry:example",
+      "title": "Input OTP",
+      "files": [
+        "registry/base-rhea/examples/input-otp-example.tsx"
+      ]
+    },
+    {
+      "name": "item-example",
+      "type": "registry:example",
+      "title": "Item",
+      "files": [
+        "registry/base-rhea/examples/item-example.tsx"
+      ]
+    },
+    {
+      "name": "kbd-example",
+      "type": "registry:example",
+      "title": "Kbd",
+      "files": [
+        "registry/base-rhea/examples/kbd-example.tsx"
+      ]
+    },
+    {
+      "name": "label-example",
+      "type": "registry:example",
+      "title": "Label",
+      "files": [
+        "registry/base-rhea/examples/label-example.tsx"
+      ]
+    },
+    {
+      "name": "menubar-example",
+      "type": "registry:example",
+      "title": "Menubar",
+      "files": [
+        "registry/base-rhea/examples/menubar-example.tsx"
+      ]
+    },
+    {
+      "name": "native-select-example",
+      "type": "registry:example",
+      "title": "Native Select",
+      "files": [
+        "registry/base-rhea/examples/native-select-example.tsx"
+      ]
+    },
+    {
+      "name": "navigation-menu-example",
+      "type": "registry:example",
+      "title": "Navigation Menu",
+      "files": [
+        "registry/base-rhea/examples/navigation-menu-example.tsx"
+      ]
+    },
+    {
+      "name": "pagination-example",
+      "type": "registry:example",
+      "title": "Pagination",
+      "files": [
+        "registry/base-rhea/examples/pagination-example.tsx"
+      ]
+    },
+    {
+      "name": "popover-example",
+      "type": "registry:example",
+      "title": "Popover",
+      "files": [
+        "registry/base-rhea/examples/popover-example.tsx"
+      ]
+    },
+    {
+      "name": "progress-example",
+      "type": "registry:example",
+      "title": "Progress",
+      "files": [
+        "registry/base-rhea/examples/progress-example.tsx"
+      ]
+    },
+    {
+      "name": "radio-group-example",
+      "type": "registry:example",
+      "title": "Radio Group",
+      "files": [
+        "registry/base-rhea/examples/radio-group-example.tsx"
+      ]
+    },
+    {
+      "name": "resizable-example",
+      "type": "registry:example",
+      "title": "Resizable",
+      "files": [
+        "registry/base-rhea/examples/resizable-example.tsx"
+      ]
+    },
+    {
+      "name": "scroll-area-example",
+      "type": "registry:example",
+      "title": "Scroll Area",
+      "files": [
+        "registry/base-rhea/examples/scroll-area-example.tsx"
+      ]
+    },
+    {
+      "name": "select-example",
+      "type": "registry:example",
+      "title": "Select",
+      "files": [
+        "registry/base-rhea/examples/select-example.tsx"
+      ]
+    },
+    {
+      "name": "separator-example",
+      "type": "registry:example",
+      "title": "Separator",
+      "files": [
+        "registry/base-rhea/examples/separator-example.tsx"
+      ]
+    },
+    {
+      "name": "sheet-example",
+      "type": "registry:example",
+      "title": "Sheet",
+      "files": [
+        "registry/base-rhea/examples/sheet-example.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-example",
+      "type": "registry:example",
+      "title": "Sidebar",
+      "files": [
+        "registry/base-rhea/examples/sidebar-example.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-icon-example",
+      "type": "registry:example",
+      "title": "Sidebar (Icon)",
+      "files": [
+        "registry/base-rhea/examples/sidebar-icon-example.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-inset-example",
+      "type": "registry:example",
+      "title": "Sidebar (Inset)",
+      "files": [
+        "registry/base-rhea/examples/sidebar-inset-example.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-floating-example",
+      "type": "registry:example",
+      "title": "Sidebar (Floating)",
+      "files": [
+        "registry/base-rhea/examples/sidebar-floating-example.tsx"
+      ]
+    },
+    {
+      "name": "skeleton-example",
+      "type": "registry:example",
+      "title": "Skeleton",
+      "files": [
+        "registry/base-rhea/examples/skeleton-example.tsx"
+      ]
+    },
+    {
+      "name": "slider-example",
+      "type": "registry:example",
+      "title": "Slider",
+      "files": [
+        "registry/base-rhea/examples/slider-example.tsx"
+      ]
+    },
+    {
+      "name": "sonner-example",
+      "type": "registry:example",
+      "title": "Sonner",
+      "files": [
+        "registry/base-rhea/examples/sonner-example.tsx"
+      ]
+    },
+    {
+      "name": "spinner-example",
+      "type": "registry:example",
+      "title": "Spinner",
+      "files": [
+        "registry/base-rhea/examples/spinner-example.tsx"
+      ]
+    },
+    {
+      "name": "switch-example",
+      "type": "registry:example",
+      "title": "Switch",
+      "files": [
+        "registry/base-rhea/examples/switch-example.tsx"
+      ]
+    },
+    {
+      "name": "table-example",
+      "type": "registry:example",
+      "title": "Table",
+      "files": [
+        "registry/base-rhea/examples/table-example.tsx"
+      ]
+    },
+    {
+      "name": "tabs-example",
+      "type": "registry:example",
+      "title": "Tabs",
+      "files": [
+        "registry/base-rhea/examples/tabs-example.tsx"
+      ]
+    },
+    {
+      "name": "textarea-example",
+      "type": "registry:example",
+      "title": "Textarea",
+      "files": [
+        "registry/base-rhea/examples/textarea-example.tsx"
+      ]
+    },
+    {
+      "name": "toast-example",
+      "type": "registry:example",
+      "title": "Toast",
+      "files": [
+        "registry/base-rhea/examples/toast-example.tsx"
+      ]
+    },
+    {
+      "name": "toggle-example",
+      "type": "registry:example",
+      "title": "Toggle",
+      "files": [
+        "registry/base-rhea/examples/toggle-example.tsx"
+      ]
+    },
+    {
+      "name": "toggle-group-example",
+      "type": "registry:example",
+      "title": "Toggle Group",
+      "files": [
+        "registry/base-rhea/examples/toggle-group-example.tsx"
+      ]
+    },
+    {
+      "name": "tooltip-example",
+      "type": "registry:example",
+      "title": "Tooltip",
+      "files": [
+        "registry/base-rhea/examples/tooltip-example.tsx"
+      ]
+    },
+    {
+      "name": "demo",
+      "type": "registry:example",
+      "title": "Demo",
+      "files": [
+        "registry/base-rhea/examples/demo.tsx"
+      ]
+    },
+    {
+      "name": "component-example",
+      "type": "registry:example",
+      "title": "Example",
+      "files": [
+        "registry/base-rhea/examples/component-example.tsx"
+      ]
+    },
+    {
+      "name": "attachment-example",
+      "type": "registry:example",
+      "title": "Attachment",
+      "files": [
+        "registry/base-rhea/examples/attachment-example.tsx"
+      ]
+    },
+    {
+      "name": "bubble-example",
+      "type": "registry:example",
+      "title": "Bubble",
+      "files": [
+        "registry/base-rhea/examples/bubble-example.tsx"
+      ]
+    },
+    {
+      "name": "message-scroller-example",
+      "type": "registry:example",
+      "title": "Message Scroller",
+      "files": [
+        "registry/base-rhea/examples/message-scroller-example.tsx"
+      ]
+    },
+    {
+      "name": "questionnaire-example",
+      "type": "registry:example",
+      "title": "Questionnaire",
+      "files": [
+        "registry/base-rhea/examples/questionnaire-example.tsx"
+      ]
+    },
+    {
+      "name": "marker-example",
+      "type": "registry:example",
+      "title": "Marker",
+      "files": [
+        "registry/base-rhea/examples/marker-example.tsx"
+      ]
+    },
+    {
+      "name": "trace-example",
+      "type": "registry:example",
+      "title": "Trace",
+      "files": [
+        "registry/base-rhea/examples/trace-example.tsx"
+      ]
+    },
+    {
+      "name": "code-block-example",
+      "type": "registry:example",
+      "title": "Code Block",
+      "files": [
+        "registry/base-rhea/examples/code-block-example.tsx"
+      ]
+    },
+    {
+      "name": "message-example",
+      "type": "registry:example",
+      "title": "Message",
+      "files": [
+        "registry/base-rhea/examples/message-example.tsx"
+      ]
+    },
+    {
+      "name": "utils",
+      "type": "registry:lib",
+      "files": [
+        "registry/base-rhea/lib/utils.ts"
+      ]
+    },
+    {
+      "name": "example",
+      "type": "registry:component",
+      "title": "Example",
+      "files": [
+        "registry/base-rhea/components/example.tsx"
+      ]
+    },
+    {
+      "name": "preview",
+      "type": "registry:block",
+      "title": "Preview",
+      "files": [
+        "registry/base-rhea/blocks/preview/index.tsx"
+      ]
+    },
+    {
+      "name": "preview-02",
+      "type": "registry:block",
+      "title": "Preview 02",
+      "files": [
+        "registry/base-rhea/blocks/preview-02/index.tsx"
+      ]
+    },
+    {
+      "name": "preview-03",
+      "type": "registry:block",
+      "title": "Preview 03",
+      "files": [
+        "registry/base-rhea/blocks/preview-03/index.tsx"
+      ]
+    },
+    {
+      "name": "login-01",
+      "type": "registry:block",
+      "title": "Login 01",
+      "description": "A simple login form.",
+      "categories": [
+        "authentication",
+        "login"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/login-01/page.tsx",
+        "registry/base-rhea/blocks/login-01/components/login-form.tsx"
+      ]
+    },
+    {
+      "name": "login-02",
+      "type": "registry:block",
+      "title": "Login 02",
+      "description": "A two column login page with a cover image.",
+      "categories": [
+        "authentication",
+        "login"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/login-02/page.tsx",
+        "registry/base-rhea/blocks/login-02/components/login-form.tsx"
+      ]
+    },
+    {
+      "name": "login-03",
+      "type": "registry:block",
+      "title": "Login 03",
+      "description": "A login page with a muted background color.",
+      "categories": [
+        "authentication",
+        "login"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/login-03/page.tsx",
+        "registry/base-rhea/blocks/login-03/components/login-form.tsx"
+      ]
+    },
+    {
+      "name": "login-04",
+      "type": "registry:block",
+      "title": "Login 04",
+      "description": "A login page with form and image.",
+      "categories": [
+        "authentication",
+        "login"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/login-04/page.tsx",
+        "registry/base-rhea/blocks/login-04/components/login-form.tsx"
+      ]
+    },
+    {
+      "name": "login-05",
+      "type": "registry:block",
+      "title": "Login 05",
+      "description": "A simple email-only login page.",
+      "categories": [
+        "authentication",
+        "login"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/login-05/page.tsx",
+        "registry/base-rhea/blocks/login-05/components/login-form.tsx"
+      ]
+    },
+    {
+      "name": "signup-01",
+      "type": "registry:block",
+      "title": "Signup 01",
+      "description": "A simple signup form.",
+      "categories": [
+        "authentication",
+        "signup"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/signup-01/page.tsx",
+        "registry/base-rhea/blocks/signup-01/components/signup-form.tsx"
+      ]
+    },
+    {
+      "name": "signup-02",
+      "type": "registry:block",
+      "title": "Signup 02",
+      "description": "A two column signup page with a cover image.",
+      "categories": [
+        "authentication",
+        "signup"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/signup-02/page.tsx",
+        "registry/base-rhea/blocks/signup-02/components/signup-form.tsx"
+      ]
+    },
+    {
+      "name": "signup-03",
+      "type": "registry:block",
+      "title": "Signup 03",
+      "description": "A signup page with a muted background color.",
+      "categories": [
+        "authentication",
+        "signup"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/signup-03/page.tsx",
+        "registry/base-rhea/blocks/signup-03/components/signup-form.tsx"
+      ]
+    },
+    {
+      "name": "signup-04",
+      "type": "registry:block",
+      "title": "Signup 04",
+      "description": "A signup page with form and image.",
+      "categories": [
+        "authentication",
+        "signup"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/signup-04/page.tsx",
+        "registry/base-rhea/blocks/signup-04/components/signup-form.tsx"
+      ]
+    },
+    {
+      "name": "signup-05",
+      "type": "registry:block",
+      "title": "Signup 05",
+      "description": "A simple signup form with social providers.",
+      "categories": [
+        "authentication",
+        "signup"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/signup-05/page.tsx",
+        "registry/base-rhea/blocks/signup-05/components/signup-form.tsx"
+      ]
+    },
+    {
+      "name": "dashboard-01",
+      "type": "registry:block",
+      "title": "Dashboard 01",
+      "description": "A dashboard with sidebar, charts and data table.",
+      "categories": [
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/dashboard-01/page.tsx",
+        "registry/base-rhea/blocks/dashboard-01/data.json",
+        "registry/base-rhea/blocks/dashboard-01/components/app-sidebar.tsx",
+        "registry/base-rhea/blocks/dashboard-01/components/chart-area-interactive.tsx",
+        "registry/base-rhea/blocks/dashboard-01/components/data-table.tsx",
+        "registry/base-rhea/blocks/dashboard-01/components/nav-documents.tsx",
+        "registry/base-rhea/blocks/dashboard-01/components/nav-main.tsx",
+        "registry/base-rhea/blocks/dashboard-01/components/nav-secondary.tsx",
+        "registry/base-rhea/blocks/dashboard-01/components/nav-user.tsx",
+        "registry/base-rhea/blocks/dashboard-01/components/section-cards.tsx",
+        "registry/base-rhea/blocks/dashboard-01/components/site-header.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-01",
+      "type": "registry:block",
+      "title": "Sidebar 01",
+      "description": "A simple sidebar with navigation grouped by section.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-01/page.tsx",
+        "registry/base-rhea/blocks/sidebar-01/components/app-sidebar.tsx",
+        "registry/base-rhea/blocks/sidebar-01/components/search-form.tsx",
+        "registry/base-rhea/blocks/sidebar-01/components/version-switcher.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-02",
+      "type": "registry:block",
+      "title": "Sidebar 02",
+      "description": "A sidebar with collapsible sections.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-02/page.tsx",
+        "registry/base-rhea/blocks/sidebar-02/components/app-sidebar.tsx",
+        "registry/base-rhea/blocks/sidebar-02/components/search-form.tsx",
+        "registry/base-rhea/blocks/sidebar-02/components/version-switcher.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-03",
+      "type": "registry:block",
+      "title": "Sidebar 03",
+      "description": "A sidebar with submenus.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-03/page.tsx",
+        "registry/base-rhea/blocks/sidebar-03/components/app-sidebar.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-04",
+      "type": "registry:block",
+      "title": "Sidebar 04",
+      "description": "A floating sidebar with submenus.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-04/page.tsx",
+        "registry/base-rhea/blocks/sidebar-04/components/app-sidebar.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-05",
+      "type": "registry:block",
+      "title": "Sidebar 05",
+      "description": "A sidebar with collapsible submenus.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-05/page.tsx",
+        "registry/base-rhea/blocks/sidebar-05/components/app-sidebar.tsx",
+        "registry/base-rhea/blocks/sidebar-05/components/search-form.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-06",
+      "type": "registry:block",
+      "title": "Sidebar 06",
+      "description": "A sidebar with submenus as dropdowns.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-06/page.tsx",
+        "registry/base-rhea/blocks/sidebar-06/components/app-sidebar.tsx",
+        "registry/base-rhea/blocks/sidebar-06/components/nav-main.tsx",
+        "registry/base-rhea/blocks/sidebar-06/components/sidebar-opt-in-form.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-07",
+      "type": "registry:block",
+      "title": "Sidebar 07",
+      "description": "A sidebar that collapses to icons.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-07/page.tsx",
+        "registry/base-rhea/blocks/sidebar-07/components/app-sidebar.tsx",
+        "registry/base-rhea/blocks/sidebar-07/components/nav-main.tsx",
+        "registry/base-rhea/blocks/sidebar-07/components/nav-projects.tsx",
+        "registry/base-rhea/blocks/sidebar-07/components/nav-user.tsx",
+        "registry/base-rhea/blocks/sidebar-07/components/team-switcher.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-08",
+      "type": "registry:block",
+      "title": "Sidebar 08",
+      "description": "An inset sidebar with secondary navigation.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-08/page.tsx",
+        "registry/base-rhea/blocks/sidebar-08/components/app-sidebar.tsx",
+        "registry/base-rhea/blocks/sidebar-08/components/nav-main.tsx",
+        "registry/base-rhea/blocks/sidebar-08/components/nav-projects.tsx",
+        "registry/base-rhea/blocks/sidebar-08/components/nav-secondary.tsx",
+        "registry/base-rhea/blocks/sidebar-08/components/nav-user.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-09",
+      "type": "registry:block",
+      "title": "Sidebar 09",
+      "description": "Collapsible nested sidebars.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-09/page.tsx",
+        "registry/base-rhea/blocks/sidebar-09/components/app-sidebar.tsx",
+        "registry/base-rhea/blocks/sidebar-09/components/nav-user.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-10",
+      "type": "registry:block",
+      "title": "Sidebar 10",
+      "description": "A sidebar in a popover.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-10/page.tsx",
+        "registry/base-rhea/blocks/sidebar-10/components/app-sidebar.tsx",
+        "registry/base-rhea/blocks/sidebar-10/components/nav-actions.tsx",
+        "registry/base-rhea/blocks/sidebar-10/components/nav-favorites.tsx",
+        "registry/base-rhea/blocks/sidebar-10/components/nav-main.tsx",
+        "registry/base-rhea/blocks/sidebar-10/components/nav-secondary.tsx",
+        "registry/base-rhea/blocks/sidebar-10/components/nav-workspaces.tsx",
+        "registry/base-rhea/blocks/sidebar-10/components/team-switcher.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-11",
+      "type": "registry:block",
+      "title": "Sidebar 11",
+      "description": "A sidebar with a collapsible file tree.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-11/page.tsx",
+        "registry/base-rhea/blocks/sidebar-11/components/app-sidebar.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-12",
+      "type": "registry:block",
+      "title": "Sidebar 12",
+      "description": "A sidebar with a calendar.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-12/page.tsx",
+        "registry/base-rhea/blocks/sidebar-12/components/app-sidebar.tsx",
+        "registry/base-rhea/blocks/sidebar-12/components/calendars.tsx",
+        "registry/base-rhea/blocks/sidebar-12/components/date-picker.tsx",
+        "registry/base-rhea/blocks/sidebar-12/components/nav-user.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-13",
+      "type": "registry:block",
+      "title": "Sidebar 13",
+      "description": "A sidebar in a dialog.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-13/page.tsx",
+        "registry/base-rhea/blocks/sidebar-13/components/settings-dialog.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-14",
+      "type": "registry:block",
+      "title": "Sidebar 14",
+      "description": "A sidebar on the right.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-14/page.tsx",
+        "registry/base-rhea/blocks/sidebar-14/components/app-sidebar.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-15",
+      "type": "registry:block",
+      "title": "Sidebar 15",
+      "description": "A left and right sidebar.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-15/page.tsx",
+        "registry/base-rhea/blocks/sidebar-15/components/calendars.tsx",
+        "registry/base-rhea/blocks/sidebar-15/components/date-picker.tsx",
+        "registry/base-rhea/blocks/sidebar-15/components/nav-favorites.tsx",
+        "registry/base-rhea/blocks/sidebar-15/components/nav-main.tsx",
+        "registry/base-rhea/blocks/sidebar-15/components/nav-secondary.tsx",
+        "registry/base-rhea/blocks/sidebar-15/components/nav-user.tsx",
+        "registry/base-rhea/blocks/sidebar-15/components/nav-workspaces.tsx",
+        "registry/base-rhea/blocks/sidebar-15/components/sidebar-left.tsx",
+        "registry/base-rhea/blocks/sidebar-15/components/sidebar-right.tsx",
+        "registry/base-rhea/blocks/sidebar-15/components/team-switcher.tsx"
+      ]
+    },
+    {
+      "name": "sidebar-16",
+      "type": "registry:block",
+      "title": "Sidebar 16",
+      "description": "A sidebar with a sticky site header.",
+      "categories": [
+        "sidebar",
+        "dashboard"
+      ],
+      "files": [
+        "registry/base-rhea/blocks/sidebar-16/page.tsx",
+        "registry/base-rhea/blocks/sidebar-16/components/app-sidebar.tsx",
+        "registry/base-rhea/blocks/sidebar-16/components/nav-main.tsx",
+        "registry/base-rhea/blocks/sidebar-16/components/nav-projects.tsx",
+        "registry/base-rhea/blocks/sidebar-16/components/nav-secondary.tsx",
+        "registry/base-rhea/blocks/sidebar-16/components/nav-user.tsx",
+        "registry/base-rhea/blocks/sidebar-16/components/search-form.tsx",
+        "registry/base-rhea/blocks/sidebar-16/components/site-header.tsx"
+      ]
+    },
+    {
+      "name": "use-mobile",
+      "type": "registry:hook",
+      "files": [
+        "registry/base-rhea/hooks/use-mobile.ts"
+      ]
+    },
+    {
+      "name": "use-highlighted-code",
+      "type": "registry:hook",
+      "files": [
+        "registry/base-rhea/hooks/use-highlighted-code.ts",
+        "registry/base-rhea/lib/highlighter.tsx"
+      ]
+    },
+    {
+      "name": "font-geist",
+      "type": "registry:font",
+      "title": "Geist"
+    },
+    {
+      "name": "font-inter",
+      "type": "registry:font",
+      "title": "Inter"
+    },
+    {
+      "name": "font-noto-sans",
+      "type": "registry:font",
+      "title": "Noto Sans"
+    },
+    {
+      "name": "font-nunito-sans",
+      "type": "registry:font",
+      "title": "Nunito Sans"
+    },
+    {
+      "name": "font-figtree",
+      "type": "registry:font",
+      "title": "Figtree"
+    },
+    {
+      "name": "font-roboto",
+      "type": "registry:font",
+      "title": "Roboto"
+    },
+    {
+      "name": "font-raleway",
+      "type": "registry:font",
+      "title": "Raleway"
+    },
+    {
+      "name": "font-dm-sans",
+      "type": "registry:font",
+      "title": "DM Sans"
+    },
+    {
+      "name": "font-public-sans",
+      "type": "registry:font",
+      "title": "Public Sans"
+    },
+    {
+      "name": "font-outfit",
+      "type": "registry:font",
+      "title": "Outfit"
+    },
+    {
+      "name": "font-oxanium",
+      "type": "registry:font",
+      "title": "Oxanium"
+    },
+    {
+      "name": "font-manrope",
+      "type": "registry:font",
+      "title": "Manrope"
+    },
+    {
+      "name": "font-space-grotesk",
+      "type": "registry:font",
+      "title": "Space Grotesk"
+    },
+    {
+      "name": "font-montserrat",
+      "type": "registry:font",
+      "title": "Montserrat"
+    },
+    {
+      "name": "font-ibm-plex-sans",
+      "type": "registry:font",
+      "title": "IBM Plex Sans"
+    },
+    {
+      "name": "font-source-sans-3",
+      "type": "registry:font",
+      "title": "Source Sans 3"
+    },
+    {
+      "name": "font-instrument-sans",
+      "type": "registry:font",
+      "title": "Instrument Sans"
+    },
+    {
+      "name": "font-jetbrains-mono",
+      "type": "registry:font",
+      "title": "JetBrains Mono"
+    },
+    {
+      "name": "font-geist-mono",
+      "type": "registry:font",
+      "title": "Geist Mono"
+    },
+    {
+      "name": "font-noto-serif",
+      "type": "registry:font",
+      "title": "Noto Serif"
+    },
+    {
+      "name": "font-roboto-slab",
+      "type": "registry:font",
+      "title": "Roboto Slab"
+    },
+    {
+      "name": "font-merriweather",
+      "type": "registry:font",
+      "title": "Merriweather"
+    },
+    {
+      "name": "font-lora",
+      "type": "registry:font",
+      "title": "Lora"
+    },
+    {
+      "name": "font-playfair-display",
+      "type": "registry:font",
+      "title": "Playfair Display"
+    },
+    {
+      "name": "font-eb-garamond",
+      "type": "registry:font",
+      "title": "EB Garamond"
+    },
+    {
+      "name": "font-instrument-serif",
+      "type": "registry:font",
+      "title": "Instrument Serif"
+    },
+    {
+      "name": "font-heading-geist",
+      "type": "registry:font",
+      "title": "Geist (Heading)"
+    },
+    {
+      "name": "font-heading-inter",
+      "type": "registry:font",
+      "title": "Inter (Heading)"
+    },
+    {
+      "name": "font-heading-noto-sans",
+      "type": "registry:font",
+      "title": "Noto Sans (Heading)"
+    },
+    {
+      "name": "font-heading-nunito-sans",
+      "type": "registry:font",
+      "title": "Nunito Sans (Heading)"
+    },
+    {
+      "name": "font-heading-figtree",
+      "type": "registry:font",
+      "title": "Figtree (Heading)"
+    },
+    {
+      "name": "font-heading-roboto",
+      "type": "registry:font",
+      "title": "Roboto (Heading)"
+    },
+    {
+      "name": "font-heading-raleway",
+      "type": "registry:font",
+      "title": "Raleway (Heading)"
+    },
+    {
+      "name": "font-heading-dm-sans",
+      "type": "registry:font",
+      "title": "DM Sans (Heading)"
+    },
+    {
+      "name": "font-heading-public-sans",
+      "type": "registry:font",
+      "title": "Public Sans (Heading)"
+    },
+    {
+      "name": "font-heading-outfit",
+      "type": "registry:font",
+      "title": "Outfit (Heading)"
+    },
+    {
+      "name": "font-heading-oxanium",
+      "type": "registry:font",
+      "title": "Oxanium (Heading)"
+    },
+    {
+      "name": "font-heading-manrope",
+      "type": "registry:font",
+      "title": "Manrope (Heading)"
+    },
+    {
+      "name": "font-heading-space-grotesk",
+      "type": "registry:font",
+      "title": "Space Grotesk (Heading)"
+    },
+    {
+      "name": "font-heading-montserrat",
+      "type": "registry:font",
+      "title": "Montserrat (Heading)"
+    },
+    {
+      "name": "font-heading-ibm-plex-sans",
+      "type": "registry:font",
+      "title": "IBM Plex Sans (Heading)"
+    },
+    {
+      "name": "font-heading-source-sans-3",
+      "type": "registry:font",
+      "title": "Source Sans 3 (Heading)"
+    },
+    {
+      "name": "font-heading-instrument-sans",
+      "type": "registry:font",
+      "title": "Instrument Sans (Heading)"
+    },
+    {
+      "name": "font-heading-jetbrains-mono",
+      "type": "registry:font",
+      "title": "JetBrains Mono (Heading)"
+    },
+    {
+      "name": "font-heading-geist-mono",
+      "type": "registry:font",
+      "title": "Geist Mono (Heading)"
+    },
+    {
+      "name": "font-heading-noto-serif",
+      "type": "registry:font",
+      "title": "Noto Serif (Heading)"
+    },
+    {
+      "name": "font-heading-roboto-slab",
+      "type": "registry:font",
+      "title": "Roboto Slab (Heading)"
+    },
+    {
+      "name": "font-heading-merriweather",
+      "type": "registry:font",
+      "title": "Merriweather (Heading)"
+    },
+    {
+      "name": "font-heading-lora",
+      "type": "registry:font",
+      "title": "Lora (Heading)"
+    },
+    {
+      "name": "font-heading-playfair-display",
+      "type": "registry:font",
+      "title": "Playfair Display (Heading)"
+    },
+    {
+      "name": "font-heading-eb-garamond",
+      "type": "registry:font",
+      "title": "EB Garamond (Heading)"
+    },
+    {
+      "name": "font-heading-instrument-serif",
+      "type": "registry:font",
+      "title": "Instrument Serif (Heading)"
+    }
+  ]
+}

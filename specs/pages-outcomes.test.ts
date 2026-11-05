@@ -27,6 +27,23 @@ afterEach(async () => {
 const PROFILE_FORMAT = 'https://rezics.com/presentation/profile/1';
 const DATA_COMPONENTS = new Set(['SubjectHeader', 'Statements', 'MoreStatements', 'SubjectList']);
 const SUBJECT_READS = new Set(['SubjectHeader', 'Statements', 'MoreStatements']);
+const VIEW_NAMES = [
+  'overview',
+  'editions',
+  'contents',
+  'characters',
+  'appearances',
+  'credits',
+  'works',
+  'relations',
+  'posts',
+  'reviews',
+  'discussion',
+  'lists',
+  'collections',
+  'details',
+] as const;
+type ViewName = (typeof VIEW_NAMES)[number];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 interface ComponentProps {
   id: string;
@@ -45,21 +62,15 @@ interface Composition {
   root: { props: Record<string, never> };
   content: Component[];
 }
-interface TypeTemplate {
-  type: string;
-  document: Composition;
-}
-interface BaseTemplate {
-  base: string;
-  document: Composition;
-}
-interface RouteTemplate {
-  route: string;
-  document: Composition;
-}
+type ViewDocuments = { overview: Composition } & { [Name in Exclude<ViewName, 'overview'>]?: Composition };
+type Documents = { document: Composition; views?: undefined } | { views: ViewDocuments; document?: undefined };
+type TypeTemplate = { type: string } & Documents;
+type BaseTemplate = { base: string } & Documents;
+type RouteTemplate = { route: string } & Documents;
+type GenericTemplate = Composition | { views: ViewDocuments };
 interface Profile {
   format: typeof PROFILE_FORMAT;
-  generic: Composition;
+  generic: GenericTemplate;
   bases: BaseTemplate[];
   types: TypeTemplate[];
   routes: RouteTemplate[];
@@ -77,6 +88,7 @@ interface PageBody {
   profile: string;
   template: TemplateName;
   document: Composition;
+  views?: ViewName[];
   reads: Record<string, ReadValue>;
 }
 
@@ -102,7 +114,7 @@ const heading = (id: string, text: string, level: 2 | 3 | 4 = 2): Component => (
 });
 const document = (content: Component[]): Composition => ({ root: { props: {} }, content });
 function profile(
-  parts: { generic?: Composition; bases?: BaseTemplate[]; types?: TypeTemplate[]; routes?: RouteTemplate[] } = {},
+  parts: { generic?: GenericTemplate; bases?: BaseTemplate[]; types?: TypeTemplate[]; routes?: RouteTemplate[] } = {},
 ): Profile {
   return {
     format: PROFILE_FORMAT,
@@ -158,12 +170,26 @@ function expectComposition(value: Composition) {
     expect(item).toEqual({ type: expect.any(String), props: expect.objectContaining({ id: expect.any(String) }) });
   }
 }
-function expectEntries<Key extends string>(items: ({ document: Composition } & Record<Key, string>)[], fieldName: Key) {
+function expectViews(value: ViewDocuments) {
+  expect(value !== null && typeof value === 'object' && !Array.isArray(value)).toBe(true);
+  const names = Object.keys(value);
+  expect(names).toContain('overview');
+  for (const name of names) {
+    expect(VIEW_NAMES as readonly string[]).toContain(name);
+    expectComposition(value[name as ViewName]!);
+  }
+}
+function expectEntries<Key extends string>(items: ({ [Name in Key]: string } & Documents)[], fieldName: Key) {
   expect(Array.isArray(items)).toBe(true);
   const values = items.map((item) => {
-    expect(Object.keys(item).sort()).toEqual([fieldName, 'document'].sort());
+    if ('views' in item && item.views !== undefined) {
+      expect(Object.keys(item).sort()).toEqual([fieldName, 'views'].sort());
+      expectViews(item.views);
+    } else {
+      expect(Object.keys(item).sort()).toEqual([fieldName, 'document'].sort());
+      expectComposition(item.document!);
+    }
     expect(typeof item[fieldName]).toBe('string');
-    expectComposition(item.document);
     return item[fieldName];
   });
   const sorted = [...values].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
@@ -173,7 +199,10 @@ function expectEntries<Key extends string>(items: ({ document: Composition } & R
 function expectProfile(value: Profile) {
   expect(Object.keys(value).sort()).toEqual(['bases', 'format', 'generic', 'routes', 'types']);
   expect(value.format).toBe(PROFILE_FORMAT);
-  expectComposition(value.generic);
+  if ('views' in value.generic) {
+    expect(Object.keys(value.generic)).toEqual(['views']);
+    expectViews(value.generic.views);
+  } else expectComposition(value.generic);
   expectEntries(value.bases, 'base');
   expectEntries(value.types, 'type');
   expectEntries(value.routes, 'route');
@@ -189,10 +218,15 @@ async function fetchProfile(digest: string) {
   expectProfile(stored);
   return stored;
 }
+function overview(found: GenericTemplate | Documents): Composition {
+  if ('views' in found && found.views !== undefined) return found.views.overview;
+  if ('document' in found && found.document !== undefined) return found.document;
+  return found as Composition;
+}
 function templateDocument(stored: Profile, template: TemplateName): Composition {
   if (template.scope === 'generic') {
     expect(template.key).toBeNull();
-    return stored.generic;
+    return overview(stored.generic);
   }
   const keyName = template.key;
   expect(typeof keyName).toBe('string');
@@ -203,7 +237,7 @@ function templateDocument(stored: Profile, template: TemplateName): Composition 
         ? stored.bases.find((item) => item.base === keyName)
         : stored.routes.find((item) => item.route === keyName);
   if (!found) throw new Error(`Missing ${template.scope} template ${keyName}`);
-  return found.document;
+  return overview(found);
 }
 function components(value: unknown, found: Component[] = []): Component[] {
   if (Array.isArray(value)) {
@@ -267,7 +301,7 @@ function page(response: HttpResponse, kind: 'subject' | 'route') {
   const body = response.body as unknown as PageBody;
   expect(Object.keys(body).sort()).toEqual(
     kind === 'subject'
-      ? ['document', 'profile', 'reads', 'subject', 'template']
+      ? ['document', 'profile', 'reads', 'subject', 'template', 'views']
       : ['document', 'profile', 'reads', 'template'],
   );
   expect(Object.keys(body.template).sort()).toEqual(['key', 'scope']);
@@ -275,7 +309,15 @@ function page(response: HttpResponse, kind: 'subject' | 'route') {
   if (body.template.scope === 'generic') expect(body.template.key).toBeNull();
   else expect(body.template.key).toEqual(expect.any(String));
   expect(body.profile).toEqual(expect.any(String));
-  if (kind === 'subject') expect(body.subject).toEqual(expect.any(String));
+  if (kind === 'subject') {
+    expect(body.subject).toEqual(expect.any(String));
+    const names = body.views as string[];
+    expect(Array.isArray(names)).toBe(true);
+    expect(new Set(names).size).toBe(names.length);
+    for (const name of names) expect(VIEW_NAMES as readonly string[]).toContain(name);
+    expect(names).toContain('overview');
+    expect(names).toEqual(VIEW_NAMES.filter((name) => names.includes(name)));
+  }
   return body;
 }
 async function create(type: string, labels: Labels, statements: Record<string, StatementInput[]> = {}) {
@@ -361,12 +403,12 @@ test('publishing a profile needs the presentation grant', async () => {
   problem(await publish('editor', submitted), 403, 'forbidden');
   const suspendedPublish = await publish('suspended', submitted);
   const suspendedCreate = await write('suspended', '/v1/subjects', { type: 'schema:Book', labels: { en: 'Denied' } });
-  expect([401, 403]).toContain(suspendedPublish.status);
+  expect(suspendedPublish.status).toBe(401);
   expect(suspendedPublish.status).toBe(suspendedCreate.status);
-  expect(suspendedPublish.body.code).toEqual(expect.any(String));
-  expect(suspendedPublish.body.code).toBe(suspendedCreate.body.code);
-  problem(suspendedPublish, suspendedPublish.status, String(suspendedPublish.body.code));
-  problem(suspendedCreate, suspendedCreate.status, String(suspendedCreate.body.code));
+  problem(suspendedPublish, 401, 'invalid_credentials');
+  problem(suspendedCreate, 401, 'invalid_credentials');
+  expect(suspendedPublish.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
+  expect(suspendedCreate.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"');
   expect(await active()).toEqual(before);
   const digest = publishedDigest(await publish('curator', submitted), 201);
   expect(digest).not.toBe(before.digest);

@@ -39,9 +39,9 @@
  * services/importer/tests/support/sqlite-growth.ts, installed before statements
  * are prepared, including every connection and rejection. Supplement its raw
  * evidence with actual sqlite_schema/PRAGMA introspection and ANALYZE/EQP for
- * every distinct SQL/binding at every scale, as required by runStoreCost. Never
+ * every distinct SQL/binding at every scale, as required by runStoreCounts. Never
  * substitute callbacks, static indexed flags, wall time or invented counters.
- * blocks:0 means unavailable buffer evidence, not zero physical IO.
+ * Summaries count SQLite statements and returned rows; buffer IO is not observed.
  */
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import type { Evidence, Omission, Run, RunStoreDriver } from './imports-run-store-driver.ts';

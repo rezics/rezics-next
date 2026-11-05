@@ -1,8 +1,10 @@
+import { nativeProtocolClient, verificationAttribution } from './erasure-attribution.ts';
 import type { BetterAuthOptions, BetterAuthPlugin } from 'better-auth';
 import type { DBAdapter } from 'better-auth/adapters';
 import type { Pool } from 'pg';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { recordNativeRecoveryCopySource } from './recovery-copy-source.ts';
 
 type NativeDatabase = Extract<BetterAuthOptions['database'], { db: unknown }>['db'];
 // Resolve the public adapter package owned by the installed Better Auth version.
@@ -33,48 +35,99 @@ export async function pruneExpiredVerifications(database: Pool): Promise<number>
  * with a secondary key, including inside the native consume transaction.
  * All token processing, hooks, deletion and replay gates stay in Better Auth.
  */
-export const nativeVerificationPlugin = {
-  id: 'native-verification-seek',
-  async init(context) {
-    const { kysely, databaseType } = await createKyselyAdapter(context.options);
-    if (!kysely || databaseType !== 'postgres') throw new Error('Native verification requires PostgreSQL');
+function verificationPlugin(alreadyInTransaction = false) {
+  return {
+    id: 'native-verification-seek',
+    async init(context) {
+      const { kysely, databaseType } = await createKyselyAdapter(context.options);
+      if (!kysely || databaseType !== 'postgres') throw new Error('Native verification requires PostgreSQL');
 
-    function adapterFor(db: NativeDatabase, inTransaction = false): DBAdapter {
-      const adapter = kyselyAdapter(db, { type: 'postgres', transaction: !inTransaction })(context.options);
-      const findMany = adapter.findMany;
-      adapter.findMany = async <T>(query: Parameters<DBAdapter['findMany']>[0]): Promise<T[]> => {
-        const condition = query.where?.[0];
-        if (
-          query.model === 'verification' &&
-          query.limit === 1 &&
-          query.sortBy?.field === 'createdAt' &&
-          query.sortBy.direction === 'desc' &&
-          query.where?.length === 1 &&
-          condition?.field === 'identifier' &&
-          (!condition.operator || condition.operator === 'eq') &&
-          typeof condition.value === 'string' &&
-          !query.offset &&
-          !query.select &&
-          !query.join
-        ) {
-          return (await db
-            .selectFrom('verification')
-            .selectAll()
-            .where('identifier', '=', condition.value)
-            .orderBy('createdAt', 'desc')
-            .orderBy('id', 'desc')
-            .limit(1)
-            .execute()) as T[];
+      function adapterFor(db: NativeDatabase, inTransaction = false): DBAdapter {
+        const adapter = kyselyAdapter(db, { type: 'postgres', transaction: !inTransaction })(context.options);
+        const create = adapter.create;
+        adapter.create = async <T extends Record<string, unknown>, R = T>(query: {
+          model: string;
+          data: Omit<T, 'id'>;
+          select?: string[] | undefined;
+          forceAllowId?: boolean | undefined;
+        }): Promise<R> => {
+          const model = query.model;
+          if (!['verification', 'oauthClientAssertion', 'oauthRefreshFamily'].includes(model))
+            return create<T, R>(query);
+          // The artifact and its typed ownership fields commit together even when
+          // Better Auth calls create outside an explicit adapter transaction.
+          if (!inTransaction)
+            return db.transaction().execute((transaction) => adapterFor(transaction, true).create<T, R>(query));
+          const result = await create<T, R>(query);
+          const id = (result as unknown as { id: string }).id;
+          if (model === 'verification') {
+            const attribution = verificationAttribution(query.data);
+            await db
+              .updateTable('verification')
+              .set(attribution ?? { erasure_format: 'unknown' })
+              .where('id', '=', id)
+              .execute();
+            if (attribution?.erasure_format === 'reset-v1') await recordNativeRecoveryCopySource(db, id);
+          } else if (model === 'oauthClientAssertion') {
+            const client = nativeProtocolClient.getStore();
+            if (!client) throw new Error('Auth assertion producer attribution missing');
+            await db
+              .updateTable('oauthClientAssertion')
+              .set({ erasure_client_id: client })
+              .where('id', '=', id)
+              .execute();
+          } else {
+            const verification = await db
+              .selectFrom('verification')
+              .select(['erasure_account_id', 'erasure_human_id', 'erasure_operator_id', 'erasure_source_client_id'])
+              .where('identifier', '=', id)
+              .orderBy('createdAt', 'desc')
+              .orderBy('id', 'desc')
+              .limit(1)
+              .executeTakeFirst();
+            if (verification)
+              await db.updateTable('oauthRefreshFamily').set(verification).where('id', '=', id).execute();
+          }
+          return result;
+        };
+        const findMany = adapter.findMany;
+        adapter.findMany = async <T>(query: Parameters<DBAdapter['findMany']>[0]): Promise<T[]> => {
+          const condition = query.where?.[0];
+          if (
+            query.model === 'verification' &&
+            query.limit === 1 &&
+            query.sortBy?.field === 'createdAt' &&
+            query.sortBy.direction === 'desc' &&
+            query.where?.length === 1 &&
+            condition?.field === 'identifier' &&
+            (!condition.operator || condition.operator === 'eq') &&
+            typeof condition.value === 'string' &&
+            !query.offset &&
+            !query.select &&
+            !query.join
+          ) {
+            return (await db
+              .selectFrom('verification')
+              .selectAll()
+              .where('identifier', '=', condition.value)
+              .orderBy('createdAt', 'desc')
+              .orderBy('id', 'desc')
+              .limit(1)
+              .execute()) as T[];
+          }
+          return findMany<T>(query);
+        };
+        if (!inTransaction) {
+          adapter.transaction = (callback) =>
+            db.transaction().execute((transaction) => callback(adapterFor(transaction, true)));
         }
-        return findMany<T>(query);
-      };
-      if (!inTransaction) {
-        adapter.transaction = (callback) =>
-          db.transaction().execute((transaction) => callback(adapterFor(transaction, true)));
+        return adapter;
       }
-      return adapter;
-    }
 
-    return { context: { adapter: adapterFor(kysely) } };
-  },
-} satisfies BetterAuthPlugin;
+      return { context: { adapter: adapterFor(kysely, alreadyInTransaction) } };
+    },
+  } satisfies BetterAuthPlugin;
+}
+
+export const nativeVerificationPlugin = verificationPlugin();
+export const nativeVerificationTransactionPlugin = verificationPlugin(true);

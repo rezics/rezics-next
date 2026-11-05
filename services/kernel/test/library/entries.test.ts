@@ -1,6 +1,6 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { createHash, randomUUID } from 'node:crypto';
-import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
+import { randomUUID } from 'node:crypto';
 import { Value } from 'typebox/value';
 import type pg from 'pg';
 import { readAccount, type Account } from '../../src/access/account-data.ts';
@@ -10,12 +10,17 @@ import { EVENT_TYPES, readBatch } from '../../src/events/log.ts';
 import { LibraryNotFoundError } from '../../src/library/command-support.ts';
 import { createEntryCommands } from '../../src/library/entries.ts';
 import { createFollowCommands } from '../../src/library/follows.ts';
-import type { EntryState } from '../../src/library/entry-model.ts';
+import type { Entry, EntryState } from '../../src/library/entry-model.ts';
 import type { Access, AccountActor, Actor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { createAccess } from '../../src/access/permission.ts';
-import { bootstrapRelease } from '../../src/semantic/definitions.ts';
-import { createSubject, subjectTarget } from '../../src/semantic/subject.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { bootstrapGovernance } from '../../src/access/bootstrap-governance.ts';
+import { createGrantCommands } from '../../src/access/grant-commands.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { admittedAccess, accountToken, authenticateAccount } from '../support/admitted-access.ts';
+import { deadlineFor } from '../../src/request/deadline.ts';
+import { compileEntryRelease, entryTypes } from './support/profile-entry-fixture.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import {
   measure,
   openGrowthDatabase,
@@ -35,7 +40,7 @@ const entryScopes = [
   'library_entry:read',
   'library_entry:list',
 ];
-const scopes = [...entryScopes, 'follow:create', 'follow:delete'];
+const scopes = [...entryScopes, 'follow:create', 'follow:delete', 'subject:create'];
 const actor = (accountId: string, permissions: readonly string[] = scopes): AccountActor => ({
   kind: 'account',
   accountId,
@@ -44,15 +49,23 @@ const actor = (accountId: string, permissions: readonly string[] = scopes): Acco
   requestedBy: null,
   authnEpoch: 1,
 });
-const owner = actor(newId(route));
-const other = actor(newId(route));
+let owner = actor(newId(route));
+let other = actor(newId(route));
 const suspended = actor(newId(route));
-const noScope = actor(newId(route), ['subject:read']);
+let noScope = actor(newId(route), ['subject:read']);
+const setupIdentity = actor(newId(route), [
+  'access:grant',
+  'subject:create',
+  'subject:read',
+  'exposure:open',
+  'gate:any',
+]);
 const anonymous: Actor = { kind: 'anonymous' };
 const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(61)]]) };
 
 let database: GrowthDatabase;
 let access: Access;
+let kernel: ReturnType<typeof createKernel>;
 let accounts: Map<string, Account>;
 let commands: ReturnType<typeof createEntryCommands>;
 let followCommands: ReturnType<typeof createFollowCommands>;
@@ -68,25 +81,28 @@ async function installAccount(accountId: string, state: 'active' | 'suspended'):
     `INSERT INTO access.account
        (route, account_id, kind, state, transaction_id, authn_fenced, minimum_authn_epoch)
      VALUES ($1, $2, 'actor', $3, $4, false, 1)`,
-    [route, accountId, state, newId(route)],
+    [route, accountId, 'active', newId(route)],
   );
+  if (state === 'suspended') await suspendAccount(database.admin, accountId);
   const current = await readAccount(database.admin, route, accountId);
   if (!current) throw new Error('Test account was not created');
   return current;
 }
 
 async function createReadableSubject(forActor: AccountActor = owner, label: string = randomUUID()): Promise<string> {
-  const request = key();
-  const result = await createSubject(database.pool, {
-    actor: forActor,
-    target: subjectTarget(new Uint8Array(32).fill(73), forActor.accountId, request),
-    idempotencyKey: request,
-    digest: createHash('sha256').update(request).digest(),
-    item: { type: 'schema:Book', labels: { en: label } },
-    release: { digest: bundledDigest, release: bundledRelease },
-    authorize: async () => true,
-  });
-  return result.subject.id;
+  const response = await kernel.handle(
+    new Request('http://kernel.test/v1/subjects', {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${await accountToken(forActor)}`,
+        'content-type': 'application/json',
+        'idempotency-key': `"${key()}"`,
+      },
+      body: JSON.stringify({ type: entryTypes.game, labels: { en: label } }),
+    }),
+  );
+  expect(response.status).toBe(201);
+  return ((await response.json()) as { subject: { id: string } }).subject.id;
 }
 
 async function denyOwnerRead(subjectId: string): Promise<void> {
@@ -162,16 +178,48 @@ function unrelatedPopulation(name: string): Population {
 
 beforeAll(async () => {
   database = await openGrowthDatabase();
-  await bootstrapRelease(database.pool, bundledRelease);
+  await bootstrapRelease(database.pool, await compileEntryRelease('original'));
   accounts = new Map<string, Account>();
+  await installAccount(setupIdentity.accountId, 'active');
   accounts.set(owner.accountId, await installAccount(owner.accountId, 'active'));
   accounts.set(other.accountId, await installAccount(other.accountId, 'active'));
   accounts.set(suspended.accountId, await installAccount(suspended.accountId, 'suspended'));
   accounts.set(noScope.accountId, await installAccount(noScope.accountId, 'active'));
-  access = createAccess({
-    actions: new Map([['subject:read', { anonymous: true }]]),
-    accountEvidence: (candidate) => accounts.get(candidate.accountId) ?? null,
+  kernel = createKernel({
+    pool: database.pool,
+    clock,
+    tokens,
+    routeKey: new Uint8Array(32).fill(73),
+    writeRate: createWriteRateLimiter({ secret: 'native-library-entry-baseline-rate-secret' }),
+    access(config) {
+      return (access = admittedAccess(config));
+    },
   });
+  await kernel.handle(new Request('http://kernel.test/v1/definitions/active'));
+  const admit = (candidate: AccountActor) =>
+    authenticateAccount(access, { pool: database.pool, deadline: deadlineFor(120_000) }, candidate);
+  owner = await admit(owner);
+  other = await admit(other);
+  noScope = await admit(noScope);
+  const steward = await admit(setupIdentity);
+  await bootstrapGovernance(database.pool, steward.accountId);
+  await createGrantCommands({ pool: database.pool, access, managementAction: 'access:grant' }).create(
+    { pool: database.pool, actor: steward, deadline: deadlineFor(30_000) },
+    {
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      subject: { kind: 'active_accounts' },
+      actions: ['subject:create'],
+      valid: '(,)',
+      key: key(),
+    },
+  );
+  const opened = await kernel.handle(
+    new Request('http://kernel.test/v1/platform/exposure/personal_library:open', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${await accountToken(steward)}`, 'idempotency-key': `"${key()}"` },
+    }),
+  );
+  expect(opened.status).toBe(200);
   commands = createEntryCommands({ pool: database.pool, access, tokens, clock });
   followCommands = createFollowCommands({ pool: database.pool, access, clock });
 });
@@ -212,7 +260,12 @@ test('an account keeps one library entry per readable subject whose state change
   });
 
   tick();
-  const progressed = await commands.putEntry(owner, subjectId, { state: 'in_progress', revision: 1 }, key());
+  const progressed = await commands.putEntry(
+    owner,
+    subjectId,
+    { state: 'in_progress', revision: 1, incarnationId: created.value.entry.incarnationId },
+    key(),
+  );
   expect(progressed.value).toMatchObject({
     created: false,
     entry: { state: 'in_progress', revision: 2, updatedAt: clock().toISOString() },
@@ -223,13 +276,25 @@ test('an account keeps one library entry per readable subject whose state change
     accountId: owner.accountId,
   });
   const beforeStale = await snapshot();
-  await expect(commands.putEntry(owner, subjectId, { state: 'paused', revision: 1 }, key())).rejects.toMatchObject({
+  await expect(
+    commands.putEntry(
+      owner,
+      subjectId,
+      { state: 'paused', revision: 1, incarnationId: created.value.entry.incarnationId },
+      key(),
+    ),
+  ).rejects.toMatchObject({
     name: 'LibraryConflictError',
   });
   expect(await snapshot()).toEqual(beforeStale);
 
   tick();
-  const completed = await commands.putEntry(owner, subjectId, { state: 'completed', revision: 2 }, key());
+  const completed = await commands.putEntry(
+    owner,
+    subjectId,
+    { state: 'completed', revision: 2, incarnationId: progressed.value.entry.incarnationId },
+    key(),
+  );
   expect(completed.value.entry).toMatchObject({ state: 'completed', revision: 3 });
   expect(await followCommands.readFollow(owner, subjectId)).toMatchObject({ state: 'following', reason: 'library' });
   expect(await commands.readEntry(owner, subjectId)).toEqual(completed.value.entry);
@@ -247,8 +312,9 @@ test('an account keeps one library entry per readable subject whose state change
     'SELECT count(*)::int AS n FROM library.copy WHERE account_id = $1',
     [owner.accountId],
   );
-  const removed = await commands.deleteEntry(owner, subjectId, 3, key());
-  expect(removed.value).toMatchObject({ subjectId, state: 'completed', revision: 3 });
+  const removed = await commands.deleteEntry(owner, subjectId, 3, key(), completed.value.entry.incarnationId!);
+  expect(removed.value).toEqual({ deletionId: removed.transactionId, revision: 4 });
+  expect(removed.value).not.toHaveProperty('state');
   expect(await commands.readEntry(owner, subjectId).catch((error) => error)).toBeInstanceOf(LibraryNotFoundError);
   expect(await followCommands.readFollow(owner, subjectId)).toMatchObject({ state: 'following', reason: 'library' });
   const copiesAfterDelete = await database.admin.query(
@@ -256,9 +322,9 @@ test('an account keeps one library entry per readable subject whose state change
     [owner.accountId],
   );
   expect(copiesAfterDelete.rows[0].n).toBe(copiesBeforeDelete.rows[0].n);
-  await expect(commands.deleteEntry(owner, subjectId, 3, key())).rejects.toMatchObject({
-    name: 'LibraryConflictError',
-  });
+  await expect(
+    commands.deleteEntry(owner, subjectId, 3, key(), completed.value.entry.incarnationId!),
+  ).rejects.toBeInstanceOf(LibraryNotFoundError);
 
   expect(await eventRows(subjectId)).toEqual([
     { partition_no: partitionOf(route), type: updatedEvent, subject: owner.accountId, data: { subjectId } },
@@ -267,8 +333,8 @@ test('an account keeps one library entry per readable subject whose state change
     { partition_no: partitionOf(route), type: deletedEvent, subject: owner.accountId, data: { subjectId } },
   ]);
   for (const type of [updatedEvent, deletedEvent] as const) {
-    expect(Value.Check(EVENT_TYPES[type], { subjectId })).toBe(true);
-    expect(Value.Check(EVENT_TYPES[type], { subjectId, state: 'completed' })).toBe(false);
+    expect(Value.Check(EVENT_TYPES()[type], { subjectId })).toBe(true);
+    expect(Value.Check(EVENT_TYPES()[type], { subjectId, state: 'completed' })).toBe(false);
   }
   const seen: { type: string; subject?: string; data: unknown }[] = [];
   expect(
@@ -296,7 +362,10 @@ test('setting in progress follows the subject in the same command unless it was 
   );
 
   const result = await commands.putEntry(owner, subjectId, { state: 'in_progress' }, key());
-  expect(result.value).toMatchObject({ created: true, entry: { state: 'in_progress', revision: 1 } });
+  expect(result.value).toMatchObject({
+    created: true,
+    entry: { state: 'in_progress', revision: 1 },
+  });
   expect(await followCommands.readFollow(owner, subjectId)).toMatchObject({
     state: 'unfollowed',
     reason: 'explicit',
@@ -310,8 +379,13 @@ test('setting in progress follows the subject in the same command unless it was 
 });
 
 test('every entry state can be listed by a signed account and state bound keyset cursor', async () => {
-  const pageOwner = actor(newId(route));
-  accounts.set(pageOwner.accountId, await installAccount(pageOwner.accountId, 'active'));
+  const pageIdentity = actor(newId(route));
+  accounts.set(pageIdentity.accountId, await installAccount(pageIdentity.accountId, 'active'));
+  const pageOwner = await authenticateAccount(
+    access,
+    { pool: database.pool, deadline: deadlineFor(120_000) },
+    pageIdentity,
+  );
   const states: EntryState[] = ['planned', 'in_progress', 'completed', 'paused', 'dropped'];
   for (const state of states) {
     const subjectId = await createReadableSubject(pageOwner, `Page ${state}`);
@@ -391,9 +465,7 @@ test('unknown, unreadable, malformed, foreign, anonymous and suspended requests 
     GrantDeniedError,
   );
   await expect(commands.deleteEntry(noScope, subjectId, 1, key())).rejects.toBeInstanceOf(GrantDeniedError);
-  await expect(commands.deleteEntry(other, subjectId, 1, key())).rejects.toMatchObject({
-    name: 'LibraryConflictError',
-  });
+  await expect(commands.deleteEntry(other, subjectId, 1, key())).rejects.toBeInstanceOf(LibraryNotFoundError);
   expect(await snapshot()).toEqual(before);
 });
 
@@ -405,7 +477,9 @@ test('put, delete and list statement counts stay equal at three scales of unrela
   };
   const putSubjects = await Promise.all([0, 1, 2].map(() => createReadableSubject(owner)));
   const deleteSubjects = await Promise.all([0, 1, 2].map(() => createReadableSubject(owner)));
-  for (const subjectId of deleteSubjects) await commands.putEntry(owner, subjectId, { state: 'planned' }, key());
+  const deleteEntries: Entry[] = [];
+  for (const subjectId of deleteSubjects)
+    deleteEntries.push((await commands.putEntry(owner, subjectId, { state: 'planned' }, key())).value.entry);
   const sample = async (population: Population, operation: (repetition: number) => Promise<unknown>) => {
     const samples: GrowthSample[] = [];
     let previous = 0;
@@ -421,7 +495,7 @@ test('put, delete and list statement counts stay equal at three scales of unrela
     commands.putEntry(owner, putSubjects[repetition]!, { state: 'planned' }, key()),
   );
   const remove = await sample(populations.delete, (repetition) =>
-    commands.deleteEntry(owner, deleteSubjects[repetition]!, 1, key()),
+    commands.deleteEntry(owner, deleteSubjects[repetition]!, 1, key(), deleteEntries[repetition]!.incarnationId!),
   );
   const page = await sample(populations.page, () => commands.listEntries(owner, { limit: 20 }));
   for (const samples of [put, remove, page]) {

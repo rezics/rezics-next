@@ -54,3 +54,9 @@ test('documented refusal statuses are denials and documented validation statuses
     );
   }
 });
+
+test('a documented thread creation conflict is an error rather than a media denial', async () => {
+  await expect(mediaDriver.classifyMediaOutcome(problem(409, 'conflict'), 'POST', '/v1/threads')).rejects.toThrow(
+    'POST /v1/threads (409):',
+  );
+});

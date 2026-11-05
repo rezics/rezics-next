@@ -1,6 +1,42 @@
 types:
   schema:Recipe: Kochrezept
 properties:
+  schema:suitableForDiet: 'geeignet für Ernährungsform'
+  schema:recipeInstructions: Zubereitung
   schema:recipeIngredient: Zutat
   schema:cookTime: Kochzeit
   schema:recipeYield: Portionen
+inverseProperties:
+  schema:suitableForDiet: 'Rezepte für diese Ernährungsform'
+libraryProfiles:
+  recipe.cooking:
+    states:
+      planned: 'Geplant'
+      in_progress: 'In Arbeit'
+      completed: 'Abgeschlossen'
+      paused: 'Pausiert'
+      dropped: 'Abgebrochen'
+    units:
+      scalar_amount:
+        minute:
+          label: 'Minute'
+          countForms:
+            one: 'Minute'
+            other: 'Minuten'
+    copyKinds:
+      physical: 'Physisch'
+      digital: 'Digital'
+    copyStatuses:
+      physical:
+        owned: 'Im Besitz'
+        disposed: 'Abgegeben'
+      digital:
+        owned: 'Im Besitz'
+typeDescriptions:
+  schema:Recipe: 'Anleitung und Zutaten zur Zubereitung von Speisen; getrennt vom Lebensmittel selbst und vom persönlichen Kochvorgang.'
+propertyDescriptions:
+  schema:suitableForDiet: 'Ein Konzept für die angegebene Ernährungseignung, etwa vegetarisch; nicht aus Zutatennamen ableiten.'
+  schema:recipeInstructions: 'Ein verfasstes Dokument mit den Zubereitungsschritten; erwartet wird ein Dokumentwert statt einfachem Text oder einer URL.'
+  schema:recipeIngredient: 'Eine Zutat als Text mit Sprachangabe, etwa 200 g Mehl; strukturierte Lebensmittelverweise verwenden die Materialbeziehung.'
+  schema:cookTime: 'Reine Garzeit als nichtnegative ganze Zahl in Minuten (wd:Q7727), etwa 25; keine Uhrzeit und keine gesamte Vorbereitungs- oder Ruhezeit.'
+  schema:recipeYield: 'Anzahl der Portionen als einheitenlose ganzzahlige Menge von mindestens 1, etwa 4; keine frei formulierte Portionsangabe.'

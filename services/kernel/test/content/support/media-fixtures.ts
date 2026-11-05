@@ -571,3 +571,131 @@ export async function mediaGrowthFixture(
     },
   };
 }
+
+/** Native pg_index definition read from the caller's migrated growth database. */
+export type GrowthGlobalGrantIndexDefinition = {
+  readonly schema: string;
+  readonly relation: string;
+  readonly index: string;
+  readonly predicate: string | null;
+};
+
+/** Check the actual warm-up plans without adding a second measured operation. */
+export function assertGrowthPointPlans(
+  captured: import('../../support/growth.ts').Capture,
+  keys: Readonly<Record<string, readonly string[]>>,
+  globalGrantIndex?: GrowthGlobalGrantIndexDefinition,
+): void {
+  const seen = new Set<string>();
+  function visit(value: unknown): void {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) {
+      for (const child of value) visit(child);
+      return;
+    }
+    const node = value as Record<string, unknown>;
+    const relation = `${node.Schema}.${node['Relation Name']}`;
+    const columns = keys[relation];
+    if (columns && Number(node['Actual Loops']) > 0 && node['Node Type'] !== 'ModifyTable') {
+      const condition = String(node['Index Cond'] ?? '');
+      // This one partial index fixes the Global resource key in its native predicate, not in Index Cond.
+      // Every variable key must still occur in the executed probe's actual index condition.
+      const globalGrantPredicate =
+        relation === 'access.resource_grant' &&
+        node['Index Name'] === 'resource_grant_pkey_lookup' &&
+        globalGrantIndex?.schema === 'access' &&
+        globalGrantIndex.relation === 'resource_grant' &&
+        globalGrantIndex.index === 'resource_grant_pkey_lookup' &&
+        globalGrantIndex.predicate === "((route = 0) AND (resource_id = '00000000-0000-8000-8000-000000000000'::uuid))";
+      const missingKey = columns.some(
+        (column) =>
+          !condition.includes(column) && !(globalGrantPredicate && (column === 'route' || column === 'resource_id')),
+      );
+      if (!String(node['Node Type']).includes('Index') || missingKey)
+        throw new Error(`Expected exact ${relation} probe on ${columns.join(', ')}: ${JSON.stringify(node)}`);
+      seen.add(relation);
+    }
+    for (const child of Object.values(node)) visit(child);
+  }
+  visit(captured.plans);
+  for (const relation of Object.keys(keys))
+    if (!seen.has(relation)) throw new Error(`Missing executed point probe for ${relation}`);
+}
+
+/** Committed command history, including the hot principal and partition, before harness VACUUM. */
+export async function seedMediaCommandHistory(
+  database: GrowthDatabase,
+  route: number,
+  principal: string,
+  kind: string,
+  from: number,
+  to: number,
+): Promise<void> {
+  const { seed } = await import('../../support/growth.ts');
+  const partition = partitionOf(route);
+  const {
+    rows: [anchor],
+  } = await database.admin.query<{ position: string; epoch: number }>(
+    'SELECT position::text,epoch FROM core.partition WHERE partition_no=$1',
+    [partition],
+  );
+  await seed(
+    database,
+    {
+      name: 'committed media command history',
+      hotPartition: partition,
+      hotShare: 1,
+      rows: ({ ordinal }) => {
+        const transaction_id = newId(route);
+        const envelope = {
+          partition_no: partition,
+          epoch: anchor!.epoch,
+          position: Number(anchor!.position) + ordinal - from + 1,
+          transaction_id,
+        };
+        return {
+          'core.receipt': [
+            {
+              ...envelope,
+              principal_kind: 'account',
+              principal_id: principal,
+              command_kind: kind,
+              idempotency_key: `growth-history-${ordinal}`,
+              request_digest: Buffer.alloc(32),
+              response: {},
+            },
+          ],
+          'editorial.write_basis': [
+            {
+              ...envelope,
+              principal_kind: 'account',
+              principal_id: principal,
+              client_id: 'bulk-importer',
+              requested_by: null,
+            },
+          ],
+          'core.outbox': [
+            {
+              partition_no: partition,
+              epoch: envelope.epoch,
+              position: envelope.position,
+              event_seq: 0,
+              event_count: 1,
+              id: newId(route),
+              type: 'com.rezics.content.media.reserved.v1',
+              subject: transaction_id,
+              data: {},
+            },
+          ],
+        };
+      },
+      async finish(admin) {
+        await admin.query('UPDATE core.partition SET position=$2 WHERE partition_no=$1', [
+          partition,
+          Number(anchor!.position) + to - from,
+        ]);
+      },
+    },
+    { from, to },
+  );
+}

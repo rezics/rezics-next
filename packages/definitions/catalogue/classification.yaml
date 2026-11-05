@@ -3,9 +3,11 @@ name: classification
 version: 1.0.0
 description: Classification profile terms.
 prefixes:
+  rezics: https://rezics.com/vocab/
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
+  wdt: http://www.wikidata.org/prop/direct/
   skos: http://www.w3.org/2004/02/skos/core#
   foaf: http://xmlns.com/foaf/0.1/
 default_range: string
@@ -21,11 +23,28 @@ classes:
       - inScheme
       - broader
       - focus
+      - closeMatch
+    annotations:
+      schema_org_type: https://schema.org/DefinedTerm
   ConceptScheme:
     is_a: Thing
     class_uri: skos:ConceptScheme
     description: A scheme of concepts, created and adopted like any other subject.
+    annotations:
+      schema_org_type: https://schema.org/DefinedTermSet
 slots:
+  workFormat:
+    slot_uri: wdt:P7937
+    description: The form of the creative work, represented by a classification concept.
+    range: Concept
+    multivalued: true
+    exact_mappings:
+      - wd:P7937
+    annotations:
+      datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:workInForm
+      relation_order: name
   inScheme:
     slot_uri: skos:inScheme
     description: A concept scheme to which the concept belongs.
@@ -33,6 +52,9 @@ slots:
     multivalued: true
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:schemeConcept
+      relation_order: name
   broader:
     slot_uri: skos:broader
     description: A broader concept in the classification hierarchy.
@@ -40,12 +62,19 @@ slots:
     multivalued: true
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: skos:narrower
+      relation_order: name
+      acyclic: true
   focus:
     slot_uri: foaf:focus
     description: The subject that this concept stands for.
     range: Thing
     annotations:
       datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:focusOf
+      relation_order: name
   genre:
     slot_uri: schema:genre
     description: A genre concept classifying the creative work.
@@ -55,7 +84,10 @@ slots:
       - wd:P136
     annotations:
       datatype: wikibase-item
-      qualifiers: spoilerLevel
+      qualifiers: spoilerLevel sourceTagWeight sourceTagWeightMetric
+      relation_group: classification
+      inverse: rezics:workInGenre
+      relation_order: name
   keywords:
     slot_uri: schema:keywords
     description: A tag concept classifying the creative work.
@@ -63,4 +95,61 @@ slots:
     multivalued: true
     annotations:
       datatype: wikibase-item
-      qualifiers: spoilerLevel
+      qualifiers: spoilerLevel sourceTagWeight sourceTagWeightMetric
+      relation_group: classification
+      inverse: rezics:taggedSubject
+      relation_order: name
+  sourceTagWeight:
+    slot_uri: rezics:sourceTagWeight
+    description: >-
+      An exact source-reported aggregate VNDB tag rating on this classification association. For vndbTagsRating,
+      the amount is in rating points on the open interval (0,3], unit 1; zero, inferred scores, vote totals and
+      native REZICS assessments are not this statistic.
+    range: decimal
+    minimum_value: 0
+    maximum_value: 3
+    annotations:
+      datatype: quantity
+      units: '1'
+      exact: true
+      minimum_exclusive: true
+  sourceTagWeightMetric:
+    slot_uri: rezics:sourceTagWeightMetric
+    description: The typed metric that defines the scale and interpretation of sourceTagWeight.
+    pattern: '^(?:vndbTagsRating)$(?![\s\S])'
+    annotations:
+      datatype: string
+  sourceSnapshot:
+    slot_uri: rezics:sourceSnapshot
+    description: SHA-256 identity of the exact unversioned provider response used for a cited source statistic.
+    pattern: '^unversioned:sha256:[0-9a-f]{64}$(?![\s\S])'
+    annotations:
+      datatype: string
+  sourceTagId:
+    slot_uri: rezics:sourceTagId
+    description: Provider identifier of the exact tag association within the cited source record.
+    pattern: '^g[1-9][0-9]{0,9}$(?![\s\S])'
+    annotations:
+      datatype: string
+  creativeWorkStatus:
+    slot_uri: schema:creativeWorkStatus
+    description: >-
+      Development or publication status of this exact work or release, represented by a classification
+      concept. Completeness of a particular release for a work lives on the work association, not here.
+    range: Concept
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:creativeWorkWithStatus
+      relation_order: name
+  closeMatch:
+    slot_uri: skos:closeMatch
+    description: A distinct concept with a closely corresponding meaning; never equivalence or filter expansion.
+    range: Concept
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      relation_group: classification
+      inverse: rezics:closeMatchedBy
+      relation_order: name

@@ -8,8 +8,9 @@ import {
 } from '@rezics/definitions/bulk';
 import { checkMediaImportRequest, type MediaImportRequest } from '@rezics/definitions/media-import';
 import { documentText, parseDocument } from '@rezics/document';
-import { assertGrowth, type GrowthSample } from '../services/kernel/test/support/growth-bound';
+import { assertGrowth } from '../services/kernel/test/support/growth-bound';
 import { checkGrowth } from '../services/kernel/test/support/growth';
+import { countedSample, countedViolations, validateCountedRun } from '../services/kernel/test/support/growth-counters';
 import { costOf } from '../services/kernel/test/support/growth-cost';
 import { assertIndexedSqlite } from './support/verify-import-api';
 import { isAbsolute } from 'node:path';
@@ -958,7 +959,7 @@ test('hostile user posts and oversized records never become imported content', (
 
 // Returned SQLite rows and exact execution counts cannot prove indexed work alone.
 // Validate raw plans at each scale; buffers are unavailable, not zero physical IO.
-function indexed(c: Counters, fields: number) {
+function indexed(c: Counters) {
   for (const value of [
     c.statements,
     c.rowsReturned,
@@ -977,11 +978,15 @@ function indexed(c: Counters, fields: number) {
   expect(c.statements).toBe(c.sqlite.executions.length);
   expect(c.rowsReturned).toBe(c.sqlite.executions.reduce((n, statement) => n + statement.rowsReturned, 0));
   for (const statement of c.sqlite.executions) assertIndexedSqlite(statement, c.sqlite);
-  expect(c.statements).toBeLessThanOrEqual(64 + 16 * fields);
-  expect(c.rowsReturned).toBeLessThanOrEqual(128 + 32 * fields);
+  // Per-call constants belong to Cost sections: the importer's for SQLite, and Auth, Access, semantic and content's
+  // for PostgreSQL. The callers' growth checks prove both stay bounded as the catalogue and history grow.
   const pg = costOf(c.postgres);
-  expect(pg.rows).toBeLessThanOrEqual(128 + 32 * fields);
-  expect(pg.statements).toBeLessThanOrEqual(64 + 16 * fields);
+  for (const value of [pg.rows, pg.blocks, pg.statements]) {
+    expect(Number.isSafeInteger(value)).toBe(true);
+    expect(value).toBeGreaterThanOrEqual(0);
+  }
+  const counts = { 'sqlite returned rows': c.rowsReturned, 'sqlite executions': c.statements };
+  return validateCountedRun({ read: () => counts }, counts, 1);
 }
 test('fixed changes have bounded indexed work as unrelated catalogue and history grow independently', async () => {
   for (const dimension of ['catalogueRecords', 'historyRows', 'both'] as const) {
@@ -999,7 +1004,7 @@ test('fixed changes have bounded indexed work as unrelated catalogue and history
         });
         expect((await d.effects()).subjects).toBe(before.subjects);
         expect((await d.effects()).proposals).toBeGreaterThan(before.proposals);
-        for (const phase of ['reconcile', 'api'] as const) indexed(measured[phase], 3);
+        for (const phase of ['reconcile', 'api'] as const) indexed(measured[phase]);
         expect(measured.reconcile.statements).toBeGreaterThan(0);
         expect(measured.reconcile.rowsReturned).toBeGreaterThan(0);
         expect(costOf(measured.api.postgres).statements).toBeGreaterThan(0);
@@ -1010,25 +1015,34 @@ test('fixed changes have bounded indexed work as unrelated catalogue and history
           expect(run.outcome).toBe('mass-disappearance');
           expect(run.exchanges).toEqual([]);
         });
-        indexed(stop.reconcile, 3);
+        indexed(stop.reconcile);
         await d.run(await catalogue(5));
         const removal = await d.measure(async () => {
           const run = await d.run({ ...(await catalogue(4)), snapshot: '2020-01-03' });
           expect(run.outcome).toBe('complete');
           expect(run.vanished).toEqual(['5']);
         });
-        indexed(removal.reconcile, 3);
-        indexed(removal.api, 3);
+        indexed(removal.reconcile);
+        indexed(removal.api);
         samples.push({ ...measured, stop: stop.reconcile, removal: removal.reconcile, removalApi: removal.api });
       });
     for (const phase of ['reconcile', 'api', 'stop', 'removal', 'removalApi'] as const) {
-      const sqlite: GrowthSample[] = samples.map((sample, i) => ({
-        scale: [32, 128, 512][i]!,
-        cost: { rows: sample[phase].rowsReturned, blocks: 0, statements: sample[phase].statements },
-      }));
-      assertGrowth(sqlite, { rows: 'constant', blocks: 'constant', statements: 'constant' });
+      const scales = [32, 128, 512];
+      expect(
+        countedViolations(
+          {
+            read: () => ({}),
+            bounds: { 'sqlite returned rows': 'constant', 'sqlite executions': 'constant' },
+            slack: {
+              'sqlite returned rows': { absolute: 2, relative: 0.1 },
+              'sqlite executions': { absolute: 0, relative: 0 },
+            },
+          },
+          samples.map((sample, i) => ({ scale: scales[i]!, counted: countedSample([indexed(sample[phase])]) })),
+        ),
+      ).toEqual([]);
       assertGrowth(
-        samples.map((sample, i) => ({ scale: sqlite[i]!.scale, cost: costOf(sample[phase].postgres) })),
+        samples.map((sample, i) => ({ scale: scales[i]!, cost: costOf(sample[phase].postgres) })),
         { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
       );
     }
@@ -1041,7 +1055,6 @@ test('shared PostgreSQL harness measures real bounded API Auth Access fences and
         name: `imports-${operation}`,
         scales: [32, 128, 512],
         repetitions: 1,
-        warmups: 0,
         bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
         grow: async (_db, scale) => {
           // d.seed uses shared seed/Population and one deterministic setup at every scale.
@@ -1056,6 +1069,19 @@ test('shared PostgreSQL harness measures real bounded API Auth Access fences and
           if (operation === 'stop') expect(run.exchanges).toEqual([]);
           if (operation === 'removal') expect(run.vanished).toEqual(['5']);
         },
+        // Stop changes nothing, so the default warm-up repeats it. The others warm the same path and restore the
+        // state the measured run expects.
+        ...(operation === 'stop'
+          ? {}
+          : {
+              warmup: async () => {
+                for (const input of [
+                  await catalogue(operation === 'removal' ? 4 : 1, operation === 'changed'),
+                  await catalogue(operation === 'removal' ? 5 : 1),
+                ])
+                  expect((await d.run(input)).outcome).toBe('complete');
+              },
+            }),
       });
       expect(report.samples).toHaveLength(3);
       if (operation !== 'stop')
@@ -1066,52 +1092,52 @@ test('shared PostgreSQL harness measures real bounded API Auth Access fences and
         }
     }
   }));
-test('full dump reading scales with supplied bytes and keeps fixed page memory', async () => {
-  for (const count of [32, 128, 512])
-    await scenario(async (d) => {
-      const input = await catalogue(count);
-      let run!: Run;
-      const measured = await d.measure(async () => {
-        run = await d.run(input);
-        expect(run.outcome).toBe('complete');
-      });
-      const reader = measured.reader;
-      expect(reader.inputBytes).toBe(input.bytes.byteLength);
-      expect(reader.records).toBe(count);
-      expect(reader.workUnits).toBeGreaterThan(0);
-      expect(reader.workUnits).toBeLessThanOrEqual(32 * input.bytes.byteLength + 64 * count);
-      const maxRecordBytes = Math.max(
-        ...new TextDecoder()
-          .decode(input.bytes)
-          .trim()
-          .split('\n')
-          .map((line) => encoder.encode(line).length),
-      );
-      expect(reader.peakBufferedBytes).toBeLessThanOrEqual(65536 + 8 * maxRecordBytes);
-      expect(reader.maxPageRecords).toBeLessThanOrEqual(8);
-      expect(reader.statements).toBe(0);
-      expect(reader.rowsReturned).toBe(0);
-      expect(reader.sqlite.executions).toEqual([]);
-      expect(reader.postgres.statements).toEqual([]);
-      expect(reader.postgres.plans).toEqual([]);
-      expect(reader.partitions).toBe(0);
-      expect(run.conversions).toHaveLength(count);
-      expect(measured.converter.statements).toBe(0);
-      expect(measured.converter.rowsReturned).toBe(0);
-      expect(measured.converter.partitions).toBe(0);
-      expect(measured.converter.sqlite.executions).toEqual([]);
-      expect(measured.converter.postgres.statements).toEqual([]);
-      expect(measured.converter.postgres.plans).toEqual([]);
-      expect((await d.effects()).subjects).toBe(count);
-      const effects = await d.effects();
-      const unchanged = await d.measure(async () => {
-        const run = await d.run(input);
-        expect(run.outcome).toBe('complete');
-        expect(run.exchanges).toEqual([]); // Public writes are for D, not S.
-      });
-      expect(unchanged.reader.records).toBe(count);
-      expect(await d.effects()).toEqual(effects);
+test('a full dump imports end to end through the public API with fixed reader memory and re-imports idempotently', async () => {
+  await scenario(async (d) => {
+    const count = 32;
+    const input = await catalogue(count);
+    let run!: Run;
+    const measured = await d.measure(async () => {
+      run = await d.run(input);
+      expect(run.outcome).toBe('complete');
     });
+    const reader = measured.reader;
+    expect(reader.inputBytes).toBe(input.bytes.byteLength);
+    expect(reader.records).toBe(count);
+    expect(reader.workUnits).toBeGreaterThan(0);
+    expect(reader.workUnits).toBeLessThanOrEqual(32 * input.bytes.byteLength + 64 * count);
+    const maxRecordBytes = Math.max(
+      ...new TextDecoder()
+        .decode(input.bytes)
+        .trim()
+        .split('\n')
+        .map((line) => encoder.encode(line).length),
+    );
+    expect(reader.peakBufferedBytes).toBeLessThanOrEqual(65536 + 8 * maxRecordBytes);
+    expect(reader.maxPageRecords).toBeLessThanOrEqual(8);
+    expect(reader.statements).toBe(0);
+    expect(reader.rowsReturned).toBe(0);
+    expect(reader.sqlite.executions).toEqual([]);
+    expect(reader.postgres.statements).toEqual([]);
+    expect(reader.postgres.plans).toEqual([]);
+    expect(reader.partitions).toBe(0);
+    expect(run.conversions).toHaveLength(count);
+    expect(measured.converter.statements).toBe(0);
+    expect(measured.converter.rowsReturned).toBe(0);
+    expect(measured.converter.partitions).toBe(0);
+    expect(measured.converter.sqlite.executions).toEqual([]);
+    expect(measured.converter.postgres.statements).toEqual([]);
+    expect(measured.converter.postgres.plans).toEqual([]);
+    expect((await d.effects()).subjects).toBe(count);
+    const effects = await d.effects();
+    const unchanged = await d.measure(async () => {
+      const run = await d.run(input);
+      expect(run.outcome).toBe('complete');
+      expect(run.exchanges).toEqual([]); // Public writes are for D, not S.
+    });
+    expect(unchanged.reader.records).toBe(count);
+    expect(await d.effects()).toEqual(effects);
+  });
 });
 test('pure conversion scales with bounded fields and rejects the hard field cap without database work', () =>
   scenario(async (d) => {

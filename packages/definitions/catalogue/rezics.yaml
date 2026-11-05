@@ -1,6 +1,6 @@
 id: https://rezics.com/catalogue/rezics
 name: rezics
-version: 1.0.0
+version: 1.0.9
 description: The bundled REZICS definition catalogue.
 prefixes:
   linkml: https://w3id.org/linkml/
@@ -14,6 +14,7 @@ imports:
   - book
   - recipe
   - works
+  - music
   - anime
   - game
   - visual-novel

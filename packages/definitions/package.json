@@ -4,22 +4,41 @@
   "type": "module",
   "license": "Apache-2.0",
   "exports": {
-    ".": "./src/index.ts",
+    ".": {
+      "browser": "./src/browser.ts",
+      "default": "./src/index.ts"
+    },
     "./schema/release.json": "./schema/release.json",
+    "./extension": "./src/extension.ts",
     "./compile": "./src/compile.ts",
-    "./bundled": "./src/bundled.ts",
+    "./bundled": {
+      "browser": "./src/bundled-browser.ts",
+      "default": "./src/bundled.ts"
+    },
     "./validate": "./src/validate.ts",
     "./bulk": "./src/bulk.ts",
-    "./media-import": "./src/media-import.ts"
+    "./media-import": "./src/media-import.ts",
+    "./slug": "./src/slug.ts",
+    "./catalogue": {
+      "browser": "./src/catalogue.ts",
+      "default": "./src/catalogue-artifacts.ts"
+    },
+    "./catalogue/files": "./src/catalogue-files.ts",
+    "./schema/catalogue.json": "./schema/catalogue.json",
+    "./schema/catalogue-node.json": "./schema/catalogue-node.json",
+    "./schema/kind.json": "./schema/kind.json"
   },
   "scripts": {
-    "check": "tsc --noEmit -p tsconfig.json && bun test",
-    "release": "bun scripts/release.ts"
+    "check": "bun check --no-script -p tsconfig.json && bun test",
+    "release": "bun scripts/release.ts",
+    "typecheck": "bun check --no-script -p tsconfig.json",
+    "catalogue": "bun scripts/catalogue.ts"
   },
   "dependencies": {
-    "@neverblink/linkml": "0.17.1",
+    "@neverblink/linkml": "0.17.2",
+    "@noble/hashes": "2.4.0",
     "canonicalize": "5.1.0",
-    "recheck": "4.5.0",
+    "recheck": "4.6.2",
     "typebox": "1.4.3",
     "@rezics/document": "workspace:*",
     "@rezics/filter": "workspace:*",
@@ -28,6 +47,7 @@
   "devDependencies": {
     "@rezics/composition": "workspace:*",
     "@types/bun": "1.4.4",
-    "@types/spdx-license-ids": "3.0.0"
+    "@types/spdx-license-ids": "3.0.0",
+    "recheck-historical": "npm:recheck@4.5.0"
   }
 }

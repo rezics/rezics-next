@@ -72,7 +72,6 @@ function check(database: GrowthDatabase, operation: () => Promise<unknown>) {
     name: 'background poller',
     scales: [1, 8, 64],
     repetitions: 1,
-    warmups: 0,
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
     grow: async (growthDb, scale, previous) => {
       await growthDb.admin.query(`INSERT INTO ${table} SELECT generate_series($1 + 1, $2)`, [previous, scale]);
@@ -130,7 +129,6 @@ test("a workflow the operation starts runs on the queue runner and stays the ope
     name: 'queued workflow attribution',
     scales: [1, 8, 64],
     repetitions: 1,
-    warmups: 0,
     bounds: { rows: 'constant', blocks: 'constant', statements: 'constant' },
     grow: async (growthDb, scale, previous) => {
       await growthDb.admin.query(`INSERT INTO ${table} SELECT generate_series($1 + 1, $2)`, [previous, scale]);

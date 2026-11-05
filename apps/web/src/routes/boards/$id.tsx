@@ -1,72 +1,164 @@
-import { createFileRoute, Link, useLoaderData, useLocation } from '@tanstack/react-router';
+import { realmReadingReturn } from '../../community/realm-reading-return';
+import { useSession } from '../../session/query';
+import { createFileRoute, useLocation, useRouter } from '@tanstack/react-router';
 import { m } from '../../paraglide/messages.js';
 import { getLocale } from '../../paraglide/runtime.js';
-import { readBoardPage } from '../../threads/reads';
-import { SignInPrompt } from '../../threads/composer';
+import { boardPageHead } from '../../threads/thread-head';
+import { rememberThreadSlug, threadTitle } from '../../threads/thread-href';
+import { boardPageQuery } from '../../threads/thread-queries';
+import { boardSortFromSearch } from '../../threads/board-sort';
+import { BoardCommunity, BoardCommunityMenu, BoardCommunityStatus } from '../../threads/board-community';
+import { BoardParticipation, BoardStartThread } from '../../threads/board-community-actions';
+import { BoardWatchControl } from '../../threads/board-watch/control';
+import { SlowModeSetting } from '../../threads/slow-mode';
+import { isPlatformClosedError } from '../../kernel/platform-closed';
+import { isBoardPageCursorError } from '../../threads/board-reading';
+import { boardSearch, boardRequestHref } from '../../threads/board-navigation';
+import {
+  BoardPageCallerHost,
+  createBoardPageCaller,
+  useBoardPageErrorLifecycle,
+  type BoardPageLoadResult,
+} from '../../threads/board-page-caller';
+
+export { boardSearch } from '../../threads/board-navigation';
 
 export const Route = createFileRoute('/boards/$id')({
-  validateSearch: (search: Record<string, unknown>) =>
-    typeof search.cursor === 'string' ? { cursor: search.cursor } : {},
-  loaderDeps: ({ search }) => ({ cursor: search.cursor }),
-  loader: ({ params, deps }) => readBoardPage({ data: { id: params.id, cursor: deps.cursor } }),
-  head: ({ loaderData }) => ({ meta: [{ title: loaderData?.board.title ?? m.threads_untitled() }] }),
+  staticData: { publicCache: true },
+  validateSearch: boardSearch,
+  // The router passes unvalidated keys through, so read the sort through the same check again.
+  loaderDeps: ({ search }) => {
+    const parsed = boardSearch(search);
+    return { cursor: parsed.cursor, sort: parsed.sort };
+  },
+  loader: async ({ params, deps, abortController, context }) => {
+    const caller = createBoardPageCaller(
+      context.queryClient,
+      {
+        id: params.id,
+        ...(deps.cursor === undefined ? {} : { cursor: deps.cursor }),
+        ...(deps.sort === undefined ? {} : { sort: deps.sort }),
+        locale: getLocale(),
+        credentialMode: context.credentialMode,
+      },
+      abortController.signal,
+    );
+    try {
+      const read = await context.queryClient.ensureQueryData(
+        caller.queryOptions(boardPageQuery(params.id, deps.cursor, deps.sort, context.credentialMode)),
+      );
+      caller.assertLoadCurrent();
+      const result = await caller.resultFor(read, deps.cursor === undefined && read.page.threads.threads.length > 0);
+      caller.assertLoadCurrent();
+      for (const thread of [...(read.page.threads.pinnedThreads ?? []), ...read.page.threads.threads]) {
+        caller.assertLoadCurrent();
+        rememberThreadSlug(thread.id, threadTitle(thread));
+      }
+      caller.assertLoadCurrent();
+      return result;
+    } catch (error) {
+      caller.captureError(error);
+      throw error;
+    }
+  },
+  head: ({ loaderData }) => (loaderData ? boardPageHead(loaderData) : { meta: [{ title: m.threads_untitled() }] }),
+  pendingComponent: () => <BoardCommunityStatus state="loading" />,
+  errorComponent: BoardPageError,
   component: BoardPage,
 });
 
 function BoardPage() {
-  const { board, threads } = Route.useLoaderData();
-  const { session } = useLoaderData({ from: '__root__' });
+  const page = Route.useLoaderData() as BoardPageLoadResult;
+  const session = useSession();
   const location = useLocation();
+  const router = useRouter();
   const id = Route.useParams().id;
+  const search = Route.useSearch();
+  const sort = boardSortFromSearch(search.sort);
+  const returnTo = boardRequestHref(getLocale(), id, boardSearch(search));
   return (
-    <article className="max-w-4xl space-y-8 text-foreground">
-      <header className="space-y-3">
-        <h1 className="font-serif text-4xl font-semibold tracking-tight">{board.title ?? m.threads_untitled()}</h1>
-        {session === 'signed-in' ? (
-          <a
-            href={`/${getLocale()}/boards/${id}/new`}
-            className="inline-flex min-h-10 items-center rounded-lg bg-primary px-4 font-medium text-primary-foreground hover:opacity-90"
-          >
-            {m.board_start_thread()}
-          </a>
-        ) : session === 'signed-out' ? (
-          <SignInPrompt returnTo={location.publicHref.split(/[?#]/, 1)[0]!} />
-        ) : null}
-      </header>
-      <section className="space-y-4" aria-labelledby="board-threads-heading">
-        <h2 id="board-threads-heading" className="text-xl font-semibold">
-          {m.board_threads_heading()}
-        </h2>
-        {threads.threads.length ? (
-          <ul className="divide-y divide-border/60 border-y border-border/60">
-            {threads.threads.map((thread) => (
-              <li key={thread.id} className="py-4">
-                <Link
-                  to="/threads/$id"
-                  params={{ id: thread.id }}
-                  className="text-primary underline-offset-4 hover:underline"
-                >
-                  {thread.title ?? m.threads_untitled()}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-muted-foreground">{m.board_threads_empty()}</p>
-        )}
-        {threads.next && (
-          <nav aria-label={m.board_threads_heading()}>
-            <Link
-              to="/boards/$id"
-              params={{ id }}
-              search={{ cursor: threads.next }}
-              className="inline-flex min-h-10 items-center rounded-lg border border-border px-4 text-primary underline-offset-4 hover:bg-muted hover:underline"
+    <BoardPageCallerHost
+      result={page}
+      input={{
+        id,
+        ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
+        ...(sort === undefined ? {} : { sort }),
+        locale: getLocale(),
+        credentialMode: router.options.context.credentialMode,
+      }}
+    >
+      {(currentPage, reactionOrigin, slowModeSource) => (
+        <>
+          {search.returnTo ? (
+            <a
+              href={search.returnTo}
+              className="inline-flex min-h-11 min-w-11 items-center rounded-md px-3 py-2 text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
             >
-              {m.threads_next_page()}
-            </Link>
-          </nav>
-        )}
-      </section>
-    </article>
+              {realmReadingReturn(search.returnTo) ? m.realm_reading_return() : m.subject_connections_return()}
+            </a>
+          ) : null}
+          <BoardCommunity
+            page={currentPage}
+            sort={sort ?? 'active'}
+            reactionOrigin={reactionOrigin}
+            navigation={{ href: returnTo }}
+            {...(search.cursor === undefined ? {} : { cursor: search.cursor })}
+            participation={(page) => <BoardParticipation community={page.community} returnTo={returnTo} />}
+            watch={<BoardWatchControl boardId={id} returnTo={returnTo} session={session} authority={reactionOrigin} />}
+            start={(page) => (
+              <BoardStartThread
+                board={page.board}
+                advice={page.actions.createThread}
+                returnTo={returnTo}
+                {...(search.returnTo ? { preparedReturnTo: search.returnTo } : {})}
+              />
+            )}
+            overflow={<BoardCommunityMenu boardId={id} signedIn={session.state === 'signed-in'} />}
+            postingInterval={
+              session.state === 'signed-in' ? (
+                <SlowModeSetting
+                  boardId={id}
+                  scopeKey={JSON.stringify([location.publicHref, getLocale(), router.options.context.credentialMode])}
+                  credentialMode={router.options.context.credentialMode}
+                  source={slowModeSource}
+                  onApplied={() => void router.invalidate()}
+                />
+              ) : null
+            }
+          />
+        </>
+      )}
+    </BoardPageCallerHost>
+  );
+}
+
+function BoardPageError({ error }: { error: unknown }) {
+  const router = useRouter();
+  const id = Route.useParams().id;
+  const search = Route.useSearch();
+  const sort = boardSortFromSearch(search.sort);
+  const lifecycle = useBoardPageErrorLifecycle(error, {
+    id,
+    ...(search.cursor === undefined ? {} : { cursor: search.cursor }),
+    ...(sort === undefined ? {} : { sort }),
+    locale: getLocale(),
+    credentialMode: router.options.context.credentialMode,
+  });
+  const canRetry = lifecycle.caller && lifecycle.current;
+  const restart = isBoardPageCursorError(error);
+  return (
+    <BoardCommunityStatus
+      state={
+        lifecycle.caller && !lifecycle.current
+          ? 'loading'
+          : restart
+            ? 'restart'
+            : isPlatformClosedError(error)
+              ? 'closed'
+              : 'error'
+      }
+      {...(restart ? { restart: { boardId: id, sort: sort ?? 'active', returnTo: search.returnTo } } : {})}
+      {...(canRetry && !restart ? { onRetry: () => void lifecycle.retry(() => void router.invalidate()) } : {})}
+    />
   );
 }

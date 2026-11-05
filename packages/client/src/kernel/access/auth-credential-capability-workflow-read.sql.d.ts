@@ -1,5 +1,6 @@
 import type { Query } from "reylo";
 export type Params = {
+    at: string;
     route: number;
     receipt_id: string;
 };
@@ -21,6 +22,12 @@ export type Row = {
         transaction_id: string;
         consumed_at: string | null;
         consumed_transaction_id: string | null;
+        erasure_subject_id: string | null;
+        erasure_operator_id: string | null;
+        erasure_member_id: string | null;
+        erasure_previous_operator_id: string | null;
+        erasure_previous_subject_id: string | null;
+        erasure_principal_id: string | null;
     };
     route: number;
     approvalId: string;
@@ -37,53 +44,58 @@ export type Row = {
     jwtExpiresAt: string;
     transactionId: string;
 };
+export type QueryError = import("reylo").QueryError<"postgres">;
 /**
  * ```sql
+ * WITH authority AS (SELECT $1::timestamptz AS at)
  * SELECT to_jsonb(r) AS data,
  *        route, approval_id AS "approvalId", actor_id AS "actorId", client_id AS "clientId",
  *        scopes, requested_by AS "requestedBy", authn_epoch::text AS "authnEpoch",
  *        operation_key AS "operationKey", operation, digest,
  *        created_at::text AS "createdAt", expires_at::text AS "expiresAt",
  *        jwt_expires_at::text AS "jwtExpiresAt", transaction_id AS "transactionId"
- * FROM access.workflow_approval r
- * WHERE route = $1 AND approval_id = $2 AND consumed_at IS NOT NULL
- *   AND operation->>'kind' = 'credential' AND expires_at > clock_timestamp() AND jwt_expires_at > clock_timestamp();
+ * FROM access.workflow_approval r CROSS JOIN authority t
+ * WHERE route = $2 AND approval_id = $3 AND consumed_at IS NOT NULL
+ *   AND operation->>'kind' = 'credential' AND expires_at > t.at AND jwt_expires_at > t.at;
  * ```
  *
  * The statement as Reylo sends it to the database, as the module's `sql` export: `:id` is `$1` on Postgres and `?` on MySQL and SQLite, each cast is the dialect's own, and a comment naming the file ends it.
  */
-export declare const sql: "SELECT to_jsonb(r) AS data,\n       route, approval_id AS \"approvalId\", actor_id AS \"actorId\", client_id AS \"clientId\",\n       scopes, requested_by AS \"requestedBy\", authn_epoch::text AS \"authnEpoch\",\n       operation_key AS \"operationKey\", operation, digest,\n       created_at::text AS \"createdAt\", expires_at::text AS \"expiresAt\",\n       jwt_expires_at::text AS \"jwtExpiresAt\", transaction_id AS \"transactionId\"\nFROM access.workflow_approval r\nWHERE route = $1 AND approval_id = $2 AND consumed_at IS NOT NULL\n  AND operation->>'kind' = 'credential' AND expires_at > clock_timestamp() AND jwt_expires_at > clock_timestamp() /*file='src%2Faccess%2Fauth-credential-capability-workflow-read.sql'*/;";
+export declare const sql: "WITH authority AS (SELECT $1::timestamptz AS at)\nSELECT to_jsonb(r) AS data,\n       route, approval_id AS \"approvalId\", actor_id AS \"actorId\", client_id AS \"clientId\",\n       scopes, requested_by AS \"requestedBy\", authn_epoch::text AS \"authnEpoch\",\n       operation_key AS \"operationKey\", operation, digest,\n       created_at::text AS \"createdAt\", expires_at::text AS \"expiresAt\",\n       jwt_expires_at::text AS \"jwtExpiresAt\", transaction_id AS \"transactionId\"\nFROM access.workflow_approval r CROSS JOIN authority t\nWHERE route = $2 AND approval_id = $3 AND consumed_at IS NOT NULL\n  AND operation->>'kind' = 'credential' AND expires_at > t.at AND jwt_expires_at > t.at /*file='src%2Faccess%2Fauth-credential-capability-workflow-read.sql'*/;";
 /**
  * ```sql
+ * WITH authority AS (SELECT :at::timestamptz AS at)
  * SELECT to_jsonb(r) AS data,
  *        route, approval_id AS "approvalId", actor_id AS "actorId", client_id AS "clientId",
  *        scopes, requested_by AS "requestedBy", authn_epoch::text AS "authnEpoch",
  *        operation_key AS "operationKey", operation, digest,
  *        created_at::text AS "createdAt", expires_at::text AS "expiresAt",
  *        jwt_expires_at::text AS "jwtExpiresAt", transaction_id AS "transactionId"
- * FROM access.workflow_approval r
+ * FROM access.workflow_approval r CROSS JOIN authority t
  * WHERE route = :route AND approval_id = :receipt_id AND consumed_at IS NOT NULL
- *   AND operation->>'kind' = 'credential' AND expires_at > clock_timestamp() AND jwt_expires_at > clock_timestamp();
+ *   AND operation->>'kind' = 'credential' AND expires_at > t.at AND jwt_expires_at > t.at;
  * ```
  *
  * The `.sql` file's contents, exactly as written, as the module's `raw` export.
  */
-export declare const raw: "SELECT to_jsonb(r) AS data,\n       route, approval_id AS \"approvalId\", actor_id AS \"actorId\", client_id AS \"clientId\",\n       scopes, requested_by AS \"requestedBy\", authn_epoch::text AS \"authnEpoch\",\n       operation_key AS \"operationKey\", operation, digest,\n       created_at::text AS \"createdAt\", expires_at::text AS \"expiresAt\",\n       jwt_expires_at::text AS \"jwtExpiresAt\", transaction_id AS \"transactionId\"\nFROM access.workflow_approval r\nWHERE route = :route AND approval_id = :receipt_id AND consumed_at IS NOT NULL\n  AND operation->>'kind' = 'credential' AND expires_at > clock_timestamp() AND jwt_expires_at > clock_timestamp();\n";
-export declare const params: readonly ["route", "receipt_id"];
+export declare const raw: "WITH authority AS (SELECT :at::timestamptz AS at)\nSELECT to_jsonb(r) AS data,\n       route, approval_id AS \"approvalId\", actor_id AS \"actorId\", client_id AS \"clientId\",\n       scopes, requested_by AS \"requestedBy\", authn_epoch::text AS \"authnEpoch\",\n       operation_key AS \"operationKey\", operation, digest,\n       created_at::text AS \"createdAt\", expires_at::text AS \"expiresAt\",\n       jwt_expires_at::text AS \"jwtExpiresAt\", transaction_id AS \"transactionId\"\nFROM access.workflow_approval r CROSS JOIN authority t\nWHERE route = :route AND approval_id = :receipt_id AND consumed_at IS NOT NULL\n  AND operation->>'kind' = 'credential' AND expires_at > t.at AND jwt_expires_at > t.at;\n";
+export declare const params: readonly ["at", "route", "receipt_id"];
 /**
  * ```sql
+ * WITH authority AS (SELECT :at::timestamptz AS at)
  * SELECT to_jsonb(r) AS data,
  *        route, approval_id AS "approvalId", actor_id AS "actorId", client_id AS "clientId",
  *        scopes, requested_by AS "requestedBy", authn_epoch::text AS "authnEpoch",
  *        operation_key AS "operationKey", operation, digest,
  *        created_at::text AS "createdAt", expires_at::text AS "expiresAt",
  *        jwt_expires_at::text AS "jwtExpiresAt", transaction_id AS "transactionId"
- * FROM access.workflow_approval r
+ * FROM access.workflow_approval r CROSS JOIN authority t
  * WHERE route = :route AND approval_id = :receipt_id AND consumed_at IS NOT NULL
- *   AND operation->>'kind' = 'credential' AND expires_at > clock_timestamp() AND jwt_expires_at > clock_timestamp();
+ *   AND operation->>'kind' = 'credential' AND expires_at > t.at AND jwt_expires_at > t.at;
  * ```
  */
 declare const query: Query<{
+    at: string;
     route: number;
     receipt_id: string;
 }, {
@@ -104,6 +116,12 @@ declare const query: Query<{
         transaction_id: string;
         consumed_at: string | null;
         consumed_transaction_id: string | null;
+        erasure_subject_id: string | null;
+        erasure_operator_id: string | null;
+        erasure_member_id: string | null;
+        erasure_previous_operator_id: string | null;
+        erasure_previous_subject_id: string | null;
+        erasure_principal_id: string | null;
     };
     route: number;
     approvalId: string;
@@ -119,18 +137,19 @@ declare const query: Query<{
     expiresAt: string;
     jwtExpiresAt: string;
     transactionId: string;
-}, "maybeOne", "postgres"> & {
+}, "maybeOne", "postgres", QueryError> & {
     /**
      * ```sql
+     * WITH authority AS (SELECT $1::timestamptz AS at)
      * SELECT to_jsonb(r) AS data,
      *        route, approval_id AS "approvalId", actor_id AS "actorId", client_id AS "clientId",
      *        scopes, requested_by AS "requestedBy", authn_epoch::text AS "authnEpoch",
      *        operation_key AS "operationKey", operation, digest,
      *        created_at::text AS "createdAt", expires_at::text AS "expiresAt",
      *        jwt_expires_at::text AS "jwtExpiresAt", transaction_id AS "transactionId"
-     * FROM access.workflow_approval r
-     * WHERE route = $1 AND approval_id = $2 AND consumed_at IS NOT NULL
-     *   AND operation->>'kind' = 'credential' AND expires_at > clock_timestamp() AND jwt_expires_at > clock_timestamp();
+     * FROM access.workflow_approval r CROSS JOIN authority t
+     * WHERE route = $2 AND approval_id = $3 AND consumed_at IS NOT NULL
+     *   AND operation->>'kind' = 'credential' AND expires_at > t.at AND jwt_expires_at > t.at;
      * ```
      *
      * The statement as Reylo sends it to the database, as the module's `sql` export: `:id` is `$1` on Postgres and `?` on MySQL and SQLite, each cast is the dialect's own, and a comment naming the file ends it.
@@ -138,15 +157,16 @@ declare const query: Query<{
     readonly sql: typeof sql;
     /**
      * ```sql
+     * WITH authority AS (SELECT :at::timestamptz AS at)
      * SELECT to_jsonb(r) AS data,
      *        route, approval_id AS "approvalId", actor_id AS "actorId", client_id AS "clientId",
      *        scopes, requested_by AS "requestedBy", authn_epoch::text AS "authnEpoch",
      *        operation_key AS "operationKey", operation, digest,
      *        created_at::text AS "createdAt", expires_at::text AS "expiresAt",
      *        jwt_expires_at::text AS "jwtExpiresAt", transaction_id AS "transactionId"
-     * FROM access.workflow_approval r
+     * FROM access.workflow_approval r CROSS JOIN authority t
      * WHERE route = :route AND approval_id = :receipt_id AND consumed_at IS NOT NULL
-     *   AND operation->>'kind' = 'credential' AND expires_at > clock_timestamp() AND jwt_expires_at > clock_timestamp();
+     *   AND operation->>'kind' = 'credential' AND expires_at > t.at AND jwt_expires_at > t.at;
      * ```
      *
      * The `.sql` file's contents, exactly as written, as the module's `raw` export.

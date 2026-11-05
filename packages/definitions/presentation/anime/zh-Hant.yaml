@@ -1,16 +1,135 @@
 types:
+  rezics:AnimeRelease: '動畫發行版'
   schema:Episode: 集
   schema:Movie: 電影
-  schema:TVSeason: 編播季
-  schema:TVSeries: 電視系列節目
+  schema:TVSeason: '季'
+  schema:TVSeries: 'TV 動畫'
+  schema:MediaObject: '媒體物件'
 properties:
+  bf:hasPart: '收錄作品'
+  marcrel:fds: '影片發行方'
   schema:copyrightNotice: 版權聲明
   schema:duration: 片長
-  schema:endDate: 結束日期
   schema:episodeNumber: 集數
   schema:isPartOf: 所屬實體
   schema:numberOfEpisodes: 集數
-  schema:startDate: 開始日期
   wdt:P449: 首播平台
-  wdt:P7937: 作品形式
   wdt:P973: 詳細描述網址
+  schema:associatedMedia: '相關媒體'
+  schema:encodesCreativeWork: '編碼的單集'
+inverseProperties:
+  bf:hasPart: '收錄此作品的發行版'
+  marcrel:fds: '發行的影片版本'
+  schema:isPartOf: '集數'
+  wdt:P449: '首播作品'
+  schema:associatedMedia: '包含此檔案的發行版'
+  schema:encodesCreativeWork: '編碼此單集的檔案'
+typeDescriptions:
+  rezics:AnimeRelease: '具有獨立識別身分的動畫出版或發行版本，與作品本身分開。也與單集、播放檔案及個人副本區別，不因語言或格式不同就自動建立多個發行版。'
+  schema:Episode: '可獨立識別的一集動畫或其他單篇，例如第 3 集或特別篇；不是播放檔案，也不是整季。'
+  schema:Movie: '作為作品的動畫長片或短片，獨立於各個出版發行版本。'
+  schema:TVSeason: '電視動畫中可單獨識別的一季，與完整系列及單集分開。'
+  schema:TVSeries: '包含各季與各集的電視動畫作品系列，與某個具體發行版分開。'
+  schema:MediaObject: '獨立識別的目錄檔案。其詮釋資料不證明擁有檔案、下載權限、可播放狀態或觀看進度。'
+libraryProfiles:
+  anime.series:
+    states:
+      planned: '計劃'
+      in_progress: '進行中'
+      completed: '已完成'
+      paused: '暫停'
+      dropped: '放棄'
+    units:
+      scalar_amount:
+        episode:
+          label: '集'
+          countForms:
+            other: '集'
+    copyKinds:
+      physical: '實體'
+      digital: '數位'
+    copyStatuses:
+      physical:
+        owned: '擁有'
+        disposed: '已處置'
+      digital:
+        owned: '擁有'
+  anime.season:
+    states:
+      planned: '計劃'
+      in_progress: '進行中'
+      completed: '已完成'
+      paused: '暫停'
+      dropped: '放棄'
+    units:
+      scalar_amount:
+        episode:
+          label: '集'
+          countForms:
+            other: '集'
+    copyKinds:
+      physical: '實體'
+      digital: '數位'
+    copyStatuses:
+      physical:
+        owned: '擁有'
+        disposed: '已處置'
+      digital:
+        owned: '擁有'
+  anime.episode:
+    states:
+      planned: '計劃'
+      in_progress: '進行中'
+      completed: '已完成'
+      paused: '暫停'
+      dropped: '放棄'
+    units:
+      scalar_amount:
+        minute:
+          label: '分鐘'
+          countForms:
+            other: '分鐘'
+    copyKinds:
+      physical: '實體'
+      digital: '數位'
+    copyStatuses:
+      physical:
+        owned: '擁有'
+        disposed: '已處置'
+      digital:
+        owned: '擁有'
+  anime.film:
+    states:
+      planned: '計劃'
+      in_progress: '進行中'
+      completed: '已完成'
+      paused: '暫停'
+      dropped: '放棄'
+    units:
+      scalar_amount:
+        minute:
+          label: '分鐘'
+          countForms:
+            other: '分鐘'
+    copyKinds:
+      physical: '實體'
+      digital: '數位'
+    copyStatuses:
+      physical:
+        owned: '擁有'
+        disposed: '已處置'
+      digital:
+        owned: '擁有'
+propertyDescriptions:
+  bf:hasPart: '這個合集發行版收錄的獨立動畫作品，連結實際的系列、電影、季或單集。'
+  marcrel:fds: '被署名為這份影像出版物發行者的個人或組織，不照搬作品上無關的署名。'
+  schema:copyrightNotice: '來源記載的著作權聲明，本身不構成再利用授權。'
+  schema:duration: '來源明示的片長，以秒（wd:Q11574）為單位的非負整數數量記錄；例如 24 分鐘寫為 1440。'
+  schema:episodeNumber: '來源的單集序號，以文字保存，可含 0、特別篇或小數編號；與單集識別碼分開。'
+  schema:isPartOf: '此單集所屬的電視系列或季。'
+  schema:numberOfEpisodes: '此作品或季的集數，以無單位的非負整數數量記錄。'
+  wdt:P449: '來源明確指出的首播機構，不泛指後續所有發行者。'
+  wdt:P973: '介紹這部動畫作品的頁面 URL，描述性連結不等於身分精確對應。'
+
+  schema:associatedMedia: '與此已識別動畫出版發行版關聯的目錄檔案；此關聯不會使檔案等同於發行版。'
+  schema:encodesCreativeWork: '此精確目錄檔案所編碼的單集；此關係不證明擁有檔案或已觀看。'

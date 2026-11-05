@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
+import { Value } from 'typebox/value';
 import type { DocumentSnapshot } from '@rezics/document';
+import type { NativePostRevisionPage } from '../../src/content/history-page.ts';
+import type { CommunityPresentation } from '../../src/content/community-presentation-model.ts';
 import type { CommandOutcome, CommandTransaction } from '../../src/command/command.ts';
 import type { Effect } from '../../src/events/effects.ts';
 import type { CloudEvent } from '../../src/events/log.ts';
@@ -32,6 +35,8 @@ import type { DownloadContext } from '../../src/content/media-download.ts';
 import type { TurnstileVerifier } from '../../src/content/turnstile.ts';
 import type * as model from '../../src/content/model.ts';
 import type { ImportedSource, Rights } from '../../src/content/imported-contract.ts';
+import type { Kernel } from '../../src/http/kernel.ts';
+import { MediaReservationInputSchema, RealmMediaReservationInputSchema } from '../../src/content/schemas.ts';
 
 type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 function same<T extends true>(..._proof: T[]): void {}
@@ -44,6 +49,24 @@ type Command<I, V, D = commands.ContentCommandDependencies, C = model.RequestCon
 ) => Promise<CommandOutcome<V>>;
 type Ids = Readonly<{ threadId: string; itemId: string; revisionId: string }>;
 type ModerationValue = Readonly<{ targetId: string; securityRevision: string }>;
+type ReadItemFields = Omit<model.ItemView, 'availability' | 'body' | 'sha256'>;
+type AvailableReadPayload = Readonly<{ availability: 'available'; body: DocumentSnapshot; sha256: string }>;
+type ErasedReadPayload = Readonly<{
+  availability: 'erased';
+  removed: true;
+  body: null;
+  sha256: null;
+  restorableUntil?: string;
+}>;
+type WithheldReadPayload = Readonly<{
+  availability: 'withheld';
+  removed: true;
+  body: null;
+  sha256: null;
+  decisionId?: string;
+}>;
+type ErasedPagePlaceholder = model.ErasedPlaceholder & Readonly<{ restorableUntil?: string }>;
+type ReadRevisionFields = Omit<model.RevisionView, 'availability' | 'body' | 'sha256'>;
 
 // These consumers are intentionally uncalled: type checking must never execute a port.
 function publishedSignatures(): void {
@@ -82,6 +105,7 @@ function publishedSignatures(): void {
         postId: string,
         context: model.ReadContext,
         revisionId?: string,
+        retain?: reads.RetainContentRead<reads.PostEntry>,
       ) => Promise<model.Anchored<reads.PostEntry | null>>
     >
   >();
@@ -107,7 +131,7 @@ function publishedSignatures(): void {
         context: model.ReadContext,
         cursor?: string,
         limit?: number,
-      ) => Promise<model.Page<reads.RevisionView>>
+      ) => Promise<NativePostRevisionPage>
     >
   >();
   same<
@@ -357,7 +381,9 @@ function publishedModels(): void {
         licence: string;
         subjectIds: readonly string[];
         boardId: string;
-        visibility: 'published' | 'draft';
+        visibility: 'published' | 'draft' | 'protected';
+        kind?: 'discussion' | 'review';
+        voteCitation?: model.ReviewVoteCitation;
       }>
     >
   >();
@@ -366,6 +392,7 @@ function publishedModels(): void {
       model.PostInput,
       Readonly<{
         threadId: string;
+        visibility?: 'published' | 'draft' | 'protected';
         body: unknown;
         licence: string;
         subjectIds?: readonly string[];
@@ -380,6 +407,8 @@ function publishedModels(): void {
       model.RevisionInput,
       Readonly<{
         threadId: string;
+        title?: string;
+        visibility?: 'published' | 'draft';
         itemId: string;
         body: unknown;
         licence?: string;
@@ -387,6 +416,7 @@ function publishedModels(): void {
         boardId?: string;
         mediaIds?: readonly string[];
         expectedRevisionId?: string | null;
+        voteCitation?: model.ReviewVoteCitation;
       }>
     >
   >();
@@ -415,6 +445,7 @@ function publishedModels(): void {
         revisedAt: string | null;
         sha256: string;
         mediaIds: readonly string[];
+        voteCitation: model.ReviewVoteCitation | null;
       }>
     >
   >();
@@ -434,6 +465,7 @@ function publishedModels(): void {
         revisedAt: string | null;
         sha256: string;
         mediaIds: readonly string[];
+        voteCitation: model.ReviewVoteCitation | null;
       }>
     >
   >();
@@ -444,6 +476,7 @@ function publishedModels(): void {
         id: string;
         route: number;
         authorId: string;
+        kind: 'discussion' | 'review';
         title: string | null;
         licence: string;
         subjectIds: readonly string[];
@@ -461,8 +494,11 @@ function publishedModels(): void {
       model.BoardView,
       Readonly<{
         id: string;
+        realmId: string | null;
+        community: CommunityPresentation | null;
         route: number;
         title: string | null;
+        purpose: 'discussion' | 'reviews';
         visibility: model.Visibility;
         securityRevision: string;
         availability: model.Availability;
@@ -470,16 +506,9 @@ function publishedModels(): void {
       }>
     >
   >();
-  same<
-    Equal<
-      reads.ItemView,
-      Omit<model.ItemView, 'availability' | 'body' | 'sha256'> &
-        (
-          | Readonly<{ availability: 'available'; body: DocumentSnapshot; sha256: string }>
-          | Readonly<{ availability: 'erased'; removed: true; body: null; sha256: null }>
-        )
-    >
-  >();
+  same<Equal<reads.ItemView, ReadItemFields & (AvailableReadPayload | ErasedReadPayload)>>();
+  same<Equal<reads.WithheldPostEntry, ReadItemFields & WithheldReadPayload>>();
+  same<Equal<reads.RevisionView, ReadRevisionFields & (AvailableReadPayload | ErasedReadPayload)>>();
   same<
     Equal<
       model.ErasedPlaceholder,
@@ -496,11 +525,13 @@ function publishedModels(): void {
     >
   >();
   same<Equal<model.PostEntry, model.ItemView | model.ErasedPlaceholder>>();
-  same<Equal<reads.PostEntry, reads.ItemView | model.ErasedPlaceholder>>();
+  same<Equal<reads.PostEntry, reads.ItemView | ErasedPagePlaceholder | reads.WithheldPostEntry>>();
   same<
     Equal<
       typeof model.isErasedPlaceholder,
-      (entry: Readonly<{ availability: model.Availability; revisionId?: string }>) => entry is model.ErasedPlaceholder
+      (
+        entry: Readonly<{ availability: model.Availability | 'withheld'; revisionId?: string }>,
+      ) => entry is model.ErasedPlaceholder
     >
   >();
   same<Equal<reads.ThreadView, Omit<model.ThreadView, 'firstPost'> & Readonly<{ firstPost: reads.PostEntry }>>>();
@@ -569,11 +600,50 @@ function publishedModels(): void {
   same<
     Equal<
       media.MediaReservationInput,
-      Readonly<{ purpose: 'post-image'; mediaType: string; byteCount: number; sha256?: string }> &
+      Readonly<{
+        purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
+        mediaType: string;
+        byteCount: number;
+        sha256?: string;
+      }> &
         (
           | Readonly<{ containerId: string; newThread?: never }>
-          | Readonly<{ newThread: Readonly<{ boardId: string; idempotencyKey: string }>; containerId?: never }>
+          | Readonly<{
+              purpose: 'post-image';
+              newThread: Readonly<{ boardId: string; idempotencyKey: string }>;
+              containerId?: never;
+            }>
         )
+    >
+  >();
+  // Native reservation serves both routes; the generic HTTP input keeps its narrower purposes.
+  type ImageMediaType = 'image/avif' | 'image/gif' | 'image/jpeg' | 'image/png' | 'image/webp';
+  type GenericReservation = Kernel['~Routes']['v1']['media']['post'];
+  type RealmReservation = Kernel['~Routes']['v1']['realms'][':realmId']['media']['post'];
+  same<
+    Equal<
+      GenericReservation['body'],
+      | {
+          containerId: string;
+          purpose: 'post-image' | 'avatar';
+          mediaType: ImageMediaType;
+          byteCount: number;
+          sha256?: string;
+        }
+      | {
+          newThread: { boardId: string; idempotencyKey: string };
+          purpose: 'post-image';
+          mediaType: ImageMediaType;
+          byteCount: number;
+          sha256?: string;
+        }
+    >
+  >();
+  same<Equal<RealmReservation['params'], { realmId: string }>>();
+  same<
+    Equal<
+      RealmReservation['body'],
+      { purpose: 'realm-icon' | 'realm-banner'; mediaType: ImageMediaType; byteCount: number; sha256?: string }
     >
   >();
   same<
@@ -653,7 +723,12 @@ function publishedModels(): void {
   same<
     Equal<
       media.MediaMetadata,
-      | (MediaMetadataBase & Readonly<{ purpose: 'post-image'; mediaType: string; byteCount: number }>)
+      | (MediaMetadataBase &
+          Readonly<{
+            purpose: 'post-image' | 'avatar' | 'realm-icon' | 'realm-banner';
+            mediaType: string;
+            byteCount: number;
+          }>)
       | (MediaMetadataBase &
           Readonly<{
             purpose: 'cover';
@@ -675,6 +750,9 @@ function publishedModels(): void {
       | Readonly<{ kind: 'board'; id: string }>
       | Readonly<{ kind: 'thread'; id: string }>
       | Readonly<{ kind: 'post'; id: string }>
+      | Readonly<{ kind: 'subject'; id: string }>
+      | Readonly<{ kind: 'space'; id: string }>
+      | Readonly<{ kind: 'realm'; id: string }>
     >
   >();
   same<
@@ -694,6 +772,8 @@ function publishedModels(): void {
         reason: string;
         evidence: string | null;
         createdAt: string;
+        outcome: 'actioned' | 'dismissed' | null;
+        resolvedAt: string | null;
         transactionId: string;
         reporterId: string | null;
       }>
@@ -717,7 +797,14 @@ function publishedModels(): void {
       Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array; clock?: () => Date }>
     >
   >();
-  same<Equal<moderation.TakedownTarget, reports.ReportTarget>>();
+  same<
+    Equal<
+      moderation.TakedownTarget,
+      | Readonly<{ kind: 'board'; id: string }>
+      | Readonly<{ kind: 'thread'; id: string }>
+      | Readonly<{ kind: 'post'; id: string }>
+    >
+  >();
   same<Equal<moderation.TakedownInput, Readonly<{ target: moderation.TakedownTarget; reason: string }>>>();
   same<Equal<AuthorErasureInput, Readonly<{ threadId: string; authorId: string }>>>();
   same<
@@ -742,6 +829,29 @@ function publishedModels(): void {
   same<Equal<reports.ReportRequestContext, model.RequestContext & Readonly<{ botToken?: string }>>>();
 }
 void [publishedSignatures, publishedModels];
+
+test('Realm media reservation keeps its own strict purpose and route-owned parent input', () => {
+  const fields = { mediaType: 'image/png', byteCount: 10 };
+  const containerId = '019a1b2c-3d4e-7f00-8a00-5b0000000061';
+  for (const purpose of ['realm-icon', 'realm-banner']) {
+    const input = { purpose, ...fields };
+    expect(Value.Check(RealmMediaReservationInputSchema, input)).toBe(true);
+    expect(Value.Check(RealmMediaReservationInputSchema, { ...input, sha256: 'a'.repeat(64) })).toBe(true);
+    expect(Value.Check(MediaReservationInputSchema, { ...input, containerId })).toBe(false);
+    for (const extra of [
+      { containerId },
+      { newThread: { boardId: containerId, idempotencyKey: 'thread' } },
+      { unexpected: true },
+    ]) {
+      expect(Value.Check(RealmMediaReservationInputSchema, { ...input, ...extra })).toBe(false);
+    }
+    expect(Value.Check(RealmMediaReservationInputSchema, { purpose, byteCount: 10 })).toBe(false);
+    expect(Value.Check(RealmMediaReservationInputSchema, { purpose, mediaType: 'image/png' })).toBe(false);
+  }
+  for (const purpose of ['post-image', 'avatar', 'cover', 'bad-purpose']) {
+    expect(Value.Check(RealmMediaReservationInputSchema, { purpose, ...fields })).toBe(false);
+  }
+});
 
 test('named content ports are exported', () => {
   for (const port of [

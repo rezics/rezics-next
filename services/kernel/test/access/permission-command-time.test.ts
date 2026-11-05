@@ -9,10 +9,16 @@ import { grantFixture } from './grant-fixture.ts';
 
 let f: Awaited<ReturnType<typeof grantFixture>>;
 const action = 'subject:read';
+const policyResourceType = 'fixture.permission';
+const resourceRoles = {
+  roles: { 'fixture.permission.reader': [action] },
+  types: { [policyResourceType]: { owner: 'fixture.permission.reader', standing: [] } },
+};
+const actionMetadata = { anonymous: false, 'x-resource-types': [policyResourceType] } as const;
 const event = { type: 'com.rezics.access.time-probe.v1', data: {} };
 
 beforeAll(async () => {
-  f = await grantFixture();
+  f = await grantFixture([], { action, resourceType: policyResourceType });
 }, 30_000);
 beforeEach(() => f.reset());
 afterAll(async () => {
@@ -124,7 +130,8 @@ async function readAt(clock?: () => Date): Promise<boolean> {
   if (!account) throw new Error('Fixture account is missing');
   const access = clock
     ? createPermissionAccess({
-        actions: new Map([[action, { anonymous: false }]]),
+        actions: new Map([[action, actionMetadata]]),
+        resourceRoles,
         accountEvidence: () => account,
         clock,
       })

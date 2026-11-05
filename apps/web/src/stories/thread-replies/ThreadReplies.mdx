@@ -1,0 +1,19 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as ThreadReplies from './thread-replies.stories';
+
+<Meta of={ThreadReplies} />
+
+# Thread replies
+
+Reply to this post selects a parent and focuses the same editor. Cancel keeps the draft. Retrying an uncertain
+response sends the same parent, body, media and key; changing the target starts a new intent. Pending writes lock
+selection and editing. Successful replies use the returned post identity.
+
+Context uses only the loaded post identities and availability. A loaded parent links to its local slot, including a
+tombstone. An unloaded parent has neutral text and no link. No parent excerpt or ancestry request is needed.
+
+The parent content comes from `thread-owned-posts.json`. Retry, pending and refusal use explicit behavior mocks;
+they establish component behavior, with native current-authority and post-integration outcome proof handled separately.
+The page stories reuse these product components in the existing shell.
+
+Review every state with the phone390/desktop1280 viewport, locale and theme globals; no variant exports are needed.

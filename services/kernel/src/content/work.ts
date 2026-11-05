@@ -1,3 +1,7 @@
+import { registerReviewDiscoveryWork } from './review-discovery-work.ts';
+import { registerReviewCensusWork, REVIEW_CENSUS_SCHEDULE, REVIEW_CENSUS_WORKFLOW } from './review-census-work.ts';
+import { createDiscoveryMutationEffect, recoverDiscoveryMutations } from './discovery-mutation.ts';
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
 import type { Pool } from 'pg';
 import canonicalize from 'canonicalize';
 import { within, deadlineClient } from '../access/authenticate.ts';
@@ -20,6 +24,7 @@ import { Value } from 'typebox/value';
 import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
 import { WORK_APPLICATION, type WorkClient } from '../work/client.ts';
 import type { WorkContext, WorkModule } from '../work/registry.ts';
+import { purgeDeletedPostPage } from './deleted-post-purge.ts';
 import { clearErasedPostRevisions } from './erased-post-cleanup.ts';
 import readOperationEnqueue from './read-operation-enqueue.sql';
 import readOperationEnqueueReceipt from './read-operation-enqueue-receipt.sql';
@@ -27,8 +32,34 @@ import { CONTENT_EVENTS } from './events.ts';
 import { createImageJob } from './image-job.ts';
 import { createCollectionJob } from './collection-job.ts';
 import { refreshBoardRankBatch } from './board-rank.ts';
+import { repairConversationActivityPage } from './conversation-activity-repair.ts';
 import { createErasureJob } from './erasure-job.ts';
 import { createReactionCountEffect } from './reaction-projection.ts';
+import { createPartyLocatorEffect } from './party-locator.ts';
+import { createAuthorItemEffect } from './author-item-index.ts';
+import { OWN_DRAFT_REPAIR_WORKFLOW, repairOwnDraftPage } from './own-drafts-index.ts';
+import { createReportLocatorEffect } from './report-locator.ts';
+import { createCreatorEditionIndexEffect } from './edition-index.ts';
+import { createAccountUploadIndexEffect } from './account-erasure-uploads.ts';
+import { registerAccountErasureWork } from './account-erasure.ts';
+import { createSubjectThreadEffect } from './subject-thread-index.ts';
+import { processSubjectReactionMergePage, runSubjectReactionMerge } from './subject-reaction-merge.ts';
+import { deleteExpiredNoticesPage, NOTICE_PAGE_SIZE, NOTICE_RETENTION_MS } from './notices.ts';
+import {
+  BOARD_SLOW_RECOVERY_PAGE_SIZE,
+  BOARD_SLOW_RETENTION_MS,
+  pruneBoardSlowModeHistoryPage,
+  recoverBoardSlowModePage,
+} from './board-slow.ts';
+import {
+  createRealmSubjectLifecycle,
+  REALM_SUBJECT_CENSUS_PAGE,
+  REALM_SUBJECT_CENSUS_SCHEDULE,
+  REALM_SUBJECT_CENSUS_WORKFLOW,
+  REALM_SUBJECT_IDENTITY_WORKFLOW,
+  realmSubjectIdentityWorkflowId,
+  type RealmSubjectIdentityWork,
+} from './realm-subject-lifecycle.ts';
 import type { MediaStorage } from './media-storage.ts';
 import {
   CONTENT_QUEUES,
@@ -36,16 +67,36 @@ import {
   contentWorkWorkflowId,
   type ContentWorkInput,
   type AuthorEraseWorkInput,
+  type SubjectReactionMergeWorkInput,
 } from './work-contract.ts';
 
 export const CONTENT_OPERATION_PROGRESS = 'content.authorErasure.progress';
 export const CONTENT_COLLECTION_SCHEDULE = 'content.collection.hourly';
 export const CONTENT_BOARD_RANK_SCHEDULE = 'content.board-rank.every-10-minutes';
+export const CONTENT_CONVERSATION_ACTIVITY_REPAIR_SCHEDULE = 'content.conversation-activity.repair.each-minute';
+export const CONTENT_NOTICE_RETENTION_SCHEDULE = 'content.notice-retention.hourly';
+export const BOARD_SLOW_RECOVERY_SCHEDULE = 'content.board-slow.recovery.each-minute';
+export const BOARD_SLOW_RETENTION_SCHEDULE = 'content.board-slow.retention.daily';
 const PARTITION_WORKFLOW = 'content.collect.partition';
 const BOARD_RANK_WORKFLOW = 'content.board-rank.refresh';
+const CONVERSATION_ACTIVITY_REPAIR_WORKFLOW = 'content.conversation-activity.repair';
+const NOTICE_RETENTION_WORKFLOW = 'content.notice-retention';
+const NOTICE_RETENTION_PARTITION_WORKFLOW = 'content.notice-retention.partition';
+const BOARD_SLOW_RECOVERY_WORKFLOW = 'content.board-slow.recovery';
+const BOARD_SLOW_RETENTION_WORKFLOW = 'content.board-slow.retention';
 const BATCH_SIZE = 100;
 const PARTITION_CONCURRENCY = 8;
 const STEP_RETRY_DELAY_SECONDS = 1;
+
+/** DBOS retries count attempts, so eleven attempts provide ten exponentially growing waits. */
+export function contentStepRetryOptions(intervalSeconds = STEP_RETRY_DELAY_SECONDS) {
+  return {
+    retriesAllowed: true,
+    intervalSeconds,
+    backoffRate: 2,
+    maxAttempts: 11,
+  } as const;
+}
 
 type ContentWorkOptions = Readonly<{
   storage: MediaStorage;
@@ -57,6 +108,8 @@ type ContentWorkOptions = Readonly<{
   collectionPartitions?: readonly number[];
   /** Delay between attempts of a failed durable step. Production keeps one second; a test may pass a shorter one. */
   stepRetryDelaySeconds?: number;
+  /** Test-only switch for phase tests that exercise the bounded page without its event-driven coordinator. */
+  registerErasureParticipant?: boolean;
 }>;
 
 function validateInput(input: ContentWorkInput): void {
@@ -102,15 +155,65 @@ async function registerWork(
   partitions: readonly number[],
 ): Promise<void> {
   const { storage } = options;
-  const retry = {
-    retriesAllowed: true,
-    intervalSeconds: options.stepRetryDelaySeconds ?? STEP_RETRY_DELAY_SECONDS,
-    backoffRate: 1,
-    maxAttempts: 100,
-  } as const;
+  registerReviewDiscoveryWork(context);
+  registerReviewCensusWork(context, options.access, partitions);
+  const realmSubject = createRealmSubjectLifecycle({ pool: context.pool });
+  if (options.registerErasureParticipant !== false) registerAccountErasureWork(context, storage, options.routeKey);
+  const retry = contentStepRetryOptions(options.stepRetryDelaySeconds);
+  const repairDrafts = DBOS.registerStep(() => repairOwnDraftPage(context.pool), {
+    name: 'content.ownDrafts.repair.page',
+    ...retry,
+  });
+  DBOS.registerWorkflow(
+    async () => {
+      for (let page = 0; page < 16; page++) if ((await repairDrafts()).complete) return;
+    },
+    { name: OWN_DRAFT_REPAIR_WORKFLOW },
+  );
   for (const queue of Object.values(CONTENT_QUEUES)) {
     if (!(queue in context.queues)) throw new Error('Content requires shared kernel queues');
   }
+  const realmSubjectIdentityPage = DBOS.registerStep(
+    async (work: RealmSubjectIdentityWork) => realmSubject.identityPage(work, Date.now() + 30_000),
+    { name: 'content.realmSubject.identity.page', ...retry },
+  );
+  DBOS.registerWorkflow(
+    async (work: RealmSubjectIdentityWork) => {
+      const page = await realmSubjectIdentityPage(work);
+      if (page.state === 'unknown') throw new Error('Realm Subject identity page is unavailable');
+      if (page.state === 'more') {
+        if (!page.after) throw new Error('Realm Subject identity continuation has no key');
+        await context.client.enqueue(
+          {
+            applicationName: WORK_APPLICATION,
+            workflowName: REALM_SUBJECT_IDENTITY_WORKFLOW,
+            queueName: 'maintenance',
+            workflowID: realmSubjectIdentityWorkflowId(work, page.after),
+            workflowIDReusePolicy: 'return-existing',
+          },
+          work,
+        );
+      }
+    },
+    { name: REALM_SUBJECT_IDENTITY_WORKFLOW },
+  );
+  const realmSubjectCensusPage = DBOS.registerStep(
+    async () => {
+      const cursor = await realmSubject.sweepCursor(Date.now() + 30_000);
+      if (cursor.complete) return { state: 'complete' as const };
+      return realmSubject.sweep(cursor.route, REALM_SUBJECT_CENSUS_PAGE, Date.now() + 30_000);
+    },
+    { name: 'content.realmSubject.census.page', ...retry },
+  );
+  DBOS.registerWorkflow(
+    async () => {
+      // Sixteen route pages per invocation keep the scheduled source walk finite.
+      for (let page = 0; page < 16; page++) {
+        if ((await realmSubjectCensusPage()).state === 'complete') return;
+      }
+    },
+    { name: REALM_SUBJECT_CENSUS_WORKFLOW },
+  );
   const purge = DBOS.registerStep(
     async (input: ContentWorkInput) => {
       validateInput(input);
@@ -205,8 +308,31 @@ async function registerWork(
     { name: CONTENT_WORKFLOWS.authorErase },
   );
 
+  const subjectReactionMergePage = DBOS.registerStep(
+    async (input: SubjectReactionMergeWorkInput, cursor: string | null) => {
+      validateInput({ mediaId: input.id, source: input.source });
+      if (routeOf(input.survivor) === null || input.id === input.survivor)
+        throw new TypeError('Invalid subject reaction merge work input');
+      return processSubjectReactionMergePage(
+        { pool: context.pool, access: options.access },
+        { id: input.id, survivor: input.survivor, cursor },
+      );
+    },
+    { name: 'content.subjectReactionMerge.page', ...retry },
+  );
+  DBOS.registerWorkflow(
+    async (input: SubjectReactionMergeWorkInput) => {
+      validateInput({ mediaId: input.id, source: input.source });
+      if (routeOf(input.survivor) === null || input.id === input.survivor)
+        throw new TypeError('Invalid subject reaction merge work input');
+      return runSubjectReactionMerge(input, (cursor) => subjectReactionMergePage(input, cursor));
+    },
+    { name: CONTENT_WORKFLOWS.subjectReactionMerge },
+  );
+
   const collect = DBOS.registerStep(
     async (partition: number) => {
+      await recoverDiscoveryMutations(context.pool, partition);
       const outcome = await createCollectionJob(context.pool, storage, { clock: context.clock }).collectPartition(
         partition,
         BATCH_SIZE,
@@ -217,10 +343,30 @@ async function registerWork(
     },
     { name: 'content.collect.step', ...retry },
   );
+  const purgeDeleted = DBOS.registerStep(async (_name: string, action: () => Promise<unknown>) => action(), {
+    name: 'content.deletedPostPurge.step',
+    ...retry,
+  });
   const drain = DBOS.registerWorkflow(
     async (partition: number) => {
       if (!Number.isInteger(partition) || partition < 0 || partition >= PARTITIONS)
         throw new RangeError('Invalid collection partition');
+      for (let offset = 0; offset < 16; offset++) {
+        while (
+          (
+            await purgeDeletedPostPage(
+              context.pool,
+              partition * 16 + offset,
+              context.clock(),
+              () => Date.now() + 120_000,
+              <T>(name: string, action: () => Promise<T>) => purgeDeleted(name, action) as Promise<T>,
+              createErasureJob(context.pool, storage),
+            )
+          ).postIds.length === 100
+        ) {
+          /* Completed posts leave the index before the next bounded durable step. */
+        }
+      }
       // Each bounded batch is its own durable step, so recovery replays progress.
       while (!(await collect(partition)).complete) {
         /* Drain actual changed rows only. */
@@ -266,9 +412,109 @@ async function registerWork(
       name: BOARD_RANK_WORKFLOW,
     },
   );
+  const conversationActivityRepairPage = DBOS.registerStep(
+    async (partition: number) => repairConversationActivityPage(context.pool, partition, Date.now() + 30_000),
+    { name: 'content.conversation-activity.repair.page', ...retry },
+  );
+  DBOS.registerWorkflow(
+    async (_scheduledDate: Date, _context: unknown) => {
+      for (let offset = 0; offset < partitions.length; offset += PARTITION_CONCURRENCY)
+        await Promise.all(partitions.slice(offset, offset + PARTITION_CONCURRENCY).map(conversationActivityRepairPage));
+    },
+    { name: CONVERSATION_ACTIVITY_REPAIR_WORKFLOW },
+  );
+  const noticeRetentionCutoff = DBOS.registerStep(
+    async () => new Date(context.clock().getTime() - NOTICE_RETENTION_MS).toISOString(),
+    { name: 'content.notice-retention.cutoff', ...retry },
+  );
+  const noticeRetentionPage = DBOS.registerStep(
+    async (route: number, cutoff: string) => deleteExpiredNoticesPage(context.pool, route, new Date(cutoff)),
+    { name: 'content.notice-retention.page', ...retry },
+  );
+  const noticeRetentionPartition = DBOS.registerWorkflow(
+    async (partition: number, cutoff: string) => {
+      if (!Number.isInteger(partition) || partition < 0 || partition >= PARTITIONS)
+        throw new RangeError('Invalid notice retention partition');
+      for (let routeOffset = 0; routeOffset < 16; routeOffset++) {
+        const route = partition * 16 + routeOffset;
+        for (;;) {
+          if ((await noticeRetentionPage(route, cutoff)) < NOTICE_PAGE_SIZE) break;
+        }
+      }
+    },
+    { name: NOTICE_RETENTION_PARTITION_WORKFLOW },
+  );
+  DBOS.registerWorkflow(
+    async (_scheduledDate: Date, _context: unknown) => {
+      const cutoff = await noticeRetentionCutoff();
+      const sweep = DBOS.workflowID!;
+      for (let offset = 0; offset < partitions.length; offset += PARTITION_CONCURRENCY) {
+        const handles = await Promise.all(
+          partitions.slice(offset, offset + PARTITION_CONCURRENCY).map((partition) =>
+            DBOS.startWorkflow(noticeRetentionPartition, {
+              workflowID: `${sweep}:partition:${partition}`,
+            })(partition, cutoff),
+          ),
+        );
+        await Promise.all(handles.map((handle) => handle.getResult()));
+      }
+    },
+    { name: NOTICE_RETENTION_WORKFLOW },
+  );
+  const boardSlowRecoveryPage = DBOS.registerStep(
+    async () =>
+      recoverBoardSlowModePage(context.pool, BOARD_SLOW_RECOVERY_PAGE_SIZE, context.clock(), Date.now() + 120_000),
+    { name: 'content.board-slow.recovery.page', ...retry },
+  );
+  DBOS.registerWorkflow(
+    async (_scheduledDate: Date, _context: unknown) => {
+      for (let page = 0; page < 16; page++) {
+        if ((await boardSlowRecoveryPage()) < BOARD_SLOW_RECOVERY_PAGE_SIZE) return;
+      }
+    },
+    { name: BOARD_SLOW_RECOVERY_WORKFLOW },
+  );
+  const boardSlowRetentionPage = DBOS.registerStep(
+    async (cutoff: string) =>
+      pruneBoardSlowModeHistoryPage(context.pool, BOARD_SLOW_RECOVERY_PAGE_SIZE, cutoff, Date.now() + 120_000),
+    { name: 'content.board-slow.retention.page', ...retry },
+  );
+  DBOS.registerWorkflow(
+    async (_scheduledDate: Date, _context: unknown) => {
+      const cutoff = new Date(context.clock().getTime() - BOARD_SLOW_RETENTION_MS).toISOString();
+      for (let page = 0; page < 16; page++) {
+        if ((await boardSlowRetentionPage(cutoff)) < BOARD_SLOW_RECOVERY_PAGE_SIZE) return;
+      }
+    },
+    { name: BOARD_SLOW_RETENTION_WORKFLOW },
+  );
   // Client schedule provisioning works before launch. SDK applySchedules upserts
   // this stable name and preserves a single persistent schedule across restarts.
   await context.client.applySchedules([
+    {
+      scheduleName: REVIEW_CENSUS_SCHEDULE,
+      workflowName: REVIEW_CENSUS_WORKFLOW,
+      schedule: '0 * * * *',
+      queueName: 'maintenance',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
+    {
+      scheduleName: 'content.ownDrafts.every-minute',
+      workflowName: OWN_DRAFT_REPAIR_WORKFLOW,
+      schedule: '* * * * *',
+      queueName: 'maintenance',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
+    {
+      scheduleName: REALM_SUBJECT_CENSUS_SCHEDULE,
+      workflowName: REALM_SUBJECT_CENSUS_WORKFLOW,
+      schedule: '* * * * *',
+      queueName: 'maintenance',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
     {
       scheduleName: CONTENT_COLLECTION_SCHEDULE,
       workflowName: CONTENT_WORKFLOWS.collect,
@@ -285,23 +531,67 @@ async function registerWork(
       cronTimezone: 'UTC',
       automaticBackfill: false,
     },
+    {
+      scheduleName: CONTENT_CONVERSATION_ACTIVITY_REPAIR_SCHEDULE,
+      workflowName: CONVERSATION_ACTIVITY_REPAIR_WORKFLOW,
+      schedule: '* * * * *',
+      queueName: 'maintenance',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
+    {
+      scheduleName: CONTENT_NOTICE_RETENTION_SCHEDULE,
+      workflowName: NOTICE_RETENTION_WORKFLOW,
+      schedule: '0 * * * *',
+      queueName: CONTENT_QUEUES.collect,
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
+    {
+      scheduleName: BOARD_SLOW_RECOVERY_SCHEDULE,
+      workflowName: BOARD_SLOW_RECOVERY_WORKFLOW,
+      schedule: '* * * * *',
+      queueName: 'maintenance',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
+    {
+      scheduleName: BOARD_SLOW_RETENTION_SCHEDULE,
+      workflowName: BOARD_SLOW_RETENTION_WORKFLOW,
+      schedule: '0 2 * * *',
+      queueName: 'maintenance',
+      cronTimezone: 'UTC',
+      automaticBackfill: false,
+    },
   ]);
 
   // The erased-post event carries only identity. The committed tombstone is the
   // authority, so a retry or a new event id reads it again and leaves erased rows unchanged.
   const erasedPostEvent = 'com.rezics.content.post.erased.v1' as const;
-  const clearErasedPost = DBOS.registerStep(
-    async (postId: string) => clearErasedPostRevisions(context.pool, { postId }, Date.now() + 120_000),
-    { name: 'content.erasePostRevisions.step', ...retry },
+  const clearErasedPost = DBOS.registerStep(async (_name: string, action: () => Promise<unknown>) => action(), {
+    name: 'content.erasePostRevisions.step',
+    ...retry,
+  });
+  DBOS.registerWorkflow(
+    async (postId: string, accountErasure: boolean = false) =>
+      clearErasedPostRevisions(
+        context.pool,
+        { postId, accountErasure },
+        () => Date.now() + 120_000,
+        context.clock,
+        <T>(name: string, action: () => Promise<T>) => clearErasedPost(name, action) as Promise<T>,
+        createErasureJob(context.pool, storage),
+      ),
+    { name: 'content.erasePostRevisions' },
   );
-  DBOS.registerWorkflow(async (postId: string) => clearErasedPost(postId), { name: 'content.erasePostRevisions' });
   context.addEffects([
     {
       name: 'content_post_erased',
       types: [erasedPostEvent],
       async run(event) {
-        if (event.type !== erasedPostEvent || !Value.Check(CONTENT_EVENTS[erasedPostEvent], event.data))
+        if (event.type !== erasedPostEvent || !Value.Check(CONTENT_EVENTS()[erasedPostEvent], event.data))
           throw new TypeError('Invalid erased post event');
+        const data = event.data as { postId: string; accountErasure?: true };
         await context.client.enqueue(
           {
             applicationName: WORK_APPLICATION,
@@ -310,14 +600,23 @@ async function registerWork(
             workflowID: `content.erasePost:${event.id}`,
             workflowIDReusePolicy: 'return-existing',
           },
-          (event.data as { postId: string }).postId,
+          data.postId,
+          data.accountErasure === true,
         );
       },
     },
   ]);
-  // Registered with the board effect by the content work module. The shared
-  // effects relay delivers each change after the source read has been released.
-  context.addEffects([createReactionCountEffect(context.pool)]);
+  // Projections consume the source events after the source read has been released.
+  context.addEffects([
+    createDiscoveryMutationEffect(context.pool),
+    createReactionCountEffect(context.pool),
+    createSubjectThreadEffect(context.pool),
+    createAuthorItemEffect(context.pool),
+    createReportLocatorEffect(context.pool),
+    createCreatorEditionIndexEffect(context.pool),
+    createPartyLocatorEffect(context.pool),
+    createAccountUploadIndexEffect(context.pool, storage),
+  ]);
 }
 
 function counters(value: unknown, steps: boolean): OperationProgress {
@@ -362,11 +661,17 @@ export function createContentOperationClient({
             });
             const receipt =
               row &&
+              row.initiator_account_id !== null &&
               (await readOperationEnqueueReceipt.run(tx, {
                 partition_no: partitionOf(route),
                 initiator_account_id: row.initiator_account_id,
                 creation_command_kind: row.creation_command_kind,
-                creation_idempotency_key: row.creation_idempotency_key,
+                creation_idempotency_keys: nativeReceiptKeyCandidates(
+                  pool,
+                  row.creation_command_kind,
+                  row.initiator_account_id,
+                  row.creation_idempotency_key,
+                ),
                 recorded_transaction_id: row.recorded_transaction_id,
                 creation_request_digest: row.creation_request_digest,
                 operation_id: row.operation_id,

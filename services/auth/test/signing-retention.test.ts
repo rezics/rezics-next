@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { createLocalJWKSet, decodeProtectedHeader, exportJWK, generateKeyPair, jwtVerify, type JWK } from 'jose';
@@ -30,7 +31,10 @@ beforeAll(async () => {
     audience,
     secret: 'retention-fixture-secret-at-least-32-characters',
     signing: { activeKid: 'a', privateKeys: [keys[0]!] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return this.readAccount(id);
+      },
       async readAccount() {
         return {
           accountId: 'person',
@@ -43,7 +47,7 @@ beforeAll(async () => {
       async authorizeProvisioning() {
         return { accountId: 'person' };
       },
-    },
+    }),
   };
   first = await createAuthService(options);
   second = await createAuthService({ ...options, signing: { activeKid: 'a', privateKeys: [] } });

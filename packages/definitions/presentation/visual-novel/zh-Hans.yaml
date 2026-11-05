@@ -2,8 +2,37 @@ types:
   wd:Q689445: 视觉小说
 properties:
   wdt:P144: 改编自
-  wdt:P156: 下一项
   wdt:P1889: 区别于
-  wdt:P2512: 派生作品
   wdt:P361: 所属实体
-  wdt:P4969: 衍生作品
+  rezics:spinOffOf: '外传原作'
+inverseProperties:
+  wdt:P144: '衍生作品'
+  wdt:P361: '组成作品'
+  rezics:spinOffOf: '外传作品'
+libraryProfiles:
+  visual-novel.reading:
+    states:
+      planned: '计划'
+      in_progress: '进行中'
+      completed: '已完成'
+      paused: '暂停'
+      dropped: '放弃'
+    units:
+      scalar_amount:
+        percent: '百分比'
+    copyKinds:
+      physical: '实体'
+      digital: '数字'
+    copyStatuses:
+      physical:
+        owned: '拥有'
+        disposed: '已处置'
+      digital:
+        owned: '拥有'
+typeDescriptions:
+  wd:Q689445: '独立于各语言或平台发行版的视觉小说作品，角色与工作人员通过作品上的陈述关联。'
+propertyDescriptions:
+  wdt:P144: '此视觉小说所依据的创作作品，明确指出原作，而非无方向的跨媒介关联。'
+  wdt:P1889: '同一背景或连续设定中的另一部视觉小说，两者仍是独立作品。'
+  wdt:P361: '包含此作品的更大作品，如上层故事或作品合集。'
+  rezics:spinOffOf: '此衍生作品所源自的原始作品。'

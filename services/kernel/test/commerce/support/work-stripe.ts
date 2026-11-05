@@ -18,7 +18,9 @@ export function startWorkStripe() {
           return Response.json({ error: { type: 'api_error', message: 'Unavailable' } }, { status: 503 });
         }
       }
-      const pending = sessionRead ? hold : undefined;
+      // Delay the full financial read, after locator routing and Session queue admission.
+      const financialRead = sessionRead && (url.searchParams.has('expand[0]') || url.searchParams.has('expand[]'));
+      const pending = financialRead ? hold : undefined;
       if (pending) hold = undefined;
       const response = await fetch(`http://127.0.0.1:${fake.port}${url.pathname}${url.search}`, {
         method: request.method,

@@ -1,4 +1,13 @@
-import { createKernelClient, type KernelClient } from '@rezics/client';
+import {
+  createKernelClient,
+  reviewedPersonRequests,
+  isReviewedPersonEndpoint,
+  type ReviewedPersonRead,
+  type ReviewedPersonSource,
+  type ReviewedPersonMerge,
+  type ReviewedPersonAdmission,
+  type KernelClient,
+} from '@rezics/client';
 import {
   BATCH_LIMIT,
   FIELD_GROUPS,
@@ -17,7 +26,38 @@ import {
 import { isDeepStrictEqual, types } from 'node:util';
 import { Check } from 'typebox/schema';
 import { checkBatch, checkRequest, checkResult } from './accepted-checks.ts';
-import { createImportFetch, MAX_IMPORT_BODY_BYTES, type ImportHttpOptions } from './import-fetch.ts';
+import { isImportSourceRecord, isImportSourceRecordMetadataResult } from './source-record-runtime.ts';
+import {
+  createImportFetch,
+  importRetryState,
+  MAX_IMPORT_BODY_BYTES,
+  MAX_IMPORT_DEADLINE_MS,
+  MAX_IMPORT_WAIT_MS,
+  MAX_IMPORT_TOTAL_WAIT_MS,
+  type ImportHttpOptions,
+  type ImportRetryState,
+} from './import-fetch.ts';
+import {
+  type ImportSourceRecordMetadataCommand,
+  type ImportSourceRecordMetadataResult,
+  type ImportSourceStatisticValue,
+  type ImportSourceStatisticClearValue,
+  type ImportSourceStatisticFigure,
+  type ImportPublicFigure,
+  type ClassificationAssociation,
+  type ClassificationClear,
+  type ClassificationObservation,
+  type ImportSourceClassificationPutResult,
+  type ImportSourceClassificationClearResult,
+  type SourceClassificationRead,
+} from './import-contract.ts';
+
+type SubjectAPI = ReturnType<KernelClient['subjects']>;
+export type ReviewedSubjectRead = NonNullable<Awaited<ReturnType<SubjectAPI['get']>>['data']>;
+export type ReviewedCandidatePage = NonNullable<Awaited<ReturnType<SubjectAPI['candidates']['get']>>['data']>;
+type CandidateAPI = ReturnType<SubjectAPI['candidates']>;
+export type ReviewedAcceptance = NonNullable<Awaited<ReturnType<CandidateAPI['$accept']['post']>>['data']>;
+export type ReviewedAdoption = NonNullable<Awaited<ReturnType<SubjectAPI['$adopt']['post']>>['data']>;
 
 export interface FenceTuple {
   source: string;
@@ -37,6 +77,14 @@ export type ImportTransportOptions = Omit<ImportHttpOptions, 'token'> & {
   onSession?: (token: string) => void;
   pollAttempts?: number;
   pollDelayMs?: number;
+  onDeniedResponse?: (denial: ImportDeniedResponse) => Promise<void>;
+};
+
+/** Opt-in private evidence sink; never receives request headers, bodies or credentials. */
+export type ImportDeniedResponse = {
+  method: string;
+  path: string;
+  response: Response;
 };
 
 const BODY_BYTES = 65536;
@@ -120,11 +168,69 @@ function idempotencyKey(key: string): string {
   return JSON.stringify(key);
 }
 
+function statisticAlias(body: Record<string, unknown>): void {
+  if (Object.hasOwn(body, 'sourceAlias'))
+    ensure(typeof body.sourceAlias === 'string' && /^[a-z][a-z0-9_-]{0,31}(?![\s\S])/.test(body.sourceAlias));
+}
+
+function observationToken(body: Record<string, unknown>): void {
+  if (!Object.hasOwn(body, 'expectedObservation')) return;
+  ensure(
+    body.expectedObservation === null ||
+      (typeof body.expectedObservation === 'string' && /^[0-9a-f]{64}$/.test(body.expectedObservation)),
+  );
+}
+
+function sourceStatisticBody(input: unknown): ImportSourceStatisticValue {
+  const value = snapshot(input, BODY_BYTES);
+  ensure(typeof value === 'object' && value !== null && !Array.isArray(value));
+  const body = value as Record<string, unknown>;
+  statisticAlias(body);
+  observationToken(body);
+  ensure(
+    Object.keys(body)
+      .filter((key) => key !== 'sourceAlias' && key !== 'expectedObservation')
+      .sort()
+      .join(',') === 'asOf,attribution,count,licence,mean,scale,sourceRecordId',
+  );
+  const scale = body.scale;
+  ensure(typeof scale === 'object' && scale !== null && !Array.isArray(scale));
+  const sourceScale = scale as Record<string, unknown>;
+  ensure(Object.keys(sourceScale).sort().join(',') === 'max,min');
+  ensure(sourceScale.min === 1 && sourceScale.max === 10);
+  ensure(
+    typeof body.sourceRecordId === 'string' &&
+      body.sourceRecordId.length > 0 &&
+      Buffer.byteLength(body.sourceRecordId, 'utf8') <= 1024 &&
+      typeof body.mean === 'number' &&
+      Number.isFinite(body.mean) &&
+      body.mean >= 1 &&
+      body.mean <= 10 &&
+      typeof body.count === 'number' &&
+      Number.isSafeInteger(body.count) &&
+      body.count > 0 &&
+      body.count <= 2_147_483_647 &&
+      typeof body.asOf === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(body.asOf) &&
+      new Date(`${body.asOf}T00:00:00.000Z`).toISOString().slice(0, 10) === body.asOf &&
+      typeof body.licence === 'string' &&
+      body.licence.length > 0 &&
+      Buffer.byteLength(body.licence, 'utf8') <= 1024 &&
+      typeof body.attribution === 'string' &&
+      body.attribution.length > 0 &&
+      Buffer.byteLength(body.attribution, 'utf8') <= 2000,
+  );
+  return body as ImportSourceStatisticValue;
+}
+
 /** Error diagnostics retain only the HTTP classifier, never remote bodies or credentials. */
 export class ImportTransportError extends Error {
   constructor(
     readonly status?: number,
     readonly type?: string,
+    readonly code?: string,
+    readonly retryable = false,
+    readonly retry?: ImportRetryState,
   ) {
     super('Import transport request failed');
     this.name = 'ImportTransportError';
@@ -146,9 +252,25 @@ function httpFailure(reply: ClientResponse): ImportTransportError {
     (type !== undefined && /^https:\/\/rezics\.com\/problems\/[a-z0-9_-]{1,80}(?![\s\S])/.test(type))
       ? type
       : undefined;
-  return new ImportTransportError(reply.response?.status, safeType);
+  const field = (name: string): unknown =>
+    typeof value === 'object' && value !== null && !types.isProxy(value)
+      ? Object.getOwnPropertyDescriptor(value, name)?.value
+      : undefined;
+  const code = field('code');
+  const safeCode = typeof code === 'string' && /^[a-z0-9_-]{1,80}$/.test(code) ? code : undefined;
+  return new ImportTransportError(
+    reply.response?.status,
+    safeType,
+    safeCode,
+    field('retryable') === true,
+    reply.response ? importRetryState(reply.response) : undefined,
+  );
 }
-async function response(call: () => Promise<ClientResponse>, expected: number, signal?: AbortSignal) {
+async function response(
+  call: () => Promise<ClientResponse>,
+  expected: number | readonly number[],
+  signal?: AbortSignal,
+) {
   signal?.throwIfAborted();
   let reply: ClientResponse;
   try {
@@ -158,7 +280,16 @@ async function response(call: () => Promise<ClientResponse>, expected: number, s
     throw new ImportTransportError();
   }
   signal?.throwIfAborted();
-  if (!reply.response || reply.error || reply.status !== expected) throw httpFailure(reply);
+  if (
+    !reply.response ||
+    reply.error ||
+    !(typeof expected === 'number' ? reply.status === expected : expected.includes(reply.status))
+  )
+    throw httpFailure(reply);
+  if (expected === 204) {
+    ensure(reply.data === undefined || reply.data === null || reply.data === '');
+    return { status: reply.status, body: null };
+  }
   return { status: reply.status, body: snapshot(reply.data, RESPONSE_BYTES) };
 }
 
@@ -200,6 +331,10 @@ export function createImportTransport(options: ImportTransportOptions) {
   const pollDelayMs = setting(options.pollDelayMs, 1000, 1000);
   ensure((pollAttempts - 1) * pollDelayMs <= 4000);
   setting(options.maxAttempts, 3, 5, 1);
+  const deadlineMs = setting(options.deadlineMs, MAX_IMPORT_DEADLINE_MS, MAX_IMPORT_DEADLINE_MS, 1);
+  const maxWaitMs = setting(options.maxWaitMs, MAX_IMPORT_WAIT_MS, MAX_IMPORT_WAIT_MS);
+  const maxTotalWaitMs = setting(options.maxTotalWaitMs, MAX_IMPORT_TOTAL_WAIT_MS, MAX_IMPORT_TOTAL_WAIT_MS);
+  const now = options.now ?? Date.now;
   const bodyLimit = Math.min(BODY_BYTES, setting(options.maxBodyBytes, BODY_BYTES, MAX_IMPORT_BODY_BYTES));
   // Validate even when a preconstructed client is supplied; no credential hook runs here.
   const origin = new URL(options.origin);
@@ -212,22 +347,219 @@ export function createImportTransport(options: ImportTransportOptions) {
       !origin.hash,
   );
   const importFetch = options.importFetch ?? createImportFetch({ ...options, token: options.tokenProvider });
+  const observedFetch: typeof fetch = options.onDeniedResponse
+    ? Object.assign(
+        async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+          const request = new Request(input, init);
+          const reply = await importFetch(request);
+          if (reply.status === 401 || reply.status === 403) {
+            await options.onDeniedResponse!({
+              method: request.method,
+              path: new URL(request.url).pathname,
+              response: reply.clone(),
+            });
+          }
+          return reply;
+        },
+        { preconnect: importFetch.preconnect },
+      )
+    : importFetch;
   const client =
     options.client ??
     createKernelClient(options.origin, {
-      fetch: importFetch,
+      fetch: observedFetch,
       ...(options.session === undefined ? {} : { session: options.session }),
       ...(options.onSession === undefined ? {} : { onSession: options.onSession }),
     });
   const fetchOptions = (signal?: AbortSignal) => (signal === undefined ? {} : { fetch: { signal } });
 
   async function sendBatch(body: BatchWriteRequest, signal?: AbortSignal): Promise<BatchWriteResult> {
-    const reply = await response(() => client.subjects.$batchWrite.post(body, fetchOptions(signal)), 200, signal);
-    ensure(checkResult(reply.body).length === 0);
-    const result = reply.body as BatchWriteResult;
-    ensure(result.results.length === body.commands.length);
-    result.results.forEach((item, index) => ensure(item.key === body.commands[index]!.key));
-    return result;
+    const results: BatchWriteResult['results'] = [];
+    let indices = body.commands.map((_, index) => index);
+    const controller = new AbortController();
+    const aborted = () => controller.abort(signal?.reason);
+    signal?.throwIfAborted();
+    signal?.addEventListener('abort', aborted, { once: true });
+    const deadline = now() + deadlineMs;
+    let clearDeadline: (() => void) | undefined;
+    let scheduledWait = 0;
+    try {
+      const expire = () => controller.abort(new DOMException('Import batch deadline exceeded', 'TimeoutError'));
+      clearDeadline = options.schedule
+        ? options.schedule(expire, deadlineMs)
+        : (() => {
+            const timer = setTimeout(expire, deadlineMs);
+            return () => clearTimeout(timer);
+          })();
+      for (let attempt = 0; ; attempt++) {
+        const request = { commands: indices.map((index) => body.commands[index]!) };
+        const reply = await response(
+          () => client.subjects.$batchWrite.post(request, fetchOptions(controller.signal)),
+          200,
+          controller.signal,
+        );
+        ensure(checkResult(reply.body).length === 0);
+        const result = reply.body as BatchWriteResult;
+        ensure(result.results.length === request.commands.length);
+        result.results.forEach((item, index) => {
+          ensure(item.key === request.commands[index]!.key);
+          results[indices[index]!] = item;
+        });
+        indices = indices.filter((index) => {
+          const item = results[index]!;
+          return (
+            (item.status === 503 || item.status === 429) &&
+            'problem' in item &&
+            (item.problem as { retryable?: unknown }).retryable === true
+          );
+        });
+        const delay = 100 * 2 ** attempt;
+        if (
+          !indices.length ||
+          attempt >= 2 ||
+          delay > maxWaitMs ||
+          delay > maxTotalWaitMs - scheduledWait ||
+          now() + delay >= deadline
+        )
+          return { results };
+        // Retain successful receipts; retry only explicit overloads with unchanged keys and bodies.
+        scheduledWait += delay;
+        await wait(delay, controller.signal, options.sleep);
+        if (now() >= deadline) return { results };
+      }
+    } finally {
+      clearDeadline?.();
+      signal?.removeEventListener('abort', aborted);
+    }
+  }
+  async function setSourceRecordMetadata(
+    input: { command: ImportSourceRecordMetadataCommand; idempotencyKey: string },
+    signal?: AbortSignal,
+  ): Promise<ImportSourceRecordMetadataResult> {
+    const body = snapshot(input.command, bodyLimit) as ImportSourceRecordMetadataCommand;
+    ensure(
+      body &&
+        typeof body === 'object' &&
+        Object.keys(body).sort().join(',') === 'expected_metadata_revision,external_id,metadata,source' &&
+        typeof body.source === 'string' &&
+        /^[a-z][a-z0-9_-]{0,31}$/.test(body.source) &&
+        typeof body.external_id === 'string' &&
+        body.external_id.length > 0 &&
+        body.external_id.length <= 255 &&
+        isImportSourceRecord(body.metadata) &&
+        (body.expected_metadata_revision === null ||
+          (Number.isSafeInteger(body.expected_metadata_revision) && body.expected_metadata_revision > 0)),
+    );
+    const reply = await response(
+      () =>
+        client['source-records'].$setMetadata.post(body, {
+          headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
+          ...fetchOptions(signal),
+        }),
+      [200, 201],
+      signal,
+    );
+    ensure(isImportSourceRecordMetadataResult(reply.body));
+    return reply.body;
+  }
+  function statisticFigure(
+    body: unknown,
+    source: 'vndb',
+    request: ImportSourceStatisticValue,
+  ): ImportSourceStatisticFigure {
+    const value = snapshot(body, RESPONSE_BYTES);
+    ensure(typeof value === 'object' && value !== null && !Array.isArray(value));
+    const { expectedObservation: _echo, ...row } = value as Record<string, unknown>;
+    const observation = row.observation;
+    const { expectedObservation: _expected, ...fields } = request as ImportSourceStatisticValue & {
+      expectedObservation?: string | null;
+    };
+    const expected = JSON.parse(JSON.stringify({ source, ...fields })) as Record<string, unknown>;
+    delete expected.expectedObservation;
+    if (expected.sourceAlias === source) delete expected.sourceAlias;
+    if (observation !== undefined) {
+      ensure(
+        typeof observation === 'object' &&
+          observation !== null &&
+          !Array.isArray(observation) &&
+          Object.keys(observation).sort().join(',') === 'digest,kind' &&
+          (observation as { kind: unknown }).kind === 'unversioned' &&
+          typeof (observation as { digest: unknown }).digest === 'string' &&
+          /^[0-9a-f]{64}$/.test((observation as { digest: string }).digest),
+      );
+      expected.observation = observation;
+    }
+    ensure(isDeepStrictEqual(JSON.parse(JSON.stringify(row)), expected));
+    return row as ImportSourceStatisticFigure;
+  }
+
+  async function writeSourceStatistic(
+    input: {
+      subjectId: string;
+      source: 'vndb';
+      value: ImportSourceStatisticValue;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<void> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId) && input.source === 'vndb');
+    const body = sourceStatisticBody(input.value);
+    const reply = await response(
+      () =>
+        client
+          .subjects({ id: input.subjectId })
+          ['source-statistics']({ source: input.source })
+          .put(body as never, {
+            headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
+            ...fetchOptions(signal),
+          }),
+      200,
+      signal,
+    );
+    statisticFigure(reply.body, input.source, body);
+  }
+  async function clearSourceStatistic(
+    input: {
+      subjectId: string;
+      source: 'vndb';
+      value: ImportSourceStatisticClearValue;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<void> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId) && input.source === 'vndb');
+    const value = snapshot(input.value, BODY_BYTES) as Record<string, unknown>;
+    ensure(value !== null && typeof value === 'object' && !Array.isArray(value));
+    statisticAlias(value);
+    observationToken(value);
+    ensure(
+      Object.keys(value)
+        .filter((key) => key !== 'sourceAlias' && key !== 'expectedObservation')
+        .sort()
+        .join(',') === 'asOf,count,sourceRecordId',
+    );
+    ensure(
+      typeof value.sourceRecordId === 'string' &&
+        value.sourceRecordId.length > 0 &&
+        Buffer.byteLength(value.sourceRecordId) <= 1024 &&
+        value.count === 0 &&
+        typeof value.asOf === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/.test(value.asOf) &&
+        new Date(`${value.asOf}T00:00:00.000Z`).toISOString().slice(0, 10) === value.asOf,
+    );
+    // The generated client maps the registered custom method to the public :clear URL.
+    await response(
+      () =>
+        client
+          .subjects({ id: input.subjectId })
+          ['source-statistics']({ source: input.source })
+          .$clear.post(value as never, {
+            headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
+            ...fetchOptions(signal),
+          }),
+      204,
+      signal,
+    );
   }
   async function batch(input: BatchWriteRequest, signal?: AbortSignal): Promise<BatchWriteResult> {
     return sendBatch(requestBody(input, bodyLimit), signal);
@@ -290,8 +622,9 @@ export function createImportTransport(options: ImportTransportOptions) {
         typeof value === 'object' &&
         Object.keys(value).length === 2 &&
         typeof value.fenced === 'boolean' &&
-        (value.securityRevision === null ||
-          (typeof value.securityRevision === 'string' && value.securityRevision.length > 0)),
+        (value.fenced
+          ? typeof value.securityRevision === 'string' && value.securityRevision.length > 0
+          : value.securityRevision === null),
     );
     return value as { fenced: boolean; securityRevision: string | null };
   }
@@ -368,5 +701,351 @@ export function createImportTransport(options: ImportTransportOptions) {
     if ((await fence(tuple, signal)).fenced) return { outcome: 'fenced' };
     return media(body, key, signal);
   }
-  return { batch, batches, fence, refreshCover, media, importFromUrl, importStatus, requestMedia, mediaStatus };
+  // These use the same verified credentials, bounded fetch, session and native errors as imports.
+  async function readReviewedSubject(id: string, signal?: AbortSignal): Promise<ReviewedSubjectRead> {
+    mediaId(id);
+    const visited = new Set<string>();
+    let current = id;
+    while (!visited.has(current)) {
+      visited.add(current);
+      const reply = await client.subjects({ id: current }).get({
+        fetch: { ...(signal === undefined ? {} : { signal }), redirect: 'manual' },
+      });
+      if (reply.status !== 308) {
+        const result = await response(async () => reply, 200, signal);
+        const read = result.body as ReviewedSubjectRead;
+        ensure(read?.subject?.id === current);
+        return read;
+      }
+      const redirected = snapshot(reply.error?.value ?? reply.data, RESPONSE_BYTES) as {
+        redirect?: { from?: unknown; to?: unknown };
+      };
+      ensure(redirected.redirect?.from === current && typeof redirected.redirect.to === 'string');
+      const target = redirected.redirect!.to as string;
+      mediaId(target);
+      current = target;
+    }
+    throw new TypeError('Cyclic reviewed subject redirect');
+  }
+  async function readReviewedPersonIdentity(
+    id: string,
+    source: ReviewedPersonSource,
+    signal?: AbortSignal,
+  ): Promise<ReviewedPersonRead> {
+    const reply = await response(
+      () => reviewedPersonRequests(client).read(id, source, fetchOptions(signal)),
+      200,
+      signal,
+    );
+    const read = reply.body as ReviewedPersonRead;
+    if (read.reviewedIdentity != null) {
+      const endpoint = read.reviewedIdentity;
+      ensure(
+        isReviewedPersonEndpoint(endpoint) &&
+          endpoint.subject === id &&
+          read.subject.id === id &&
+          read.subject.type === 'schema:Person' &&
+          endpoint.source === source.source &&
+          endpoint.externalId === source.externalId,
+      );
+    }
+    return read;
+  }
+  async function mergeReviewedPersons(
+    body: ReviewedPersonMerge,
+    key: string,
+    signal?: AbortSignal,
+  ): Promise<ReviewedPersonAdmission> {
+    const safe = snapshot(body, BODY_BYTES) as ReviewedPersonMerge;
+    const reply = await response(
+      () =>
+        reviewedPersonRequests(client).merge(safe, {
+          headers: { 'idempotency-key': idempotencyKey(key) },
+          ...fetchOptions(signal),
+        }),
+      202,
+      signal,
+    );
+    const result = reply.body as ReviewedPersonAdmission;
+    ensure(typeof result?.operation?.id === 'string' && uuid.test(result.operation.id));
+    return result;
+  }
+  async function reviewedCandidates(
+    id: string,
+    query: { property: string; target?: string; sameAs?: string; context: string; limit: number },
+    signal?: AbortSignal,
+  ): Promise<ReviewedCandidatePage> {
+    mediaId(id);
+    const safe = snapshot(query, BODY_BYTES) as typeof query;
+    const reply = await response(
+      () => client.subjects({ id }).candidates.get({ query: safe, ...fetchOptions(signal) }),
+      200,
+      signal,
+    );
+    return reply.body as ReviewedCandidatePage;
+  }
+  async function acceptReviewedCandidate(
+    id: string,
+    candidate: string,
+    body: Parameters<CandidateAPI['$accept']['post']>[0],
+    key: string,
+    signal?: AbortSignal,
+  ): Promise<ReviewedAcceptance> {
+    mediaId(id);
+    mediaId(candidate);
+    const safe = snapshot(body, BODY_BYTES) as typeof body;
+    const reply = await response(
+      () =>
+        client
+          .subjects({ id })
+          .candidates({ candidate })
+          .$accept.post(safe, {
+            headers: { 'idempotency-key': idempotencyKey(key) },
+            ...fetchOptions(signal),
+          }),
+      200,
+      signal,
+    );
+    return reply.body as ReviewedAcceptance;
+  }
+  async function adoptReviewedCandidates(
+    id: string,
+    body: Parameters<SubjectAPI['$adopt']['post']>[0],
+    key: string,
+    signal?: AbortSignal,
+  ): Promise<ReviewedAdoption> {
+    mediaId(id);
+    const safe = snapshot(body, BODY_BYTES) as typeof body;
+    const reply = await response(
+      () =>
+        client.subjects({ id }).$adopt.post(safe, {
+          headers: { 'idempotency-key': idempotencyKey(key) },
+          ...fetchOptions(signal),
+        }),
+      200,
+      signal,
+    );
+    return reply.body as ReviewedAdoption;
+  }
+  async function readSourceStatistics(
+    input: { subjectId: string },
+    signal?: AbortSignal,
+  ): Promise<readonly ImportSourceStatisticFigure[]> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
+    const reply = await response(
+      () => client.subjects({ id: input.subjectId })['source-statistics'].get(fetchOptions(signal)),
+      200,
+      signal,
+    );
+    const list = snapshot(reply.body, RESPONSE_BYTES);
+    ensure(Array.isArray(list) && list.length <= 2);
+    return list.map((row) => {
+      ensure(typeof row === 'object' && row !== null && !Array.isArray(row));
+      const value = row as Record<string, unknown>;
+      ensure(value.source === 'vndb' || value.source === 'bangumi');
+      statisticAlias(value);
+      const observation = value.observation;
+      if (observation !== undefined) {
+        ensure(
+          typeof observation === 'object' &&
+            observation !== null &&
+            !Array.isArray(observation) &&
+            Object.keys(observation).sort().join(',') === 'digest,kind' &&
+            (observation as { kind: unknown }).kind === 'unversioned' &&
+            typeof (observation as { digest: unknown }).digest === 'string' &&
+            /^[0-9a-f]{64}$/.test((observation as { digest: string }).digest),
+        );
+      }
+      ensure(
+        typeof value.sourceRecordId === 'string' && typeof value.asOf === 'string' && typeof value.count === 'number',
+      );
+      return value as ImportSourceStatisticFigure;
+    });
+  }
+  function classifications(subjectId: string) {
+    return client.subjects({ id: subjectId })['source-classifications'];
+  }
+  function associationBody(association: unknown): ClassificationAssociation {
+    const value = snapshot(association, BODY_BYTES);
+    ensure(typeof value === 'object' && value !== null && !Array.isArray(value));
+    const body = value as Record<string, unknown>;
+    ensure(
+      Object.keys(body).sort().join(',') ===
+        'candidateId,contextId,property,qualifiersDigest,release,revision,subjectId,targetId',
+    );
+    ensure(
+      typeof body.subjectId === 'string' &&
+        uuid.test(body.subjectId) &&
+        typeof body.candidateId === 'string' &&
+        uuid.test(body.candidateId) &&
+        typeof body.contextId === 'string' &&
+        uuid.test(body.contextId) &&
+        typeof body.targetId === 'string' &&
+        uuid.test(body.targetId) &&
+        typeof body.property === 'string' &&
+        body.property.length > 0 &&
+        body.property.length <= 256 &&
+        Number.isInteger(body.revision) &&
+        (body.revision as number) >= 1 &&
+        typeof body.release === 'string' &&
+        /^sha256:[0-9a-f]{64}$/.test(body.release) &&
+        typeof body.qualifiersDigest === 'string' &&
+        /^[0-9a-f]{64}$/.test(body.qualifiersDigest),
+    );
+    return body as ClassificationAssociation;
+  }
+  async function readSourceClassifications(
+    input: { subjectId: string; associations: readonly ClassificationAssociation[] },
+    signal?: AbortSignal,
+  ): Promise<readonly SourceClassificationRead[]> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
+    ensure(Array.isArray(input.associations) && input.associations.length <= 32);
+    const associations = input.associations.map(associationBody);
+    const reply = await response(
+      () => classifications(input.subjectId).$read.post({ associations }, fetchOptions(signal)),
+      200,
+      signal,
+    );
+    const value = snapshot(reply.body, RESPONSE_BYTES);
+    ensure(typeof value === 'object' && value !== null && !Array.isArray(value) && 'items' in value);
+    const items = (value as { items: unknown }).items;
+    ensure(Array.isArray(items) && items.length === associations.length);
+    return items as SourceClassificationRead[];
+  }
+  async function writeSourceClassification(
+    input: {
+      subjectId: string;
+      association: ClassificationAssociation;
+      value: ClassificationObservation;
+      expectedObservation: string | null;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<ImportSourceClassificationPutResult> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
+    const association = associationBody(input.association);
+    ensure(association.subjectId === input.subjectId);
+    const value = snapshot(input.value, BODY_BYTES);
+    ensure(
+      input.expectedObservation === null ||
+        (typeof input.expectedObservation === 'string' && /^[0-9a-f]{64}$/.test(input.expectedObservation)),
+    );
+    const body = await response(
+      () =>
+        classifications(input.subjectId).$put.post(
+          {
+            association,
+            expectedObservation: input.expectedObservation,
+            value: value as ClassificationObservation,
+          },
+          {
+            headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
+            ...fetchOptions(signal),
+          },
+        ),
+      200,
+      signal,
+    );
+    const reply = snapshot(body.body, RESPONSE_BYTES) as Record<string, unknown>;
+    ensure(
+      typeof reply === 'object' &&
+        reply !== null &&
+        typeof reply.observationDigest === 'string' &&
+        /^[0-9a-f]{64}$/.test(reply.observationDigest) &&
+        reply.state === 'published' &&
+        typeof reply.figure === 'object' &&
+        reply.figure !== null,
+    );
+    return reply as ImportSourceClassificationPutResult;
+  }
+  async function clearSourceClassification(
+    input: {
+      subjectId: string;
+      association: ClassificationAssociation;
+      value: ClassificationClear;
+      expectedObservation: string | null;
+      idempotencyKey: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<ImportSourceClassificationClearResult> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
+    const association = associationBody(input.association);
+    ensure(association.subjectId === input.subjectId);
+    const value = snapshot(input.value, BODY_BYTES);
+    ensure(
+      input.expectedObservation === null ||
+        (typeof input.expectedObservation === 'string' && /^[0-9a-f]{64}$/.test(input.expectedObservation)),
+    );
+    const body = await response(
+      () =>
+        classifications(input.subjectId).$clear.post(
+          {
+            association,
+            expectedObservation: input.expectedObservation,
+            value: value as ClassificationClear,
+          },
+          {
+            headers: { 'idempotency-key': idempotencyKey(input.idempotencyKey) },
+            ...fetchOptions(signal),
+          },
+        ),
+      200,
+      signal,
+    );
+    const reply = snapshot(body.body, RESPONSE_BYTES) as Record<string, unknown>;
+    ensure(
+      typeof reply === 'object' &&
+        reply !== null &&
+        typeof reply.observationDigest === 'string' &&
+        /^[0-9a-f]{64}$/.test(reply.observationDigest) &&
+        reply.state === 'cleared',
+    );
+    return reply as ImportSourceClassificationClearResult;
+  }
+  async function readPublicFigure(input: { subjectId: string }, signal?: AbortSignal): Promise<ImportPublicFigure> {
+    ensure(typeof input.subjectId === 'string' && uuid.test(input.subjectId));
+    const reply = await response(
+      () => client.subjects({ id: input.subjectId }).figure.get(fetchOptions(signal)),
+      200,
+      signal,
+    );
+    const body = snapshot(reply.body, RESPONSE_BYTES);
+    ensure(typeof body === 'object' && body !== null && !Array.isArray(body) && 'figure' in body);
+    const figure = (body as { figure: unknown }).figure;
+    ensure(typeof figure === 'object' && figure !== null && !Array.isArray(figure));
+    const value = figure as Record<string, unknown>;
+    ensure(
+      typeof value.count === 'number' &&
+        Number.isSafeInteger(value.count) &&
+        value.count >= 0 &&
+        (value.state === 'ready' || value.state === 'insufficient_data' || value.state === 'updating') &&
+        (value.mean === null || typeof value.mean === 'number'),
+    );
+    return figure as ImportPublicFigure;
+  }
+  return {
+    readReviewedSubject,
+    readReviewedPersonIdentity,
+    mergeReviewedPersons,
+    reviewedCandidates,
+    acceptReviewedCandidate,
+    adoptReviewedCandidates,
+    setSourceRecordMetadata,
+    batch,
+    batches,
+    fence,
+    writeSourceStatistic,
+    clearSourceStatistic,
+    readSourceStatistics,
+    readPublicFigure,
+    readSourceClassifications,
+    writeSourceClassification,
+    clearSourceClassification,
+    refreshCover,
+    media,
+    importFromUrl,
+    importStatus,
+    requestMedia,
+    mediaStatus,
+  };
 }

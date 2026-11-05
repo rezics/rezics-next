@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -51,6 +52,7 @@ const complete = (newPassword = replacement, value = token) =>
     token: value,
     new_password: newPassword,
   });
+const projected = async (response: Response) => [response.status, await response.text()] as const;
 const snapshot = async () => ({
   credential: (await database.query(`SELECT id,password,"updatedAt" FROM account WHERE "userId"='human'`)).rows,
   source: (await database.query(`SELECT * FROM auth_recovery WHERE account_id='human' ORDER BY proof_hash`)).rows,
@@ -79,7 +81,10 @@ beforeAll(async () => {
         token = value.token;
       },
     },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
+      async readFencedAccount(id) {
+        return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+      },
       async readAccount(id) {
         return id === current.accountId && !current.fenced ? current : null;
       },
@@ -121,7 +126,7 @@ beforeAll(async () => {
         current.fenced = false;
         lastReference = reference;
       },
-    },
+    }),
   };
   service = await createAuthService(options);
   await service.internal.provisionPassword({ authorization: 'pending', email: 'human@completion.test', password });
@@ -139,18 +144,21 @@ test('missing completion is unavailable and invalid Auth never invokes the trust
   const missingCompletion = { ...options.trustedAccess };
   delete missingCompletion.completeRecovery;
   service = await createAuthService({ ...options, trustedAccess: missingCompletion });
-  expect((await complete()).status).toBe(503);
+  expect(await projected(await complete())).toEqual([503, '{"error":"authentication_denied"}']);
   expect(await snapshot()).toEqual(saved);
   service = await createAuthService(options);
-  expect((await complete(replacement, 'wrong token')).status).toBe(401);
-  expect((await complete('short')).status).toBe(400);
+  expect(await projected(await complete(replacement, 'wrong token'))).toEqual([
+    401,
+    '{"error":"authentication_denied"}',
+  ]);
+  expect(await projected(await complete('short'))).toEqual([400, '{"error":"authentication_denied"}']);
   expect(calls).toBe(0);
   expect(clears).toBe(0);
 });
 
 test('cross-service failure retains committed witness and exact resume never mutates credentials or consumes proof again', async () => {
   failCompletion = true;
-  expect((await complete()).status).toBe(503);
+  expect(await projected(await complete())).toEqual([503, '{"error":"authentication_denied"}']);
   expect(current.fenced).toBe(true);
   expect(current.authnEpoch).toBe(8);
   const saved = await snapshot();
@@ -170,14 +178,14 @@ test('cross-service failure retains committed witness and exact resume never mut
   ).toBe(401);
   service = await createAuthService(options);
   failCompletion = false;
-  expect((await complete()).status).toBe(200);
+  expect(await projected(await complete())).toEqual([200, '{"success":true}']);
   expect(current.fenced).toBe(false);
   expect(current.authnEpoch).toBe(8);
   expect(calls).toBe(1);
   expect(clears).toBe(1);
   expect(lastReference).toBe(saved.witnesses[0]!.reference);
   expect(await snapshot()).toEqual(saved);
-  expect((await complete()).status).toBe(200);
+  expect(await projected(await complete())).toEqual([200, '{"success":true}']);
   expect(clears).toBe(1);
   expect(await snapshot()).toEqual(saved);
   expect(
@@ -191,7 +199,7 @@ test('cross-service failure retains committed witness and exact resume never mut
     ).status,
   ).toBe(200);
   current.authnEpoch++;
-  expect((await complete()).status).toBe(401);
+  expect(await projected(await complete())).toEqual([401, '{"error":"authentication_denied"}']);
   expect(clears).toBe(1);
 });
 
@@ -210,4 +218,17 @@ test('original witness expiry denies completion without maintenance or a renewed
     (await database.query('SELECT reference FROM auth_recovery_establishment WHERE reference=$1', [reference]))
       .rowCount,
   ).toBe(1);
+});
+
+test('native completion validation and rate-limit refusals keep their admitted status envelope', async () => {
+  await database.query('DELETE FROM auth_attempt_counter');
+  for (let attempt = 0; attempt < 3; attempt++)
+    expect(await projected(await complete('short'))).toEqual([400, '{"error":"authentication_denied"}']);
+  const limited = await request('/recovery/complete', {
+    account_id: 'human',
+    token,
+    new_password: 'short',
+  });
+  expect(await projected(limited)).toEqual([429, '{"error":"authentication_denied"}']);
+  expect(limited.headers.get('retry-after')).toMatch(/^\d+$/);
 });

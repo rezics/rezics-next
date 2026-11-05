@@ -8,6 +8,10 @@ import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-co
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { createSuspensionCommands } from '../../src/access/suspension.ts';
 import { createLifecycleInternals } from '../../src/access/lifecycle.ts';
+import { createCredentialCapability } from '../../src/access/auth-credential-capability.ts';
+import { createOperatorCommands } from '../../src/access/operator.ts';
+import { createWorkflowApprovals } from '../../src/access/workflow-approvals.ts';
+import type { CredentialFloorBinding, SessionProof } from '@rezics/auth-contract';
 import { createThread } from '../../src/content/commands.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
@@ -30,6 +34,7 @@ const boardReadAction = 'board:read';
 const managementAction = 'access:grant';
 const suspensionAction = 'account:suspend';
 const delegationAction = 'account:delegate';
+const credentialManagementAction = 'account:manage';
 const threadCreatedEventType = 'com.rezics.content.thread.created.v1';
 const threadCommandKind = 'content.thread.create';
 
@@ -129,6 +134,7 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
     kernel = runtimeKernel;
     const actions = new Map(actionCatalogue(runtimeKernel));
     actions.set(delegationAction, { anonymous: false });
+    actions.set(credentialManagementAction, { anonymous: false });
     access = createAccess({
       actions,
       auth: {
@@ -155,7 +161,7 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
       accountId: string,
       scopes: readonly string[],
       requestedBy?: string,
-    ): Promise<{ token: string; expiresAt: number }> {
+    ): Promise<{ token: string; expiresAt: number; issuedAt: number }> {
       const issuedAt = Math.floor(Date.now() / 1000);
       const expiresAt = (issuedAt + 300) * 1000;
       const payload = {
@@ -174,7 +180,7 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
         .setIssuedAt(issuedAt)
         .setExpirationTime(issuedAt + 300)
         .sign(signing.privateKey);
-      return { token, expiresAt };
+      return { token, expiresAt, issuedAt };
     }
 
     async function insertAccount(id: string): Promise<void> {
@@ -225,6 +231,7 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
         visibility: 'published',
       };
       for (const id of [actorId, principalId]) await insertAccount(id);
+      await insertGrant({ route: routeOf(actorId)!, id: actorId }, actorId, credentialManagementAction);
       await insertBoard(resource, subjectId);
 
       for (const grantAction of [managementAction, action, boardReadAction]) {
@@ -365,18 +372,62 @@ export async function createCommandAdmissionDriver(): Promise<CommandAdmissionDr
         return;
       }
       if (fact === 'floor') {
-        await lifecycle.advanceAuthenticationFloor(
-          {
-            accountId: fixture.actor.accountId,
-            key: `floor-${randomUUID()}`,
-            purpose: 'consent-reduction',
-            expectedMinimumAuthnEpoch: fixture.actor.authnEpoch,
-            proofReference: 'a'.repeat(64),
-            proofDigest: 'b'.repeat(64),
-            proofExpiresAt: new Date(Date.now() + 60_000).toISOString(),
-          },
-          async () => true,
-        );
+        const scopes = [credentialManagementAction];
+        const bearer = await sign(fixture.actor.accountId, scopes);
+        const human: SessionProof = {
+          account_id: fixture.actor.accountId,
+          client_id: clientId,
+          scope: scopes,
+          authn_epoch: fixture.actor.authnEpoch,
+          auth_time: bearer.issuedAt,
+          amr: ['pwd'],
+        };
+        const stage: CredentialFloorBinding = {
+          operationKey: `floor-${randomUUID()}`,
+          effectReference: randomUUID(),
+          effectDigest: 'a'.repeat(64),
+          subjectAccountId: fixture.actor.accountId,
+          purpose: 'remove-key',
+          credentialRowId: randomUUID(),
+          credentialRowVersion: '1',
+          actingHumanId: human.account_id,
+          clientId,
+          scopes,
+        };
+        const referenceKeys = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(45)]]) };
+        const credential = createCredentialCapability({
+          pool: runtimePool,
+          access,
+          operators: createOperatorCommands({
+            pool: runtimePool,
+            access,
+            actions,
+            managementAction: credentialManagementAction,
+          }),
+          workflowApprovals: createWorkflowApprovals({ pool: runtimePool, access, actions, referenceKeys }),
+          referenceKeys,
+          // Fixture Auth evidence only; native Access approves, consumes and advances the floor.
+          accessTokenForProof: async () => bearer.token,
+          verifyCredentialEffect: async () => structuredClone(stage),
+        });
+        const opening = await credential.approveCredentialEffect({ stage, human, deadline });
+        const { authorization } = await credential.consumeAuthAuthorization({
+          authorization: opening.reference,
+          subjectAccountId: stage.subjectAccountId,
+          purpose: stage.purpose,
+          operationKey: stage.operationKey,
+          effectReference: stage.effectReference,
+          human,
+          deadline,
+        });
+        await credential.advanceCredentialFloor({
+          stage,
+          consumedOpening: authorization,
+          expectedPreviousFloor: fixture.actor.authnEpoch,
+          key: stage.operationKey,
+          purpose: stage.purpose,
+          deadline,
+        });
         return;
       }
       if (fact === 'fence') {

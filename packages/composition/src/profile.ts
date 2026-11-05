@@ -2,6 +2,8 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import canonicalize from 'canonicalize';
+import type { FilterRelease } from '@rezics/filter';
+import { validateDocumentFilters } from './filter.ts';
 import type {
   CompositionDocument,
   CompositionRegistry,
@@ -10,6 +12,7 @@ import type {
 } from './registry.ts';
 import { CURIE, curie } from './strings.ts';
 import { validateComposition } from './validate.ts';
+import { isView, VIEWS, type View, type ViewDocuments } from './views.ts';
 
 /** Identifier of a presentation profile. */
 export const PROFILE_FORMAT = 'https://rezics.com/presentation/profile/1';
@@ -49,25 +52,27 @@ interface Column {
   valid: (value: string) => boolean;
 }
 
-export interface ProfileBaseTemplate {
-  base: string;
-  document: CompositionDocument;
-}
+/**
+ * A template's documents: `views` holds one document per view, and `document` alone is the shorthand for a template
+ * that has only its overview.
+ */
+export type TemplateBody =
+  | { document: CompositionDocument; views?: undefined }
+  | { views: ViewDocuments; document?: undefined };
 
-export interface ProfileTypeTemplate {
-  type: string;
-  document: CompositionDocument;
-}
+export type ProfileBaseTemplate = { base: string } & TemplateBody;
 
-export interface ProfileRouteTemplate {
-  route: string;
-  document: CompositionDocument;
-}
+export type ProfileTypeTemplate = { type: string } & TemplateBody;
+
+export type ProfileRouteTemplate = { route: string } & TemplateBody;
+
+/** The generic page: its overview document, or `{ views }`. */
+export type GenericTemplate = CompositionDocument | { views: ViewDocuments };
 
 /** One generic page plus templates keyed by structural base, type and route. */
 export interface PresentationProfile {
   format: typeof PROFILE_FORMAT;
-  generic: CompositionDocument;
+  generic: GenericTemplate;
   bases: ProfileBaseTemplate[];
   types: ProfileTypeTemplate[];
   routes: ProfileRouteTemplate[];
@@ -169,6 +174,21 @@ function adopt(registry: CompositionRegistry, document: unknown, pointer: string
   for (const violation of violations) add(pointer + violation.pointer, violation.code);
 }
 
+/** The documents of `views`: only the closed view names, `overview` present, each a valid composition. */
+function validateViews(registry: CompositionRegistry, value: unknown, pointer: string, add: Add): void {
+  if (!isRecord(value)) {
+    add(pointer, 'invalid');
+    return;
+  }
+  for (const key of Object.keys(value)) {
+    if (!isView(key)) add(join(pointer, key), 'invalid');
+  }
+  if (!Object.hasOwn(value, 'overview')) add(join(pointer, 'overview'), 'invalid');
+  for (const view of VIEWS) {
+    if (Object.hasOwn(value, view)) adopt(registry, value[view], join(pointer, view), add);
+  }
+}
+
 function validateKeyedList(
   registry: CompositionRegistry,
   value: Record<string, unknown>,
@@ -196,7 +216,7 @@ function validateKeyedList(
       continue;
     }
     for (const key of Object.keys(entry)) {
-      if (key !== column.key && key !== 'document') add(join(entryPointer, key), 'invalid');
+      if (key !== column.key && key !== 'document' && key !== 'views') add(join(entryPointer, key), 'invalid');
     }
     const keyPointer = join(entryPointer, column.key);
     if (!Object.hasOwn(entry, column.key)) {
@@ -214,8 +234,13 @@ function validateKeyedList(
       } else previous = undefined;
     }
     const documentPointer = join(entryPointer, 'document');
-    if (!Object.hasOwn(entry, 'document')) add(documentPointer, 'invalid');
-    else adopt(registry, entry.document, documentPointer, add);
+    const viewsPointer = join(entryPointer, 'views');
+    if (Object.hasOwn(entry, 'views')) {
+      if (Object.hasOwn(entry, 'document')) add(documentPointer, 'invalid');
+      validateViews(registry, entry.views, viewsPointer, add);
+    } else if (!Object.hasOwn(entry, 'document')) add(documentPointer, 'invalid');
+    if (Object.hasOwn(entry, 'document') && !Object.hasOwn(entry, 'views'))
+      adopt(registry, entry.document, documentPointer, add);
   }
 }
 
@@ -229,7 +254,12 @@ function validateEnvelope(registry: CompositionRegistry, value: unknown, add: Ad
   }
   if (!Object.hasOwn(value, 'format') || value.format !== PROFILE_FORMAT) add('/format', 'invalid');
   if (!Object.hasOwn(value, 'generic')) add('/generic', 'invalid');
-  else adopt(registry, value.generic, '/generic', add);
+  else if (isRecord(value.generic) && Object.hasOwn(value.generic, 'views')) {
+    for (const key of Object.keys(value.generic)) {
+      if (key !== 'views') add(join('/generic', key), 'invalid');
+    }
+    validateViews(registry, value.generic.views, '/generic/views', add);
+  } else adopt(registry, value.generic, '/generic', add);
   for (const column of COLUMNS) validateKeyedList(registry, value, column, add);
 }
 
@@ -279,23 +309,86 @@ function findSorted<T>(entries: readonly T[], key: string, read: (entry: T) => s
   return undefined;
 }
 
+/** The documents of a template: its `views`, or its lone `document` as the overview. */
+export function templateViews(template: TemplateBody | GenericTemplate): Partial<ViewDocuments> {
+  if ('views' in template && template.views !== undefined) return template.views;
+  if ('document' in template && template.document !== undefined) return { overview: template.document };
+  return { overview: template as CompositionDocument };
+}
+
+type Candidate = { scope: ResolvedTemplate['scope']; key: string | null; template: TemplateBody | GenericTemplate };
+
 /** Route, then type, then structural bases nearest first, then the generic page. */
-export function resolveTemplate(profile: PresentationProfile, target: TemplateTarget): ResolvedTemplate {
+function candidates(profile: PresentationProfile, target: TemplateTarget): Candidate[] {
+  const found: Candidate[] = [];
   if (target.route !== undefined) {
-    const found = findSorted(profile.routes, target.route, (entry) => entry.route);
-    if (found) return { scope: 'route', key: found.route, document: found.document };
+    const entry = findSorted(profile.routes, target.route, (item) => item.route);
+    if (entry) found.push({ scope: 'route', key: entry.route, template: entry });
   }
   if (target.type !== undefined) {
-    const found = findSorted(profile.types, target.type, (entry) => entry.type);
-    if (found) return { scope: 'type', key: found.type, document: found.document };
+    const entry = findSorted(profile.types, target.type, (item) => item.type);
+    if (entry) found.push({ scope: 'type', key: entry.type, template: entry });
   }
   const bases = target.bases;
   if (bases !== undefined) {
     for (let index = 0; index < bases.length; index++) {
       const base = bases[index]!;
-      const found = findSorted(profile.bases, base, (entry) => entry.base);
-      if (found) return { scope: 'base', key: found.base, document: found.document };
+      const entry = findSorted(profile.bases, base, (item) => item.base);
+      if (entry) found.push({ scope: 'base', key: entry.base, template: entry });
     }
   }
-  return { scope: 'generic', key: null, document: profile.generic };
+  found.push({ scope: 'generic', key: null, template: profile.generic });
+  return found;
+}
+
+/**
+ * The template that answers the target, then its document for the view. A template that lacks the view yields to the
+ * next in the resolution order, and the generic page is last; `null` when none defines the view.
+ */
+export function resolveView(profile: PresentationProfile, target: TemplateTarget, view: View): ResolvedTemplate | null {
+  for (const { scope, key, template } of candidates(profile, target)) {
+    const document = templateViews(template)[view];
+    if (document !== undefined) return { scope, key, document };
+  }
+  return null;
+}
+
+/** The views any template of the resolution order defines, in the order a page offers them. */
+export function definedViews(profile: PresentationProfile, target: TemplateTarget): View[] {
+  const chain = candidates(profile, target).map(({ template }) => templateViews(template));
+  return VIEWS.filter((view) => chain.some((views) => views[view] !== undefined));
+}
+
+/**
+ * Route, then type, then structural bases nearest first, then the generic page. The document is the overview of the
+ * first template in that order; the `bases` of a template are consulted for other views through `resolveView`.
+ */
+export function resolveTemplate(profile: PresentationProfile, target: TemplateTarget): ResolvedTemplate {
+  const resolved = resolveView(profile, target, 'overview');
+  if (!resolved) throw new Error('A profile always defines the generic overview');
+  return resolved;
+}
+
+/** Structural validation precedes this release-dependent publication check. */
+export function validateProfileFilters(
+  registry: CompositionRegistry,
+  profile: PresentationProfile,
+  release: FilterRelease,
+): CompositionViolation[] {
+  const errors: CompositionViolation[] = [];
+  const templates: [string, TemplateBody | GenericTemplate][] = [
+    ['/generic', profile.generic],
+    ...profile.bases.map((entry, index): [string, TemplateBody] => [`/bases/${index}`, entry]),
+    ...profile.types.map((entry, index): [string, TemplateBody] => [`/types/${index}`, entry]),
+    ...profile.routes.map((entry, index): [string, TemplateBody] => [`/routes/${index}`, entry]),
+  ];
+  for (const [pointer, template] of templates) {
+    for (const [view, document] of Object.entries(templateViews(template))) {
+      const path =
+        'views' in template ? `${pointer}/views/${view}` : 'document' in template ? `${pointer}/document` : pointer;
+      for (const violation of validateDocumentFilters(registry, document!, release))
+        errors.push({ ...violation, pointer: path + violation.pointer });
+    }
+  }
+  return errors.sort((a, b) => (a.pointer < b.pointer ? -1 : a.pointer > b.pointer ? 1 : 0)).slice(0, 64);
 }

@@ -1,6 +1,15 @@
+import { readNativePermissionAccount } from './account-authority.ts';
 import { requireAccessDeadline, throwAccessUnavailable } from './unavailable.ts';
 import { authoritativeTimeValue, type CommandAttempt } from '../command/command.ts';
-import type { Access, AccessContext, AccountActor, Actor } from '../request/access.ts';
+import { systemClock, type KernelClock } from '../clock.ts';
+import { identityExpired, type IdentityExpiry } from './identity-expiry.ts';
+import {
+  AuthenticationError,
+  type Access,
+  type AccessContext,
+  type AccountActor,
+  type Actor,
+} from '../request/access.ts';
 import { readAccount, type Account } from './account-data.ts';
 import { deadlineClient, within } from './authenticate.ts';
 import { accessRoot } from './derived-access.ts';
@@ -11,7 +20,13 @@ import { accessRoot } from './derived-access.ts';
 const contexts = new WeakMap<AccessContext, CommandAttempt>();
 export function commandAccessContext(context: AccessContext, attempt: CommandAttempt): AccessContext {
   authoritativeTimeValue(attempt.time);
-  const bound = { ...context };
+  const commandWork = attempt.commandWork;
+  if (commandWork && context.work && context.work !== commandWork.access)
+    throw new TypeError('Command Access work must use the original request frame');
+  const bound: AccessContext = {
+    ...context,
+    ...(commandWork ? { deadline: Math.min(context.deadline, commandWork.deadline), work: commandWork.access } : {}),
+  };
   contexts.set(bound, attempt);
   return bound;
 }
@@ -22,10 +37,11 @@ export function accessCommandAttempt(context: AccessContext): CommandAttempt | u
 }
 
 type Snapshot = Readonly<{
+  expiryClock?: IdentityExpiry['expiryClock'];
+  expires: number;
   account: Account;
   pool: AccessContext['pool'];
   deadline: number;
-  expires: number;
   durableTime?: import('../command/command.ts').AuthoritativeTime;
 }>;
 type CapturedAccount = Readonly<{ minimumAuthnEpoch: string; operatorAccountId: string | null }>;
@@ -51,12 +67,15 @@ export function admittedCommandAccount(context: AccessContext, actor: AccountAct
 }
 
 type Admission = (actor: Actor, context: AccessContext) => Promise<Account | null>;
-const admissions = new WeakMap<Access, Admission>();
+// Native Access can register while the request/command modules are loading.
+// Do not replace that registration when this module finishes evaluating.
+var admissions: WeakMap<Access, Admission> | undefined;
 export function installCommandAdmission(access: Access, admission: Admission): void {
   const root = accessRoot(access);
   if (root !== access) throw new Error('Cannot install command admission on derived Access');
-  if (admissions.has(root)) throw new Error('Command admission already installed');
-  admissions.set(root, admission);
+  const registry = (admissions ??= new WeakMap());
+  if (registry.has(root)) throw new Error('Command admission already installed');
+  registry.set(root, admission);
 }
 
 /** Operator's additional domain prerequisites consume this same observation.
@@ -69,7 +88,9 @@ export async function actingCommandAccount(
   context: AccessContext,
 ): Promise<Account | null> {
   if (!accessCommandAttempt(context)) throw new TypeError('Command admission requires a live attempt');
-  const admission = admissions.get(accessRoot(access));
+  const admission = admissions?.get(accessRoot(access));
+  if (!admission && context.work)
+    context.work.unavailable('Access installed command admission native account producer');
   return admission
     ? admission(actor, context)
     : readAccount(
@@ -78,10 +99,13 @@ export async function actingCommandAccount(
         actor.accountId,
       );
 }
+/** A missing registration refuses the command. An installed admission still
+ * checks only account actors; anonymous attempts add no actor read.
+ */
 export async function requireCommandAdmission(access: Access, actor: Actor, context: AccessContext): Promise<void> {
   if (!accessCommandAttempt(context)) throw new TypeError('Command admission requires a live attempt');
-  const admission = admissions.get(accessRoot(access));
-  if (admission && actor.kind === 'account' && !(await admission(actor, context)))
+  const admission = admissions?.get(accessRoot(access));
+  if (!admission || (actor.kind === 'account' && !(await admission(actor, context))))
     throw new Error('Command admission denied');
 }
 
@@ -89,10 +113,13 @@ export async function requireCommandAdmission(access: Access, actor: Actor, cont
  * replace the authenticated snapshot: even a changed floor below token epoch
  * revokes that snapshot. All action preparations share only this opaque result.
  */
-export function createCommandAdmission(identity: (actor: AccountActor) => Snapshot | undefined): Admission {
+export function createCommandAdmission(
+  identity: (actor: AccountActor) => Snapshot | undefined,
+  clock: KernelClock = systemClock,
+): Admission {
   const observations = new WeakMap<
     object,
-    WeakMap<AccountActor, { deadline: number; account: Promise<Account | null> }>
+    WeakMap<AccountActor, { deadline: number; work: AccessContext['work']; account: Promise<Account | null> }>
   >();
   return async (actor, context) => {
     requireAccessDeadline(context.deadline);
@@ -101,12 +128,12 @@ export function createCommandAdmission(identity: (actor: AccountActor) => Snapsh
     admitted.get(attempt.time)?.delete(actor);
     const snapshot = identity(actor);
     if (snapshot) requireAccessDeadline(snapshot.deadline);
-    const deadline = Math.min(context.deadline, snapshot?.deadline ?? -Infinity, snapshot?.expires ?? -Infinity);
+    const deadline = Math.min(context.deadline, snapshot?.deadline ?? -Infinity);
     if (
       !snapshot ||
+      identityExpired(snapshot, clock) ||
       snapshot.pool !== context.pool ||
       (snapshot.durableTime !== undefined && snapshot.durableTime !== attempt.time) ||
-      Date.now() >= snapshot.expires ||
       !Number.isFinite(deadline) ||
       attempt.basis?.actorAccountId !== actor.accountId ||
       attempt.basis.clientId !== actor.clientId ||
@@ -134,17 +161,20 @@ export function createCommandAdmission(identity: (actor: AccountActor) => Snapsh
       });
       return account;
     };
-    if (snapshot.durableTime === attempt.time) return remember(snapshot.account);
+    if (!context.work && snapshot.durableTime === attempt.time) return remember(snapshot.account);
     let actors = observations.get(attempt.time);
     if (!actors) {
       actors = new WeakMap();
       observations.set(attempt.time, actors);
     }
     let observation = actors.get(actor);
-    if (!observation) {
+    if (!observation || observation.work !== context.work) {
       const account = within(deadline, async () => {
         const original = snapshot.account;
-        const current = await readAccount(deadlineClient(context.pool, deadline), original.route, actor.accountId);
+        const current = context.work
+          ? await readNativePermissionAccount(deadlineClient(context.pool, deadline), actor.accountId, context.work)
+          : await readAccount(deadlineClient(context.pool, deadline), original.route, actor.accountId);
+        if (current?.state === 'suspended') throw new AuthenticationError(401, 'Bearer error="invalid_token"');
         return current &&
           current.accountId === original.accountId &&
           current.route === original.route &&
@@ -156,10 +186,12 @@ export function createCommandAdmission(identity: (actor: AccountActor) => Snapsh
           ? original
           : null;
       }).catch((error: unknown) => {
+        context.work?.fail(error);
         throwAccessUnavailable(error, deadline);
+        if (error instanceof AuthenticationError) throw error;
         return null;
       });
-      observation = { deadline, account };
+      observation = { deadline, work: context.work, account };
       actors.set(actor, observation);
     }
     const account = await observation.account;

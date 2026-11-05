@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -6,6 +7,13 @@ import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, idempotencyKeyOf, SESSION_HEADER } from '../http/request.ts';
 import { AuthenticationError } from '../request/access.ts';
+import { DecisionPageSchema, readDecisionPage } from './decision-page.ts';
+import type { ContentReadDependencies } from './reads.ts';
+import {
+  listModerationHistory,
+  ModerationHistoryPageSchema,
+  ModerationHistoryQuerySchema,
+} from './moderation-history.ts';
 import { erasePost, takedown } from './moderation.ts';
 import type { ModerationDependencies } from './moderation.ts';
 import { beginAuthorErasure, postEraseReceiptAccess, readOperation } from './operations.ts';
@@ -21,40 +29,63 @@ import {
 } from './schemas.ts';
 
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
-const sessionHeader = { [SESSION_HEADER]: t.String() };
-const reason = strictContentSchema(ModerationReasonSchema);
-const response = strictContentSchema(ModerationResponseSchema);
-const operation = strictContentSchema(OperationSchema);
-const readFailures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  500: problemSchema('internal_error'),
-  503: problemSchema('overloaded', 'deadline_exceeded', 'partition_unavailable', 'dependency_unavailable'),
-};
-const writeFailures = {
-  ...readFailures,
-  403: problemSchema('forbidden'),
-  413: problemSchema('content_too_large'),
-  422: problemSchema('idempotency_conflict', 'too_many_events'),
-  429: problemSchema('rate_limited'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-    'rate_limit_unavailable',
-  ),
-};
-const writeRate = defineRateLimit({ family: 'write', units: 1 });
-function detail(operationId: string, action: 'moderation:takedown' | 'post:erase') {
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }));
+}
+function sessionHeader() {
+  return memoizedValue(sessionHeader, () => ({ [SESSION_HEADER]: t.String() }));
+}
+function reason() {
+  return memoizedValue(reason, () => strictContentSchema(ModerationReasonSchema));
+}
+function response() {
+  return memoizedValue(response, () => strictContentSchema(ModerationResponseSchema));
+}
+function operation() {
+  return memoizedValue(operation, () => strictContentSchema(OperationSchema));
+}
+function readFailures() {
+  return memoizedValue(readFailures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    500: problemSchema('internal_error'),
+    503: problemSchema('overloaded', 'deadline_exceeded', 'partition_unavailable', 'dependency_unavailable'),
+  }));
+}
+function historyReadFailures() {
+  return memoizedValue(historyReadFailures, () => ({
+    ...readFailures(),
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+  }));
+}
+function writeFailures() {
+  return memoizedValue(writeFailures, () => ({
+    ...readFailures(),
+    403: problemSchema('forbidden'),
+    413: problemSchema('content_too_large'),
+    422: problemSchema('idempotency_conflict', 'too_many_events'),
+    429: problemSchema('rate_limited'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+      'rate_limit_unavailable',
+    ),
+  }));
+}
+function writeRate() {
+  return memoizedValue(writeRate, () => defineRateLimit({ family: 'write', units: 1 }));
+}
+function detail(operationId: string, action: 'moderation:takedown' | 'post:erase', type: 'board' | 'thread' | 'post') {
   return {
     operationId,
+    'x-resource-types': [`content.${type}`],
     'x-exposure': 'public' as const,
     'x-action': action,
-    'x-rate-limit': writeRate,
+    'x-rate-limit': writeRate(),
     ...(action === 'post:erase' ? { 'x-replay-authorization': 'self-account-read' as const } : {}),
     security: [{ bearerAuth: [] }],
   };
@@ -79,7 +110,10 @@ async function command<T>(work: () => Promise<T>): Promise<T> {
 /** Transport only: exact point commands own authorization before receipt replay;
  * author-scope initiation commits an operation for the native outbox relay.
  */
-export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: ModerationDependencies & ContentRuntime) {
+export function moderationRoutes(
+  app: ReturnType<typeof reportRoutes>,
+  deps: ModerationDependencies & ContentRuntime & Pick<ContentReadDependencies, 'tokens'>,
+) {
   const operations: AuthorErasureDependencies = {
     pool: deps.pool,
     get access() {
@@ -121,18 +155,72 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
   ];
   const pointOptions = {
     params,
-    headers,
-    body: reason,
+    headers: headers(),
+    body: reason(),
     parse,
     transform: ({ request }: { request: Request }) => {
       if (oversized.delete(request)) throw new ProblemError('content_too_large');
     },
-    response: { 200: withHeaders(response, sessionHeader), ...writeFailures },
+    response: { 200: withHeaders(response(), sessionHeader()), ...writeFailures() },
   };
   return app
+    .get(
+      '/v1/moderation-decisions/:id',
+      {
+        params,
+        response: {
+          200: withHeaders(DecisionPageSchema(), { ...sessionHeader(), 'cache-control': t.String() }),
+          ...readFailures(),
+        },
+        detail: {
+          operationId: 'moderation_decision.get',
+          'x-exposure': 'public',
+          'x-action': 'moderation:takedown',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params: { id }, actor, request, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, async () => {
+          const result = await readDecisionPage(deps, id, request, { actor, deadline: job.deadline });
+          if (!result || !result.value) throw new ProblemError('not_found');
+          session.record(result.anchor);
+          return result.value;
+        });
+      },
+    )
+    .get(
+      '/v1/boards/:id/moderation-history',
+      {
+        params,
+        query: ModerationHistoryQuerySchema,
+        response: {
+          200: withHeaders(strictContentSchema(ModerationHistoryPageSchema()), {
+            ...sessionHeader(),
+            'cache-control': t.String(),
+          }),
+          ...historyReadFailures(),
+        },
+        detail: {
+          operationId: 'moderation_decision.list',
+          'x-resource-types': ['content.board'],
+          'x-exposure': 'public',
+          'x-action': 'moderation:takedown',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params: { id }, query, actor, request, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        return admission.run('normal', job, async () => {
+          const result = await listModerationHistory(deps, id, { actor, request, deadline: job.deadline }, query);
+          session.record(result.anchor);
+          return result.value;
+        });
+      },
+    )
     .post(
       customMethod('/v1/boards/:id', 'takeDown'),
-      { ...pointOptions, detail: detail('board.takedown', 'moderation:takedown') },
+      { ...pointOptions, detail: detail('board.takedown', 'moderation:takedown', 'board') },
       async ({ params: { id }, actor, body, request, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         return command(() =>
@@ -151,7 +239,7 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
     )
     .post(
       customMethod('/v1/threads/:id', 'takeDown'),
-      { ...pointOptions, detail: detail('thread.takedown', 'moderation:takedown') },
+      { ...pointOptions, detail: detail('thread.takedown', 'moderation:takedown', 'thread') },
       async ({ params: { id }, actor, body, request, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         return command(() =>
@@ -170,7 +258,7 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
     )
     .post(
       customMethod('/v1/posts/:id', 'takeDown'),
-      { ...pointOptions, detail: detail('post.takedown', 'moderation:takedown') },
+      { ...pointOptions, detail: detail('post.takedown', 'moderation:takedown', 'post') },
       async ({ params: { id }, actor, body, request, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         return command(() =>
@@ -189,7 +277,7 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
     )
     .post(
       customMethod('/v1/posts/:id', 'erase'),
-      { ...pointOptions, detail: detail('post.erase_point', 'post:erase') },
+      { ...pointOptions, detail: detail('post.erase_point', 'post:erase', 'post') },
       async ({ params: { id }, actor, body, request, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         return command(() =>
@@ -211,8 +299,8 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
       {
         ...pointOptions,
         body: strictContentSchema(AuthorErasureInputSchema),
-        response: { 202: withHeaders(operation, sessionHeader), ...writeFailures },
-        detail: detail('thread.erase', 'post:erase'),
+        response: { 202: withHeaders(operation(), sessionHeader()), ...writeFailures() },
+        detail: detail('thread.erase', 'post:erase', 'thread'),
       },
       async ({ params: { id }, actor, body, request, admission, job, session, set }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -248,7 +336,7 @@ export function moderationRoutes(app: ReturnType<typeof reportRoutes>, deps: Mod
       '/v1/operations/:id',
       {
         params,
-        response: { 200: operation, ...readFailures },
+        response: { 200: operation(), ...readFailures() },
         detail: {
           operationId: 'operation.get',
           'x-exposure': 'public',

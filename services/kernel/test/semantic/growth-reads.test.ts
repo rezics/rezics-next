@@ -8,9 +8,12 @@ import type { AccountActor } from '../../src/request/access.ts';
 import { createContext } from '../../src/semantic/context.ts';
 import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { itemFacts } from '../../src/semantic/item.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import { moderateStatement } from '../../src/semantic/moderation.ts';
 import { adoptCandidates, decideCandidate, proposeStatement } from '../../src/semantic/candidates.ts';
 import { createSubject, readLabels, writeFacts } from '../../src/semantic/subject.ts';
+import listOutboundPage from '../../src/semantic/list-outbound-links-by-property.sql';
+import listInboundPage from '../../src/semantic/list-inbound-links-by-property.sql';
 import {
   checkGrowth,
   openGrowthDatabase,
@@ -20,6 +23,12 @@ import {
   type Placement,
   type Population,
 } from '../support/growth.ts';
+import {
+  captureUnforcedIndexes,
+  logGrowthSeeding,
+  seedSemanticPopulation,
+  unrelatedSemanticPopulation,
+} from './planner-fixtures.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -89,6 +98,12 @@ beforeAll(async () => {
       })),
     },
   );
+  const projection = linkProjection(db.pool);
+  for (let step = 0; step < 200; step++) {
+    const result = await projection.run(BOOK_PARTITION);
+    if (result.status !== 'busy' && result.envelopes === 0) break;
+    if (step === 199) throw new Error('Semantic link projection did not catch up');
+  }
   await seed({ pool: db.pool, admin: db.admin }, accessGrants(), { from: 0, to: 2_000 });
 }, 60_000);
 
@@ -458,29 +473,51 @@ test('Batch label fill stays within its bound as its partition grows', async () 
       return labels;
     },
   });
+  logGrowthSeeding(report);
   expect(report.samples).toHaveLength(3);
-}, 60_000);
+}, 900_000);
 
-test('Related labels of a subject read stay within their bound as the related partitions grow', async () => {
+test('semantic covering reads use unforced indexed access as populations grow', async () => {
   const population = growingPopulation('semantic-growth-related-labels', 510, 0, (ordinal) => {
     const elsewhere = ordinal % 4 === 3;
     const partition = elsewhere ? 600 + (ordinal % 40) : RELATED_PARTITIONS[ordinal % RELATED_PARTITIONS.length]!;
     return partition * 16 + (ordinal % 16);
   });
+  const unrelated = unrelatedSemanticPopulation('growth-reads-related-unrelated', BOOK_PARTITION);
+  const operation = async () => {
+    const body = await readAnchor(bookId);
+    for (const id of people) {
+      if (!body.related[id]) throw new Error(`missing related subject ${id}`);
+    }
+    return body;
+  };
+  const indexedScales = new Set<number>();
   const report = await checkGrowth(db, {
     name: 'Related labels of a subject read stay within their bound as the related partitions grow',
     bounds,
-    grow: (_database, scale, previous) => growPopulation(population, scale, previous, 60, 2_400),
-    operation: async () => {
-      const body = await readAnchor(bookId);
-      for (const id of people) {
-        if (!body.related[id]) throw new Error(`missing related subject ${id}`);
-      }
-      return body;
+    grow: async (_database, scale, previous) => {
+      await growPopulation(population, scale, previous, 60, 2_400);
+      await seedSemanticPopulation({ pool: db.pool, admin: db.admin }, unrelated.population, {
+        from: previous * 500,
+        to: scale * 500,
+      });
+    },
+    operation,
+    prepare: async (_database, scale) => {
+      if (indexedScales.has(scale)) return;
+      await captureUnforcedIndexes(db, 'Related labels of a subject read', scale, operation, {
+        'semantic.subject': 'subject_pkey',
+        'semantic.revision': 'revision_pkey',
+        'semantic.fact': ['fact_label', 'fact_terms'],
+        'semantic.outbound_link': 'outbound_link_present',
+        'semantic.outbound_link_count': 'outbound_link_count_pkey',
+      });
+      indexedScales.add(scale);
     },
   });
+  logGrowthSeeding(report);
   expect(report.samples).toHaveLength(3);
-}, 60_000);
+}, 900_000);
 
 test("Anchored subject read stays within its bound as the subject's history grows", async () => {
   const route = HISTORY_PARTITION * 16;
@@ -497,6 +534,7 @@ test("Anchored subject read stays within its bound as the subject's history grow
   });
   const contextId = context.context.id;
   await seed({ pool: db.pool, admin: db.admin }, editorialBaseline(), { from: 0, to: 2_000 });
+  const unrelated = unrelatedSemanticPopulation('growth-reads-history-unrelated', HISTORY_PARTITION);
   const command = (action: string) => ({
     actor,
     subject,
@@ -523,6 +561,8 @@ test("Anchored subject read stays within its bound as the subject's history grow
   let selectedCandidate = '';
   let globalHead: number | null = null;
   let contextHead: number | null = null;
+  const operation = async () => readAnchor(subject);
+  const indexedScales = new Set<number>();
   const report = await checkGrowth(db, {
     name: "Anchored subject read stays within its bound as the subject's history grows",
     scales: [8, 64, 512],
@@ -587,6 +627,10 @@ test("Anchored subject read stays within its bound as the subject's history grow
             break;
         }
       }
+      await seedSemanticPopulation({ pool: db.pool, admin: db.admin }, unrelated.population, {
+        from: previous * 500,
+        to: scale * 500,
+      });
       if (scale === 512) {
         await moderateStatement(db.pool, {
           ...command('moderation:hide'),
@@ -597,10 +641,27 @@ test("Anchored subject read stays within its bound as the subject's history grow
         });
       }
     },
-    operation: async () => readAnchor(subject),
+    operation,
+    prepare: async (_database, scale) => {
+      if (indexedScales.has(scale)) return;
+      await captureUnforcedIndexes(db, 'Anchored subject read', scale, operation, {
+        'semantic.subject': 'subject_pkey',
+        'semantic.redirect': 'redirect_pkey',
+        'semantic.revision': 'revision_pkey',
+        'semantic.fact': ['fact_label', 'fact_terms'],
+        'semantic.outbound_link': 'outbound_link_present',
+        'semantic.outbound_link_count': 'outbound_link_count_pkey',
+        'semantic.candidate': 'candidate_page',
+        'semantic.adoption': 'adoption_pkey',
+        'semantic.acceptance_current': 'acceptance_current_rejected',
+        'semantic.hidden_candidate': 'hidden_candidate_pkey',
+      });
+      indexedScales.add(scale);
+    },
   });
+  logGrowthSeeding(report);
   expect(report.samples).toHaveLength(3);
-}, 60_000);
+}, 900_000);
 
 test('the fact writer refuses more than 512 facts for one subject', async () => {
   let queried = false;
@@ -632,3 +693,116 @@ test('the fact writer refuses more than 512 facts for one subject', async () => 
   ).rejects.toThrow(TypeError);
   expect(queried).toBe(false);
 }, 60_000);
+
+test('semantic covering reads use unforced indexed access as their populations grow', async () => {
+  const partition = 550;
+  const route = partition * 16;
+  const holder = newId(route);
+  const target = newId(route);
+  const nil = '00000000-0000-0000-0000-000000000000';
+  await createFixed(route, holder, 'schema:Book', { en: 'Community seek holder' });
+  await createFixed(route, target, 'schema:Person', { en: 'Community seek target' });
+  const contextTarget = { route, id: newId(route) };
+  const created = await createContext(db.pool, {
+    actor,
+    target: contextTarget,
+    idempotencyKey: randomUUID(),
+    digest: digest(contextTarget.id),
+    input: { labels: { en: 'Community covering seeks' } },
+    authorize: async () => true,
+  });
+  const context = created.context.id;
+  const unrelated = unrelatedSemanticPopulation('growth-reads-community-unrelated', partition);
+  const page = async (scale: number, selectedContext: string, middle: boolean) => {
+    const start = middle ? Math.floor(scale / 2) : 0;
+    const afterStatement = start
+      ? createHash('md5')
+          .update(`community-covering-statement-${start - 1}`)
+          .digest('hex')
+          .replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5')
+      : nil;
+    const parameters = {
+      route,
+      context_id: selectedContext,
+      property: 'schema:author',
+      filter_value: nil,
+      after_order: start ? String(start - 1).padStart(8, '0') : '',
+      after_statement: afterStatement,
+      page_limit: 26,
+      scan_limit: 0,
+    };
+    const expected: string[] = [];
+    for (let ordinal = start; ordinal < scale && expected.length < 26; ordinal++) {
+      if (selectedContext !== GLOBAL_CONTEXT && ordinal < 12) continue;
+      expected.push(String(ordinal).padStart(8, '0'));
+    }
+    expect(expected).toHaveLength(26);
+    const outbound = await listOutboundPage.run(db.pool, {
+      ...parameters,
+      subject_id: holder,
+      after_target: start ? target : nil,
+    });
+    const inbound = await listInboundPage.run(db.pool, {
+      ...parameters,
+      subject_id: target,
+      after_source: start ? holder : nil,
+    });
+    expect(outbound.map((row) => row.order_key)).toEqual(expected);
+    expect(inbound.map((row) => row.order_key)).toEqual(expected);
+    expect(outbound.every((row) => row.target === target)).toBe(true);
+    expect(inbound.every((row) => row.subject === holder)).toBe(true);
+  };
+  const indexedScales = new Set<number>();
+  const report = await checkGrowth(db, {
+    name: 'Global and community native covering seeks',
+    scales: [64, 512, 4096],
+    bounds,
+    grow: async (_database, scale, previous) => {
+      await seedSemanticPopulation(db, unrelated.population, { from: previous * 500, to: scale * 500 });
+      await db.admin.query(
+        `INSERT INTO semantic.outbound_link(route,subject_id,context_id,property,filter_value,order_key,
+          target_subject_id,statement_id,slot_id,relation,source_revision,source_type,target_type,value,suppressed,
+          present,recorded_transaction_id)
+         SELECT $1,$2,context,'schema:author',$5,lpad(n::text,8,'0'),$3,
+                md5('community-covering-statement-' || n)::uuid,md5('community-covering-slot-' || n)::uuid,
+                true,1,'schema:Book','schema:Person','value',context=$4::uuid AND n<12,
+                context<>$4::uuid OR n<12 OR n%2=0,$8
+         FROM generate_series($6::integer,$7::integer) n
+         CROSS JOIN unnest(ARRAY[$4::uuid,$9::uuid]) context`,
+        [route, holder, target, context, nil, previous, scale - 1, randomUUID(), GLOBAL_CONTEXT],
+      );
+      await db.admin.query(
+        `INSERT INTO semantic.inbound_link(route,subject_id,context_id,property,filter_value,order_key,
+          source_subject_id,statement_id,source_revision,source_type,suppressed,present,recorded_transaction_id)
+         SELECT route,target_subject_id,context_id,property,filter_value,order_key,subject_id,statement_id,
+                source_revision,'schema:Book',suppressed,present,recorded_transaction_id
+         FROM semantic.outbound_link WHERE route=$1 AND subject_id=$2
+           AND order_key>=lpad($3::text,8,'0')`,
+        [route, holder, previous],
+      );
+    },
+    operation: async (_database, scale) => {
+      for (const selectedContext of [GLOBAL_CONTEXT, context]) {
+        await page(scale, selectedContext, false);
+        await page(scale, selectedContext, true);
+      }
+    },
+    prepare: async (_database, scale) => {
+      if (indexedScales.has(scale)) return;
+      for (const selectedContext of [GLOBAL_CONTEXT, context]) {
+        for (const middle of [false, true]) {
+          await captureUnforcedIndexes(
+            db,
+            `${selectedContext === GLOBAL_CONTEXT ? 'Global' : 'Community'} covering ${middle ? 'middle' : 'first'} pages`,
+            scale,
+            () => page(scale, selectedContext, middle),
+            { 'semantic.outbound_link': 'outbound_link_present', 'semantic.inbound_link': 'inbound_link_present' },
+          );
+        }
+      }
+      indexedScales.add(scale);
+    },
+  });
+  logGrowthSeeding(report);
+  expect(report.samples.map(({ scale }) => scale)).toEqual([64, 512, 4096]);
+}, 900_000);

@@ -1,7 +1,23 @@
 types:
+  wd:Q2095: 食物
+  wd:Q2620972: '故事篇章'
   schema:Person: 人物
   schema:Organization: 組織
+  schema:SoftwareApplication: 軟體應用程式
+  rezics:ReleaseGroup: '發佈組'
+  schema:Place: '地點'
+  schema:AdministrativeArea: '行政區'
+  schema:Event: '活動'
 properties:
+  rezics:penNameOf: '筆名使用者'
+  wdt:P186: 材料
+  wdt:P1114: 數量
+  rezics:note: 備註
+  rezics:listSection: 清單分節
+  rezics:storyArc: '故事篇章'
+  rezics:firstPart: '起始話或章'
+  rezics:lastPart: '結束話或章'
+  wdt:P518: '適用篇章'
   schema:url: URL
   schema:name: 名稱
   schema:sameAs: 精確匹配
@@ -14,6 +30,11 @@ properties:
   schema:dateModified: 最後更新
   schema:inLanguage: 語言
   schema:abstract: 摘要
+  wdt:P106: 職業
+  schema:knowsLanguage: 通曉語言
+  wdt:P749: 上級組織
+  wdt:P1365: 前身
+  wdt:P1366: 繼任者
   schema:image: 圖像
   wdt:P648: 開放圖書館識別碼
   wdt:P5732: Bangumi主題識別碼
@@ -34,4 +55,138 @@ properties:
   schema:character: '登場角色'
   wdt:P179: '所屬系列'
   rezics:spoilerLevel: '劇透程度'
+  wdt:P3629: '登場時年齡'
   schema:alternateName: 別名
+  rezics:representativeEdition: '代表版本'
+  rezics:crossMediaCounterpart: '跨媒體對應作品'
+  rezics:summaryOf: '總集篇的本篇'
+  rezics:sideStoryOf: '番外篇的本篇'
+  rezics:sameCharacters: '相同角色、無關故事'
+  rezics:sameSetting: '相同世界觀'
+  rezics:alternativeSetting: '不同世界觀'
+  rezics:alternativeVersion: '不同演繹'
+  rezics:collaborationWith: '角色聯動'
+  rezics:bangumiRelatedTo: '關聯（Bangumi）'
+  rezics:artbookCounterpart: '畫集與對應作品'
+  rezics:editionCounterpart: '圖書的不同版本'
+  rezics:bangumiLegacyVersion: '版本關聯（Bangumi 舊代碼）'
+  rezics:expansionCounterpart: '擴充包或基礎遊戲'
+  wdt:P4092: '校驗和'
+  wdt:P3575: '檔案大小'
+  rezics:hashAlgorithm: '雜湊演算法'
+  rezics:codec: '編解碼器'
+  rezics:fileQuality: '檔案品質'
+  rezics:releaseGroup: '發佈組'
+  schema:containedInPlace: '所屬地點'
+  schema:location: '地點'
+  schema:startDate: '開始日期'
+  schema:endDate: '結束日期'
+inverseProperties:
+  rezics:penNameOf: '筆名'
+  wdt:P186: 用於
+  rezics:storyArc: '所屬作品'
+  schema:author: '著作'
+  schema:illustrator: '插畫作品'
+  schema:director: '執導作品'
+  schema:musicBy: '作曲作品'
+  schema:producer: '製作作品'
+  schema:productionCompany: '參與製作的作品'
+  wdt:P58: '編劇作品'
+  wdt:P178: '開發作品'
+  wdt:P725: '配音作品'
+  schema:contributor: '參與作品'
+  schema:character: '登場作品'
+  wdt:P179: '系列成員'
+  rezics:summaryOf: '總集篇'
+  rezics:sideStoryOf: '番外篇'
+  rezics:bangumiRelatedTo: '關聯來源（Bangumi）'
+  wdt:P749: 下屬組織
+  wdt:P1365: 繼任者
+  wdt:P1366: 前身
+
+  rezics:releaseGroup: '此發佈組的檔案'
+  schema:containedInPlace: '包含地點'
+propertyDescriptions:
+  rezics:penNameOf: '使用此筆名或共同名義的個人或組織。'
+  wdt:P186: '作為材料或組成部分的食物或已完成的食譜，可用限定詞補充用量和清單順序。'
+  wdt:P1114: '陳述對象的用量，附有單位；來源若提供範圍，也保留下限與上限。'
+  rezics:note: '針對這筆陳述的帶語言註記，例如替代食材的建議。'
+  rezics:listSection: '此項所屬清單分節的帶語言標題，例如醬汁。'
+  rezics:storyArc: '此作品所包含的故事篇章，以限定詞記錄順序及起訖集數或章節編號。'
+  rezics:firstPart: '篇章第一集或第一章的編號，沿用作品自身的編號方式。'
+  rezics:lastPart: '篇章最後一集或最後一章的編號，沿用作品自身的編號方式。'
+  wdt:P518: '這次角色登場或署名實際適用的故事篇章。'
+  schema:url: '用來識別此對象的 URL。'
+  schema:name: '將來源中的標題或名稱以帶語言文字提出的陳述，不會自動採用為顯示標籤。'
+  schema:sameAs: '同一實體在其他資料集中的標準 URI；僅有關聯的頁面並非精確對應。'
+  schema:birthDate: '來源明確記載的出生日期，保留已知精度；沒有年份的生日不能視為完整出生日期。'
+  schema:deathDate: '來源記載的死亡日期，維持來源的日期精度。'
+  schema:author: '被署名為這部作品或出版物作者的個人或組織。'
+  schema:position: '清單中由 1 起算的順序，以字串儲存，例如 1、2。'
+  schema:datePublished: '這部作品或發行版的出版日期，保留來源提供的日期精度。'
+  schema:version: '來源紀錄的修訂識別碼，不是作品的剪輯版或出版版本名稱。'
+  schema:dateModified: '來源紀錄最後更新的日期，與作品出版日期分開記錄。'
+  schema:inLanguage: '資源使用的語言代碼，例如 en、ja，與介面語言分開。'
+  schema:abstract: '撰寫的摘要文件，慣例上每種語言一份；接受文件值，而非一般字串。'
+  wdt:P106: '表示此人職業的概念，例如導演或作家；作品署名不能代替此一事實。'
+  schema:knowsLanguage: '此人通曉的語言，記為已採納的概念；既非口語能力，也非署名作品所用語言。'
+  wdt:P749: '此製作方的上級組織。陳述記在下級一側，可附起迄日期與出處。'
+  wdt:P1365: '此製作方所取代的組織。值為前身；這是有方向的更替，不是單純按時間相鄰的鄰居。'
+  wdt:P1366: '取代此製作方的組織。值為繼任者，作為與前身陳述相互獨立的方向保存。'
+  schema:image: '描繪此對象的已上傳媒體物件；使用媒體值，而非外部圖片 URL。'
+  wdt:P648: 'Open Library 識別碼，例如 OL45804W、OL7353617M 或 OL23919A；填入識別碼而非頁面 URL。'
+  wdt:P5732: 'Bangumi 條目的數字識別碼，例如 123；與人物及角色識別碼分開。'
+  wdt:P6298: 'Bangumi 人物的數字識別碼，與條目和角色識別碼各自獨立。'
+  wdt:P3180: '包含實體前綴的 VNDB 識別碼，例如 v17、r123、p1、s1；不是 URL。'
+  schema:illustrator: '被署名為這部作品或出版物插畫者的個人或組織。'
+  schema:director: '被署名為這部作品或出版物導演的個人或組織。'
+  schema:musicBy: '被署名為音樂作曲者的個人或組織。'
+  schema:producer: '被署名為製作人的個人或組織。'
+  schema:productionCompany: '被署名為製作公司的個人或組織。'
+  wdt:P58: '被署名為編劇的個人或組織。'
+  wdt:P178: '被署名為開發者的個人或組織。'
+  wdt:P725: '具署名的配音者，可用角色限定詞指明所飾演的角色。'
+  schema:contributor: '從事其他工作的署名個人或組織；以詳細角色概念說明具體職務。'
+  wdt:P1932: '來源稱呼陳述對象時的原文寫法，例如演職員表上的署名。'
+  wdt:P3831: '表示具體工作職務或登場身分的概念，而非自由填寫的署名文字。'
+  wdt:P453: '這筆配音署名所飾演的虛構角色。'
+  schema:character: '在這部作品登場的角色，可限定其身分、署名、劇透、篇章、年齡和參考文獻。'
+  wdt:P3629: '該登場陳述上的年齡，以非負年數（wd:Q577）記錄；來源整體年齡不是此限定。'
+  wdt:P179: '此成員所屬的系列，以位置限定詞記錄系列內編號。'
+  rezics:spoilerLevel: '以無單位整數表示的揭露等級：0 為無劇透，1 為輕微劇透，2 為重大劇透。'
+  schema:alternateName: '別名或其他標題，以帶語言文字保留原來的拼寫和語言。'
+  rezics:representativeEdition: '為指定語言選作此作品代表的版本或發行版，每種語言一個值。'
+  rezics:crossMediaCounterpart: '同一系列企劃中採用其他媒介的作品；這項關聯本身不表示改編方向。'
+  rezics:summaryOf: '這部總集篇或摘要作品所濃縮的完整敘事作品。'
+  rezics:sideStoryOf: '這部補充性外傳所屬的主線敘事作品。'
+  rezics:sameCharacters: '角色共通但敘述獨立故事的作品。'
+  rezics:sameSetting: '世界或時間線相同，主要角色卻不同的作品。'
+  rezics:alternativeSetting: '將相同主要角色安排在不同世界或時間線的作品。'
+  rezics:alternativeVersion: '在相同背景下使用相同角色的另一種敘事版本。'
+  rezics:collaborationWith: '透過角色跨作合作連結的作品；此關聯本身不指定客串角色或承載合作的作品。'
+  rezics:bangumiRelatedTo: 'Bangumi 明確標示的其他條目關聯，僅保留該來源的主張，不推定關係種類。'
+  rezics:artbookCounterpart: '作品與其配套畫集的關聯，不指定哪一端是畫集。'
+  rezics:editionCounterpart: '書籍的其他版本或版次；這項對稱關聯不判定原版，也不表示作品到版本的方向。'
+  rezics:bangumiLegacyVersion: '保留自 Bangumi 已停用 Main Version 代碼 4013 的對稱版本關聯，不指定原版方向。'
+  rezics:expansionCounterpart: '基礎遊戲與追加作品的無方向關聯；來源若已明示擴充方向，可使用有方向的擴充關係。'
+  wdt:P4092: '校驗和的精確文字。雜湊演算法另行保存；數值相同不會識別或合併檔案。'
+  wdt:P3575: '依來源記錄的位元組單位精確十進位數量保存檔案大小。'
+  rezics:hashAlgorithm: '原樣保存校驗演算法的來源代碼，未知代碼也保留以供審查。'
+  rezics:codec: '原樣保存來源提供的編解碼器代碼，包括尚未識別的代碼。'
+  rezics:fileQuality: '原樣保存來源提供的品質代碼，包括尚未識別的代碼。'
+  rezics:releaseGroup: '與此檔案關聯的 AniDB 來源群組，可獨立讀取，並與出版發行版及個人副本區分。'
+  schema:containedInPlace: '直接包含此地點的上級地點，例如其所屬行政區。'
+  schema:location: '此活動發生的地點；它不代表活動本身或某一場演出。'
+  schema:startDate: '來源所述對象時間範圍的起點，保留來源的精度與曆法。'
+  schema:endDate: '來源所述對象時間範圍的終點，保留來源的精度與曆法。'
+typeDescriptions:
+  wd:Q2095: '可供食用的食品或物質，例如麵粉；食譜則說明食物的製作方式。'
+  wd:Q2620972: '作品內具有名稱且依序排列的一段集數或章節，以起訖編號界定範圍。'
+  schema:Person: '目錄中可識別的真實人物，例如作者；與虛構角色分開記錄。'
+  schema:Organization: '出版社、製作公司等組織，或具署名的團體。'
+  schema:SoftwareApplication: '可獨立識別的軟體應用程式，例如閱讀工具；遊戲作品與其發行版各有專用類型。'
+
+  rezics:ReleaseGroup: '由 AniDB 識別並與其發佈的檔案關聯的來源群組。其身分與各檔案及出版發行版分開保留。'
+  schema:Place: '可具體識別的地理地點或建成場所，與在該處舉行的活動分別建檔。'
+  schema:AdministrativeArea: '以地點表示的具名行政區域，與其中的活動場所分別識別。'
+  schema:Event: '具有自身身分與時間範圍的事件，與地點及參與者分別識別。'

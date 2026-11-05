@@ -85,7 +85,7 @@ test('report submission keeps K/D/R/A fixed as stored reports and sessions grow'
             expect(request.method).toBe('POST');
             expect(new URL(request.url).pathname).toBe('/v1/reports');
             expect(request.headers.get('authorization')).toBe(signedIn ? 'Bearer fresh-token' : null);
-            expect(request.headers.get('idempotency-key')).toBe(draft.idempotencyKey);
+            expect(request.headers.get('idempotency-key')).toBe(JSON.stringify(draft.idempotencyKey));
             const { idempotencyKey: _key, ...body } = draft;
             expect(await request.json()).toEqual(body);
             return Response.json(heldReports[0], { status: 201 });

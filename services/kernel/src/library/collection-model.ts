@@ -5,10 +5,12 @@ export type CollectionState = 'active' | 'deleted';
 export type CollectionRow = {
   route: number;
   collectionId: string;
-  curatorAccountId: string;
+  curatorAccountId: string | null;
   title: string;
   description: string | null;
   visibility: CollectionVisibility;
+  presentationKind: string | null;
+  coverMediaId: string | null;
   state: CollectionState;
   revision: number;
   memberCount: number;
@@ -16,6 +18,9 @@ export type CollectionRow = {
   createdAt: string;
   updatedAt: string;
   transactionId: string;
+  membershipKind?: 'curated' | 'dynamic';
+  builtinKind?: string | null;
+  hasSavedRule?: boolean;
 };
 
 /** Collection view exposed to module callers. */
@@ -27,9 +32,14 @@ export type CollectionDraft = {
   title: string;
   description: string | null;
   visibility: CollectionVisibility;
+  presentationKind?: string | null;
+  coverMediaId?: string | null;
 };
 
-export type CollectionChanges = Pick<CollectionDraft, 'title' | 'description' | 'visibility'>;
+export type CollectionChanges = Pick<
+  CollectionDraft,
+  'title' | 'description' | 'visibility' | 'presentationKind' | 'coverMediaId'
+>;
 
 /** Database projection for one ordered member. */
 export type CollectionMemberRow = {
@@ -41,6 +51,12 @@ export type CollectionMemberRow = {
   ordinalKey: string;
   addedAt: string;
   transactionId: string;
+  deletionId?: string | null;
+  deletionRevision?: number | null;
+  deletedAt?: string | null;
+  purgeAfter?: string | null;
+  deletedOrdinalKey?: string | null;
+  memberRevision?: number;
 };
 
 /** Member view; subject IDs are deliberately not unique within a Collection. */

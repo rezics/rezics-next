@@ -5,6 +5,8 @@ import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { readAccount, readPublicAccount } from '../../src/access/account-data.ts';
 import { createAccess } from '../../src/access/permission.ts';
 import { AccessUnavailableError } from '../../src/access/index.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
+import { admittedAccess, authenticateAccount } from '../support/admitted-access.ts';
 import type { AccountActor } from '../../src/request/access.ts';
 import {
   createLifecycleInternals,
@@ -46,22 +48,26 @@ const internal = createLifecycleInternals({
 });
 const row = (id: string) => withConnection(reader, (client) => readAccount(client, routeOf(id)!, id));
 const publicRow = (id: string) => withConnection(reader, (client) => readPublicAccount(client, routeOf(id)!, id));
-const access = createAccess({ actions: LIFECYCLE_ACTIONS, accountEvidence: (_actor, context) => context.account });
+const access = admittedAccess({ actions: LIFECYCLE_ACTIONS });
 const commands = createLifecycleCommands({ pool, access, clock });
 let sequence = 0;
 const key = () => `command-${++sequence}`;
-const context = async (id: string, scopes = [...LIFECYCLE_ACTIONS.keys()]) => ({
-  actor: {
-    kind: 'account',
+const context = async (id: string, scopes = [...LIFECYCLE_ACTIONS.keys()]) => {
+  const claims = {
     accountId: id,
     clientId: 'verified-client',
     requestedBy: null,
     authnEpoch: 1,
     scopes,
-  } as AccountActor,
-  account: await row(id),
-  deadline: Date.now() + 2000,
-});
+  };
+  let actor: AccountActor;
+  try {
+    actor = await authenticateAccount(access, { pool, deadline: Date.now() + 290_000 }, claims);
+  } catch {
+    actor = { kind: 'account', ...claims };
+  }
+  return { actor, account: await row(id), deadline: Date.now() + 2000 };
+};
 async function pending(handle: string) {
   const registrationKey = key();
   const accountId = internal.registrationTarget(registrationKey);
@@ -179,7 +185,7 @@ test('activation requires verified provisioning bound to this registration and r
   instant = before;
 });
 
-test('handle namespace protects active claims and redirects; expiry releases only expired pending or reserved claims', async () => {
+test('handle namespace protects active claims and former handles; expiry releases only expired pending claims', async () => {
   instant = Date.now();
   fixedClock = true;
   const id = await person('namespace');
@@ -198,8 +204,11 @@ test('handle namespace protects active claims and redirects; expiry releases onl
   );
   instant += HANDLE_REDIRECT_TTL_MS;
   expect(await internal.resolveHandle('namespace')).toBeNull();
-  await internal.expireHandle({ handle: 'namespace', key: key() });
-  await internal.reserveHandle({ handle: 'namespace', accountId: other, key: key() });
+  await expect(internal.expireHandle({ handle: 'namespace', key: key() })).rejects.toBeInstanceOf(LifecycleDeniedError);
+  await expect(internal.reserveHandle({ handle: 'namespace', accountId: other, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  await internal.reserveHandle({ handle: 'namespace', accountId: id, key: key() });
   const expired = await pending('expire_pending');
   instant += REGISTRATION_TTL_MS;
   await internal.expireHandle({ handle: 'expire_pending', key: key() });
@@ -458,7 +467,9 @@ test('tombstone atomically erases private fields and returns only a durable iden
     minimumAuthnEpoch: 2n,
   });
   expect(await publicRow(id)).toEqual({ accountId: id, kind: 'actor', state: 'deleted' });
-  expect(await commands.tombstone(ctx, request)).toEqual({ ...result, replayed: true });
+  // Admission re-reads the account. Deletion changes that snapshot, so the same
+  // actor cannot replay the command after the account is gone.
+  await expect(commands.tombstone(ctx, request)).rejects.toBeInstanceOf(LifecycleDeniedError);
   expect(await row(operator)).toEqual(operatorBefore);
   const stored = await reader.query(
     'SELECT row_to_json(a)::text AS value FROM access.account a WHERE route=$1 AND account_id=$2',
@@ -487,6 +498,158 @@ test('operator responsibility and unresolved membership reservations deny tombst
   );
   expect(await row(id)).toEqual(original);
   expect(await counts(id)).toEqual(before);
+});
+
+async function automated(operator: string, handle: string) {
+  const id = await person(handle);
+  await reader.query('UPDATE access.account SET operator_account_id=$3 WHERE route=$1 AND account_id=$2', [
+    routeOf(id),
+    id,
+    operator,
+  ]);
+  return id;
+}
+async function manages(manager: string, operator: string) {
+  await reader.query(
+    `INSERT INTO access.resource_grant(route,resource_id,subject_id,action,valid,transaction_id)
+    VALUES ($1,$2,$3,'account:manage','(,)',$3)`,
+    [routeOf(operator), operator, manager],
+  );
+}
+
+test('a human who manages an operator can delete an automated account that operator operates, a human who does not manage that operator cannot', async () => {
+  const operator = await person('delete_operator');
+  const manager = await person('delete_manager');
+  const stranger = await person('delete_stranger');
+  await manages(manager, operator);
+  const subject = await automated(operator, 'delete_automated');
+  const before = await row(subject);
+  await expect(commands.tombstone(await context(stranger), { accountId: subject, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  expect(await row(subject)).toEqual(before);
+  const grants = await reader.query(
+    'SELECT count(*)::int AS n FROM access.resource_grant WHERE route=$1 AND resource_id=$2',
+    [routeOf(subject), subject],
+  );
+  const result = await commands.tombstone(await context(manager), { accountId: subject, key: key() });
+  expect(result.value).toMatchObject({ accountId: subject, priorOperatorAccountId: operator });
+  expect(await row(subject)).toMatchObject({ state: 'deleted', operatorAccountId: null });
+  // Authority is read through the relation: no standing grant was written on the account.
+  const after = await reader.query(
+    'SELECT count(*)::int AS n FROM access.resource_grant WHERE route=$1 AND resource_id=$2',
+    [routeOf(subject), subject],
+  );
+  expect(after.rows[0].n).toBe(grants.rows[0].n);
+});
+
+test('a human who manages the prior operator can replay an automated account tombstone with its original receipt', async () => {
+  const operator = await person('replay_operator');
+  const manager = await person('replay_manager');
+  await manages(manager, operator);
+  const subject = await automated(operator, 'replay_automated');
+  const request = { accountId: subject, key: key() };
+
+  const deleted = await commands.tombstone(await context(manager), request);
+  const replay = await commands.tombstone(await context(manager), request);
+
+  expect(replay).toEqual({ ...deleted, replayed: true });
+  expect(replay.value).toEqual(deleted.value);
+});
+
+test('a tombstone replay stays denied after its caller loses management of the recorded prior operator', async () => {
+  const operator = await person('revoked_replay_operator');
+  const manager = await person('revoked_replay_manager');
+  await manages(manager, operator);
+  const subject = await automated(operator, 'revoked_replay_automated');
+  const request = { accountId: subject, key: key() };
+
+  await commands.tombstone(await context(manager), request);
+  await reader.query(
+    `DELETE FROM access.resource_grant
+    WHERE route=$1 AND resource_id=$2 AND subject_id=$3 AND action='account:manage'`,
+    [routeOf(operator), operator, manager],
+  );
+
+  await expect(commands.tombstone(await context(manager), request)).rejects.toBeInstanceOf(LifecycleDeniedError);
+});
+
+test('a deleted automated account cannot receive a new tombstone command from its former operator manager', async () => {
+  const operator = await person('new_key_operator');
+  const manager = await person('new_key_manager');
+  await manages(manager, operator);
+  const subject = await automated(operator, 'new_key_automated');
+  await commands.tombstone(await context(manager), { accountId: subject, key: key() });
+  const before = await row(subject);
+
+  await expect(commands.tombstone(await context(manager), { accountId: subject, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  expect(await row(subject)).toEqual(before);
+});
+
+test("after a transfer the old operator's managers can no longer delete it and the new operator's can", async () => {
+  const oldOperator = await person('transfer_old');
+  const newOperator = await person('transfer_new');
+  const oldManager = await person('transfer_old_manager');
+  const newManager = await person('transfer_new_manager');
+  await manages(oldManager, oldOperator);
+  await manages(newManager, newOperator);
+  const subject = await automated(oldOperator, 'transfer_automated');
+  await reader.query('UPDATE access.account SET operator_account_id=$3 WHERE route=$1 AND account_id=$2', [
+    routeOf(subject),
+    subject,
+    newOperator,
+  ]);
+  const before = await row(subject);
+  await expect(
+    commands.tombstone(await context(oldManager), { accountId: subject, key: key() }),
+  ).rejects.toBeInstanceOf(LifecycleDeniedError);
+  expect(await row(subject)).toEqual(before);
+  const result = await commands.tombstone(await context(newManager), { accountId: subject, key: key() });
+  expect(result.value).toMatchObject({ accountId: subject, priorOperatorAccountId: newOperator });
+  expect(await row(subject)).toMatchObject({ state: 'deleted' });
+});
+
+test("a person's account is still deleted only by that person", async () => {
+  const person_ = await person('delete_person');
+  const other = await person('delete_person_other');
+  const holder = await person('delete_person_manager');
+  await manages(holder, other);
+  await manages(holder, person_);
+  const before = await row(person_);
+  await expect(commands.tombstone(await context(holder), { accountId: person_, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  await expect(commands.tombstone(await context(other), { accountId: person_, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  expect(await row(person_)).toEqual(before);
+  await commands.tombstone(await context(person_), { accountId: person_, key: key() });
+  expect(await row(person_)).toMatchObject({ state: 'deleted' });
+});
+
+test('an operator with operated accounts still cannot be deleted', async () => {
+  const operator = await person('held_operator');
+  const subject = await automated(operator, 'held_automated');
+  const manager = await person('held_manager');
+  await manages(manager, operator);
+  await internal.reserveCoordination({
+    accountId: operator,
+    relatedAccountId: subject,
+    purpose: 'operator',
+    key: key(),
+  });
+  const before = await row(operator);
+  await expect(commands.tombstone(await context(operator), { accountId: operator, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  await commands.tombstone(await context(manager), { accountId: subject, key: key() });
+  // The responsibility hold outlives the operated account until it is released.
+  await expect(commands.tombstone(await context(operator), { accountId: operator, key: key() })).rejects.toBeInstanceOf(
+    LifecycleDeniedError,
+  );
+  expect(await row(operator)).toEqual(before);
 });
 
 test('fenced and moved partitions reject through the actual executor and authorization unavailability denies', async () => {
@@ -518,9 +681,13 @@ test('fenced and moved partitions reject through the actual executor and authori
   await expect(
     unavailable.updateAccount(await context(id), { accountId: id, key: key(), patch: { displayName: 'forbidden' } }),
   ).rejects.toBeInstanceOf(LifecycleDeniedError);
+  const unavailableActor = await context(id);
   await expect(
     commands.updateAccount(
-      { ...(await context(id)), account: null },
+      {
+        ...unavailableActor,
+        actor: { ...unavailableActor.actor, scopes: [...unavailableActor.actor.scopes] },
+      },
       { accountId: id, key: key(), patch: { displayName: 'forbidden' } },
     ),
   ).rejects.toBeInstanceOf(LifecycleDeniedError);
@@ -534,15 +701,14 @@ test('prepared evidence is gathered once and expires before a delayed command at
   const delayed = createLifecycleCommands({
     pool,
     clock,
-    access: {
-      ...access,
+    access: deriveAccess(access, {
       async prepare(actor, action, resource, ctx) {
         prepares++;
         const evidence = await access.prepare!(actor, action, resource, { ...ctx, deadline: Date.now() + 1000 });
         await Bun.sleep(1050);
         return evidence;
       },
-    },
+    }),
   });
   const before = await counts(id);
   await expect(

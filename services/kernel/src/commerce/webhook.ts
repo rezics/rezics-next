@@ -1,8 +1,13 @@
+import { memoizedValue } from '../memoized.ts';
 import Stripe from 'stripe';
+import { MAX_WEBHOOK_SECRETS } from './config.ts';
 import { HANDLED_STRIPE_EVENTS, type HandledStripeEvent, type StripeEventRef } from './model.ts';
 
+const MAX_SIGNATURE_BYTES = 8192;
 const cryptoProvider = Stripe.createSubtleCryptoProvider();
-const handled = new Set<string>(HANDLED_STRIPE_EVENTS);
+function handled() {
+  return memoizedValue(handled, () => new Set<string>(HANDLED_STRIPE_EVENTS));
+}
 
 export class WebhookSignatureError extends Error {
   constructor() {
@@ -18,7 +23,15 @@ export async function verifyStripeEvent(
   secrets: readonly string[],
   receivedAt: number,
 ): Promise<Stripe.Event> {
-  if (!header || !Number.isFinite(receivedAt)) throw new WebhookSignatureError();
+  if (
+    !header ||
+    header.length > MAX_SIGNATURE_BYTES ||
+    Buffer.byteLength(header, 'utf8') > MAX_SIGNATURE_BYTES ||
+    secrets.length === 0 ||
+    secrets.length > MAX_WEBHOOK_SECRETS ||
+    !Number.isFinite(receivedAt)
+  )
+    throw new WebhookSignatureError();
   for (const secret of secrets) {
     try {
       return await Stripe.webhooks.constructEventAsync(raw, header, secret, 300, cryptoProvider, receivedAt);
@@ -40,7 +53,7 @@ function paymentIntentId(value: unknown): string | null {
 
 /** Only identifiers from supported, platform-account events cross into durable work. */
 export function classifyStripeEvent(event: Stripe.Event): StripeEventRef | null {
-  if (!record(event) || Object.hasOwn(event, 'account') || !handled.has(event.type)) return null;
+  if (!record(event) || Object.hasOwn(event, 'account') || !handled().has(event.type)) return null;
   if (
     typeof event.id !== 'string' ||
     !/^evt_[A-Za-z0-9]+$/.test(event.id) ||

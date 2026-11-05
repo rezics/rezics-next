@@ -1,4 +1,6 @@
 import { APPEARANCE, platformRegistry } from '@rezics/composition';
+import { Button } from '@rezics/ui/shadcn/button';
+import { Input } from '@rezics/ui/shadcn/input';
 import { createContext, isValidElement, useContext, type ReactNode } from 'react';
 import { pageText, usePageLocale, usePageMessages } from './data';
 
@@ -42,15 +44,20 @@ const headerSlotClass = [
 ].join(' ');
 const actionsSlotClass = 'flex flex-wrap items-center gap-2';
 
-const PageHostContext = createContext<ReactNode>(null);
+const PageHostContext = createContext<{ actions: ReactNode; personal: ReactNode; afterHeader: ReactNode }>({
+  actions: null,
+  personal: null,
+  afterHeader: null,
+});
 
 const headingClass = {
+  1: 'text-4xl in-data-[heading-scale=lg]:text-5xl',
   2: 'text-2xl leading-snug in-data-[heading-scale=lg]:text-3xl',
   3: 'text-xl leading-snug in-data-[heading-scale=lg]:text-2xl',
   4: 'text-lg leading-snug in-data-[heading-scale=lg]:text-xl',
 } as const;
 
-const headingTag = { 2: 'h2', 3: 'h3', 4: 'h4' } as const;
+const headingTag = { 1: 'h1', 2: 'h2', 3: 'h3', 4: 'h4' } as const;
 
 const textClass = [
   'max-w-prose space-y-4 text-base leading-7 text-foreground',
@@ -106,9 +113,28 @@ function hasContent(value: ReactNode): boolean {
   return true;
 }
 
-/** Provide controls owned by the page host to its template's actions slot. */
-export function PageHost({ actions, children }: { actions?: ReactNode; children?: ReactNode }) {
-  return <PageHostContext.Provider value={actions ?? null}>{children}</PageHostContext.Provider>;
+/**
+ * Provide content owned by the page host to its template's actions and personal slots, and the content the host
+ * places right after the template's header: the view tabs.
+ */
+export function PageHost({
+  actions,
+  personal,
+  afterHeader,
+  children,
+}: {
+  actions?: ReactNode;
+  personal?: ReactNode;
+  afterHeader?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <PageHostContext.Provider
+      value={{ actions: actions ?? null, personal: personal ?? null, afterHeader: afterHeader ?? null }}
+    >
+      {children}
+    </PageHostContext.Provider>
+  );
 }
 
 function choice<const Values extends readonly string[]>(
@@ -137,13 +163,14 @@ function Columns(props: Record<string, unknown>) {
 }
 
 function Heading(props: Record<string, unknown>) {
-  const text = pageText(props.text, usePageLocale());
-  const level = props.level === 3 || props.level === 4 ? props.level : 2;
+  const locale = usePageLocale();
+  const text = pageText(props.text, locale);
+  const level = props.level === 1 || props.level === 3 || props.level === 4 ? props.level : 2;
   const Tag = headingTag[level];
   return (
     <Tag
-      lang={text.lang}
-      className={`m-0 font-semibold tracking-tight text-balance text-foreground ${headingClass[level]}`}
+      lang={level === 1 ? (text.lang ?? locale) : text.lang}
+      className={`m-0 min-w-0 max-w-full font-semibold tracking-tight text-balance wrap-anywhere text-foreground ${headingClass[level]}`}
     >
       {text.text}
     </Tag>
@@ -164,7 +191,7 @@ function Text(props: Record<string, unknown>) {
   const blocks = paragraphs(text.text);
   if (blocks.length === 0) return null;
   return (
-    <div lang={text.lang} className={textClass}>
+    <div lang={text.lang} className={`min-w-0 w-full wrap-anywhere ${textClass}`}>
       {blocks.map((lines, index) => (
         <p className="text-pretty" key={index}>
           {lines.reduce<ReactNode[]>((nodes, line, lineIndex) => {
@@ -187,22 +214,23 @@ function SearchBox(props: Record<string, unknown>) {
       role="search"
       method="get"
       action={`/${encodeURIComponent(locale)}/search`}
-      className="flex w-full max-w-3xl gap-2"
+      className="flex min-w-0 w-full max-w-3xl flex-wrap items-start gap-2"
     >
-      <input
+      <Input
         type="search"
         name="q"
         placeholder={placeholder.text}
         aria-label={placeholder.text}
         lang={placeholder.lang}
-        className="min-w-0 flex-1 rounded-xl border border-border bg-background px-4 py-3 text-foreground shadow-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        className="h-12 min-w-0 max-w-full flex-[1_1_16rem] rounded-xl px-4 text-base"
       />
-      <button
+      <Button
         type="submit"
-        className="shrink-0 rounded-xl bg-primary px-5 py-3 font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        size="lg"
+        className="h-auto min-h-12 min-w-11 max-w-full shrink rounded-xl px-5 py-3 text-base whitespace-normal"
       >
-        {messages.search}
-      </button>
+        <span className="min-w-0 wrap-anywhere">{messages.search}</span>
+      </Button>
     </form>
   );
 }
@@ -211,19 +239,19 @@ function LinkGrid(props: Record<string, unknown>) {
   const locale = usePageLocale();
   const links = Array.isArray(props.links) ? props.links : [];
   return (
-    <ul className="grid min-w-0 grid-cols-2 gap-3 sm:grid-cols-4">
+    <ul className="grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,11rem),1fr))] gap-3">
       {links.map((item, index) => {
         if (!isRecord(item) || typeof item.href !== 'string') return null;
         const label = pageText(item.label, locale);
         const href = item.href.startsWith('/') ? `/${encodeURIComponent(locale)}${item.href}` : item.href;
         return (
-          <li key={`${item.href}:${index}`}>
+          <li className="min-w-0" key={`${item.href}:${index}`}>
             <a
               href={href}
               lang={label.lang}
-              className="flex min-h-14 items-center justify-center rounded-xl border border-border/70 bg-card px-4 py-3 text-center font-semibold text-card-foreground shadow-sm transition-colors hover:border-link/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex min-h-14 min-w-0 w-full items-center justify-center rounded-xl border border-border/70 bg-card px-4 py-3 text-center font-semibold text-card-foreground shadow-sm transition-colors hover:border-link/50 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              {label.text}
+              <span className="min-w-0 wrap-anywhere">{label.text}</span>
             </a>
           </li>
         );
@@ -233,11 +261,16 @@ function LinkGrid(props: Record<string, unknown>) {
 }
 
 function Slot(props: Record<string, unknown>) {
-  const actions = useContext(PageHostContext);
+  const { actions, personal, afterHeader } = useContext(PageHostContext);
   const children = content(props.children);
   switch (props.name) {
     case 'header':
-      return <header className={headerSlotClass}>{children}</header>;
+      return (
+        <>
+          <header className={headerSlotClass}>{children}</header>
+          {afterHeader}
+        </>
+      );
     case 'actions': {
       if (!hasContent(actions) && !hasContent(children)) return null;
       return (
@@ -245,6 +278,15 @@ function Slot(props: Record<string, unknown>) {
           {actions}
           {children}
         </div>
+      );
+    }
+    case 'personal': {
+      if (!hasContent(personal)) return null;
+      return (
+        <section className={slotClass} data-slot="personal">
+          {personal}
+          {children}
+        </section>
       );
     }
     case 'hero':

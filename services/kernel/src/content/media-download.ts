@@ -1,5 +1,9 @@
 import { createResourcePublicEligibility } from '../access/index.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { authoritativeTimeValue, mintReadTime, type AuthoritativeTime } from '../command/command.ts';
+import { readRealm, realmReadEligibility, type RealmView } from '../community/realm.ts';
+import realmHead from '../community/realm-read.sql';
+import { ProblemError } from '../http/problem.ts';
 import { accessCheck, type AccessCheck, type Actor, type AccessClient } from '../request/access.ts';
 import { routeOf } from '../route/route.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
@@ -13,11 +17,20 @@ import readPostAuthor from './read-post-author.sql';
 import readThreadAuthor from './read-thread-author.sql';
 import type { DownloadDecision, DownloadVariant, MediaDependencies } from './media.ts';
 import read from './read-download-media.sql';
+import readWork from './read-download-media-work.sql';
+import { authorizedRealmMedia, realmMediaVariants } from './realm-media-read.ts';
+import { AccessWorkUnavailableError, type AccessWorkAccounting } from '../access/work.ts';
+import { coverPreparedAccessWork } from './cover-prepared-access-work.ts';
+import { COVER_MEDIA_WORK_DEPENDENCY, mediaEligibilityCallbacks } from './media-eligibility-access-work.ts';
 
 type Row = NonNullable<Awaited<ReturnType<typeof read.run>>>;
+type RealmHeadRow = NonNullable<Awaited<ReturnType<typeof realmHead.run>>>;
 export type DownloadContext = Readonly<{
   deadline: number;
   routeKey?: Uint8Array;
+  /** Trusted caller forwarding only; never reconstructed from an HTTP timestamp. */
+  time?: AuthoritativeTime;
+  work?: AccessWorkAccounting;
 }>;
 const denied: DownloadDecision = Object.freeze({ allowed: false });
 const digest = /^[0-9a-f]{64}$/;
@@ -34,21 +47,98 @@ function selection(variant: string) {
   if (!(width < 320 || [320, 640, 960, 1280, 1920, 2560].includes(width))) return null;
   return { format: match[1]!, width };
 }
-async function point(client: AccessClient, id: string, slot: { format: string; width: number }): Promise<Row | null> {
-  const input = { route: route(id), media_id: id, ...slot };
+async function point(
+  client: AccessClient,
+  id: string,
+  slot: { format: string; width: number },
+  bounded = false,
+  credit = true,
+  provenance = true,
+): Promise<Row | null> {
+  const input = {
+    route: route(id),
+    media_id: id,
+    ...slot,
+    credit_bytes: credit ? 8192 : 0,
+    provenance_bytes: provenance ? 65536 : 0,
+  };
+  const statement = bounded ? readWork : read;
   const result = await client.query<Row>(
-    read.sql,
-    read.params.map((name) => input[name as keyof typeof input]),
+    statement.sql,
+    statement.params.map((name) => input[name as keyof typeof input]),
   );
   return result.rows.length === 1 ? result.rows[0]! : null;
 }
 const signature = (value: unknown) => JSON.stringify(value);
 const usable = (row: Row) => !row.erased && !row.collection_pending && !row.taken_down;
 
+/** A permanent post claim inherits that post's current disclosure chain, rather
+ * than only the thread or reply parent used to reserve the image. Historical
+ * reservations without an item binding retain their container prerequisite.
+ * A moved claim cannot silently switch the reservation's native relationship.
+ */
+async function disclosureChain(
+  client: AccessClient,
+  row: Row,
+  readParent?: Parameters<typeof mediaParentChain>[2],
+): Promise<MediaParent[]> {
+  const owner = row.claimed_item_id ?? row.container_id;
+  if (routeOf(owner) !== routeOf(row.container_id)) throw new GrantDeniedError();
+  const chain = await mediaParentChain(client, owner, readParent);
+  if (
+    (row.claimed_item_id !== null && chain[0]?.kind !== 'post') ||
+    !chain.some((parent) => parent.id === row.container_id)
+  )
+    throw new GrantDeniedError();
+  return chain;
+}
+
+function realmSignature(value: RealmView | RealmHeadRow): string {
+  const realm =
+    'realm_id' in value
+      ? {
+          realmId: value.realm_id,
+          spaceId: value.space_id,
+          state: value.state,
+          visibility: value.visibility,
+          contextId: value.context_id,
+          boardSchemeId: value.board_scheme_id,
+          headRevisionId: value.head_revision_id,
+          createdAt: value.created_at,
+          creator: value.creator,
+          predecessor: value.predecessor,
+          title: value.title,
+          summary: value.summary,
+          revisionCreatedAt: value.revision_created_at,
+          author: value.author,
+          votes: value.votes as Record<string, unknown>,
+        }
+      : value;
+  return JSON.stringify([
+    realm.realmId,
+    realm.spaceId,
+    realm.state,
+    realm.visibility,
+    realm.contextId,
+    realm.boardSchemeId,
+    realm.headRevisionId,
+    new Date(realm.createdAt).toISOString(),
+    realm.creator,
+    realm.predecessor,
+    realm.title,
+    realm.summary,
+    new Date(realm.revisionCreatedAt).toISOString(),
+    realm.author,
+    Object.entries(realm.votes).sort(([left], [right]) => left.localeCompare(right)),
+  ]);
+}
+
 /** No image bytes or object-store operations cross this boundary. Prepared
  * facts are independently anchored and released, then revalidated at each home.
  * H is bounded by mediaParentChain; the final media query probes one exact slot.
  */
+type AuthorizedDownload = Readonly<{ row: Row; decision: Extract<DownloadDecision, { allowed: true }> }>;
+
 export async function downloadMedia(
   dependencies: MediaDependencies,
   mediaId: string,
@@ -56,34 +146,118 @@ export async function downloadMedia(
   variant: DownloadVariant,
   context: DownloadContext,
 ): Promise<DownloadDecision> {
+  return (await authorizeDownload(dependencies, mediaId, actor, variant, context))?.decision ?? denied;
+}
+
+/** Internal authenticated transport facts. The supplied row is an expectation,
+ * never permission: the ordinary download verifier checks it before and at final
+ * disclosure. No retry selects a replacement when that expectation changes. */
+export async function authorizeMediaDerivative(
+  dependencies: MediaDependencies,
+  mediaId: string,
+  actor: Actor,
+  variant: Exclude<DownloadVariant, 'original'>,
+  context: DownloadContext,
+  expected: Row,
+): Promise<Row | null> {
+  return (await authorizeDownload(dependencies, mediaId, actor, variant, context, expected))?.row ?? null;
+}
+
+async function authorizeDownload(
+  dependencies: MediaDependencies,
+  mediaId: string,
+  actor: Actor,
+  variant: DownloadVariant,
+  context: DownloadContext,
+  expected?: Row,
+): Promise<AuthorizedDownload | null> {
   const slot = selection(variant);
   if (!slot || routeOf(mediaId) === null || !Number.isFinite(context.deadline) || Date.now() >= context.deadline)
-    return denied;
+    return null;
   const r = route(mediaId);
   const snapshot = <T>(home: number, work: (client: AccessClient) => Promise<T>) =>
     mediaParentSnapshot(dependencies.pool, home, context.deadline, work);
   try {
     const initial = await snapshot(r, (client) => point(client, mediaId, slot));
-    if (!initial || !usable(initial) || routeOf(initial.container_id) !== r) return denied;
+    if (
+      !initial ||
+      !usable(initial) ||
+      routeOf(initial.container_id) !== r ||
+      (expected !== undefined && signature(initial) !== signature(expected))
+    )
+      return null;
     const original = variant === 'original';
+    if (initial.purpose === 'realm-icon' || initial.purpose === 'realm-banner') {
+      if (original || initial.state !== 'available') return null;
+      const authorized = await authorizedRealmMedia(dependencies, initial.container_id, [mediaId], {
+        actor,
+        deadline: context.deadline,
+      });
+      const current = authorized.get(mediaId);
+      if (!current) return null;
+      const selected = realmMediaVariants(current).find(
+        (entry) => entry.format === slot.format && entry.width === slot.width,
+      );
+      if (!selected || Date.now() >= context.deadline) return null;
+      return await snapshot(r, async (client) => {
+        const current = await point(client, mediaId, slot);
+        if (!current || !usable(current) || signature(current) !== signature(initial)) return null;
+        return authorizedDecision(current, mediaId, variant, false, context.deadline);
+      });
+    }
+    if (initial.purpose === 'avatar') {
+      if (original || initial.state !== 'available' || initial.container_id !== initial.uploader_id) return null;
+      const resource = { route: r, id: mediaId };
+      const check = await accessCheck(
+        dependencies.access,
+        actor,
+        'media:read',
+        {
+          ...resource,
+          eligibility: createResourcePublicEligibility({
+            resource,
+            action: 'media:read',
+            ...mediaEligibilityCallbacks({
+              evidence: initial,
+              media: { kind: 'download', route: r, id: mediaId, ...slot, credit: false, provenance: false },
+              async verify({ client }, reads) {
+                const current = await reads.media((bounded) =>
+                  point(client, mediaId, slot, bounded, initial.credit !== null, initial.provenance !== null),
+                );
+                if (!current || !usable(current) || signature(current) !== signature(initial))
+                  throw new GrantDeniedError();
+                return true;
+              },
+            }),
+          }),
+        },
+        { pool: dependencies.pool, deadline: context.deadline },
+      );
+      return await snapshot(r, async (client) => {
+        const current = await point(client, mediaId, slot);
+        if (!current || !usable(current) || signature(current) !== signature(initial) || !(await check(client)))
+          return null;
+        return authorizedDecision(current, mediaId, variant, true, context.deadline);
+      });
+    }
     if (original) {
       if (
         actor.kind !== 'account' ||
         actor.accountId !== initial.uploader_id ||
         !['uploaded', 'available'].includes(initial.state)
       )
-        return denied;
+        return null;
     } else if (
       initial.state !== 'available' ||
       initial.variant_key === null ||
       (initial.purpose === 'post-image' && initial.claimed_at === null)
     )
-      return denied;
+      return null;
 
     // A cover inherits its declared subject; candidate visibility belongs to the
     // semantic response. The tuple fence is read at its independent source home.
     if (initial.purpose === 'cover') {
-      if (!context.routeKey) return denied;
+      if (!context.routeKey) return null;
       const provenance = initial.provenance as {
         source?: unknown;
         external_id?: unknown;
@@ -95,7 +269,7 @@ export async function downloadMedia(
         typeof provenance.external_id !== 'string' ||
         provenance.field_group !== 'cover'
       )
-        return denied;
+        return null;
       const home = tupleRoute(context.routeKey, provenance.source, provenance.external_id);
       const tuple = {
         route: home,
@@ -105,10 +279,19 @@ export async function downloadMedia(
       };
       const fenceAtHome = () => snapshot(home, async (client) => (await readFences(client, [tuple]))[0]);
       const fence = await fenceAtHome();
-      if (!fence || fence.takenDown) return denied;
+      if (!fence || fence.takenDown) return null;
       const resource = { route: r, id: initial.container_id };
       const subjectResource = { ...resource, eligibility: subjectReadEligibility(resource) };
-      const accessContext = { pool: dependencies.pool, deadline: context.deadline };
+      const accessContext = {
+        pool: dependencies.pool,
+        deadline: context.deadline,
+        ...(context.time === undefined ? {} : { time: context.time }),
+        ...(context.work === undefined ? {} : { work: context.work }),
+      };
+      if (context.work) {
+        if (!context.time) throw new (AccessWorkUnavailableError())(COVER_MEDIA_WORK_DEPENDENCY);
+        authoritativeTimeValue(context.time);
+      }
       const subject = await accessCheck(dependencies.access, actor, 'subject:read', subjectResource, accessContext);
       const publicSubject = original
         ? null
@@ -121,6 +304,7 @@ export async function downloadMedia(
               subjectResource,
               accessContext,
             );
+      const prepared = coverPreparedAccessWork(subject, publicSubject, accessContext);
       let publiclyVisible = false;
       const mediaResource = { route: r, id: mediaId };
       const media = await accessCheck(
@@ -132,45 +316,92 @@ export async function downloadMedia(
           eligibility: createResourcePublicEligibility({
             resource: mediaResource,
             action: 'media:read',
-            async prepare() {
-              return initial;
-            },
-            async verify({ client }) {
-              const current = await point(client, mediaId, slot);
-              if (!current || !usable(current) || signature(current) !== signature(initial))
-                throw new GrantDeniedError();
-              // Existence is a hard prerequisite even when an independent grant
-              // could satisfy the subject formula without a public floor.
-              if (!(await subjectExists.run(client, { route: r, subject_id: initial.container_id })))
-                throw new GrantDeniedError();
-              if (!(await subject(client))) throw new GrantDeniedError();
-              // Anonymous viewing and public visibility use the same prepared
-              // check on this snapshot; evaluate that formula only once.
-              publiclyVisible = publicSubject !== null && (publicSubject === subject || (await publicSubject(client)));
-              return publiclyVisible;
-            },
+            ...mediaEligibilityCallbacks({
+              evidence: initial,
+              dependency: COVER_MEDIA_WORK_DEPENDENCY,
+              media: {
+                kind: 'download',
+                route: r,
+                id: mediaId,
+                ...slot,
+                credit: initial.credit !== null,
+                provenance: initial.provenance !== null,
+              },
+              cover: { ...resource, access: prepared },
+              async verify({ client }, reads) {
+                const current = await reads.media((bounded) =>
+                  point(client, mediaId, slot, bounded, initial.credit !== null, initial.provenance !== null),
+                );
+                if (!current || !usable(current) || signature(current) !== signature(initial))
+                  throw new GrantDeniedError();
+                // Existence is a hard prerequisite even when an independent grant
+                // could satisfy the subject formula without a public floor.
+                if (
+                  !(await reads.subject(async (bounded) => {
+                    const input = { route: r, subject_id: initial.container_id };
+                    if (!bounded) return subjectExists.run(client, input);
+                    // Dispatch only the existing exact native statement: the SQL
+                    // convenience wrapper may perform catalogue freshness reads.
+                    const result = await client.query<{ found: number }>(
+                      subjectExists.sql,
+                      subjectExists.params.map((name) => input[name as keyof typeof input]),
+                    );
+                    return result.rows[0] ?? null;
+                  }))
+                )
+                  throw new GrantDeniedError();
+                if (!(await reads.prepared(subject))) throw new GrantDeniedError();
+                // Anonymous viewing and public visibility use the same prepared
+                // check on this snapshot; evaluate that formula only once.
+                publiclyVisible =
+                  publicSubject !== null && (publicSubject === subject || (await reads.prepared(publicSubject)));
+                return publiclyVisible;
+              },
+            }),
           }),
         },
         accessContext,
       );
       const currentFence = await fenceAtHome();
-      if (!currentFence || currentFence.takenDown || signature(currentFence) !== signature(fence)) return denied;
-      return snapshot(r, async (client) => {
+      if (!currentFence || currentFence.takenDown || signature(currentFence) !== signature(fence)) return null;
+      return await snapshot(r, async (client) => {
         const current = await point(client, mediaId, slot);
-        if (!current || !usable(current) || signature(current) !== signature(initial) || !(await media(client)))
-          return denied;
-        return bytesDecision(current, mediaId, variant, publiclyVisible, context.deadline);
+        if (
+          !current ||
+          !usable(current) ||
+          signature(current) !== signature(initial) ||
+          !(await media(client, context.time))
+        )
+          return null;
+        return authorizedDecision(current, mediaId, variant, publiclyVisible, context.deadline);
       });
     }
-    if (initial.purpose !== 'post-image') return denied;
-    const chain = await snapshot(r, (client) => mediaParentChain(client, initial.container_id));
+    if (initial.purpose !== 'post-image') return null;
+    const chain = await snapshot(r, (client) => disclosureChain(client, initial));
     const boardId = chain.at(-1)?.board_id;
-    if (!boardId) return denied;
+    if (!boardId) return null;
     const board = await snapshot(route(boardId), (client) => mediaParentBoard(client, boardId));
     const accessContext = {
       pool: dependencies.pool,
       deadline: context.deadline,
     };
+    let realmId: string | null = board.realm_id;
+    let realmInitial: RealmView | null = null;
+    let realmCheck: AccessCheck | null = null;
+    let realmRoute: number | null = null;
+    if (realmId !== null) {
+      realmRoute = route(realmId);
+      realmInitial = await readRealm(dependencies, actor, realmId, { deadline: context.deadline });
+      if (!realmInitial) return null;
+      const realmResource = { route: realmRoute, id: realmId };
+      realmCheck = await accessCheck(
+        dependencies.access,
+        actor,
+        'realm:read',
+        { ...realmResource, eligibility: realmReadEligibility(realmResource) },
+        accessContext,
+      );
+    }
     async function prepare(row: MediaParent): Promise<AccessCheck> {
       const action = `${row.kind}:read`;
       const resource = { route: route(row.id), id: row.id };
@@ -183,32 +414,41 @@ export async function downloadMedia(
           eligibility: createResourcePublicEligibility({
             resource,
             action,
-            async prepare() {
-              return row;
-            },
-            async verify({ client }) {
-              const current =
-                row.kind === 'board'
-                  ? await mediaParentBoard(client, row.id)
-                  : (await parent.run(client, { route: r, id: row.id, kind: row.kind }))[0];
-              if (
-                !current ||
-                signature(current) !== signature(row) ||
-                !['published', 'protected', 'draft'].includes(current.visibility) ||
-                current.availability !== 'available'
-              )
-                throw new GrantDeniedError();
-              if (current.visibility === 'draft') {
-                if (actor.kind !== 'account' || (row.kind !== 'thread' && row.kind !== 'post'))
+            ...mediaEligibilityCallbacks({
+              evidence: row,
+              parent: {
+                kind: row.kind,
+                route: resource.route,
+                id: row.id,
+                author: row.visibility === 'draft' && actor.kind === 'account' && row.kind !== 'board',
+              },
+              async verify({ client }, reads) {
+                const currentRows = await reads.parent(async () =>
+                  row.kind === 'board'
+                    ? mediaParentBoard(client, row.id)
+                    : parent.run(client, { route: r, id: row.id, kind: row.kind }),
+                );
+                const current = Array.isArray(currentRows) ? currentRows[0] : currentRows;
+                if (
+                  !current ||
+                  signature(current) !== signature(row) ||
+                  !['published', 'protected', 'draft'].includes(current.visibility) ||
+                  current.availability !== 'available'
+                )
                   throw new GrantDeniedError();
-                const author =
-                  row.kind === 'thread'
-                    ? await readThreadAuthor.run(client, { route: r, id: row.id })
-                    : await readPostAuthor.run(client, { route: r, id: row.id });
-                if (!author || author.author_account_id !== actor.accountId) throw new GrantDeniedError();
-              }
-              return current.visibility === 'published';
-            },
+                if (current.visibility === 'draft') {
+                  if (actor.kind !== 'account' || (row.kind !== 'thread' && row.kind !== 'post'))
+                    throw new GrantDeniedError();
+                  const author = await reads.author(() =>
+                    row.kind === 'thread'
+                      ? readThreadAuthor.run(client, { route: r, id: row.id })
+                      : readPostAuthor.run(client, { route: r, id: row.id }),
+                  );
+                  if (!author || author.author_account_id !== actor.accountId) throw new GrantDeniedError();
+                }
+                return current.visibility === 'published';
+              },
+            }),
           }),
         },
         accessContext,
@@ -229,16 +469,33 @@ export async function downloadMedia(
         eligibility: createResourcePublicEligibility({
           resource,
           action: 'media:read',
-          async prepare() {
-            return initial;
-          },
-          async verify({ client }) {
-            const current = await point(client, mediaId, slot);
-            if (!current || !usable(current) || signature(current) !== signature(initial)) throw new GrantDeniedError();
-            const currentChain = await mediaParentChain(client, current.container_id);
-            if (signature(currentChain) !== signature(chain)) throw new GrantDeniedError();
-            return publiclyVisible;
-          },
+          ...mediaEligibilityCallbacks({
+            evidence: initial,
+            media: {
+              kind: 'download',
+              route: r,
+              id: mediaId,
+              ...slot,
+              ancestors: chain.map(({ id, kind }) => {
+                if (kind === 'board') throw new GrantDeniedError();
+                return { id, kind };
+              }),
+              credit: initial.credit !== null,
+              provenance: initial.provenance !== null,
+            },
+            async verify({ client }, reads) {
+              const current = await reads.media((bounded) =>
+                point(client, mediaId, slot, bounded, initial.credit !== null, initial.provenance !== null),
+              );
+              if (!current || !usable(current) || signature(current) !== signature(initial))
+                throw new GrantDeniedError();
+              const currentChain = await disclosureChain(client, current, (input) =>
+                reads.ancestor(input, () => parent.run(client, input)),
+              );
+              if (signature(currentChain) !== signature(chain)) throw new GrantDeniedError();
+              return publiclyVisible;
+            },
+          }),
         }),
       },
       accessContext,
@@ -249,20 +506,49 @@ export async function downloadMedia(
       const current = await readBoardParent.run(client, { route: route(boardId), id: boardId });
       return current !== null && signature(current) === signature(board) && (await boardCheck(client));
     });
-    if (!boardVisible) return denied;
-    return snapshot(r, async (client) => {
+    if (!boardVisible) return null;
+    const currentMedia = await snapshot(r, async (client) => {
       const current = await point(client, mediaId, slot);
-      if (!current || !usable(current) || signature(current) !== signature(initial)) return denied;
-      const currentChain = await mediaParentChain(client, current.container_id);
-      if (signature(currentChain) !== signature(chain)) return denied;
-      for (const check of checks) if (!(await check(client))) return denied;
-      if (!(await mediaCheck(client))) return denied;
-      return bytesDecision(current, mediaId, variant, publiclyVisible, context.deadline);
+      if (!current || !usable(current) || signature(current) !== signature(initial)) return null;
+      const currentChain = await disclosureChain(client, current);
+      if (signature(currentChain) !== signature(chain)) return null;
+      for (const check of checks) if (!(await check(client))) return null;
+      if (!(await mediaCheck(client))) return null;
+      return current;
     });
+    if (!currentMedia) return null;
+    if (realmId !== null) {
+      if (realmRoute === null || !realmInitial || !realmCheck || board.realm_id !== realmId) return null;
+      const currentRealm = await snapshot(realmRoute, async (client) => {
+        const time = await mintReadTime(client);
+        try {
+          if (!(await realmCheck!(client, time))) return false;
+        } catch (error) {
+          if (error instanceof ProblemError && error.code === 'not_found') return false;
+          throw error;
+        }
+        const at = authoritativeTimeValue(time);
+        const rows = await realmHead.run(client, { route: realmRoute!, id: realmId!, at });
+        return rows !== null && realmSignature(rows) === realmSignature(realmInitial!);
+      });
+      if (!currentRealm) return null;
+    }
+    return authorizedDecision(currentMedia, mediaId, variant, publiclyVisible, context.deadline);
   } catch (error) {
-    if (error instanceof GrantDeniedError || error instanceof RangeError) return denied;
+    if (error instanceof GrantDeniedError || error instanceof RangeError) return null;
     throw error;
   }
+}
+
+function authorizedDecision(
+  row: Row,
+  mediaId: string,
+  variant: DownloadVariant,
+  publiclyVisible: boolean,
+  deadline: number,
+): AuthorizedDownload | null {
+  const decision = bytesDecision(row, mediaId, variant, publiclyVisible, deadline);
+  return decision.allowed ? { row, decision } : null;
 }
 
 function bytesDecision(

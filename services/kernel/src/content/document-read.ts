@@ -10,22 +10,31 @@ import { readCandidateDisclosure } from '../semantic/disclosure.ts';
 import { subjectReadEligibility } from '../semantic/eligibility.ts';
 import { MAX_DOCUMENT_BYTES } from './document.ts';
 import { tupleRoute } from './imported-contract.ts';
-import { readImportedField, type ImportedFieldView } from './imported-fields.ts';
+import { readImportedField, readImportedFieldBounded, type ImportedFieldView } from './imported-fields.ts';
+import { readAuthoredField, readAuthoredFieldBounded, type AuthoredFieldView } from './authored-fields.ts';
 import type { Anchored, AnchoredPosition, ReadContext } from './model.ts';
 import { readFences } from './source-fences.ts';
 
 export type DocumentReadDependencies = Readonly<{ pool: Pool; access: Access; routeKey: Uint8Array }>;
-export type DocumentView = Readonly<{
+type DocumentMetadata = Readonly<{
   id: string;
   subjectId: string;
   candidateId: string;
   revision: number;
-  source: ImportedFieldView['source'];
-  rights: ImportedFieldView['rights'];
   language: string;
   digest: string;
-}> &
-  (Readonly<{ availability: 'available'; body: DocumentSnapshot }> | Readonly<{ availability: 'erased'; body: null }>);
+}>;
+type AvailableDocument = Readonly<{ availability: 'available'; body: DocumentSnapshot }>;
+type ErasedDocument = Readonly<{ availability: 'erased'; body: null }>;
+export type DocumentView =
+  | (DocumentMetadata &
+      Readonly<{ origin: 'import'; source: ImportedFieldView['source']; rights: ImportedFieldView['rights'] }> &
+      (AvailableDocument | ErasedDocument))
+  | (DocumentMetadata & Readonly<{ origin: 'account'; author: string; licence: string }> & AvailableDocument);
+
+type DocumentReference =
+  | Readonly<{ origin: 'import'; row: ImportedFieldView }>
+  | Readonly<{ origin: 'account'; row: AuthoredFieldView }>;
 
 /** Each reference has its own released anchor. Access preparation may acquire
  * account and membership homes only before entering the subject snapshot. */
@@ -58,49 +67,107 @@ async function snapshot<T>(
 }
 
 // Availability can advance to erased while immutable identity/evidence cannot.
-const binding = ({ body: _body, availability: _availability, ...identity }: ImportedFieldView) =>
-  JSON.stringify(identity);
-function view(row: ImportedFieldView): DocumentView | null {
-  const metadata = {
+function importedBinding({ body: _body, availability: _availability, ...identity }: ImportedFieldView) {
+  return JSON.stringify(identity);
+}
+function authoredBinding({ body: _body, availability: _availability, ...identity }: AuthoredFieldView) {
+  return JSON.stringify(identity);
+}
+function binding(reference: DocumentReference): string {
+  return reference.origin === 'import' ? importedBinding(reference.row) : authoredBinding(reference.row);
+}
+function metadata(row: Pick<ImportedFieldView, 'id' | 'subject' | 'candidate' | 'revision' | 'language' | 'digest'>) {
+  return {
     id: row.id,
     subjectId: row.subject,
     candidateId: row.candidate,
     revision: row.revision,
-    source: row.source,
-    rights: row.rights,
     language: row.language,
     digest: row.digest,
   };
-  if (row.availability === 'erased')
-    return row.body === null ? { ...metadata, availability: 'erased', body: null } : null;
+}
+function parseBody(row: Pick<ImportedFieldView, 'availability' | 'body'>): DocumentSnapshot | null {
   if (row.availability !== 'available' || !row.body || row.body.byteLength > MAX_DOCUMENT_BYTES) return null;
   try {
     const text = new TextDecoder('utf-8', { fatal: true }).decode(row.body);
     const body = parseDocument(JSON.parse(text));
     if (serializeDocument(body) !== text) return null;
-    return { ...metadata, availability: 'available', body };
+    return body;
   } catch {
     return null;
   }
 }
+function viewImported(row: ImportedFieldView): DocumentView | null {
+  if (row.availability === 'erased')
+    return row.body === null
+      ? {
+          ...metadata(row),
+          origin: 'import',
+          source: row.source,
+          rights: row.rights,
+          availability: 'erased',
+          body: null,
+        }
+      : null;
+  const body = parseBody(row);
+  return body
+    ? { ...metadata(row), origin: 'import', source: row.source, rights: row.rights, availability: 'available', body }
+    : null;
+}
+function viewAuthored(row: AuthoredFieldView): DocumentView | null {
+  // Authored erasures are private tombstones. Their public identity is concealed like an unknown id.
+  if (row.availability !== 'available') return null;
+  const body = parseBody(row);
+  return body
+    ? {
+        ...metadata(row),
+        origin: 'account',
+        author: row.authorAccountId,
+        licence: row.licence,
+        availability: 'available',
+        body,
+      }
+    : null;
+}
 
-/** Exact immutable imported revision disclosure. Only stored bindings select the
- * semantic subject/candidate and original source tuple, including after merges.
- * Final passes re-read authoritative facts at their own homes; no reference read
- * holds a connection while acquiring another partition. No receipt carries bytes. */
+/** Exact document disclosure. Stored bindings select the semantic subject and
+ * candidate; imported documents also retain their original source tuple, including
+ * after merges. Final passes re-read authoritative facts at their own homes; no
+ * reference read holds a connection while acquiring another partition. */
 export async function readDocument(
   dependencies: DocumentReadDependencies,
   id: string,
   context: ReadContext,
+  maxSourceBytes?: number,
 ): Promise<{ document: DocumentView; anchors: readonly AnchoredPosition[] } | null> {
   const route = routeOf(id);
-  if (route === null || !Number.isFinite(context.deadline) || Date.now() >= context.deadline) return null;
+  if (
+    route === null ||
+    !Number.isFinite(context.deadline) ||
+    Date.now() >= context.deadline ||
+    (maxSourceBytes !== undefined &&
+      (!Number.isSafeInteger(maxSourceBytes) || maxSourceBytes < 1 || maxSourceBytes > MAX_DOCUMENT_BYTES))
+  )
+    return null;
   const atHome = <T>(home: number, work: (client: AccessClient) => Promise<T>) =>
     snapshot(dependencies, home, context, work);
+  const readReference = async (client: AccessClient): Promise<DocumentReference | null> => {
+    const imported =
+      maxSourceBytes === undefined
+        ? await readImportedField(client, route, id)
+        : await readImportedFieldBounded(client, route, id, maxSourceBytes);
+    if (imported) return { origin: 'import', row: imported };
+    const authored =
+      maxSourceBytes === undefined
+        ? await readAuthoredField(client, route, id)
+        : await readAuthoredFieldBounded(client, route, id, maxSourceBytes);
+    return authored ? { origin: 'account', row: authored } : null;
+  };
   try {
-    const initial = (await atHome(route, (client) => readImportedField(client, route, id))).value;
-    if (!initial || routeOf(initial.subject) !== route || routeOf(initial.candidate) !== route) return null;
-    const resource = { route, id: initial.subject };
+    const initial = (await atHome(route, readReference)).value;
+    const row = initial?.row;
+    if (!row || routeOf(row.subject) !== route || routeOf(row.candidate) !== route) return null;
+    const resource = { route, id: row.subject };
     const check = await accessCheck(
       dependencies.access,
       context.actor,
@@ -108,7 +175,7 @@ export async function readDocument(
       { ...resource, eligibility: subjectReadEligibility(resource) },
       { pool: dependencies.pool, deadline: context.deadline },
     );
-    const ref = { subject: initial.subject, candidate: initial.candidate };
+    const ref = { subject: row.subject, candidate: row.candidate };
     const semantic = (
       await atHome(route, async (client) => {
         if (!(await check(client))) return null;
@@ -117,31 +184,43 @@ export async function readDocument(
     ).value;
     if (!semantic?.disclosed || !Number.isSafeInteger(semantic.security_revision) || semantic.security_revision < 0)
       return null;
-    const home = tupleRoute(dependencies.routeKey, initial.source.source, initial.source.external_id);
-    const tuple = {
-      route: home,
-      source: initial.source.source,
-      external_id: initial.source.external_id,
-      field_group: 'summary' as const,
-    };
-    const fenceAtHome = () => atHome(home, async (client) => (await readFences(client, [tuple]))[0]);
-    const fence = (await fenceAtHome()).value;
-    if (!fence || fence.takenDown) return null;
+    let fenceAnchor: AnchoredPosition | undefined;
+    if (initial.origin === 'import') {
+      const source = initial.row.source;
+      const home = tupleRoute(dependencies.routeKey, source.source, source.external_id);
+      const tuple = {
+        route: home,
+        source: source.source,
+        external_id: source.external_id,
+        field_group: 'summary' as const,
+      };
+      const fenceAtHome = () => atHome(home, async (client) => (await readFences(client, [tuple]))[0]);
+      const fence = (await fenceAtHome()).value;
+      if (!fence || fence.takenDown) return null;
 
-    // Native cross-partition disclosure convention: revalidate and release the
-    // reference, then recheck the current owning resource before serialization.
-    const finalFence = await fenceAtHome();
-    if (!finalFence.value || finalFence.value.takenDown || finalFence.value.securityRevision !== fence.securityRevision)
-      return null;
+      // Native cross-partition disclosure convention: revalidate and release the
+      // reference, then recheck the current owning resource before serialization.
+      const finalFence = await fenceAtHome();
+      const finalFenceValue = finalFence.value;
+      if (!finalFenceValue || finalFenceValue.takenDown || finalFenceValue.securityRevision !== fence.securityRevision)
+        return null;
+      fenceAnchor = finalFence.anchor;
+    }
     const final = await atHome(route, async (client) => {
-      const current = await readImportedField(client, route, id);
-      if (!current || binding(current) !== binding(initial) || !(await check(client))) return null;
+      const current = await readReference(client);
+      if (
+        !current ||
+        current.origin !== initial.origin ||
+        binding(current) !== binding(initial) ||
+        !(await check(client))
+      )
+        return null;
       const disclosure = await readCandidateDisclosure(client, ref);
       if (!disclosure?.disclosed || disclosure.security_revision !== semantic.security_revision) return null;
-      return view(current);
+      return current.origin === 'import' ? viewImported(current.row) : viewAuthored(current.row);
     });
     if (!final.value || Date.now() >= context.deadline) return null;
-    return { document: final.value, anchors: [finalFence.anchor, final.anchor] };
+    return { document: final.value, anchors: fenceAnchor ? [fenceAnchor, final.anchor] : [final.anchor] };
   } catch (error) {
     if (error instanceof GrantDeniedError || error instanceof RangeError) return null;
     throw error;

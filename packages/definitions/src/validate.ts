@@ -1,5 +1,7 @@
 import type { PropertyDefinition, Release } from './index.ts';
 import { Compile } from 'typebox/schema';
+import { checkDocument, serializeDocument } from '@rezics/document';
+import spdxLicenseIds from 'spdx-license-ids';
 
 export type Violation = {
   pointer: string;
@@ -13,7 +15,7 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const pointer = (base: string, part: string | number) =>
   `${base}/${String(part).replaceAll('~', '~0').replaceAll('/', '~1')}`;
 
-export function checkSubjectStructure(input: unknown) {
+export function checkSubjectStructure(input: unknown, release?: Pick<Release, 'properties'>) {
   const errors: Violation[] = [];
   const add = (at: string, code: Violation['code']) => {
     if (errors.length < 16) errors.push({ pointer: at, code });
@@ -122,7 +124,6 @@ export function checkSubjectStructure(input: unknown) {
           add(at, 'invalid_type');
           continue;
         }
-        if (list.length > 32) add(at, 'out_of_range');
         const entries: StatementDraft[] = [];
         list.forEach((entry, i) => {
           const path = pointer(at, i);
@@ -170,6 +171,43 @@ export function checkSubjectStructure(input: unknown) {
           if (snak && typeof rank === 'string')
             entries.push({ property: prop, rank, value: snak.value, qualifiers, references });
         });
+        // Selection limits apply to each relation target, including its declared slot key.
+        // Unknown values share one property slot unless an external identity is supplied.
+        const relation = release?.properties[prop]?.relation;
+        const selections = new Map<string, number>();
+        for (const entry of entries) {
+          const value = entry.value;
+          const qualifier = (id: string, absolute = false) =>
+            entry.qualifiers.find(
+              (part): part is { property: string; value: { type: 'value'; content: string } } =>
+                isObject(part) &&
+                part.property === id &&
+                isObject(part.value) &&
+                part.value.type === 'value' &&
+                typeof part.value.content === 'string' &&
+                (!absolute || /^[A-Za-z][A-Za-z0-9+.-]*:[^\s]+$/.test(part.value.content)),
+            )?.value.content;
+          let key = '';
+          if (relation && isObject(value)) {
+            if (
+              value.type === 'value' &&
+              typeof value.content === 'string' &&
+              /^[0-9a-f]{8}-[0-9a-f]{4}-[78][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value.content)
+            )
+              key = JSON.stringify([
+                'target',
+                value.content,
+                relation.slotKey ? (qualifier(relation.slotKey) ?? '') : '',
+              ]);
+            else if (value.type === 'somevalue') {
+              const iri = qualifier('schema:sameAs', true);
+              if (iri) key = JSON.stringify(['external', iri]);
+            }
+          }
+          const count = (selections.get(key) ?? 0) + 1;
+          selections.set(key, count);
+          if (count === 33) add(at, 'out_of_range');
+        }
         drafts.push({ property: prop, entries });
       }
   }
@@ -237,13 +275,25 @@ export function issuePointers(issue: RawIssue): { pointer: string; code: Violati
 
 export type ItemTarget = { pointer: string; id: string; targets: readonly string[] };
 
-const validators = new WeakMap<Release, Map<string, ReturnType<typeof Compile>>>();
+const licenceIds = new Set(spdxLicenseIds);
+const authoredDocument = Compile({
+  type: 'object',
+  required: ['document', 'licence', 'language'],
+  additionalProperties: false,
+  properties: {
+    document: {},
+    licence: { type: 'string', minLength: 1, maxLength: 128 },
+    language: { type: 'string', minLength: 1, maxLength: 128 },
+  },
+});
+
+const validators = new WeakMap<object, Map<string, ReturnType<typeof Compile>>>();
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const at = (pointer: string, key: string | number) =>
   `${pointer}/${String(key).replaceAll('~', '~0').replaceAll('/', '~1')}`;
 
-function validator(release: Release, id: string, property: PropertyDefinition) {
+function validator(release: Pick<Release, 'properties'>, id: string, property: PropertyDefinition) {
   let properties = validators.get(release);
   if (!properties) {
     properties = new Map();
@@ -288,9 +338,9 @@ function compareDecimal(left: string, right: string): number {
   return a.negative ? -magnitude : magnitude;
 }
 
-function dateExists(time: string, precision: number): boolean {
+function dateExists(time: string, precision: number, calendarmodel: unknown): boolean {
   const match = /^[+-]([0-9]{4,})-([0-9]{2})-([0-9]{2})T00:00:00Z$/.exec(time);
-  if (!match) return false;
+  if (!match || !/[1-9]/.test(match[1]!)) return false;
   const month = Number(match[2]);
   const day = Number(match[3]);
   if (precision === 9) return month === 0 && day === 0;
@@ -298,16 +348,21 @@ function dateExists(time: string, precision: number): boolean {
   if (precision === 10) return day === 0;
   // Divisibility by 400, 100 and 4 depends only on the last four year digits.
   const year = Number(match[1]!.slice(-4));
-  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const leap =
+    calendarmodel === 'http://www.wikidata.org/entity/Q1985786'
+      ? year % 4 === 0
+      : year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
   const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
   return precision === 11 && day >= 1 && day <= days[month - 1]!;
 }
 
 export function checkSubjectRelease(
   input: unknown,
-  release: Release,
+  release: Pick<Release, 'properties'> & Partial<Pick<Release, 'types'>>,
   rejectContent?: (property: PropertyDefinition) => boolean,
   catalogueOnly = false,
+  authoredDocuments = false,
+  allowUnknownReferences = false,
 ): { violations: Violation[]; items: ItemTarget[] } {
   const violations: Violation[] = [];
   const items: ItemTarget[] = [];
@@ -318,9 +373,10 @@ export function checkSubjectRelease(
   if (!record(input)) return result;
   if (!catalogueOnly && input.type === undefined) add('/type', 'required');
   else if (!catalogueOnly && typeof input.type !== 'string') add('/type', 'invalid_type');
-  else if (!catalogueOnly && !Object.hasOwn(release.types, input.type as string)) add('/type', 'unsupported');
+  else if (!catalogueOnly && (!release.types || !Object.hasOwn(release.types, input.type as string)))
+    add('/type', 'unsupported');
   if (violations.length) return result;
-  const type = release.types[input.type as string]!;
+  const type = catalogueOnly ? undefined : release.types![input.type as string]!;
   if (!record(input.statements)) return result;
 
   const checkValue = (raw: Record<string, unknown>, property: PropertyDefinition, id: string, path: string) => {
@@ -336,35 +392,74 @@ export function checkSubjectRelease(
       for (const error of limits) add(error.pointer, error.code);
       return;
     }
-    const compiled = validator(release, id, property);
+    const authored = authoredDocuments && property.datatype === 'document';
+    const compiled = authored ? authoredDocument : validator(release, id, property);
     if (!compiled.Check(content)) {
       const [, errors] = compiled.Errors(content);
       for (const error of errors) for (const field of issuePointers(error)) add(pointer + field.pointer, field.code);
       return;
     }
+    if (authored && record(content)) {
+      if (!record(content.document) || !checkDocument(content.document)) add(`${pointer}/document`, 'invalid_format');
+      else if (new TextEncoder().encode(serializeDocument(content.document)).byteLength > 2 * 1024 * 1024)
+        add(`${pointer}/document`, 'out_of_range');
+      if (
+        typeof content.licence === 'string' &&
+        !licenceIds.has(content.licence) &&
+        !/^LicenseRef-[A-Za-z0-9.-]+$/.test(content.licence)
+      )
+        add(`${pointer}/licence`, 'invalid_format');
+      try {
+        if (typeof content.language !== 'string' || /[\u0000-\u001f\u007f-\u009f]/u.test(content.language))
+          throw new Error();
+        new Intl.Locale(content.language);
+      } catch {
+        add(`${pointer}/language`, 'invalid_format');
+      }
+    }
     if (property.datatype === 'quantity' && record(content) && typeof content.amount === 'string') {
       if (
-        (property.minimum !== undefined && compareDecimal(content.amount, String(property.minimum)) < 0) ||
+        (property.minimum !== undefined &&
+          (compareDecimal(content.amount, String(property.minimum)) < 0 ||
+            (property.minimumExclusive === true && compareDecimal(content.amount, String(property.minimum)) === 0))) ||
         (property.maximum !== undefined && compareDecimal(content.amount, String(property.maximum)) > 0)
       )
         add(`${pointer}/amount`, 'out_of_range');
+      for (const bound of ['lowerBound', 'upperBound'] as const) {
+        const value = content[bound];
+        if (typeof value !== 'string') continue;
+        if (
+          (bound === 'lowerBound' && compareDecimal(value, content.amount) > 0) ||
+          (bound === 'upperBound' && compareDecimal(value, content.amount) < 0) ||
+          (property.minimum !== undefined &&
+            (compareDecimal(value, String(property.minimum)) < 0 ||
+              (property.minimumExclusive === true && compareDecimal(value, String(property.minimum)) === 0))) ||
+          (property.maximum !== undefined && compareDecimal(value, String(property.maximum)) > 0)
+        )
+          add(`${pointer}/${bound}`, 'out_of_range');
+      }
     } else if (
       property.datatype === 'time' &&
       record(content) &&
       typeof content.time === 'string' &&
       typeof content.precision === 'number'
     ) {
-      if (!dateExists(content.time, content.precision)) add(`${pointer}/time`, 'invalid_format');
+      if (!dateExists(content.time, content.precision, content.calendarmodel)) add(`${pointer}/time`, 'invalid_format');
     } else if (property.datatype === 'wikibase-item' && typeof content === 'string') {
       items.push({ pointer, id: content, targets: property.targets! });
     }
   };
   const propertyId = (raw: unknown): string | undefined =>
     record(raw) && record(raw.property) && typeof raw.property.id === 'string' ? raw.property.id : undefined;
-  const checkPart = (raw: unknown, path: string, allowed?: readonly string[]) => {
+  const checkPart = (raw: unknown, path: string, allowed?: readonly string[], allowUnknown = false) => {
     const id = propertyId(raw);
     if (id === undefined) return;
-    if (!Object.hasOwn(release.properties, id) || (allowed && !allowed.includes(id))) {
+    if (!Object.hasOwn(release.properties, id)) {
+      if (allowUnknown) return;
+      add(`${path}/property/id`, 'unsupported');
+      return;
+    }
+    if (allowed && !allowed.includes(id)) {
       add(`${path}/property/id`, 'unsupported');
       return;
     }
@@ -373,7 +468,7 @@ export function checkSubjectRelease(
 
   for (const [id, list] of Object.entries(input.statements)) {
     const path = at('/statements', id);
-    if (catalogueOnly ? !Object.hasOwn(release.properties, id) : !type.properties.includes(id)) {
+    if (catalogueOnly ? !Object.hasOwn(release.properties, id) : !type!.properties.includes(id)) {
       add(path, 'unsupported');
       continue;
     }
@@ -392,7 +487,9 @@ export function checkSubjectRelease(
       if (Array.isArray(statement.references))
         statement.references.forEach((reference, k) => {
           if (record(reference) && Array.isArray(reference.parts))
-            reference.parts.forEach((part, m) => checkPart(part, `${pointer}/references/${k}/parts/${m}`));
+            reference.parts.forEach((part, m) =>
+              checkPart(part, `${pointer}/references/${k}/parts/${m}`, undefined, allowUnknownReferences),
+            );
         });
     });
   }
@@ -405,7 +502,7 @@ function valueLimits(content: unknown, pointer: string): Violation[] {
     if (typeof content[key] === 'string' && content[key].length > 127)
       return [{ pointer: `${pointer}/${key}`, code: 'out_of_range' }];
   }
-  if (typeof content.time === 'string' && /^[+-]?[0-9]{17}/.test(content.time))
+  if (typeof content.time === 'string' && content.time.length > 33)
     return [{ pointer: `${pointer}/time`, code: 'out_of_range' }];
   return [];
 }
@@ -423,19 +520,25 @@ function combine(first: Violation[], second: Violation[]): Violation[] {
 
 export function checkSubjectInput(
   input: unknown,
-  release: Release,
+  release: Pick<Release, 'properties'> & Pick<Release, 'types'>,
   rejectContent?: (property: PropertyDefinition) => boolean,
+  authoredDocuments = false,
 ): { violations: Violation[]; targets: ItemTarget[] } {
-  const structural = checkSubjectStructure(input);
-  const typed = checkSubjectRelease(input, release, rejectContent);
+  const structural = checkSubjectStructure(input, release);
+  const typed = checkSubjectRelease(input, release, rejectContent, false, authoredDocuments);
   return { violations: combine(structural.violations, typed.violations), targets: typed.items };
 }
 
 /** Proposal pointers match the single-statement HTTP envelope. */
 export function checkStatementInput(
   raw: unknown,
-  release: Release | undefined,
-  options: { rejectContent?: (property: PropertyDefinition) => boolean } = {},
+  release: Pick<Release, 'properties'> | undefined,
+  options: {
+    rejectContent?: (property: PropertyDefinition) => boolean;
+    authoredDocuments?: boolean;
+    /** Exact Type descriptors need not include every otherwise valid reference property. Native writes validate those. */
+    allowUnknownReferences?: boolean;
+  } = {},
 ): { violations: Violation[]; targets: ItemTarget[] } {
   const property =
     isObject(raw) && isObject(raw.property) && typeof raw.property.id === 'string' ? raw.property.id : '';
@@ -451,10 +554,20 @@ export function checkStatementInput(
   // A proposal's subject type must be checked by the caller against its database.
   const input = { type: '', labels: { en: 'Validation' }, statements: { [property]: [raw] } };
   const typed = release
-    ? checkSubjectRelease(input, release, options.rejectContent, true)
+    ? checkSubjectRelease(
+        input,
+        release,
+        options.rejectContent,
+        true,
+        options.authoredDocuments,
+        options.allowUnknownReferences,
+      )
     : { violations: [], items: [] };
   const violations = typed.violations.map(remap);
-  if (!isObject(raw) || !Array.isArray(raw.references) || !raw.references.length)
+  if (
+    release?.properties[property]?.disclosure !== 'sourceOrConsent' &&
+    (!isObject(raw) || !Array.isArray(raw.references) || !raw.references.length)
+  )
     violations.push({ pointer: '/statement/references', code: 'required' });
   const structural = checkSubjectStructure(input).violations.map(remap);
   return {

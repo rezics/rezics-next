@@ -1,0 +1,32 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+import * as ThreadReading from './thread-reading.stories';
+
+<Meta of={ThreadReading} />
+
+# Thread reading
+
+Pattern and Page stories share the delivered `ThreadReading` region and native post/header components; Pages add
+`AppShell`. Full posts keep their canonical `DocumentBody` in a shared `ContentItemFrame`; the `Posts` heading and
+revision entries use the shared heading parts while thread, ordered-list and history `li` semantics remain intact.
+Existing thread, owned-thread, Realm-thread and history recordings supply their data. The populated signed-in and
+signed-out stories retain rich document and edited/unedited post coverage. `LongDocument` keeps its final paragraph
+visible through the same production reader. The existing reply example
+uses the recorded parent relationship; selection and cancellation act on the same composer. Page exports bind the shared plays explicitly so Storybook
+indexes their interactions as well as their renderings. Selection checks the recorded opening-post identity and
+entered text; cancellation removes only that target and retains the text. The deleted organization
+example uses the existing identity fixture and keeps the readable post body, separately from a deleted post.
+Explicit post lifecycle examples use null current bodies. The existing state components represent loading,
+unavailable and current denial. Play interactions reach own edit, both recorded history versions and report states.
+
+Each history entry keeps its exact-revision link and disclosed byline with the immutable document first. Its full
+licence, subject and stored vote citation follow in the same framed reading entry; the separately supplied current
+vote comparison remains private to that author. Long identifiers wrap without clamping the canonical document.
+
+See the web README's Thread reading source contract for layout, privacy and data bounds. Review the same story IDs
+with `phone390` and `desktop1280` viewport globals and existing locale/theme globals. These stories establish no
+native authorization or visual pass. Exact revision pages belong to their separate route.
+
+The plays requery the accessible textbox until the mounted ProseMirror editor replaces the temporary fallback,
+then use the real reply control and keyboard. Blurring publishes the structured draft before cancellation.
+Temporary personal-query gaps keep that same composer mounted but hidden and unable to submit; current
+participation status stays visible. A refreshed initialization key does not replace an existing draft or intent.

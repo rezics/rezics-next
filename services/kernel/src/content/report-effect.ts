@@ -1,13 +1,17 @@
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import { deadlineClient, within } from '../access/authenticate.ts';
-import { runCommand } from '../command/command.ts';
+import { noEffect, runCommand } from '../command/command.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import type { Effect } from '../events/effects.ts';
 import type { CloudEvent } from '../events/log.ts';
 import { readPartition } from '../partition/partition.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
 import read from './read-report.sql';
+import { reportBoardPlacement } from './board-report-candidates.ts';
+import boardUpsert from './board-report-upsert.sql';
+import catalogueUpsert from './catalogue-report-upsert.sql';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { REPORT_EVENTS, type ReportEventData } from './report-events.ts';
 import upsert from './upsert-report-target.sql';
 
@@ -120,4 +124,87 @@ export async function applyReportEffect(pool: Pool, event: CloudEvent): Promise<
   } catch (error) {
     if (!(error instanceof AlreadyProjected)) throw error;
   }
+  // Also runs after exact-target replay: a crash between the two partition writes is repairable.
+  if (['subject', 'space', 'realm'].includes(report.targetKind)) {
+    await runCommand(pool, { partition: partitionOf(0), deadline }, async (tx) => {
+      const added = await catalogueUpsert.run(tx, {
+        report_route: reportRoute,
+        report_id: data.reportId,
+        subject_id: report.targetId,
+        target_kind: report.targetKind,
+        created_at: report.createdAt,
+      });
+      if (!added) return noEffect(null);
+      return {
+        value: null,
+        events: [
+          {
+            type: 'com.rezics.content.catalogue-report.projected.v1',
+            subject: GLOBAL_CONTEXT,
+            data: { reportId: data.reportId },
+          },
+        ],
+      };
+    });
+    return;
+  }
+  await projectBoardCandidate(
+    pool,
+    { kind: report.targetKind, id: report.targetId },
+    reportRoute,
+    data.reportId,
+    report.createdAt,
+    deadline,
+  );
+}
+
+/** Release the native target snapshot before writing the board partition. */
+async function projectBoardCandidate(
+  pool: Pool,
+  target: { kind: ReportEventData<typeof sourceType>['targetKind']; id: string },
+  reportRoute: number,
+  reportId: string,
+  createdAt: string,
+  deadline: number,
+): Promise<void> {
+  const boardId = await within(deadline, () =>
+    withConnection(pool, async (connection) => {
+      const client = deadlineClient(connection, deadline);
+      try {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        const anchor = await readPartition(client, partitionOf(routeOf(target.id)!));
+        if (!anchor || anchor.writeState === 'moved') throw new Error('Report target partition unavailable');
+        const board = await reportBoardPlacement(client, target);
+        await client.query('COMMIT');
+        return board;
+      } catch (error) {
+        try {
+          await connection.query('ROLLBACK');
+        } catch (rollbackError) {
+          discardConnection(connection, rollbackError as Error);
+        }
+        throw error;
+      }
+    }),
+  );
+  if (!boardId) return;
+  const route = routeOf(boardId)!;
+  await runCommand(pool, { partition: partitionOf(route), deadline }, async (tx) => {
+    const added = await boardUpsert.run(tx, {
+      route,
+      board_id: boardId,
+      target_kind: target.kind,
+      target_id: target.id,
+      report_route: reportRoute,
+      report_id: reportId,
+      created_at: createdAt,
+    });
+    if (!added) return noEffect(null);
+    return {
+      value: null,
+      events: [
+        { type: projectedType, subject: boardId, data: { reportId, targetKind: target.kind, targetId: target.id } },
+      ],
+    };
+  });
 }

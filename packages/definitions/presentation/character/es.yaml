@@ -6,3 +6,31 @@ properties:
   schema:weight: masa
   wdt:P1853: grupo sanguíneo
   wdt:P6296: identificador de personaje en Bangumi
+  rezics:relatedCharacterIdentity: identidad de personaje relacionada
+  wdt:P26: cónyuge
+  wdt:P3373: hermano o hermana
+  wdt:P22: padre
+  wdt:P25: madre
+  wdt:P451: pareja
+  rezics:characterRival: rival
+inverseProperties:
+  schema:gender: 'Sujetos de este género'
+  wdt:P1853: 'Sujetos de este grupo sanguíneo'
+  rezics:relatedCharacterIdentity: identidad relacionada de
+  wdt:P22: padre de
+  wdt:P25: madre de
+typeDescriptions:
+  wd:Q95074: 'Un personaje ficticio identificable, incluida una máquina, nave u organización ficticia; las apariciones y voces se registran en las obras.'
+propertyDescriptions:
+  schema:gender: 'El género del personaje ficticio descrito explícitamente como concepto; no se infiere el sexo biológico.'
+  schema:height: 'La altura declarada como cantidad no negativa en centímetros (wd:Q174728) o metros (wd:Q11573), conservando la unidad.'
+  schema:weight: 'La masa declarada como cantidad no negativa en kilogramos (wd:Q11570) o gramos (wd:Q41803), conservando la unidad.'
+  wdt:P1853: 'El grupo sanguíneo declarado explícitamente como concepto, por ejemplo A; lo desconocido sigue siendo desconocido.'
+  wdt:P6296: 'El identificador numérico positivo de personaje en Bangumi; no el de un título o persona ni la URL de una página.'
+  rezics:relatedCharacterIdentity: 'Otro personaje con el que se asocia esta identidad; no es fusión, redirección, instancia de clase, biografía combinada ni el rol de aparición main.'
+  wdt:P26: 'Otro personaje indicado como cónyuge, con calificación opcional de spoiler.'
+  wdt:P3373: 'Otro personaje indicado como hermano o hermana, con calificación opcional de spoiler.'
+  wdt:P22: 'El personaje indicado como padre, con calificación opcional de spoiler.'
+  wdt:P25: 'El personaje indicado como madre, con calificación opcional de spoiler.'
+  wdt:P451: 'Otro personaje indicado como pareja o amante, con calificación opcional de spoiler.'
+  rezics:characterRival: 'Otro personaje indicado como rival o enemigo; no es un rol de aparición.'

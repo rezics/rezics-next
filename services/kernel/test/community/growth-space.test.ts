@@ -8,9 +8,10 @@ import { Pool } from 'pg';
 import { migrate as migrateAuth } from '../../../auth/scripts/database.ts';
 import { createAccess } from '../../src/access/index.ts';
 import { readAccount } from '../../src/access/account-data.ts';
-import { type AccountActor } from '../../src/request/access.ts';
+import { accessCheck, type AccountActor } from '../../src/request/access.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const routeKey = new Uint8Array(32).fill(37);
@@ -33,7 +34,7 @@ async function fixture(pool: Pool, admin: Pool) {
   };
   const ids = [newId(0x1234), newId(0x2345)];
   const approvals = new Set(ids);
-  const actions = ['space:create', 'space:manage', 'space:read'];
+  const actions = ['space:create', 'space:manage', 'space:read', 'realm:read'];
   const password = 'community test password with enough entropy';
   const auth = await createAuthService({
     database: authPool,
@@ -41,7 +42,7 @@ async function fixture(pool: Pool, admin: Pool) {
     audience: 'https://community.api.test',
     secret: 'community-test-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const row = await readAccount(admin, routeOf(id)!, id);
         return (
@@ -58,7 +59,7 @@ async function fixture(pool: Pool, admin: Pool) {
         if (!approvals.delete(reference)) throw new Error('Unknown fixture provisioning reference');
         return { accountId: reference };
       },
-    },
+    }),
   });
   await auth.internal.registerClient({ clientId: 'community-test', firstParty: true, scopes: actions });
   const access = createAccess({
@@ -140,6 +141,39 @@ afterAll(async () => {
 });
 const deps = () => ({ pool: db.pool, access: f.access, routeKey });
 
+function carriedRealmRows(route: number, spaceId: string, creator: string) {
+  const realmId = newId(route);
+  const revisions = Array.from({ length: revisionsPerSpace }, () => newId(route));
+  const at = '2020-01-01T00:00:00.000Z';
+  return {
+    'community.realm': [
+      {
+        route,
+        realm_id: realmId,
+        space_id: spaceId,
+        state: 'active',
+        visibility: 'public',
+        context_id: GLOBAL_CONTEXT,
+        head_revision_id: revisions.at(-1),
+        created_at: at,
+        creator,
+      },
+    ],
+    'community.realm_revision': revisions.map((revision_id, index) => ({
+      route,
+      realm_id: realmId,
+      revision_id,
+      predecessor: index === 0 ? null : revisions[index - 1],
+      title: 'Carried Realm',
+      summary: '',
+      visibility: 'public',
+      context_id: GLOBAL_CONTEXT,
+      created_at: at,
+      author: creator,
+    })),
+  };
+}
+
 for (const operation of ['create', 'read', 'update'] as const)
   test(`Space ${operation} stays bounded at 256, 1024 and 4096 Spaces and their revisions`, async () => {
     await db.admin.query(
@@ -148,6 +182,22 @@ for (const operation of ['create', 'read', 'update'] as const)
     const probe = await space.createSpace(deps(), f.actor, input, context());
     const route = routeOf(probe.value.spaceId)!;
     const hotPartition = partitionOf(route);
+    let probeRealmId: string | undefined;
+    if (operation === 'read') {
+      const probeRealms: Population = {
+        name: `probe-realm-${randomUUID()}`,
+        hotPartition,
+        hotShare: 1,
+        rows: () => carriedRealmRows(route, probe.value.spaceId, f.actor.accountId),
+      };
+      await seed({ pool: db.pool, admin: db.admin }, probeRealms, { from: 0, to: 1 });
+      probeRealmId = (
+        await db.admin.query('SELECT realm_id FROM community.realm WHERE route=$1 AND space_id=$2', [
+          route,
+          probe.value.spaceId,
+        ])
+      ).rows[0].realm_id;
+    }
     let head = probe.value.revisionId;
     const positionBase = Number(
       (await db.admin.query('SELECT position FROM core.partition WHERE partition_no=$1', [hotPartition])).rows[0]
@@ -188,6 +238,7 @@ for (const operation of ['create', 'read', 'update'] as const)
             created_at: at,
             author: f.actor.accountId,
           })),
+          ...(operation === 'read' ? carriedRealmRows(route, spaceId, f.actor.accountId) : {}),
           'access.resource_initialization': [
             {
               route,
@@ -288,7 +339,27 @@ for (const operation of ['create', 'read', 'update'] as const)
       },
       async operation() {
         if (operation === 'create') return space.createSpace(deps(), f.actor, input, context(key()));
-        if (operation === 'read') return space.readSpace(db.pool, probe.value.spaceId, new Date().toISOString());
+        if (operation === 'read') {
+          const context = { deadline: Date.now() + 90_000 };
+          const resource = { route, id: probe.value.spaceId };
+          const check = await accessCheck(
+            f.access,
+            f.actor,
+            'space:read',
+            { ...resource, eligibility: space.spaceReadEligibility(resource) },
+            { pool: db.pool, ...context },
+          );
+          const value = await space.readSpaceForViewer(
+            deps(),
+            f.actor,
+            probe.value.spaceId,
+            new Date().toISOString(),
+            context,
+            check,
+          );
+          expect(value?.realmId).toBe(probeRealmId);
+          return value;
+        }
         const result = await space.updateSpace(
           deps(),
           f.actor,

@@ -1,18 +1,28 @@
 import type { Pool, PoolClient } from 'pg';
-import { readAccount } from '../access/account-data.ts';
+import { commandAccessContext } from '../access/command-admission.ts';
+import { readAccountCommandState } from '../access/account-data.ts';
+import { deadlineClient } from '../access/authenticate.ts';
+import { currentCommandWorkAssociation } from '../command/work-context.ts';
 import { GrantDeniedError } from '../access/grant-commands.ts';
-import { authoritativeTimeValue, type CommandEvent, type CommandOutcome } from '../command/command.ts';
+import {
+  authoritativeTimeValue,
+  mintReadTime,
+  type CommandAttempt,
+  type CommandEvent,
+  type CommandOutcome,
+} from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { readSpace, spaceReadEligibility } from '../community/space.ts';
 import { withConnection } from '../database/pool.ts';
 import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
-import { deadlineFor } from '../request/deadline.ts';
+import { withRequestDeadline } from '../request/deadline.ts';
 import { routeOf } from '../route/route.ts';
 import { readCollection } from './collection-store.ts';
-import { createLibraryCommandRunner, LibraryNotFoundError, WORK_STEP_DEADLINE_MS } from './command-support.ts';
+import { createLibraryCommandRunner, LibraryNotFoundError, workStepDeadline } from './command-support.ts';
 import type { Follow, FollowPageCursor, FollowTargetType } from './follow-model.ts';
 import { applyFollow, pageFollows, readFollow as readStoredFollow } from './follow-store.ts';
 import { resolveSubject } from './subject-anchor.ts';
+import { consumeFollowWork, followAccountWork, withFollowWork } from './follow-operation-bounds.ts';
 
 const FOLLOW_EVENT = 'com.rezics.library.follow.updated.v1';
 
@@ -65,13 +75,17 @@ function asTarget(value: FollowTarget): FollowTarget {
 /** Library follow commands. Follows stay in the follower's partition and are never counted in public. */
 export function createFollowCommands(config: FollowDeps) {
   const { pool, access, clock } = config;
-  const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
+  const runner = createLibraryCommandRunner({ pool, access, ...(clock === undefined ? {} : { clock }) });
 
-  async function admit(actor: Actor, action: string): Promise<AccountActor> {
+  async function admit(actor: Actor, action: string, deadline: number): Promise<AccountActor> {
     const account = requireAccount(actor);
     if (!account.scopes.includes(action)) throw new GrantDeniedError();
     const route = routeOf(account.accountId)!;
-    const current = await withConnection(pool, (client) => readAccount(client, route, account.accountId));
+    const current = await consumeFollowWork('admit', followAccountWork(account.accountId), () =>
+      withConnection(pool, (client) =>
+        readAccountCommandState(deadlineClient(client, deadline), route, account.accountId),
+      ),
+    );
     if (
       !current ||
       current.kind !== 'actor' ||
@@ -86,7 +100,17 @@ export function createFollowCommands(config: FollowDeps) {
     return account;
   }
 
-  async function readable(actor: AccountActor, target: FollowTarget): Promise<FollowTarget | null> {
+  async function readable(
+    actor: AccountActor,
+    target: FollowTarget,
+    deadline: number,
+    attempt?: CommandAttempt,
+  ): Promise<FollowTarget | null> {
+    const work = currentCommandWorkAssociation()?.access;
+    const base = { pool, deadline, ...(work ? { work } : {}) };
+    const context = attempt ? commandAccessContext(base, attempt) : base;
+    const time =
+      attempt?.time ?? (await withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock)));
     const route = routeOf(target.targetId);
     if (route === null) return null;
     if (target.targetType === 'space') {
@@ -99,19 +123,22 @@ export function createFollowCommands(config: FollowDeps) {
           ...identity,
           eligibility: spaceReadEligibility(identity),
         },
-        { pool, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
+        context,
       );
       const allowed = await withConnection(pool, async (client) => {
-        if (!(await check(client))) return false;
-        return (await readSpace(client, target.targetId, new Date().toISOString())) !== null;
+        const db = deadlineClient(client, deadline);
+        if (!(await check(db, time))) return false;
+        return (await readSpace(db, target.targetId, authoritativeTimeValue(time))) !== null;
       });
       return allowed ? target : null;
     }
     if (target.targetType === 'subject') {
-      const resolved = await resolveSubject({ pool, access }, actor, target.targetId);
-      return resolved ? { ...target, targetId: resolved.subjectId } : null;
+      const resolved = await resolveSubject({ pool, access }, actor, target.targetId, time, context);
+      return resolved ? target : null;
     }
-    const collection = await withConnection(pool, (client) => readCollection(client, route, target.targetId));
+    const collection = await withConnection(pool, (client) =>
+      readCollection(deadlineClient(client, deadline), route, target.targetId),
+    );
     return collection?.state === 'active' &&
       (collection.visibility === 'public' ||
         collection.visibility === 'unlisted' ||
@@ -120,35 +147,43 @@ export function createFollowCommands(config: FollowDeps) {
       : null;
   }
 
-  async function resolveTarget(actor: AccountActor, input: FollowTarget | string): Promise<FollowTarget> {
+  async function resolveTarget(
+    actor: AccountActor,
+    input: FollowTarget | string,
+    deadline: number,
+    attempt?: CommandAttempt,
+  ): Promise<FollowTarget> {
     const candidates: FollowTarget[] =
       typeof input === 'string'
         ? (['collection', 'subject', 'space'] as const).map((targetType) => ({ targetId: input, targetType }))
         : [asTarget(input)];
     for (const target of candidates) {
-      const resolved = await readable(actor, target);
+      const resolved = await readable(actor, target, deadline, attempt);
       if (resolved) return resolved;
     }
     throw new LibraryNotFoundError();
   }
 
-  async function load(accountId: string, targetId: string): Promise<Follow | null> {
+  async function load(accountId: string, targetId: string, deadline = workStepDeadline()): Promise<Follow | null> {
     const route = routeOf(accountId);
     if (route === null || routeOf(targetId) === null) return null;
-    return withConnection(pool, (client) => readStoredFollow(client, route, accountId, targetId));
+    return withConnection(pool, (client) =>
+      readStoredFollow(deadlineClient(client, deadline), route, accountId, targetId),
+    );
   }
 
   async function finish(
     run: () => Promise<CommandOutcome<Follow>>,
     accountId: string,
     targetId: string,
+    deadline = workStepDeadline(),
   ): Promise<FollowWrite> {
     try {
       const command = await run();
       return { follow: command.value, changed: !command.replayed, command };
     } catch (error) {
       if (!(error instanceof UnchangedFollow)) throw error;
-      const follow = await load(accountId, targetId);
+      const follow = await load(accountId, targetId, deadline);
       if (!follow) throw error;
       return { follow, changed: false, command: null };
     }
@@ -156,59 +191,102 @@ export function createFollowCommands(config: FollowDeps) {
 
   async function write(
     actor: AccountActor,
-    target: FollowTarget,
+    input: FollowTarget | string,
     requestKey: string,
     intent: 'follow' | 'unfollow',
+    deadline: number,
   ): Promise<FollowWrite> {
     const action = intent === 'follow' ? 'follow:create' : 'follow:delete';
     const kind = intent === 'follow' ? 'library.follow' : 'library.unfollow';
+    const targetId = typeof input === 'string' ? input : asTarget(input).targetId;
+    if (routeOf(targetId) === null) throw new LibraryNotFoundError();
+    // Preserve the existing target-shaped digest. Stored identity is read only in
+    // this account's partition; an absent own row conveys no foreign target type.
+    const existing = await load(actor.accountId, targetId, deadline);
+    const target = existing
+      ? { targetId: existing.targetId, targetType: existing.targetType }
+      : typeof input === 'string'
+        ? await resolveTarget(actor, input, deadline)
+        : asTarget(input);
     return finish(
       () =>
-        runner.ownAccount(actor, { action, kind, requestKey, input: target }, async (tx, command) => {
-          const route = routeOf(actor.accountId)!;
-          // The command log requires an event, so an unchanged row aborts before the receipt.
-          const changed = await applyFollow(tx, route, {
-            accountId: actor.accountId,
-            targetId: target.targetId,
-            targetType: target.targetType,
-            intent,
-            reason: 'explicit',
-            transactionId: command.transactionId,
-            time: authoritativeTimeValue(command.time),
-          });
-          if (!changed) throw new UnchangedFollow();
-          const follow = await readStoredFollow(tx, route, actor.accountId, target.targetId);
-          if (!follow) throw new Error('Follow write did not leave a row');
-          return { value: follow, events: [followEvent(actor.accountId, target.targetId)] };
-        }),
+        runner.ownAccountPrepared(
+          actor,
+          {
+            action,
+            kind,
+            requestKey,
+            input: target ?? { targetId },
+            deadline,
+            followOperation: true,
+            async prepare(attempt) {
+              // Business failure is deferred until AFTER current owner admission and
+              // exact receipt replay. A stored removal never visits the target home.
+              if (intent === 'unfollow' && existing) return { target, error: null };
+              try {
+                return { target: await resolveTarget(actor, target ?? input, deadline, attempt), error: null };
+              } catch (error) {
+                return { target: null, error };
+              }
+            },
+          },
+          async (tx, command, prepared) => {
+            if (prepared.error) {
+              throw prepared.error;
+            }
+            if (!prepared.target) throw new LibraryNotFoundError();
+            const route = routeOf(actor.accountId)!;
+            const stored = await readStoredFollow(tx, route, actor.accountId, targetId);
+            if (stored && stored.targetType !== prepared.target.targetType) throw new LibraryNotFoundError();
+            if (intent === 'unfollow' && existing && !stored) throw new LibraryNotFoundError();
+            const changed = await applyFollow(tx, route, {
+              accountId: actor.accountId,
+              targetId,
+              targetType: stored?.targetType ?? prepared.target.targetType,
+              intent,
+              reason: 'explicit',
+              transactionId: command.transactionId,
+              time: authoritativeTimeValue(command.time),
+            });
+            if (!changed) {
+              throw new UnchangedFollow();
+            }
+            const follow = await readStoredFollow(tx, route, actor.accountId, targetId);
+            if (!follow) throw new Error('Follow write did not leave a row');
+            return { value: follow, events: [followEvent(actor.accountId, targetId)] };
+          },
+        ),
       actor.accountId,
-      target.targetId,
+      targetId,
+      deadline,
     );
   }
 
-  async function follow(actor: Actor, input: FollowTarget | string, requestKey: string): Promise<FollowWrite> {
-    const account = await admit(actor, 'follow:create');
-    const target = await resolveTarget(account, input);
-    return write(account, target, requestKey, 'follow');
+  async function follow(
+    actor: Actor,
+    input: FollowTarget | string,
+    requestKey: string,
+    deadline = workStepDeadline(),
+  ): Promise<FollowWrite> {
+    const original = typeof input === 'string' ? input : Object.freeze({ ...input });
+    return withFollowWork(deadline, () =>
+      withRequestDeadline(deadline, async () =>
+        write(await admit(actor, 'follow:create', deadline), original, requestKey, 'follow', deadline),
+      ),
+    );
   }
 
-  async function unfollow(actor: Actor, input: FollowTarget | string, requestKey: string): Promise<FollowWrite> {
-    const account = await admit(actor, 'follow:delete');
-    const existing = typeof input === 'string' ? await load(account.accountId, input) : null;
-    const target = await resolveTarget(
-      account,
-      existing
-        ? {
-            targetId: existing.targetId,
-            targetType: existing.targetType,
-          }
-        : input,
-    );
-    return write(
-      account,
-      existing ? { targetId: existing.targetId, targetType: existing.targetType } : target,
-      requestKey,
-      'unfollow',
+  async function unfollow(
+    actor: Actor,
+    input: FollowTarget | string,
+    requestKey: string,
+    deadline = workStepDeadline(),
+  ): Promise<FollowWrite> {
+    const original = typeof input === 'string' ? input : Object.freeze({ ...input });
+    return withFollowWork(deadline, () =>
+      withRequestDeadline(deadline, async () =>
+        write(await admit(actor, 'follow:delete', deadline), original, requestKey, 'unfollow', deadline),
+      ),
     );
   }
 
@@ -218,30 +296,44 @@ export function createFollowCommands(config: FollowDeps) {
     stepKey: string;
   }): Promise<FollowWrite> {
     const { accountId, spaceId, stepKey } = input;
-    return finish(
-      () =>
-        runner.trustedAccount(
-          accountId,
-          { kind: 'library.follow.membership', stepKey, input: { accountId, spaceId } },
-          async (tx, command) => {
-            const route = routeOf(accountId)!;
-            const changed = await applyFollow(tx, route, {
+    const deadline = workStepDeadline();
+    return withFollowWork(deadline, () =>
+      withRequestDeadline(deadline, () =>
+        finish(
+          () =>
+            runner.trustedAccount(
               accountId,
-              targetId: spaceId,
-              targetType: 'space',
-              intent: 'implied',
-              reason: 'membership',
-              transactionId: command.transactionId,
-              time: authoritativeTimeValue(command.time),
-            });
-            if (!changed) throw new UnchangedFollow();
-            const follow = await readStoredFollow(tx, route, accountId, spaceId);
-            if (!follow) throw new Error('Follow write did not leave a row');
-            return { value: follow, events: [followEvent(accountId, spaceId)] };
-          },
+              {
+                kind: 'library.follow.membership',
+                stepKey,
+                input: { accountId, spaceId },
+                followOperation: true,
+                deadline,
+              },
+              async (tx, command) => {
+                const route = routeOf(accountId)!;
+                const changed = await applyFollow(tx, route, {
+                  accountId,
+                  targetId: spaceId,
+                  targetType: 'space',
+                  intent: 'implied',
+                  reason: 'membership',
+                  transactionId: command.transactionId,
+                  time: authoritativeTimeValue(command.time),
+                });
+                if (!changed) {
+                  throw new UnchangedFollow();
+                }
+                const follow = await readStoredFollow(tx, route, accountId, spaceId);
+                if (!follow) throw new Error('Follow write did not leave a row');
+                return { value: follow, events: [followEvent(accountId, spaceId)] };
+              },
+            ),
+          accountId,
+          spaceId,
+          deadline,
         ),
-      accountId,
-      spaceId,
+      ),
     );
   }
 
@@ -259,19 +351,24 @@ export function createFollowCommands(config: FollowDeps) {
     return changed ? followEvent(input.accountId, input.subjectId) : null;
   }
 
-  async function readFollow(actor: Actor, targetId: string): Promise<Follow | null> {
+  async function readFollow(actor: Actor, targetId: string, deadline = workStepDeadline()): Promise<Follow | null> {
     const account = requireAccount(actor);
-    return load(account.accountId, targetId);
+    return load(account.accountId, targetId, deadline);
   }
 
   async function listFollows(
     actor: Actor,
-    page: { cursor: FollowPageCursor | null; limit: number },
+    page: { cursor: FollowPageCursor | null; limit: number; targetType?: FollowTargetType },
+    deadline = workStepDeadline(),
   ): Promise<Follow[]> {
     const account = requireAccount(actor);
     const route = routeOf(account.accountId)!;
     return withConnection(pool, (client) =>
-      pageFollows(client, route, account.accountId, { after: page.cursor, limit: page.limit }),
+      pageFollows(deadlineClient(client, deadline), route, account.accountId, {
+        after: page.cursor,
+        limit: page.limit,
+        ...(page.targetType === undefined ? {} : { targetType: page.targetType }),
+      }),
     );
   }
 

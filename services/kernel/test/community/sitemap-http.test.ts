@@ -1,0 +1,488 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
+import type { PoolClient } from 'pg';
+import type { SitemapRealmItem, SitemapSpaceItem } from '../../src/community/sitemap.ts';
+import { createAccess } from '../../src/access/index.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
+import { createKernel } from '../../src/http/kernel.ts';
+import { openApiDocument } from '../../src/http/openapi.ts';
+import { actionCatalogue } from '../../src/http/request.ts';
+import { newId } from '../../src/route/route.ts';
+import { decodeListCursor } from '../../src/tokens/list-cursor.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { openGrowthDatabase } from '../support/growth.ts';
+import { standingFixture } from '../access/standing-fixture.ts';
+
+const routeKey = new Uint8Array(32).fill(71);
+const tokens = { current: 1, keys: new Map([[1, new Uint8Array(32).fill(72)]]) };
+const route = 0x4321;
+const creator = newId(0x1234);
+const initialAt = '2026-10-01T00:00:00.000Z';
+const fixedNow = Date.parse('2026-10-27T00:00:00.000Z');
+
+type SpaceFixture = { id: string; revision: string; address: string | null };
+type RealmFixture = { id: string; revision: string; spaceId: string; visibility: 'public' | 'protected' };
+
+let db: Awaited<ReturnType<typeof openGrowthDatabase>>;
+let fixture: Awaited<ReturnType<typeof standingFixture>>;
+let kernel: ReturnType<typeof createKernel>;
+let bearer: string;
+let spaces: SpaceFixture[];
+let realms: RealmFixture[];
+const anonymouslyUnreadable = new Set<string>();
+
+beforeAll(async () => {
+  db = await openGrowthDatabase();
+  fixture = await standingFixture(['space:read', 'realm:read']);
+  await fixture.reset();
+
+  const authenticate = fixture.access.authenticate;
+  const issued: string[] = [];
+  fixture.access.authenticate = (token, context) => {
+    issued.push(token);
+    return authenticate(token, { ...context, pool: db.pool });
+  };
+  try {
+    await fixture.context();
+    bearer = issued[0]!;
+  } finally {
+    fixture.access.authenticate = authenticate;
+  }
+
+  kernel = createKernel({
+    pool: db.pool,
+    routeKey: routeKey,
+    tokens,
+    clock: () => new Date(fixedNow),
+    access: (config) => {
+      const access = createAccess(config);
+      return deriveAccess(access, {
+        authenticate: (token, context) => fixture.access.authenticate(token, { ...context, pool: db.pool }),
+        async authorize(client, actor, action, resource, evidence, time) {
+          if (actor.kind === 'anonymous' && action === 'space:read' && anonymouslyUnreadable.has(resource.id))
+            return false;
+          return access.authorize(client, actor, action, resource, evidence, time);
+        },
+      });
+    },
+  });
+  spaces = [];
+  realms = [];
+  const inaccessible = await addSpace('hidden-space-address', initialAt);
+  anonymouslyUnreadable.add(inaccessible.id);
+  const noAddress = await addSpace(null, initialAt);
+  await addSpace('standalone-address', initialAt);
+  const publicHost = await addSpace('public-host', initialAt);
+  const protectedHost = await addSpace('protected-host', initialAt);
+  const publicRealm = await addRealm(publicHost.id, 'public');
+  const protectedRealm = await addRealm(protectedHost.id, 'protected');
+  const noBoardHost = await addSpace('public-no-board-host', '2026-10-01T00:00:02.000Z');
+  const publicRealmWithoutBoard = await addRealm(noBoardHost.id, 'public');
+  realms.push(publicRealm, protectedRealm, publicRealmWithoutBoard);
+  expect(noAddress.address).toBeNull();
+});
+
+afterAll(async () => {
+  await fixture?.close();
+  await db?.close();
+});
+
+async function addSpace(address: string | null, at: string): Promise<SpaceFixture> {
+  const id = newId(route);
+  const revision = newId(route);
+  await inTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO community.space(route,space_id,state,head_revision_id,created_at,creator)
+     VALUES ($1,$2,'active',$3,$4,$5)`,
+      [route, id, revision, at, creator],
+    );
+    await client.query(
+      `INSERT INTO community.space_revision(route,space_id,revision_id,predecessor,address,title,summary,created_at,author)
+     VALUES ($1,$2,$3,NULL,$4,'Sitemap Space','',$5,$6)`,
+      [route, id, revision, address, at, creator],
+    );
+  });
+  if (address !== null) await activateAddress(id, address);
+  const value = { id, revision, address };
+  spaces.push(value);
+  return value;
+}
+
+// Install the native address tuple at its SHA-256 route; revision text alone is not a claim.
+async function activateAddress(spaceId: string, address: string): Promise<void> {
+  await db.admin.query(
+    `INSERT INTO community.space_address_claim
+     (route,normalized_address,space_id,state,expires_at,reserved_until,transaction_id)
+     VALUES ($1,$2,$3,'active',NULL,NULL,$4)`,
+    [createHash('sha256').update(address).digest().readUInt16BE(0), address, spaceId, newId(route)],
+  );
+}
+
+async function addRealm(spaceId: string, visibility: 'public' | 'protected'): Promise<RealmFixture> {
+  const id = newId(route);
+  const revision = newId(route);
+  await inTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO community.realm(route,realm_id,space_id,state,visibility,context_id,head_revision_id,created_at,creator)
+     VALUES ($1,$2,$3,'active',$4,$5,$6,$7,$8)`,
+      [route, id, spaceId, visibility, GLOBAL_CONTEXT, revision, initialAt, creator],
+    );
+    await client.query(
+      `INSERT INTO community.realm_revision(route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
+     VALUES ($1,$2,$3,NULL,'Sitemap Realm','',$4,$5,$6,$7)`,
+      [route, id, revision, visibility, GLOBAL_CONTEXT, initialAt, creator],
+    );
+  });
+  return { id, revision, spaceId, visibility };
+}
+
+async function inTransaction(operation: (client: PoolClient) => Promise<void>): Promise<void> {
+  const client = await db.admin.connect();
+  try {
+    await client.query('BEGIN');
+    await operation(client);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function addBoard(realmId: string, at: string): Promise<string> {
+  const id = newId(route);
+  await db.admin.query(
+    `INSERT INTO content.board(route,board_id,realm_id,subject_id,title,visibility,security_revision,recorded_transaction_id,created_at)
+     VALUES ($1,$2,$3,$4,'Sitemap board','published',1,$2,$5)`,
+    [route, id, realmId, newId(0x6789), at],
+  );
+  return id;
+}
+
+async function get(feed: 'realms' | 'spaces', values: Record<string, string> = {}, token?: string) {
+  const response = await kernel.handle(
+    new Request(`http://kernel.test/v1/sitemap/${feed}?${new URLSearchParams(values)}`, {
+      headers: token ? { authorization: `Bearer ${token}` } : {},
+    }),
+  );
+  return { response, text: await response.clone().text(), body: await response.json() };
+}
+
+async function walk<Feed extends 'realms' | 'spaces'>(
+  feed: Feed,
+  limit: number,
+  token?: string,
+): Promise<(Feed extends 'realms' ? SitemapRealmItem : SitemapSpaceItem)[]> {
+  const items: (Feed extends 'realms' ? SitemapRealmItem : SitemapSpaceItem)[] = [];
+  let cursor: string | null = null;
+  let pages = 0;
+  do {
+    const page = await get(feed, { limit: String(limit), ...(cursor ? { cursor } : {}) }, token);
+    expect(page.response.status).toBe(200);
+    expect(page.body.items.length).toBeLessThanOrEqual(limit);
+    items.push(...page.body.items);
+    cursor = page.body.next;
+    expect(++pages).toBeLessThan(500);
+  } while (cursor);
+  return items;
+}
+
+test('a sitemap cursor issued for one feed is invalid_cursor on every other feed', async () => {
+  for (const feed of ['realms', 'spaces'] as const) {
+    const issued = await get(feed, { limit: '1' });
+    expect(issued.response.status).toBe(200);
+    expect(issued.body.next).toEqual(expect.any(String));
+    const decoded = await decodeListCursor(
+      tokens,
+      {
+        route: `GET /v1/sitemap/${feed}`,
+        viewer: null,
+        query: {},
+      },
+      issued.body.next!,
+      new Date(fixedNow),
+    );
+    expect(decoded.ok).toBe(true);
+    for (const other of ['realms', 'spaces'] as const) {
+      if (other === feed) continue;
+      expect((await get(other, { cursor: issued.body.next! })).body).toMatchObject({ code: 'invalid_cursor' });
+    }
+  }
+});
+
+test('a sitemap cursor sealed under the previous key still resumes after rotation, and one under a retired key is invalid_cursor', async () => {
+  const issued = await get('realms', { limit: '1' });
+  expect(issued.body.next).toEqual(expect.any(String));
+  const originalCurrent = tokens.current;
+  const originalKeys = new Map(tokens.keys);
+  try {
+    tokens.current = 2;
+    tokens.keys.set(2, new Uint8Array(32).fill(73));
+    expect((await get('realms', { limit: '1', cursor: issued.body.next! })).response.status).toBe(200);
+    tokens.keys.delete(1);
+    expect((await get('realms', { limit: '1', cursor: issued.body.next! })).body).toMatchObject({
+      code: 'invalid_cursor',
+    });
+  } finally {
+    tokens.current = originalCurrent;
+    tokens.keys.clear();
+    for (const [id, key] of originalKeys) tokens.keys.set(id, key);
+  }
+});
+
+test('the Realm and Space sitemap feeds are public and use the shared page shapes', async () => {
+  const document = openApiDocument(kernel);
+  for (const feed of ['realms', 'spaces'] as const) {
+    const operation = document.paths[`/v1/sitemap/${feed}`]?.get;
+    expect(operation?.operationId).toBe(`sitemap_${feed}.list`);
+    expect(operation?.['x-exposure']).toBe('public');
+    expect(actionCatalogue(kernel).has(operation?.['x-action'] as string)).toBe(true);
+    expect(kernel.routes.filter((entry) => entry.path === `/v1/sitemap/${feed}`)).toHaveLength(1);
+    const firstPage = await get(feed, { limit: '1' });
+    expect(firstPage.response.status).toBe(200);
+    expect(firstPage.body.items).toHaveLength(1);
+  }
+});
+
+test('the Realm and Space sitemap feeds walk every listed item exactly once through their cursors', async () => {
+  const expectedRealms = realms
+    .filter((realm) => realm.visibility === 'public')
+    .map((realm) => realm.id)
+    .sort();
+  const expectedSpaces = spaces
+    .filter(
+      (space) =>
+        space.address !== null &&
+        !anonymouslyUnreadable.has(space.id) &&
+        !realms.some((realm) => realm.spaceId === space.id),
+    )
+    .map((space) => space.id)
+    .sort();
+  for (const limit of [1, 2, 1000]) {
+    const listedRealms = await walk('realms', limit);
+    const realmIds = listedRealms.map((item) => item.id);
+    expect(new Set(realmIds).size).toBe(realmIds.length);
+    expect([...realmIds].sort()).toEqual(expectedRealms);
+    for (const item of listedRealms) {
+      expect(Object.keys(item).sort()).toEqual(['canonicalDestination', 'id', 'lastModified']);
+      const realm = realms.find((realm) => realm.id === item.id)!;
+      const host = spaces.find((space) => space.id === realm.spaceId)!;
+      expect(item.canonicalDestination).toEqual(
+        host.address === null
+          ? { kind: 'realm', realmId: realm.id }
+          : { kind: 'space', spaceId: host.id, address: host.address },
+      );
+    }
+
+    const listedSpaces = await walk('spaces', limit);
+    const spaceIds = listedSpaces.map((item) => item.id);
+    expect(new Set(spaceIds).size).toBe(spaceIds.length);
+    expect([...spaceIds].sort()).toEqual(expectedSpaces);
+    for (const item of listedSpaces) expect(Object.keys(item).sort()).toEqual(['address', 'id', 'lastModified']);
+    const publicRealm = realms.find((realm) => realm.visibility === 'public')!;
+    expect(listedRealms.find((item) => item.id === publicRealm.id)?.canonicalDestination).toEqual({
+      kind: 'space',
+      spaceId: publicRealm.spaceId,
+      address: 'public-host',
+    });
+    expect(listedSpaces.some((item) => item.id === publicRealm.spaceId)).toBe(false);
+    expect(listedSpaces.find((item) => item.address === 'standalone-address')).toBeDefined();
+    const destinations = [
+      ...listedRealms.map((item) => item.canonicalDestination),
+      ...listedSpaces.map((item) => ({ kind: 'space' as const, spaceId: item.id, address: item.address })),
+    ];
+    for (const realm of realms.filter((realm) => realm.visibility === 'public'))
+      expect(destinations.filter((item) => item.kind === 'space' && item.spaceId === realm.spaceId)).toHaveLength(1);
+    const families = destinations.map((item) => (item.kind === 'space' ? item.spaceId : item.realmId));
+    expect(new Set(families).size).toBe(families.length);
+  }
+});
+
+test('a protected Realm and a Space without an address or anonymous read are never listed', async () => {
+  const protectedRealm = realms.find((realm) => realm.visibility === 'protected')!;
+  expect((await walk('realms', 1000)).some((item) => item.id === protectedRealm.id)).toBe(false);
+  expect((await walk('spaces', 1000)).some((item) => item.id === protectedRealm.spaceId)).toBe(false);
+  expect((await walk('spaces', 1000)).some((item) => item.id === spaces[1]!.id)).toBe(false);
+  const inaccessible = await getSpace(spaces[0]!.id);
+  expect(inaccessible.status).toBe(404);
+});
+
+async function getSpace(id: string): Promise<Response> {
+  return kernel.handle(new Request(`http://kernel.test/v1/spaces/${id}`));
+}
+
+test('a bearer caller receives the same Realm and Space feeds as an anonymous caller', async () => {
+  for (const feed of ['realms', 'spaces'] as const) {
+    const anonymous = await get(feed, { limit: '1' });
+    const authenticated = await get(feed, { limit: '1' }, bearer);
+    expect(authenticated.response.status).toBe(200);
+    expect(authenticated.body.items).toEqual(anonymous.body.items);
+    expect(Boolean(authenticated.body.next)).toBe(Boolean(anonymous.body.next));
+    if (authenticated.body.next && anonymous.body.next) {
+      const binding = { route: `GET /v1/sitemap/${feed}`, viewer: null, query: {} };
+      const [authenticatedCursor, anonymousCursor] = await Promise.all([
+        decodeListCursor(tokens, binding, authenticated.body.next, new Date(fixedNow)),
+        decodeListCursor(tokens, binding, anonymous.body.next, new Date(fixedNow)),
+      ]);
+      expect(authenticatedCursor.ok).toBe(true);
+      expect(anonymousCursor.ok).toBe(true);
+      if (authenticatedCursor.ok && anonymousCursor.ok)
+        expect({ epoch: authenticatedCursor.epoch, after: authenticatedCursor.after }).toEqual({
+          epoch: anonymousCursor.epoch,
+          after: anonymousCursor.after,
+        });
+    }
+    if (anonymous.body.next) {
+      const continued = await get(feed, { limit: '1', cursor: anonymous.body.next });
+      const bearerContinued = await get(feed, { limit: '1', cursor: anonymous.body.next }, bearer);
+      expect(bearerContinued.body.items).toEqual(continued.body.items);
+    }
+  }
+});
+
+test('lastModified follows a new Realm or Space revision and a new board in the Realm', async () => {
+  const publicRealm = realms.find((realm) => realm.visibility === 'public')!;
+  const publicHost = spaces.find((space) => space.id === publicRealm.spaceId)!;
+  const publicSpace = spaces.find((space) => space.address === 'standalone-address')!;
+  const beforeRealm = (await walk('realms', 1000)).find((item) => item.id === publicRealm.id)!.lastModified;
+  const beforeSpace = (await walk('spaces', 1000)).find((item) => item.id === publicSpace.id)!;
+
+  const newSpaceRevision = newId(route);
+  const spaceAt = '2026-10-02T00:00:00.000Z';
+  for (const [space, address, revision] of [
+    [publicHost, 'public-host-v2', newId(route)],
+    [publicSpace, 'standalone-address-v2', newSpaceRevision],
+  ] as const) {
+    await inTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO community.space_revision(route,space_id,revision_id,predecessor,address,title,summary,created_at,author)
+       VALUES ($1,$2,$3,$4,$5,'Sitemap Space revision','',$6,$7)`,
+        [route, space.id, revision, space.revision, address, spaceAt, creator],
+      );
+      await client.query('UPDATE community.space SET head_revision_id=$3 WHERE route=$1 AND space_id=$2', [
+        route,
+        space.id,
+        revision,
+      ]);
+    });
+    await activateAddress(space.id, address);
+    await db.admin.query(
+      `UPDATE community.space_address_claim SET state='reserved',reserved_until='2026-11-01'
+       WHERE route=$1 AND normalized_address=$2 AND space_id=$3`,
+      [createHash('sha256').update(space.address!).digest().readUInt16BE(0), space.address, space.id],
+    );
+  }
+  const newRealmRevision = newId(route);
+  const realmAt = '2026-10-03T00:00:00.000Z';
+  await inTransaction(async (client) => {
+    await client.query(
+      `INSERT INTO community.realm_revision(route,realm_id,revision_id,predecessor,title,summary,visibility,context_id,created_at,author)
+     VALUES ($1,$2,$3,$4,'Sitemap Realm revision','',$5,$6,$7,$8)`,
+      [
+        route,
+        publicRealm.id,
+        newRealmRevision,
+        publicRealm.revision,
+        publicRealm.visibility,
+        GLOBAL_CONTEXT,
+        realmAt,
+        creator,
+      ],
+    );
+    await client.query('UPDATE community.realm SET head_revision_id=$3 WHERE route=$1 AND realm_id=$2', [
+      route,
+      publicRealm.id,
+      newRealmRevision,
+    ]);
+  });
+  await addBoard(publicRealm.id, '2026-10-04T00:00:00.000Z');
+
+  const realmItem = (await walk('realms', 1000)).find((item) => item.id === publicRealm.id)!;
+  const spaceItem = (await walk('spaces', 1000)).find((item) => item.id === publicSpace.id)!;
+  expect(beforeRealm).toBe(initialAt);
+  expect(realmItem.lastModified).toBe('2026-10-04T00:00:00.000000Z');
+  expect(realmItem.lastModified > beforeRealm).toBe(true);
+  expect(spaceItem.lastModified).toBe(spaceAt);
+  expect(spaceItem.lastModified > beforeSpace.lastModified).toBe(true);
+  expect(spaceItem.address).toBe('standalone-address-v2');
+  expect(realmItem.canonicalDestination).toEqual({ kind: 'space', spaceId: publicHost.id, address: 'public-host-v2' });
+  expect((await walk('spaces', 1000)).some((item) => item.id === publicHost.id)).toBe(false);
+});
+
+test('a cursor that stops on a skipped candidate contains no id, route or timestamp of that candidate in its decoded bytes', async () => {
+  const hiddenIds: string[] = [];
+  for (let index = 0; index < 8; index++) {
+    const host = await addSpace(`protected-host-${index}`, initialAt);
+    hiddenIds.push(host.id);
+    const realm = await addRealm(host.id, 'protected');
+    hiddenIds.push(realm.id);
+  }
+  for (const feed of ['realms', 'spaces'] as const) {
+    let cursor: string | null = null;
+    let cursorAfterSkipped: string | null = null;
+    let pages = 0;
+    do {
+      const page = await get(feed, { limit: '1', ...(cursor ? { cursor } : {}) });
+      expect(page.response.status).toBe(200);
+      cursor = page.body.next;
+      if (!page.body.items.length && cursor) {
+        cursorAfterSkipped = cursor;
+        break;
+      }
+      expect(++pages).toBeLessThan(500);
+    } while (cursor);
+    expect(cursorAfterSkipped).toEqual(expect.any(String));
+    const opaque = cursorAfterSkipped!;
+    const binding = { route: `GET /v1/sitemap/${feed}`, viewer: null, query: {} };
+    const decoded = await decodeListCursor(tokens, binding, opaque, new Date(fixedNow));
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) throw new Error('Cursor did not decode');
+    const readable = Buffer.from(opaque, 'base64url').toString('utf8');
+    for (const id of hiddenIds) expect(readable).not.toContain(id);
+    expect(decoded.epoch).toBe(1);
+    expect(decoded.after).toHaveLength(2);
+    expect(typeof decoded.after[0]).toBe('number');
+    expect(typeof decoded.after[1]).toBe('string');
+  }
+});
+
+test('the canonical family union excludes protected, unreadable and removed carried chains', async () => {
+  const hidden: { host: SpaceFixture; realm: RealmFixture }[] = [];
+  for (const state of ['protected', 'unreadable', 'removed-host', 'removed-realm'] as const) {
+    const host = await addSpace(`excluded-${state}`, initialAt);
+    const realm = await addRealm(host.id, state === 'protected' ? 'protected' : 'public');
+    hidden.push({ host, realm });
+    if (state === 'unreadable') anonymouslyUnreadable.add(host.id);
+    if (state === 'removed-host')
+      await db.admin.query("UPDATE community.space SET state='removed' WHERE route=$1 AND space_id=$2", [
+        route,
+        host.id,
+      ]);
+    if (state === 'removed-realm')
+      await db.admin.query("UPDATE community.realm SET state='removed' WHERE route=$1 AND realm_id=$2", [
+        route,
+        realm.id,
+      ]);
+  }
+  const listedRealms = await walk('realms', 1);
+  const listedSpaces = await walk('spaces', 1);
+  const families = [
+    ...listedRealms.map((item) =>
+      item.canonicalDestination.kind === 'space'
+        ? item.canonicalDestination.spaceId
+        : item.canonicalDestination.realmId,
+    ),
+    ...listedSpaces.map((item) => item.id),
+  ];
+  for (const { host, realm } of hidden) {
+    expect(listedRealms.some((item) => item.id === realm.id)).toBe(false);
+    expect(families).not.toContain(host.id);
+    expect(families).not.toContain(realm.id);
+    expect(JSON.stringify([...listedRealms, ...listedSpaces])).not.toContain(host.address!);
+  }
+  const publicRealm = realms.find((realm) => realm.visibility === 'public')!;
+  expect(families.filter((id) => id === publicRealm.spaceId)).toHaveLength(1);
+  const standalone = spaces.find((space) => space.address === 'standalone-address')!;
+  expect(listedSpaces.some((item) => item.id === standalone.id)).toBe(true);
+});

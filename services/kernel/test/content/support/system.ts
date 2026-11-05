@@ -1,3 +1,4 @@
+import { accountDeletionRuntime, registerAccountDeletionRuntime } from '../../support/account-deletion.ts';
 import { createHash, randomBytes } from 'node:crypto';
 import { WEBSITE_CLIENT_ID, type PublicJwks } from '@rezics/auth';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -5,7 +6,7 @@ import type { Pool } from 'pg';
 import type { Access, AccountActor, ActionCatalogue } from '../../../src/request/access.ts';
 import type { Kernel } from '../../../src/http/kernel.ts';
 import type { KeyRing } from '../../../src/tokens/seal.ts';
-import { createNativeContentSystem } from './native-system.ts';
+import { createNativeContentSystemWithOrdinaryScopes } from './native-system.ts';
 
 export type ContentAccountState = 'active' | 'suspended';
 
@@ -35,6 +36,11 @@ export interface ContentSystemOptions {
   readonly databaseUrl: string;
   /** Optional isolated database namespace for deterministic fixture assertions. */
   readonly namespace?: string;
+  /** Supply a separately instrumented Auth database pool before the production handler is constructed. */
+  readonly authPoolFactory?: (databaseUrl: string) => Promise<{
+    readonly pool: Pool;
+    close(): Promise<void>;
+  }>;
 }
 
 export interface ContentSystem {
@@ -54,6 +60,7 @@ export interface ContentSystem {
   readonly actors: ContentActors;
   readonly auth: {
     readonly ordinaryClient: ContentAuthClient;
+    readonly ordinaryScopes: readonly string[];
     readonly websiteClient: ContentAuthClient;
     /** Obtain a real Auth-issued token for a provisioned account and registered client. */
     issue(input: {
@@ -66,6 +73,10 @@ export interface ContentSystem {
     refresh(input: { readonly refreshToken: string }): Promise<ContentCredential>;
   };
   readonly access: Access;
+  /** Construct a fresh production verifier/cache for a cold native read sample. */
+  readonly createFreshAccess: (observeJwks?: (request: Request, response: Response) => Promise<void>) => Access;
+  /** Mount the same native routes, rate stage and fixture policy on a captured application pool. */
+  readonly createKernelForPool: (pool: Pool, access: Access) => Kernel;
   /** Catalogue derived from the routes mounted on this real Kernel. */
   readonly actions: ActionCatalogue;
   readonly clock: {
@@ -109,7 +120,15 @@ function cookieHeader(response: Response): string {
  * real `rezics-website` client against those same services.
  */
 export async function createContentSystem(options: ContentSystemOptions): Promise<ContentSystem> {
-  const native = await createNativeContentSystem(options);
+  return createContentSystemWithOrdinaryScopes(options);
+}
+
+/** Select ordinary product scopes without changing the shared fixture's frozen options contract. */
+export async function createContentSystemWithOrdinaryScopes(
+  options: ContentSystemOptions,
+  ordinaryScopes?: readonly string[],
+): Promise<ContentSystem> {
+  const native = await createNativeContentSystemWithOrdinaryScopes(options, ordinaryScopes);
   try {
     const issuer = native.nativeAuth.verifier.issuer;
     const audience = native.nativeAuth.verifier.audience;
@@ -288,8 +307,16 @@ export async function createContentSystem(options: ContentSystemOptions): Promis
       routeKey: native.routeKey,
       tokenKeys: native.tokenKeys,
       actors: { ...native.actors, worker, otherWorker },
-      auth: { ordinaryClient: native.auth.ordinaryClient, websiteClient, issue, refresh },
+      auth: {
+        ordinaryClient: native.auth.ordinaryClient,
+        ordinaryScopes: native.auth.ordinaryScopes,
+        websiteClient,
+        issue,
+        refresh,
+      },
       access: native.access,
+      createFreshAccess: native.createFreshAccess,
+      createKernelForPool: native.createKernelForPool,
       actions: native.actions,
       clock: native.clock,
       transport: native.transport,
@@ -309,6 +336,7 @@ export async function createContentSystem(options: ContentSystemOptions): Promis
           });
         }));
     governanceCredentialPorts.set(system, governance);
+    registerAccountDeletionRuntime(system, accountDeletionRuntime(native));
     return system;
   } catch (error) {
     try {

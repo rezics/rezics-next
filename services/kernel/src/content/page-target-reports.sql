@@ -1,7 +1,28 @@
-SELECT report_route, report_id,
-       to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at
-FROM content.report_target
-WHERE route = :route::integer AND target_kind = :target_kind::text AND target_id = :target_id::uuid
-  AND (created_at, report_id) < (:created_at::timestamptz, :report_id::uuid)
-ORDER BY report_target.created_at DESC, report_id DESC
-LIMIT :limit::integer;
+WITH input AS NOT MATERIALIZED (
+  SELECT :route::integer AS route, :target_kind::text AS target_kind, :target_id::uuid AS target_id,
+         :created_at::timestamptz AS after_at, :report_id::uuid AS after_id,
+         :oldest::boolean AS oldest, :limit::integer AS page_limit
+)
+SELECT * FROM (
+(SELECT candidate.report_route, candidate.report_id, candidate.target_kind, candidate.target_id,
+        to_char(candidate.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at
+ FROM content.report_target AS candidate
+ WHERE candidate.route = (SELECT route FROM input) AND candidate.target_kind = (SELECT target_kind FROM input) AND candidate.target_id = (SELECT target_id FROM input)
+   AND NOT (SELECT oldest FROM input)
+   AND (candidate.created_at, candidate.report_id) < ((SELECT after_at FROM input), (SELECT after_id FROM input))
+ ORDER BY candidate.created_at DESC, candidate.report_id DESC
+ LIMIT (SELECT page_limit FROM input))
+UNION ALL
+(SELECT candidate.report_route, candidate.report_id, candidate.target_kind, candidate.target_id,
+        to_char(candidate.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at
+ FROM content.report_target AS candidate
+ WHERE candidate.route = (SELECT route FROM input) AND candidate.target_kind = (SELECT target_kind FROM input) AND candidate.target_id = (SELECT target_id FROM input)
+   AND (SELECT oldest FROM input)
+   AND (candidate.created_at, candidate.report_id) > ((SELECT after_at FROM input), (SELECT after_id FROM input))
+ ORDER BY candidate.created_at ASC, candidate.report_id ASC
+ LIMIT (SELECT page_limit FROM input))
+) AS candidates
+ORDER BY CASE WHEN (SELECT oldest FROM input) THEN candidates.created_at END ASC,
+         CASE WHEN NOT (SELECT oldest FROM input) THEN candidates.created_at END DESC,
+         CASE WHEN (SELECT oldest FROM input) THEN candidates.report_id END ASC,
+         CASE WHEN NOT (SELECT oldest FROM input) THEN candidates.report_id END DESC;

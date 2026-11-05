@@ -1,3 +1,6 @@
 types:
-  schema:ComicSeries: 일본의 만화 시리즈
+  schema:ComicSeries: '만화'
   schema:PublicationVolume: 권
+typeDescriptions:
+  schema:ComicSeries: '출판된 개별 권과 독립된 만화 시리즈 작품입니다. 일본 작품으로 한정하지 않습니다.'
+  schema:PublicationVolume: '독립적으로 참조할 수 있는 만화의 출판 권입니다. 소속 시리즈를 연결하고 위치로 권 번호를 기록합니다.'

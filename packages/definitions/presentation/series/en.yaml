@@ -1,6 +1,14 @@
 types:
-  wd:Q7725310: 'series of creative works'
+  wd:Q7725310: 'series'
   schema:BookSeries: 'book series'
 properties:
   wdt:P2635: 'number of parts of this work'
   wdt:P1433: 'published in'
+inverseProperties:
+  wdt:P1433: 'Published works'
+typeDescriptions:
+  wd:Q7725310: 'A named series of creative works, including nonfiction or mixed media; a curated personal list is a Collection instead.'
+  schema:BookSeries: 'A series of books; each member links to the series with part of the series, optionally recording its position.'
+propertyDescriptions:
+  wdt:P2635: 'Stated number of parts in the series as a nonnegative whole-number quantity in volumes (wd:Q1238720) or chapters (wd:Q1980247).'
+  wdt:P1433: 'The larger creative work in which this series was published, such as a magazine.'

@@ -1,3 +1,4 @@
+import { setFixtureAccountState } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, beforeEach, expect, test } from 'bun:test';
 import { ACTIVE_ACCOUNTS, parentCreationAuthorization, installStandingParentGrant } from '../../src/access/index.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
@@ -95,11 +96,7 @@ test('grant, consent, actual parent, and active unfenced evidence each independe
   await expect(create({ kind: 'anonymous' })).rejects.toBeInstanceOf(GrantDeniedError);
   await expect(create(undefined, f.access, false)).rejects.toBeInstanceOf(GrantDeniedError);
   for (const state of ['pending', 'suspended', 'deleted']) {
-    await f.reader.query('UPDATE access.account SET state=$3 WHERE route=$1 AND account_id=$2', [
-      routeOf(f.recipient),
-      f.recipient,
-      state,
-    ]);
+    await setFixtureAccountState(f.reader, f.recipient, state);
     await expect(create()).rejects.toThrow();
   }
   await f.reader.query("UPDATE access.account SET state='active',authn_fenced=true WHERE route=$1 AND account_id=$2", [

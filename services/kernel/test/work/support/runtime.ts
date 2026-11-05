@@ -79,15 +79,18 @@ if (mode === 'registry') {
       register(value) {
         context = value;
         const step = DBOS.registerStep(
-          async (id: string) => {
+          async (id: string, destination?: string) => {
             console.log(`started:${id}`);
             await Bun.sleep(1_000);
             console.log(`finished:${id}`);
+            if (destination) await DBOS.send(destination, id);
             return id;
           },
           { name: 'fixture.step' },
         );
-        DBOS.registerWorkflow(async (id: string) => step(id), { name: 'fixture.work' });
+        DBOS.registerWorkflow(async (id: string, destination?: string) => step(id, destination), {
+          name: 'fixture.work',
+        });
       },
     },
   ];

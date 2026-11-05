@@ -67,7 +67,7 @@ const statement = (property: string, content: unknown, extra: Record<string, unk
   ...extra,
 });
 
-test('the source marks facet-capable statements and retains only item-valued qualifiers', async () => {
+test('the source marks descriptive facets and excludes relation statements', async () => {
   const author = await create({ type: 'schema:Person', labels: { en: 'Author' } });
   const role = await create({ type: 'skos:Concept', labels: { en: 'Author role' } });
   const book = await create({
@@ -116,12 +116,7 @@ test('the source marks facet-capable statements and retains only item-valued qua
     for (const subject of snapshot.subjects) indexed.set(subject.id, subject as never);
   }
 
-  expect(indexed.get(book.id)!.statements.find(({ property }) => property === 'schema:author')).toEqual({
-    property: 'schema:author',
-    value: author.id,
-    facet: { kind: 'item' },
-    qualifiers: [{ property: 'wdt:P3831', value: role.id }],
-  });
+  expect(indexed.get(book.id)!.statements.find(({ property }) => property === 'schema:author')).toBeUndefined();
   expect(indexed.get(book.id)!.statements.find(({ property }) => property === 'schema:inLanguage')).toEqual({
     property: 'schema:inLanguage',
     value: 'ja',

@@ -13,8 +13,9 @@ import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { createPool } from '../../src/database/pool.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { actionCatalogue, IDEMPOTENCY_HEADER } from '../../src/http/request.ts';
-import { routeOf } from '../../src/route/route.ts';
+import { partitionOf, routeOf } from '../../src/route/route.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { linkProjection } from '../../src/semantic/links.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 import { assertSetupResponse } from '../content/support/setup-response.ts';
 
@@ -48,6 +49,22 @@ let member: Person;
 let unrelated: Person;
 let contextId: string;
 let realmId: string;
+const projection = () => linkProjection(pool);
+
+async function catchUpLinks(id: string): Promise<void> {
+  const relay = projection();
+  const route = routeOf(id);
+  if (route === null) throw new Error('Subject id must carry its route');
+  for (let step = 0; step < 200; step++) {
+    const result = await relay.run(partitionOf(route));
+    if (result.status === 'busy') {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      continue;
+    }
+    if (result.envelopes === 0) return;
+  }
+  throw new Error('Semantic link projection did not catch up');
+}
 
 async function call(method: string, path: string, actor?: Person, body?: unknown, setup?: { status: number }) {
   const headers = new Headers();
@@ -265,16 +282,21 @@ async function fixture() {
     },
   });
   // Subject creation creates and adopts these candidates in Global through Semantic.
-  return { book, candidate: book.statements['schema:author']![0]!.id };
+  return { book, target: author.id, candidate: book.statements['schema:author']![0]!.id };
 }
 async function view(id: string, context = GLOBAL_CONTEXT): Promise<Subject> {
+  await catchUpLinks(id);
   const result = await call('GET', `/v1/subjects/${id}?context=${context}`, moderator);
   expect(result.status).toBe(200);
   expect(result.body.subject.context).toBe(context);
   return result.body.subject;
 }
-async function candidates(id: string, context: string, property: string) {
-  const result = await call('GET', `/v1/subjects/${id}/candidates?property=${property}&context=${context}`, moderator);
+async function candidates(id: string, context: string, property: string, target?: string) {
+  const result = await call(
+    'GET',
+    `/v1/subjects/${id}/candidates?property=${property}&context=${context}${target ? `&target=${target}` : ''}`,
+    moderator,
+  );
   expect(result.status).toBe(200);
   return result.body.candidates as { id: string; decision: string; head: number | null; rank: string | null }[];
 }
@@ -292,7 +314,7 @@ function stable(subject: Subject) {
 }
 
 test('a Realm moderator accepts and rejects locally while other values fall back to Global', async () => {
-  const { book, candidate } = await fixture();
+  const { book, target, candidate } = await fixture();
   const global = await view(book.id);
   expect((await view(book.id, contextId)).statements).toEqual(global.statements);
   const rejected = await decide(book.id, candidate, 'reject', null);
@@ -302,7 +324,7 @@ test('a Realm moderator accepts and rejects locally while other values fall back
   expect(local.statements['schema:author'] ?? []).toEqual([]);
   expect(local.resolution).toEqual({ 'schema:author': 'unresolved' });
   expect(local.statements['schema:inLanguage']).toEqual(global.statements['schema:inLanguage']);
-  expect(await candidates(book.id, contextId, 'schema:author')).toContainEqual(
+  expect(await candidates(book.id, contextId, 'schema:author', target)).toContainEqual(
     expect.objectContaining({ id: candidate, decision: 'rejected', head: 1, rank: null }),
   );
   const accepted = await decide(book.id, candidate, 'accept', 1);
@@ -311,15 +333,15 @@ test('a Realm moderator accepts and rejects locally while other values fall back
   const restored = await view(book.id, contextId);
   expect(restored.statements).toEqual(global.statements);
   expect(restored.resolution).toEqual({});
-  expect(await candidates(book.id, contextId, 'schema:author')).toContainEqual(
+  expect(await candidates(book.id, contextId, 'schema:author', target)).toContainEqual(
     expect.objectContaining({ id: candidate, decision: 'accepted', head: 2, rank: 'normal' }),
   );
 });
 
 test('Realm Context decisions preserve global identity, values and candidate decisions', async () => {
-  const { book, candidate } = await fixture();
+  const { book, target, candidate } = await fixture();
   const global = await view(book.id);
-  const globalCandidates = await candidates(book.id, GLOBAL_CONTEXT, 'schema:author');
+  const globalCandidates = await candidates(book.id, GLOBAL_CONTEXT, 'schema:author', target);
   expect(globalCandidates).toContainEqual(
     expect.objectContaining({ id: candidate, decision: 'accepted', head: 1, rank: 'normal' }),
   );
@@ -335,23 +357,23 @@ test('Realm Context decisions preserve global identity, values and candidate dec
     const local = await view(book.id, contextId);
     for (const field of ['id', 'type', 'labels', 'descriptions', 'aliases'] as const)
       expect(local[field]).toEqual(global[field]);
-    expect(await candidates(book.id, GLOBAL_CONTEXT, 'schema:author')).toEqual(globalCandidates);
+    expect(await candidates(book.id, GLOBAL_CONTEXT, 'schema:author', target)).toEqual(globalCandidates);
   }
 });
 
-test('a non-moderator member and an unrelated account cannot accept or reject in the Realm Context', async () => {
-  const { book, candidate } = await fixture();
+test('an account with a direct Realm read grant and an unrelated account cannot accept or reject in the Realm Context', async () => {
+  const { book, target, candidate } = await fixture();
   expect((await call('GET', `/v1/realms/${realmId}`, member)).status).toBe(200);
   expect((await call('GET', `/v1/realms/${realmId}`, unrelated)).status).toBe(404);
   const before = await view(book.id, contextId);
-  const decisions = await candidates(book.id, contextId, 'schema:author');
+  const decisions = await candidates(book.id, contextId, 'schema:author', target);
   for (const actor of [member, unrelated]) {
     for (const verb of ['accept', 'reject'] as const) {
       const denied = await decide(book.id, candidate, verb, null, actor);
       expect(denied.status).toBe(403);
       expect(denied.body).toMatchObject({ code: 'forbidden', effect_status: 'not_applied' });
       expect(await view(book.id, contextId)).toEqual(before);
-      expect(await candidates(book.id, contextId, 'schema:author')).toEqual(decisions);
+      expect(await candidates(book.id, contextId, 'schema:author', target)).toEqual(decisions);
     }
   }
   for (const verb of ['accept', 'reject'] as const) {

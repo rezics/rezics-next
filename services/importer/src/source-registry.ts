@@ -1,4 +1,5 @@
-import { SourceSchema } from '@rezics/definitions/bulk';
+import { bundledDigest } from '@rezics/definitions/bundled';
+import { BATCH_LIMIT, SourceSchema } from '@rezics/definitions/bulk';
 import type { MediaImportRequest } from '@rezics/definitions/media-import';
 import {
   converter_revision as bangumiRevision,
@@ -16,17 +17,54 @@ import {
   convertOpenLibrary,
   type OpenLibraryConversion,
 } from '@rezics/conversion/open-library';
+import {
+  converter_revision as crossMediaRevision,
+  convertCrossMediaEntity,
+  crossMediaEntityKind,
+  bangumiRecordUrl,
+  vndbRecordUrl,
+  mapSourceEnumeration,
+  type CrossMediaEntityConversion,
+} from '@rezics/conversion/cross-media-entities';
+import { mapBangumiVocabulary } from '@rezics/conversion/bangumi-vocabulary';
+import { mapVndbVocabulary } from '@rezics/conversion/vndb-vocabulary';
+import type {
+  NativeIdentity,
+  SourceVocabularyGap,
+  SourceVocabularyInput,
+  SourceVocabularyRow,
+} from '@rezics/conversion';
 import type { ConversionInput, SourceId } from '@rezics/conversion';
+import { projectSourceClassification } from '@rezics/conversion';
 import type { ConversionContext } from '../../../packages/conversion/src/support.ts';
-import type { ImportConversion, SourceRegistration } from './import-contract.ts';
+import type {
+  ImportConversion,
+  ImportSourceStatistic,
+  ImportSourceStatisticClear,
+  ImportSourceRecord,
+  SourceRegistration,
+} from './import-contract.ts';
 
 /** Typed source asset leaves are passed through from modules that define them. */
 export type SourceAssets = {
   readonly coverAssets: Omit<MediaImportRequest, 'containerId'>[];
   readonly mediaImportIntents: MediaImportRequest[];
+  readonly sourceVocabularyGaps?: readonly SourceVocabularyGap[];
 };
 
 type NativeConversion = BangumiConversion | VndbConversion | WikidataConversion | OpenLibraryConversion;
+
+type VocabularySource = {
+  readonly external_id: string;
+  readonly digest: string;
+  readonly record_revision: string | null;
+  readonly converter_revision: string;
+  readonly proposals: NativeConversion['proposals'];
+  readonly sourceMetadata?: unknown;
+  readonly normalizedRecord?: Record<string, unknown>;
+};
+
+const selectedBangumiRevision = `${crossMediaRevision}+${bangumiRevision}`;
 
 type NativeSource = Readonly<{
   source: string;
@@ -61,6 +99,51 @@ const nativeSources: Readonly<Record<SourceId, NativeSource>> = {
   },
 };
 
+/** Selected Bangumi work conversions include the entity path and all current native mappings. */
+export const crossMediaBangumiRevision = `${crossMediaRevision}+${bangumiRevision}`;
+const isCrossMediaBangumiRevision = (value: string) => /^cross-media-entities@\d+\+bangumi@\d+$/u.test(value);
+
+/** Reviewed metadata rights only; prose and cover permissions remain converter-owned. */
+function describeSourceRecord(kind: SourceId, id: string): ImportSourceRecord {
+  const cc0 = { id: 'CC0-1.0', url: 'https://creativecommons.org/publicdomain/zero/1.0/' };
+  switch (kind) {
+    case 'bangumi':
+      if (!/^(?:(?:character|person|episode):)?[1-9][0-9]*$/.test(id))
+        throw new TypeError('Invalid Bangumi record identity');
+      return {
+        name: 'Bangumi',
+        url: bangumiRecordUrl(id),
+        licence: { id: 'CC-BY-SA-3.0', url: 'https://creativecommons.org/licenses/by-sa/3.0/' },
+        attribution: 'Bangumi contributors',
+      };
+    case 'vndb':
+      if (!/^[vcsrp][1-9][0-9]*$/.test(id)) throw new TypeError('Invalid VNDB record identity');
+      return {
+        name: 'VNDB',
+        url: vndbRecordUrl(id),
+        licence: { id: 'ODbL-1.0', url: 'https://opendatacommons.org/licenses/odbl/1-0/' },
+        attribution: 'VNDB (database: ODbL-1.0; permitted metadata contents: DbCL-1.0)',
+      };
+    case 'openlibrary':
+      if (!/^\/(?:works\/OL[1-9][0-9]*W|books\/OL[1-9][0-9]*M)$/.test(id))
+        throw new TypeError('Invalid Open Library record identity');
+      return {
+        name: 'Open Library',
+        url: `https://openlibrary.org${id}`,
+        licence: cc0,
+        attribution: 'Open Library contributors',
+      };
+    case 'wikidata':
+      if (!/^Q[1-9][0-9]*$/.test(id)) throw new TypeError('Invalid Wikidata record identity');
+      return {
+        name: 'Wikidata',
+        url: `https://www.wikidata.org/wiki/${id}`,
+        licence: cc0,
+        attribution: 'Wikidata contributors',
+      };
+  }
+}
+
 type SourceField = 'source' | 'converter_revision';
 type StringConstraint = { minLength?: number; maxLength?: number; pattern?: string };
 
@@ -75,21 +158,144 @@ function validateSourceField(field: SourceField, value: unknown): asserts value 
     throw new TypeError(`Invalid source ${field}`);
 }
 
-function addAliases(result: NativeConversion): ImportConversion<SourceAssets> {
+/** Project statistics only with the acquisition's admitted snapshot date. */
+export function vndbSourceStatistics(
+  normalized: unknown,
+  sourceAlias: string,
+  sourceSnapshotAsOf?: string,
+): Pick<ImportConversion, 'sourceStatistic' | 'sourceStatisticClear'> {
+  const record = normalized as { vn?: { id: string; c_votecount?: number; c_average?: number | null } };
+  let sourceStatistic: ImportSourceStatistic | undefined;
+  let sourceStatisticClear: ImportSourceStatisticClear | undefined;
+  if (sourceSnapshotAsOf !== undefined && record.vn) {
+    const count = record.vn.c_votecount;
+    const average = record.vn.c_average;
+    if (count === 0 && average !== undefined) {
+      sourceStatisticClear = {
+        source: 'vndb',
+        ...(sourceAlias === 'vndb' ? {} : { sourceAlias }),
+        sourceRecordId: record.vn.id,
+        count: 0,
+        asOf: sourceSnapshotAsOf,
+      };
+    }
+    if (count !== undefined && count > 0 && average !== undefined && average !== null && average >= 100) {
+      sourceStatistic = {
+        source: 'vndb',
+        ...(sourceAlias === 'vndb' ? {} : { sourceAlias }),
+        sourceRecordId: record.vn.id,
+        scale: { min: 1, max: 10 },
+        mean: average / 100,
+        count,
+        asOf: sourceSnapshotAsOf,
+        licence: 'ODbL-1.0',
+        attribution: 'VNDB',
+      };
+    }
+  }
+  return { ...(sourceStatistic ? { sourceStatistic } : {}), ...(sourceStatisticClear ? { sourceStatisticClear } : {}) };
+}
+
+function addAliases(
+  result: NativeConversion,
+  sourceAlias: string,
+  sourceKind: SourceId,
+  context: ConversionContext,
+  sourceSnapshotAsOf?: string,
+): ImportConversion<SourceAssets> {
   const coverAssets = 'coverAssets' in result ? result.coverAssets : [];
   const mediaImportIntents = 'mediaImportIntents' in result ? result.mediaImportIntents : [];
+  const statistics =
+    sourceKind === 'vndb' ? vndbSourceStatistics(result.normalizedRecord, sourceAlias, sourceSnapshotAsOf) : {};
+  const vocabulary =
+    context.sourceVocabulary && (sourceKind === 'bangumi' || sourceKind === 'vndb')
+      ? sourceVocabularyResult(result, sourceAlias, sourceKind, context.sourceVocabulary, context)
+      : undefined;
   return {
     ...result,
+    ...(vocabulary === undefined
+      ? {}
+      : {
+          proposals: [...result.proposals, ...vocabulary.proposals],
+          diagnostics: [
+            ...result.diagnostics,
+            ...vocabulary.gaps.map((gap) => ({ pointer: gap.path, code: gap.reason, sourceVocabularyGap: gap })),
+          ],
+          sourceVocabularyGaps: vocabulary.gaps,
+          sourceVocabulary: vocabulary.request,
+        }),
     normalized: result.normalizedRecord,
-    coverAssets,
-    mediaImportIntents,
+    coverAssets: [...coverAssets],
+    mediaImportIntents: [...mediaImportIntents],
+    ...statistics,
+    ...(context.sourceClassification === undefined
+      ? {}
+      : { sourceClassification: projectSourceClassification(context.sourceClassification) }),
   };
+}
+
+function sourceVocabularyResult(
+  result: VocabularySource,
+  sourceAlias: string,
+  sourceKind: 'bangumi' | 'vndb',
+  request: NonNullable<ConversionContext['sourceVocabulary']>,
+  context: ConversionContext,
+) {
+  const metadata = describeSourceRecord(sourceKind, result.external_id);
+  const recorded =
+    'sourceMetadata' in result && result.sourceMetadata && typeof result.sourceMetadata === 'object'
+      ? (result.sourceMetadata as { recordUrl?: unknown }).recordUrl
+      : undefined;
+  const recordUrl =
+    typeof recorded === 'string' && recorded
+      ? recorded
+      : sourceKind === 'bangumi'
+        ? bangumiRecordUrl(result.external_id)
+        : `https://vndb.org/${result.external_id}.${result.record_revision}`;
+  const rows: SourceVocabularyRow[] = [...request.rows];
+  if (sourceKind === 'bangumi' && context.subjectId && result.normalizedRecord) {
+    const normalized = result.normalizedRecord;
+    const nativeType = mapSourceEnumeration('bangumi', 'person.type', normalized.type as number)?.term;
+    const career = normalized.career;
+    if ((nativeType === 'schema:Person' || nativeType === 'schema:Organization') && Array.isArray(career)) {
+      const identity: NativeIdentity = { id: context.subjectId, type: nativeType, releaseDigest: bundledDigest };
+      const explicit = new Map(
+        rows
+          .filter((row): row is Extract<SourceVocabularyRow, { kind: 'person-career' }> => row.kind === 'person-career')
+          .map((row) => [`${row.path}\0${row.code}`, row]),
+      );
+      for (const code of career) {
+        if (typeof code !== 'string') continue;
+        const key = `/career\0${code}`;
+        if (!explicit.has(key)) explicit.set(key, { kind: 'person-career', person: identity, code, path: '/career' });
+      }
+      for (const [key, row] of explicit) if (row.person === undefined) explicit.set(key, { ...row, person: identity });
+      rows.splice(0, rows.length, ...rows.filter((row) => row.kind !== 'person-career'), ...explicit.values());
+    }
+  }
+  const input: SourceVocabularyInput = {
+    metadata: {
+      provider: sourceKind,
+      sourceAlias,
+      externalId: result.external_id,
+      recordRevision: result.record_revision,
+      digest: result.digest,
+      converterRevision: result.converter_revision,
+      recordUrl,
+      license: metadata.licence?.id ?? '',
+      attribution: metadata.attribution ?? '',
+    },
+    bindings: request.bindings,
+    rows,
+    commandLimit: Math.max(0, BATCH_LIMIT - result.proposals.length),
+  };
+  return sourceKind === 'bangumi' ? mapBangumiVocabulary(input) : mapVndbVocabulary(input);
 }
 
 /** Register one of the four pure native converters under trusted application metadata. */
 export function createSourceRegistration(
   sourceKind: SourceId,
-  options?: { source?: string; converterRevision?: string },
+  options?: { source?: string; converterRevision?: string; sourceSnapshotAsOf?: string },
 ): SourceRegistration<SourceAssets> {
   if (!Object.hasOwn(nativeSources, sourceKind)) throw new TypeError('Unknown source kind');
   const native = nativeSources[sourceKind];
@@ -105,10 +311,53 @@ export function createSourceRegistration(
     sourceKind,
     source,
     converter_revision: converterRevision,
+    describeSourceRecord: (externalId) => describeSourceRecord(sourceKind, externalId),
     convert(input, context) {
       if (context.source !== source) throw new TypeError('Conversion context source differs from registration');
+      if (sourceKind === 'bangumi' || sourceKind === 'vndb') {
+        const kind = crossMediaEntityKind(sourceKind, input.external_id, input.record);
+        if (
+          kind &&
+          (kind === 'bangumi-person' ||
+            converterRevision === crossMediaRevision ||
+            (sourceKind === 'bangumi' && isCrossMediaBangumiRevision(converterRevision)))
+        ) {
+          const entity = convertCrossMediaEntity(input, context, { converterRevision, sourceKind });
+          const base: ImportConversion<SourceAssets> = {
+            ...entity,
+            normalized: entity.normalizedRecord,
+            ...(sourceKind === 'vndb'
+              ? vndbSourceStatistics(entity.normalizedRecord, source, options?.sourceSnapshotAsOf)
+              : {}),
+            coverAssets: [...entity.coverAssets],
+            mediaImportIntents: [...entity.mediaImportIntents],
+          };
+          if (!context.sourceVocabulary) return base;
+          const vocabulary = sourceVocabularyResult(entity, source, sourceKind, context.sourceVocabulary, context);
+          return {
+            ...base,
+            proposals: [...entity.proposals, ...vocabulary.proposals],
+            diagnostics: [
+              ...entity.diagnostics,
+              ...vocabulary.gaps.map((gap) => ({ pointer: gap.path, code: gap.reason, sourceVocabularyGap: gap })),
+            ],
+            sourceVocabularyGaps: vocabulary.gaps,
+            sourceVocabulary: vocabulary.request,
+          };
+        }
+      }
       const result = native.convert(input, context, { converterRevision });
-      return addAliases(result);
+      return addAliases(result, source, sourceKind, context, options?.sourceSnapshotAsOf);
     },
   };
+}
+
+/** Selected-family Bangumi records use a revision that tracks both native and entity conversion. */
+export function createSelectedFamilySourceRegistration(
+  sourceKind: 'bangumi' | 'vndb',
+  source: string,
+): SourceRegistration<SourceAssets> {
+  return sourceKind === 'bangumi'
+    ? createSourceRegistration('bangumi', { source, converterRevision: selectedBangumiRevision })
+    : createSourceRegistration('vndb', { source, converterRevision: crossMediaRevision });
 }

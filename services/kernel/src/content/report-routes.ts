@@ -1,19 +1,28 @@
+import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { status, t } from 'elysia';
 import { GrantDeniedError } from '../access/grant-commands.ts';
+import { customMethod } from '../http/custom-method.ts';
 import { ProblemError, problemSchema } from '../http/problem.ts';
 import { defineRateLimit } from '../http/rate-limit.ts';
 import { IDEMPOTENCY_HEADER, SESSION_HEADER } from '../http/request.ts';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { routeOf } from '../route/route.ts';
 import type { documentRoutes } from './document-routes.ts';
 import { ContentForbiddenError, ContentNotFoundError as CommandNotFoundError } from './commands.ts';
 import type { AnchoredPosition } from './model.ts';
 import { ContentNotFoundError as ReadNotFoundError } from './reads.ts';
+import { dismissReport, ReportResolvedError } from './report-outcomes.ts';
+import { createReporterHistory, ReporterHistoryChangedError, ReporterHistoryCursorError } from './reporter-history.ts';
+import { ReporterHistoryPageSchema, ReporterHistoryQuerySchema } from './reporter-history-schemas.ts';
 import { parseReportBody, reportRequestContext, requireReportInspection } from './report-admission.ts';
+import { readReportInspection } from './report-inspection.ts';
 import {
   createReport,
-  listTargetReports,
+  listSelectedTargetReports,
+  listCatalogueReports,
   readReport,
+  reportReadView,
   ReportProofRequiredError,
   ReportProofUnavailableError,
   ReportUnavailableError,
@@ -21,7 +30,9 @@ import {
   type ReportTarget,
 } from './reports.ts';
 import {
-  ContentPageQuerySchema,
+  ReportPageQuerySchema,
+  CatalogueReportPageQuerySchema,
+  CatalogueReportPageResponseSchema,
   ReportReceiptSchema,
   ReportInputSchema,
   ReportPageResponseSchema,
@@ -31,29 +42,35 @@ import {
 
 export type ReportRouteDependencies = ReportDependencies;
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
-const privateHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
-const readFailures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  409: problemSchema('stale_cursor'),
-  500: problemSchema('internal_error'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-    'rate_limit_unavailable',
-  ),
-};
-const writeFailures = {
-  ...readFailures,
-  403: problemSchema('forbidden'),
-  413: problemSchema('content_too_large'),
-  422: problemSchema('idempotency_conflict', 'too_many_events'),
-  429: problemSchema('rate_limited'),
-};
+function privateHeaders() {
+  return memoizedValue(privateHeaders, () => ({ [SESSION_HEADER]: t.String(), 'cache-control': t.String() }));
+}
+function readFailures() {
+  return memoizedValue(readFailures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    409: problemSchema('stale_cursor'),
+    500: problemSchema('internal_error'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+      'rate_limit_unavailable',
+    ),
+  }));
+}
+function writeFailures() {
+  return memoizedValue(writeFailures, () => ({
+    ...readFailures(),
+    403: problemSchema('forbidden'),
+    413: problemSchema('content_too_large'),
+    422: problemSchema('idempotency_conflict', 'too_many_events'),
+    429: problemSchema('rate_limited'),
+  }));
+}
 
 function existingId(id: string): void {
   if (routeOf(id) === null) throw new ProblemError('not_found');
@@ -70,6 +87,7 @@ async function reportOperation<T>(operation: () => Promise<T>, inspection = fals
     if (error instanceof ReportProofRequiredError) throw new ProblemError('forbidden');
     if (error instanceof ReportProofUnavailableError)
       throw new ProblemError('dependency_unavailable', { headers: { 'retry-after': '1' } });
+    if (error instanceof ReportResolvedError) throw new ProblemError('conflict');
     if (error instanceof ReportUnavailableError) throw new ProblemError('not_found');
     if (error instanceof GrantDeniedError) throw new ProblemError(inspection ? 'not_found' : 'forbidden');
     if (error instanceof CommandNotFoundError || error instanceof ReadNotFoundError)
@@ -86,8 +104,49 @@ async function reportOperation<T>(operation: () => Promise<T>, inspection = fals
  * and budget charging. No handler may spend again or verify a one-use proof.
  */
 export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencies: ReportRouteDependencies) {
+  const history = createReporterHistory(dependencies);
   const oversized = new WeakSet<Request>();
   const created = app
+    .post(
+      customMethod('/v1/reports/:id', 'dismiss'),
+      {
+        params,
+        headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
+        response: {
+          200: withHeaders(
+            t.Object({ reportId: t.String(), outcome: t.Literal('dismissed') }, { additionalProperties: false }),
+            privateHeaders(),
+          ),
+          ...writeFailures(),
+          409: problemSchema('conflict'),
+        },
+        detail: {
+          operationId: 'report.dismiss',
+          'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+          'x-exposure': 'public',
+          'x-action': 'moderation:takedown',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ params: { id }, actor, request, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        existingId(id);
+        return reportOperation(
+          () =>
+            admission.run('normal', job, async () => {
+              const result = await dismissReport(
+                dependencies,
+                actor,
+                id,
+                reportRequestContext(actor, request, job.deadline, undefined),
+              );
+              session.record(result);
+              return result.value;
+            }),
+          true,
+        );
+      },
+    )
     .post(
       '/v1/reports',
       {
@@ -98,11 +157,19 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
         body: strictContentSchema(ReportInputSchema),
         response: {
-          201: withHeaders(strictContentSchema(ReportReceiptSchema), { ...privateHeaders, location: t.String() }),
-          ...writeFailures,
+          201: withHeaders(strictContentSchema(ReportReceiptSchema), { ...privateHeaders(), location: t.String() }),
+          ...writeFailures(),
         },
         detail: {
           operationId: 'report.create',
+          'x-resource-types': [
+            'content.board',
+            'content.thread',
+            'content.post',
+            'semantic.subject',
+            'community.space',
+            'community.realm',
+          ],
           'x-exposure': 'public',
           'x-action': 'report:create',
           'x-rate-limit': defineRateLimit({ family: 'report', units: 1 }),
@@ -128,14 +195,55 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
       },
     )
     .get(
+      '/v1/reports/me',
+      {
+        query: ReporterHistoryQuerySchema,
+        response: {
+          200: withHeaders(strictContentSchema(ReporterHistoryPageSchema()), privateHeaders()),
+          ...readFailures(),
+        },
+        detail: {
+          operationId: 'report.own_history',
+          'x-exposure': 'public',
+          'x-action': 'account:read',
+          description:
+            'The current reporter inventory and optional exact own case, with current native outcomes and readable target actions.',
+          security: [{ bearerAuth: [] }],
+        },
+      },
+      async ({ query, actor, admission, job, session, set }) => {
+        set.headers['cache-control'] = 'private, no-store';
+        if (actor.kind !== 'account') throw new ProblemError('authentication_required');
+        if (query.reportId !== undefined) existingId(query.reportId);
+        return reportOperation(
+          () =>
+            admission.run('normal', job, async () => {
+              try {
+                const { anchor, ...page } = await history.read({ actor, deadline: job.deadline }, query);
+                session.record(component(anchor));
+                return { ...page, entries: [...page.entries] };
+              } catch (error) {
+                if (error instanceof ReporterHistoryCursorError) throw new ProblemError('invalid_cursor');
+                if (error instanceof ReporterHistoryChangedError)
+                  throw new ProblemError('dependency_unavailable', { headers: { 'retry-after': '1' } });
+                throw error;
+              }
+            }),
+          true,
+        );
+      },
+    )
+    .get(
       '/v1/reports/:id',
       {
         params,
-        response: { 200: withHeaders(strictContentSchema(ReportResponseSchema), privateHeaders), ...readFailures },
+        response: { 200: withHeaders(strictContentSchema(ReportResponseSchema), privateHeaders()), ...readFailures() },
         detail: {
           operationId: 'report.get',
           'x-exposure': 'public',
-          'x-action': 'moderation:read_reports',
+          'x-action': 'account:read',
+          description:
+            'A reporter reads their submitted record through account:read. A moderator receives the exact report, separately observed reported revision and current target, and current command advice through moderation:read_reports; advice is not command authority.',
           security: [{ bearerAuth: [] }],
         },
       },
@@ -145,10 +253,18 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
         return reportOperation(
           () =>
             admission.run('normal', job, async () => {
+              const inspection = await readReportInspection(dependencies, id, { actor, deadline: job.deadline });
+              if (inspection.value) {
+                session.record(component(inspection.anchor));
+                return {
+                  report: reportReadView(inspection.value.report),
+                  inspection: inspection.value.inspection,
+                };
+              }
               const result = await readReport(dependencies, id, { actor, deadline: job.deadline });
               if (!result.value) throw new ProblemError('not_found');
               session.record(component(result.anchor));
-              return { report: result.value };
+              return { report: reportReadView(result.value) };
             }),
           true,
         );
@@ -159,8 +275,8 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
   // owns its independent target anchor and per-report partition fills.
   const listOptions = {
     params,
-    query: ContentPageQuerySchema,
-    response: { 200: withHeaders(strictContentSchema(ReportPageResponseSchema), privateHeaders), ...readFailures },
+    query: ReportPageQuerySchema,
+    response: { 200: withHeaders(strictContentSchema(ReportPageResponseSchema), privateHeaders()), ...readFailures() },
   };
   const board = created.get(
     '/v1/boards/:id/reports',
@@ -168,6 +284,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
       ...listOptions,
       detail: {
         operationId: 'board.reports',
+        'x-resource-types': ['content.board'],
         'x-exposure': 'public',
         'x-action': 'moderation:read_reports',
         security: [{ bearerAuth: [] }],
@@ -190,6 +307,7 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
       ...listOptions,
       detail: {
         operationId: 'thread.reports',
+        'x-resource-types': ['content.thread'],
         'x-exposure': 'public',
         'x-action': 'moderation:read_reports',
         security: [{ bearerAuth: [] }],
@@ -206,12 +324,13 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
       );
     },
   );
-  return thread.get(
+  const post = thread.get(
     '/v1/posts/:id/reports',
     {
       ...listOptions,
       detail: {
         operationId: 'post.reports',
+        'x-resource-types': ['content.post'],
         'x-exposure': 'public',
         'x-action': 'moderation:read_reports',
         security: [{ bearerAuth: [] }],
@@ -229,26 +348,150 @@ export function reportRoutes(app: ReturnType<typeof documentRoutes>, dependencie
     },
   );
 
+  const subject = post.get(
+    '/v1/subjects/:id/reports',
+    {
+      ...listOptions,
+      query: CatalogueReportPageQuerySchema,
+      response: {
+        200: withHeaders(strictContentSchema(CatalogueReportPageResponseSchema), privateHeaders()),
+        ...readFailures(),
+      },
+      detail: {
+        operationId: 'subject_report.list',
+        'x-resource-types': ['semantic.subject'],
+        'x-exposure': 'public',
+        'x-action': 'moderation:read_reports',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    ({ params: { id }, query, actor, admission, job, session, set }) => {
+      set.headers['cache-control'] = 'private, no-store';
+      return list(
+        { kind: 'subject', id },
+        { actor, deadline: job.deadline },
+        query,
+        (operation) => admission.run('normal', job, operation),
+        session,
+      );
+    },
+  );
+  const space = subject.get(
+    '/v1/spaces/:spaceId/reports',
+    {
+      ...listOptions,
+      params: t.Object({ spaceId: t.String() }, { additionalProperties: false }),
+      detail: {
+        operationId: 'space.reports',
+        'x-resource-types': ['community.space'],
+        'x-exposure': 'public',
+        'x-action': 'moderation:read_reports',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    ({ params: { spaceId }, query, actor, admission, job, session, set }) => {
+      set.headers['cache-control'] = 'private, no-store';
+      return list(
+        { kind: 'space', id: spaceId },
+        { actor, deadline: job.deadline },
+        query,
+        (operation) => admission.run('normal', job, operation),
+        session,
+      );
+    },
+  );
+  const realm = space.get(
+    '/v1/realms/:realmId/reports',
+    {
+      ...listOptions,
+      params: t.Object({ realmId: t.String() }, { additionalProperties: false }),
+      detail: {
+        operationId: 'realm.reports',
+        'x-resource-types': ['community.realm'],
+        'x-exposure': 'public',
+        'x-action': 'moderation:read_reports',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    ({ params: { realmId }, query, actor, admission, job, session, set }) => {
+      set.headers['cache-control'] = 'private, no-store';
+      return list(
+        { kind: 'realm', id: realmId },
+        { actor, deadline: job.deadline },
+        query,
+        (operation) => admission.run('normal', job, operation),
+        session,
+      );
+    },
+  );
+  return realm.get(
+    '/v1/catalogue/reports',
+    {
+      query: CatalogueReportPageQuerySchema,
+      response: {
+        200: withHeaders(strictContentSchema(CatalogueReportPageResponseSchema), privateHeaders()),
+        ...readFailures(),
+      },
+      detail: {
+        operationId: 'catalogue_report.list',
+        'x-exposure': 'public',
+        'x-action': 'moderation:read_reports',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    ({ query, actor, admission, job, session, set }) => {
+      set.headers['cache-control'] = 'private, no-store';
+      return list(
+        { kind: 'catalogue', id: GLOBAL_CONTEXT },
+        { actor, deadline: job.deadline },
+        query,
+        (operation) => admission.run('normal', job, operation),
+        session,
+      );
+    },
+  );
+
   function list(
-    target: ReportTarget,
-    context: Parameters<typeof listTargetReports>[2],
-    query: { cursor?: string; limit?: number },
+    target: ReportTarget | { kind: 'catalogue'; id: string },
+    context: Parameters<typeof listSelectedTargetReports>[2],
+    query: { cursor?: string; limit?: number } & import('./reports.ts').ReportSelection,
     admit: <T>(operation: () => Promise<T>) => Promise<T>,
     session: { record: (value: ReturnType<typeof component>) => void },
   ) {
     existingId(target.id);
+    const authorityId = target.kind === 'subject' || target.kind === 'catalogue' ? GLOBAL_CONTEXT : target.id;
     return reportOperation(
       () =>
         admit(async () => {
-          await requireReportInspection(dependencies, target.id, context);
+          await requireReportInspection(
+            dependencies,
+            authorityId,
+            context,
+            target.kind === 'space' || target.kind === 'realm' ? target.kind : undefined,
+          );
           let page;
           try {
-            page = await listTargetReports(dependencies, target, context, query.cursor, query.limit ?? 20);
+            page =
+              target.kind === 'catalogue'
+                ? await listCatalogueReports(dependencies, context, query.cursor, query.limit ?? 20, query)
+                : await listSelectedTargetReports(
+                    dependencies,
+                    target,
+                    context,
+                    query.cursor,
+                    query.limit ?? 20,
+                    query,
+                  );
           } catch (error) {
             if (query.cursor !== undefined && error instanceof TypeError) throw new ProblemError('invalid_cursor');
             throw error;
           }
-          await requireReportInspection(dependencies, target.id, context);
+          await requireReportInspection(
+            dependencies,
+            authorityId,
+            context,
+            target.kind === 'space' || target.kind === 'realm' ? target.kind : undefined,
+          );
           session.record(component(page.anchor));
           return { reports: [...page.entries], next: page.nextCursor };
         }),

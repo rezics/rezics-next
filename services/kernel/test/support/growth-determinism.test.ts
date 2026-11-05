@@ -1,7 +1,7 @@
 import pg from 'pg';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { withConnection } from '../../src/database/pool.ts';
-import { capture, openGrowthDatabase, type GrowthDatabase } from './growth-capture.ts';
+import { capture, openGrowthDatabase, settle, type GrowthDatabase } from './growth-capture.ts';
 import { costOf } from './growth-cost.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -45,7 +45,7 @@ beforeAll(async () => {
   `);
   await db.admin.query(`ALTER TABLE ${rows} SET (parallel_workers = 2)`);
   await db.admin.query(`ALTER TABLE ${blockerRows} SET (parallel_workers = 2)`);
-  await db.admin.query('VACUUM (ANALYZE)');
+  await settle(db, { analyze: true });
 });
 
 afterAll(async () => {

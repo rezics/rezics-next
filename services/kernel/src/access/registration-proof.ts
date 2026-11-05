@@ -1,3 +1,7 @@
+import { nativeReceiptKeyCandidates } from '../command/receipt-key.ts';
+import { accessClock } from './access-clock.ts';
+import { systemClock } from '../clock.ts';
+import type { Access } from '../request/access.ts';
 import { throwAccessUnavailable } from './unavailable.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -127,6 +131,7 @@ function responseMatches(value: unknown, reference: Reference): value is AuthPro
 async function verifySnapshot(
   client: PoolClient,
   reference: Reference,
+  at: string,
   relation?: RelationReference,
 ): Promise<AuthProvisioningReceipt | null> {
   const native = nativeReceipt(reference);
@@ -144,7 +149,7 @@ async function verifySnapshot(
     principal_kind: 'account',
     principal_id: native.actorAccountId,
     command_kind: native.kind,
-    idempotency_key: native.key,
+    idempotency_keys: nativeReceiptKeyCandidates(client, native.kind, native.actorAccountId, native.key),
   });
   if (
     !receipt ||
@@ -155,7 +160,7 @@ async function verifySnapshot(
     !responseMatches(receipt.response, reference)
   )
     return null;
-  // PostgreSQL supplies this read's authoritative time. Current private facts and
+  // The kernel clock supplies this read's authoritative time. Current private facts and
   // creation transaction must still agree, regardless of registration cleanup lag.
   if (relation) {
     const input = relation.input;
@@ -169,7 +174,12 @@ async function verifySnapshot(
       principal_kind: 'account',
       principal_id: basis.actorAccountId,
       command_kind: 'access.operator.relation-recorded',
-      idempotency_key: `${routeOf(reference.accountId)!}:${input.key}`,
+      idempotency_keys: nativeReceiptKeyCandidates(
+        client,
+        'access.operator.relation-recorded',
+        basis.actorAccountId,
+        `${routeOf(reference.accountId)!}:${input.key}`,
+      ),
     });
     const expected = {
       subjectAccountId: reference.accountId,
@@ -197,6 +207,7 @@ async function verifySnapshot(
       handle: reference.handle,
       reservation_id: reference.reservationId,
       expires_at: reference.expiresAt,
+      at,
       transaction_id: relation.transactionId,
       operator_id: input.operatorAccountId,
       operator_reservation_id: input.reservationId,
@@ -212,6 +223,7 @@ async function verifySnapshot(
     handle: reference.handle,
     reservation_id: reference.reservationId,
     expires_at: reference.expiresAt,
+    at,
     transaction_id: reference.transactionId,
   });
   return current
@@ -277,9 +289,11 @@ function decodeAutomated(value: unknown): AutomatedReference | null {
  */
 export function createRegistrationProofBindings(config: {
   pool: Pool;
+  access?: Access;
   referenceKeys: KeyRing;
 }): RegistrationProofBindings {
   const { pool, referenceKeys } = config;
+  const clock = config.access ? accessClock(config.access) : systemClock;
   async function verifyProvisioningReceipt(reference: string): Promise<AuthProvisioningReceipt | null> {
     try {
       const decoded = decode(unseal(referenceKeys, SCOPE, reference));
@@ -287,7 +301,7 @@ export function createRegistrationProofBindings(config: {
       return await withConnection(pool, async (client) => {
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         try {
-          const result = await verifySnapshot(client, decoded);
+          const result = await verifySnapshot(client, decoded, clock().toISOString());
           await client.query('COMMIT');
           return result;
         } catch (error) {
@@ -312,7 +326,7 @@ export function createRegistrationProofBindings(config: {
       return await withConnection(pool, async (client) => {
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         try {
-          const verified = await verifySnapshot(client, pending, automated?.relation);
+          const verified = await verifySnapshot(client, pending, clock().toISOString(), automated?.relation);
           const relation = automated?.relation;
           const current =
             verified &&
@@ -322,6 +336,7 @@ export function createRegistrationProofBindings(config: {
               handle: pending.handle,
               reservation_id: pending.reservationId,
               expires_at: pending.expiresAt,
+              at: clock().toISOString(),
               transaction_id: relation?.transactionId ?? pending.transactionId,
               operator_id: relation?.input.operatorAccountId ?? '',
               operator_reservation_id: relation?.input.reservationId ?? '',

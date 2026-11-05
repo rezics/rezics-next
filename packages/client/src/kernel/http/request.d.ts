@@ -30,8 +30,8 @@ type RouteApp = {
         strictPath?: boolean;
     };
 };
-/** Derives the configured action set from the routes mounted on an application. */
-export declare function actionCatalogue(app: RouteApp): ActionCatalogue;
+/** Composes mounted routes with trusted native declarations, checking their agreement. */
+export declare function actionCatalogue(app: RouteApp, nativeActions?: ActionCatalogue): ActionCatalogue;
 /** A snapshot of server declarations, indexed by native method and matched template.
  * Construct only after composition; Elysia's routes getter composes hook views.
  * Request paths are never matched here: Elysia has already selected the route.

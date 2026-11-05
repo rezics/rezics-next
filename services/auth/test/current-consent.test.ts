@@ -1,3 +1,4 @@
+import { MAX_CONSENTED_SCOPES, MAX_CONSENTED_SCOPE_OCTETS } from '@rezics/auth-contract';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
@@ -94,5 +95,33 @@ test('pending scope validation and intersection cannot add authority or treat an
       } as unknown as Pool,
     });
     expect(await reader.readCurrentConsent(selected)).toEqual(scopes === null ? null : { ...selected, scopes });
+  }
+});
+
+test('current consent applies the shared bound independently to consent, client ceiling and pending scopes', async () => {
+  const maximum = Array.from({ length: MAX_CONSENTED_SCOPES }, (_, i) => `scope:${i}:`.padEnd(128, 'a'));
+  expect(maximum.join(' ').length).toBe(MAX_CONSENTED_SCOPE_OCTETS);
+  for (const field of ['consent', 'ceiling', 'pending'] as const) {
+    for (const extra of [false, true]) {
+      const reader = createCurrentConsentReader({
+        database: {
+          async query() {
+            return {
+              rows: [
+                {
+                  consent: maximum,
+                  ceiling: maximum,
+                  pending: maximum,
+                  [field]: extra ? [...maximum, 'extra'] : maximum,
+                },
+              ],
+            };
+          },
+        } as unknown as Pool,
+      });
+      expect(await reader.readCurrentConsent(selected)).toEqual(
+        extra ? null : { ...selected, scopes: [...maximum].sort() },
+      );
+    }
   }
 });

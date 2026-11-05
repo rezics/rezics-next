@@ -88,6 +88,9 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
     },
     trustedAccess: {
       ...createAuthBindings({ pool, ...registration }),
+      async revalidateCredentialEffect() {
+        throw new Error('kernel-test-complete');
+      },
       async consumeAuthorization(input) {
         if (mode === 'approve')
           approved = await capability.approveCredentialEffect({ stage: approvalStage, human: input.human });
@@ -203,11 +206,12 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
       approvalStage = structuredClone(binding);
       mode = 'approve';
       try {
-        await service.internal.setCredential({
+        await service.internal.applyCredentialEffect({
           authorization: 'live-proof-callback',
+          effectRef: binding.effectReference,
+          key: binding.operationKey,
           subjectAccountId: binding.subjectAccountId,
           headers,
-          credential: { kind: 'key', kid: 'staged-test-key', remove: true },
         });
       } catch (error) {
         if (!(error instanceof Error) || error.message !== 'kernel-test-complete') throw error;
@@ -220,11 +224,12 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
       mode = 'revalidate';
       revalidation = input;
       try {
-        await service.internal.setCredential({
+        await service.internal.applyCredentialEffect({
           authorization: input.authorization,
+          effectRef: input.stage.effectReference,
+          key: input.stage.operationKey,
           subjectAccountId: input.stage.subjectAccountId,
           headers,
-          credential: { kind: 'key', kid: 'staged-test-key', remove: true },
         });
       } catch (error) {
         if (!(error instanceof Error) || error.message !== 'kernel-test-complete') throw error;
@@ -241,11 +246,12 @@ async function fixture(pool: Pool, authPool: Pool, url: string) {
         effectReference: binding.effectReference,
       };
       try {
-        await service.internal.setCredential({
+        await service.internal.applyCredentialEffect({
           authorization: reference,
+          effectRef: binding.effectReference,
+          key: binding.operationKey,
           subjectAccountId: binding.subjectAccountId,
           headers,
-          credential: { kind: 'key', kid: 'staged-test-key', remove: true },
         });
       } catch (error) {
         if (!(error instanceof Error) || error.message !== 'kernel-test-complete') throw error;

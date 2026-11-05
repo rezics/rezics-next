@@ -1,3 +1,4 @@
+import { readSessionToken } from './session-token';
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -99,10 +100,11 @@ const fake = Bun.serve({
     if (!url.pathname.startsWith('/v1/')) return failure(404, 'not_found');
     // Unknown /v1 routes, including the anonymous home pages:read, answer 404. A bearer is required only for media.
     const creating = request.method === 'POST' && url.pathname === '/v1/media';
+    const advising = request.method === 'GET' && url.pathname === '/v1/media/avatar-upload-advice';
     const match = /^\/v1\/media\/([^/:]+)(:complete)?$/.exec(url.pathname);
-    const reading = request.method === 'GET' && match !== null && match[2] === undefined;
+    const reading = request.method === 'GET' && match !== null && match[2] === undefined && !advising;
     const completing = request.method === 'POST' && match?.[2] === ':complete';
-    if (!creating && !reading && !completing) {
+    if (!creating && !reading && !completing && !advising) {
       await request.body?.cancel().catch(() => {});
       return failure(404, 'not_found');
     }
@@ -111,9 +113,36 @@ const fake = Bun.serve({
     calls.push({ method: request.method, path: url.pathname, authorization, body });
     const sub = tokens.get(authorization?.replace(/^Bearer /, '') ?? '');
     if (!sub) return failure(401, 'authentication_required');
+    if (advising) {
+      if ([...url.searchParams.keys()].length) return failure(400, 'invalid_request');
+      return Response.json({
+        viewerState: 'signed_in',
+        viewer: { accountId: sub },
+        target: { containerId: sub, purpose: 'avatar' },
+        constraints: {
+          mediaTypes: ['image/avif', 'image/gif', 'image/jpeg', 'image/png', 'image/webp'],
+          maxByteCount: 20_971_520,
+        },
+        allowedActions: ['upload'],
+      });
+    }
     if (creating) {
-      if (!request.headers.get('idempotency-key')) return failure(400, 'invalid_request');
+      const rawKey = request.headers.get('idempotency-key');
+      if (!rawKey) return failure(400, 'invalid_request');
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(rawKey);
+      } catch {
+        return failure(400, 'invalid_request');
+      }
+      if (typeof parsed !== 'string' || parsed.length < 1 || parsed.length > 255)
+        return failure(400, 'invalid_request');
       const input = body as Record<string, unknown>;
+      const replay = [...reservations.values()].find(
+        (media) => media.reservationRequestId === parsed && media.uploaderId === sub,
+      );
+      if (replay)
+        return Response.json({ media: replay }, { status: 201, headers: { location: `/v1/media/${replay.id}` } });
       const id = randomUUID();
       const future = input.newThread as { idempotencyKey?: string } | undefined;
       const media: Reservation = {
@@ -128,7 +157,7 @@ const fake = Bun.serve({
         sha256: (input.sha256 as string | undefined) ?? null,
         uploaderId: sub,
         key: `private/${id}/original`,
-        reservationRequestId: randomUUID(),
+        reservationRequestId: parsed,
       };
       reservations.set(id, media);
       return Response.json({ media }, { status: 201, headers: { location: `/v1/media/${id}` } });
@@ -224,7 +253,7 @@ async function signIn(sub: string) {
   expect(value).toBeDefined();
   const page = await fetch(`${origin}/en`, { headers: { cookie: `${sessionCookie}=${value}` } });
   expect(page.status).toBe(200);
-  const csrfToken = /<meta\s+name="csrf-token"\s+content="([A-Za-z0-9_-]{22})"/.exec(await page.text())?.[1];
+  const csrfToken = await readSessionToken(origin, `${sessionCookie}=${value}`);
   expect(csrfToken).toBeDefined();
   return {
     origin,
@@ -282,6 +311,51 @@ test(
           byteCount: 4,
           sha256,
         },
+      },
+    ]);
+  },
+  timeout,
+);
+
+test(
+  'an avatar reservation keeps the account container and avatar purpose through the site upload route',
+  async () => {
+    const alice = await signIn('0192f3a0-6c1e-7b2a-9d4e-000000000001');
+    const bytes = new Uint8Array([9, 8, 7, 6]);
+    const body = {
+      containerId: '0192f3a0-6c1e-7b2a-9d4e-000000000001',
+      purpose: 'avatar',
+      mediaType: 'image/png',
+      byteCount: bytes.byteLength,
+    };
+    const before = calls.length;
+    const reserveResponse = await fetch(`${alice.origin}/media`, {
+      method: 'POST',
+      headers: { ...alice.headers, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    expect(reserveResponse.status, await reserveResponse.clone().text()).toBe(201);
+    expect(calls[before]).toMatchObject({
+      method: 'POST',
+      path: '/v1/media',
+      authorization: alice.authorization,
+      body,
+    });
+    const reserved = (await reserveResponse.json()) as { media: { id: string } };
+    const uploaded = await fetch(`${alice.origin}/media/${reserved.media.id}`, {
+      method: 'PUT',
+      headers: { ...alice.headers, 'content-type': body.mediaType },
+      body: bytes,
+    });
+    expect(uploaded.status, await uploaded.clone().text()).toBe(200);
+    expect(
+      calls.slice(before + 1).map(({ method, path, body: requestBody }) => ({ method, path, body: requestBody })),
+    ).toEqual([
+      { method: 'GET', path: `/v1/media/${reserved.media.id}`, body: null },
+      {
+        method: 'POST',
+        path: `/v1/media/${reserved.media.id}:complete`,
+        body: expect.objectContaining({ containerId: body.containerId }),
       },
     ]);
   },
@@ -407,6 +481,74 @@ test(
       expect(await response.json()).toMatchObject({ code: 'invalid_request', status: 400 });
       expect(calls.length).toBe(at);
     }
+  },
+  timeout,
+);
+
+test(
+  'a lost avatar reservation acknowledgement retries the original key and body through the site',
+  async () => {
+    const accountId = '0192f3a0-6c1e-7b2a-9d4e-0000000000aa';
+    const alice = await signIn(accountId);
+    const key = randomUUID();
+    const posted = { containerId: accountId, purpose: 'avatar', mediaType: 'image/png', byteCount: 4 };
+    const headers = {
+      ...alice.headers,
+      'content-type': 'application/json',
+      'idempotency-key': JSON.stringify(key),
+    };
+    const before = reservations.size;
+    const first = await fetch(`${alice.origin}/media`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(posted),
+    });
+    expect(first.status, await first.clone().text()).toBe(201);
+    privateResponse(first);
+    const reserved = (await first.json()) as { media: { id: string } };
+    const replay = await fetch(`${alice.origin}/media`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(posted),
+    });
+    expect(replay.status, await replay.clone().text()).toBe(201);
+    expect(await replay.json()).toEqual(reserved);
+    expect(reservations.size).toBe(before + 1);
+    expect([...reservations.values()].at(-1)).toMatchObject({
+      id: reserved.media.id,
+      reservationRequestId: key,
+      uploaderId: accountId,
+    });
+    const hostile = await fetch(`${alice.origin}/media`, {
+      method: 'POST',
+      headers: { ...alice.headers, 'content-type': 'application/json', 'idempotency-key': 'not-a-structured-key' },
+      body: JSON.stringify(posted),
+    });
+    expect(hostile.status).toBe(400);
+    expect(reservations.size).toBe(before + 1);
+  },
+  timeout,
+);
+
+test(
+  'avatar upload advice uses the installed Content handle and preserves its native constraints',
+  async () => {
+    const accountId = '0192f3a0-6c1e-7b2a-9d4e-0000000000ab';
+    const alice = await signIn(accountId);
+    const before = calls.length;
+    const response = await fetch(`${alice.origin}/media/avatar-upload-advice`, { headers: alice.headers });
+    expect(response.status, await response.clone().text()).toBe(200);
+    privateResponse(response);
+    expect(await response.json()).toMatchObject({
+      viewer: { accountId },
+      target: { containerId: accountId, purpose: 'avatar' },
+      constraints: { maxByteCount: 20_971_520 },
+      allowedActions: ['upload'],
+    });
+    expect(calls.length).toBe(before + 1);
+    const unknown = await fetch(`${alice.origin}/media/avatar-upload-advice?extra=1`, { headers: alice.headers });
+    expect(unknown.status).toBe(400);
+    expect(calls.length).toBe(before + 1);
   },
   timeout,
 );

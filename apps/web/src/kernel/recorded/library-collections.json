@@ -1,0 +1,34 @@
+{
+  "collections": [
+    {
+      "id": "01a17a3b-6ef3-71cc-80d0-f4ccb5814bbf",
+      "curatorAccountId": "01a17a3a-20f5-72aa-9f14-f4cc56678188",
+      "title": "To read this winter",
+      "description": null,
+      "visibility": "private",
+      "revision": 1,
+      "presentationKind": null,
+      "presentationKindSource": "mixed",
+      "memberCount": 2,
+      "createdAt": "2026-10-26T18:22:28.286Z",
+      "updatedAt": "2026-10-26T18:22:28.309Z",
+      "curator": { "id": "01a17a3a-20f5-72aa-9f14-f4cc56678188", "handle": "mira", "displayName": "Mira Okabe" }
+    },
+    {
+      "id": "01a17a3b-6d8f-71f2-a0f8-f4ccbb7c7ba2",
+      "curatorAccountId": "01a17a3a-20f5-72aa-9f14-f4cc56678188",
+      "title": "Books I come back to",
+      "description": "Short novels I reread every few years, in the order I would hand them to a friend.",
+      "visibility": "public",
+      "revision": 1,
+      "presentationKind": null,
+      "presentationKindSource": "mixed",
+      "memberCount": 4,
+      "createdAt": "2026-10-26T18:22:28.174Z",
+      "updatedAt": "2026-10-26T18:22:28.276Z",
+      "curator": { "id": "01a17a3a-20f5-72aa-9f14-f4cc56678188", "handle": "mira", "displayName": "Mira Okabe" }
+    }
+  ],
+  "next": null,
+  "status": 200
+}

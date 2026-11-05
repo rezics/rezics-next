@@ -123,7 +123,7 @@ test('without commerce variables the API starts, serves reads, and refuses order
         'content-type': 'application/json',
         'idempotency-key': JSON.stringify('unconfigured-order-key'),
       },
-      body: JSON.stringify({ offerId }),
+      body: JSON.stringify({ offerId, expectedOfferRevision: 1 }),
     });
     expect(refused.status).toBe(503);
     expect(await refused.json()).toMatchObject({ code: 'dependency_unavailable' });

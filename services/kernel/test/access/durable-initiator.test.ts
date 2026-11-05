@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -27,21 +28,22 @@ import {
 import { accessCheck, type AccountActor } from '../../src/request/access.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
 import { openGrowthDatabase, capture } from '../support/growth.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 
 const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
 const action = 'subject:write';
 const extra = 'subject:publish';
-const actions = new Map([
-  [action, { anonymous: false }],
-  [extra, { anonymous: false }],
-  ['account:delegate', { anonymous: false }],
-]);
-
 /** Test-owned SQL module. Only create() writes positive operation evidence, in an
  * authorized native command with an immutable source and an exact core receipt.
  * Both Access and the private Auth listener use instrumented pools for growth.
  */
-export async function nativeModule() {
+export async function nativeModule(requestedAction = action) {
+  const action = requestedAction;
+  const catalogue = new Map([
+    [action, { anonymous: false }],
+    [extra, { anonymous: false }],
+    ['account:delegate', { anonymous: false }],
+  ]);
   const db = await openGrowthDatabase();
   db.pool.options.max = 1;
   migrate(db.url);
@@ -65,7 +67,7 @@ export async function nativeModule() {
     audience,
     secret: 'durable-test-secret-at-least-thirty-two-bytes',
     signing: { activeKid: jwk.kid, privateKeys: [jwk] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const a = await readAccount(db.pool, routeOf(id)!, id);
         return (
@@ -87,7 +89,7 @@ export async function nativeModule() {
         if (!approvals.delete(reference)) throw new Error('Denied');
         return { accountId: reference };
       },
-    },
+    }),
   });
   const edgeKey = await generateKeyPair('RS256', { extractable: true });
   const edgeJwk = { ...(await exportJWK(edgeKey.publicKey)), kid: 'edge-test' };
@@ -119,9 +121,9 @@ export async function nativeModule() {
       return handler(new Request(url, { ...init, headers }));
     },
   });
-  const nativeAccess = (catalogue = actions) =>
+  const nativeAccess = (mounted = catalogue) =>
     createAccess({
-      actions: catalogue,
+      actions: mounted,
       auth: {
         issuer,
         audience,
@@ -236,8 +238,16 @@ export async function nativeModule() {
       return null;
     return record;
   };
-  async function fixture(delegated = false) {
+  async function fixture(delegated = false, scopeSnapshot = [action, 'account:delegate']) {
     const p = await person();
+    if (scopeSnapshot.length > 2) {
+      await authPool.query('UPDATE auth_client SET scopes=$2 WHERE client_id=$1', [p.clientId, scopeSnapshot]);
+      await authPool.query('UPDATE auth_consent SET scopes=$3 WHERE account_id=$1 AND client_id=$2', [
+        p.id,
+        p.clientId,
+        scopeSnapshot,
+      ]);
+    }
     const principal = delegated ? await person(0x2345) : null;
     const target = { route: 0x5678, id: newId(0x5678) };
     await db.admin.query('INSERT INTO durable_test.authority(route,id) VALUES ($1,$2)', [target.route, target.id]);
@@ -272,7 +282,7 @@ export async function nativeModule() {
     const bearer = await new SignJWT({
       sub: p.id,
       client_id: p.clientId,
-      scope: `${action} account:delegate`,
+      scope: scopeSnapshot.join(' '),
       authn_epoch: 10,
       iat: now,
       exp,
@@ -610,11 +620,12 @@ if (Bun.main === import.meta.path) {
           `UPDATE access.principal_assignment SET revoked_at=transaction_timestamp(),valid=valid*tstzrange(NULL,transaction_timestamp(),'[)') WHERE route=$1 AND principal_id=$2 AND request_id=$3`,
           [routeOf(principal.id), principal.id, f.creator.requestedBy!.split(':').at(-1)],
         );
-      } else if (fact === 'principal suspended' || fact === 'principal fenced')
-        await h.db.admin.query(
-          `UPDATE access.account SET ${fact.endsWith('fenced') ? 'authn_fenced=true' : "state='suspended'"} WHERE route=$1 AND account_id=$2`,
-          [routeOf(principal.id), principal.id],
-        );
+      } else if (fact === 'principal suspended') await suspendAccount(h.db.admin, principal.id);
+      else if (fact === 'principal fenced')
+        await h.db.admin.query('UPDATE access.account SET authn_fenced=true WHERE route=$1 AND account_id=$2', [
+          routeOf(principal.id),
+          principal.id,
+        ]);
       else if (fact.endsWith('grant'))
         await h.db.admin.query(
           'DELETE FROM access.resource_grant WHERE route=$1 AND resource_id=$2 AND subject_id=$3',

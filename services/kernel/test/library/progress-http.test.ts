@@ -1,14 +1,18 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
+import { createAccess } from '../../src/access/index.ts';
+import { deriveAccess } from '../../src/access/derived-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { Buffer } from 'node:buffer';
 import { createHash, randomUUID } from 'node:crypto';
-import { generateKeyPair, jwtVerify, SignJWT, type JWTPayload } from 'jose';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createKernel } from '../../src/http/kernel.ts';
 import { openApiDocument } from '../../src/http/openapi.ts';
-import { AuthenticationError, type Access } from '../../src/request/access.ts';
+import { type Access } from '../../src/request/access.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { bundledDigest, bundledRelease } from '@rezics/definitions/bundled';
 import { bootstrapRelease } from '../../src/semantic/definitions.ts';
 import { createSubject as createSemanticSubject, subjectTarget } from '../../src/semantic/subject.ts';
-import { capture, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
+import { capture, costOf, openGrowthDatabase, type GrowthDatabase } from '../support/growth.ts';
 
 const issuer = 'https://auth.progress.test';
 const audience = 'https://kernel.progress.test';
@@ -40,14 +44,17 @@ async function request(
   method: 'GET' | 'POST' | 'DELETE',
   path: string,
   body?: unknown,
+  requestKey?: string,
+  context: { origin?: string; language?: string } = {},
 ) {
   const headers: Record<string, string> = {};
   const account = as === 'owner' ? owner : as === 'other' ? other : as === 'suspended' ? suspended : null;
   if (account) headers.authorization = `Bearer ${credentials.get(account)!}`;
-  if (method !== 'GET') headers['idempotency-key'] = key();
+  if (method !== 'GET') headers['idempotency-key'] = requestKey ?? key();
   if (body !== undefined) headers['content-type'] = 'application/json';
+  if (context.language !== undefined) headers['accept-language'] = context.language;
   const response = await app.handle(
-    new Request(`https://kernel.test${path}`, {
+    new Request(`${context.origin ?? 'https://kernel.test'}${path}`, {
       method,
       headers,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -56,18 +63,18 @@ async function request(
   return { response, body: (await response.json()) as Record<string, any> };
 }
 
-async function createSubject(): Promise<string> {
+async function createSubject(accountId = owner): Promise<string> {
   const requestKey = randomUUID();
   const created = await createSemanticSubject(db.pool, {
     actor: {
       kind: 'account',
-      accountId: owner,
+      accountId,
       clientId: 'web',
       scopes,
       requestedBy: null,
       authnEpoch: 1,
     },
-    target: subjectTarget(new Uint8Array(32).fill(23), owner, requestKey),
+    target: subjectTarget(new Uint8Array(32).fill(23), accountId, requestKey),
     idempotencyKey: requestKey,
     digest: createHash('sha256').update(requestKey).digest(),
     item: { type: 'schema:Book', labels: { en: `Progress subject ${serial}` } },
@@ -77,8 +84,14 @@ async function createSubject(): Promise<string> {
   return created.subject.id;
 }
 
-async function start(subjectId: string, mode: string, unit: string, extras: Record<string, unknown> = {}) {
-  const result = await request('owner', 'POST', '/v1/progressSessions', { subjectId, mode, unit, ...extras });
+async function start(
+  subjectId: string,
+  mode: string,
+  unit: string,
+  extras: Record<string, unknown> = {},
+  as: 'owner' | 'other' = 'owner',
+) {
+  const result = await request(as, 'POST', '/v1/progressSessions', { subjectId, mode, unit, ...extras });
   expect(result.response.status).toBe(201);
   return result.body.progressSession as Record<string, any>;
 }
@@ -126,34 +139,16 @@ beforeAll(async () => {
   await bootstrapRelease(db.pool, bundledRelease);
 
   const signing = await generateKeyPair('ES256', { extractable: true });
-  const access: Access = {
-    async authenticate(token) {
-      let payload: JWTPayload;
-      try {
-        ({ payload } = await jwtVerify(token, signing.publicKey, { issuer, audience, algorithms: ['ES256'] }));
-      } catch {
-        throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-      }
-      if (
-        typeof payload.sub !== 'string' ||
-        typeof payload.client_id !== 'string' ||
-        typeof payload.scope !== 'string' ||
-        typeof payload.authn_epoch !== 'number'
-      )
-        throw new AuthenticationError(401, 'Bearer error="invalid_token"');
-      return {
-        kind: 'account',
-        accountId: payload.sub,
-        clientId: payload.client_id,
-        scopes: payload.scope.split(' '),
-        requestedBy: null,
-        authnEpoch: payload.authn_epoch,
-      };
-    },
+  const jwk = { ...(await exportJWK(signing.publicKey)), kid: 'progress-http', alg: 'ES256' };
+  const native = createAccess({
+    actions: new Map(scopes.map((action) => [action, { anonymous: false }])),
+    auth: { issuer, audience, jwksUrl: `${issuer}/jwks`, fetch: async () => Response.json({ keys: [jwk] }) },
+  });
+  const access: Access = deriveAccess(native, {
     async authorize(_client, actor, action) {
       return actor.kind === 'account' && actor.scopes.includes(action);
     },
-  };
+  });
   app = createKernel({
     pool: db.pool,
     routeKey: new Uint8Array(32).fill(23),
@@ -169,7 +164,7 @@ beforeAll(async () => {
   for (const [accountId, state] of [
     [owner, 'active'],
     [other, 'active'],
-    [suspended, 'suspended'],
+    [suspended, 'active'],
   ] as const) {
     await db.admin.query(
       `INSERT INTO access.account(route, account_id, kind, state, transaction_id, membership_inverse_complete)
@@ -196,6 +191,7 @@ beforeAll(async () => {
         .sign(signing.privateKey),
     );
   }
+  await suspendAccount(db.admin, suspended);
   await db.admin.query(
     `INSERT INTO access.exposure_opening ("group", valid, transaction_id)
      VALUES ('reading_progress', tstzrange('2020-01-01T00:00:00Z', NULL, '[)'), $1)`,
@@ -211,6 +207,7 @@ test('progress HTTP mounts each reading progress operation with its gate exposur
   const operationIds = [
     'progress_session.create',
     'progress_session.list',
+    'progress_session.discovery',
     'progress_session.read',
     'progress_session.record',
     'progress_session.complete',
@@ -367,6 +364,89 @@ test('owners start and record every mode, page units and changes, and publish an
   expect(sessions.map((item) => item.id)).toContain(reread.id);
 });
 
+test('owners keep chapter and volume measures independent in one session with revision and replay protection', async () => {
+  const subjectId = await createSubject();
+  const created = await start(subjectId, 'scalar_amount', 'chapter', {
+    total: '24',
+    additionalMeasures: [{ unit: 'volume', total: '12' }],
+  });
+  expect(created.measures).toEqual([
+    { unit: 'chapter', amount: null, total: '24' },
+    { unit: 'volume', amount: null, total: '12' },
+  ]);
+
+  const presented = await request('owner', 'GET', `/v1/progressSessions/${created.id}?presentation=FULL`);
+  expect(presented.body.progressSession.measures).toHaveLength(2);
+  for (const measure of presented.body.progressSession.measures)
+    expect(measure.presentation).toMatchObject({ meaning: 'known', recording: { state: 'supported' } });
+  expect((await request('other', 'GET', `/v1/progressSessions/${created.id}`)).response.status).toBe(404);
+
+  const chapter = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, {
+    revision: 1,
+    measureId: 'chapter',
+    amount: '0',
+  });
+  expect(chapter.response.status).toBe(200);
+  expect(chapter.body.progressSession.measures).toEqual([
+    { unit: 'chapter', amount: '0', total: '24' },
+    { unit: 'volume', amount: null, total: '12' },
+  ]);
+  const staleVolume = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, {
+    revision: 1,
+    measureId: 'volume',
+    amount: '3.5',
+  });
+  expect(staleVolume.response.status).toBe(409);
+
+  const volume = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, {
+    revision: 2,
+    measureId: 'volume',
+    amount: '3.5',
+  });
+  expect(volume.response.status).toBe(200);
+  const staleCorrection = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, {
+    revision: 2,
+    measureId: 'chapter',
+    amount: '1',
+  });
+  expect(staleCorrection.response.status).toBe(409);
+  const correctionBody = { revision: 3, measureId: 'chapter', amount: '2.5' };
+  const corrected = await request(
+    'owner',
+    'POST',
+    `/v1/progressSessions/${created.id}:record`,
+    correctionBody,
+    'chapter-correction',
+  );
+  expect(corrected.response.status).toBe(200);
+  const replay = await request(
+    'owner',
+    'POST',
+    `/v1/progressSessions/${created.id}:record`,
+    correctionBody,
+    'chapter-correction',
+  );
+  expect(replay.body).toEqual(corrected.body);
+  const clearedVolume = await request('owner', 'POST', `/v1/progressSessions/${created.id}:record`, {
+    revision: 4,
+    measureId: 'volume',
+    clear: true,
+  });
+  expect(clearedVolume.body.progressSession.measures).toEqual([
+    { unit: 'chapter', amount: '2.5', total: '24' },
+    { unit: 'volume', amount: null, total: '12' },
+  ]);
+  const changes = await progressPage<Record<string, any>>(`/v1/progressSessions/${created.id}/changes`, 'changes');
+  expect(changes.map((change) => change.intent)).toEqual([
+    { measureId: 'chapter', amount: '0' },
+    { measureId: 'volume', amount: '3.5' },
+    { measureId: 'chapter', amount: '2.5' },
+    { measureId: 'volume', clear: true },
+  ]);
+  expect(changes.map((change) => change.revision)).toEqual([2, 3, 4, 5]);
+  expect(volume.body.progressSession.measures[0].amount).toBe('0');
+});
+
 test('hidden private session ids are concealed and suspended writes leave data unchanged', async () => {
   const subjectId = await createSubject();
   const current = await start(subjectId, 'completed_units', 'chapter');
@@ -383,13 +463,19 @@ test('hidden private session ids are concealed and suspended writes leave data u
   expect(anonymous.response.status).toBe(404);
   expect(stableProblem(anonymous.body)).toEqual(stableProblem(unknown.body));
   const suspendedRead = await request('suspended', 'GET', `/v1/progressSessions/${current.id}`);
-  expect(suspendedRead.response.status).toBe(404);
-  expect(stableProblem(suspendedRead.body)).toEqual(stableProblem(unknown.body));
+  expect(suspendedRead.response.status).toBe(401);
+  expect(stableProblem(suspendedRead.body)).toEqual({
+    ...stableProblem(unknown.body),
+    status: 401,
+    code: 'invalid_credentials',
+    title: 'Invalid Credentials',
+    type: 'https://rezics.com/problems/invalid_credentials',
+  });
   expect(
     await progressPage<Record<string, any>>(`/v1/progressSessions?subjectId=${subjectId}`, 'progressSessions', 'other'),
   ).toEqual([]);
   expect((await request('anonymous', 'GET', `/v1/progressSessions?subjectId=${subjectId}`)).response.status).toBe(401);
-  expect((await request('suspended', 'GET', `/v1/progressSessions?subjectId=${subjectId}`)).response.status).toBe(403);
+  expect((await request('suspended', 'GET', `/v1/progressSessions?subjectId=${subjectId}`)).response.status).toBe(401);
 
   const logResponse = await request('owner', 'POST', '/v1/publishedLogs', { sessionId: current.id });
   expect(logResponse.response.status).toBe(201);
@@ -490,4 +576,247 @@ test('a record request with one added id and one hundred removed ids answers 400
   expect(result.response.status).toBe(400);
   expect(result.body.code).toBe('invalid_request');
   expect(await authoritativeProgressRows()).toEqual(before);
+});
+
+test('owner discovery pages exact occurrences across subjects and rejects stale or foreign cursors', async () => {
+  const firstSubject = await createSubject();
+  const secondSubject = await createSubject();
+  const first = await start(firstSubject, 'scalar_amount', 'minute');
+  const repeat = await start(firstSubject, 'cursor_position', 'page');
+  const otherSubject = await start(secondSubject, 'completed_units', 'episode');
+  const completed = await request('owner', 'POST', `/v1/progressSessions/${repeat.id}:complete`, {
+    revision: repeat.revision,
+  });
+  expect(completed.response.status).toBe(200);
+
+  const occurrences: Record<string, any>[] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await request(
+      'owner',
+      'GET',
+      `/v1/progressSessionDiscovery?limit=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`,
+    );
+    expect(result.response.status).toBe(200);
+    expect(result.body.viewerState).toBe('signed_in');
+    occurrences.push(...result.body.progressSessions);
+    cursor = result.body.next ?? undefined;
+  } while (cursor);
+
+  expect(occurrences.map((row) => row.id)).toHaveLength(3);
+  expect(new Set(occurrences.map((row) => row.id))).toEqual(new Set([first.id, repeat.id, otherSubject.id]));
+  expect(occurrences.find((row) => row.id === repeat.id)?.allowedActions.complete).toEqual({
+    allowed: false,
+    reason: 'session_not_active',
+  });
+  const subjectMode = await request(
+    'owner',
+    'GET',
+    `/v1/progressSessionDiscovery?subjectId=${firstSubject}&mode=cursor_position`,
+  );
+  expect(subjectMode.response.status).toBe(200);
+  expect(subjectMode.body.progressSessions.map((row: Record<string, unknown>) => row.id)).toEqual([repeat.id]);
+  const statePage = await request('owner', 'GET', '/v1/progressSessionDiscovery?state=completed');
+  expect(statePage.body.progressSessions.map((row: Record<string, unknown>) => row.id)).toEqual([repeat.id]);
+  const profileEmpty = await request(
+    'owner',
+    'GET',
+    '/v1/progressSessionDiscovery?profileId=00000000-0000-4000-8000-000000000099',
+  );
+  expect(profileEmpty).toMatchObject({ response: { status: 200 }, body: { progressSessions: [], next: null } });
+  const retainedPin = await db.admin.query<{ profileId: string }>(
+    'SELECT library_profile_pin ->> \'profileId\' AS "profileId" FROM library.progress_session WHERE route=$1 AND session_id=$2',
+    [accountRoute, first.id],
+  );
+  expect(retainedPin.rows[0]?.profileId).toBeString();
+  const byRetainedProfile = await request(
+    'owner',
+    'GET',
+    `/v1/progressSessionDiscovery?profileId=${encodeURIComponent(retainedPin.rows[0]!.profileId)}`,
+  );
+  expect(byRetainedProfile.response.status).toBe(200);
+  expect(byRetainedProfile.body.progressSessions.map((row: Record<string, unknown>) => row.id)).toContain(first.id);
+
+  const firstPage = await request('owner', 'GET', '/v1/progressSessionDiscovery?limit=1');
+  expect(typeof firstPage.body.next).toBe('string');
+  const changedPredicate = await request(
+    'owner',
+    'GET',
+    `/v1/progressSessionDiscovery?limit=1&mode=cursor_position&cursor=${encodeURIComponent(firstPage.body.next)}`,
+  );
+  expect(changedPredicate.response.status).toBe(400);
+  expect(changedPredicate.body.code).toBe('invalid_cursor');
+  const changedLanguage = await request(
+    'owner',
+    'GET',
+    `/v1/progressSessionDiscovery?limit=1&cursor=${encodeURIComponent(firstPage.body.next)}`,
+    undefined,
+    undefined,
+    { language: 'ja' },
+  );
+  expect(changedLanguage.response.status).toBe(400);
+  const changedOrigin = await request(
+    'owner',
+    'GET',
+    `/v1/progressSessionDiscovery?limit=1&cursor=${encodeURIComponent(firstPage.body.next)}`,
+    undefined,
+    undefined,
+    { origin: 'https://other.test' },
+  );
+  expect(changedOrigin.response.status).toBe(400);
+  const foreign = await request(
+    'other',
+    'GET',
+    `/v1/progressSessionDiscovery?limit=1&cursor=${encodeURIComponent(firstPage.body.next)}`,
+  );
+  expect(foreign.response.status).toBe(400);
+  expect(foreign.body.code).toBe('invalid_cursor');
+
+  await start(firstSubject, 'scalar_amount', 'chapter');
+  const membershipChanged = await request(
+    'owner',
+    'GET',
+    `/v1/progressSessionDiscovery?limit=1&cursor=${encodeURIComponent(firstPage.body.next)}`,
+  );
+  expect(membershipChanged.response.status).toBe(409);
+  expect(membershipChanged.body.code).toBe('stale_cursor');
+  const deletionPage = await request('owner', 'GET', '/v1/progressSessionDiscovery?limit=1');
+  await db.admin.query('DELETE FROM library.progress_session WHERE route=$1 AND session_id=$2', [
+    accountRoute,
+    deletionPage.body.progressSessions[0].id,
+  ]);
+  const deletedAnchor = await request(
+    'owner',
+    'GET',
+    `/v1/progressSessionDiscovery?limit=1&cursor=${encodeURIComponent(deletionPage.body.next)}`,
+  );
+  expect(deletedAnchor.response.status).toBe(409);
+  expect(deletedAnchor.body.code).toBe('stale_cursor');
+
+  const active = occurrences.find((row) => row.id === otherSubject.id)!;
+  const retired = await request('owner', 'POST', `/v1/progressSessions/${active.id}:retire`, {
+    revision: active.revision,
+  });
+  expect(retired.response.status).toBe(200);
+  const withoutRetired = await request('owner', 'GET', '/v1/progressSessionDiscovery');
+  expect(withoutRetired.body.progressSessions.map((row: Record<string, unknown>) => row.id)).not.toContain(active.id);
+  await db.admin.query(
+    "UPDATE library.progress_session SET state='active', revision=revision+1 WHERE route=$1 AND session_id=$2",
+    [accountRoute, active.id],
+  );
+  const restored = await request('owner', 'GET', '/v1/progressSessionDiscovery?mode=completed_units');
+  expect(restored.body.progressSessions.map((row: Record<string, unknown>) => row.id)).toContain(active.id);
+});
+
+test('owner discovery request cost stays bounded as a private library grows to 4096 sessions', async () => {
+  const subjectId = await createSubject(other);
+  const template = await start(subjectId, 'scalar_amount', 'minute', {}, 'other');
+  const route = routeOf(other)!;
+  const measurements: {
+    scale: number;
+    statements: number;
+    requestBytes: number;
+    responseBytes: number;
+    sqlRows: number;
+    sqlBlocks: number;
+    progressWrites: number;
+    serializedBytes: number;
+    backends: number;
+    backgroundStatements: number;
+    plans: number;
+  }[] = [];
+  let previous = 1;
+
+  for (const scale of [64, 512, 4096]) {
+    const ids = Array.from({ length: scale - previous }, () => newId(route));
+    await db.admin.query(
+      `INSERT INTO library.progress_session
+       SELECT (jsonb_populate_record(NULL::library.progress_session,
+         to_jsonb(template) || jsonb_build_object('session_id', copy.session_id))).*
+       FROM library.progress_session AS template
+       CROSS JOIN unnest($3::uuid[]) AS copy(session_id)
+       WHERE template.route = $1 AND template.session_id = $2`,
+      [route, template.id, ids],
+    );
+    await db.admin.query('ANALYZE library.progress_session');
+    const count = await db.admin.query<{ count: string }>(
+      'SELECT count(*)::text AS count FROM library.progress_session WHERE route = $1 AND account_id = $2',
+      [route, other],
+    );
+    expect(Number(count.rows[0]?.count)).toBe(scale);
+
+    const result = await capture(db, () => request('other', 'GET', '/v1/progressSessionDiscovery?limit=50'), {
+      includeBackends: true,
+    });
+    expect(result.value.response.status).toBe(200);
+    expect(result.value.body.viewerState).toBe('signed_in');
+    expect(result.value.body.progressSessions).toHaveLength(50);
+    expect(typeof result.value.body.next).toBe('string');
+    expect(new Set(result.value.body.progressSessions.map((row: Record<string, unknown>) => row['id'])).size).toBe(50);
+    expect(
+      result.value.body.progressSessions.every(
+        (row: Record<string, unknown>) => typeof row['subject'] === 'object' && row['subject'] !== null,
+      ),
+    ).toBe(true);
+
+    const captured = result.capture;
+    const cost = costOf(captured);
+    const sum = (values: readonly number[] | undefined) => (values ?? []).reduce((total, value) => total + value, 0);
+    const allStatements = [...captured.statements, ...(captured.backgroundStatements ?? [])];
+    measurements.push({
+      scale,
+      statements: allStatements.length,
+      requestBytes: sum(captured.requestBytes) + sum(captured.backgroundRequestBytes),
+      responseBytes: sum(captured.responseBytes) + sum(captured.backgroundResponseBytes),
+      sqlRows: cost.rows + (cost.backgroundRows ?? 0),
+      sqlBlocks: cost.blocks + (cost.backgroundBlocks ?? 0),
+      progressWrites: allStatements.filter(
+        (statement) =>
+          /\b(?:INSERT|UPDATE|DELETE|MERGE|TRUNCATE)\b/i.test(statement) &&
+          /\blibrary\.(?:progress_session|progress_discovery_generation|progress_unit|progress_change)\b/i.test(
+            statement,
+          ),
+      ).length,
+      serializedBytes: Buffer.byteLength(JSON.stringify(result.value.body), 'utf8'),
+      backends: new Set(captured.statementBackends ?? []).size,
+      backgroundStatements: captured.backgroundStatements?.length ?? 0,
+      plans: captured.plans.length + (captured.backgroundPlans?.length ?? 0),
+    });
+    previous = scale;
+  }
+
+  const [small, medium, large] = measurements;
+  expect(small!.statements).toBeLessThanOrEqual(128);
+  expect(small!.requestBytes).toBeLessThanOrEqual(1_000_000);
+  expect(small!.responseBytes).toBeLessThanOrEqual(1_000_000);
+  expect(small!.sqlRows).toBeLessThanOrEqual(1024);
+  expect(small!.sqlBlocks).toBeLessThanOrEqual(256);
+  expect(small!.serializedBytes).toBeLessThanOrEqual(1_000_000);
+  expect(small!.plans).toBeLessThanOrEqual(small!.statements);
+  expect(small!.backends).toBe(1);
+  expect(small!.backgroundStatements).toBe(0);
+  expect(small!.progressWrites).toBe(0);
+  expect(medium!).toMatchObject({
+    statements: small!.statements,
+    requestBytes: small!.requestBytes,
+    responseBytes: small!.responseBytes,
+    sqlRows: small!.sqlRows,
+    progressWrites: small!.progressWrites,
+    serializedBytes: small!.serializedBytes,
+    backends: small!.backends,
+    backgroundStatements: small!.backgroundStatements,
+    plans: small!.plans,
+  });
+  expect(large!).toMatchObject({
+    statements: small!.statements,
+    requestBytes: small!.requestBytes,
+    responseBytes: small!.responseBytes,
+    sqlRows: small!.sqlRows,
+    progressWrites: small!.progressWrites,
+    serializedBytes: small!.serializedBytes,
+    backends: small!.backends,
+    backgroundStatements: small!.backgroundStatements,
+    plans: small!.plans,
+  });
+  expect(Math.max(small!.sqlBlocks, medium!.sqlBlocks, large!.sqlBlocks) - small!.sqlBlocks).toBeLessThanOrEqual(32);
 });

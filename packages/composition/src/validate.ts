@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import canonicalize from 'canonicalize';
+import { FilterError } from '@rezics/filter';
+import { publicFilterProp, parseConfiguredPageFilter, typeListFilter } from './filter.ts';
 import {
   MAX_COMPOSITION_BYTES,
   MAX_COMPOSITION_DEPTH,
@@ -140,6 +142,16 @@ function walkLocalized(schema: SchemaNode, value: unknown, pointer: string, add:
 }
 
 function walkSchema(schema: SchemaNode, value: unknown, pointer: string, add: Add): void {
+  if (schema === publicFilterProp) {
+    try {
+      parseConfiguredPageFilter(value);
+    } catch (error) {
+      if (!(error instanceof FilterError)) throw error;
+      for (const violation of error.errors)
+        add(pointer + violation.pointer, violation.code === 'out_of_range' ? 'limit' : 'invalid');
+    }
+    return;
+  }
   if (safetyKind(schema) === 'localizedText') {
     walkLocalized(schema, value, pointer, add);
     return;
@@ -161,10 +173,12 @@ function walkSchema(schema: SchemaNode, value: unknown, pointer: string, add: Ad
       walkString(schema, value, pointer, add);
       return;
     case 'Integer':
-      if (typeof value !== 'number' || !Number.isInteger(value) || !inRange(schema, value)) add(pointer, 'invalid');
+      if (typeof value !== 'number' || !Number.isInteger(value)) add(pointer, 'invalid');
+      else if (!inRange(schema, value)) add(pointer, 'limit');
       return;
     case 'Number':
-      if (typeof value !== 'number' || !Number.isFinite(value) || !inRange(schema, value)) add(pointer, 'invalid');
+      if (typeof value !== 'number' || !Number.isFinite(value)) add(pointer, 'invalid');
+      else if (!inRange(schema, value)) add(pointer, 'limit');
       return;
     case 'Boolean':
       if (typeof value !== 'boolean') add(pointer, 'invalid');
@@ -236,6 +250,13 @@ function walkString(schema: SchemaNode, value: unknown, pointer: string, add: Ad
   if (!patternOk(schema, value) || !lengthOk(value, schema)) add(pointer, 'invalid');
 }
 
+interface PageState {
+  ids: Set<string>;
+  /** Pointers to the `level` of every level-1 `Heading`, in walk order. */
+  headings: string[];
+  subjectHeaders: number;
+}
+
 function recordId(value: unknown, pointer: string, seen: Set<string>, add: Add): void {
   if (typeof value !== 'string' || !NODE_ID.test(value)) {
     add(pointer, 'invalid');
@@ -253,14 +274,14 @@ function validateProps(
   component: CompositionComponent,
   props: Record<string, unknown>,
   pointer: string,
-  seen: Set<string>,
+  page: PageState,
   add: Add,
 ): void {
   const schema = component.props as SchemaNode;
   const properties = schema.properties ?? {};
   const slots = new Set(component.slots);
   if (!Object.hasOwn(props, 'id')) add(join(pointer, 'id'), 'invalid');
-  else recordId(props.id, join(pointer, 'id'), seen, add);
+  else recordId(props.id, join(pointer, 'id'), page.ids, add);
   for (const key of Object.keys(props)) {
     if (key !== 'id' && !slots.has(key) && properties[key] === undefined) add(join(pointer, key), 'invalid');
   }
@@ -271,6 +292,16 @@ function validateProps(
     }
     walkSchema(property, props[key], join(pointer, key), add);
   }
+  if (component.type === 'TypeList' && Array.isArray(props.types)) {
+    try {
+      typeListFilter(props.types as string[], props.filter);
+    } catch (error) {
+      if (!(error instanceof FilterError)) throw error;
+      add(join(pointer, 'filter'), error.errors.some((item) => item.code === 'out_of_range') ? 'limit' : 'invalid');
+    }
+  }
+  if (component.type === 'SubjectHeader') page.subjectHeaders += 1;
+  if (component.type === 'Heading' && props.level === 1) page.headings.push(join(pointer, 'level'));
   for (const slot of component.slots) {
     const slotPointer = join(pointer, slot);
     if (!Object.hasOwn(props, slot)) {
@@ -283,7 +314,7 @@ function validateProps(
       continue;
     }
     for (let index = 0; index < children.length; index++) {
-      validateNode(components, children[index], join(slotPointer, index), seen, add);
+      validateNode(components, children[index], join(slotPointer, index), page, add);
     }
   }
 }
@@ -292,7 +323,7 @@ function validateNode(
   components: ReadonlyMap<string, CompositionComponent>,
   value: unknown,
   pointer: string,
-  seen: Set<string>,
+  page: PageState,
   add: Add,
 ): void {
   if (!isRecord(value)) {
@@ -317,7 +348,7 @@ function validateNode(
     if (Object.hasOwn(value, 'props')) add(join(pointer, 'props'), 'invalid');
     return;
   }
-  validateProps(components, component, value.props, join(pointer, 'props'), seen, add);
+  validateProps(components, component, value.props, join(pointer, 'props'), page, add);
 }
 
 function validateDocument(registry: CompositionRegistry, value: unknown, add: Add): void {
@@ -326,7 +357,7 @@ function validateDocument(registry: CompositionRegistry, value: unknown, add: Ad
     return;
   }
   const components = new Map(registry.components.map((component) => [component.type, component]));
-  const seen = new Set<string>();
+  const page: PageState = { ids: new Set(), headings: [], subjectHeaders: 0 };
   for (const key of Object.keys(value)) {
     if (key !== 'root' && key !== 'content') add(join('', key), 'invalid');
   }
@@ -336,7 +367,12 @@ function validateDocument(registry: CompositionRegistry, value: unknown, add: Ad
   else if (!Array.isArray(value.content)) add('/content', 'invalid');
   else {
     for (let index = 0; index < value.content.length; index++) {
-      validateNode(components, value.content[index], `/content/${index}`, seen, add);
+      validateNode(components, value.content[index], `/content/${index}`, page, add);
+    }
+    // A subject header is the page heading, so it leaves no room for a level-1 heading; otherwise the first one is.
+    if (page.subjectHeaders <= 1) {
+      for (const pointer of page.subjectHeaders === 1 ? page.headings : page.headings.slice(1))
+        add(pointer, 'duplicate');
     }
   }
 }
@@ -421,6 +457,7 @@ export function validateComposition(registry: CompositionRegistry, value: unknow
     try {
       const plan = planReads(registry, value as CompositionDocument, {
         subject: '00000000-0000-8000-8000-000000000000',
+        account: { id: '00000000-0000-8000-8000-000000000000', handle: 'placeholder' },
       });
       let cost = 0;
       for (const read of Object.values(plan.reads)) cost += readCost(read);

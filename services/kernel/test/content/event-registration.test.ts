@@ -1,5 +1,6 @@
 import { afterAll, expect, expectTypeOf, test } from 'bun:test';
 import pg from 'pg';
+import { newId } from '../../src/route/route.ts';
 import { runCommand, type CommandEvent } from '../../src/command/command.ts';
 import { CONTENT_EVENTS, type ContentEventData, type ContentEventType } from '../../src/content/events.ts';
 import { createPool } from '../../src/database/pool.ts';
@@ -22,16 +23,59 @@ const mediaId = crypto.randomUUID();
 const containerId = crypto.randomUUID();
 const reportId = crypto.randomUUID();
 const authored = { threadId, itemId, revisionId, actorId };
+const threadIndex = {
+  placeId: containerId,
+  kind: 'discussion' as const,
+  subjectIds: [itemId],
+  activityAt: '2026-10-27T00:00:00.000Z',
+};
 const media = { mediaId, containerId };
 const fixtures = {
-  'com.rezics.content.thread.created.v1': authored,
-  'com.rezics.content.post.created.v1': authored,
-  'com.rezics.content.revision.created.v1': authored,
+  'com.rezics.content.conversation-activity.projected.v1': {
+    postIds: [itemId],
+    sourceEpoch: 1,
+    sourcePosition: '1',
+  },
+  'com.rezics.content.board.watch.changed.v1': {
+    accountId: actorId,
+    boardId: containerId,
+    watching: true,
+    revision: 1,
+  },
+  'com.rezics.content.watch.removed.v1': { accountId: actorId, kind: 'board', watchId: itemId },
+  'com.rezics.content.board.slow-mode.changed.v1': { boardId: containerId, intervalSeconds: 60 },
+  'com.rezics.content.feed.indexed.v1': {},
+  'com.rezics.content.feed.delivered.v1': {},
+  'com.rezics.content.feed.erased.v1': {},
+  'com.rezics.content.feed.expired.v1': {},
+  'com.rezics.content.edition.creator-indexed.v1': { editionId: itemId, creatorAccountId: actorId },
+  'com.rezics.content.edition.created.v1': { editionId: itemId, editionRevision: '1' },
+  'com.rezics.content.edition.published.v1': { editionId: itemId, editionRevision: '2' },
+  'com.rezics.content.edition.unpublished.v1': { editionId: itemId, editionRevision: '3' },
+  'com.rezics.content.thread.created.v1': { ...authored, ...threadIndex },
+  'com.rezics.content.post.created.v1': { ...authored, ...threadIndex },
+  'com.rezics.content.post.published.v1': { ...authored, ...threadIndex },
+  'com.rezics.content.revision.created.v1': {
+    ...authored,
+    ...threadIndex,
+    previousSubjectIds: [itemId],
+  },
   'com.rezics.content.board.created.v1': {
     boardId: containerId,
     realmId: crypto.randomUUID(),
     conceptId: crypto.randomUUID(),
     actorId,
+  },
+  'com.rezics.content.authored-field.created.v1': {
+    id: revisionId,
+    subject: itemId,
+    candidate: threadId,
+    authorId: actorId,
+  },
+  'com.rezics.content.authored-field.erased.v1': {
+    id: revisionId,
+    subject: itemId,
+    authorId: actorId,
   },
   'com.rezics.content.media.reserved.v1': { ...media, actorId },
   'com.rezics.content.media.uploaded.v1': { ...media, actorId },
@@ -42,13 +86,32 @@ const fixtures = {
   'com.rezics.content.media.collected.v1': media,
   'com.rezics.content.media.import-requested.v1': { mediaId },
   'com.rezics.content.media.taken-down.v1': { mediaId, securityRevision: '9223372036854775807' },
+  'com.rezics.content.moderation.appeal-created.v1': { appealId: itemId },
+  'com.rezics.content.moderation.appeal-resolved.v1': { appealId: itemId },
   'com.rezics.content.moderation.takedown.v1': {
+    targetKind: 'post',
+    targetId: itemId,
+    securityRevision: '9223372036854775807',
+  },
+  'com.rezics.content.moderation.restored.v1': {
     targetKind: 'post',
     targetId: itemId,
     securityRevision: '9223372036854775807',
   },
   'com.rezics.content.post.erased.v1': { postId: itemId, securityRevision: '9223372036854775807' },
   'com.rezics.content.moderation.erasure.v1': { threadId, postIds: [itemId], mediaIds: [mediaId] },
+  'com.rezics.content.post.restored.v1': { postId: itemId, securityRevision: '9223372036854775807' },
+  'com.rezics.content.report-locator.installed.v1': {
+    partition: 0,
+    epoch: 1,
+    position: '0',
+    expected: '0',
+    applied: '0',
+    complete: true,
+  },
+  'com.rezics.content.report-locator.coverage.v1': { partition: 0 },
+  'com.rezics.content.catalogue-report.projected.v1': { reportId },
+  'com.rezics.content.report.resolved.v1': { reportId },
   'com.rezics.content.report.created.v1': { reportId, targetKind: 'post', targetId: itemId, revisionId },
   'com.rezics.content.report-target.projected.v1': { reportId, targetKind: 'post', targetId: itemId },
   'com.rezics.content.reaction.changed.v1': {
@@ -65,6 +128,26 @@ const fixtures = {
     sourceEpoch: 1,
     sourcePosition: '9223372036854775807',
   },
+  'com.rezics.content.board-thread.pin.changed.v1': {
+    boardId: containerId,
+    threadId,
+    actorId,
+    pinned: true,
+    pinPosition: 1,
+  },
+  'com.rezics.content.author-item.projected.v1': {
+    authorAccountId: actorId,
+    itemKind: 'thread',
+    itemId: threadId,
+    sourceEpoch: 1,
+    sourcePosition: '9223372036854775807',
+  },
+  'com.rezics.content.subject-thread.projected.v1': {
+    subjectId: itemId,
+    threadId,
+    sourceEpoch: 1,
+    sourcePosition: '9223372036854775807',
+  },
   'com.rezics.content.source_fence.taken_down.v1': {
     route: 1234,
     source: 'catalog',
@@ -72,6 +155,36 @@ const fixtures = {
     field_group: 'cover',
     securityRevision: '9223372036854775807',
   },
+  'com.rezics.content.review-discovery.opened.v1': { route: 1232, id: threadId },
+  'com.rezics.content.review-discovery.progress.v1': { route: 1232, id: threadId, version: '2', complete: true },
+  'com.rezics.content.review-discovery.changed.v1': {
+    partition: 77,
+    through: '1',
+    ids: [threadId],
+    origin: {
+      partition: 77,
+      epoch: 1,
+      position: '100',
+      eventIndex: 0,
+      id: itemId,
+      type: 'com.rezics.content.thread.created.v1',
+    },
+  },
+  'com.rezics.content.realm-discovery.changed.v1': {
+    realmId: newId(4321),
+    realmEpoch: '1',
+    spaceId: newId(4321),
+    boardId: newId(4321),
+    threadId: newId(1234),
+    sourceRoute: 1234,
+    creationDay: '2026-10-30',
+    sourceVersion: '1',
+    contributing: true,
+    change: 1,
+  },
+  'com.rezics.content.realm-discovery.prepared.v1': { route: 1234, intent: 'a'.repeat(64), generation: '1' },
+  'com.rezics.content.realm-discovery.outcome.v1': { route: 1234, intent: 'a'.repeat(64), generation: '1' },
+  'com.rezics.content.own-drafts.repaired.v1': {},
 } satisfies { [T in ContentEventType]: ContentEventData<T> };
 const entries = Object.entries(fixtures);
 let nextPartition = 1400;
@@ -142,7 +255,7 @@ test('reaction event types retain the closed kinds and nullable transitions', ()
   type ReactionKind = 'upvote' | 'downvote' | 'like' | 'love' | 'laugh' | 'insightful' | 'sad';
   expectTypeOf<ContentEventData<'com.rezics.content.reaction.changed.v1'>>().toEqualTypeOf<{
     actorId: string;
-    targetKind: 'thread' | 'post';
+    targetKind: 'thread' | 'post' | 'subject';
     targetId: string;
     previousKind: ReactionKind | null;
     kind: ReactionKind | null;
@@ -157,10 +270,10 @@ test('native registerEffects accepts every closed content event', () => {
 
 test('the ESM catalogue shares the module schema values', async () => {
   const again = await import('../../src/events/log.ts');
-  expect(again.EVENT_TYPES).toBe(EVENT_TYPES);
-  expect(Object.keys(CONTENT_EVENTS)).toEqual(Object.keys(fixtures));
-  for (const [type, schema] of Object.entries(CONTENT_EVENTS)) {
-    expect(Reflect.get(EVENT_TYPES, type)).toBe(schema);
+  expect(again.EVENT_TYPES()).toBe(EVENT_TYPES());
+  expect(Object.keys(CONTENT_EVENTS())).toEqual(Object.keys(fixtures));
+  for (const [type, schema] of Object.entries(CONTENT_EVENTS())) {
+    expect(Reflect.get(EVENT_TYPES(), type)).toBe(schema);
   }
 });
 

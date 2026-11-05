@@ -28,7 +28,7 @@ const actions = new Map(['account:manage', 'account:suspend'].map((action) => [a
 const context = () => ({ pool, deadline: Date.now() + 10_000 });
 const iso = (at: number) => new Date(at).toISOString();
 
-async function fixture() {
+async function fixture(lifetime = 300) {
   let now = Date.now() + 10_000;
   let afterRead: number | undefined;
   const clock = () => {
@@ -60,19 +60,21 @@ async function fixture() {
         [resource.route, resource.id, id, action],
       );
   }
-  const jwtExpiry = Math.floor(Date.now() / 1000) * 1000 + 300_000;
+  if (lifetime === 1) await Bun.sleep(1000 - (Date.now() % 1000));
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const jwtExpiry = issuedAt * 1000 + lifetime * 1000;
   const bearer = await new SignJWT({
     client_id: 'web',
     scope: [...actions.keys()].join(' '),
     authn_epoch: 1,
-    auth_time: Math.floor(Date.now() / 1000),
+    auth_time: issuedAt,
     amr: ['pwd'],
   })
     .setProtectedHeader({ alg: 'ES256', kid: jwk.kid, typ: 'at+jwt' })
     .setIssuer(issuer)
     .setAudience(audience)
     .setSubject(id)
-    .setIssuedAt()
+    .setIssuedAt(issuedAt)
     .setExpirationTime(jwtExpiry / 1000)
     .sign(signing.privateKey);
   const actor = await access.authenticate(bearer, context());
@@ -152,19 +154,32 @@ test('an approval can be consumed just before its unchanged lifetime', async () 
   expect(new Date(row.rows[0].consumed_at).getTime()).toBe(f.at());
 });
 
-test('bearer expiry caps the lifetime and is checked on the Access clock', async () => {
-  const f = await fixture();
-  f.set(f.jwtExpiry - 30_000);
-  const approval = await f.approve();
-  expect(Date.parse(approval.expiresAt)).toBe(f.jwtExpiry);
+test('bearer expiry is checked on wall time and caps the approval in kernel time', async () => {
+  const f = await fixture(30);
+  f.set(f.jwtExpiry + 3_600_000);
   expect(verifiedBearerExpiry(f.access, f.actor, context())).toBe(f.jwtExpiry);
-  f.set(f.jwtExpiry + 1);
-  expect(() => verifiedBearerExpiry(f.access, f.actor, context())).toThrow();
+  const before = Date.now();
+  const approval = await f.approve();
+  const after = Date.now();
+  const expires = Date.parse(approval.expiresAt);
+  expect(expires).toBeGreaterThanOrEqual(f.at() + f.jwtExpiry - after);
+  expect(expires).toBeLessThanOrEqual(f.at() + f.jwtExpiry - before);
+  f.set(expires - 1);
+  expect((await readApprovedIdentity(f.access, keys, approval.reference, context())).actor.accountId).toBe(
+    f.actor.accountId,
+  );
+  f.set(expires);
   await expect(readApprovedIdentity(f.access, keys, approval.reference, context())).rejects.toHaveProperty(
     'status',
     403,
   );
-  await expect(f.approve()).rejects.toHaveProperty('status', 403);
+  expect(verifiedBearerExpiry(f.access, f.actor, context())).toBe(f.jwtExpiry);
+  expect((await f.approve()).expiresAt).toBeDefined();
+
+  const expired = await fixture(1);
+  await Bun.sleep(Math.max(0, expired.jwtExpiry - Date.now()));
+  expect(() => verifiedBearerExpiry(expired.access, expired.actor, context())).toThrow();
+  await expect(expired.approve()).rejects.toHaveProperty('status', 403);
 });
 
 test('approval SQL uses evaluation T even when both lifetimes precede database time', async () => {

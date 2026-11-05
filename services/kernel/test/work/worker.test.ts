@@ -3,7 +3,7 @@ import { readWorkerConfig } from '../../src/worker.ts';
 import { createWorkClient } from '../../src/work/client.ts';
 import { WORK_QUEUES } from '../../src/work/queues.ts';
 import { commerceWorkModule } from '../../src/commerce/work-module.ts';
-import { KERNEL_WORK_MODULES } from '../../src/work/modules.ts';
+import { KERNEL_WORK_MODULES } from '../support/default-work-modules.ts';
 import { fixture } from './support/process.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -11,23 +11,40 @@ if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test data
 const routeKey = Buffer.alloc(32, 41).toString('base64url');
 const workerEnvironment = {
   KERNEL_ROUTE_KEY: routeKey,
+  KERNEL_RATING_COUNTER_SECRET: Buffer.alloc(32, 43).toString('base64url'),
   KERNEL_SESSION_KEYS: `1:${Buffer.alloc(32, 42).toString('base64url')}`,
   AUTH_ISSUER: 'https://auth.worker.test',
   AUTH_AUDIENCE: 'https://kernel.worker.test',
   AUTH_JWKS_URL: 'https://auth.worker.test/.well-known/jwks.json',
 };
+const elapsedSeconds = (started: number) => Math.round(((performance.now() - started) / 1000) * 10_000) / 10_000;
+const reportFixturePhases = (phases: Record<string, number>) =>
+  process.stdout.write(`REZICS_KERNEL_FIXTURE_PHASES=${JSON.stringify(phases)}\n`);
 
 test('worker configuration names invalid variables without revealing values', () => {
   expect(KERNEL_WORK_MODULES.filter((module) => module === commerceWorkModule)).toHaveLength(1);
   expect(KERNEL_WORK_MODULES.map((module) => module.name)).toEqual([
     'accounts',
+    'account_erasure',
+    'rating',
     'commerce',
     'library',
     'community',
+    'semantic',
     'search',
+    'imports',
     'content',
+    'retention',
   ]);
-  expect(Object.keys(WORK_QUEUES)).toEqual(['governance', 'effects', 'workflows', 'delivery', 'import', 'maintenance']);
+  expect(Object.keys(WORK_QUEUES)).toEqual([
+    'governance',
+    'effects',
+    'locator-effects',
+    'workflows',
+    'delivery',
+    'import',
+    'maintenance',
+  ]);
   expect(readWorkerConfig({ DATABASE_URL: databaseUrl })).toMatchObject({ databaseUrl, poolSize: 10 });
   expect(
     readWorkerConfig({ DATABASE_URL: databaseUrl, NOMAD_JOB_NAME: 'kernel', NOMAD_ALLOC_INDEX: '3' }),
@@ -64,15 +81,31 @@ test('worker configuration names invalid variables without revealing values', ()
   expect(() => readWorkerConfig({ DATABASE_URL: databaseUrl, NOMAD_JOB_NAME: 'kernel' })).toThrow('NOMAD_ALLOC_INDEX');
 });
 
+const valid: Record<string, string> = {
+  ...workerEnvironment,
+  DATABASE_URL: databaseUrl,
+  STRIPE_SECRET_KEY: 'sk_test_worker_configuration_secret',
+  STRIPE_MANAGED_PAYMENTS: 'false',
+  CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
+  CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
+  // The check's one analysis database; without it each child re-describes every statement against the file's own.
+  ...(process.env.REYLO_CONFIG ? { REYLO_CONFIG: process.env.REYLO_CONFIG } : {}),
+};
+
+test("worker configuration children read Reylo analyses from the check's analysis database", async () => {
+  const reyloConfig = process.env.REYLO_CONFIG;
+  if (!reyloConfig) return;
+  const child = Bun.spawn([process.execPath, '-e', 'console.log(process.env.REYLO_CONFIG ?? "")'], {
+    env: { ...valid },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [exitCode, stdout] = await Promise.all([child.exited, new Response(child.stdout).text()]);
+  expect(exitCode).toBe(0);
+  expect(stdout.trim()).toBe(reyloConfig);
+});
+
 test('a worker missing or rejecting commerce configuration names the variable and hides secret values', async () => {
-  const valid = {
-    ...workerEnvironment,
-    DATABASE_URL: databaseUrl,
-    STRIPE_SECRET_KEY: 'sk_test_worker_configuration_secret',
-    STRIPE_MANAGED_PAYMENTS: 'false',
-    CHECKOUT_SUCCESS_URL: 'https://web.example.test/success',
-    CHECKOUT_CANCEL_URL: 'https://web.example.test/cancel',
-  };
   const cases = [
     ['STRIPE_SECRET_KEY', undefined, 'STRIPE_SECRET_KEY'],
     ['STRIPE_SECRET_KEY', 'sk_test_do_not_print_secret!', 'STRIPE_SECRET_KEY'],
@@ -87,7 +120,10 @@ test('a worker missing or rejecting commerce configuration names the variable an
   const program = `
     import { ConfigError } from './src/commerce/config.ts';
     import { readWorkerConfig, startWorker } from './src/worker.ts';
-    import { KERNEL_WORK_MODULES } from './src/work/modules.ts';
+    import { createDiscoveryProducerEntry } from './src/composition/discovery.ts';
+    import { createKernelRuntimeDefaults } from './src/composition/runtime-defaults.ts';
+    import { createKernelWorkModules } from './src/work/modules.ts';
+    const KERNEL_WORK_MODULES = createKernelWorkModules(createDiscoveryProducerEntry, createKernelRuntimeDefaults);
 
     const env = { ...process.env };
     const { variable, value } = JSON.parse(process.env.WORKER_CONFIG_CASE);
@@ -135,11 +171,15 @@ test('API enqueue before startup survives, duplicate IDs execute once, and SIGTE
     const handle = await client.enqueue(options, workflowID);
     await client.enqueue(options, workflowID);
     expect((await handle.getStatus())?.status).toBe('ENQUEUED');
+    const workerBootStarted = performance.now();
     runtime = fixture('worker');
     await runtime.until('worker-ready');
+    reportFixturePhases({ workerBoot: elapsedSeconds(workerBootStarted) });
     await runtime.until(`started:${workflowID}`);
+    const workerDrainStarted = performance.now();
     runtime.child.kill('SIGTERM');
     const output = await runtime.finish();
+    reportFixturePhases({ workerDrain: elapsedSeconds(workerDrainStarted) });
     expect(output.match(/started:/g)).toHaveLength(1);
     expect(output).toContain(`finished:${workflowID}`);
     expect(await handle.getResult()).toBe(workflowID);

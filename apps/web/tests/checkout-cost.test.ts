@@ -15,14 +15,12 @@ mock.module('cloudflare:workers', () => ({
     },
   },
 }));
+let pageRequest: Request | undefined;
 mock.module('@tanstack/react-start/server', () => ({
-  getRequest() {},
-  setResponseHeader() {},
-}));
-mock.module('@tanstack/react-router', () => ({
-  notFound() {
-    return new Error('Not Found');
+  getRequest() {
+    return pageRequest;
   },
+  setResponseHeader() {},
 }));
 
 const app = join(import.meta.dir, '..');
@@ -51,15 +49,20 @@ type KernelCall = {
 };
 type Offer = {
   id: string;
+  revision: number;
   targetSubjectId: string;
   title: string;
   currency: string;
   unitAmountMinor: number;
   state: 'active';
+  subject: null;
 };
 type Order = {
   id: string;
   offerId: string;
+  title: string;
+  targetSubjectId: string;
+  subject: null;
   settlement: 'paid' | 'pending' | 'failed' | 'unknown';
   checkoutUrl: string | null;
   checkoutExpiresAt: string | null;
@@ -73,15 +76,20 @@ let heldOrders: Order[] = [];
 
 const offerOf = (id: string): Offer => ({
   id,
+  revision: 3,
   targetSubjectId: contentId(90),
   title: id === targetOfferId ? 'A field guide to stars' : `Other offer ${id}`,
   currency: 'usd',
   unitAmountMinor: 123456,
   state: 'active',
+  subject: null,
 });
 const orderOf = (id: string, settlement: Order['settlement'], offerId = targetOfferId): Order => ({
   id,
   offerId,
+  title: 'A field guide to stars',
+  targetSubjectId: contentId(90),
+  subject: null,
   settlement,
   checkoutUrl: settlement === 'failed' ? null : checkoutUrl,
   checkoutExpiresAt: '2026-12-01T00:00:00.000Z',
@@ -185,7 +193,7 @@ const kernel = Bun.serve({
 kernelOrigin = kernel.url.origin;
 
 const { startCheckout } = await import('../src/checkout/start.ts');
-const { orderStatusResponse } = await import('../src/checkout/order.server.ts');
+const { loadOrder, orderStatusResponse } = await import('../src/checkout/order.server.ts');
 
 type Counts = { credential: number; signedIn: number; create: number; takeLogin: number; end: number; r2: number };
 function sessionHarness() {
@@ -258,7 +266,7 @@ function checkoutRequest(offerId: string, key: string) {
       origin: 'https://site.test',
       'x-csrf-token': csrf,
     },
-    body: JSON.stringify({ offerId, idempotencyKey: key }),
+    body: JSON.stringify({ offerId, expectedOfferRevision: 3, idempotencyKey: key }),
   });
 }
 function orderRequest(id: string) {
@@ -340,7 +348,7 @@ test('checkout start stays within its bound as s grows', async () => {
       path: '/v1/orders',
       authorization: `Bearer ${accessToken}`,
       idempotencyKey,
-      body: { offerId: targetOfferId },
+      body: { offerId: targetOfferId, expectedOfferRevision: 3 },
     });
     expect(counts.r2).toBe(0);
     expect(authCalls).toEqual([]);
@@ -374,6 +382,22 @@ test('order status read stays within its bound as s grows', async () => {
       });
       expect(counts.r2).toBe(0);
       expect(authCalls).toEqual([]);
+
+      // The page read is the same one call, with the page locale in its query, and the subject summary comes with it.
+      kernelCalls.length = 0;
+      const page = sessionHarness();
+      const pageLoad = orderRequest(id);
+      await prepareSession(pageLoad, page.env);
+      pageRequest = pageLoad;
+      const data = await loadOrder(id, 'de');
+      pageRequest = undefined;
+      expect(data).toMatchObject({ id, offerId: targetOfferId, settlement, title: 'A field guide to stars' });
+      expect(data.subject.subject.title).toBe('A field guide to stars');
+      expect(page.counts.credential).toBe(1);
+      expect(durableCalls(page.counts)).toBe(1);
+      expect(sequence(kernelCalls)).toEqual([`GET /v1/orders/${id}?languages=de`]);
+      expect(kernelCalls[0]).toMatchObject({ authorization: `Bearer ${accessToken}` });
+      expect(page.counts.r2).toBe(0);
     }
   }
 });
@@ -482,17 +506,34 @@ test('offer page stays within its bound as s grows', async () => {
     holdCatalogue(s);
     expect(heldOffers).toHaveLength(s);
     expect(heldOrders).toHaveLength(s);
+    const warmed = await fetch(`${origin}/en/offers/${targetOfferId}`);
+    expect(warmed.status).toBe(200);
+    await warmed.arrayBuffer();
     kernelCalls.length = 0;
     authCalls.length = 0;
     const response = await fetch(`${origin}/en/offers/${targetOfferId}`);
     const body = await response.text();
     expect(response.status, body.slice(0, 500)).toBe(200);
-    expect(sequence(kernelCalls)).toEqual([`GET /v1/offers/${targetOfferId}`]);
+    expect(sequence(kernelCalls)).toEqual([`GET /v1/offers/${targetOfferId}?languages=en`]);
     expect(kernelCalls[0]).toMatchObject({
       method: 'GET',
-      path: `/v1/offers/${targetOfferId}`,
+      path: `/v1/offers/${targetOfferId}?languages=en`,
       authorization: null,
     });
     expect(authCalls).toEqual([]);
   }
 }, 300_000);
+
+test('checkout BFF rejects missing or invalid displayed revision before calling the kernel', async () => {
+  for (const expectedOfferRevision of [undefined, null, 0, -1, 1.5, '3', Number.MAX_SAFE_INTEGER + 1]) {
+    const { env } = sessionHarness();
+    kernelCalls.length = 0;
+    const request = new Request(checkoutRequest(targetOfferId, idempotencyKey), {
+      body: JSON.stringify({ offerId: targetOfferId, expectedOfferRevision, idempotencyKey }),
+    });
+    await expect(startCheckout(request, env)).rejects.toMatchObject({
+      problem: { status: 400, code: 'invalid_request' },
+    });
+    expect(kernelCalls).toEqual([]);
+  }
+});

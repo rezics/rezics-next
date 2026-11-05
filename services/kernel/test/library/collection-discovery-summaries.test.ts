@@ -1,0 +1,297 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { authoritativeTimeValue, mintReadTime, releaseOperationalTime } from '../../src/command/command.ts';
+import { withConnection } from '../../src/database/pool.ts';
+import { publicCollectionDiscoverySource } from '../../src/library/collection-discovery-source.ts';
+import { readPublicCollectionDiscoverySummaries as hydrate } from '../../src/library/collection-discovery-summaries.ts';
+import { createCollectionPublicationEpisodes } from '../../src/library/collection-publication-episodes.ts';
+import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
+import type { Access, Actor } from '../../src/request/access.ts';
+import { createCollectionRulesFixture, type CollectionRulesFixture } from './support/collection-rules-fixture.ts';
+
+let f: CollectionRulesFixture;
+let actor: Actor;
+beforeAll(async () => {
+  f = await createCollectionRulesFixture();
+  actor = await f.runtime.identity.access.authenticate(f.owner, {
+    pool: f.database.pool,
+    deadline: Date.now() + 30000,
+  });
+}, 120000);
+afterAll(async () => {
+  await f?.close();
+});
+const context = (id: string, viewer: Actor = { kind: 'anonymous' }) => ({
+  actor: viewer,
+  partition: partitionOf(routeOf(id)!),
+  deadline: Date.now() + 120000,
+});
+const deps = (access = f.runtime.identity.access) => ({ pool: f.database.pool, access });
+const publicDeps = (access = f.runtime.identity.access) => ({ ...deps(access), routeKey: f.runtime.identity.routeKey });
+async function saved() {
+  const response = await f.send('POST', '/v1/collections', {
+    title: 'Public selection',
+    visibility: 'private',
+    membershipKind: 'dynamic',
+    rule: { filter: { owner: { presence: true } }, sort: 'id' },
+  });
+  expect(response.status).toBe(201);
+  return (await response.json()).collection as { id: string; revision: number };
+}
+async function published() {
+  const collection = await saved();
+  const response = await f.send('POST', `/v1/collections/${collection.id}:publishSelected`, {
+    revision: collection.revision,
+    subjectIds: [],
+  });
+  expect(response.status).toBe(200);
+  return await response.json();
+}
+function betweenRounds(change: () => Promise<void>): Access {
+  const base = f.runtime.identity.access;
+  let rounds = 0;
+  return {
+    ...base,
+    async prepareReadDecisions(input) {
+      if (++rounds === 2) await change();
+      return base.prepareReadDecisions!(input);
+    },
+  };
+}
+
+test('current curated metadata, full identity and destination; hidden, removed and missing keys are omitted', async () => {
+  const visible = await f.collection({ visibility: 'public', title: 'Original' });
+  const privateRow = await f.collection();
+  const unlisted = await f.collection({ visibility: 'unlisted' });
+  const removed = await f.collection({ visibility: 'public' });
+  expect((await f.send('DELETE', `/v1/collections/${removed.id}?revision=${removed.revision}`)).status).toBe(204);
+  expect(
+    (await f.send('PATCH', `/v1/collections/${visible.id}`, { revision: visible.revision, title: 'Current title' }))
+      .status,
+  ).toBe(200);
+  const ids = [visible.id, privateRow.id, unlisted.id, removed.id, newId(routeOf(visible.id)!), visible.id];
+  const result = await hydrate(deps(), ids, context(visible.id, actor));
+  if (result.state !== 'ready') throw new Error('Native curated discovery must be ready');
+  expect(result.summaries[0]).toMatchObject({
+    kind: 'collection',
+    id: visible.id,
+    destination: `/collections/${visible.id}`,
+    membershipKind: 'curated',
+    title: 'Current title',
+    revision: visible.revision + 1,
+    memberCount: 0,
+  });
+  expect(result.summaries).toHaveLength(1);
+}, 120000);
+
+test('completed A remains selected while a real whole-query B is pending; dynamic cards contain no private/count fields', async () => {
+  const a = await published();
+  await createCollectionPublicationEpisodes(deps()).begin(
+    actor,
+    {
+      collectionId: a.collection.id,
+      revision: a.collection.revision,
+      visibility: 'public',
+    },
+    randomUUID(),
+  );
+  const result = await hydrate(deps(), [a.collection.id], context(a.collection.id));
+  expect(result).toMatchObject({
+    state: 'ready',
+    summaries: [
+      {
+        id: a.collection.id,
+        membershipKind: 'dynamic',
+        outputGeneration: a.publication.generation,
+      },
+    ],
+  });
+  if (result.state !== 'ready') throw new Error('Completed native A must remain readable');
+  for (const key of 'curatorAccountId coverMediaId memberCount createdAt updatedAt orderEpoch rule filter workingOutput pins builtin'.split(
+    ' ',
+  ))
+    expect(result.summaries[0]).not.toHaveProperty(key);
+}, 120000);
+
+test('a withdrawal and new public episode between candidate and disclosure require a fresh selected A check', async () => {
+  const a = await published();
+  const id = a.collection.id;
+  const episodes = createCollectionPublicationEpisodes(deps());
+  await episodes.begin(
+    actor,
+    { collectionId: id, revision: a.collection.revision, visibility: 'public' },
+    randomUUID(),
+  );
+  const detail = await f.send('GET', `/v1/collections/${id}`);
+  expect(detail.status).toBe(200);
+  const revision = (await detail.json()).collection.revision;
+  const route = routeOf(id);
+  if (route === null) throw new Error('The native Collection key must retain its route');
+  const partition = partitionOf(route);
+  const source = publicCollectionDiscoverySource({ pool: f.database.pool });
+  const first = await source.read(partition, [{ route, id }]);
+  if (first.status !== 'available') throw new Error('The current public candidate must be available');
+  expect(first.items[0]).toMatchObject({
+    status: 'indexable',
+    value: { membershipKind: 'dynamic', output: { generation: a.publication.generation } },
+  });
+
+  const access = betweenRounds(async () => {
+    const withdrawn = await f.send('PATCH', `/v1/collections/${id}`, { revision, visibility: 'private' });
+    expect(withdrawn.status).toBe(200);
+    const current = (await withdrawn.json()).collection;
+    await episodes.begin(actor, { collectionId: id, revision: current.revision, visibility: 'public' }, randomUUID());
+  });
+  expect(await hydrate(deps(access), [id], context(id))).toEqual({ state: 'unavailable', reason: 'changed' });
+
+  const current = await source.read(partition, [{ route, id }]);
+  if (current.status !== 'available') throw new Error('The re-published current candidate must be available');
+  expect(BigInt(current.stamp.position)).toBeGreaterThan(BigInt(first.stamp.position));
+  expect(current.items[0]).toMatchObject({
+    status: 'indexable',
+    value: { membershipKind: 'dynamic', output: { generation: a.publication.generation } },
+  });
+  expect(await hydrate(deps(), [id], context(id))).toMatchObject({
+    state: 'ready',
+    summaries: [{ id, membershipKind: 'dynamic', outputGeneration: a.publication.generation }],
+  });
+}, 120000);
+
+test('unknown native output authority is unavailable, never a fabricated ready-empty output', async () => {
+  const row = await saved();
+  expect(
+    (await f.send('PATCH', `/v1/collections/${row.id}`, { revision: row.revision, visibility: 'public' })).status,
+  ).toBe(200);
+  expect(await hydrate(deps(), [row.id], context(row.id))).toEqual({
+    state: 'unavailable',
+    reason: 'native_authority',
+  });
+}, 120000);
+
+test('withdrawal, removal and native revision changes between admission and disclosure win', async () => {
+  for (const change of ['private', 'deleted', 'title'] as const) {
+    const row = await f.collection({ visibility: 'public' });
+    const access = betweenRounds(async () => {
+      const response =
+        change === 'deleted'
+          ? await f.send('DELETE', `/v1/collections/${row.id}?revision=${row.revision}`)
+          : await f.send('PATCH', `/v1/collections/${row.id}`, {
+              revision: row.revision,
+              ...(change === 'private' ? { visibility: 'private' } : { title: 'Changed' }),
+            });
+      expect(response.status).toBe(change === 'deleted' ? 204 : 200);
+    });
+    expect(await hydrate(deps(access), [row.id], context(row.id))).toMatchObject(
+      change === 'title' ? { state: 'unavailable', reason: 'changed' } : { state: 'ready', summaries: [] },
+    );
+  }
+}, 120000);
+
+test('Access scope denial and a terminal curator fence never disclose a public card', async () => {
+  const row = await f.collection({ visibility: 'public' });
+  const bearer = await f.credential('ordinary', ['subject:read']);
+  const denied = await f.runtime.identity.access.authenticate(bearer, {
+    pool: f.database.pool,
+    deadline: Date.now() + 30000,
+  });
+  expect(await hydrate(deps(), [row.id], context(row.id, denied))).toMatchObject({ state: 'ready', summaries: [] });
+  const ownerId = f.runtime.identity.ordinary.accountId;
+  const ownerKeys = [routeOf(ownerId), ownerId];
+  const access = betweenRounds(async () => {
+    // Negative terminal evidence only; no retained output or positive authority is fabricated.
+    await f.database.admin.query(
+      "UPDATE access.account SET state='deleted' WHERE route=$1 AND account_id=$2",
+      ownerKeys,
+    );
+  });
+  try {
+    expect(await hydrate(deps(access), [row.id], context(row.id))).toEqual({
+      state: 'unavailable',
+      reason: 'native_authority',
+    });
+  } finally {
+    await f.database.admin.query(
+      "UPDATE access.account SET state='active' WHERE route=$1 AND account_id=$2",
+      ownerKeys,
+    );
+  }
+}, 120000);
+
+test('validation precedes native I/O, including full-key partition bounds and the duplicate-inclusive limit', async () => {
+  const id = newId(0x0123);
+  const unavailablePool = {
+    connect() {
+      throw new Error('Unexpected native read');
+    },
+  } as unknown as typeof f.database.pool;
+  const dependencies = { ...deps(), pool: unavailablePool };
+  for (const ids of [['bad-key'], [newId(0x0130)], Array(101).fill(id)])
+    await expect(hydrate(dependencies, ids, context(id))).rejects.toBeInstanceOf(RangeError);
+  expect(await hydrate(dependencies, [], context(id))).toMatchObject({ state: 'ready', summaries: [], operands: [] });
+
+  const visible = await f.collection({ visibility: 'public' });
+  const route = routeOf(f.runtime.identity.ordinary.accountId)!;
+  const batch = [visible.id, ...Array.from({ length: 99 }, () => newId(route))];
+  expect(await hydrate(deps(), batch, context(visible.id, actor))).toMatchObject({
+    state: 'ready',
+    summaries: [{ id: visible.id, membershipKind: 'curated' }],
+  });
+});
+
+test('caller read times remain live and unrelated native infrastructure failures propagate', async () => {
+  const row = await f.collection({ visibility: 'public' });
+  const time = await withConnection(f.database.pool, (client) => mintReadTime(client));
+  try {
+    expect((await hydrate(deps(), [row.id], { ...context(row.id), time })).state).toBe('ready');
+    expect(authoritativeTimeValue(time)).toBeString();
+  } finally {
+    releaseOperationalTime(time);
+  }
+  const failure = new Error('Native owner checkout failed');
+  const broken: Access = { ...f.runtime.identity.access, prepareReadDecisions: async () => Promise.reject(failure) };
+  await expect(hydrate(deps(broken), [row.id], context(row.id))).rejects.toBe(failure);
+}, 120000);
+
+test('selected A supplies exact dynamic Subject membership and null recency while private B builds', async () => {
+  const subjects: string[] = [];
+  for (let index = 0; index < 5; index++) {
+    const subjectId = await f.subject(`Published member ${index}`);
+    subjects.push(subjectId);
+    await f.entry(subjectId);
+  }
+  const collection = await saved();
+  const promoted = await f.send('POST', `/v1/collections/${collection.id}:publishSelected`, {
+    revision: collection.revision,
+    subjectIds: subjects,
+  });
+  expect(promoted.status).toBe(200);
+  const published = await promoted.json();
+  const target = subjects.toSorted().at(-1)!;
+  const episodes = createCollectionPublicationEpisodes(deps());
+  const begun = await episodes.begin(
+    actor,
+    { collectionId: collection.id, revision: published.collection.revision, visibility: 'public' },
+    randomUUID(),
+  );
+  expect(begun.value.locator.collectionId).toBe(collection.id);
+
+  const result = await hydrate(publicDeps(), [collection.id], context(collection.id), {
+    subjectId: target,
+  });
+  expect(result).toMatchObject({
+    state: 'ready',
+    summaries: [{ id: collection.id, membershipKind: 'dynamic', outputGeneration: published.publication.generation }],
+    operands: [
+      {
+        id: collection.id,
+        subjectMembership: { state: 'available', subjectId: target, matches: true },
+        recency: [null, routeOf(collection.id), collection.id],
+        eligible: { subject: true },
+      },
+    ],
+  });
+  if (result.state !== 'ready') throw new Error('Selected public A must remain current during B');
+  expect(result.summaries[0]?.preview).toMatchObject({ state: 'available', truncated: true });
+  if (result.summaries[0]?.preview.state === 'available')
+    expect(result.summaries[0].preview.members.map((member) => member.subject.id)).not.toContain(target);
+}, 120000);

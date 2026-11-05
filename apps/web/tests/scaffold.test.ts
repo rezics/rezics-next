@@ -107,15 +107,15 @@ test(
   async () => {
     const origin = await site();
     const english = await messages('en');
-    expect(typeof english.home_heading).toBe('string');
+    expect(typeof english.nav_home).toBe('string');
     for (const locale of locales) {
       const own = await messages(locale);
-      if (locale !== 'en') expect(own.home_heading).not.toBe(english.home_heading);
+      if (locale !== 'en') expect(own.nav_home).not.toBe(english.nav_home);
       const response = await fetch(`${origin}/${locale}/`);
       expect(response.status).toBe(200);
       const html = await response.text();
       expect(htmlLang(html)).toBe(locale);
-      expect(html).toContain(Bun.escapeHTML(String(own.home_heading)));
+      expect(html).toContain(Bun.escapeHTML(String(own.nav_home)));
     }
   },
   timeout,

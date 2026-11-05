@@ -1,3 +1,6 @@
+import { prepareRealmDiscoverySource, type RealmDiscoveryBinding } from '../community/discovery-source.ts';
+import { appendDiscoveryStart } from './discovery.ts';
+import readDiscoveryBoard from './discovery-board.sql';
 import { createHash, createHmac } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -26,8 +29,12 @@ import { prepareRealmParticipationResult, type RealmParticipationCheck } from '.
 import membershipHistory from '../community/membership-history.sql';
 import { readPartition } from '../partition/partition.ts';
 import { withConnection } from '../database/pool.ts';
+import { partitionReadClient } from '../database/read-snapshot.ts';
 import { anchorRoute, newId, partitionOf, routeOf } from '../route/route.ts';
-import { InvalidDocumentError, validateContentDocument } from './document.ts';
+import { isStoredRatingUnit, ratingQuestionHistogramIndex } from '../rating/question-scale.ts';
+import questionScaleRead from '../rating/question-scale-read.sql';
+import { InvalidDocumentError, validateContentDocument, type ValidatedContentDocument } from './document.ts';
+import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { claimMedia, InvalidMediaClaimError, MediaUnavailableError } from './media.ts';
 import {
   mediaParentBoard,
@@ -35,7 +42,14 @@ import {
   realmParticipationMatches,
   type RealmParticipationProof,
 } from './media-parent.ts';
-import type { ContentCommandValue, PostInput, RequestContext, RevisionInput, ThreadInput } from './model.ts';
+import type {
+  ContentCommandValue,
+  PostInput,
+  RequestContext,
+  RevisionInput,
+  ReviewVoteCitation,
+  ThreadInput,
+} from './model.ts';
 import readBoard from './read-board.sql';
 import readThread from './read-thread.sql';
 import readPost from './read-post.sql';
@@ -43,6 +57,15 @@ import insertThread from './create-thread.sql';
 import insertPost from './create-post.sql';
 import insertRevision from './create-revision.sql';
 import updateHead from './update-head.sql';
+import publishOpeningThread from './publish-opening-thread.sql';
+import readReviewVote from './read-review-vote.sql';
+import {
+  BoardSlowAdmissionUnavailableError,
+  boardSlowAdmission,
+  type BoardSlowReceiptReference,
+} from './board-slow.ts';
+
+export type { ReviewVoteCitation } from './model.ts';
 
 export { DocumentTooLargeError, InvalidDocumentError } from './document.ts';
 export type ContentCommandDependencies = Readonly<{
@@ -57,6 +80,7 @@ type ThreadCreationInput = ThreadInput & Readonly<{ mediaIds?: readonly string[]
 const CREATE_THREAD = 'content.thread.create';
 const CREATE_POST = 'content.post.create';
 const REVISE_POST = 'content.post.revise';
+const SLOW_MODE_REPLAY_PROBE = Symbol('slow mode replay probe');
 const CONTENT_GRANT_TYPES = ['content.thread', 'content.post'] as const;
 
 /** Role resolution drops a content template when any named action is unmounted.
@@ -113,6 +137,12 @@ export class RevisionPreconditionError extends Error {
     this.name = 'RevisionPreconditionError';
   }
 }
+export class ReviewConflictError extends Error {
+  constructor() {
+    super('The author already has a live review of this subject on the board');
+    this.name = 'ReviewConflictError';
+  }
+}
 function account(actor: Actor) {
   if (actor.kind !== 'account') throw new ContentForbiddenError();
   return actor;
@@ -122,9 +152,70 @@ function route(id: string): number {
   if (value === null) throw new ContentNotFoundError();
   return value;
 }
+function reviewCitation(value: unknown): ReviewVoteCitation | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new InvalidDocumentError();
+  const citation = value as Record<string, unknown>;
+  if (
+    Object.keys(citation).length !== 3 ||
+    Object.keys(citation).some((key) => !['questionId', 'units', 'revision'].includes(key)) ||
+    typeof citation.questionId !== 'string' ||
+    routeOf(citation.questionId) === null ||
+    !isStoredRatingUnit(citation.units) ||
+    !Number.isSafeInteger(citation.revision) ||
+    (citation.revision as number) < 1
+  )
+    throw new InvalidDocumentError();
+  return {
+    questionId: citation.questionId,
+    units: citation.units as number,
+    revision: citation.revision as number,
+  };
+}
+async function currentReviewCitation(
+  tx: CommandTransaction,
+  authorId: string,
+  subjectId: string,
+  value: unknown,
+): Promise<ReviewVoteCitation | null> {
+  const citation = reviewCitation(value);
+  if (!citation) return null;
+  const row = await readReviewVote.run(tx, {
+    route: route(authorId),
+    voter_id: authorId,
+    question_id: citation.questionId,
+    target_id: subjectId,
+  });
+  if (!row || row.units === null || Number(row.units) !== citation.units || Number(row.revision) !== citation.revision)
+    throw new InvalidDocumentError('Vote citation does not match the author’s current vote');
+  const questionRoute = routeOf(citation.questionId)!;
+  const scale = await questionScaleRead.run(await partitionReadClient(tx, partitionOf(questionRoute)), {
+    question_id: citation.questionId,
+  });
+  if (!scale) throw new InvalidDocumentError('Vote citation question is unavailable');
+  try {
+    ratingQuestionHistogramIndex(scale, citation.units);
+  } catch {
+    throw new InvalidDocumentError('Vote citation is outside its question scale');
+  }
+  return citation;
+}
+function postgresConstraint(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'constraint' in error && typeof error.constraint === 'string'
+    ? error.constraint
+    : undefined;
+}
 export function threadTarget(routeKey: Uint8Array, accountId: string, idempotencyKey: string): Resource {
+  return threadTargetAtRoute(routeKey, accountId, idempotencyKey);
+}
+function threadTargetAtRoute(
+  routeKey: Uint8Array,
+  accountId: string,
+  idempotencyKey: string,
+  routeOverride?: number,
+): Resource {
   const identity = `${accountId}\n${CREATE_THREAD}\n${idempotencyKey}`;
-  const r = anchorRoute(routeKey, identity);
+  const r = routeOverride ?? anchorRoute(routeKey, identity);
   const bytes = createHmac('sha256', routeKey).update(`content.thread.target.id\n${identity}`).digest().subarray(0, 16);
   bytes[6] = (bytes[6]! & 0x0f) | 0x80;
   bytes[8] = (bytes[8]! & 0x3f) | 0x80;
@@ -158,6 +249,24 @@ function options(
         .digest(),
     },
   };
+}
+
+/** Current authorization and receipt lookup finish before admission opens a
+ * board-home checkout. No-receipt probes roll back before admission begins.
+ */
+async function probeSlowModeReplay(
+  pool: Pool,
+  commandOptions: ReturnType<typeof options>,
+  authorization: CommandAuthorization,
+): Promise<CommandOutcome<ContentCommandValue> | null> {
+  try {
+    return await runCommand<ContentCommandValue>(pool, { ...commandOptions, authorization }, async () => {
+      throw SLOW_MODE_REPLAY_PROBE;
+    });
+  } catch (error) {
+    if (error === SLOW_MODE_REPLAY_PROBE) return null;
+    throw error;
+  }
 }
 // Snapshot the request before the first await; semantic document validation belongs
 // after authorization and receipt lookup, inside the body phase.
@@ -241,6 +350,11 @@ function document(body: unknown, licence: string, subjectIds: readonly (string |
   return validateContentDocument({ body, licence, subjectIds });
 }
 
+function storedSubjectIds(values: readonly (string | null)[]): string[] {
+  if (values.some((value) => typeof value !== 'string')) throw new TypeError('Stored subject references are invalid');
+  return values as string[];
+}
+
 async function prepareContentParticipation(
   dependencies: ContentCommandDependencies,
   actor: Actor,
@@ -281,7 +395,9 @@ function containerAuthorization(
   itemId: string | null,
   context: RequestContext,
   revising: boolean,
+  receipt: BoardSlowReceiptReference,
   concealDepartedMember = false,
+  admitSlowMode = false,
 ) {
   const r = route(threadId);
   const resource = { route: r, id: revising ? itemId! : threadId };
@@ -289,6 +405,8 @@ function containerAuthorization(
   let current: Chain;
   let checks: Awaited<ReturnType<typeof accessCheck>>[] = [];
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
+  let currentPlaceId = GLOBAL_CONTEXT;
+  const slow = boardSlowAdmission(dependencies, actor, context, r, receipt);
   const limit = revising ? 33 : 32;
   // A non-author never held a revise receipt. Keep today's not_found ahead of
   // the authorship denial. The author's fresh key is refused in the body so an
@@ -302,6 +420,7 @@ function containerAuthorization(
     if (!sameChain(prepared, current)) throw new ContentNotFoundError();
     concealErasedRevise(current);
     const board = await mediaParentBoard(client, current.thread.board_id);
+    currentPlaceId = board.realm_id ?? GLOBAL_CONTEXT;
     if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), board.realm_id))
       throw new ContentForbiddenError();
     if (revising && current.posts[0]?.author_account_id !== account(actor).accountId) throw new ContentForbiddenError();
@@ -311,10 +430,14 @@ function containerAuthorization(
   return {
     resource,
     validate,
+    slow,
     get current() {
       return current;
     },
-    wrap(base: CommandAuthorization): CommandAuthorization {
+    get placeId() {
+      return currentPlaceId;
+    },
+    wrap(base: CommandAuthorization, includeSlowMode = admitSlowMode): CommandAuthorization {
       return {
         ...base,
         async prepare(attempt) {
@@ -373,8 +496,9 @@ function containerAuthorization(
             if (!proof.allowed) throw new ContentForbiddenError();
             participation.set(attempt.time, proof);
           }
+          let evidence: unknown;
           try {
-            return await base.prepare!(attempt);
+            evidence = await base.prepare!(attempt);
           } catch (error) {
             // Erasure used to fail closed before the creation grant. A fresh reply
             // from a persona without post:create stays not_found and writes nothing.
@@ -383,6 +507,8 @@ function containerAuthorization(
               throw new ContentNotFoundError();
             throw error;
           }
+          if (includeSlowMode) await slow.prepare(prepared.thread.board_id, attempt.time);
+          return evidence;
         },
         async authorize(tx, attempt, evidence) {
           const mode = await base.authorize(tx, attempt, evidence);
@@ -429,15 +555,13 @@ function creationEntries(
 async function appendRevision(
   tx: CommandTransaction,
   value: ContentCommandValue,
-  body: unknown,
-  licence: string,
-  subjectIds: readonly (string | null)[],
+  validated: ValidatedContentDocument,
   boardId: string,
   mediaIds: readonly string[],
   transactionId: string,
   time: AuthoritativeTime,
+  voteCitation: ReviewVoteCitation | null = null,
 ) {
-  const validated = document(body, licence, subjectIds);
   await insertRevision.run(tx, {
     route: route(value.threadId),
     thread_id: value.threadId,
@@ -450,9 +574,11 @@ async function appendRevision(
     subject_ids: validated.subjectIds,
     board_id: boardId,
     media_ids: [...mediaIds],
+    vote_citation: voteCitation,
     transaction_id: transactionId,
     at: authoritativeTimeValue(time),
   });
+  return validated.subjectIds;
 }
 const CREATED_EVENT = {
   thread: 'com.rezics.content.thread.created.v1',
@@ -460,15 +586,49 @@ const CREATED_EVENT = {
   revision: 'com.rezics.content.revision.created.v1',
 } as const;
 
-function result<Noun extends keyof typeof CREATED_EVENT>(value: ContentCommandValue, actor: Actor, noun: Noun) {
+type ThreadIndexEventFields = Readonly<{
+  placeId: string;
+  kind: 'discussion' | 'review';
+  subjectIds: readonly string[];
+  activityAt: string;
+  previousSubjectIds?: readonly string[];
+}>;
+
+function eventActivityAt(time: AuthoritativeTime): string {
+  const authoritative = authoritativeTimeValue(time);
+  const value = new Date(authoritative);
+  if (!Number.isFinite(value.getTime())) throw new TypeError('Invalid authoritative content time');
+  const fraction = /\.(\d+)(?=(?:Z|[+-]\d\d(?::?\d\d)?)$)/.exec(authoritative)?.[1] ?? '';
+  const microseconds = `${fraction}000000`.slice(0, 6);
+  return value.toISOString().replace(/\.\d{3}Z$/, `.${microseconds}Z`);
+}
+
+function result<Noun extends keyof typeof CREATED_EVENT>(
+  value: ContentCommandValue,
+  actor: Actor,
+  noun: Noun,
+  index: ThreadIndexEventFields,
+  firstPublication = false,
+) {
+  // Pin the revision chosen by this transaction while preserving existing events.
+  const { previousSubjectIds: _previous, ...publicationIndex } = index;
   return {
     value,
     events: [
       {
         type: CREATED_EVENT[noun],
         subject: value.itemId,
-        data: { ...value, actorId: account(actor).accountId },
+        data: { ...value, actorId: account(actor).accountId, ...index },
       },
+      ...(firstPublication
+        ? [
+            {
+              type: 'com.rezics.content.post.published.v1',
+              subject: value.itemId,
+              data: { ...value, actorId: account(actor).accountId, ...publicationIndex },
+            },
+          ]
+        : []),
     ],
   };
 }
@@ -482,10 +642,17 @@ export async function createThread(
   ensureContentGrantTemplates(dependencies.access);
   const author = account(actor);
   const body = request(input);
-  const target = threadTarget(dependencies.routeKey, author.accountId, context.idempotencyKey);
+  const board = { route: route(body.boardId), id: body.boardId };
+  const threadKind = body.kind ?? 'discussion';
+  const target = threadTargetAtRoute(
+    dependencies.routeKey,
+    author.accountId,
+    context.idempotencyKey,
+    threadKind === 'review' ? route(author.accountId) : undefined,
+  );
   const postTarget = { route: target.route, id: newId(target.route) };
   const value = { threadId: target.id, itemId: postTarget.id, revisionId: newId(target.route) };
-  const board = { route: route(body.boardId), id: body.boardId };
+  const commandOptions = options(dependencies, actor, target.route, CREATE_THREAD, body, context);
   const inserted = new WeakMap<CommandTransaction, string>();
   const entries = creationEntries(
     actor,
@@ -495,7 +662,10 @@ export async function createThread(
     ],
     inserted,
   );
+  const slow = boardSlowAdmission(dependencies, actor, context, target.route, commandOptions.receipt);
   let boardCheck: Awaited<ReturnType<typeof accessCheck>>;
+  let threadPlaceId = GLOBAL_CONTEXT;
+  const discovery = new WeakMap<AuthoritativeTime, { boardVersion: string; binding: RealmDiscoveryBinding }>();
   const participation = new WeakMap<AuthoritativeTime, RealmParticipationProof>();
   const base = parentCreationAuthorization({
     access: dependencies.access,
@@ -514,6 +684,17 @@ export async function createThread(
         )
           throw new ContentNotFoundError();
         const current = await mediaParentBoard(client, board.id);
+        threadPlaceId = current.realm_id ?? GLOBAL_CONTEXT;
+        const qualified = discovery.get(time);
+        if (
+          qualified &&
+          (current.realm_id !== qualified.binding.realmId ||
+            row.visibility !== 'published' ||
+            row.security_revision !== qualified.boardVersion)
+        )
+          discovery.delete(time);
+        // board_identity makes purpose immutable, so this validation cannot race a purpose change.
+        if ((current.purpose === 'reviews') !== (threadKind === 'review')) throw new InvalidDocumentError();
         if (dependencies.realmParticipation && !realmParticipationMatches(participation.get(time), current.realm_id))
           throw new ContentForbiddenError();
         return true;
@@ -527,7 +708,7 @@ export async function createThread(
       manifest: createResourceCreationManifest(entries),
     },
   });
-  const authorization: CommandAuthorization = {
+  const makeAuthorization = (admitSlowMode: boolean): CommandAuthorization => ({
     ...base,
     async prepare(attempt) {
       boardCheck = await accessCheck(dependencies.access, actor, 'board:read', board, {
@@ -553,19 +734,56 @@ export async function createThread(
         if (!proof.allowed) throw new ContentForbiddenError();
         participation.set(attempt.time, proof);
       }
-      return base.prepare!(attempt);
+      if (threadKind === 'discussion' && body.visibility === 'published') {
+        const original = await mediaParentSnapshot(dependencies.pool, board.route, context.deadline, (client) =>
+          readDiscoveryBoard.run(client, {
+            route: board.route,
+            board_id: board.id,
+            at: authoritativeTimeValue(attempt.time),
+          }),
+        );
+        if (original && original.realm_id !== null) {
+          const binding = await prepareRealmDiscoverySource(
+            dependencies,
+            original.realm_id,
+            attempt.time,
+            context.deadline,
+          );
+          if (binding) discovery.set(attempt.time, { boardVersion: original.security_revision, binding });
+        }
+      }
+      const evidence = await base.prepare!(attempt);
+      if (admitSlowMode) await slow.prepare(body.boardId, attempt.time);
+      return evidence;
     },
-  };
-  const outcome = await runCommand(
-    dependencies.pool,
-    { ...options(dependencies, actor, target.route, CREATE_THREAD, body, context), authorization },
-    async (tx, command) => {
+    async authorize(tx, attempt, evidence) {
+      return base.authorize(tx, attempt, evidence);
+    },
+  });
+  const preflightAuthorization = makeAuthorization(false);
+  const authorization = makeAuthorization(true);
+  try {
+    const replay = await probeSlowModeReplay(dependencies.pool, commandOptions, preflightAuthorization);
+    if (replay) return replay;
+    const outcome = await runCommand(dependencies.pool, { ...commandOptions, authorization }, async (tx, command) => {
+      slow.assertAllowed(command.time);
       if (
         typeof body.title !== 'string' ||
         body.title.trim().length === 0 ||
-        (body.visibility !== 'published' && body.visibility !== 'draft')
+        (body.visibility !== 'published' && body.visibility !== 'draft' && body.visibility !== 'protected') ||
+        (threadKind !== 'discussion' && threadKind !== 'review')
       )
         throw new InvalidDocumentError();
+      const isReview = threadKind === 'review';
+      if (isReview && (body.subjectIds.length !== 1 || routeOf(body.subjectIds[0]!) === null))
+        throw new InvalidDocumentError('A review must name exactly one subject');
+      if (!isReview && body.voteCitation !== undefined) throw new InvalidDocumentError();
+      // Validate the entire opening before inserting either member of the
+      // deferred thread/post cycle. Keep validation after authorized replay.
+      const validated = document(body.body, body.licence, body.subjectIds);
+      const citation = isReview
+        ? await currentReviewCitation(tx, author.accountId, body.subjectIds[0]!, body.voteCitation)
+        : null;
       const mediaIds = mediaReferences(body.mediaIds === undefined ? [] : body.mediaIds, target.route);
       const at = authoritativeTimeValue(command.time);
       await insertThread.run(tx, {
@@ -573,6 +791,8 @@ export async function createThread(
         thread_id: value.threadId,
         author_id: author.accountId,
         board_id: body.boardId,
+        kind: threadKind,
+        review_subject_id: isReview ? body.subjectIds[0]! : null,
         title: body.title,
         visibility: body.visibility,
         transaction_id: command.transactionId,
@@ -590,16 +810,15 @@ export async function createThread(
         transaction_id: command.transactionId,
         at,
       });
-      await appendRevision(
+      const subjectIds = await appendRevision(
         tx,
         value,
-        body.body,
-        body.licence,
-        body.subjectIds,
+        validated,
         body.boardId,
         mediaIds,
         command.transactionId,
         command.time,
+        citation,
       );
       inserted.set(tx, command.transactionId);
       for (const entry of entries) await initializeResourceGrants(tx, entry);
@@ -612,10 +831,50 @@ export async function createThread(
           revisionId: value.revisionId,
           boardId: body.boardId,
         });
-      return result(value, actor, 'thread');
-    },
-  );
-  return outcome;
+      await slow.claim(tx, command.time, {
+        targetPostId: value.itemId,
+        revisionId: value.revisionId,
+        transactionId: command.transactionId,
+        postedAt: at,
+      });
+      const created = result(
+        value,
+        actor,
+        'thread',
+        {
+          placeId: threadPlaceId,
+          kind: threadKind,
+          subjectIds,
+          activityAt: eventActivityAt(command.time),
+        },
+        body.visibility === 'published',
+      );
+      const qualified = discovery.get(command.time);
+      const deltas = qualified
+        ? await appendDiscoveryStart(tx, {
+            threadId: value.threadId,
+            boardId: body.boardId,
+            binding: qualified.binding,
+            time: command.time,
+          })
+        : [];
+      return { value: created.value, events: [...created.events, ...deltas] };
+    });
+    try {
+      await slow.finish(outcome);
+    } catch {
+      // Registered Content recovery finalizes the committed ticket after transient board-home failure.
+    }
+    return outcome;
+  } catch (error) {
+    try {
+      await slow.recoverLatest();
+    } catch {
+      throw new BoardSlowAdmissionUnavailableError();
+    }
+    if (postgresConstraint(error) === 'thread_one_live_review_idx') throw new ReviewConflictError();
+    throw error;
+  }
 }
 
 export async function createPost(
@@ -630,6 +889,7 @@ export async function createPost(
   const r = route(body.threadId);
   const target = { route: r, id: newId(r) };
   const value = { threadId: body.threadId, itemId: target.id, revisionId: newId(r) };
+  const commandOptions = options(dependencies, actor, r, CREATE_POST, body, context);
   const container = containerAuthorization(
     dependencies,
     actor,
@@ -637,35 +897,50 @@ export async function createPost(
     body.parentId ?? null,
     context,
     false,
+    commandOptions.receipt,
     true,
   );
   const inserted = new WeakMap<CommandTransaction, string>();
   const entries = creationEntries(actor, [{ resource: target, type: 'content.post' }], inserted);
-  const authorization = container.wrap(
-    parentCreationAuthorization({
-      access: dependencies.access,
-      actor,
-      action: 'post:create',
-      parent: { resource: container.resource, validate: container.validate },
-      context: {
-        pool: dependencies.pool,
-        deadline: context.deadline,
-        resource: target,
-        creation: entries[0]!.creation,
-        manifest: createResourceCreationManifest(entries),
-      },
-    }),
-  );
-  return runCommand(
-    dependencies.pool,
-    { ...options(dependencies, actor, r, CREATE_POST, body, context), authorization },
-    async (tx, command) => {
+  const baseAuthorization = parentCreationAuthorization({
+    access: dependencies.access,
+    actor,
+    action: 'post:create',
+    parent: { resource: container.resource, validate: container.validate },
+    context: {
+      pool: dependencies.pool,
+      deadline: context.deadline,
+      resource: target,
+      creation: entries[0]!.creation,
+      manifest: createResourceCreationManifest(entries),
+    },
+  });
+  const preflightAuthorization = container.wrap(baseAuthorization, false);
+  const authorization = container.wrap(baseAuthorization, true);
+  try {
+    const replay = await probeSlowModeReplay(dependencies.pool, commandOptions, preflightAuthorization);
+    if (replay) return replay;
+    const outcome = await runCommand(dependencies.pool, { ...commandOptions, authorization }, async (tx, command) => {
+      container.slow.assertAllowed(command.time);
       if (container.current.posts.some((row) => erasedRow(row))) throw new ContentNotFoundError();
+      if (
+        body.visibility !== undefined &&
+        body.visibility !== 'published' &&
+        body.visibility !== 'draft' &&
+        body.visibility !== 'protected'
+      )
+        throw new InvalidDocumentError();
+      const visibility = body.visibility ?? 'published';
       const root = container.current.thread;
       if (body.boardId !== undefined && body.boardId !== root.board_id)
         throw new InvalidDocumentError('Board mismatch');
-      const defaults = body.subjectIds === undefined ? await post(tx, root.first_post_id!, body.threadId) : null;
+      const firstPost = await post(tx, root.first_post_id!, body.threadId);
       const mediaIds = mediaReferences(body.mediaIds === undefined ? [] : body.mediaIds, r);
+      const validated = document(
+        body.body,
+        body.licence,
+        body.subjectIds === undefined ? firstPost.subject_ids : body.subjectIds,
+      );
       await insertPost.run(tx, {
         route: r,
         thread_id: value.threadId,
@@ -673,21 +948,11 @@ export async function createPost(
         parent_id: body.parentId ?? null,
         author_id: author.accountId,
         revision_id: value.revisionId,
-        visibility: 'published',
+        visibility,
         transaction_id: command.transactionId,
         at: authoritativeTimeValue(command.time),
       });
-      await appendRevision(
-        tx,
-        value,
-        body.body,
-        body.licence,
-        body.subjectIds === undefined ? defaults!.subject_ids : body.subjectIds,
-        root.board_id,
-        mediaIds,
-        command.transactionId,
-        command.time,
-      );
+      await appendRevision(tx, value, validated, root.board_id, mediaIds, command.transactionId, command.time);
       inserted.set(tx, command.transactionId);
       await initializeResourceGrants(tx, entries[0]!);
       if (mediaIds.length)
@@ -698,9 +963,39 @@ export async function createPost(
           itemId: value.itemId,
           revisionId: value.revisionId,
         });
-      return result(value, actor, 'post');
-    },
-  );
+      await container.slow.claim(tx, command.time, {
+        targetPostId: value.itemId,
+        revisionId: value.revisionId,
+        transactionId: command.transactionId,
+        postedAt: authoritativeTimeValue(command.time),
+      });
+      return result(
+        value,
+        actor,
+        'post',
+        {
+          placeId: container.placeId,
+          kind: container.current.thread.kind,
+          subjectIds: storedSubjectIds(firstPost.subject_ids),
+          activityAt: eventActivityAt(command.time),
+        },
+        visibility === 'published',
+      );
+    });
+    try {
+      await container.slow.finish(outcome);
+    } catch {
+      // Registered Content recovery finalizes the committed ticket after transient board-home failure.
+    }
+    return outcome;
+  } catch (error) {
+    try {
+      await container.slow.recoverLatest();
+    } catch {
+      throw new BoardSlowAdmissionUnavailableError();
+    }
+    throw error;
+  }
 }
 
 export async function revisePost(
@@ -713,39 +1008,79 @@ export async function revisePost(
   const body = request({ ...input, expectedRevisionId: input.expectedRevisionId ?? null });
   const r = route(body.threadId);
   const value = { threadId: body.threadId, itemId: body.itemId, revisionId: newId(r) };
-  const container = containerAuthorization(dependencies, actor, body.threadId, body.itemId, context, true);
-  const authorization = container.wrap(
-    resourceAuthorization({
-      access: dependencies.access,
-      actor,
-      action: 'post:revise',
-      anchor: { resource: container.resource, validate: container.validate },
-      context: { pool: dependencies.pool, deadline: context.deadline, partition: partitionOf(r) },
-    }),
+  const commandOptions = options(dependencies, actor, r, REVISE_POST, body, context);
+  const container = containerAuthorization(
+    dependencies,
+    actor,
+    body.threadId,
+    body.itemId,
+    context,
+    true,
+    commandOptions.receipt,
   );
-  return runCommand(
-    dependencies.pool,
-    { ...options(dependencies, actor, r, REVISE_POST, body, context), authorization },
-    async (tx, command) => {
+  const baseAuthorization = resourceAuthorization({
+    access: dependencies.access,
+    actor,
+    action: 'post:revise',
+    anchor: { resource: container.resource, validate: container.validate },
+    context: { pool: dependencies.pool, deadline: context.deadline, partition: partitionOf(r) },
+  });
+  const preflightAuthorization = container.wrap(baseAuthorization, false);
+  const authorization = container.wrap(baseAuthorization, true);
+  try {
+    const replay = await probeSlowModeReplay(dependencies.pool, commandOptions, preflightAuthorization);
+    if (replay) return replay;
+    const outcome = await runCommand(dependencies.pool, { ...commandOptions, authorization }, async (tx, command) => {
+      container.slow.assertAllowed(command.time);
       const previous = container.current.posts[0]!;
+      const threadSecurityRevision = container.current.thread.security_revision;
+      if (previous.security_revision === null || threadSecurityRevision === null) throw new ContentNotFoundError();
       // A fresh key cannot revise an erased post or any erased ancestor. Replay
       // never enters this body. updateHead also refuses to advance an erased head.
       if (container.current.posts.some((row) => erasedRow(row))) throw new ContentNotFoundError();
+      if (body.visibility !== undefined && body.visibility !== 'published' && body.visibility !== 'draft')
+        throw new InvalidDocumentError();
+      const visibility = body.visibility ?? previous.visibility;
+      if (visibility !== previous.visibility && !(previous.visibility === 'draft' && visibility === 'published'))
+        throw new InvalidDocumentError('Only draft-to-published visibility changes are allowed');
+      const firstPublication = previous.visibility === 'draft' && visibility === 'published';
       if (body.expectedRevisionId !== null && body.expectedRevisionId !== previous.head_revision_id)
         throw new RevisionPreconditionError();
       if (body.boardId !== undefined && body.boardId !== container.current.thread.board_id)
         throw new InvalidDocumentError('Board mismatch');
       const mediaIds = mediaReferences(body.mediaIds === undefined ? previous.media_ids : body.mediaIds, r);
-      await appendRevision(
+      const isFirstPost = value.itemId === container.current.thread.first_post_id;
+      if (
+        body.title !== undefined &&
+        (container.current.thread.kind !== 'review' ||
+          !isFirstPost ||
+          typeof body.title !== 'string' ||
+          body.title.trim().length === 0 ||
+          [...body.title].length > 1024)
+      )
+        throw new InvalidDocumentError('Only a review opening revision may change its title');
+      const citation = reviewCitation(body.voteCitation);
+      if (citation && (container.current.thread.kind !== 'review' || !isFirstPost)) throw new InvalidDocumentError();
+      const revisedSubjectIdsInput = body.subjectIds === undefined ? previous.subject_ids : body.subjectIds;
+      if (
+        container.current.thread.kind === 'review' &&
+        isFirstPost &&
+        (revisedSubjectIdsInput.length !== 1 ||
+          revisedSubjectIdsInput[0] !== container.current.thread.review_subject_id)
+      )
+        throw new InvalidDocumentError('A review must retain exactly its target subject');
+      const currentCitation = citation
+        ? await currentReviewCitation(tx, author.accountId, container.current.thread.review_subject_id!, citation)
+        : null;
+      const revisedSubjectIds = await appendRevision(
         tx,
         value,
-        body.body,
-        body.licence === undefined ? previous.licence : body.licence,
-        body.subjectIds === undefined ? previous.subject_ids : body.subjectIds,
+        document(body.body, body.licence === undefined ? previous.licence : body.licence, revisedSubjectIdsInput),
         body.boardId === undefined ? previous.board_id : body.boardId,
         mediaIds,
         command.transactionId,
         command.time,
+        currentCitation,
       );
       const changed = await updateHead.run(tx, {
         route: r,
@@ -754,8 +1089,21 @@ export async function revisePost(
         author_id: author.accountId,
         revision_id: value.revisionId,
         previous_revision_id: previous.head_revision_id,
+        visibility,
+        previous_visibility: previous.visibility,
+        security_revision: previous.security_revision,
       });
       if (!changed) throw new ContentNotFoundError();
+      if (firstPublication && isFirstPost) {
+        const published = await publishOpeningThread.run(tx, {
+          route: r,
+          thread_id: value.threadId,
+          post_id: value.itemId,
+          author_id: author.accountId,
+          security_revision: threadSecurityRevision,
+        });
+        if (!published) throw new ContentNotFoundError();
+      }
       if (mediaIds.length)
         await claimMedia(tx, {
           mediaIds,
@@ -764,7 +1112,58 @@ export async function revisePost(
           itemId: value.itemId,
           revisionId: value.revisionId,
         });
-      return result(value, actor, 'revision');
-    },
-  );
+      if (body.title !== undefined) {
+        const title = await tx.query(
+          `UPDATE content.thread SET title=$6,security_revision=security_revision+1
+           WHERE route=$1 AND thread_id=$2 AND first_post_id=$3 AND author_account_id=$4
+             AND security_revision=$5::bigint AND availability='available' AND kind='review'
+           RETURNING thread_id`,
+          [
+            r,
+            value.threadId,
+            value.itemId,
+            author.accountId,
+            (BigInt(threadSecurityRevision) + (firstPublication ? 1n : 0n)).toString(),
+            body.title,
+          ],
+        );
+        if (title.rowCount !== 1) throw new ContentNotFoundError();
+      }
+      const indexSubjectIds = isFirstPost
+        ? revisedSubjectIds
+        : storedSubjectIds((await post(tx, container.current.thread.first_post_id!, value.threadId)).subject_ids);
+      await container.slow.claim(tx, command.time, {
+        targetPostId: value.itemId,
+        revisionId: value.revisionId,
+        transactionId: command.transactionId,
+        postedAt: authoritativeTimeValue(command.time),
+      });
+      return result(
+        value,
+        actor,
+        'revision',
+        {
+          placeId: container.placeId,
+          kind: container.current.thread.kind,
+          subjectIds: indexSubjectIds,
+          activityAt: eventActivityAt(command.time),
+          ...(isFirstPost ? { previousSubjectIds: storedSubjectIds(previous.subject_ids) } : {}),
+        },
+        firstPublication,
+      );
+    });
+    try {
+      await container.slow.finish(outcome);
+    } catch {
+      // Registered Content recovery finalizes the committed ticket after transient board-home failure.
+    }
+    return outcome;
+  } catch (error) {
+    try {
+      await container.slow.recoverLatest();
+    } catch {
+      throw new BoardSlowAdmissionUnavailableError();
+    }
+    throw error;
+  }
 }

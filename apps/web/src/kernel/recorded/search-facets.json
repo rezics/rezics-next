@@ -1,0 +1,51 @@
+{
+  "query": "The",
+  "facets": [
+    {
+      "property": "type",
+      "relation": "exact",
+      "values": [
+        {
+          "value": "schema:Book",
+          "count": 7,
+          "labels": {
+            "de": "Buch",
+            "es": "libro",
+            "fr": "livre",
+            "ko": "책",
+            "en": "book",
+            "ja": "本",
+            "zh-Hans": "书籍",
+            "zh-Hant": "書籍"
+          }
+        },
+        {
+          "value": "schema:Recipe",
+          "count": 2,
+          "labels": { "en": "recipe", "ja": "レシピ", "zh-Hans": "食谱", "zh-Hant": "食譜" }
+        },
+        {
+          "value": "bf:Instance",
+          "count": 1,
+          "labels": { "en": "edition", "ja": "版", "zh-Hans": "版本", "zh-Hant": "版本" }
+        },
+        {
+          "value": "wd:Q20631656",
+          "count": 1,
+          "labels": { "en": "release", "ja": "発行", "zh-Hans": "版本", "zh-Hant": "版本" }
+        }
+      ]
+    },
+    {
+      "property": "schema:datePublished",
+      "relation": "exact",
+      "values": [
+        { "value": "1905", "count": 1, "labels": { "en": "1905", "ja": "1905", "zh-Hans": "1905", "zh-Hant": "1905" } },
+        { "value": "1914", "count": 1, "labels": { "en": "1914", "ja": "1914", "zh-Hans": "1914", "zh-Hant": "1914" } }
+      ]
+    }
+  ],
+  "total": { "value": 11, "relation": "exact" },
+  "as_of": "2026-10-27T00:00:00Z",
+  "status": 200
+}

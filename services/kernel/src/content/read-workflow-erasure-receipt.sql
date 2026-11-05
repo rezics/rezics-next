@@ -5,4 +5,5 @@ FROM core.receipt r
 WHERE r.partition_no = :partition_no::integer
   AND r.principal_kind = 'account' AND r.principal_id = :initiator_account_id::uuid
   AND r.command_kind = :creation_command_kind::nullable(text)
-  AND r.idempotency_key = :creation_idempotency_key::nullable(text);
+  AND r.idempotency_key = ANY(:creation_idempotency_keys::text[])
+LIMIT 1;

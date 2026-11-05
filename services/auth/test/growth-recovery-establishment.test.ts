@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -118,7 +119,10 @@ for (const kind of ['complete', 'resolve', 'cleanup'] as const) {
         audience: 'https://api.test',
         secret,
         signing: { activeKid: key.kid, privateKeys: [key] },
-        trustedAccess: {
+        trustedAccess: trustedAccessPorts({
+          async readFencedAccount(id) {
+            return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+          },
           readAccount,
           readRecoveryAccount: readAccount,
           authorizeProvisioning: async (authorization) => ({
@@ -169,7 +173,7 @@ for (const kind of ['complete', 'resolve', 'cleanup'] as const) {
               throw new Error('Recovery completion denied');
             authorized.delete(proofReference);
           },
-        },
+        }),
         recoveryDelivery: {
           async deliver(value) {
             tokens.set(value.accountId, value.token);

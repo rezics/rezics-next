@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { decodeJwt, exportJWK, generateKeyPair, importJWK, SignJWT, type JWK } from 'jose';
@@ -6,6 +7,8 @@ import { AccessUnavailableError, createAccess, createResourcePublicEligibility }
 import { readAccount } from '../../src/access/account-data.ts';
 import { createDelegationCommands } from '../../src/access/delegation-commands.ts';
 import { accessCheck, actorOf, AuthenticationError, type ActionCatalogue } from '../../src/request/access.ts';
+import { PROBLEMS, ProblemError } from '../../src/http/problem.ts';
+import { trustedAccessPorts } from '../support/trusted-access.ts';
 import { dropTestDatabase } from '../support/drop-test-database.ts';
 
 const url = process.env.DATABASE_URL;
@@ -128,7 +131,7 @@ beforeAll(async () => {
     audience,
     secret: 'test-only-better-auth-secret-with-at-least-32-bytes',
     signing: { activeKid: signingKey.kid!, privateKeys: [signingKey] },
-    trustedAccess: {
+    trustedAccess: trustedAccessPorts({
       async readAccount(id) {
         const account = await readAccount(pool, routeOf(id), id);
         return (
@@ -146,7 +149,7 @@ beforeAll(async () => {
         if (!approvals.delete(reference)) throw new Error('No provisioning approval');
         return { accountId: reference };
       },
-    },
+    }),
   };
   const approvals = new Set([person, robot, principal]);
   service = await createAuthService(options);
@@ -294,7 +297,7 @@ test('forged expired revoked and wrong-audience sessions fail closed', async () 
     })),
   ])
     await invalid(access.authenticate(await signed(claims), context()));
-  for (const state of ['pending', 'suspended', 'deleted']) {
+  for (const state of ['pending', 'deleted']) {
     await pool.query('UPDATE access.account SET state=$3 WHERE route=$1 AND account_id=$2', [
       routeOf(person),
       person,
@@ -309,6 +312,20 @@ test('forged expired revoked and wrong-audience sessions fail closed', async () 
       ]);
     }
   }
+  const suspendedId = '00000000-0000-7000-8000-123400000099';
+  await pool.query(
+    "INSERT INTO access.account(route,account_id,kind,state,transaction_id) VALUES ($1,$2,'actor','active',$2)",
+    [routeOf(suspendedId), suspendedId],
+  );
+  const suspendedBearer = await signed({ sub: suspendedId });
+  await suspendAccount(pool, suspendedId);
+  const suspendedError = await access.authenticate(suspendedBearer, context()).then(
+    () => null,
+    (error: unknown) => error,
+  );
+  expect(suspendedError).toBeInstanceOf(ProblemError);
+  expect(suspendedError).toMatchObject({ code: 'account_suspended' });
+  expect(PROBLEMS.account_suspended.status).toBe(403);
   await pool.query('UPDATE access.account SET minimum_authn_epoch=2 WHERE route=$1 AND account_id=$2', [
     routeOf(robot),
     robot,
@@ -421,10 +438,7 @@ test('delegated signed claims require an actual principal-created matching assig
   delegated = await signed({ requested_by: requestedBy, sub: robot, authn_epoch: 2 });
   await invalid(access.authenticate(delegated, context()));
   delegated = await signed({ requested_by: requestedBy });
-  await pool.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-    routeOf(principal),
-    principal,
-  ]);
+  await suspendAccount(pool, principal);
   await invalid(access.authenticate(delegated, context()));
 });
 

@@ -40,7 +40,6 @@ function setTextblock(editor: Editor, type: string, attrs: Record<string, unknow
   unwrapBlocks(editor);
   editor
     .chain()
-    .focus()
     .command(({ tr, state }) => {
       tr.setBlockType(state.selection.from, state.selection.to, state.schema.nodes[type]!, (node) => ({
         ...carried(node),
@@ -57,7 +56,7 @@ const mark = (id: string, label: keyof RichTextEditorLabels): EditorCommand => (
   mark: id,
   active: (editor) => editor.isActive(id),
   run: (editor) => {
-    editor.chain().focus().toggleMark(id).run();
+    editor.chain().toggleMark(id).run();
   },
 });
 
@@ -85,7 +84,7 @@ export const markCommands: readonly EditorCommand[] = [
     id: 'clearFormatting',
     label: 'clearFormatting',
     run: (editor) => {
-      editor.chain().focus().unsetAllMarks().run();
+      editor.chain().unsetAllMarks().run();
     },
   },
 ];
@@ -132,7 +131,7 @@ const list = (
   active: (editor) => editor.isActive(node),
   run: (editor) => {
     if (editor.isActive('heading') || editor.isActive('codeBlock')) setTextblock(editor, 'paragraph');
-    editor.chain().focus().toggleList(node, item).run();
+    editor.chain().toggleList(node, item).run();
   },
 });
 export const blockCommands: readonly EditorCommand[] = [
@@ -158,7 +157,7 @@ export const blockCommands: readonly EditorCommand[] = [
     active: (editor) => editor.isActive('blockquote'),
     run: (editor) => {
       if (editor.isActive('heading') || editor.isActive('codeBlock')) setTextblock(editor, 'paragraph');
-      editor.chain().focus().toggleWrap('blockquote').run();
+      editor.chain().toggleWrap('blockquote').run();
     },
   },
   {
@@ -176,7 +175,6 @@ function insertBlock(editor: Editor, content: Record<string, unknown>) {
   const block = editor.schema.nodeFromJSON(content);
   editor
     .chain()
-    .focus()
     .command(({ tr, state }) => {
       const { $from } = state.selection;
       if (!$from.parent.isTextblock) return false;
@@ -226,6 +224,12 @@ export const insertCommands: readonly EditorCommand[] = [
   imageCommand,
 ];
 
+/** Slash can also start an inline link while keeping the block insertion set separate for the touch sheet. */
+export const slashCommands: readonly EditorCommand[] = [
+  ...insertCommands,
+  markCommands.find((command) => command.id === 'link')!,
+];
+
 /** Schema membership, rather than a profile flag, determines the offered commands. */
 export function availableCommands(commands: readonly EditorCommand[], editor: Editor) {
   return commands.filter(
@@ -237,6 +241,21 @@ export function availableCommands(commands: readonly EditorCommand[], editor: Ed
 /** The touch sheet uses the insertion set and schema/upload rules offered by the slash menu. */
 export function availableInsertCommands(editor: Editor, upload: boolean): EditorCommand[] {
   return availableCommands(insertCommands, editor).filter((command) => command.id !== 'image' || upload);
+}
+
+/** Run a menu command only from its current editable visit, then focus synchronously if that visit still owns it. */
+export function runEditorCommand(
+  command: EditorCommand,
+  editor: Editor,
+  openLink: () => void,
+  openImage: () => void,
+  isCurrent: () => boolean,
+): boolean {
+  if (!isCurrent() || editor.isDestroyed || !editor.isEditable) return false;
+  command.run(editor, openLink, openImage);
+  if (!isCurrent() || editor.isDestroyed || !editor.isEditable) return true;
+  editor.view.focus();
+  return true;
 }
 
 /** A constant set of commands is recomputed once per transaction. */

@@ -1,0 +1,964 @@
+import { expect, mock, test } from 'bun:test';
+import { createRequire } from 'node:module';
+import { act, createElement as h, useState, type ReactNode } from 'react';
+import type { FactCommand, FactsCurrent } from '../src/features/catalogue/subject-facts';
+import type { CandidateTransport } from '../src/subject/candidate-review';
+
+mock.module('cloudflare:workers', () => ({ env: {} }));
+
+// Authored UNRUN: mounted DOM assertions are not browser geometry or native acceptance.
+async function mounted(
+  run: (page: {
+    host: HTMLElement;
+    render: (node: ReactNode, remount?: boolean) => Promise<void>;
+    choose: (select: HTMLSelectElement, value: string) => Promise<void>;
+    enter: (input: HTMLInputElement, value: string) => Promise<void>;
+  }) => Promise<void>,
+) {
+  const require = createRequire(import.meta.url);
+  const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
+  const window = new Window({ url: 'https://site.invalid/en' });
+  const globals = [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'HTMLButtonElement',
+    'HTMLFormElement',
+    'HTMLInputElement',
+    'HTMLSelectElement',
+    'Element',
+    'Node',
+    'DocumentFragment',
+    'Document',
+    'ShadowRoot',
+    'MutationObserver',
+    'ResizeObserver',
+    'getComputedStyle',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'matchMedia',
+    'IS_REACT_ACT_ENVIRONMENT',
+  ];
+  const saved = new Map(globals.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  for (const key of globals)
+    Object.defineProperty(globalThis, key, {
+      configurable: true,
+      writable: true,
+      value: key === 'window' ? window : key === 'IS_REACT_ACT_ENVIRONMENT' ? true : window[key],
+    });
+  const { createRoot } = await import('react-dom/client');
+  const { setLocale } = await import('../src/paraglide/runtime.js');
+  setLocale('en', { reload: false });
+  const host = window.document.createElement('main') as HTMLElement;
+  window.document.body.append(host);
+  const root = createRoot(host);
+  let generation = 0;
+  try {
+    await run({
+      host,
+      render: async (node, remount = true) => {
+        if (remount) generation++;
+        await act(async () => root.render(h('div', { key: generation }, node)));
+      },
+      choose: async (select, value) => {
+        await act(async () => {
+          select.value = value;
+          select.dispatchEvent(new window.Event('change', { bubbles: true }));
+        });
+      },
+      enter: async (input, value) => {
+        await act(async () => {
+          Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+          input.dispatchEvent(new window.Event('input', { bubbles: true }));
+        });
+      },
+    });
+  } finally {
+    await act(async () => root.unmount());
+    await window.happyDOM.abort();
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+}
+
+function button(region: Element, name: string) {
+  const found = [...region.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent === name);
+  expect(found).toBeDefined();
+  return found!;
+}
+
+const property = 'schema:keywords';
+const concept = '00000000-0000-4000-8000-00000000d101';
+const replacement = '00000000-0000-4000-8000-00000000d102';
+const evidence = 'https://archive.example/character/' + 'original-source-'.repeat(12) + '?record=A%2Fb#evidence';
+
+test('shared Character and StoryArc classification keyboard openings focus only the requested admitted draft', async () => {
+  await mounted(async ({ host, render, choose, enter }) => {
+    const { CharacterClassifications } = await import('../src/features/catalogue/character-profile-classification');
+    const { CatalogueCurrentReading } = await import('../src/features/catalogue/editor-lifetime');
+    const { m } = await import('../src/paraglide/messages.js');
+    const setup = await supplied(2);
+    const props = { ...setup, properties: [property], locale: 'en', search: async () => [] };
+    const view = (ready = true) => (
+      <CatalogueCurrentReading visible ready={ready} revision={ready ? 'current' : 'retired'}>
+        <CharacterClassifications {...props} />
+        <CharacterClassifications {...props} />
+      </CatalogueCurrentReading>
+    );
+    await render(view());
+    const [first, sibling] = [...host.querySelectorAll('section')];
+    const document = host.ownerDocument;
+    expect(document.activeElement).toBe(document.body);
+    await choose(sibling!.querySelector('select')!, setup.read.public.subject.statements[property]![0]!.id);
+    await act(async () => button(sibling!, m.facts_edit_field()).click());
+    const siblingUrl = sibling!.querySelector<HTMLInputElement>('input[type="url"]')!;
+    await enter(siblingUrl, evidence + 'private');
+    const activate = async (name: string, detail = 0, move = false) => {
+      if (name === m.facts_edit_field())
+        await choose(first!.querySelector('select')!, setup.read.public.subject.statements[property]![1]!.id);
+      await act(async () => {
+        const opener = button(first!, name);
+        opener.focus();
+        opener.dispatchEvent(new document.defaultView!.MouseEvent('click', { bubbles: true, detail }));
+        if (move) siblingUrl.focus();
+      });
+    };
+    const picker = () => first!.querySelector<HTMLInputElement>('[role="combobox"]')!;
+    await activate(m.facts_edit_field());
+    expect(document.activeElement).toBe(picker());
+    await act(async () => button(first!, m.curation_view_discard()).click());
+    await activate(m.facts_add_value());
+    expect(document.activeElement).toBe(picker());
+    expect(picker().value).toBe('');
+    await act(async () => button(first!, m.curation_view_discard()).click());
+    await activate(m.facts_edit_field(), 1);
+    expect(document.activeElement).not.toBe(picker());
+    await act(async () => button(first!, m.curation_view_discard()).click());
+    await choose(first!.querySelector('select')!, setup.read.public.subject.statements[property]![1]!.id);
+    const opener = button(first!, m.facts_edit_field());
+    const stale = Reflect.get(
+      opener,
+      Object.keys(opener).find((key) => key.startsWith('__reactProps'))!,
+    ).onClick;
+    opener.focus();
+    await render(view(false), false);
+    await act(async () => stale({ currentTarget: opener, detail: 0 }));
+    expect(document.activeElement).toBe(opener);
+    expect(picker()).toBeNull();
+    await render(view(), false);
+    expect(document.activeElement).toBe(opener);
+    await activate(m.facts_edit_field(), 0, true);
+    expect(document.activeElement).toBe(siblingUrl);
+    expect(sibling!.querySelector('input[type="url"]')).toBe(siblingUrl);
+    expect(siblingUrl.value).toBe(evidence + 'private');
+  });
+});
+
+test('discard changes locally, choose another source, and keep its pending or uncertain command for exact retry', async () => {
+  await mounted(async ({ host, render, choose, enter }) => {
+    const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
+    const { m } = await import('../src/paraglide/messages.js');
+    const setup = await supplied(2, 'uncertain');
+    const sources = setup.read.public.subject.statements[property]!;
+    sources[1]!.qualifiers.push({
+      property: { id: 'rezics:spoilerLevel', data_type: 'quantity' },
+      value: { type: 'value', content: { amount: '+0', unit: '1' } },
+    });
+    const gate = Promise.withResolvers<void>();
+    const propose = setup.transport.propose;
+    setup.transport.propose = async (command) => {
+      await gate.promise;
+      return propose(command);
+    };
+    await render(<CharacterClassification {...setup} property={property} locale="en" search={async () => []} />);
+    const input = () => host.querySelector<HTMLInputElement>('fieldset input[type="url"]')!;
+    await choose(host.querySelector('select')!, sources[0]!.id);
+    await act(async () => button(host, m.facts_edit_field()).click());
+    await enter(input(), evidence + 'draft');
+    await act(async () => button(host, m.curation_view_discard()).click());
+    expect(host.ownerDocument.activeElement).toBe(button(host, m.candidate_cancel()));
+    expect(input().value).toBe(evidence + 'draft');
+    await act(async () => button(host, m.curation_view_discard()).click());
+    expect(host.ownerDocument.activeElement).toBe(host.querySelector('select'));
+    expect(host.querySelector<HTMLSelectElement>('select')!.value).toBe('');
+    expect(setup.fixture.calls).toEqual([]);
+    await choose(host.querySelector('select')!, sources[1]!.id);
+    await act(async () => button(host, m.facts_edit_field()).click());
+    expect(host.querySelector<HTMLInputElement>('[role="combobox"]')!.value).toBe(
+      setup.read.public.related[replacement]!.labels.en!,
+    );
+    expect(button(host, m.correction_submit()).disabled).toBe(true);
+    expect(input().value).toBe(evidence);
+    await enter(input(), evidence + 'replacement');
+    await act(async () => button(host, m.correction_submit()).click());
+    expect(button(host, m.curation_view_discard()).disabled).toBe(true);
+    await act(async () => gate.resolve());
+    expect(button(host, m.curation_view_discard()).disabled).toBe(true);
+    await act(async () => button(host, m.curation_view_discard()).click());
+    expect(host.querySelector('fieldset')!.disabled).toBe(true);
+    expect(host.textContent).toContain(m.facts_uncertain());
+    const { statementInput } = await import('../src/features/catalogue/statement-editor');
+    const expected = statementInput(sources[1]!);
+    expected.references[0]!.parts[0]!.value = { type: 'value', content: evidence + 'replacement' };
+    expect(setup.commands[0]!.statement).toEqual(expected);
+    await act(async () => button(host, m.correction_retry()).click());
+    expect(setup.commands[1]).toBe(setup.commands[0]);
+    expect(host.textContent).toContain(m.correction_proposed());
+  });
+});
+
+async function supplied(count = 1, scenario: 'ready' | 'uncertain' | 'denied' = 'ready') {
+  const { characterProfileFixture, characterProfileId } =
+    await import('../src/kernel/fake/catalogue-character-profile');
+  const fixture = characterProfileFixture(scenario);
+  const read: FactsCurrent = {
+    ok: true,
+    public: fixture.character,
+    release: structuredClone(fixture.release),
+    source: null,
+  };
+  const seed = read.public.subject.statements['schema:height']![0]!;
+  for (const field of [property, 'schema:gender']) {
+    read.public.subject.statements[field] = Array.from({ length: field === property ? count : 1 }, (_, index) => ({
+      ...structuredClone(seed),
+      id: `00000000-0000-4000-8000-${String(index + (field === property ? 800 : 900)).padStart(12, '0')}`,
+      property: { id: field, data_type: 'wikibase-item' },
+      value: { type: 'value' as const, content: index % 2 ? replacement : concept },
+      references: [
+        {
+          hash: 'supplied-evidence',
+          parts: [
+            { property: { id: 'schema:url', data_type: 'url' }, value: { type: 'value' as const, content: evidence } },
+          ],
+        },
+      ],
+    }));
+  }
+  read.public.related[concept] = { type: 'skos:Concept', labels: { ja: '出典で明示された分類 — '.repeat(12) } };
+  read.public.related[replacement] = { type: 'skos:Concept', labels: { en: 'Another supplied classification' } };
+  const reviews: { property: string; session?: string }[] = [];
+  const reads: { property?: string; session?: string }[] = [];
+  const commands: FactCommand[] = [];
+  const native = fixture.props.facts(characterProfileId);
+  const transport = {
+    ...native,
+    propose: (command: FactCommand) => {
+      commands.push(command);
+      return native.propose(command);
+    },
+  };
+  const review = (property: string, session?: string): CandidateTransport => {
+    reviews.push({ property, session });
+    const next = fixture.props.review(characterProfileId, property, session);
+    return {
+      ...next,
+      read: (field, cursor, continuity = session, work) => {
+        reads.push({ property: field, session: continuity });
+        return next.read(field, cursor, continuity, work);
+      },
+    };
+  };
+  return { fixture, read, transport, review, reviews, reads, commands };
+}
+
+test('Character profile disclosure requires a settled successful read for its exact address', async () => {
+  const { currentCharacterRead } = await import('../src/features/catalogue/character-profile');
+  const read = { ok: true, character: { subject: { id: 'character' } }, work: { subject: { id: 'work' } } } as never;
+  expect([
+    currentCharacterRead(read, { id: 'character', work: 'work' }, false, false),
+    currentCharacterRead(read, { id: 'character', work: 'work' }, true, false),
+    currentCharacterRead(read, { id: 'character', work: 'work' }, false, true),
+    currentCharacterRead(read, { id: 'other', work: 'work' }, false, false),
+    currentCharacterRead(read, { id: 'character', work: 'other' }, false, false),
+    currentCharacterRead({ ok: false, reason: 'unavailable' }, { id: 'character', work: 'work' }, false, false),
+  ]).toEqual([true, false, false, false, false, false]);
+});
+
+test('empty, one and multiple current choices keep exact names, source baselines, labels and independent DOM addresses', async () => {
+  await mounted(async ({ host, render, choose }) => {
+    const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
+    const { m } = await import('../src/paraglide/messages.js');
+    for (const count of [0, 1, 2]) {
+      const setup = await supplied(count);
+      const props = { ...setup, property, locale: 'en', search: async () => [] };
+      await render(
+        <>
+          <CharacterClassification {...props} />
+          <CharacterClassification {...props} />
+        </>,
+      );
+      const fields = [...host.querySelectorAll<HTMLElement>('main > div > section, div > section')].filter((section) =>
+        section.querySelector('h3'),
+      );
+      expect(fields).toHaveLength(2);
+      const selects = fields.map((field) => field.querySelector<HTMLSelectElement>('select'));
+      if (count) {
+        expect(selects[0]!.id).not.toBe(selects[1]!.id);
+        for (const [index, field] of fields.entries()) {
+          const label = field.querySelector<HTMLLabelElement>('label')!;
+          expect(label.htmlFor).toBe(selects[index]!.id);
+          expect(host.ownerDocument.getElementById(label.htmlFor)).toBe(selects[index]);
+          expect(selects[index]!.getAttribute('aria-label')).toBe(m.facts_choose_value());
+          expect([...selects[index]!.options].map((option) => [option.value, option.textContent])).toEqual([
+            ['', m.correction_choose()],
+            ...setup.read.public.subject.statements[property]!.map((statement, index) => [
+              statement.id,
+              m.facts_selected_value({ number: index + 1 }),
+            ]),
+          ]);
+          expect(button(field, m.facts_edit_field()).disabled).toBe(count > 1);
+        }
+        await choose(selects[1]!, setup.read.public.subject.statements[property]![count - 1]!.id);
+        expect(selects[0]!.value).toBe(count === 1 ? setup.read.public.subject.statements[property]![0]!.id : '');
+      } else expect(selects).toEqual([null, null]);
+      await act(async () => button(fields[1]!, m.facts_edit_field()).click());
+      expect(fields[0]!.querySelector('fieldset')).toBeNull();
+      expect(fields[1]!.textContent).toContain(m.facts_private());
+      expect(fields[1]!.querySelector('h3[data-content-item-slot="title"]')).not.toBeNull();
+      expect(fields[1]!.querySelector('h4[data-content-item-slot="title"]')).not.toBeNull();
+      expect(button(fields[1]!, m.correction_submit()).disabled).toBe(count > 0);
+      expect(fields[1]!.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!.value).toBe(
+        count ? (count === 2 ? replacement : concept) : '',
+      );
+      expect(setup.fixture.calls).toEqual([]);
+      expect(setup.reads).toEqual([]);
+      expect(host.querySelector('[data-slot="list-row-link"], a button, a input')).toBeNull();
+    }
+  });
+});
+
+test('classification choices follow exact reread IDs while staged private and uncertain intent stays fixed', async () => {
+  await mounted(async ({ host, render, choose, enter }) => {
+    const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
+    const { statementInput } = await import('../src/features/catalogue/statement-editor');
+    const { m } = await import('../src/paraglide/messages.js');
+    const setup = await supplied(2, 'uncertain');
+    const sources = setup.read.public.subject.statements[property]!;
+    const sourceA = sources[0]!;
+    const sourceB = sources[1]!;
+    sourceA.references[0]!.parts[0]!.value = { type: 'value', content: 'https://archive.example/source-a' };
+    sourceB.references[0]!.parts[0]!.value = { type: 'value', content: 'https://archive.example/source-b' };
+    let updateRead!: (ids: string[]) => void;
+    function CurrentRead() {
+      const [read, setRead] = useState(setup.read);
+      updateRead = (ids) => {
+        const next = structuredClone(setup.read);
+        const current = next.public.subject.statements[property]!;
+        next.public.subject.statements[property] = ids.map((id) => current.find((statement) => statement.id === id)!);
+        setRead(next);
+      };
+      return (
+        <>
+          <CharacterClassification {...setup} read={read} property={property} locale="en" search={async () => []} />
+          <CharacterClassification {...setup} read={read} property={property} locale="en" search={async () => []} />
+        </>
+      );
+    }
+    await render(<CurrentRead />);
+    const fields = () => [...host.querySelectorAll('h3')].map((heading) => heading.closest<HTMLElement>('section')!);
+    const select = (index: number) => fields()[index]!.querySelector<HTMLSelectElement>('select')!;
+    const value = (index: number) =>
+      fields()[index]!.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!;
+
+    await choose(select(0), sourceA.id);
+    await choose(select(1), sourceA.id);
+    await act(async () => updateRead([sourceB.id, sourceA.id]));
+    expect([select(0).value, select(1).value]).toEqual([sourceA.id, sourceA.id]);
+    await act(async () => button(fields()[0]!, m.facts_edit_field()).click());
+    expect(value(0).value).toBe(concept);
+    expect(fields()[0]!.querySelector<HTMLInputElement>('input[type="url"]')!.value).toBe(
+      'https://archive.example/source-a',
+    );
+
+    await act(async () => updateRead([sourceB.id]));
+    expect(select(1).value).toBe('');
+    expect(button(fields()[1]!, m.facts_edit_field()).disabled).toBe(true);
+    expect(button(fields()[1]!, m.facts_add_value()).disabled).toBe(false);
+    expect(fields()[0]!.textContent).toContain(m.facts_private());
+    expect(value(0).value).toBe(concept);
+    expect(fields()[0]!.querySelector<HTMLInputElement>('input[type="url"]')!.value).toBe(
+      'https://archive.example/source-a',
+    );
+    await choose(select(1), sourceB.id);
+    await act(async () => button(fields()[1]!, m.facts_edit_field()).click());
+    expect(value(1).value).toBe(replacement);
+    await act(async () => button(fields()[1]!, m.curation_view_discard()).click());
+
+    const edited = 'https://archive.example/source-a-edited';
+    await enter(fields()[0]!.querySelector<HTMLInputElement>('input[type="url"]')!, edited);
+    await act(async () => button(fields()[0]!, m.correction_submit()).click());
+    expect(fields()[0]!.textContent).toContain(m.facts_uncertain());
+    const command = setup.commands[0]!;
+    const expected = statementInput(sourceA);
+    expected.references[0]!.parts[0]!.value = { type: 'value', content: edited };
+    expect(command.statement).toEqual(expected);
+    const body = structuredClone(command.statement);
+
+    await act(async () => updateRead([]));
+    expect(setup.commands[0]).toBe(command);
+    expect(command.key).toBe(setup.commands[0]!.key);
+    expect(command.statement).toEqual(body);
+    expect(value(0).value).toBe(concept);
+    expect(fields()[0]!.querySelector<HTMLInputElement>('input[type="url"]')!.value).toBe(edited);
+    expect(fields()[1]!.querySelector('select')).toBeNull();
+    expect(button(fields()[1]!, m.facts_edit_field()).disabled).toBe(false);
+    await act(async () => button(fields()[1]!, m.facts_edit_field()).click());
+    expect(value(1).value).toBe('');
+    await act(async () => button(fields()[0]!, m.correction_retry()).click());
+    expect(setup.commands[1]).toBe(command);
+    expect(setup.commands[1]!.statement).toEqual(body);
+  });
+});
+
+test('multivalued Add stages a blank private value; current Edit preserves full supplied fallback title and evidence', async () => {
+  await mounted(async ({ host, render }) => {
+    const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
+    const { m } = await import('../src/paraglide/messages.js');
+    const setup = await supplied(2);
+    setup.read.release.properties[property]!.labels = { ja: '物語で明示された分類と根拠の長い名前 — '.repeat(10) };
+    const before = structuredClone(setup.read.public);
+    const props = { ...setup, property, locale: 'en', search: async () => [] };
+    await render(
+      <div dir="rtl">
+        <CharacterClassification {...props} />
+      </div>,
+    );
+    expect(host.querySelector('h3')!.getAttribute('lang')).toBe('ja');
+    expect(host.querySelector('h3')!.getAttribute('dir')).toBe('auto');
+    expect(host.querySelector('h3')!.textContent).toBe(setup.read.release.properties[property]!.labels.ja!);
+    await act(async () => button(host, m.facts_add_value()).click());
+    expect(host.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!.value).toBe('');
+    expect(host.querySelector<HTMLInputElement>('[role="combobox"]')!.value).toBe('');
+    await render(<CharacterClassification {...props} />);
+    await act(async () => button(host, m.facts_add_value()).click());
+    // A single selected source is auto-chosen; its picker uses only supplied public related metadata.
+    const single = await supplied();
+    await render(<CharacterClassification {...props} read={single.read} />);
+    await act(async () => button(host, m.facts_edit_field()).click());
+    expect(host.querySelector<HTMLInputElement>('[role="combobox"]')!.value).toBe(
+      single.read.public.related[concept]!.labels.ja!,
+    );
+    expect([...host.querySelectorAll<HTMLInputElement>('input')].some((input) => input.value === evidence)).toBe(true);
+    expect(button(host, m.correction_submit()).disabled).toBe(true);
+    delete single.read.public.related[concept];
+    await render(<CharacterClassification {...props} read={single.read} />);
+    await act(async () => button(host, m.facts_edit_field()).click());
+    expect(host.querySelector<HTMLInputElement>('[role="combobox"]')!.value).toBe(m.subject_value_unlabelled());
+    expect(setup.read.public).toEqual(before);
+    expect(setup.fixture.calls).toEqual([]);
+  });
+});
+
+test('uncertain retry reuses the identical sealed command and key; only deliberate Review reads its exact candidate/session', async () => {
+  await mounted(async ({ host, render, enter }) => {
+    const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
+    const { m } = await import('../src/paraglide/messages.js');
+    const setup = await supplied(1, 'uncertain');
+    const before = structuredClone(setup.read.public);
+    await render(<CharacterClassification {...setup} property={property} locale="en" search={async () => []} />);
+    await act(async () => button(host, m.facts_edit_field()).click());
+    await enter(host.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, replacement);
+    await act(async () => button(host, m.correction_submit()).click());
+    expect(setup.commands).toHaveLength(1);
+    const original = structuredClone(setup.commands[0]!);
+    expect(host.querySelector('fieldset')!.disabled).toBe(true);
+    expect(host.textContent).toContain(m.correction_unavailable());
+    expect(setup.reads).toEqual([]);
+    expect(host.querySelector('#candidate-review')).toBeNull();
+    await act(async () => button(host, m.correction_retry()).click());
+    expect(setup.commands).toHaveLength(2);
+    expect(setup.commands[1]).toBe(setup.commands[0]);
+    expect(setup.commands[1]).toEqual(original);
+    const writes = setup.fixture.calls.filter((call) => call.method === 'POST');
+    expect(writes).toHaveLength(2);
+    expect(writes[1]).toEqual(writes[0]);
+    expect(writes[0]).toEqual({
+      method: 'POST',
+      path: `/v1/subjects/${setup.read.public.subject.id}/candidates`,
+      body: { statement: original.statement },
+      key: original.key,
+    });
+    expect(original.statement.references[0]!.parts[0]!.value).toEqual({ type: 'value', content: evidence });
+    expect(host.textContent).toContain(m.correction_proposed());
+    expect(setup.fixture.candidates).toHaveLength(1);
+    expect(setup.fixture.candidates[0]!.decision).toBeNull();
+    expect(setup.read.public).toEqual(before);
+    expect(setup.reads).toEqual([]);
+    const result = setup.reviews.at(-1)!;
+    expect(result).toEqual({ property, session: 'character-session' });
+    const exact = setup.fixture.candidates[0]!;
+    const decoy = structuredClone(exact);
+    decoy.id = '00000000-0000-4000-8000-00000000d199';
+    decoy.statement.id = decoy.id;
+    decoy.statement.value = { type: 'value', content: concept };
+    setup.fixture.candidates.unshift(decoy);
+    await act(async () => button(host, m.correction_review()).click());
+    expect(setup.reads).toEqual([{ property, session: 'character-session' }]);
+    expect(host.querySelector('#candidate-review')).not.toBeNull();
+    expect(host.textContent).toContain(m.candidate_proposed());
+    const proposed = [...host.querySelectorAll('h4')].find(
+      (heading) => heading.textContent === m.candidate_proposed(),
+    )!.parentElement!;
+    expect(proposed.textContent).toContain(setup.read.public.related[replacement]!.labels.en!);
+    expect(proposed.textContent).not.toContain(setup.read.public.related[concept]!.labels.ja!);
+    expect(host.querySelector(`#include-${exact.id}`)).not.toBeNull();
+    expect(setup.fixture.calls.filter((call) => call.method === 'POST')).toEqual(writes);
+    expect(setup.read.public).toEqual(before);
+  });
+});
+
+test('actual picker admits exact and released base types, excludes unknown/ineligible targets and keeps each picker independent', async () => {
+  await mounted(async ({ host, render, enter }) => {
+    const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
+    const { m } = await import('../src/paraglide/messages.js');
+    for (const target of ['skos:Concept', 'schema:Thing']) {
+      const setup = await supplied(0);
+      // Both target and base edges are from the current release; no synthetic subtype is invented.
+      setup.read.release.properties[property]!.targets = [target];
+      const requests: { text: string; signal: AbortSignal }[] = [];
+      const options = [
+        { id: replacement, title: 'A valid supplied Concept', types: ['skos:Concept'], typeLabel: '', cover: null },
+        { id: concept, title: 'Unknown type', types: ['absent:Type'], typeLabel: '', cover: null },
+        {
+          id: setup.fixture.work.id,
+          title: 'A work, not a Concept',
+          types: [setup.fixture.work.publicRead.subject.type],
+          typeLabel: '',
+          cover: null,
+        },
+      ];
+      const search = async (text: string, signal: AbortSignal) => {
+        requests.push({ text, signal });
+        return options;
+      };
+      await render(
+        <>
+          <CharacterClassification {...setup} property={property} locale="en" search={search} />
+          <CharacterClassification {...setup} property={property} locale="en" search={search} />
+        </>,
+      );
+      const sections = [...host.querySelectorAll<HTMLElement>('section')];
+      for (const section of sections) await act(async () => button(section, m.facts_edit_field()).click());
+      const inputs = sections.map((section) => section.querySelector<HTMLInputElement>('[role="combobox"]')!);
+      await act(async () => inputs[1]!.focus());
+      await enter(inputs[1]!, 'supplied');
+      // Wait for the real picker's existing debounce, not a substitute search implementation.
+      for (let attempt = 0; attempt < 100 && !host.ownerDocument.querySelector('[role="option"]'); attempt++)
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        });
+      const shown = [...host.ownerDocument.querySelectorAll<HTMLElement>('[role="option"]')];
+      expect(shown.some((option) => option.textContent?.includes('A valid supplied Concept'))).toBe(true);
+      expect(shown.some((option) => option.textContent?.includes('Unknown type'))).toBe(false);
+      expect(shown.some((option) => option.textContent?.includes('A work, not a Concept'))).toBe(
+        target === 'schema:Thing',
+      );
+      await act(async () => shown.find((option) => option.textContent?.includes('A valid supplied Concept'))!.click());
+      expect(inputs[0]!.value).toBe('');
+      expect(inputs[1]!.value).toBe('A valid supplied Concept');
+      expect(sections[1]!.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!.value).toBe(
+        replacement,
+      );
+      expect(requests).toHaveLength(1);
+      expect(requests[0]!.text).toBe('supplied');
+      expect(setup.fixture.calls).toEqual([]);
+      expect(setup.reads).toEqual([]);
+    }
+  });
+});
+
+test('unchanged connected CharacterProfile parent retires a pending classification result with its reader', async () => {
+  await mounted(async ({ host, render, enter }) => {
+    const { CharacterProfile } = await import('../src/features/catalogue/character-profile-view');
+    const { CandidateReaderBoundary } = await import('../src/subject/candidate-lifetime');
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+    const { m } = await import('../src/paraglide/messages.js');
+    const setup = await supplied();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    let finish!: (result: Awaited<ReturnType<typeof setup.transport.propose>>) => void;
+    const pending = new Promise<Awaited<ReturnType<typeof setup.transport.propose>>>((resolve) => {
+      finish = resolve;
+    });
+    function Parent() {
+      const [retired, setRetired] = useState(false);
+      return (
+        <QueryClientProvider client={client}>
+          <button onClick={() => setRetired(true)}>Retire illustrative reader</button>
+          <CandidateReaderBoundary
+            address="classification-parent"
+            observed={{
+              state: retired ? 'signed-out' : 'signed-in',
+              subject: retired ? null : 'original-reader',
+              csrfToken: retired ? null : 'fixture-csrf',
+            }}
+          >
+            <CharacterProfile
+              {...setup.fixture.props}
+              id={setup.read.public.subject.id}
+              locale="en"
+              session={retired ? 'signed-out' : 'signed-in'}
+              facts={() => ({ ...setup.transport, propose: () => pending })}
+            />
+          </CandidateReaderBoundary>
+        </QueryClientProvider>
+      );
+    }
+    try {
+      await render(<Parent />);
+      const field = () =>
+        [...host.querySelectorAll('h3')]
+          .find((heading) => heading.textContent === setup.read.release.properties[property]!.labels.en)
+          ?.closest('section');
+      for (let attempt = 0; attempt < 100 && !field(); attempt++)
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        });
+      expect(field()).toBeDefined();
+      await act(async () => button(field()!, m.facts_edit_field()).click());
+      await enter(field()!.querySelector<HTMLInputElement>('input[type="url"]')!, evidence + 'pending');
+      await act(async () => button(host, m.facts_submit()).click());
+      await act(async () => button(host, 'Retire illustrative reader').click());
+      await act(async () =>
+        finish({
+          ok: true,
+          kind: 'proposed-awaiting-review',
+          candidate: '00000000-0000-4000-8000-00000000d198',
+          revision: 2,
+          session: 'old-private-session',
+        }),
+      );
+      expect(host.textContent).not.toContain(m.correction_proposed());
+      expect(host.querySelector('#candidate-review')).toBeNull();
+      expect(setup.fixture.candidates).toEqual([]);
+      expect(setup.reads).toEqual([]);
+    } finally {
+      await render(null);
+      client.clear();
+    }
+  });
+});
+
+test('independent property proposal results and denied/stale/unavailable distinctions do not publish or open review', async () => {
+  await mounted(async ({ host, render, enter }) => {
+    const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
+    const { m } = await import('../src/paraglide/messages.js');
+    for (const fields of [
+      [property, 'schema:gender'],
+      [property, property],
+    ]) {
+      const setup = await supplied();
+      const firstReplacement = '00000000-0000-4000-8000-00000000d103';
+      setup.read.public.related[firstReplacement] = {
+        type: 'skos:Concept',
+        labels: { en: 'Independent first proposal' },
+      };
+      const before = structuredClone(setup.read.public);
+      await render(
+        <>
+          {fields.map((field, index) => (
+            <CharacterClassification key={index} {...setup} property={field} locale="en" search={async () => []} />
+          ))}
+        </>,
+      );
+      const regions = [...host.querySelectorAll<HTMLElement>('section')];
+      for (const [index, region] of regions.entries()) {
+        await act(async () => button(region, m.facts_edit_field()).click());
+        await enter(
+          region.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!,
+          index === 0 ? firstReplacement : replacement,
+        );
+      }
+      await act(async () => button(regions[1]!, m.correction_submit()).click());
+      expect(regions[0]!.textContent).not.toContain(m.correction_proposed());
+      await act(async () => button(regions[0]!, m.correction_submit()).click());
+      expect(setup.commands.map((command) => command.statement.property.id)).toEqual([fields[1]!, fields[0]!]);
+      expect(new Set(setup.commands.map((command) => command.key)).size).toBe(2);
+      expect(setup.fixture.candidates.map((candidate) => candidate.statement.property.id)).toEqual([
+        fields[1]!,
+        fields[0]!,
+      ]);
+      expect(setup.reads).toEqual([]);
+      for (const index of [1, 0]) {
+        await act(async () => button(regions[index]!, m.correction_review()).click());
+        expect(setup.reads.at(-1)).toEqual({ property: fields[index], session: 'character-session' });
+        const exact = setup.fixture.candidates[1 - index]!;
+        expect(regions[index]!.querySelector(`#include-${exact.id}`)).not.toBeNull();
+        const proposed = [...regions[index]!.querySelectorAll('h4')].find(
+          (heading) => heading.textContent === m.candidate_proposed(),
+        )!.parentElement!;
+        const titles = [
+          setup.read.public.related[firstReplacement]!.labels.en!,
+          setup.read.public.related[replacement]!.labels.en!,
+        ];
+        expect(proposed.textContent).toContain(titles[index]!);
+        expect(proposed.textContent).not.toContain(titles[1 - index]!);
+        if (index === 1) expect(regions[0]!.querySelector('#candidate-review')).toBeNull();
+      }
+      expect(setup.reads).toHaveLength(2);
+      expect(setup.read.public).toEqual(before);
+    }
+    const setup = await supplied();
+    const before = structuredClone(setup.read.public);
+    for (const reason of ['denied', 'stale', 'unavailable'] as const) {
+      await render(
+        <CharacterClassification
+          {...setup}
+          property={property}
+          locale="en"
+          search={async () => []}
+          transport={{ ...setup.transport, propose: async () => ({ ok: false, reason }) }}
+        />,
+      );
+      await act(async () => button(host, m.facts_edit_field()).click());
+      await enter(host.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_value()}"]`)!, replacement);
+      await act(async () => button(host, m.correction_submit()).click());
+      expect(host.querySelector('[role="alert"]')!.textContent).toBe(
+        reason === 'denied'
+          ? m.correction_denied()
+          : reason === 'stale'
+            ? m.correction_stale()
+            : m.correction_unavailable(),
+      );
+      expect(host.querySelector('fieldset')!.disabled).toBe(reason === 'unavailable');
+      expect(host.querySelector('#candidate-review')).toBeNull();
+      expect(setup.read.public).toEqual(before);
+    }
+  });
+});
+
+test('classification rejection links a nested correction and labels an unknown part fallback', async () => {
+  await mounted(async ({ host, render, enter }) => {
+    const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
+    const { m } = await import('../src/paraglide/messages.js');
+    const setup = await supplied();
+    const errors = [
+      { pointer: '/statement/references/0/parts/0/value/content', code: 'invalid_format' as const },
+      { pointer: '/statement/qualifiers/7/value/content', code: 'required' as const },
+    ];
+    await render(
+      <CharacterClassification
+        {...setup}
+        property={property}
+        locale="en"
+        search={async () => []}
+        transport={{ ...setup.transport, propose: async () => ({ ok: false, reason: 'invalid', errors }) }}
+      />,
+    );
+    await act(async () => button(host, m.facts_edit_field()).click());
+    await enter(host.querySelector<HTMLInputElement>(`input[aria-label="${m.correction_url()}"]`)!, `${evidence}edit`);
+    await act(async () => button(host, m.correction_submit()).click());
+    const list = host.querySelector<HTMLElement>(`ul[aria-label="${m.correction_errors()}"]`)!;
+    const links = [...list.querySelectorAll<HTMLAnchorElement>('a')];
+    expect(links).toHaveLength(2);
+    const nested = host.ownerDocument.getElementById(links[0]!.getAttribute('href')!.slice(1));
+    expect(nested?.tagName).toBe('INPUT');
+    expect(nested?.getAttribute('aria-invalid')).toBe('true');
+    expect(links[1]!.textContent).toBe(m.correction_qualifiers());
+    expect(host.ownerDocument.getElementById(links[1]!.getAttribute('href')!.slice(1))?.tagName).toBe('SECTION');
+    expect([...list.querySelectorAll('li p')].every((instruction) => instruction.textContent)).toBe(true);
+  });
+});
+
+test('supplied selected-value growth at 1/8/32 renders only bounded rows and performs zero IO', async () => {
+  await mounted(async ({ host, render }) => {
+    const { CharacterClassification } = await import('../src/features/catalogue/character-profile-classification');
+    for (const count of [1, 8, 32]) {
+      const setup = await supplied(count);
+      let searches = 0;
+      await render(
+        <CharacterClassification
+          {...setup}
+          property={property}
+          locale="en"
+          search={async () => {
+            searches++;
+            return [];
+          }}
+        />,
+      );
+      expect(host.querySelectorAll('option')).toHaveLength(count + 1);
+      expect(host.querySelectorAll('h3')).toHaveLength(1);
+      expect(host.querySelectorAll('button')).toHaveLength(2);
+      expect(setup.commands).toEqual([]);
+      expect(setup.reads).toEqual([]);
+      expect(setup.fixture.calls).toEqual([]);
+      expect(searches).toBe(0);
+    }
+  });
+});
+
+for (const family of ['Character', 'StoryArc'] as const) {
+  test(`${family} successful classification withdrawal preserves private recovery and exact unresolved intent`, async () => {
+    await mounted(async ({ host, render, enter }) => {
+      const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+      const { CharacterProfile } = await import('../src/features/catalogue/character-profile-view');
+      const { StoryArcProfile } = await import('../src/features/catalogue/story-arc-profile-view');
+      const { storyArcProfileFixture } = await import('../src/kernel/fake/catalogue-story-arc-profile');
+      const { m } = await import('../src/paraglide/messages.js');
+      const setup = await supplied();
+      const arc = storyArcProfileFixture();
+      arc.arc.subject.statements[property] = structuredClone(setup.read.public.subject.statements[property]!);
+      const subject = family === 'Character' ? setup.read.public : arc.arc;
+      const original = family === 'Character' ? setup.read.release : arc.release;
+      let release = original;
+      const withdrawn = structuredClone(original);
+      withdrawn.types[subject.subject.type]!.properties = withdrawn.types[subject.subject.type]!.properties.filter(
+        (field) => field !== property,
+      );
+      delete withdrawn.properties[property];
+      const commands: FactCommand[] = [];
+      let finish!: (result: Awaited<ReturnType<typeof setup.transport.propose>>) => void;
+      const transport = {
+        ...setup.transport,
+        propose: async (command: FactCommand) => {
+          commands.push(command);
+          return commands.length === 1
+            ? new Promise<Awaited<ReturnType<typeof setup.transport.propose>>>((resolve) => {
+                finish = resolve;
+              })
+            : { ok: false as const, reason: 'uncertain' as const };
+        },
+      };
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+      });
+      const settle = (action: () => void) =>
+        act(async () => {
+          action();
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        });
+      const reload = (next: typeof release) =>
+        settle(() => {
+          release = next;
+          button(host, m.correction_reload()).click();
+        });
+      const label = original.properties[property]!.labels.en;
+      const field = () =>
+        family === 'Character'
+          ? host.querySelector<HTMLElement>(`[data-classification-property="${property}"]`)
+          : [...host.querySelectorAll('h3')].find((heading) => heading.textContent === label)?.closest('section');
+      const beforeUnload = () => {
+        const event = new host.ownerDocument.defaultView!.Event('beforeunload', { cancelable: true });
+        host.ownerDocument.defaultView!.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      const capture = (node: HTMLElement) =>
+        Reflect.get(
+          node,
+          Object.keys(node).find((key) => key.startsWith('__reactProps'))!,
+        ).onClick as () => void;
+      try {
+        await render(
+          <QueryClientProvider client={client}>
+            {family === 'Character' ? (
+              <CharacterProfile
+                {...setup.fixture.props}
+                id={subject.subject.id}
+                locale="en"
+                facts={() => transport}
+                transport={{
+                  ...setup.fixture.transport,
+                  load: async () => ({
+                    ok: true,
+                    release,
+                    character: subject,
+                    work: null,
+                  }),
+                }}
+              />
+            ) : (
+              <StoryArcProfile
+                {...arc.props}
+                id={subject.subject.id}
+                locale="en"
+                facts={() => transport}
+                transport={{
+                  ...arc.transport,
+                  load: async () => ({
+                    ok: true,
+                    release,
+                    arc: subject,
+                    work: null,
+                  }),
+                }}
+              />
+            )}
+          </QueryClientProvider>,
+        );
+        await settle(() => {});
+        const holder = field()!;
+        await settle(() => button(holder, m.facts_edit_field()).click());
+        await enter(holder.querySelector<HTMLInputElement>('input[type="url"]')!, 'https://private.test/authored');
+        const submitControl =
+          family === 'Character' ? button(host, m.facts_submit()) : button(holder, m.correction_submit());
+        const oldSubmit = capture(submitControl);
+        await reload(withdrawn);
+        expect(field()).toBe(holder);
+        expect(holder.querySelector('input')).toBeNull();
+        expect(holder.querySelector('pre')!.textContent).toContain('https://private.test/authored');
+        expect(holder.querySelector('pre')!.textContent).toContain(concept);
+        expect(beforeUnload()).toBe(true);
+        expect(
+          (family === 'Character' ? button(host, m.facts_submit()) : button(holder, m.correction_submit())).disabled,
+        ).toBe(true);
+        await settle(oldSubmit);
+        expect(commands).toHaveLength(0);
+        await settle(() => button(holder, m.curation_view_discard()).click());
+        await settle(() => button(holder, m.candidate_cancel()).click());
+        expect(holder.querySelector('pre')).not.toBeNull();
+        await reload(original);
+        expect(field()).toBe(holder);
+        expect(holder.querySelector<HTMLInputElement>('input[type="url"]')!.value).toBe(
+          'https://private.test/authored',
+        );
+        await reload(withdrawn);
+        await settle(() => button(holder, m.curation_view_discard()).click());
+        await settle(() => button(holder, m.curation_view_discard()).click());
+        expect(field()).toBeUndefined();
+        expect(beforeUnload()).toBe(false);
+
+        await reload(original);
+        const sealedHolder = field()!;
+        await settle(() => button(sealedHolder, m.facts_edit_field()).click());
+        await enter(sealedHolder.querySelector<HTMLInputElement>('input[type="url"]')!, 'https://private.test/sealed');
+        await settle(() =>
+          button(
+            family === 'Character' ? host : sealedHolder,
+            family === 'Character' ? m.facts_submit() : m.correction_submit(),
+          ).click(),
+        );
+        expect(commands).toHaveLength(1);
+        const exact = structuredClone(commands[0]);
+        await reload(withdrawn);
+        await settle(() =>
+          finish({
+            ok: true,
+            kind: 'proposed-awaiting-review',
+            candidate: 'late-withdrawn',
+            revision: 1,
+          }),
+        );
+        expect(field()).toBe(sealedHolder);
+        expect(sealedHolder.textContent).not.toContain(m.correction_proposed());
+        expect(beforeUnload()).toBe(true);
+        expect(button(sealedHolder, m.curation_view_discard()).disabled).toBe(true);
+        await settle(() => button(sealedHolder, m.correction_retry()).click());
+        expect(commands).toHaveLength(2);
+        expect(commands[1]).toBe(commands[0]);
+        expect(commands[1]).toEqual(exact);
+        await reload(original);
+        expect(field()).toBe(sealedHolder);
+        expect(sealedHolder.querySelector<HTMLInputElement>('input[type="url"]')!.value).toBe(
+          'https://private.test/sealed',
+        );
+        expect(sealedHolder.querySelector('fieldset')!.disabled).toBe(true);
+      } finally {
+        await render(null);
+        client.clear();
+      }
+    });
+  });
+}

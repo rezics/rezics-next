@@ -193,7 +193,11 @@ async function rejected(d: MediaBoundaryDriver, fault: SourceFault, code: string
   await drain(d, id);
   const native = await d.boundary.observe(id);
   expect(native.row.state).toBe('rejected');
-  expect(native.transitions).toEqual(['reserved', 'rejected']);
+  expect(native.transitions).toEqual(
+    fault === 'corrupt-image' || fault === 'over-40-megapixels'
+      ? ['reserved', 'uploaded', 'rejected']
+      : ['reserved', 'rejected'],
+  );
   expect(native.variants).toEqual([]);
   const status = await d.status(id);
   expect(checkMediaImportStatus(status.body)).toEqual([]);
@@ -220,8 +224,8 @@ test('streamed source bytes beyond 20 MiB reject without trusting content length
 test('the production source deadline rejects a stalled external response', () =>
   scenario((d) => rejected(d, 'timeout', 'source-timeout')));
 test('Sharp rejects encoded input above 40 megapixels', () =>
-  scenario((d) => rejected(d, 'over-40-megapixels', 'source-format')));
-test('Sharp rejects corrupt encoded image data', () => scenario((d) => rejected(d, 'corrupt-image', 'source-format')));
+  scenario((d) => rejected(d, 'over-40-megapixels', 'image-rejected')));
+test('Sharp rejects corrupt encoded image data', () => scenario((d) => rejected(d, 'corrupt-image', 'image-rejected')));
 
 test('unconfigured source hosts are rejected before any source HTTP request', () =>
   scenario(async (d) => {

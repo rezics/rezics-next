@@ -1,3 +1,4 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
@@ -17,7 +18,14 @@ import {
 if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
   test('actual native Auth rate limit uses one replica safe point consume as population grows', async () => {
     const child = Bun.spawn(['bun', 'test', import.meta.path], {
-      env: { ...process.env, NODE_ENV: 'production', AUTH_RATE_GROWTH_CHILD: '1' },
+      // The native graph runs in a child of this placed lane process. Transfer
+      // the lane owner so its direct-child placement check remains valid.
+      env: {
+        ...process.env,
+        NODE_ENV: 'production',
+        AUTH_RATE_GROWTH_CHILD: '1',
+        AUTH_CHECK_LANE_OWNER: String(process.pid),
+      },
       stdout: 'inherit',
       stderr: 'inherit',
     });
@@ -59,7 +67,10 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
       secret,
       audience: 'https://api.growth.test',
       signing: { activeKid: key.kid, privateKeys: [key] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
+        async readFencedAccount(id: string) {
+          return id === account.accountId ? account : null;
+        },
         async readAccount(id: string) {
           return id === account.accountId ? account : null;
         },
@@ -75,7 +86,7 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
         async completeRecovery() {
           throw new Error('Invalid proofs must not complete recovery');
         },
-      },
+      }),
       recoveryDelivery: {
         async deliver() {
           delivered++;
@@ -111,6 +122,7 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
   // peers, native credentials/clients, unrelated AND measured-owner history,
   // recovery bindings and expired verifications together, without planner hints.
   async function grow(database: GrowthDatabase, scale: number, previous: number) {
+    process.env.GROWTH_PROFILE ??= '/dev/stdout';
     const range = [previous * 1024 + 1, scale * 1024];
     await database.admin.query(
       `INSERT INTO "user" (id,name,email,"emailVerified")
@@ -426,14 +438,20 @@ if (process.env.AUTH_RATE_GROWTH_CHILD !== '1') {
 
   test('README rate row matches verified behavior', async () => {
     const readme = await Bun.file(new URL('../README.md', import.meta.url)).text();
-    const row = readme.split('\n').find((line) => line.startsWith('| Native attempt rate limiter'));
+    const rows = readme.split('\n').filter((line) => line.startsWith('| Native attempt rate limiter'));
+    expect(rows).toHaveLength(1);
+    const row = rows[0];
     expect(row).toBeDefined();
     expect(verifiedCosts).toHaveLength(3);
     for (const cost of verifiedCosts) {
       expect(row).toContain(`Q=${cost.statements}`);
       expect(row).toContain(`${cost.rows} examined rows`);
     }
-    expect(row).toContain('B=O(log C + log R)');
+    expect(row).toContain('unrelated counter keys C');
+    expect(row).toContain('expired verifications R');
+    expect(row).toContain('R=O(1), B=O(log C + log R)');
+    expect(row).toContain('15 atomic consumes (12 native request budgets and three per-account mail cooldown checks)');
+    expect(row).toContain('plus 44 other handler statements. Six transaction controls separately.');
     expect(row).toContain('one atomic upsert');
     expect(row).toContain('growth-auth-rate.test.ts');
   });

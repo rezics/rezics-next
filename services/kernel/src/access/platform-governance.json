@@ -5,14 +5,19 @@
     "gate:any",
     "exposure:open",
     "exposure:close",
+    "exposure:manage_read",
+    "account:assign_reserved_handle",
     "account:suspend",
     "account:reinstate",
     "account:set_rate_tier",
+    "account:verify_agent",
     "account:renew_cleanup",
+    "account:read_erasure",
     "client:manage",
     "organization:create",
     "subject:create",
     "subject:batch_write",
+    "source_statistic:write",
     "source_fence:read",
     "source_fence:takedown",
     "media:import_from_url",
@@ -33,7 +38,19 @@
     "offer:create",
     "payout_statement:mark_paid",
     "space:create",
-    "realm:create"
+    "space:restore",
+    "realm:create",
+    "realm:restore",
+    "realm:approve_claim",
+    "zone:create"
   ],
-  "globalReach": ["moderation:takedown", "moderation:read_reports", "post:erase", "media:erase", "access:grant"]
+  "globalReach": [
+    "moderation:takedown",
+    "moderation:read_reports",
+    "post:erase",
+    "media:erase",
+    "access:grant",
+    "space:restore",
+    "realm:restore"
+  ]
 }

@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import { withHeaders } from '@elysia/openapi';
+import { toOpenAPISchema, withHeaders } from '@elysia/openapi';
 import { Elysia, t } from 'elysia';
 import { resolve } from 'node:path';
 import type { OpenAPIV3_1 } from 'openapi-types';
@@ -98,6 +98,56 @@ test('request bodies are JSON only and hidden routes are left out', () => {
   expect(Object.keys(document.paths!)).toEqual(['/v1/things', '/v1/things/{id}']);
 });
 
+test('global body parser restores JSON schemas and preserves raw request content types', () => {
+  const build = (withGlobalParser: boolean) => {
+    const app = (withGlobalParser ? createApp({ pool }).onParse('global', async () => ({})) : createApp({ pool }))
+      .post(
+        '/v1/global-body',
+        { body: t.Object({ name: t.String() }), detail: { operationId: 'global.body' } },
+        () => ({ ok: true }),
+      )
+      .post(
+        '/v1/raw-body',
+        {
+          detail: {
+            operationId: 'raw.body',
+            'x-body-mode': 'raw',
+            requestBody: {
+              required: true,
+              content: {
+                'text/plain': { schema: { type: 'string' } },
+                'application/octet-stream': { schema: { type: 'string', format: 'binary' } },
+              },
+            },
+          } as never,
+        },
+        () => ({ ok: true }),
+      );
+    return app;
+  };
+
+  const withoutHook = build(false);
+  const withHook = build(true);
+  const rawGenerated = toOpenAPISchema(withHook, { staticFile: false }).paths['/v1/global-body']?.post?.requestBody;
+  console.log('Global parser generated request body:', JSON.stringify(rawGenerated));
+  expect((rawGenerated as { content?: unknown } | undefined)?.content).toEqual({});
+
+  const withoutHookDocument = openApiDocument(withoutHook);
+  const withHookDocument = openApiDocument(withHook);
+  expect(withHookDocument).toEqual(withoutHookDocument);
+
+  const globalBody = withHookDocument.paths['/v1/global-body']!.post!.requestBody!;
+  expect(Object.keys(globalBody.content!)).toEqual(['application/json']);
+  expect(globalBody.content!['application/json']!.schema).toMatchObject({
+    type: 'object',
+    properties: { name: { type: 'string' } },
+    required: ['name'],
+  });
+
+  const rawBody = withHookDocument.paths['/v1/raw-body']!.post!.requestBody!;
+  expect(Object.keys(rawBody.content!)).toEqual(['application/octet-stream', 'text/plain']);
+});
+
 test('generation refuses an error response that is not a problem and an unknown security scheme', () => {
   const bare = new Elysia().get('/v1/bare', { response: { 404: t.Object({ message: t.String() }) } }, () => {
     throw new Error('unreachable');
@@ -106,6 +156,49 @@ test('generation refuses an error response that is not a problem and an unknown 
   const cookie = { security: [{ cookieSession: [] }] };
   const unknown = new Elysia().get('/v1/cookie', { detail: cookie }, () => 'ok');
   expect(() => openApiDocument(unknown)).toThrow('GET /v1/cookie: unknown security scheme cookieSession');
+});
+
+test('authored closed command bodies survive an unknown transport body and global parser', () => {
+  const command = t.Object(
+    { metadata: t.Object({ name: t.String({ minLength: 1 }) }, { additionalProperties: false }) },
+    { additionalProperties: false },
+  );
+  const app = createApp({ pool }).post(
+    '/v1/commands',
+    {
+      body: t.Any(),
+      detail: {
+        operationId: 'command.write',
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: command } },
+        },
+      },
+    },
+    () => ({ ok: true }),
+  );
+  const body = openApiDocument(app).paths['/v1/commands']!.post!.requestBody!;
+  expect(Object.keys(body.content!)).toEqual(['application/json']);
+  expect(body).toMatchObject({
+    required: true,
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['metadata'],
+          properties: {
+            metadata: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['name'],
+              properties: { name: { type: 'string', minLength: 1 } },
+            },
+          },
+        },
+      },
+    },
+  });
 });
 
 test('the document is OpenAPI 3.1 with the bearer scheme and stable text', () => {

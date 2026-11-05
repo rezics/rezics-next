@@ -5,7 +5,7 @@ import { createPool } from '../src/database/pool.ts';
 import { createKernel } from '../src/http/kernel.ts';
 import { customMethod } from '../src/http/custom-method.ts';
 import { ProblemError, problemSchema } from '../src/http/problem.ts';
-import type { SearchService } from '../src/search/http/routes.ts';
+import type { SearchService } from '../src/search/service-scope.ts';
 import { Value } from 'typebox/value';
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -19,7 +19,7 @@ const suggestions: unknown[] = [];
 const search: SearchService = {
   async search(_principal, request) {
     searches.push(request);
-    return { subjects: [], total: { value: 0, relation: 'exact' }, next: null, as_of: '2026-10-26T00:00:00Z' };
+    return { subjects: [], next: null, as_of: '2026-10-26T00:00:00Z' };
   },
   async facets() {
     throw new Error('Unexpected facets call');
@@ -27,6 +27,9 @@ const search: SearchService = {
   async suggest(q, limit) {
     suggestions.push({ q, limit });
     return { subjects: [], as_of: '2026-10-26T00:00:00Z' };
+  },
+  async releaseGroups() {
+    throw new Error('Unexpected release groups call');
   },
 };
 const schema = t.Object({ integer: t.Integer(), number: t.Number(), boolean: t.Boolean(), string: t.String() });

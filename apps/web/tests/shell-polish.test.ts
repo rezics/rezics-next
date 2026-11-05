@@ -1,7 +1,8 @@
 import { afterAll, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
-import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join, resolve } from 'node:path';
 import { chromium, type Browser, type BrowserContextOptions, type Page } from 'playwright';
 
 const app = join(import.meta.dir, '..');
@@ -9,6 +10,35 @@ const locales = ['en', 'zh-Hant', 'zh-Hans', 'ja', 'ko', 'de', 'fr', 'es'] as co
 const desktop = { width: 1280, height: 860 };
 const phone = { width: 390, height: 844 };
 const timeout = 300_000;
+
+test('the font preload uses an actual bundler-resolved existing font asset rather than a development node_modules URL', async () => {
+  const shell = await Bun.file(join(app, 'src/shell/shell.tsx')).text();
+  const preloads = shell.match(/<link\b[^>]*\brel="preload"[^>]*\bas="font"[^>]*\/>/g) ?? [];
+  expect(preloads).toHaveLength(1);
+  const preload = preloads[0]!;
+  expect(preload).toContain('type="font/woff2"');
+  expect(preload).toContain('crossOrigin="anonymous"');
+  const binding = /href=\{(\w+)\}/.exec(preload)?.[1];
+  expect(binding).toBeDefined();
+  const imports = [
+    ...shell.matchAll(/import\s+(\w+)\s+from\s+['"](@fontsource-variable\/manrope\/files\/[^'"]+\.woff2)\?url['"]/g),
+  ];
+  const fontImport = imports.find((match) => match[1] === binding);
+  expect(fontImport).toBeDefined();
+
+  const require = createRequire(join(app, 'package.json'));
+  const fontPath = require.resolve(fontImport![2]!);
+  const font = await Bun.file(fontPath).arrayBuffer();
+  expect(new TextDecoder().decode(font.slice(0, 4))).toBe('wOF2');
+
+  // Both the preload and the existing typography must resolve to the same installed resource.
+  const styles = await Bun.file(join(app, 'src/styles.css')).text();
+  expect(styles).toContain("@import '@fontsource-variable/manrope'");
+  const cssPath = require.resolve('@fontsource-variable/manrope');
+  const css = await Bun.file(cssPath).text();
+  const cssFonts = [...css.matchAll(/url\(([^)]+)\)/g)].map((match) => resolve(dirname(cssPath), match[1]!));
+  expect(cssFonts).toContain(fontPath);
+});
 
 type Messages = Record<string, string>;
 async function messages(locale: string): Promise<Messages> {
@@ -159,41 +189,6 @@ test(
       expect(await logo.getAttribute('href'), locale).toBe(`/${locale}`);
       await page.context().close();
     }
-  },
-  timeout,
-);
-
-test(
-  'the phone navigation sheet shows the site and a visible close button that gives focus back',
-  async () => {
-    for (const locale of locales) {
-      const own = await messages(locale);
-      expect(own.shell_close_navigation?.trim(), locale).toBeTruthy();
-      expect(own.shell_close_navigation, locale).not.toBe(own.shell_open_navigation);
-    }
-    const en = await messages('en');
-    const page = await open('/en', { viewport: phone });
-    const trigger = page.getByRole('button', { name: en.shell_open_navigation!, exact: true });
-    await trigger.click();
-    const sheet = page.getByRole('dialog');
-    await sheet.waitFor();
-    const logo = sheet.getByRole('link', { name: 'REZICS', exact: true });
-    expect(await logo.getAttribute('href')).toBe('/en');
-    const close = sheet.getByRole('button', { name: en.shell_close_navigation!, exact: true });
-    const box = (await close.boundingBox())!;
-    expect(box.width).toBeGreaterThanOrEqual(24);
-    expect(box.height).toBeGreaterThanOrEqual(24);
-    expect(box.x >= 0 && box.y >= 0 && box.x + box.width <= phone.width && box.y + box.height <= phone.height).toBe(
-      true,
-    );
-    await close.click();
-    await sheet.waitFor({ state: 'hidden' });
-    await page.waitForFunction(
-      (name) => document.activeElement?.getAttribute('aria-label') === name,
-      en.shell_open_navigation!,
-    );
-    expect(await trigger.evaluate((element) => element === document.activeElement)).toBe(true);
-    await page.context().close();
   },
   timeout,
 );

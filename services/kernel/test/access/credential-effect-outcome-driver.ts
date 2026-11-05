@@ -1,3 +1,5 @@
+import { actionDeclarations } from './native-account-bindings-fixture.ts';
+import { authenticator } from '../../../auth/test/support/passkey-authenticator';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { AsyncResource } from 'node:async_hooks';
 import { fileURLToPath } from 'node:url';
@@ -74,11 +76,33 @@ async function successful<T>(response: Response, command: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+export type NativeSecurityDriver = {
+  issuer: string;
+  person(): Promise<{ accountId: string; caller: string; email: string }>;
+  login(email: string, password?: string, clientId?: string, scopes?: string[]): Promise<string>;
+  request(caller: string, path: string, body?: unknown): Promise<Response>;
+  register(clientId: string, scopes: string[]): Promise<void>;
+  bearer(caller: string): Promise<string>;
+  reauthenticate(caller: string, password: string): Promise<string>;
+  kernel(token: string, path: string, body?: unknown): Promise<Response>;
+  snapshot(accountId: string): Promise<{
+    passkeys: Record<string, unknown>[];
+    sessions: Record<string, unknown>[];
+    consents: Record<string, unknown>[];
+    floor: string;
+    effects: Record<string, unknown>[];
+  }>;
+  expire(caller: string): Promise<void>;
+  afterConsentReview<T>(clientId: string, run: () => Promise<void>, operation: () => Promise<T>): Promise<T>;
+};
+
 /** Only credentials and caller handles live in this harness. Approval provenance,
  * policy, narrowing, consumption, floor advancement and effects belong to product.
  */
-export async function createNativeCredentialEffectDriver(): Promise<
-  NativeCredentialEffectDriver & { advanceClock(milliseconds: number): void }
+export async function createNativeCredentialEffectDriver(
+  options: { retainHumanPasskey?: boolean } = {},
+): Promise<
+  NativeCredentialEffectDriver & { advanceClock(milliseconds: number): void; security: NativeSecurityDriver }
 > {
   let clockOffset = 0;
   const clock = () => new Date(Date.now() + clockOffset);
@@ -113,6 +137,7 @@ export async function createNativeCredentialEffectDriver(): Promise<
   let clientId = 'credential-consented';
   const loginClient = 'credential-login';
   const callers = new Map<string, Caller>();
+  const fixtureEffects = new Set<string>();
   const organizationFixtures = new Map<string, { owner: string; memberReservationId: string }>();
   const routeKey = testRouteKey();
   const referenceKeys = { current: 1, keys: new Map([[1, randomBytes(32)]]) };
@@ -122,7 +147,7 @@ export async function createNativeCredentialEffectDriver(): Promise<
   const websitePair = await generateKeyPair('ES256', { extractable: true });
   const redirectUri = `${issuer}/website/callback`;
   const signingKey = { ...(await exportJWK(pair.privateKey)), kid: 'native-credential-host' };
-  const actions = new Map([...LIFECYCLE_ACTIONS, ...scopes.map((scope) => [scope, { anonymous: false }] as const)]);
+  const actions = new Map([...LIFECYCLE_ACTIONS, ...actionDeclarations(scopes)]);
   const kernel = () => required(pool, 'Kernel database is closed');
   const auth = () => required(authPool, 'Auth database is closed');
   const currentHost = () => required(host, 'Auth host is stopped');
@@ -439,7 +464,92 @@ export async function createNativeCredentialEffectDriver(): Promise<
     };
   };
 
+  const security: NativeSecurityDriver = {
+    issuer,
+    afterConsentReview: (clientId, run, operation) => atBoundary('consent-reviewed', run, operation, clientId),
+    person,
+    login,
+    bearer,
+    async reauthenticate(caller, password) {
+      const source = required(callers.get(caller), 'Missing original caller');
+      return login(source.email, password, source.clientId, source.scopes);
+    },
+    async request(caller, path, body) {
+      const stored = required(callers.get(caller), 'Missing native Security caller');
+      const response = await hostRequest(
+        new Request(`${issuer}${path}`, {
+          method: body === undefined ? 'GET' : 'POST',
+          headers: { origin: issuer, 'content-type': 'application/json', cookie: stored.headers.get('cookie') ?? '' },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+      );
+      // Keep actual ceremony/session cookie changes for this harness caller only.
+      const jar = new Map(
+        (stored.headers.get('cookie') ?? '')
+          .split('; ')
+          .filter(Boolean)
+          .map((part) => {
+            const equal = part.indexOf('=');
+            return [part.slice(0, equal), part.slice(equal + 1)] as const;
+          }),
+      );
+      for (const value of response.headers.getSetCookie()) {
+        const pair = value.split(';')[0]!;
+        const equal = pair.indexOf('=');
+        jar.set(pair.slice(0, equal), pair.slice(equal + 1));
+      }
+      stored.headers.set('cookie', [...jar].map(([name, value]) => `${name}=${value}`).join('; '));
+      return response;
+    },
+    register: (clientId, scopes) => registerTestClient(service, { clientId, scopes, firstParty: false, actions }),
+    kernel(token, path, body) {
+      return kernelHttp.handle(
+        new Request(`https://credential.api.test${path}`, {
+          method: body === undefined ? 'GET' : 'PATCH',
+          headers: {
+            authorization: `Bearer ${token}`,
+            ...(body === undefined
+              ? {}
+              : {
+                  'content-type': 'application/json',
+                  'idempotency-key': JSON.stringify(randomUUID()),
+                }),
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+      );
+    },
+    async snapshot(accountId) {
+      return {
+        passkeys: (await auth().query('SELECT * FROM passkey WHERE "userId"=$1 ORDER BY id', [accountId])).rows,
+        sessions: (await auth().query('SELECT * FROM session WHERE "userId"=$1 ORDER BY id', [accountId])).rows,
+        consents: (await auth().query('SELECT * FROM auth_consent WHERE account_id=$1 ORDER BY client_id', [accountId]))
+          .rows,
+        effects: (
+          await auth().query('SELECT * FROM auth_effect_receipt WHERE account_id=$1 ORDER BY receipt_id', [accountId])
+        ).rows,
+        floor: (
+          await kernel().query('SELECT minimum_authn_epoch::text AS floor FROM access.account WHERE account_id=$1', [
+            accountId,
+          ])
+        ).rows[0].floor,
+      };
+    },
+    async expire(caller) {
+      const proof = await successful<SessionProof>(await security.request(caller, '/session'), 'session to expire');
+      const current = await successful<{ viewer: { session_id: string } }>(
+        await security.request(caller, '/security-page'),
+        'session inventory to expire',
+      );
+      await auth().query(
+        `UPDATE session SET "expiresAt"=clock_timestamp()-interval '1 second' WHERE id=$1 AND "userId"=$2`,
+        [current.viewer.session_id, proof.account_id],
+      );
+    },
+  };
+
   return {
+    security,
     async seed(mode, sessions = 1) {
       // Each independent fixture starts alongside Auth's real-time proof budgets.
       clockOffset = 0;
@@ -520,6 +630,29 @@ export async function createNativeCredentialEffectDriver(): Promise<
       const botManager = operatorId === null ? other.caller : human.caller;
       const bot = await automated(operatorId ?? other.accountId, botManager);
       const subjectId = operatorId === null ? human.accountId : bot.accountId;
+      if (operatorId === null && options.retainHumanPasskey !== false) {
+        // Successful human password retirement needs a real interactive fallback.
+        // Keep the four-purpose outcome assertions unchanged by qualifying this fixture natively.
+        const device = authenticator();
+        const enrollment = await successful<{ challenge: string; user: { id: string } }>(
+          await security.request(human.caller, '/passkeys/register/options', {}),
+          'fixture passkey preparation',
+        );
+        await successful(
+          await security.request(human.caller, '/passkeys/register', {
+            name: 'Fixture interactive fallback',
+            response: device.registration(enrollment, true, issuer),
+          }),
+          'fixture passkey enrollment',
+        );
+        for (const row of (
+          await auth().query<{ effect_reference: string }>(
+            "SELECT effect_reference FROM auth_effect_receipt WHERE account_id=$1 AND purpose='add-passkey'",
+            [human.accountId],
+          )
+        ).rows)
+          fixtureEffects.add(row.effect_reference);
+      }
       const existing = await publicKey();
       const otherExisting = await publicKey();
       const candidate = await publicKey();
@@ -638,7 +771,7 @@ export async function createNativeCredentialEffectDriver(): Promise<
           "SELECT * FROM auth_effect_receipt WHERE account_id=ANY($1::text[]) AND committed_at IS NOT NULL AND operation_key NOT LIKE 'fixture:%' ORDER BY receipt_id",
           [targets],
         )
-      ).rows;
+      ).rows.filter((row) => !fixtureEffects.has(row.effect_reference));
       const floors = (
         await kernel().query(
           'SELECT account_id,minimum_authn_epoch::text,authn_fenced AS fenced FROM access.account WHERE account_id=ANY($1::uuid[]) ORDER BY account_id',
@@ -951,9 +1084,10 @@ export async function createNativeCredentialEffectDriver(): Promise<
    * port or run a private formula; native command locks are released before callbacks.
    */
   async function atBoundary<T>(
-    at: 'before-consume' | 'consumed' | 'committed',
+    at: 'before-consume' | 'consumed' | 'committed' | 'consent-reviewed',
     run: () => Promise<void>,
     operation: () => Promise<T>,
+    consentClientId?: string,
   ): Promise<T> {
     const runOutsideCommand = AsyncResource.bind(run);
     const databases = at === 'consumed' ? [kernel(), auth()] : [auth()];
@@ -999,7 +1133,10 @@ export async function createNativeCredentialEffectDriver(): Promise<
             ? /SELECT (?:id,password,)?xmin::text AS version FROM (?:account|auth_public_key)/.test(sql)
             : at === 'consumed'
               ? database === auth() && nativeCommitted && sql === 'SELECT auth_assert_session_capacity($1,true)'
-              : sql === 'COMMIT' && committed;
+              : at === 'consent-reviewed'
+                ? sql === 'SELECT pg_advisory_unlock_shared(hashtextextended($1, 0))' &&
+                  (args[1] as string[])[0] === `auth-client:${consentClientId}`
+                : sql === 'COMMIT' && committed;
         if (fired || !match) return invoke(...args);
         fired = true;
         if (at === 'consumed') {

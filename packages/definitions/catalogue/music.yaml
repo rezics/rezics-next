@@ -1,0 +1,57 @@
+id: https://rezics.com/catalogue/music
+name: music
+version: 1.0.0
+description: Music places, events, instrument identities and sourced event credits.
+prefixes:
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
+  wd: http://www.wikidata.org/entity/
+  wdt: http://www.wikidata.org/prop/direct/
+  rezics: https://rezics.com/vocab/
+default_range: string
+imports:
+  - linkml:types
+  - core
+classes:
+  MusicVenue:
+    is_a: Place
+    class_uri: schema:MusicVenue
+    description: A specific place used as a venue for music performances, distinct from performances held there.
+    annotations:
+      schema_org_type: https://schema.org/MusicVenue
+  MusicEvent:
+    is_a: Event
+    class_uri: schema:MusicEvent
+    description: An identified music event with its own time and place, distinct from a performance or venue.
+    slots:
+      - performer
+    annotations:
+      schema_org_type: https://schema.org/MusicEvent
+  Instrument:
+    is_a: Thing
+    class_uri: wd:Q34379
+    description: A musical instrument identity, separate from the person who uses it and any particular event.
+    exact_mappings:
+      - wd:Q34379
+slots:
+  performer:
+    slot_uri: schema:performer
+    description: A person or organization credited as performing at this music event.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs detailedRole instrumentUsed
+      relation_group: credit
+      inverse: none
+      relation_order: name
+      relation_slot_key: wdt:P1303
+      relation_filter: wdt:P1303
+  instrumentUsed:
+    slot_uri: wdt:P1303
+    description: The musical instrument used by the credited performer in this exact statement.
+    range: Instrument
+    annotations:
+      datatype: wikibase-item

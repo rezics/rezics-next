@@ -1,0 +1,640 @@
+{
+  "status": 200,
+  "handle": "mira",
+  "subject": "0192f3a0-6c1e-7b2a-f001-000000000001",
+  "account": "0192f3a0-6c1e-7b2a-f001-000000000001",
+  "profile": "sha256:47976876913edbfa03e4f2641f4c20d3ce57528e1f2d2fe9f23dc67b1665c885",
+  "template": {
+    "scope": "type",
+    "key": "schema:Person"
+  },
+  "document": {
+    "root": {
+      "props": {}
+    },
+    "content": [
+      {
+        "type": "Slot",
+        "props": {
+          "id": "header",
+          "name": "header",
+          "children": [
+            {
+              "type": "SubjectHeader",
+              "props": {
+                "id": "subject-header"
+              }
+            },
+            {
+              "type": "AccountIdentity",
+              "props": {
+                "id": "account-identity"
+              }
+            },
+            {
+              "type": "Slot",
+              "props": {
+                "id": "actions",
+                "name": "actions",
+                "children": []
+              }
+            }
+          ]
+        }
+      },
+      {
+        "type": "Summary",
+        "props": {
+          "id": "summary"
+        }
+      },
+      {
+        "type": "SubjectList",
+        "props": {
+          "id": "author",
+          "title": {
+            "en": "Written works",
+            "zh-Hant": "著作",
+            "zh-Hans": "著作",
+            "ja": "著作",
+            "ko": "저술한 작품",
+            "de": "Geschriebene Werke",
+            "fr": "Œuvres écrites",
+            "es": "Obras escritas"
+          },
+          "property": "schema:author",
+          "limit": 12
+        }
+      },
+      {
+        "type": "SubjectList",
+        "props": {
+          "id": "illustrator",
+          "title": {
+            "en": "Illustrated works",
+            "zh-Hant": "插畫作品",
+            "zh-Hans": "插画作品",
+            "ja": "挿絵を担当した作品",
+            "ko": "삽화를 맡은 작품",
+            "de": "Illustrierte Werke",
+            "fr": "Œuvres illustrées",
+            "es": "Obras ilustradas"
+          },
+          "property": "schema:illustrator",
+          "limit": 12
+        }
+      },
+      {
+        "type": "SubjectList",
+        "props": {
+          "id": "director",
+          "title": {
+            "en": "Directed works",
+            "zh-Hant": "執導作品",
+            "zh-Hans": "执导作品",
+            "ja": "監督作品",
+            "ko": "연출한 작품",
+            "de": "Werke als Regisseur",
+            "fr": "Réalisations",
+            "es": "Obras dirigidas"
+          },
+          "property": "schema:director",
+          "limit": 12
+        }
+      },
+      {
+        "type": "SubjectList",
+        "props": {
+          "id": "music",
+          "title": {
+            "en": "Music",
+            "zh-Hant": "音樂作品",
+            "zh-Hans": "音乐作品",
+            "ja": "音楽を担当した作品",
+            "ko": "음악을 맡은 작품",
+            "de": "Werke als Komponist",
+            "fr": "Musique",
+            "es": "Música"
+          },
+          "property": "schema:musicBy",
+          "limit": 12
+        }
+      },
+      {
+        "type": "SubjectList",
+        "props": {
+          "id": "voice-roles",
+          "title": {
+            "en": "Voice roles",
+            "zh-Hant": "配音角色",
+            "zh-Hans": "配音角色",
+            "ja": "声の出演",
+            "ko": "성우 출연",
+            "de": "Sprechrollen",
+            "fr": "Rôles vocaux",
+            "es": "Papeles de voz"
+          },
+          "property": "wdt:P725",
+          "limit": 12
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "side-stories",
+          "title": {
+            "en": "Side stories",
+            "zh-Hant": "外傳",
+            "zh-Hans": "外传",
+            "ja": "外伝",
+            "ko": "외전",
+            "de": "Nebengeschichten",
+            "fr": "Histoires parallèles",
+            "es": "Historias paralelas"
+          },
+          "property": "rezics:sideStoryOf",
+          "limit": 12
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "adaptations",
+          "title": {
+            "en": "Adaptations",
+            "zh-Hant": "改編作品",
+            "zh-Hans": "改编作品",
+            "ja": "派生作品",
+            "ko": "파생 작품",
+            "de": "Adaptionen",
+            "fr": "Adaptations",
+            "es": "Adaptaciones"
+          },
+          "property": "wdt:P144",
+          "limit": 12
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "versions",
+          "title": {
+            "en": "Alternative versions",
+            "zh-Hant": "其他版本",
+            "zh-Hans": "其他版本",
+            "ja": "別バージョン",
+            "ko": "다른 버전",
+            "de": "Alternative Fassungen",
+            "fr": "Versions alternatives",
+            "es": "Versiones alternativas"
+          },
+          "property": "rezics:alternativeVersion",
+          "limit": 12
+        }
+      },
+      {
+        "type": "RelationGroups",
+        "props": {
+          "id": "related",
+          "title": {
+            "en": "Related",
+            "zh-Hant": "相關作品",
+            "zh-Hans": "相关作品",
+            "ja": "関連作品",
+            "ko": "관련 작품",
+            "de": "Verwandtes",
+            "fr": "Œuvres liées",
+            "es": "Obras relacionadas"
+          },
+          "property": "rezics:bangumiRelatedTo",
+          "limit": 12
+        }
+      },
+      {
+        "type": "AccountPosts",
+        "props": {
+          "id": "account-posts",
+          "limit": 4
+        }
+      },
+      {
+        "type": "AccountThreads",
+        "props": {
+          "id": "account-reviews",
+          "threadKind": "review",
+          "limit": 4
+        }
+      },
+      {
+        "type": "AccountCollections",
+        "props": {
+          "id": "account-collections",
+          "limit": 4
+        }
+      },
+      {
+        "type": "ThreadList",
+        "props": {
+          "id": "threads"
+        }
+      },
+      {
+        "type": "CollectionList",
+        "props": {
+          "id": "lists",
+          "title": {
+            "en": "Lists",
+            "zh-Hant": "清單",
+            "zh-Hans": "清单",
+            "ja": "リスト",
+            "ko": "목록",
+            "de": "Listen",
+            "fr": "Listes",
+            "es": "Listas"
+          },
+          "limit": 6
+        }
+      },
+      {
+        "type": "Sources",
+        "props": {
+          "id": "sources"
+        }
+      }
+    ]
+  },
+  "views": [
+    "overview",
+    "characters",
+    "works",
+    "relations",
+    "posts",
+    "reviews",
+    "discussion",
+    "lists",
+    "collections",
+    "details"
+  ],
+  "reads": {
+    "r0": {
+      "status": 200,
+      "body": {
+        "subject": {
+          "id": "0192f3a0-6c1e-7b2a-f001-000000000001",
+          "type": "schema:Person",
+          "labels": {
+            "en": "Mira Okabe"
+          },
+          "descriptions": {},
+          "aliases": {},
+          "statements": {}
+        },
+        "related": {}
+      }
+    },
+    "r1": {
+      "status": 200,
+      "body": {
+        "accounts": [
+          {
+            "id": "0192f3a0-6c1e-7b2a-f001-000000000001",
+            "kind": "actor",
+            "handle": "mira",
+            "displayName": "Mira Okabe",
+            "state": "active",
+            "automated": false,
+            "operatorId": null,
+            "bio": "Reads on trains. Keeps lists.",
+            "links": [],
+            "avatar": null,
+            "publicViews": {
+              "posts": true,
+              "reviews": true,
+              "collections": true
+            },
+            "subject": null,
+            "verified": false
+          }
+        ]
+      }
+    },
+    "r2": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    },
+    "r3": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    },
+    "r4": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    },
+    "r5": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    },
+    "r6": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    },
+    "r7": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    },
+    "r8": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    },
+    "r9": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    },
+    "r10": {
+      "status": 200,
+      "body": {
+        "links": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    },
+    "r11": {
+      "status": 200,
+      "body": {
+        "posts": [
+          {
+            "id": "0192f3a0-6c1e-7b2a-c001-000000000001",
+            "authorId": "0192f3a0-6c1e-7b2a-f001-000000000001",
+            "threadId": "0192f3a0-6c1e-7b2a-b002-000000000001",
+            "thread": {
+              "id": "0192f3a0-6c1e-7b2a-b002-000000000001",
+              "title": "Reading group, week 1"
+            },
+            "body": {
+              "version": "rezics-document-v1",
+              "profile": "text",
+              "doc": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "textAlign": null,
+                      "id": "b3321143-a0e8-4f36-a840-305792449d4d",
+                      "lang": null,
+                      "dir": null
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Reply 1: I read it on the train and kept missing my stop."
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "createdAt": "2026-06-01T09:30:00.000Z"
+          },
+          {
+            "id": "0192f3a0-6c1e-7b2a-c001-000000000002",
+            "authorId": "0192f3a0-6c1e-7b2a-f001-000000000001",
+            "threadId": "0192f3a0-6c1e-7b2a-b002-000000000002",
+            "thread": {
+              "id": "0192f3a0-6c1e-7b2a-b002-000000000002",
+              "title": "Reading group, week 2"
+            },
+            "body": {
+              "version": "rezics-document-v1",
+              "profile": "text",
+              "doc": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "textAlign": null,
+                      "id": "85f3025a-85aa-441c-8b70-0c27a408728b",
+                      "lang": null,
+                      "dir": null
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Reply 2: I read it on the train and kept missing my stop."
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "createdAt": "2026-06-02T09:30:00.000Z"
+          },
+          {
+            "id": "0192f3a0-6c1e-7b2a-c001-000000000003",
+            "authorId": "0192f3a0-6c1e-7b2a-f001-000000000001",
+            "threadId": "0192f3a0-6c1e-7b2a-b002-000000000003",
+            "thread": {
+              "id": "0192f3a0-6c1e-7b2a-b002-000000000003",
+              "title": null
+            },
+            "body": {
+              "version": "rezics-document-v1",
+              "profile": "text",
+              "doc": {
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "attrs": {
+                      "textAlign": null,
+                      "id": "77555e87-b71f-4039-99e4-087d20635584",
+                      "lang": null,
+                      "dir": null
+                    },
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Reply 3: I read it on the train and kept missing my stop."
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "createdAt": "2026-06-03T09:30:00.000Z"
+          }
+        ],
+        "next": null
+      }
+    },
+    "r12": {
+      "status": 200,
+      "body": {
+        "threads": [
+          {
+            "id": "0192f3a0-6c1e-7b2a-b001-000000000001",
+            "kind": "review",
+            "title": "Review 1: a quiet read",
+            "authorId": "0192f3a0-6c1e-7b2a-f001-000000000001",
+            "firstPost": {
+              "id": "0192f3a0-6c1e-7b2a-b101-000000000001",
+              "body": {
+                "version": "rezics-document-v1",
+                "profile": "text",
+                "doc": {
+                  "type": "doc",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "textAlign": null,
+                        "id": "a885a26b-802b-49a1-9dea-c4f3c3786f9a",
+                        "lang": null,
+                        "dir": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Opening post 1. It stays with you after the last page."
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              "createdAt": "2026-06-01T09:30:00.000Z"
+            }
+          },
+          {
+            "id": "0192f3a0-6c1e-7b2a-b001-000000000002",
+            "kind": "review",
+            "title": "Review 2: a quiet read",
+            "authorId": "0192f3a0-6c1e-7b2a-f001-000000000001",
+            "firstPost": {
+              "id": "0192f3a0-6c1e-7b2a-b101-000000000002",
+              "body": {
+                "version": "rezics-document-v1",
+                "profile": "text",
+                "doc": {
+                  "type": "doc",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "attrs": {
+                        "textAlign": null,
+                        "id": "88456ea2-aa75-4e05-9efb-6be15f6c9400",
+                        "lang": null,
+                        "dir": null
+                      },
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Opening post 2. It stays with you after the last page."
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              "createdAt": "2026-06-02T09:30:00.000Z"
+            }
+          }
+        ],
+        "next": null
+      }
+    },
+    "r13": {
+      "status": 200,
+      "body": {
+        "collections": [
+          {
+            "id": "0192f3a0-6c1e-7b2a-d001-000000000001",
+            "title": "Shelf 1",
+            "description": "Books I return to when the weather turns.",
+            "memberCount": 3,
+            "updatedAt": "2026-06-01T09:30:00.000Z",
+            "curator": {
+              "id": "0192f3a0-6c1e-7b2a-f001-000000000001",
+              "handle": "mira",
+              "displayName": null
+            }
+          },
+          {
+            "id": "0192f3a0-6c1e-7b2a-d001-000000000002",
+            "title": "Shelf 2",
+            "description": null,
+            "memberCount": 4,
+            "updatedAt": "2026-06-02T09:30:00.000Z",
+            "curator": {
+              "id": "0192f3a0-6c1e-7b2a-f001-000000000001",
+              "handle": "mira",
+              "displayName": null
+            }
+          }
+        ],
+        "next": null
+      }
+    },
+    "r14": {
+      "status": 200,
+      "body": {
+        "collections": [],
+        "count": {
+          "value": 0,
+          "exact": true
+        }
+      }
+    }
+  }
+}

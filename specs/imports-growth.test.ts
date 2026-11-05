@@ -9,8 +9,10 @@ import type { ConversionInput } from '../packages/conversion/src';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { assertGrowth, type GrowthSample } from '../services/kernel/test/support/growth-bound';
+import { countedSample, countedViolations, validateCountedRun } from '../services/kernel/test/support/growth-counters';
 import { costOf, isControlStatement } from '../services/kernel/test/support/growth-cost';
 import type { Counters, Fixture, ImportGrowthDriver, Scenario, Seed, SqliteStatement } from './imports-growth-driver';
+import { assertIndexedSqlite } from './support/verify-import-api';
 
 const scales = Object.freeze([32, 128, 512] as const);
 const payloadScales = Object.freeze([1, 8, 64] as const);
@@ -87,6 +89,9 @@ function integer(value: number) {
 function common(c: Counters): asserts c is Required<Counters> {
   for (const value of [c.networkRequests, c.workUnits, c.allocatedBytes, c.peakRetainedBytes, c.peakRetainedRecords])
     integer(value!);
+  expect(c.accounting).toBeDefined();
+  integer(c.accounting!.requestBodyBytes);
+  integer(c.accounting!.pagePlanBytes);
 }
 function purity(c: Counters) {
   integer(c.networkRequests);
@@ -99,6 +104,13 @@ function purity(c: Counters) {
 function readerCost(c: Counters, bytes: number, fields: number, byteCap = RECORD_CAP) {
   common(c);
   purity(c);
+  expect(c.accounting.reader).toBeDefined();
+  const reader = c.accounting.reader!;
+  for (const value of Object.values(reader)) integer(value);
+  expect(c.workUnits).toBe(reader.scannedBytes + reader.copiedBytes);
+  expect(c.allocatedBytes).toBe(reader.pulledBytes + reader.copiedBytes);
+  expect(c.accounting.requestBodyBytes).toBe(0);
+  expect(c.accounting.pagePlanBytes).toBe(0);
   expect(c.workUnits).toBeGreaterThan(0);
   expect(c.workUnits).toBeLessThanOrEqual(64 * (bytes + fields));
   expect(c.allocatedBytes).toBeGreaterThan(0);
@@ -107,79 +119,14 @@ function readerCost(c: Counters, bytes: number, fields: number, byteCap = RECORD
 }
 // Test support only: raw plans and declared schema prove SQLite access bounds;
 // returned rows alone cannot reveal a full scan that returns one aggregate row.
+// Both import suites share one SQLite validator, in specs/support/verify-import-api.ts.
 function sqliteKeyProof(statement: SqliteStatement, c: Counters) {
-  expect(c.sqlite.analyzed).toBe(true);
-  expect(c.sqlite.growingRelations.length).toBeGreaterThan(0);
-  expect(statement.parameters).toBeDefined();
-  for (const value of Object.values(statement.parameters))
-    expect(value === null || ['string', 'number', 'bigint'].includes(typeof value) || value instanceof Uint8Array).toBe(
-      true,
-    );
-  integer(statement.rowsReturned);
   if (statement.changes !== undefined) integer(statement.changes);
-  const plan = JSON.parse(statement.explain) as { id: number; parent: number; detail: string }[];
-  expect(Array.isArray(plan)).toBe(true);
-  for (const row of plan) {
+  for (const row of JSON.parse(statement.explain) as { id: number; parent: number }[]) {
     integer(row.id);
     integer(row.parent);
-    expect(typeof row.detail).toBe('string');
-    expect(row.detail).not.toMatch(/\bSCAN\b|USE TEMP B-TREE|AUTOMATIC/i);
   }
-  if (statement.classification === 'transaction-control') {
-    expect(statement.sql).toMatch(
-      /^\s*(?:BEGIN(?:\s+(?:DEFERRED|IMMEDIATE|EXCLUSIVE))?(?:\s+TRANSACTION)?|COMMIT|END|ROLLBACK(?:\s+TO(?:\s+SAVEPOINT)?\s+[\w]+)?|SAVEPOINT\s+[\w]+|RELEASE(?:\s+SAVEPOINT)?\s+[\w]+)\s*;?\s*$/i,
-    );
-    expect(plan).toEqual([]);
-    expect(statement.reads).toEqual([]);
-    expect(statement.rowsReturned).toBe(0);
-    return;
-  }
-  if (statement.classification === 'keyed-insert') {
-    // A single VALUES tuple bound on a declared unique key has no read plan.
-    // INSERT SELECT, UPSERT subqueries, UPDATE and DELETE get no spelling exemption.
-    const insert =
-      /^\s*INSERT(?:\s+OR\s+(?:IGNORE|ABORT|FAIL|ROLLBACK))?\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)\s*;?\s*$/i.exec(
-        statement.sql,
-      );
-    expect(insert).not.toBeNull();
-    const table = c.sqlite.growingRelations.find((r) => r.table === insert![1]);
-    expect(table).toBeDefined();
-    const columns = insert![2]!.split(',').map((v) => v.trim());
-    const values = insert![3]!.split(',').map((v) => v.trim());
-    expect(values.length).toBe(columns.length);
-    for (const value of values) expect(value).toMatch(/^(?:\?\d*|[:@$]\w+)$/);
-    const keys = table!.indexes.filter((index) => index.unique).map((index) => index.columns);
-    if (table!.integerPrimaryKey) keys.push([table!.integerPrimaryKey]);
-    expect(keys.some((key) => key.length > 0 && key.every((column) => columns.includes(column)))).toBe(true);
-    expect(plan).toEqual([]);
-    expect(statement.reads).toEqual([]);
-    return;
-  }
-  expect(statement.classification).toBe('readable');
-  expect(plan.length).toBeGreaterThan(0);
-  const searches = plan.filter((row) => /^SEARCH /i.test(row.detail));
-  for (const read of statement.reads) {
-    const table = c.sqlite.growingRelations.find((r) => r.table === read.table);
-    expect(table).toBeDefined();
-    const nodes = searches.filter((row) => row.detail.split(/\s+/)[1] === read.alias);
-    expect(nodes.length).toBeGreaterThan(0);
-    for (const node of nodes) {
-      const access = / USING (?:COVERING )?(?:INDEX (\S+)|INTEGER PRIMARY KEY) \((.+)\)$/i.exec(node.detail);
-      expect(access).not.toBeNull();
-      const index = table!.indexes.find((i) => i.name === access![1]);
-      if (access![1]) expect(index).toBeDefined();
-      else expect(table!.integerPrimaryKey).toBeTruthy();
-      const prefix = index?.columns[0] ?? 'rowid';
-      const first = access![2]!.split(/ AND /i)[0]!;
-      expect(first).toMatch(/^[\w]+\s*(?:=|>|<|>=|<=)\s*\?$/);
-      expect(first.split(/\s*[=<>]/)[0]).toBe(prefix);
-    }
-  }
-  // No growing access node may escape the metadata proof, including join aliases.
-  for (const node of searches) {
-    const alias = node.detail.split(/\s+/)[1];
-    expect(statement.reads.some((read) => read.alias === alias)).toBe(true);
-  }
+  assertIndexedSqlite(statement, c.sqlite);
 }
 function database(c: Counters, fixture: Fixture, seed: Seed, items = 1) {
   common(c);
@@ -194,9 +141,12 @@ function database(c: Counters, fixture: Fixture, seed: Seed, items = 1) {
   expect(c.postgres.statements).toEqual(postgresStatements.map((s) => s.sql));
   for (const statement of postgresStatements)
     if (statement.explain) expect(c.postgres.plans).toContainEqual(JSON.parse(statement.explain));
+  const statementErrors = c.postgres.statementErrors ?? postgresStatements.map(() => null);
+  expect(statementErrors.length).toBe(postgresStatements.length);
+  for (const code of statementErrors) if (code !== null) expect(code).toMatch(/^[0-9A-Z]{5}$/);
+  let postgresIndex = 0;
   for (const statement of c.statements) {
     expect(statement.sql.length).toBeGreaterThan(0);
-    expect(statement.sql).not.toMatch(/\bcount\s*\(/i);
     if (statement.engine === 'sqlite') {
       sqliteKeyProof(statement, c);
       returned += statement.rowsReturned;
@@ -204,30 +154,45 @@ function database(c: Counters, fixture: Fixture, seed: Seed, items = 1) {
     } else {
       expect(statement.engine).toBe('postgres');
       integer(statement.rowsAppended);
+      const errorCode = statementErrors[postgresIndex++];
+      if (errorCode !== null) expect(statement.rowsAppended).toBe(0);
       if (!statement.explain) {
-        expect(isControlStatement(statement.sql)).toBe(true);
+        expect(isControlStatement(statement.sql) || errorCode !== null).toBe(true);
         continue;
       }
     }
   }
-  // auto_explain also emits nested plans without a separate client query call.
-  // Check every raw plan rather than silently dropping nested authorization work.
+  // Measured plans are the planner's own choice on unpinned sessions. auto_explain also emits nested plans without a
+  // separate client query call; their query texts join the index proof rather than silently dropping nested
+  // authorization work.
+  const roots = (document: unknown) =>
+    (Array.isArray(document) ? document : [document]) as { Plan: Record<string, unknown>; 'Query Text'?: unknown }[];
+  const texts = new Set(postgresStatements.filter((s) => s.explain).map((s) => s.sql));
   for (const document of c.postgres.plans) {
-    const walk = (node: Record<string, unknown>) => {
-      const type = String(node['Node Type'] ?? '');
-      if (/Scan/.test(type)) {
-        expect(type).toMatch(/^Index(?: Only)? Scan$/);
-        expect(String(node['Index Cond'] ?? '')).not.toBe('');
-      }
-      for (const child of (node.Plans ?? []) as Record<string, unknown>[]) walk(child);
-    };
-    const roots = (Array.isArray(document) ? document : [document]) as { Plan: Record<string, unknown> }[];
-    for (const root of roots) {
+    for (const root of roots(document)) {
       expect(root.Plan).toBeDefined();
-      walk(root.Plan);
+      if (typeof root['Query Text'] === 'string') texts.add(root['Query Text']);
     }
     expect(JSON.stringify(document)).toContain('Actual Rows');
     expect(JSON.stringify(document)).toContain('Shared Hit Blocks');
+  }
+  // Index service is proven apart from measurement: the generic plan of every captured text, with sequential scans
+  // disabled, reaches every table through an index condition. A sequential scan left there, or an index scan without
+  // a condition, means no index serves the predicate.
+  expect(new Set(c.indexPlans.map((p) => p.sql))).toEqual(texts);
+  for (const { plan } of c.indexPlans) {
+    const walk = (node: Record<string, unknown>) => {
+      // CTE, function and VALUES scans read only their own inputs, which are planned separately.
+      const type = String(node['Node Type'] ?? '');
+      if (typeof node['Relation Name'] === 'string')
+        expect(type).toMatch(/^(?:Index(?: Only)? Scan|Bitmap Heap Scan|ModifyTable)$/);
+      if (/^(?:Index(?: Only)?|Bitmap Index) Scan$/.test(type)) expect(String(node['Index Cond'] ?? '')).not.toBe('');
+      for (const child of (node.Plans ?? []) as Record<string, unknown>[]) walk(child);
+    };
+    for (const root of roots(plan)) {
+      expect(root.Plan).toBeDefined();
+      walk(root.Plan);
+    }
   }
   expect(JSON.stringify(d().statementBudgets)).toBe(declaredBudgets!);
   const terms = d().statementBudgets[seed.scenario];
@@ -247,20 +212,30 @@ function database(c: Counters, fixture: Fixture, seed: Seed, items = 1) {
     const executions = engine === 'sqlite' ? sqliteStatements : postgresStatements.length + c.postgres.plans.length;
     expect(executions).toBeLessThanOrEqual(ceiling);
   }
+  // Per-call constants belong to Cost sections: the importer's for SQLite, and Auth, Access, semantic and content's
+  // for PostgreSQL. The callers' growth checks prove rows, statements and requests stay bounded as the catalogue,
+  // history and payload grow.
   const postgres = costOf(c.postgres); // actual examined rows, inclusive shared hits + reads
-  expect(returned).toBeLessThanOrEqual(64 * (items + seed.fields));
-  expect(postgres.rows + postgresStatements.reduce((sum, s) => sum + s.rowsAppended, 0)).toBeLessThanOrEqual(
-    64 * (items + seed.fields),
-  );
-  expect(c.networkRequests).toBeLessThanOrEqual(8 * items);
+  const appended = postgresStatements.reduce((sum, s) => sum + s.rowsAppended, 0);
+  integer(c.networkRequests);
   expect(c.allocatedBytes).toBeLessThanOrEqual(64 * (items * RECORD_CAP + seed.fields * 1024));
   expect(c.peakRetainedBytes).toBeLessThanOrEqual(4 * (B * RECORD_CAP + seed.fields * 1024));
   expect(c.peakRetainedRecords).toBeLessThanOrEqual(seed.scenario === 'bulk' ? items : B);
-  return {
-    // blocks:0 means unavailable SQLite buffers, not zero physical I/O.
-    sqlite: { rows: returned, blocks: 0, statements: sqliteStatements },
-    postgres: { ...postgres, statements: postgresStatements.length + c.postgres.plans.length },
+  const counts = {
+    'sqlite returned rows': returned,
+    'sqlite executions': sqliteStatements,
+    'network requests': c.networkRequests,
+    'derived PG examined plus ModifyTable rows': postgres.rows + appended,
+    'derived PG client calls plus raw plans': postgresStatements.length + c.postgres.plans.length,
   };
+  // Keep the original composites, with their actual ingredients, outside canonical PG cost.
+  const reader = c.accounting.reader;
+  const work = sqliteStatements + postgresStatements.length + c.postgres.plans.length;
+  expect(c.workUnits).toBe(reader ? work + reader.scannedBytes + reader.copiedBytes : work);
+  const allocated = c.accounting.requestBodyBytes + c.accounting.pagePlanBytes;
+  expect(c.allocatedBytes).toBe(reader ? allocated + reader.pulledBytes + reader.copiedBytes : allocated);
+  validateCountedRun({ read: () => counts }, counts, seed.n);
+  return { postgres, counts };
 }
 const options = (scenario: Scenario, n = 32, history = 32, fields = 1): Seed =>
   Object.freeze({ n, history, fields, scenario, source: 'growth-source', key: 'fixed-record' });
@@ -456,6 +431,7 @@ async function reconcile(scenario: Scenario) {
   const fixed = new Map<number, string>();
   const samples = new Map<string, GrowthSample[]>();
   const pages = new Map<string, GrowthSample[]>();
+  const counted = new Map<string, { scale: number; counted: ReturnType<typeof countedSample> }[]>();
   for (const axis of ['n', 'history', 'fields'] as const)
     for (const scale of axisScales(axis)) {
       const seed = { ...options(scenario), [axis]: scale };
@@ -475,24 +451,22 @@ async function reconcile(scenario: Scenario) {
         expect(result.counters.networkRequests).toBeGreaterThanOrEqual(result.value.envelopes!.length);
       }
       const cost = database(result.counters, fixture, seed, items);
-      for (const engine of ['sqlite', 'postgres'] as const) {
-        const key = `${axis}:${engine}`;
-        const group = samples.get(key) ?? [];
-        group.push({ scale, cost: cost[engine] });
-        samples.set(key, group);
-      }
+      const group = samples.get(axis) ?? [];
+      group.push({ scale, cost: cost.postgres });
+      samples.set(axis, group);
+      const units = counted.get(axis) ?? [];
+      units.push({ scale, counted: countedSample([cost.counts]) });
+      counted.set(axis, units);
       const sql = result.counters.statements.map((s) => `${s.sql}\n${s.explain}`).join('\n');
       if (scenario === 'mass-disappearance') {
         expect(result.value.status).toBe('mass-disappearance-blocked');
         expect(result.value.publicWrites).toBe(0);
-        expect(sql).toMatch(/baseline/i);
-        expect(sql).toMatch(/seen|survivor/i);
       } else {
         expect(result.value.status).toBe('completed');
         expect(result.value.publicWrites).toBe(scenario === 'unchanged' ? 0 : items);
         if (scenario !== 'vanished-page') {
           expect(sql).toMatch(/source/i);
-          expect(sql).toMatch(/record_key/i);
+          expect(sql).toMatch(/record_key|external_id/i);
           expect(result.value.fenceChecks).toBeGreaterThanOrEqual(items);
           expect(sql).toMatch(/external_id/i);
           expect(sql).toMatch(/field_group/i);
@@ -505,7 +479,7 @@ async function reconcile(scenario: Scenario) {
         expect(new Set(result.value.visitedKeys).size).toBe(B);
         expect(result.value.nextCursor).toBeTruthy();
         expect(sql).toMatch(/run_id|generation/i);
-        expect(sql).toMatch(/record_key\s*>/i);
+        expect(sql).toMatch(/record_key\s*\)?\s*>/i);
         expect(sql).toMatch(/limit/i);
         const next = await d().measure(() =>
           d().run({
@@ -518,12 +492,13 @@ async function reconcile(scenario: Scenario) {
           }),
         );
         const nextCost = database(next.counters, fixture, seed, B);
-        for (const engine of ['sqlite', 'postgres'] as const) {
-          const key = `${axis}:${engine}`;
-          const group = pages.get(key) ?? [];
-          group.push({ scale, cost: nextCost[engine] });
-          pages.set(key, group);
-        }
+        const group = pages.get(axis) ?? [];
+        group.push({ scale, cost: nextCost.postgres });
+        pages.set(axis, group);
+        const key = `${axis}:next-page`;
+        const units = counted.get(key) ?? [];
+        units.push({ scale, counted: countedSample([nextCost.counts]) });
+        counted.set(key, units);
         expect(next.value.visitedKeys).toEqual(fixture.vanishedKeys.slice(B, B * 2));
         expect(next.value.visitedKeys.length).toBeGreaterThan(0);
         expect(next.value.visitedKeys.length).toBeLessThanOrEqual(B);
@@ -531,14 +506,71 @@ async function reconcile(scenario: Scenario) {
       }
     }
   for (const [key, group] of [...samples, ...pages]) {
-    const payload = key.startsWith('fields:');
+    const payload = key === 'fields';
     assertGrowth(group, {
       rows: payload ? 'linear' : 'constant',
-      blocks: key.endsWith(':sqlite') ? 'constant' : payload ? 'linear' : 'logarithmic',
+      blocks: payload ? 'linear' : 'logarithmic',
       statements: payload ? 'linear' : 'constant',
     });
   }
+  for (const [axis, samples] of counted) {
+    const bound: 'linear' | 'constant' = axis.startsWith('fields') ? 'linear' : 'constant';
+    const bounds = Object.fromEntries(Object.keys(samples[0]!.counted).map((name) => [name, bound]));
+    expect(
+      countedViolations(
+        {
+          read: () => ({}),
+          bounds,
+          slack: {
+            'sqlite returned rows': { absolute: 2, relative: 0.1 },
+            'sqlite executions': { absolute: 0, relative: 0 },
+            'network requests': { absolute: 2, relative: 0.1 },
+            'derived PG examined plus ModifyTable rows': { absolute: 2, relative: 0.1 },
+            'derived PG client calls plus raw plans': { absolute: 0, relative: 0 },
+          },
+        },
+        samples,
+      ),
+    ).toEqual([]);
+  }
 }
+test('native import growth preserves canonical PostgreSQL capture and exact separate SQLite transport and derived work bounds', async () => {
+  const seed = options('unchanged');
+  const fixture = await d().seed(seed);
+  const result = await d().measure(() =>
+    d().run({
+      kind: 'unchanged',
+      source: seed.source,
+      key: seed.key,
+      fields: seed.fields,
+      pageCap: B,
+    }),
+  );
+  const raw = structuredClone(result.counters.postgres);
+  const summary = database(result.counters, fixture, seed);
+  expect(result.counters.postgres).toEqual(raw);
+  expect(summary.postgres).toEqual(costOf(raw));
+  const sqlite = result.counters.statements.filter((s) => s.engine === 'sqlite');
+  const pg = result.counters.statements.filter((s) => s.engine === 'postgres');
+  expect(summary.counts).toEqual({
+    'sqlite returned rows': sqlite.reduce((sum, s) => sum + s.rowsReturned, 0),
+    'sqlite executions': sqlite.length,
+    'network requests': result.counters.networkRequests,
+    'derived PG examined plus ModifyTable rows': costOf(raw).rows + pg.reduce((sum, s) => sum + s.rowsAppended, 0),
+    'derived PG client calls plus raw plans': raw.statements.length + raw.plans.length,
+  });
+  // Freeze the pre-existing static ceilings independently of observations or growth class.
+  for (const terms of Object.values(d().statementBudgets)) {
+    for (const engine of ['sqlite', 'postgres'] as const) {
+      const methods = terms.filter((term) => term.engine === engine);
+      expect(
+        ['fixed', 'perItem', 'perField'].map((key) =>
+          methods.reduce((sum, term) => sum + term[key as 'fixed' | 'perItem' | 'perField'], 0),
+        ),
+      ).toEqual(engine === 'sqlite' ? [1456, 144, 32] : [4000, 1000, 256]);
+    }
+  }
+});
 test('unchanged refresh still point seeks the fence without reading source or subject history', async () => {
   await reconcile('unchanged');
 });

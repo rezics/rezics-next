@@ -1,19 +1,42 @@
+import { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 export { LifecycleDeniedError } from './lifecycle-20261025094010-command.ts';
 import type { Pool } from 'pg';
-import { type Access, type AccountActor, type ActionCatalogue } from '../request/access.ts';
+import { type CommandAttempt } from '../command/command.ts';
+import { type Access, type AccountActor, type AccessClient, type ActionCatalogue } from '../request/access.ts';
 import type { PermissionContext } from './permission.ts';
 import { type ContinuationBinding } from './committed-continuations.ts';
-/** Authoritative application-clock policy: registration lasts 30 minutes and an
- * old handle redirects for 30 days. Neither clock nor timestamps come from JSON.
- * Coordination holds have NO expiry: only a durable workflow may resolve them.
+/** Authoritative application-clock policy: registration lasts 30 minutes and
+ * former handles forward for 30 days but retain their allocation forever.
+ * Neither clock nor timestamps come from JSON. Coordination holds have NO
+ * expiry: only a durable workflow may resolve them.
  */
+export declare class OrganizationCloseBlockedError extends LifecycleDeniedError {
+    readonly blocker: {
+        purpose: string;
+        relatedAccountId: string;
+    };
+    constructor(blocker: {
+        purpose: string;
+        relatedAccountId: string;
+    });
+}
 export declare const REGISTRATION_TTL_MS: number;
 export declare const HANDLE_REDIRECT_TTL_MS: number;
+export declare const HANDLE_CHANGE_LIMIT = 5;
+export declare const HANDLE_CHANGE_WINDOW_MS: number;
 export declare const LIFECYCLE_ACTIONS: ActionCatalogue;
 export declare function normalizeHandle(handle: string): string;
+export declare function normalizeLookupHandle(handle: string): string;
 type Boundary = {
     pool: Pool;
     clock?: () => Date;
+};
+export type AuthenticationBarrierReceipt = {
+    accountId: string;
+    purpose: AuthenticationBarrierCommand['purpose'];
+    operationKey: string;
+    receiptId: string;
+    minimumAuthnEpoch: number;
 };
 export type LifecycleRequest = Omit<PermissionContext, 'pool'> & {
     actor: AccountActor;
@@ -28,6 +51,21 @@ export type AuthenticationBarrierCommand = LifecycleCommand & {
     proofReference: string;
     proofDigest: string;
     proofExpiresAt: string;
+    /** The operator opening of the session that reduces an automated account's consent. */
+    openingReceiptId?: string;
+};
+/** Whether the human of an operator opening still manages the operator: decided with the shared permission
+ * evaluator on the opening's recorded principal, before the account lock at the attempt's T, then checked
+ * again under the lock. The barrier holds no formula of its own.
+ */
+export type OpeningManagement = {
+    prepare(attempt: CommandAttempt, opening: {
+        operatorAccountId: string;
+        subjectAccountId: string;
+        action: string;
+        principal: AccountActor;
+    }): Promise<object>;
+    authorize(tx: AccessClient, attempt: CommandAttempt, proof: object): Promise<void>;
 };
 export type HandleTransition = LifecycleCommand & {
     handle: string;
@@ -98,6 +136,7 @@ export type RecoveryEvidence = {
  */
 export declare function createLifecycleInternals(config: Boundary & {
     routeKey: Uint8Array;
+    access?: Access;
     provisioningEvidence: (evidence: unknown) => Promise<ProvisioningEvidence | null>;
     recoveryEvidence: (evidence: unknown) => Promise<RecoveryEvidence | null>;
 }): {
@@ -122,6 +161,7 @@ export declare function createLifecycleInternals(config: Boundary & {
         accountId: string;
         handle: string;
         operationId: string;
+        reservedHandleException?: boolean;
     }>>;
     finalizeHandleTransition(value: HandleTransition): Promise<import("../command/command.ts").CommandOutcome<{
         accountId: string;
@@ -159,11 +199,12 @@ export declare function createLifecycleInternals(config: Boundary & {
         handle: string;
         accountId: string;
         key: string;
-    }): Promise<import("../command/command.ts").CommandOutcome<{
+    }, request?: LifecycleRequest): Promise<import("../command/command.ts").CommandOutcome<{
         handle: string;
         accountId: string;
         reservationId: string;
         expiresAt: string;
+        reservedHandleException?: boolean;
     }>>;
     createPending(input: LifecycleCommand & {
         handle: string;
@@ -196,6 +237,7 @@ export declare function createLifecycleInternals(config: Boundary & {
     }): Promise<import("../command/command.ts").CommandOutcome<{
         handle: string;
         accountId: string;
+        reservedHandleException?: boolean;
     }>>;
     redirectHandle(input: LifecycleCommand & {
         handle: string;
@@ -223,16 +265,16 @@ export declare function createLifecycleInternals(config: Boundary & {
         reservationId: string;
         key: string;
     }): Promise<{
-        partition: number;
-        epoch: number;
-        position: bigint;
-        transactionId: string;
-        replayed: boolean;
         value: {
             organizationId: string;
             memberAccountId: string;
             reservationId: string;
         };
+        partition: number;
+        epoch: number;
+        position: bigint;
+        transactionId: string;
+        replayed: boolean;
     }>;
     /** Actor/operator-anchor hold, separate from organization mutation. Holds
      * remain until the durable workflow releases them using terminal proof.
@@ -246,17 +288,17 @@ export declare function createLifecycleInternals(config: Boundary & {
         purpose: "operator";
         reservationId: string;
     }> | {
-        partition: number;
-        epoch: number;
-        position: bigint;
-        transactionId: string;
-        replayed: boolean;
         value: {
             accountId: string;
             relatedAccountId: string;
             purpose: "membership";
             reservationId: string;
         };
+        partition: number;
+        epoch: number;
+        position: bigint;
+        transactionId: string;
+        replayed: boolean;
     }>;
     /** Abort an unpublished organization reservation on its authoritative anchor.
      * A committed terminal slot permanently prevents delayed publication. Active
@@ -292,7 +334,7 @@ export declare function createLifecycleInternals(config: Boundary & {
      * attempt, including receipt replay; floor comparison holds the account lock.
      * A later floor can never authorize an earlier operation's receipt.
      */
-    advanceAuthenticationFloor(value: AuthenticationBarrierCommand, verifyAtAttempt: () => Promise<boolean>): Promise<import("../command/command.ts").CommandOutcome<{
+    advanceAuthenticationFloor(value: AuthenticationBarrierCommand, verifyAtAttempt: () => Promise<boolean>, management?: OpeningManagement): Promise<import("../command/command.ts").CommandOutcome<{
         receiptId: string;
         accountId: string;
         minimumAuthnEpoch: string;
@@ -300,12 +342,22 @@ export declare function createLifecycleInternals(config: Boundary & {
         priorOperatorAccountId: string | null;
     }>>;
     raiseFence(input: LifecycleCommand): Promise<import("../command/command.ts").CommandOutcome<LifecycleFenceReceipt>>;
+    confirmBarrier: (value: AuthenticationBarrierReceipt) => Promise<boolean>;
     readFenceReceipt(accountId: string, receiptId: string): Promise<LifecycleFenceReceipt | null>;
     readFenceState(accountId: string): Promise<{
         fenced: boolean;
         receiptId: string | null;
         minimumAuthnEpoch: string;
     } | null>;
+    /** Trusted Auth composition only, after the consent reduction and its session revocation committed.
+     * Clears the fence that exact consent barrier raised. A fence the barrier did not raise, or one a later floor
+     * moved past, stays and the completion still commits; a recovery fence needs its establishment evidence.
+     */
+    completeConsentBarrier(value: AuthenticationBarrierReceipt): Promise<import("../command/command.ts").CommandOutcome<{
+        accountId: string;
+        receiptId: string;
+        minimumAuthnEpoch: string;
+    }>>;
     clearFence(input: LifecycleCommand & {
         evidence: unknown;
     }): Promise<import("../command/command.ts").CommandOutcome<{
@@ -325,6 +377,7 @@ export declare function createLifecycleCommands(config: Boundary & {
         accountId: string;
         handle: string;
         operationId: string;
+        reservedHandleException?: boolean;
     }>>;
     updateAccount(context: LifecycleRequest, input: LifecycleCommand & {
         patch: unknown;

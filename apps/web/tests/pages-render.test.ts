@@ -64,6 +64,31 @@ test('a node whose type has no component renders nothing and the rest of the pag
   expect(html).not.toContain('Carousel');
 });
 
+test('a malformed declared slot renders empty and keeps supported siblings in document order', () => {
+  const html = render({
+    root: { props: {} },
+    content: [
+      heading('first', 'First'),
+      { type: 'Stack', props: { id: 'broken', gap: 'sm', children: 'not-nodes' } },
+      {
+        type: 'Columns',
+        props: {
+          id: 'body',
+          split: 'even',
+          start: heading('hidden', 'Hidden'),
+          end: [heading('right', 'Right')],
+        },
+      },
+      heading('last', 'Last'),
+    ],
+  });
+  const order = ['First', 'Right', 'Last'].map((text) => html.indexOf(`>${text}</h2>`));
+  expect(order.every((index) => index >= 0)).toBe(true);
+  expect([...order].sort((a, b) => a - b)).toEqual(order);
+  expect(html).not.toContain('Hidden');
+  expect(html).not.toContain('not-nodes');
+});
+
 test("the render path's initial load stays within 24 KiB", async () => {
   const entry = new URL('../src/features/pages/render.tsx', import.meta.url).pathname;
   const outdir = mkdtempSync(join(tmpdir(), 'pages-render-'));

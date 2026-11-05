@@ -1,3 +1,4 @@
+import { sourceRecordMetadataFixture } from './transport-driver.ts';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { Database, Statement } from 'bun:sqlite';
@@ -8,15 +9,14 @@ import type { MediaImportAccepted, MediaImportRequest, MediaImportStatus } from 
 import type {
   CreateImportPipelineDriver,
   Exchange,
-  MediaMode,
   Phase,
   PipelineOptions,
   PipelineRecord,
   PipelineReport,
 } from '../../../specs/imports-pipeline-driver.ts';
 import { Importer, type ImportMediaResolution, type ImporterOptions } from '../src/importer.ts';
+import { createImportTransport, type ImportTransportOptions } from '../src/import-client.ts';
 import { createMediaResolver } from '../src/media-resolver.ts';
-import type { Owner } from '../src/record-bindings.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 
 const fixture = JSON.parse(
@@ -24,7 +24,7 @@ const fixture = JSON.parse(
 );
 const nativeRegistration = createSourceRegistration('bangumi');
 /** Machine-independent work counters for the record-cpu-growth specification. */
-export const pipelineWork = { conversions: 0, prepares: 0, statements: 0, transactions: 0 };
+export const pipelineWork = { conversions: 0, prepares: 0, statements: 0, transactions: 0, commits: 0 };
 const registration: typeof nativeRegistration = {
   ...nativeRegistration,
   convert(input, context) {
@@ -32,14 +32,23 @@ const registration: typeof nativeRegistration = {
     return nativeRegistration.convert(input, context);
   },
 };
+let tracedDatabases = 0;
 function countWork(database: Database): Database {
+  const trace = process.env.IMPORTER_PREPARE_TRACE === '1';
+  const databaseNumber = trace ? ++tracedDatabases : 0;
+  let prepareEvent = 0;
   const prepare = database.prepare.bind(database);
   const count = (sql: string) => {
     if (/^\s*BEGIN\b/i.test(sql)) pipelineWork.transactions++;
+    if (/^\s*(?:COMMIT|END)\b/i.test(sql)) pipelineWork.commits++;
   };
   database.prepare = ((sql: string, ...rest: unknown[]) => {
     pipelineWork.prepares++;
     count(sql);
+    // Opt-in cold-cache evidence only: bounded literal SQL, never bound parameters.
+    if (trace && ++prepareEvent <= 128 && sql.length <= 16_384) {
+      console.info('importer prepare trace:', JSON.stringify({ database: databaseNumber, event: prepareEvent, sql }));
+    }
     const statement = (prepare as (sql: string, ...rest: unknown[]) => Statement)(sql, ...rest);
     for (const method of ['run', 'get', 'all'] as const) {
       const execute = statement[method].bind(statement) as (...args: unknown[]) => unknown;
@@ -98,12 +107,14 @@ class Scheduler {
     private readonly exchanges: Exchange[],
     private readonly hook: (exchange: Exchange) => void,
     private readonly sleepLog: { phase: Phase; ms: number }[],
+    private readonly flushTurns = 8,
   ) {}
 
   request<T>(
     input: Omit<Exchange, 'started' | 'ended' | 'startOrder' | 'endOrder' | 'cancelled'>,
     signal: AbortSignal | undefined,
     operation: () => T,
+    delay = this.latency,
   ): Promise<T> {
     const exchange: Exchange = {
       ...input,
@@ -113,12 +124,32 @@ class Scheduler {
       endOrder: 0,
       cancelled: false,
     };
-    return this.schedule(this.latency, input.recordKey, signal, operation, exchange);
+    return this.schedule(delay, input.recordKey, signal, operation, exchange);
   }
 
   sleep(ms: number, signal: AbortSignal): Promise<void> {
     this.sleepLog.push({ phase: 'media', ms });
     return this.schedule(ms, '', signal, () => undefined);
+  }
+
+  timer(callback: () => void, ms: number): () => void {
+    this.active++;
+    const event: Event = {
+      at: this.now + ms,
+      key: '',
+      sequence: ++this.eventSequence,
+      operation: callback,
+      resolve() {},
+      reject() {},
+    };
+    this.events.push(event);
+    return () => {
+      const index = this.events.indexOf(event);
+      if (index !== -1) {
+        this.events.splice(index, 1);
+        this.active--;
+      }
+    };
   }
 
   private schedule<T>(
@@ -158,7 +189,7 @@ class Scheduler {
       },
     );
     while (!settled || this.events.length) {
-      await Promise.resolve();
+      for (let turn = 0; turn < this.flushTurns; turn++) await Promise.resolve();
       if (!this.events.length) {
         await Promise.resolve();
         continue;
@@ -241,8 +272,26 @@ function sourceRecord(record: PipelineRecord): SourceRecord {
   return { source: 'bangumi', key: record.key, revision: String(record.revision), payload };
 }
 
-export const createImportPipelineDriver: CreateImportPipelineDriver = async (factoryOptions) => {
+export type WriteSimulation = {
+  limit: number;
+  until?: number;
+  status?: number;
+  retryable?: boolean;
+  http?: Pick<ImportTransportOptions, 'maxAttempts' | 'maxWaitMs' | 'maxTotalWaitMs' | 'deadlineMs'>;
+  invocations?: { at: number; bytes: string; recordKey: string }[];
+  onSend?(
+    request: BatchWriteRequest,
+    at: number,
+  ): { status?: number; retryAfter?: string; delayMs?: number } | undefined;
+  accepted: Map<string, number>;
+  attempts: { at: number; inFlight: number; overloaded: boolean; keys: string[] }[];
+};
+export const createImportPipelineDriver: (
+  options: Parameters<CreateImportPipelineDriver>[0] & { writes?: WriteSimulation },
+) => ReturnType<CreateImportPipelineDriver> = async (factoryOptions) => {
   let options: PipelineOptions = { ...factoryOptions };
+  const writes = factoryOptions.writes;
+  let inFlightWrites = 0;
   const path = join(factoryOptions.directory, 'imports.sqlite');
   const receipts = new Map<string, Receipt>();
   const subjectKeys = new Set<string>();
@@ -316,11 +365,13 @@ export const createImportPipelineDriver: CreateImportPipelineDriver = async (fac
       retractionKeys.add(command.key);
       result = { key: command.key, status: 200, value: { revision: 1 } };
     }
+    if (writes) writes.accepted.set(command.key, (writes.accepted.get(command.key) ?? 0) + 1);
     receipts.set(command.key, { bytes, result: structuredClone(result) });
     return result;
   };
 
   const transport = {
+    setSourceRecordMetadata: sourceRecordMetadataFixture().setSourceRecordMetadata,
     readFence(tuple: { source: string; external_id: string; field_group: BatchCommand['source']['field_group'] }) {
       const key = tuple.external_id;
       return scheduler.request(
@@ -338,41 +389,98 @@ export const createImportPipelineDriver: CreateImportPipelineDriver = async (fac
       );
     },
     batchWrite(request: BatchWriteRequest): Promise<BatchWriteResult> {
-      const key = request.commands[0]!.source.external_id;
-      const bytes = JSON.stringify(request);
-      const bootstrap = request.commands.every((command) => command.op === 'create');
-      const metadata =
-        !bootstrap &&
-        request.commands.some((command) => command.op === 'propose' && command.source.field_group !== 'cover');
-      return scheduler.request(
-        {
-          recordKey: key,
-          phase: phase(key, 'staged'),
-          kind: 'bulk',
-          metadata,
-          bytes,
-          keys: request.commands.map((command) => command.key),
-          request: structuredClone(request),
-        },
-        currentSignal,
-        () => {
-          const inject = !bootstrap && fault?.recordKey === key;
-          if (inject && fault?.response === 'bulk-error')
-            return {
-              results: request.commands.map((command) => ({
-                key: command.key,
-                status: 409,
-                problem: { type: 'conflict', title: 'Fixture rejection', status: 409 },
-              })),
-            };
-          const results = request.commands.map((command) => applyCommand(command, JSON.stringify(command)));
-          if (inject && fault?.response === 'invalid-response')
-            return { results: [{ key: 'invalid', status: 200, value: { revision: 1 } }] } as BatchWriteResult;
-          return { results };
-        },
-      );
+      writes?.invocations?.push({
+        at: scheduler.now,
+        bytes: JSON.stringify(request),
+        recordKey: request.commands[0]!.source.external_id,
+      });
+      return writes ? httpTransport.batch(request, currentSignal) : remoteBatch(request);
     },
   };
+
+  const remoteBatch = (
+    request: BatchWriteRequest,
+    overloaded = false,
+    reply?: { status?: number; retryAfter?: string; delayMs?: number },
+  ): Promise<BatchWriteResult> => {
+    const key = request.commands[0]!.source.external_id;
+    const bytes = JSON.stringify(request);
+    const bootstrap = request.commands.every((command) => command.op === 'create');
+    const metadata =
+      !bootstrap &&
+      request.commands.some((command) => command.op === 'propose' && command.source.field_group !== 'cover');
+    return scheduler.request(
+      {
+        recordKey: key,
+        phase: phase(key, 'staged'),
+        kind: 'bulk',
+        metadata,
+        bytes,
+        keys: request.commands.map((command) => command.key),
+        request: structuredClone(request),
+      },
+      currentSignal,
+      () => {
+        if (overloaded || reply?.status !== undefined)
+          throw Response.json(
+            {
+              type: 'https://rezics.com/problems/transaction_retry_exhausted',
+              title: 'Transaction retry exhausted',
+              status: reply?.status ?? writes?.status ?? 503,
+              code: 'transaction_retry_exhausted',
+              retryable: writes?.retryable ?? true,
+            },
+            {
+              status: reply?.status ?? writes?.status ?? 503,
+              headers: reply?.retryAfter === undefined ? {} : { 'retry-after': reply.retryAfter },
+            },
+          );
+        const inject = !bootstrap && fault?.recordKey === key;
+        if (inject && fault?.response === 'bulk-error')
+          return {
+            results: request.commands.map((command) => ({
+              key: command.key,
+              status: 409,
+              problem: { type: 'conflict', title: 'Fixture rejection', status: 409 },
+            })),
+          };
+        const results = request.commands.map((command) => applyCommand(command, JSON.stringify(command)));
+        if (inject && fault?.response === 'invalid-response')
+          return { results: [{ key: 'invalid', status: 200, value: { revision: 1 } }] } as BatchWriteResult;
+        return { results };
+      },
+      reply?.delayMs,
+    );
+  };
+  const httpTransport = createImportTransport({
+    origin: 'https://api.example.test',
+    tokenProvider: async (_fresh?: boolean) => 'fixture',
+    ...writes?.http,
+    now: () => scheduler.now,
+    schedule: (callback, ms) => scheduler.timer(callback, ms),
+    sleep: (ms) => scheduler.sleep(ms, currentSignal ?? new AbortController().signal),
+    fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      const body = (await request.json()) as BatchWriteRequest;
+      const count = ++inFlightWrites;
+      const reply = writes!.onSend?.(body, scheduler.now);
+      const overloaded = count > writes!.limit && scheduler.now < (writes!.until ?? Infinity);
+      writes!.attempts.push({
+        at: scheduler.now,
+        inFlight: count,
+        overloaded,
+        keys: body.commands.map((command) => command.key),
+      });
+      try {
+        return Response.json(await remoteBatch(body, overloaded, reply));
+      } catch (error) {
+        if (error instanceof Response) return error;
+        throw error;
+      } finally {
+        inFlightWrites--;
+      }
+    }) as typeof fetch,
+  });
 
   const makeImporter = () => {
     const importerOptions: ImporterOptions = {
@@ -579,6 +687,7 @@ export const createImportPipelineDriver: CreateImportPipelineDriver = async (fac
       exchanges,
       exchangeHook,
       sleeps,
+      writes ? 256 : 8,
     );
   };
 

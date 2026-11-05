@@ -1,11 +1,13 @@
 id: https://rezics.com/catalogue/works
 name: works
 version: 1.0.0
-description: Launch profiles for music albums.
+description: Music album works, published editions, identified recordings and sourced quotations.
 prefixes:
   linkml: https://w3id.org/linkml/
   schema: http://schema.org/
   wd: http://www.wikidata.org/entity/
+  wdt: http://www.wikidata.org/prop/direct/
+  rezics: https://rezics.com/vocab/
 default_range: string
 imports:
   - linkml:types
@@ -15,6 +17,7 @@ classes:
     abstract: true
     is_a: CreativeWork
     slots:
+      - representativeEdition
       - datePublished
       - inLanguage
       - abstract
@@ -26,4 +29,210 @@ classes:
     slots:
       - bangumiSubjectId
     annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:datePublished, schema:genre]
       facets: contributor partOfSeries genre keywords inLanguage
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/MusicAlbum
+  MusicRelease:
+    is_a: CreativeWork
+    class_uri: schema:MusicRelease
+    description: >-
+      A specific published edition of a music album, with its catalogue number, format, date, label
+      and ordered recordings. Distinct from the album work, a personal copy, a playback file or a
+      recording. Languages and formats describe this edition; they do not create a Cartesian product
+      of releases. Medium-level disc or side identity is not published here.
+    exact_mappings:
+      - wd:Q108041547
+    slots:
+      - alternateName
+      - abstract
+      - datePublished
+      - inLanguage
+      - duration
+      - distributionFormat
+      - catalogNumber
+      - recordLabel
+      - releaseOf
+      - track
+      - musicBy
+      - contributor
+    annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:datePublished, wdt:P437]
+      facets: releaseOf datePublished distributionFormat recordLabel inLanguage
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/MusicRelease
+  MusicRecording:
+    is_a: CreativeWork
+    class_uri: schema:MusicRecording
+    description: >-
+      An identified recorded performance of a musical work, such as one song take. Distinct from the
+      album grouping, a published edition, a playback file or a personal copy.
+    exact_mappings:
+      - wd:Q5057302
+    slots:
+      - alternateName
+      - datePublished
+      - duration
+      - inLanguage
+      - byArtist
+      - musicBy
+      - contributor
+    annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: [schema:duration, schema:datePublished]
+      facets: byArtist datePublished duration inLanguage
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/MusicRecording
+
+  Quotation:
+    is_a: Thing
+    class_uri: schema:Quotation
+    description: An authored quotation of a work, with speaker, credited creator and cited source kept distinct.
+    exact_mappings:
+      - wd:Q815341
+    slots:
+      - abstract
+      - inLanguage
+      - quotationText
+      - spokenByCharacter
+      - about
+      - creator
+      - actor
+    annotations:
+      list_presentation:
+        imageAspect: portrait
+        keyFacts: []
+      facets: inLanguage
+      cover_ratio: 5:7
+      schema_org_type: https://schema.org/Quotation
+
+slots:
+  releaseOf:
+    slot_uri: schema:releaseOf
+    description: The music album work this published edition realizes.
+    range: MusicAlbum
+    annotations:
+      datatype: wikibase-item
+      relation_group: derivation
+      inverse: schema:albumRelease
+      relation_order: date
+      acyclic: true
+  catalogNumber:
+    slot_uri: schema:catalogNumber
+    description: The catalogue number assigned to this edition by its issuing label.
+    exact_mappings:
+      - wd:P528
+    annotations:
+      datatype: string
+  recordLabel:
+    slot_uri: schema:recordLabel
+    description: The record label that issued this edition.
+    range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P264
+    annotations:
+      datatype: wikibase-item
+      relation_group: association
+      inverse: rezics:labelOf
+      relation_order: name
+  track:
+    slot_uri: schema:track
+    description: An identified recording appearing on this edition, in listed order.
+    range: MusicRecording
+    multivalued: true
+    exact_mappings:
+      - wd:P658
+    annotations:
+      datatype: wikibase-item
+      qualifiers: position creditedAs detailedRole datePublished sameAs listingPart
+      relation_group: membership
+      inverse: rezics:recordingOn
+      relation_order: position
+      relation_slot_key: wdt:P642
+      acyclic: true
+  byArtist:
+    slot_uri: schema:byArtist
+    description: A person or organization credited as the performing artist of this recording.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    exact_mappings:
+      - wd:P175
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs position detailedRole appliesToPart
+      relation_group: credit
+      inverse: rezics:artistOf
+      relation_order: position
+      relation_filter: [wdt:P3831, wdt:P518]
+  listingPart:
+    slot_uri: wdt:P642
+    description: >-
+      The listing-occurrence Concept that distinguishes this track association from another
+      association to the same recording. It is not a published music medium.
+    range: Concept
+    annotations:
+      datatype: wikibase-item
+      relation_group: classification
+      inverse: none
+      relation_order: name
+
+  quotationText:
+    slot_uri: schema:text
+    description: The exact authored quotation document, with its language on the document value.
+    annotations:
+      datatype: document
+  spokenByCharacter:
+    slot_uri: schema:spokenByCharacter
+    description: The fictional character who speaks this quotation, never a credited creator or voice actor.
+    range: Character
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: spoilerLevel
+      relation_group: appearance
+      inverse: rezics:spokenQuotations
+      relation_order: name
+  about:
+    slot_uri: schema:about
+    description: The creative work this quotation cites. A substring match never creates this relationship.
+    range: CreativeWork
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: spoilerLevel appliesToPart
+      relation_group: membership
+      inverse: schema:subjectOf
+      relation_order: name
+      acyclic: true
+  creator:
+    slot_uri: schema:creator
+    description: A person or organization credited for this quotation, never the fictional speaker.
+    any_of:
+      - range: Person
+      - range: Organization
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs
+      relation_group: association
+      inverse: rezics:quotationsCreated
+      relation_order: name
+  actor:
+    slot_uri: schema:actor
+    description: An optional performing voice for this quotation. A speaker never infers a voice actor.
+    range: Person
+    multivalued: true
+    annotations:
+      datatype: wikibase-item
+      qualifiers: creditedAs
+      relation_group: association
+      inverse: rezics:quotationsVoiced
+      relation_order: name

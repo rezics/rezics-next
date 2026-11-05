@@ -1,13 +1,32 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
-import { Pool } from 'pg';
+import { Client, Pool } from 'pg';
 import { exportJWK, generateKeyPair } from 'jose';
-import { testDatabase } from '../../../auth/scripts/database.ts';
+import { createAuthDatabase } from '../support/auth-database.ts';
 import { handleFixture } from './workflow-handle-fixture.ts';
 import { routeOf } from '../../src/route/route.ts';
-import { AuthBindingDeniedError } from '../../src/access/auth-bindings.ts';
 
-let deployment: ReturnType<typeof testDatabase>;
+async function cloneAuthDatabase(): Promise<{ url: string; close(): Promise<void> }> {
+  const name = `workflow_members_auth_${Bun.randomUUIDv7().replaceAll('-', '')}`;
+  const url = await createAuthDatabase(process.env.DATABASE_URL!, name);
+  return {
+    url,
+    async close() {
+      const admin = new URL(process.env.DATABASE_URL!);
+      admin.pathname = '/postgres';
+      const owner = new Client({ connectionString: admin.toString() });
+      await owner.connect();
+      try {
+        await owner.query(`DROP DATABASE IF EXISTS "${name}_system" WITH (FORCE)`);
+        await owner.query(`DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`);
+      } finally {
+        await owner.end();
+      }
+    },
+  };
+}
+
+let deployment: Awaited<ReturnType<typeof cloneAuthDatabase>>;
 let fixture: Awaited<ReturnType<typeof handleFixture>>;
 let system: Pool;
 const password = randomBytes(24).toString('base64url');
@@ -51,12 +70,13 @@ async function holds(accountId: string) {
   ).rows.map((r) => r.reservation_id);
 }
 beforeAll(async () => {
-  deployment = testDatabase();
+  deployment = await cloneAuthDatabase();
   const database = new Pool({ connectionString: deployment.url });
-  await database.query('CREATE DATABASE membership_workflow_system');
+  const systemName = `${new URL(deployment.url).pathname.slice(1)}_system`;
+  await database.query(`CREATE DATABASE "${systemName}"`);
   await database.end();
   const systemUrl = new URL(deployment.url);
-  systemUrl.pathname = '/membership_workflow_system';
+  systemUrl.pathname = `/${systemName}`;
   system = new Pool({ connectionString: systemUrl.href });
   const signing = await generateKeyPair('ES256', { extractable: true });
   fixture = await handleFixture({
@@ -72,7 +92,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await fixture?.close();
   await system?.end();
-  deployment?.close();
+  await deployment?.close();
 });
 
 test('DBOS sequences actual member and organization commands and resumes a lost release acknowledgement once', async () => {
@@ -132,11 +152,11 @@ test('DBOS sequences actual member and organization commands and resumes a lost 
   expect(history).toContain('accounts.change-membership');
   expect(history).toContain('accounts.release-membership');
   fixture.approve('member', await token(member));
-  // The committed continuation authorizes cleanup, but cannot disclose a
-  // result through the initiating bearer after its account was deleted.
-  await expect(
-    fixture.workflows.deleteAccount({ key: 'delete_former_member', authorization: 'member', accountId: member }),
-  ).rejects.toBeInstanceOf(AuthBindingDeniedError);
+  // The member's own deletion removes the standing it relied on: the answer is
+  // the workflow's outcome, and the deletion stays committed.
+  expect(
+    await fixture.workflows.deleteAccount({ key: 'delete_former_member', authorization: 'member', accountId: member }),
+  ).toEqual({ accountId: member });
   expect(await fixture.read(member)).toMatchObject({ state: 'deleted', fenced: true });
   expect((await fixture.database.query('SELECT id FROM "user" WHERE id=$1', [member])).rows).toEqual([]);
 }, 60000);
@@ -359,17 +379,17 @@ test('successful consent and client reductions invalidate already issued JWTs at
   const old = ((await tokenResponse.json()) as { access_token: string }).access_token;
   expect((await fixture.authenticate(old)).kind).toBe('account');
   fixture.approve('consent-reduction', login.token);
-  // The reduction commits its fence and effect, then current-authority result
-  // disclosure refuses the initiating bearer that the operation just revoked.
-  await expect(
-    fixture.workflows.reduceConsent({
+  // The reduction commits its fence and effect and removes the caller's own
+  // standing: the answer is the workflow's outcome, not a refusal.
+  expect(
+    await fixture.workflows.reduceConsent({
       key: 'native_consent_reduction',
       authorization: 'consent-reduction',
       accountId: actor,
       clientId: 'reduction-client',
       scopes: ['read'],
     }),
-  ).rejects.toBeInstanceOf(AuthBindingDeniedError);
+  ).toEqual({ accountId: actor });
   await expect(fixture.authenticate(old)).rejects.toThrow();
   expect(
     (
@@ -392,13 +412,13 @@ test('successful consent and client reductions invalidate already issued JWTs at
   const deleted = await person('deleted_reduction_owner');
   const deletedLogin = await operatorLogin(deleted);
   fixture.approve('delete-reduction-owner', deletedLogin.token);
-  await expect(
-    fixture.workflows.deleteAccount({
+  expect(
+    await fixture.workflows.deleteAccount({
       key: 'delete_reduction_owner',
       authorization: 'delete-reduction-owner',
       accountId: deleted,
     }),
-  ).rejects.toBeInstanceOf(AuthBindingDeniedError);
+  ).toEqual({ accountId: deleted });
   await expect(fixture.authenticate(deletedLogin.token)).rejects.toThrow();
   const deletedAccount = await fixture.read(deleted);
   expect(deletedAccount).toMatchObject({ state: 'deleted' });

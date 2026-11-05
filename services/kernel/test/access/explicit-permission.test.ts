@@ -1,3 +1,4 @@
+import { suspendAccount } from '../support/native-suspension-driver.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createResourcePublicEligibility } from '../../src/access/eligibility.ts';
 import { accessRoot, deriveAccess } from '../../src/access/derived-access.ts';
@@ -36,7 +37,9 @@ function publicResource(f: ActorFixture): Resource {
 
 async function decide(f: ActorFixture, actor = f.actor, resource: Resource = f.resource, access?: Access) {
   const account = await readAccount(pool, routeOf(actor.accountId)!, actor.accountId);
-  const permissions = access ?? f.permissions({ actions: new Map([[action, { anonymous: true }]]) });
+  const permissions =
+    access ??
+    f.permissions({ actions: new Map([[action, { anonymous: true, 'x-resource-types': ['fixture.page'] }]]) });
   const context = { pool, deadline: Date.now() + 10_000, account };
   const check = await accessExplicitCheck(permissions, actor, action, resource, context);
   const ordinary = await accessCheck(accessRoot(permissions), actor, action, resource, context);
@@ -99,11 +102,7 @@ for (const operand of ['denial', 'fence', 'principal', 'delegation', 'temporal']
         routeOf(f.actorId),
         f.actorId,
       ]);
-    if (operand === 'principal')
-      await pool.query("UPDATE access.account SET state='suspended' WHERE route=$1 AND account_id=$2", [
-        routeOf(f.principalId),
-        f.principalId,
-      ]);
+    if (operand === 'principal') await suspendAccount(pool, f.principalId);
     if (operand === 'delegation')
       await pool.query('DELETE FROM access.principal_assignment WHERE route=$1 AND principal_id=$2', [
         routeOf(f.principalId),

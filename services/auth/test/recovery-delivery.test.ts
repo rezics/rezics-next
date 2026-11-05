@@ -1,8 +1,11 @@
+import { trustedAccessPorts } from './support/trusted-access.ts';
 import { expect, test } from 'bun:test';
 import { createHash, createHmac } from 'node:crypto';
 import { betterAuth, type BetterAuthOptions } from 'better-auth';
 import { betterAuthOptions } from '../src/better-auth.ts';
 import { recoveryDelivery } from '../src/recovery-delivery.ts';
+import { readRecoveryCopySource, readRecoveryCopySourcePage } from '../src/recovery-copy-source.ts';
+import { startNativeErasure } from '../src/erasure-native.ts';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool, type PoolClient } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
@@ -101,7 +104,10 @@ test('native failed mail deletes only its newly committed verification and proof
       audience: 'https://api.test',
       secret: 'persistent-recovery-delivery-secret-32-bytes',
       signing: { activeKid: key.kid, privateKeys: [key] },
-      trustedAccess: {
+      trustedAccess: trustedAccessPorts({
+        async readFencedAccount(id) {
+          return (await this.readAccount(id)) ?? (await this.readRecoveryAccount!(id));
+        },
         readAccount: async (id) => accounts.get(id) ?? null,
         readRecoveryAccount: async (id) => accounts.get(id) ?? null,
         authorizeProvisioning: async (id) => ({ accountId: id }),
@@ -128,7 +134,7 @@ test('native failed mail deletes only its newly committed verification and proof
           )
             throw new Error('Invalid completion');
         },
-      },
+      }),
       recoveryDelivery: {
         async deliver(value) {
           const source = (await database.query('SELECT * FROM auth_recovery WHERE proof_hash=$1', [hash(value.token)]))
@@ -223,6 +229,202 @@ test('native failed mail deletes only its newly committed verification and proof
       ).toBe(200);
     }
     expect(authorizations).toBe(2);
+  } finally {
+    await database.end();
+    fixture.close();
+  }
+}, 60000);
+
+test('actual native recovery INSERT commits typed Source before hooks and disclosure; void, ambiguous and late results retain the original custody', async () => {
+  const fixture = testDatabase();
+  // A callback can use this sole slot only if the native transaction/lease ended.
+  const database = new Pool({ connectionString: fixture.url, max: 1 });
+  try {
+    for (const mode of ['void', 'throw', 'result', 'timeout', 'late'] as const) {
+      const accountId = `source-${mode}`;
+      const email = `${accountId}@example.test`;
+      await database.query('INSERT INTO "user" (id,name,email,"emailVerified") VALUES ($1,\'\',$2,false)', [
+        accountId,
+        email,
+      ]);
+      let deliveryId = '';
+      let token = '';
+      let calls = 0;
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const binding = recoveryDelivery(
+        database,
+        {
+          async deliver(message) {
+            calls++;
+            expect(message.deliveryId).toBe(deliveryId);
+            expect(message.token).toBe(token);
+            const source = (await readRecoveryCopySource(database, deliveryId))!;
+            expect(source).toMatchObject({
+              deliveryId,
+              status: 'in-flight',
+              custody: 'unknown',
+              sinkGeneration: null,
+              attempts: 1,
+              code: 'receiving-result-unavailable',
+              sourceComponent: 'verification',
+            });
+            expect(source.roles).toEqual({
+              account_id: accountId,
+              erasure_human_id: null,
+              erasure_operator_id: null,
+              erasure_client_owner_id: null,
+              erasure_source_client_owner_id: null,
+            });
+            expect(JSON.stringify(source)).not.toContain(email);
+            expect(JSON.stringify(source)).not.toContain(token);
+            if (mode === 'throw') throw new Error(`private ${email} ${token}`);
+            if (mode === 'timeout') await held;
+            if (mode === 'result') return { erased: true, sinkGeneration: 'unverified-caller-claim' } as never;
+            if (mode === 'late') {
+              const obligation = await startNativeErasure(database, accountId, 7);
+              expect(
+                (
+                  await database.query('SELECT applicable,recovery_copy_pending FROM auth_erasure WHERE id=$1', [
+                    obligation,
+                  ])
+                ).rows[0],
+              ).toEqual({ applicable: true, recovery_copy_pending: 'recovery-copy-custody' });
+            }
+          },
+        },
+        'https://source.auth.test',
+      );
+      const options = betterAuthOptions(
+        database,
+        'https://source.auth.test',
+        'persistent-source-native-secret-at-least-32-bytes',
+      );
+      const native = betterAuth({
+        ...options,
+        emailAndPassword: { enabled: true, resetPasswordTokenExpiresIn: 300, sendResetPassword: binding.send },
+        databaseHooks: {
+          verification: {
+            create: {
+              async after(row, context) {
+                deliveryId = row.id;
+                token = row.identifier.slice('reset-password:'.length);
+                const source = (await readRecoveryCopySource(database, deliveryId))!;
+                expect(source).toMatchObject({ status: 'intent', attempts: 0, custody: 'unknown' });
+                expect(source.expiresAt).toEqual(row.expiresAt);
+                const nativeRows = (
+                  await database.query(
+                    `SELECT v.erasure_role_xid=s.erasure_role_xid AS same_transaction
+                  FROM verification v JOIN auth_recovery_copy_source s ON s.delivery_id=v.id WHERE v.id=$1`,
+                    [row.id],
+                  )
+                ).rows;
+                expect(nativeRows).toEqual([{ same_transaction: true }]);
+                await binding.hooks.create!.after!(row, context);
+              },
+            },
+          },
+        },
+      });
+      const outcome = { failed: false };
+      try {
+        await binding.run({ accountId, epoch: 7 }, () => native.api.requestPasswordReset({ body: { email } }), outcome);
+      } finally {
+        release();
+      }
+      expect(calls).toBe(1);
+      expect(outcome.failed).toBe(mode === 'throw' || mode === 'timeout');
+      const code =
+        mode === 'throw'
+          ? 'callback-failed'
+          : mode === 'timeout'
+            ? 'callback-timeout'
+            : mode === 'result'
+              ? 'unsupported-result'
+              : 'legacy-void';
+      expect(await readRecoveryCopySource(database, deliveryId)).toMatchObject({
+        deliveryId,
+        status: 'unknown',
+        custody: 'unknown',
+        attempts: 1,
+        code,
+      });
+      const page = await readRecoveryCopySourcePage(database, { accountId, role: 'account_id' });
+      expect(page).toEqual([{ deliveryId, status: 'unknown', custody: 'unknown', code }]);
+      expect(Buffer.byteLength(JSON.stringify(page[0]))).toBeLessThanOrEqual(1024);
+      expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(65536);
+      // Native cleanup/TTL does not remove a potentially retained external copy.
+      await database.query('DELETE FROM auth_recovery WHERE account_id=$1', [accountId]);
+      await database.query('DELETE FROM verification WHERE id=$1', [deliveryId]);
+      expect(await readRecoveryCopySource(database, deliveryId)).toMatchObject({ custody: 'unknown', code });
+      await expect(
+        database.query('DELETE FROM auth_recovery_copy_source WHERE delivery_id=$1', [deliveryId]),
+      ).rejects.toThrow('receiving disposition unavailable');
+      await expect(binding.send({ user: { id: accountId, email }, token })).rejects.toThrow('provenance unavailable');
+      expect(calls).toBe(1);
+    }
+    expect(await readRecoveryCopySourcePage(database, { accountId: 'unrelated', role: 'account_id' })).toEqual([]);
+  } finally {
+    await database.end();
+    fixture.close();
+  }
+}, 60000);
+
+test('Source recording failure rolls back the actual native verification INSERT and cannot be replaced with a later observation', async () => {
+  const fixture = testDatabase();
+  const database = new Pool({ connectionString: fixture.url, max: 1 });
+  try {
+    const options = betterAuthOptions(
+      database,
+      'https://atomic-source.auth.test',
+      'persistent-atomic-source-secret-at-least-32-bytes',
+    );
+    await database.query(
+      `INSERT INTO "user" (id,name,email,"emailVerified") VALUES ('atomic-source','','atomic@example.test',false)`,
+    );
+    await database.query(`CREATE FUNCTION reject_recovery_source() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'Injected Source interruption'; END $$;
+      CREATE TRIGGER aa_reject_source BEFORE INSERT ON auth_recovery_copy_source
+      FOR EACH ROW EXECUTE FUNCTION reject_recovery_source()`);
+    let hooks = 0;
+    let calls = 0;
+    const binding = recoveryDelivery(database, {
+      async deliver() {
+        calls++;
+      },
+    });
+    const native = betterAuth({
+      ...options,
+      emailAndPassword: { enabled: true, resetPasswordTokenExpiresIn: 300, sendResetPassword: binding.send },
+      databaseHooks: {
+        verification: {
+          create: {
+            async after(row, context) {
+              hooks++;
+              await binding.hooks.create!.after!(row, context);
+            },
+          },
+        },
+      },
+    });
+    await expect(
+      binding.run({ accountId: 'atomic-source', epoch: 7 }, () =>
+        native.api.requestPasswordReset({ body: { email: 'atomic@example.test' } }),
+      ),
+    ).rejects.toThrow();
+    expect(hooks).toBe(0);
+    expect(calls).toBe(0);
+    expect((await database.query('SELECT id FROM verification')).rows).toEqual([]);
+    expect((await database.query('SELECT delivery_id FROM auth_recovery_copy_source')).rows).toEqual([]);
+    expect((await database.query('SELECT proof_hash FROM auth_recovery')).rows).toEqual([]);
+    await database.query('DROP TRIGGER aa_reject_source ON auth_recovery_copy_source');
+    await database.query(`INSERT INTO verification (id,identifier,value,"expiresAt")
+      VALUES ('historical-source','reset-password:old-proof','atomic-source',now()+interval '5 minutes')`);
+    await expect(
+      database.query(`INSERT INTO auth_recovery_copy_source(delivery_id) VALUES ('historical-source')`),
+    ).rejects.toThrow('Source provenance unavailable');
   } finally {
     await database.end();
     fixture.close();
