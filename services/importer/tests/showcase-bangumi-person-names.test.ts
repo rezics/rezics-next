@@ -26,7 +26,11 @@ test('the default selected Person shares one bounded PersonDetail response for c
   expect(developmentShowcaseSelection.bangumi).toContain(selection.rootSubject);
   const selectedRows = JSON.parse(selection.responseBody) as { id: number; type: number; name: string }[];
   expect(createHash('sha256').update(selection.responseBody).digest('hex')).toBe(selection.responseSha256);
-  expect(selectedRows).toContainEqual({ id: selection.person.id, type: selection.person.type, name: selection.person.name });
+  expect(
+    selectedRows.some(
+      ({ id, type, name }) => id === selection.person.id && type === selection.person.type && name === selection.person.name,
+    ),
+  ).toBe(true);
   expect(createHash('sha256').update(selection.person.responseBody).digest('hex')).toBe(selection.person.detailSha256);
 
   const directory = await mkdtemp(join(tmpdir(), 'showcase-bangumi-person-names-'));

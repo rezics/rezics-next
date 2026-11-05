@@ -58,7 +58,12 @@ test('PersonDetail infobox name reaches cited Person statements with the origina
     convert({ ...record, infobox: [{ key: '简体中文名', value: '岸本斉史' }] }).digest,
   );
   expect(convert(record).proposals.some((command) => command.op === 'propose' && command.statement.property.id === 'schema:alternateName')).toBe(false);
-  expect(convert({ ...record, type: 2 }).proposals[0]?.op === 'create' ? convert({ ...record, type: 2 }).proposals[0]?.subject.type : undefined).toBe('schema:Organization');
+  const organization = convertCrossMediaEntity(
+    { external_id: 'person:641', record_revision: null, record: { ...record, type: 2 } },
+    { source: 'bangumi_cross_media' },
+    { sourceKind: 'bangumi' },
+  );
+  expect(organization.proposals.find((command) => command.op === 'create')?.subject.type).toBe('schema:Organization');
   expect(() => convert({ ...record, id: 642 })).toThrow(ConversionError);
 });
 

@@ -23,7 +23,7 @@ test('selected actual Persons use bounded API career fallback and sealed source 
         source: 'bangumi',
         key: 'person:8102',
         revision: null,
-        payload: { id: 8102, type: 1, name: 'Archive role', career: [] },
+        payload: { id: 8102, type: 1, name: 'Archive role', name_cn: 'Archive Chinese', career: [] },
       },
       {
         source: 'bangumi',

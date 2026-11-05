@@ -27,7 +27,6 @@ test('actual runImportCli accepts pinned five-column PersonDetail rows as propos
     const state = join(directory, 'state.sqlite');
     const key = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey.export({ format: 'jwk' });
     await writeFile(keyPath, JSON.stringify({ ...key, kid: randomUUID(), alg: 'ES256' }), { mode: 0o600 });
-    await writeFile(state, '', { mode: 0o600 });
     const row = `/type/person\tperson:641\tunversioned\t\t${evidence.operatorExample.responseBody}\n`;
     const sent: BatchCommand[] = [];
     const subjects = new Map<string, string>();
