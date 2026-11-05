@@ -5,9 +5,10 @@ mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: {} }));
 
+const { characterAddress } = await import('../src/features/catalogue/character-profile-actions');
+
 import type { KernelClient } from '@rezics/client';
 import { candidateContext } from '../src/subject/candidates';
-import { characterAddress } from '../src/features/catalogue/character-profile-actions';
 import {
   characterPublicReturnHref,
   globalCharacterCorrectionHref,
