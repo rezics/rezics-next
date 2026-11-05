@@ -1378,9 +1378,15 @@ exec "${realGit}" "$@"
       basePresence: 'present',
       precondition: 'satisfied',
     } as const);
-    const unavailable = (id: string, state: string, completion: string, commit: string | null, reason: string) => ({
+    const unavailable = (
+      id: string,
+      state: string,
+      completion: 'integrated' | 'unknown',
+      commit: string | null,
+      reason: string,
+    ) => ({
       id, state, completion, commit, sourcePresence: 'unknown', basePresence: 'unknown', precondition: 'unknown', reason,
-    });
+    } as const);
     expect(captured.context.dependencies).toEqual({
       required: 10,
       included: 10,
