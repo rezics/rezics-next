@@ -18,7 +18,7 @@ export type ScreenCurrentVisit = {
   locale: string;
   definition: string;
   source: string;
-  occurrence?: ScreenCurrentOccurrence;
+  occurrence?: ScreenCurrentOccurrence | undefined;
 };
 export type ScreenCurrentReturn = Omit<ScreenCurrentVisit, 'source'>;
 export type ScreenCurrentVisitSearch =

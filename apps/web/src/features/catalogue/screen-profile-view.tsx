@@ -8,6 +8,7 @@ import { useId, useLayoutEffect, useMemo, useRef, useState, type ComponentProps,
 import { flushSync } from 'react-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickText } from '@rezics/composition';
+import { releaseDigest } from '@rezics/definitions';
 import type { EntityPickerSearch } from '@rezics/ui/entity-picker';
 import { Button, buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../paraglide/messages.js';
@@ -191,7 +192,7 @@ function ScreenProfileLive({
   id?: string | undefined;
   series?: string | undefined;
   context?: string;
-  realm?: string;
+  realm?: string | undefined;
   locale: string;
   session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
   transport: ScreenTransport;
@@ -337,9 +338,9 @@ function ScreenProfileLive({
     !query.isError &&
     query.data?.ok &&
     query.data.public?.subject.id === id &&
-    query.data.public.subject.context === context &&
-    query.data.public.subject.release === releaseDigest(query.data.release) &&
-    (!visit || (visit.subject === id && visit.context === context && visit.type === query.data.public.subject.type))
+    query.data.public?.subject.context === context &&
+    query.data.public?.subject.release === releaseDigest(query.data.release) &&
+    (!visit || (visit.subject === id && visit.context === context && visit.type === query.data.public?.subject.type))
       ? query.data
       : undefined;
   const currentInspection: ScreenCurrentOccurrence | undefined =
@@ -391,10 +392,10 @@ function ScreenProfileLive({
           result.isSuccess &&
           result.data?.ok &&
           result.data.public?.subject.id === id &&
-          result.data.public.subject.context === context &&
-          result.data.public.subject.release === releaseDigest(result.data.release) &&
+          result.data.public?.subject.context === context &&
+          result.data.public?.subject.release === releaseDigest(result.data.release) &&
           (!visit ||
-            (visit.subject === id && visit.context === context && visit.type === result.data.public.subject.type))
+            (visit.subject === id && visit.context === context && visit.type === result.data.public?.subject.type))
         )
           setRetired(false);
       })
@@ -770,7 +771,7 @@ function ScreenCorrection({
 }: {
   id: string;
   context: string;
-  realm?: string;
+  realm?: string | undefined;
   locale: string;
   session: string;
   transport: ScreenTransport;

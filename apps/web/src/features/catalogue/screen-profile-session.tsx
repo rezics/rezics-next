@@ -142,7 +142,7 @@ export function ScreenCurrentVisitRecovery({
   retry,
 }: {
   locale: string;
-  globalHref?: string;
+  globalHref?: string | undefined;
   message?: 'invalid' | 'unavailable' | 'concealed';
   retry?: () => void;
 }) {
