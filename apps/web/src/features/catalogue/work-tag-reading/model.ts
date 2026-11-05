@@ -134,10 +134,7 @@ export function projectWorkTags(input: {
       const spoilerLevels = spoilerParts.map((qualifier) =>
         qualifier.value.type === 'value' ? readNativeSpoilerLevel(qualifier.value.content) : null,
       );
-      if (spoilerLevels.some((level) => level === null)) {
-        hasUnavailable = true;
-        continue;
-      }
+      if (spoilerLevels.some((level) => level === null)) continue;
       const spoilerQualifiers = spoilerParts.map((qualifier, index) => ({
         property: qualifier.property.id,
         in: [spoilerLevels[index]!],

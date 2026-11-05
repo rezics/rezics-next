@@ -287,7 +287,16 @@ function tagReading(size = 1) {
         tagQualifier('rezics:sourceTagWeightMetric', 'vndbTagsRating', 'string'),
         tagQualifier('rezics:spoilerLevel', { amount: '+1', unit: '1' }),
       ],
-      references: [{ parts: [tagQualifier('schema:url', 'https://vndb.org/v17', 'url')] }],
+      references: [
+        {
+          parts: [
+            tagQualifier('schema:url', 'https://vndb.org/v17', 'url'),
+            tagQualifier('rezics:sourceTagId', 'g3', 'string'),
+            tagQualifier('rezics:sourceSnapshot', `unversioned:sha256:${'a'.repeat(64)}`, 'string'),
+          ],
+        },
+        { parts: [tagQualifier('schema:url', 'https://api.vndb.org/kana#post-vn', 'url')] },
+      ],
     })) as SubjectRead['subject']['statements'][string],
   };
   return source;
@@ -315,8 +324,8 @@ test('tag assertions preserve exact provider meaning, duplicate rows, original i
   expect(tags.tags[0]?.weight).toEqual({ state: 'source', amount: '+2.59999990463257', metric: 'vndbTagsRating' });
   const html = tagMarkup(source);
   expect(html.match(/data-tag-index=/g)).toHaveLength(2);
-  expect(html).toContain('VNDB tags.rating: +2.59999990463257');
-  expect(html).toContain('Supplied spoiler level: 1');
+  expect(html).toContain('VNDB aggregate rating: 2.59999990463257 / 3');
+  expect(html).toContain('Spoiler level: 1');
   expect(html).not.toContain(id(799));
   expect(html).toContain(`/subjects/${id(701)}/`);
   for (const threshold of [0, 2]) {
@@ -343,30 +352,41 @@ test('tag assertions preserve exact provider meaning, duplicate rows, original i
     const unsupported = structuredClone(statementWithWeight);
     unsupported.qualifiers[0]!.value.content = { amount, unit } as never;
     expect(workTagWeight(unsupported, releasedTags)).toEqual({ state: 'unavailable' });
+    expect(
+      tagMarkup({ ...source, subject: { ...source.subject, statements: { 'schema:genre': [unsupported] } } }),
+    ).not.toContain('data-state="available"');
   }
   const unsupported = structuredClone(statementWithWeight);
   unsupported.qualifiers[1]!.value.content = 'importConfidence';
   expect(workTagWeight(unsupported, releasedTags)).toEqual({ state: 'unsupported' });
   expect(tagMarkup({ ...source, subject: { ...source.subject, statements: { 'schema:genre': [absent] } } })).toContain(
-    'No source weight supplied',
+    'No source weight recorded',
   );
+  const unknown = structuredClone(statementWithWeight);
+  unknown.qualifiers = [
+    { property: { id: 'rezics:spoilerLevel', data_type: 'quantity' }, value: { type: 'somevalue' } },
+  ];
+  const withStatements = (statements: (typeof source.subject.statements)[string]) => ({
+    ...source,
+    subject: { ...source.subject, statements: { 'schema:genre': statements } },
+  });
+  expect(tagMarkup(withStatements([unknown]), 2)).toBe(tagMarkup(withStatements([]), 2));
 });
 
-test('the 24-row preview exposes native continuation without hidden totals and distinguishes unavailable from no admitted tags', () => {
+test('the installed tag window pages disclosed assertions without borrowing native totals and distinguishes unavailable from empty', () => {
   const source = tagReading(27);
   source.subject.relationCounts = { 'schema:genre': 999999 };
   const html = tagMarkup(source);
-  expect(html.match(/data-tag-index=/g)).toHaveLength(24);
-  expect(html).toContain('first 24 admitted assertions');
-  expect(html).toContain('/details?via=');
-  expect(html).toContain('property=schema%3Agenre');
-  expect(html).not.toContain('property=schema%3Acontributor');
-  expect(html).not.toContain('property=wdt%3AP179');
-  expect(html.replace(/<[^>]*>/g, '')).not.toMatch(/\b27\b/);
+  expect(html.match(/data-tag-index=/g)).toHaveLength(12);
+  expect(html).toContain('More tags');
+  expect(html).toContain('27 tags');
+  expect(html).toContain('role=schema%3Agenre');
+  expect(html).not.toContain('role=schema%3Acontributor');
+  expect(html).not.toContain('role=wdt%3AP179');
   expect(html).not.toMatch(/(?<!\d)999999(?!\d)/);
   const empty = tagMarkup(source, 0);
-  expect(empty).toContain('No admitted tag assertions');
-  expect(empty).not.toContain('first 24 admitted assertions');
+  expect(empty).toContain('No work tags are disclosed in this reading.');
+  expect(empty).not.toContain('More tags');
   expect(empty).not.toMatch(/(?<!\d)999999(?!\d)/);
   const unavailable = renderToStaticMarkup(
     createElement(SubjectConceptTags, {
@@ -376,11 +396,11 @@ test('the 24-row preview exposes native continuation without hidden totals and d
       spoilerThreshold: 0,
     }),
   );
-  expect(unavailable).toContain('Tag evidence is unavailable');
-  expect(unavailable).not.toContain('No admitted tag assertions');
+  expect(unavailable).toContain('Tags are unavailable for this released reading.');
+  expect(unavailable).not.toContain('No work tags are disclosed in this reading.');
 });
 
-test('evidence inspection is independent of browsing and retires on preference and equal source replacement', async () => {
+test('return restores the exact assertion beyond the first tag window without replaying focus after replacement', async () => {
   const { dirname } = await import('node:path');
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -405,9 +425,9 @@ test('evidence inspection is independent of browsing and retires on preference a
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
-  const source = tagReading();
-  const returnHref = `/en/subjects/${id(700)}/book#work-tags?statement=${id(800)}&property=schema%3Agenre&spoiler=1&focus=browse`;
-  const draw = (read: SubjectRead, threshold: number) =>
+  const source = tagReading(27);
+  const returnHref = `/en/subjects/${id(700)}/book#work-tags?statement=${id(825)}&property=schema%3Agenre&spoiler=1&focus=browse`;
+  const draw = (read: SubjectRead, threshold: number, currentHref = returnHref) =>
     act(async () => {
       root.render(
         createElement(SubjectConceptTags, {
@@ -416,29 +436,46 @@ test('evidence inspection is independent of browsing and retires on preference a
           definitions: releasedTags,
           locale: 'en',
           spoilerThreshold: threshold,
-          currentHref: returnHref,
+          currentHref,
         }),
       );
     });
-  const inspect = () => host.querySelector<HTMLButtonElement>('[data-tag-action="evidence"]')!;
+  const browse = () => host.querySelector<HTMLAnchorElement>('[data-tag-action="browse"]')!;
+  const evidence = () => host.querySelector<HTMLAnchorElement>('[data-tag-action="evidence"]')!;
+  const more = () => [...host.querySelectorAll('button')].find((button) => button.textContent === 'More tags')!;
   try {
     await draw(source, 1);
-    const browse = host.querySelector('[data-tag-action="browse"]')!;
-    expect(window.document.activeElement).toBe(browse);
-    expect(inspect().tagName).toBe('BUTTON');
-    expect(host.querySelector('[data-tag-action="browse"]')?.tagName).toBe('A');
-    await act(async () => inspect().click());
-    expect(host.textContent).toContain('https://vndb.org/v17');
-    expect(host.textContent).toContain(id(800));
-    expect(host.textContent).toContain('not a REZICS rating or import confidence');
+    expect(window.document.activeElement === host.querySelector('[data-tag-index="25"] a')).toBe(true);
+    expect(host.querySelectorAll('[data-tag-index]')).toHaveLength(3);
+    expect(more().disabled).toBe(true);
+    expect(browse().tagName).toBe('A');
+    expect(evidence().tagName).toBe('A');
+    const exactReturn = new URL(evidence().href).searchParams.get('returnTo')!;
+    expect(exactReturn).toContain(`statement=${id(824)}`);
+    expect(exactReturn).toContain('focus=evidence');
+    const previous = () =>
+      [...host.querySelectorAll('button')].find((button) => button.textContent === 'Previous tags')!;
+    await act(async () => previous().click());
+    expect(host.querySelectorAll('[data-tag-index]')).toHaveLength(12);
+    await act(async () => previous().click());
+    expect(previous().disabled).toBe(true);
+    await act(async () => more().click());
+    await act(async () => more().click());
+    expect(host.querySelectorAll('[data-tag-index]')).toHaveLength(3);
+    expect(more().disabled).toBe(true);
     await draw(structuredClone(source), 1);
-    expect(host.querySelector('[data-slot="work-tag-evidence"]')).toBeNull();
-    await act(async () => inspect().click());
+    expect(host.querySelector('[data-tag-index="0"]')).not.toBeNull();
+    expect(window.document.activeElement === browse()).toBe(false);
     await draw(source, 0);
     expect(host.textContent).not.toContain('2.59999990463257');
     await draw(source, 1);
-    expect(host.querySelector('[data-slot="work-tag-evidence"]')).toBeNull();
-    expect(window.document.activeElement).not.toBe(host.querySelector('[data-tag-action="browse"]'));
+    expect(window.document.activeElement === browse()).toBe(false);
+    await draw(source, 1, returnHref.replace('focus=browse', 'focus=evidence'));
+    expect(
+      window.document.activeElement === host.querySelector('[data-tag-index="25"] [data-tag-action="evidence"]'),
+    ).toBe(true);
+    await draw(source, 0, returnHref.replace(id(825), id(999)));
+    expect(window.document.activeElement === host.querySelector('h2')).toBe(true);
   } finally {
     await act(async () => root.unmount());
     for (const [key, descriptor] of previous) {

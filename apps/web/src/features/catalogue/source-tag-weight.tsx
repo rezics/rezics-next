@@ -43,8 +43,14 @@ function reading(statement: Stmt): Reading {
     return { state: 'unavailable' };
   if (content.amount.length > 127) return { state: 'unavailable' };
   const amount = content.amount.replace(/^\+/u, '');
-  const numeric = Number(amount);
-  if (!Number.isFinite(numeric) || numeric <= 0 || numeric > 3) return { state: 'unavailable' };
+  const [integer, fraction = ''] = amount.split('.');
+  // Compare the supplied decimal token without rounding evidence at either endpoint.
+  if (
+    !['0', '1', '2', '3'].includes(integer!) ||
+    (integer === '0' && !/[1-9]/u.test(fraction)) ||
+    (integer === '3' && /[1-9]/u.test(fraction))
+  )
+    return { state: 'unavailable' };
 
   const source = statement.references.flatMap((reference) => {
     const recordUrls = reference.parts.flatMap((part) =>

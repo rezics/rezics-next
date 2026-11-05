@@ -1,5 +1,5 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
-import { useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { Release } from '@rezics/definitions';
 import type { Related } from '../../../subject/types';
 import { catalogueEntries } from '../catalogue-entry';
@@ -69,6 +69,7 @@ function TagDetails({
     <div className="grid min-w-0 gap-2 rounded-md border border-border/70 p-3">
       <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
         <a
+          data-tag-action="browse"
           href={queryHref(concept.href, conceptQuery)}
           lang={label.lang ?? undefined}
           dir="auto"
@@ -77,6 +78,7 @@ function TagDetails({
           {label.text}
         </a>
         <a
+          data-tag-action="evidence"
           href={queryHref(concept.href, evidenceQuery)}
           className={`${buttonVariants({ variant: 'link', size: 'sm' })} min-h-11 max-w-full whitespace-normal text-start [overflow-wrap:anywhere]`}
         >
@@ -103,6 +105,7 @@ export function WorkTagReadingView({
   spoilerThreshold,
   workHref,
   returnToFor,
+  returnIntent,
 }: {
   model: WorkTagProjection;
   related: Related;
@@ -111,8 +114,30 @@ export function WorkTagReadingView({
   spoilerThreshold: number;
   workHref?: string | undefined;
   returnToFor?: ((selection: WorkTagReturnSelection) => string) | undefined;
+  returnIntent?: { selection: WorkTagReturnSelection | undefined; consume: () => void } | undefined;
 }) {
-  const [page, setPage] = useState(0);
+  const heading = useId();
+  const root = useRef<HTMLElement>(null);
+  const selection = returnIntent?.selection;
+  const selectedIndex =
+    selection?.spoiler === spoilerThreshold
+      ? model.rows.findIndex((row) => row.statement.id === selection.statement && row.property === selection.property)
+      : -1;
+  const [page, setPage] = useState(() => (selectedIndex < 0 ? 0 : Math.floor(selectedIndex / WORK_TAG_PAGE_SIZE)));
+  useLayoutEffect(() => {
+    if (!returnIntent) return;
+    returnIntent.consume();
+    const target =
+      selectedIndex < 0
+        ? undefined
+        : root.current?.querySelector<HTMLElement>(
+            `[data-tag-index="${selectedIndex}"] [data-tag-action="${selection!.focus}"]`,
+          );
+    if (document.activeElement === document.body || document.activeElement === root.current) {
+      (target ?? root.current?.querySelector<HTMLElement>('h2'))?.focus({ preventScroll: true });
+      target?.scrollIntoView?.({ block: 'nearest' });
+    }
+  }, [returnIntent]);
   const o = { locale: locale as never };
   const returnHref = workHref ?? model.workHref;
   const start = page * WORK_TAG_PAGE_SIZE;
@@ -132,8 +157,16 @@ export function WorkTagReadingView({
           ? m.subject_work_tags_empty({}, o)
           : m.subject_work_tags_unavailable({}, o);
     return (
-      <section data-slot="subject-concept-tags" className="min-w-0 space-y-2">
-        <h2 className="font-sans text-lg font-semibold">{m.subject_tags({}, o)}</h2>
+      <section
+        ref={root}
+        id="work-tags"
+        aria-labelledby={heading}
+        data-slot="subject-concept-tags"
+        className="min-w-0 space-y-2"
+      >
+        <h2 id={heading} tabIndex={-1} className="font-sans text-lg font-semibold">
+          {m.subject_tags({}, o)}
+        </h2>
         <p role="status" className="text-sm text-muted-foreground">
           {message}
         </p>
@@ -143,8 +176,16 @@ export function WorkTagReadingView({
 
   const lastPage = Math.max(0, Math.ceil(model.rows.length / WORK_TAG_PAGE_SIZE) - 1);
   return (
-    <section data-slot="subject-concept-tags" className="min-w-0 space-y-3">
-      <h2 className="font-sans text-lg font-semibold">{m.subject_tags({}, o)}</h2>
+    <section
+      ref={root}
+      id="work-tags"
+      aria-labelledby={heading}
+      data-slot="subject-concept-tags"
+      className="min-w-0 space-y-3"
+    >
+      <h2 id={heading} tabIndex={-1} className="font-sans text-lg font-semibold">
+        {m.subject_tags({}, o)}
+      </h2>
       <p data-slot="subject-tag-population" className="text-sm text-muted-foreground">
         {m.subject_work_tags_available({ count: model.disclosedCount }, o)}
       </p>
@@ -165,7 +206,7 @@ export function WorkTagReadingView({
             <dd>
               <ul aria-label={facet.label.text} className="grid min-w-0 gap-2">
                 {facet.rows.map((row) => (
-                  <li key={row.key} className="min-w-0">
+                  <li key={row.key} data-tag-index={model.rows.indexOf(row)} className="min-w-0">
                     <TagDetails
                       row={row}
                       related={related}
