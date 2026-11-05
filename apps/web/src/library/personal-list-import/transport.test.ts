@@ -94,6 +94,26 @@ test('authenticated generated transport accepts conditional score and native Pro
     },
   };
   expect(await port.review(command)).toEqual({ kind: 'reviewed', value: score });
+  const progress: Extract<VndbCommand, { kind: 'review' }> = {
+    kind: 'review',
+    uploadId,
+    key: 'progress-key',
+    body: {
+      ordinal: 1,
+      action: 'progress',
+      targetId,
+      progress: {
+        occurrence: { kind: 'existing', sessionId: reviewId },
+        measures: [{ field: 'minutes', action: 'adopt', replace: true }],
+      },
+    },
+  };
+  await port.review(progress);
+  expect(calls[1]).toMatchObject({
+    authorization: 'Bearer authored-owner',
+    key: '"progress-key"',
+    body: progress.body,
+  });
   const apply = { kind: 'apply' as const, uploadId, body: { rows: [{ ordinal: 0, scoreReviewId: reviewId }] } };
   expect(await port.apply(apply)).toMatchObject({
     kind: 'applied',
@@ -108,7 +128,7 @@ test('authenticated generated transport accepts conditional score and native Pro
   });
   reader = undefined;
   expect(await port.review(command)).toEqual({ kind: 'denied', status: 401 });
-  expect(calls).toHaveLength(3);
+  expect(calls).toHaveLength(4);
   reader = owner;
 });
 

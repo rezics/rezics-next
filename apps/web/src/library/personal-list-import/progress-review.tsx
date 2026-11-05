@@ -83,7 +83,11 @@ export function VndbProgressReview({
           <option value="start">{m.library_vndb_progress_start()}</option>
           {eligible.map((session) => (
             <option key={session.id} value={session.id}>
-              {session.startedAt} · {session.amount ?? '—'} minute · {session.id}
+              {session.startedAt} ·{' '}
+              {(session.unit === 'minute'
+                ? session.amount
+                : session.measures?.find((measure) => measure.unit === 'minute')?.amount) ?? '—'}{' '}
+              minute · {session.id}
             </option>
           ))}
         </select>
