@@ -67,11 +67,15 @@ async function read(target: MemberPageTarget, changes: Record<string, unknown> =
     ]),
   );
   let calls = 0;
+  const cancellation = new AbortController();
   const client = createKernelClient('https://kernel.invalid', {
     fetch: async (input, init) => {
       const request = new Request(input, init);
       calls++;
       expect(request.redirect).toBe('manual');
+      expect(request.signal.aborted).toBe(false);
+      cancellation.abort();
+      expect(request.signal.aborted).toBe(true);
       expect(await request.json()).toEqual({ target, languages: ['en'], continuation });
       expect(request.headers.get('authorization')).toBe('Bearer prepared');
       return Response.json(page, { status, headers: { location: '/v1/pages:read?target=canonical' } });
@@ -87,6 +91,7 @@ async function read(target: MemberPageTarget, changes: Record<string, unknown> =
       representation: { context: PAGE_GLOBAL_CONTEXT, population: 'global' },
     },
     'Bearer prepared',
+    cancellation.signal,
   );
   expect(calls).toBe(1);
   return result;

@@ -220,7 +220,7 @@ function MemberReader({
       if (signal.aborted || !admission.current(requestIncarnation)) throw new Error('Retired member reading');
       let result: Section;
       try {
-        result = await loadMemberList({ data: request });
+        result = await loadMemberList({ data: request, signal });
       } catch (error) {
         if (signal.aborted || !admission.current(requestIncarnation)) throw new Error('Retired member reading');
         throw error;
@@ -307,7 +307,8 @@ export function MemberList({
   const lifetime = useReadingLifetime(() => {
     const key = activeQueryKey.current;
     activeQueryKey.current = undefined;
-    if (key) void queryClient.cancelQueries({ queryKey: key, exact: true });
+    if (key && !queryClient.getQueryCache().find({ queryKey: key, exact: true })?.getObserversCount())
+      void queryClient.cancelQueries({ queryKey: key, exact: true });
   });
   useLayoutEffect(() => {
     const generation = lifetime.generation();
@@ -378,7 +379,7 @@ export function MemberList({
       expectedReader: expectedReader ?? value.cacheReader ?? null,
       representation: pageRepresentation(value.context),
     };
-    const queryKey = ['composed-members', request, incarnation, generation] as const;
+    const queryKey = ['composed-members', request, incarnation, instance, generation] as const;
     admission.registerQuery('member-continuation', queryKey);
     activeQueryKey.current = queryKey;
     try {
@@ -392,7 +393,7 @@ export function MemberList({
           if (signal.aborted || !isCurrent()) throw new Error('Retired member continuation');
           await Promise.resolve();
           if (signal.aborted || !isCurrent()) throw new Error('Retired member continuation');
-          const result = await loadMemberList({ data: request });
+          const result = await loadMemberList({ data: request, signal });
           if (signal.aborted || !isCurrent()) throw new Error('Retired member continuation');
           return result;
         },

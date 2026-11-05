@@ -7,7 +7,6 @@ import type { KernelClient } from '@rezics/client';
 import type { CompositionDocument, SelectedContext } from '@rezics/composition';
 import recording from '../src/kernel/recorded/library-collection-members.json';
 
-// Authored UNRUN for integration execution; uses the real QueryClient and default Members reader.
 test('Default composed member recovery admits only its live reader and preserves usable continuation behavior', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -70,7 +69,22 @@ test('Default composed member recovery admits only its live reader and preserves
   };
   mock.module('cloudflare:workers', () => ({ env }));
   const start = await import('../.storybook/react-start');
-  mock.module('@tanstack/react-start', () => start);
+  mock.module('@tanstack/react-start', () => ({
+    ...start,
+    createServerFn: () => {
+      const chain = start.createServerFn();
+      const handler = chain.handler;
+      chain.handler = ((fn: Parameters<typeof handler>[0]) => {
+        const invoke = handler(fn);
+        return (input: { signal?: AbortSignal }) => {
+          // Model the server-function HTTP request, carrying the caller's signal to the BFF.
+          currentRequest = new Request(currentRequest, { signal: input.signal });
+          return invoke(input as never);
+        };
+      }) as typeof handler;
+      return chain;
+    },
+  }));
   mock.module('@tanstack/react-start/server', () => ({
     ...start,
     getRequest: () => currentRequest,
@@ -104,6 +118,7 @@ test('Default composed member recovery admits only its live reader and preserves
   type NativeCall = {
     input: NativeInput;
     authorization: string | null;
+    signal: AbortSignal | undefined;
     document: CompositionDocument;
     context?: SelectedContext;
   };
@@ -111,9 +126,10 @@ test('Default composed member recovery admits only its live reader and preserves
   const native = {
     pages: {
       $read: {
-        post: async (input: NativeInput, options?: { headers?: HeadersInit }) => {
+        post: async (input: NativeInput, options?: { headers?: HeadersInit; fetch?: { signal?: AbortSignal } }) => {
           const call: NativeCall = {
             input,
+            signal: options?.fetch?.signal,
             authorization: options?.headers ? new Headers(options.headers).get('authorization') : null,
             document,
             ...(context ? { context } : {}),
@@ -548,6 +564,8 @@ test('Default composed member recovery admits only its live reader and preserves
       await render();
       const late = hold();
       await press();
+      const retiredSignal = nativeCalls.at(-1)!.signal;
+      expect(retiredSignal?.aborted).toBe(false);
       if (boundary === 'target') target = { account: 'another-reader' };
       if (boundary === 'node')
         document = {
@@ -569,6 +587,7 @@ test('Default composed member recovery admits only its live reader and preserves
         };
       if (boundary === 'locale') locale = 'fr';
       await render();
+      expect(retiredSignal?.aborted).toBe(true);
       expect(status().textContent).toBe('');
       const freshTrigger = button();
       freshTrigger.focus();

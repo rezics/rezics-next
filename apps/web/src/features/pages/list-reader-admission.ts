@@ -244,8 +244,8 @@ export function useListReaderAdmission(
   function clearOwnedQueries(target: ListReaderOwner) {
     for (const queryKey of target.queryKeys.values()) {
       const query = queryClient.getQueryCache().find({ queryKey, exact: true });
-      // A query with another active observer belongs to that reader too. Its own admission will retire it.
-      if (query && query.getObserversCount() > 1) continue;
+      // Observed reads retire through QueryObserver. Only unobserved explicit reads need cancellation here.
+      if (query && query.getObserversCount() > 0) continue;
       void queryClient.cancelQueries({ queryKey, exact: true });
       queryClient.removeQueries({ queryKey, exact: true });
     }
@@ -262,48 +262,50 @@ export function useListReaderAdmission(
   }
 
   useLayoutEffect(() => {
-    if (!owner.privateReading || !owner.observeSession) return;
+    const observesSession = owner.privateReading && owner.observeSession;
     const cache = queryClient.getQueryCache();
     const wasSuspended = owner.suspended;
-    const unsubscribe = cache.subscribe((event) => {
-      const eventKey: QueryKey = event.query.queryKey;
-      if (
-        ownerRef.current !== owner ||
-        eventKey.length !== sessionQuery.queryKey.length ||
-        eventKey.some((part: unknown, index: number) => part !== sessionQuery.queryKey[index])
-      )
-        return;
-      let next: SessionSnapshot;
-      if (event.type === 'removed') {
-        next = {
-          phase: 'removed',
-          query: null,
-          status: 'pending',
-          fetchStatus: 'idle',
-          data: undefined,
-          error: undefined,
-          dataUpdatedAt: 0,
-          errorUpdatedAt: 0,
-          dataUpdateCount: 0,
-          errorUpdateCount: 0,
-        };
-      } else if (event.type === 'added') {
-        const observed = readSessionSnapshot(queryClient);
-        next = { ...observed, phase: observed.phase === 'unobserved' ? 'pending' : observed.phase };
-      } else if (event.type === 'updated') {
-        const observed = readSessionSnapshot(queryClient);
-        const action = event.action.type;
-        if (action === 'error' || action === 'invalidate' || action === 'fetch') {
-          const { session: _session, ...withoutSession } = observed;
-          next = { ...withoutSession, phase: action === 'error' ? 'error' : 'pending' };
-        } else if (action === 'success' || action === 'setState') next = observed;
-        else return;
-      } else return;
-      retire(owner, next);
-      invalidateRender();
-    });
+    const unsubscribe = observesSession
+      ? cache.subscribe((event) => {
+          const eventKey: QueryKey = event.query.queryKey;
+          if (
+            ownerRef.current !== owner ||
+            eventKey.length !== sessionQuery.queryKey.length ||
+            eventKey.some((part: unknown, index: number) => part !== sessionQuery.queryKey[index])
+          )
+            return;
+          let next: SessionSnapshot;
+          if (event.type === 'removed') {
+            next = {
+              phase: 'removed',
+              query: null,
+              status: 'pending',
+              fetchStatus: 'idle',
+              data: undefined,
+              error: undefined,
+              dataUpdatedAt: 0,
+              errorUpdatedAt: 0,
+              dataUpdateCount: 0,
+              errorUpdateCount: 0,
+            };
+          } else if (event.type === 'added') {
+            const observed = readSessionSnapshot(queryClient);
+            next = { ...observed, phase: observed.phase === 'unobserved' ? 'pending' : observed.phase };
+          } else if (event.type === 'updated') {
+            const observed = readSessionSnapshot(queryClient);
+            const action = event.action.type;
+            if (action === 'error' || action === 'invalidate' || action === 'fetch') {
+              const { session: _session, ...withoutSession } = observed;
+              next = { ...withoutSession, phase: action === 'error' ? 'error' : 'pending' };
+            } else if (action === 'success' || action === 'setState') next = observed;
+            else return;
+          } else return;
+          retire(owner, next);
+          invalidateRender();
+        })
+      : undefined;
 
-    const latest = readSessionSnapshot(queryClient);
+    const latest = observesSession ? readSessionSnapshot(queryClient) : owner.snapshot;
     if (!sameSnapshot(owner.snapshot, latest)) {
       retire(owner, latest);
       invalidateRender();
@@ -315,7 +317,7 @@ export function useListReaderAdmission(
     owner.suspended = false;
 
     return () => {
-      unsubscribe();
+      unsubscribe?.();
       if (ownerRef.current !== owner) {
         clearOwnedQueries(owner);
         return;
@@ -354,11 +356,9 @@ export function useListReaderAdmission(
       return session.state === 'signed-in' && session.subject === expectedReader;
     },
     registerQuery(slot: string, queryKey: QueryKey) {
-      if (!options.privateReading || !options.observeSession) return;
       owner.queryKeys.set(slot, queryKey);
     },
     releaseQuery(slot: string, queryKey: QueryKey) {
-      if (!options.privateReading || !options.observeSession) return;
       const owned = owner.queryKeys.get(slot);
       if (owned && JSON.stringify(owned) === JSON.stringify(queryKey)) owner.queryKeys.delete(slot);
     },
