@@ -391,6 +391,8 @@ test('The actual personal Library accepts only matching prepared-viewer and sour
         host.innerHTML = html;
         root = hydrateRoot(host, tree(), { onRecoverableError: (error) => hydrationErrors.push(error) });
       } else root.render(tree());
+    });
+    await act(async () => {
       const { browserObservation } = await import('../src/session/observation');
       const observation = browserObservation(client).getSnapshot();
       if (observation.state === 'signed-in')
