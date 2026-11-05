@@ -2,53 +2,11 @@ import { expect, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
 import { BulkOperationUndo, undoOperand, bulkOperationUndoHref } from '../src/library/bulk-operation-undo';
 import { prepareNativeBulkUndo } from '../src/library/bulk-operation-undo-native';
-import type { BulkOperation } from '../src/library/bulk-operation-recovery-native';
+import type { OperationAddress } from '../src/library/bulk-operation-recovery-native';
+import type { BulkUndoRead } from '../src/library/bulk-operation-undo-evidence';
 import type { LibraryRestoreInput } from '../src/library/entries-read';
 
-const id = '12345678-1234-4234-8234-123456789abc';
-const operation: BulkOperation = {
-  id,
-  route: 1,
-  action: 'remove_from_library',
-  state: null,
-  collectionId: null,
-  selectionKind: 'explicit',
-  phase: 'completed',
-  selectionComplete: true,
-  occurrencesComplete: true,
-  cancelRequested: false,
-  counts: {
-    scannedCandidates: 2,
-    selectedSubjects: 2,
-    scannedOccurrences: 0,
-    capturedOccurrences: 0,
-    targets: 2,
-    applied: 2,
-    pending: 0,
-    no_effect: 0,
-    reconciling: 0,
-    conflict: 0,
-    denied: 0,
-    failed: 0,
-    cancelled: 0,
-  },
-  summary: null,
-  admittedAt: '2026-11-03T00:00:00Z',
-  targetBoundAt: null,
-  expiresAt: '2099-11-04T00:00:00Z',
-  resultsExpireAt: '2099-11-05T00:00:00Z',
-  finishedAt: '2026-11-03T01:00:00Z',
-  reason: null,
-};
-const outcome: import('../src/library/bulk-operation-undo-evidence').BulkUndoOutcome = {
-  ordinal: '0',
-  subjectId: 'book-one',
-  memberId: null,
-  resultingMemberId: null,
-  state: 'applied',
-  reason: null,
-  deletion: { deletionId: id, revision: 12, restoreUntil: '2099-11-04T00:00:00Z' },
-};
+import { id, operation, outcome } from './bulk-operation-undo-fixtures';
 const ready = {
   state: 'ready' as const,
   operation,
@@ -241,3 +199,70 @@ test.each(['occupied', 'stale', 'expired'] as const)(
     expect(model.attempts.has('1')).toBe(false);
   },
 );
+
+test('coordinates commit only admitted success, retain eight predecessors and retry the exact failed target', async () => {
+  const calls: OperationAddress[] = [];
+  let result: BulkUndoRead = { ...ready, page: { outcomes: [], next: '1' } };
+  let generation = 0;
+  let release: ((value: BulkUndoRead) => void) | undefined;
+  const model = new BulkOperationUndo(
+    { id, viewer: 'alice' },
+    {
+      current: () => true,
+      capture: () => {
+        const original = generation;
+        return () => generation === original;
+      },
+      captureRestore: () => () => true,
+      restore: () => true,
+      csrf: () => 'csrf',
+      headers: () => new Headers({ 'x-csrf-token': 'csrf' }),
+    },
+    {
+      read: async (address) => {
+        calls.push(address);
+        return release === undefined
+          ? result
+          : new Promise((resolve) => {
+              release = resolve;
+            });
+      },
+      prepare: async () => ({ state: 'invalid' }),
+      sender: () => async () => ({ ok: false, reason: 'unavailable' }),
+    },
+    () => {},
+  );
+  await model.read();
+  for (let index = 1; index <= 10; index++) {
+    result = { ...ready, page: { outcomes: [], next: String(index + 1) } };
+    await model.more();
+  }
+  expect(model.state.cursor).toBe('10');
+  result = { state: 'invalid' };
+  await model.previous();
+  expect(model.state.cursor).toBe('10');
+  expect(calls.at(-1)?.cursor).toBe('9');
+  result = { ...ready, page: { outcomes: [], next: null } };
+  await model.retryRead();
+  expect(calls.at(-1)?.cursor).toBe('9');
+  expect(model.state.cursor).toBe('9');
+  await model.read();
+  expect(calls.at(-1)?.cursor).toBe('9');
+  for (let index = 0; index < 7; index++) await model.previous();
+  expect(model.state.cursor).toBe('2');
+  expect(model.state.previous).toBe(false);
+  const count = calls.length;
+  await model.previous();
+  expect(calls).toHaveLength(count);
+  await model.first();
+  expect(calls.at(-1)).not.toHaveProperty('cursor');
+  expect(model.state.previous).toBe(false);
+  release = () => {};
+  const pending = model.read();
+  generation++;
+  model.retireEvidence();
+  release(ready);
+  await pending;
+  expect(model.state.page).toBeUndefined();
+  expect(model.state.cursor).toBeUndefined();
+});
