@@ -89,7 +89,6 @@ import { createMediaResolver } from './media-resolver.ts';
 import type { BangumiCoverSource, BangumiPersonCareerSource, CrossMediaMediaOutcome } from './showcase-media.ts';
 import { acquireBangumiCoverSources } from './showcase-media.ts';
 import { acquireBangumiPersonCareerSources, bangumiPersonCareerAdmission } from './showcase-bangumi-careers.ts';
-import { acquireBangumiPersonSources, type BangumiPersonSource } from './showcase-bangumi-people.ts';
 import {
   createSelectedFamilySourceRegistration,
   createSourceRegistration,
@@ -334,9 +333,9 @@ export type CrossMediaPlan = {
   /** Exact selected VNDB release platform and medium rows for source-vocabulary admission. */
   releasePlatforms?: ReadonlyMap<string, VndbReleasePlatformFacts>;
   coverSources?: readonly BangumiCoverSource[];
-  /** Exact API receipts for careers read from selected Bangumi Person records. */
+  /** Exact API receipts for careers and PersonDetail dates read from selected Bangumi Person records. */
   personCareerSources?: readonly BangumiPersonCareerSource[];
-  personSources?: readonly BangumiPersonSource[];
+  personSources?: readonly BangumiPersonCareerSource[];
 };
 const VNDB_EXPECTED_HEADERS: Readonly<Record<string, string>> = {
   chars:
@@ -3241,7 +3240,6 @@ export async function runCrossMediaSeedCli(
     if (journal) {
       plan = await acquireBangumiPersonCareerSources(plan, { journal });
       plan = await acquireBangumiCoverSources(plan, { journal });
-      plan = await acquireBangumiPersonSources(plan, { journal });
     }
     let publicationPlan = structuredClone(plan);
     let result = await seedShowcaseVndbReleases({

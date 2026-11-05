@@ -42,7 +42,7 @@ function names(result: { proposals: readonly BatchCommand[] }) {
 test('preferred alias not last supplies the label and every admitted source name', () => {
   const bound = convert(record([preferred, additional, third]));
   const bootstrap = convert(record([preferred, additional, third]), false);
-  expect(converter_revision).toBe('cross-media-entities@12');
+  expect(converter_revision).toBe('cross-media-entities@13');
   expect(bootstrap.proposals[0]).toMatchObject({
     op: 'create',
     subject: { type: 'schema:Person', labels: { und: 'Preferred Alias' } },

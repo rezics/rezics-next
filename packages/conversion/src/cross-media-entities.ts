@@ -41,7 +41,7 @@ import {
   type BangumiPersonBirthDate,
 } from './bangumi-person-birth-date.ts';
 
-export const converter_revision = 'cross-media-entities@12';
+export const converter_revision = 'cross-media-entities@13';
 export const bangumiCharacterNameCommandLimit =
   2 +
   bangumiCharacterNameLimits.maxNameFacts +

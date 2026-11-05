@@ -325,7 +325,7 @@ unchanged dumps offer the new facts; names, dates, player count, book grain,
 cover and source-link support are preserved. No infobox-field scheme URI is
 minted.
 
-Cross-media entity revision `cross-media-entities@12` retains an admitted
+Cross-media entity revision `cross-media-entities@13` retains an admitted
 Bangumi `person.summary` for the source-selected `schema:Person` or
 `schema:Organization` identity. Its exact bytes enter the normalized digest;
 nonempty text becomes an `und` `schema:abstract` document proposal with the
@@ -337,7 +337,9 @@ cited day-precision `schema:birthDate` in the released 4–16 digit year range.
 Partial, invalid and Organization dates are withheld; Character `生日` stays
 omitted. `last_modified` is comment time, not a record revision. Ordinary
 `person:<id>` JSON uses this entity revision; selected-family envelopes keep
-`cross-media-entities@12+bangumi@14`.
+`cross-media-entities@13+bangumi@14`.
+Decision: selected PersonDetail birth dates reuse the existing career
+`GET /v0/persons/{id}` acquisition rather than a second HTTP client.
 
 Decision: type 3 uses admitted `schema:MusicAlbum` because Semantic has no music work/release/track split; type 6 uses `schema:Movie` for pinned movie platforms and `schema:TVSeries` for pinned TV-template platforms, sharing `liveActionWorkType`; archive integer platform ids stringify; unknown live-action platform codes stay ignored at `/platform`. MusicAlbum has no library profile. Bangumi episode records stay the graph continuation.
 
@@ -455,7 +457,7 @@ and `o`; the official
 [VNDB schema](https://g.blicky.net/vndb.git/tree/sql/schema.sql?id=55866ce6cb150d2de85e5f204828eafae5e50bc5)
 defines `blood_type` as `unknown`, `a`, `b`, `ab` and `o`.
 
-`cross-media-entities@12` retains the classification input in the deterministic
+`cross-media-entities@13` retains the classification input in the deterministic
 digest, preserves measurement cells when the character-name projection is
 present, and records actual versus spoiler gender as separate source variants.
 Only the four explicit blood types reach `vndb-vocabulary@4`; the bounded
@@ -477,7 +479,7 @@ assert Wikidata equivalence. The native gender qualifier gap stays explicit.
 
 ### VNDB release titles
 
-`cross-media-entities@12` projects admitted `releases_titles` rows onto
+`cross-media-entities@13` projects admitted `releases_titles` rows onto
 `wd:Q20631656`. `title`/`lang` become `schema:name`; nonempty `latin` becomes
 `schema:alternateName` with the existing Latn tag. `mtl` is retained technical
 metadata and never ranks labels or supplies a translation credit. A second name
@@ -499,7 +501,7 @@ COPY `\\N` is the dump null representation and writes no language statement.
 
 ### VNDB release barcodes
 
-The current `cross-media-entities@12` mapping keeps the COPY `releases.gtin`
+The current `cross-media-entities@13` mapping keeps the COPY `releases.gtin`
 cell in the sanitized projection. Admitted values are the exact decimal
 spelling that matches the released `schema:gtin` lexical contract (8 or 12–14
 digits). Dump unknown `0`, null, malformed, unsupported-length and unsafe
@@ -577,7 +579,7 @@ Decision: source-specific schemes are `https://vndb.org/releases/platforms` and 
 
 ### VNDB character names and aliases
 
-`cross-media-entities@12` projects selected `chars_names` and `chars_alias`
+`cross-media-entities@13` projects selected `chars_names` and `chars_alias`
 rows onto one bound `wd:Q95074`. The `chars_names.lang` tag is preserved on
 `schema:name`; its explicit romanized `latin` cell becomes an unqualified
 `schema:alternateName` using the source language with a `Latn` script subtag.
@@ -598,7 +600,7 @@ rejected rather than truncated.
 
 ### Bangumi character names and aliases
 
-`cross-media-entities@12` reads only the selected character's `name`, `name_cn`
+`cross-media-entities@13` reads only the selected character's `name`, `name_cn`
 and the pinned `Crt` infobox fields `简体中文名` and labelled `别名` rows. Top-level
 `name` remains `und`, `name_cn` remains `zh`, and `简体中文名` is a `zh-Hans`
 preferred name. Every supported `别名` row is an alternate name; its exact label
@@ -627,7 +629,7 @@ Decision: `第二中文名` uses `zh`, `英文名` uses `en`, `日文名` and `�
   language distinctions and alias removal. The native default-selection and
   publication scenario is `services/kernel/test/imports/bangumi-character-names.test.ts`.
 
-Combined revision decision: `cross-media-entities@12` preserves Bangumi character names, physical profiles, person biographies, type-1 Person birth dates and bounded Person careers while adding Game appearances and performer associations; it also preserves VNDB character names and aliases, staff aliases, release classification, titles, minimum age, GTIN and character blood types. Bangumi Organization `wdt:P6298` is omitted with an explicit diagnostic because the released Organization profile does not admit that property. Selected-family Game staff credits reuse the existing mapper and advance under the combined Bangumi converter registration.
+Combined revision decision: `cross-media-entities@13` preserves Bangumi character names, physical profiles, person biographies, type-1 Person birth dates and bounded Person careers while adding Game appearances and performer associations; it also preserves VNDB character names and aliases, staff aliases, release classification, titles, minimum age, GTIN and character blood types. Bangumi Organization `wdt:P6298` is omitted with an explicit diagnostic because the released Organization profile does not admit that property. Selected-family Game staff credits reuse the existing mapper and advance under the combined Bangumi converter registration.
 
 ### Bangumi Person careers
 
@@ -1054,7 +1056,7 @@ commands and one cover intent; byte caps remain unchanged. The new keyword adds 
 ## Bangumi TVAnime subject profiles
 
 Decision: `bangumi@12` adds official websites to the integrated `bangumi@11`
-Game-name mapping; the combined registration keeps `cross-media-entities@12`.
+Game-name mapping; the combined registration keeps `cross-media-entities@13`.
 
 
 Current `bangumi@14` shares one bounded infobox scan for the exact pinned
@@ -1095,7 +1097,7 @@ not retract independently adopted assertions.
 
 ### Bangumi character physical profile
 
-`cross-media-entities@12` parses only `血型`, `身高` and `体重` from the
+`cross-media-entities@13` parses only `血型`, `身高` and `体重` from the
 [pinned `{{Infobox Crt` template](https://github.com/bangumi/common/blob/2ee87b9995353f77cf02e390e8635bf97dbc1fa2/wiki_template.yml#L1321-L1359). Heights keep explicit centimetres/metres and
 weights keep explicit kilograms/grams as released exact quantities. The
 original scalar and indexed field path enter normalized source evidence, so an
@@ -1189,7 +1191,7 @@ descriptive links and 16 copyright notices, and retains at most 16 diagnostics.
 Values are rejected on overflow; none are truncated or canonicalized.
 
 - Touches: ordinary `bangumi@14` and selected-family
-  `cross-media-entities@12+bangumi@14` publication for one TVAnime source record,
+  `cross-media-entities@13+bangumi@14` publication for one TVAnime source record,
   its exact Bangumi citation, and the existing review/adoption/current-read path.
 - Bound: only the pinned TVAnime template; source refresh keeps the Bangumi
   alias/key, record digest and revision, existing journal recovery, rights
@@ -1238,7 +1240,7 @@ current public read confirms the Concept, source URI, and membership in
 `https://rezics.com/schemes/bangumi/genres`. The pinned source field declares
 this meaning but supplies no native UUID or taxonomy equivalence. Ordinary
 registration remains proposal-only; the selected-family caller uses the
-combined `cross-media-entities@12+bangumi@14` registration and existing
+combined `cross-media-entities@13+bangumi@14` registration and existing
 manifest, separate review/adoption, and public-read path.
 
 Missing, wrong-scheme, refused, concealed, retracted, and unavailable bindings

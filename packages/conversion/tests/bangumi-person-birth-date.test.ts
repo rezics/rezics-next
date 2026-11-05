@@ -41,7 +41,7 @@ function birth(result: ReturnType<typeof convert>) {
 }
 
 test('an actual type-1 Person date becomes a cited day-precision birthDate on unchanged identity', () => {
-  expect(converter_revision).toBe('cross-media-entities@12');
+  expect(converter_revision).toBe('cross-media-entities@13');
   const person = convert({
     id: pinned.id,
     type: pinned.type,

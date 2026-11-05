@@ -31,7 +31,7 @@ import type {
   BangumiPersonCareerSource,
   CrossMediaMediaOutcome,
 } from './showcase-media.ts';
-import type { BangumiPersonSource, BangumiPersonSourceJournal } from './showcase-bangumi-people.ts';
+import type { BangumiPersonSourceJournal } from './showcase-bangumi-people.ts';
 import { validAvailableCover } from './showcase-media.ts';
 import { vndbPublicTagConceptUri, vndbPublicTagScheme } from '../../../packages/conversion/src/support.ts';
 import { vndbTagsRatingMetric } from '@rezics/conversion/vndb-vocabulary';
@@ -94,13 +94,6 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
         intent_json TEXT NOT NULL
       ) STRICT;
       CREATE TABLE IF NOT EXISTS showcase_cover_source (
-        source_alias TEXT NOT NULL,
-        external_id TEXT NOT NULL,
-        archive_digest TEXT NOT NULL,
-        source_json TEXT NOT NULL,
-        PRIMARY KEY(source_alias,external_id,archive_digest)
-      ) STRICT;
-      CREATE TABLE IF NOT EXISTS showcase_person_source (
         source_alias TEXT NOT NULL,
         external_id TEXT NOT NULL,
         archive_digest TEXT NOT NULL,
@@ -338,9 +331,12 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       source.endpoint !== `https://api.bgm.tv/v0/persons/${source.externalId.slice('person:'.length)}` ||
       source.sourceStatus !== 'available' ||
       !/^[0-9a-f]{64}$/u.test(source.responseDigest ?? '') ||
-      !Array.isArray(source.careers) ||
-      source.careers.length > 7 ||
-      source.careers.some((career) => typeof career !== 'string' || !career.isWellFormed() || career.length > 64) ||
+      (source.careers !== undefined &&
+        (!Array.isArray(source.careers) ||
+          source.careers.length > 7 ||
+          source.careers.some(
+            (career) => typeof career !== 'string' || !career.isWellFormed() || career.length > 64,
+          ))) ||
       (source.etag !== undefined && (source.etag.length > 64 || !/^[\x20-\x7e]*$/u.test(source.etag)))
     )
       throw new TypeError('Invalid Bangumi Person career receipt');
@@ -353,38 +349,6 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
     }
     this.#db
       .query('INSERT INTO showcase_cover_source(source_alias,external_id,archive_digest,source_json) VALUES(?,?,?,?)')
-      .run(source.sourceAlias, source.externalId, source.archiveDigest, body);
-    return source;
-  }
-
-  personSource(sourceAlias: string, externalId: string, archiveDigest: string): BangumiPersonSource | null {
-    const row = this.#db
-      .query<{ source_json: string }, [string, string, string]>(
-        'SELECT source_json FROM showcase_person_source WHERE source_alias=? AND external_id=? AND archive_digest=?',
-      )
-      .get(sourceAlias, externalId, archiveDigest);
-    return row ? (JSON.parse(row.source_json) as BangumiPersonSource) : null;
-  }
-
-  sealPersonSource(source: BangumiPersonSource): BangumiPersonSource {
-    if (
-      source.sourceAlias !== 'bangumi_cross_media' ||
-      !/^person:[1-9][0-9]*$/u.test(source.externalId) ||
-      !/^[0-9a-f]{64}$/u.test(source.archiveDigest) ||
-      !['available', 'absent'].includes(source.sourceStatus) ||
-      source.endpoint !== `https://api.bgm.tv/v0/persons/${source.externalId.slice('person:'.length)}` ||
-      !/^[0-9a-f]{64}$/u.test(source.responseDigest ?? '') ||
-      (source.etag !== undefined && (source.etag.length > 256 || !/^[\x20-\x7e]*$/u.test(source.etag)))
-    )
-      throw new TypeError('Invalid Bangumi person source receipt');
-    const body = json(source);
-    const prior = this.personSource(source.sourceAlias, source.externalId, source.archiveDigest);
-    if (prior) {
-      if (json(prior) !== body) throw new TypeError('Bangumi person source changed under the same archive digest');
-      return prior;
-    }
-    this.#db
-      .query('INSERT INTO showcase_person_source(source_alias,external_id,archive_digest,source_json) VALUES(?,?,?,?)')
       .run(source.sourceAlias, source.externalId, source.archiveDigest, body);
     return source;
   }

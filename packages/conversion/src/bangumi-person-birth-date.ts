@@ -36,7 +36,7 @@ export function bangumiPersonBirthTime(year: unknown, month: unknown, day: unkno
   const monthValue = monthDay(month);
   const dayValue = monthDay(day);
   if (!yearText || monthValue === undefined || dayValue === undefined) return;
-  if (monthValue > 12 || dayValue > gregorianMonthDays(Number(yearText.slice(-4)), monthValue)) return;
+  if (monthValue > 12 || dayValue > gregorianMonthDays(Number(yearText), monthValue)) return;
   return {
     time: `+${yearText}-${String(monthValue).padStart(2, '0')}-${String(dayValue).padStart(2, '0')}T00:00:00Z`,
     precision: 11,

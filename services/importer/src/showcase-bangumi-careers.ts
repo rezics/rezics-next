@@ -40,6 +40,36 @@ function selectedPeople(plan: CrossMediaPlan): SourceRecord[] {
   return rows;
 }
 
+function integerOrNull(value: unknown): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value === 'number' && Number.isSafeInteger(value)) return value;
+  return undefined;
+}
+
+function missingBirth(payload: Record<string, unknown>): boolean {
+  return !(
+    Object.hasOwn(payload, 'birth_year') &&
+    Object.hasOwn(payload, 'birth_mon') &&
+    Object.hasOwn(payload, 'birth_day')
+  );
+}
+
+function admittedCareers(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.length > 7) return;
+  if (
+    value.some(
+      (entry) =>
+        typeof entry !== 'string' ||
+        !entry.isWellFormed() ||
+        Buffer.byteLength(entry, 'utf8') > 64 ||
+        /[\u0000-\u001f\u007f-\u009f]/u.test(entry),
+    )
+  )
+    return;
+  return [...new Set(value as string[])];
+}
+
 function receipt(source: BangumiPersonCareerSource, row: SourceRecord): BangumiPersonCareerSource {
   const endpoint = `${origin}${pathPrefix}${row.key.slice('person:'.length)}`;
   if (
@@ -50,11 +80,12 @@ function receipt(source: BangumiPersonCareerSource, row: SourceRecord): BangumiP
     source.sourceRevision !== (row.revision ?? 'unversioned') ||
     source.sourceStatus !== 'available' ||
     !/^[0-9a-f]{64}$/u.test(source.responseDigest ?? '') ||
-    !Array.isArray(source.careers) ||
-    source.careers.length > 7 ||
-    source.careers.some(
-      (career) => typeof career !== 'string' || !career.isWellFormed() || Buffer.byteLength(career, 'utf8') > 64,
-    )
+    (source.careers !== undefined &&
+      (!Array.isArray(source.careers) ||
+        source.careers.length > 7 ||
+        source.careers.some(
+          (career) => typeof career !== 'string' || !career.isWellFormed() || Buffer.byteLength(career, 'utf8') > 64,
+        )))
   )
     throw new TypeError('Invalid sealed Bangumi Person career source');
   return source;
@@ -88,28 +119,23 @@ async function readCareers(
     const responseDigest = createHash('sha256').update(bytes).digest('hex');
     const parsed: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
     const person = object(parsed);
-    const careers = person?.career;
-    if (
-      !person ||
-      person.id !== id ||
-      !Array.isArray(careers) ||
-      careers.length > 7 ||
-      careers.some(
-        (value) =>
-          typeof value !== 'string' ||
-          !value.isWellFormed() ||
-          Buffer.byteLength(value, 'utf8') > 64 ||
-          /[\u0000-\u001f\u007f-\u009f]/u.test(value),
-      )
-    )
+    if (!person || person.id !== id)
       throw new TypeError('Invalid Bangumi Person career response');
+    const careers = admittedCareers(person.career);
+    const birth_year = integerOrNull(person.birth_year);
+    const birth_mon = integerOrNull(person.birth_mon);
+    const birth_day = integerOrNull(person.birth_day);
     const etagHeader = response.headers.get('etag');
     const responseEtag = etag(etagHeader);
     if (etagHeader !== null && responseEtag === undefined) throw new TypeError('Invalid Bangumi Person ETag');
     return {
       ...base,
       sourceStatus: 'available',
-      careers: [...new Set(careers as string[])],
+      ...(careers ? { careers } : {}),
+      ...(typeof person.type === 'number' && Number.isSafeInteger(person.type) ? { type: person.type } : {}),
+      ...(birth_year === undefined ? {} : { birth_year }),
+      ...(birth_mon === undefined ? {} : { birth_mon }),
+      ...(birth_day === undefined ? {} : { birth_day }),
       responseDigest,
       ...(responseEtag ? { etag: responseEtag } : {}),
     };
@@ -152,9 +178,12 @@ export async function acquireBangumiPersonCareerSources(
   });
   const sources: BangumiPersonCareerSource[] = [];
   const failures = new Set<string>();
+  const neededCareer = new Set<string>();
   const people = selectedPeople(plan).filter((row) => {
     const payload = object(row.payload);
-    return payload?.type === 1 && !Object.hasOwn(payload, 'career');
+    if (payload?.type !== 1) return false;
+    if (!Object.hasOwn(payload, 'career')) neededCareer.add(row.key);
+    return !Object.hasOwn(payload, 'career') || missingBirth(payload);
   });
   for (let index = 0; index < people.length; index++) {
     const row = people[index]!;
@@ -167,13 +196,13 @@ export async function acquireBangumiPersonCareerSources(
       evidence = await readCareers(row, get, signal);
       if (evidence.sourceStatus === 'available') options.journal?.sealPersonCareerSource(evidence);
     }
-    if (evidence.sourceStatus !== 'available') failures.add(row.key);
-    else sources.push(evidence);
+    sources.push(evidence);
+    if (evidence.sourceStatus !== 'available' && neededCareer.has(row.key)) failures.add(row.key);
     if (index + 1 < people.length) {
       try {
         await pause(requestGapMs, signal);
       } catch {
-        for (const remaining of people.slice(index + 1)) failures.add(remaining.key);
+        for (const remaining of people.slice(index + 1)) if (neededCareer.has(remaining.key)) failures.add(remaining.key);
         break;
       }
     }
@@ -181,8 +210,13 @@ export async function acquireBangumiPersonCareerSources(
   const sourceByPerson = new Map(sources.map((source) => [source.externalId, source]));
   const entities = plan.entities.bangumi.map((row) => {
     const source = sourceByPerson.get(row.key);
-    if (!source || !source.careers) return row;
-    return { ...row, payload: { ...row.payload, career: [...source.careers] } };
+    if (!source) return row;
+    const payload = { ...(row.payload as Record<string, unknown>) };
+    if (!Object.hasOwn(payload, 'career') && source.careers) payload.career = [...source.careers];
+    if (!Object.hasOwn(payload, 'birth_year') && 'birth_year' in source) payload.birth_year = source.birth_year;
+    if (!Object.hasOwn(payload, 'birth_mon') && 'birth_mon' in source) payload.birth_mon = source.birth_mon;
+    if (!Object.hasOwn(payload, 'birth_day') && 'birth_day' in source) payload.birth_day = source.birth_day;
+    return { ...row, payload };
   });
   const gaps = [...plan.gaps];
   for (const key of failures)

@@ -50,6 +50,7 @@ test('selected actual Persons use bounded API career fallback and sealed source 
     const requests: string[] = [];
     const bodies = new Map([
       [8101, JSON.stringify({ id: 8101, career: ['producer', 'writer'] })],
+      [8102, JSON.stringify({ id: 8102, career: ['actor'], birth_year: 1970, birth_mon: 2, birth_day: 3 })],
       [8105, JSON.stringify({ id: 9999, career: ['actor'] })],
     ]);
     const fetch = (async (input: RequestInfo | URL) => {
@@ -64,7 +65,11 @@ test('selected actual Persons use bounded API career fallback and sealed source 
       sleep: async () => {},
     });
 
-    expect(requests).toEqual(['https://api.bgm.tv/v0/persons/8101', 'https://api.bgm.tv/v0/persons/8105']);
+    expect(requests).toEqual([
+      'https://api.bgm.tv/v0/persons/8101',
+      'https://api.bgm.tv/v0/persons/8102',
+      'https://api.bgm.tv/v0/persons/8105',
+    ]);
     const person = selected.entities.bangumi.find(({ key }) => key === 'person:8101')!;
     expect(person.payload).toMatchObject({
       id: 8101,
@@ -73,7 +78,12 @@ test('selected actual Persons use bounded API career fallback and sealed source 
       summary: 'Biography retained.',
       career: ['producer', 'writer'],
     });
-    expect(selected.entities.bangumi.find(({ key }) => key === 'person:8102')?.payload).toHaveProperty('career', []);
+    expect(selected.entities.bangumi.find(({ key }) => key === 'person:8102')?.payload).toMatchObject({
+      career: [],
+      birth_year: 1970,
+      birth_mon: 2,
+      birth_day: 3,
+    });
     expect(selected.entities.bangumi.find(({ key }) => key === 'person:8103')?.payload).not.toHaveProperty('career');
     expect(selected.entities.bangumi.find(({ key }) => key === 'person:8105')?.payload).not.toHaveProperty('career');
     expect(selected.gaps).toContainEqual(
@@ -96,9 +106,11 @@ test('selected actual Persons use bounded API career fallback and sealed source 
     try {
       const replay = await acquireBangumiPersonCareerSources(plan, {
         journal: reopened,
-        fetch: (async () => {
-          throw new Error('sealed career source unexpectedly fetched again');
-        }) as unknown as typeof globalThis.fetch,
+        fetch: (async (input: RequestInfo | URL) => {
+          if (String(input).endsWith('/8101') || String(input).endsWith('/8102'))
+            throw new Error('sealed career source unexpectedly fetched again');
+          return new Response(bodies.get(Number(String(input).slice(String(input).lastIndexOf('/') + 1))));
+        }) as typeof globalThis.fetch,
         sleep: async () => {},
       });
       expect(replay.entities.bangumi.find(({ key }) => key === 'person:8101')?.payload).toHaveProperty('career', [
