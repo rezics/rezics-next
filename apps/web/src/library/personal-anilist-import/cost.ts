@@ -51,13 +51,7 @@ export function emptyAniListCost(): AniListCostSnapshot {
 export function aniListCallTotal(cost: AniListCostSnapshot): number {
   const calls = cost.calls;
   return (
-    calls.preview +
-    calls.page +
-    calls.review +
-    calls.apply +
-    calls.cancel +
-    calls.question +
-    calls['score-readback']
+    calls.preview + calls.page + calls.review + calls.apply + calls.cancel + calls.question + calls['score-readback']
   );
 }
 

@@ -210,9 +210,9 @@ function recordingPort(
   const tokens = new Map<number, string>();
   let applyAttempts = 0;
   const stored = Array.from({ length: total }, (_, index) =>
-      row(index, {
+    row(index, {
       source: source(index, options.groups ? { name: index % 2 ? 'Watching again' : 'Watching' } : null),
-        ...(index === 0 ? { scoreLexeme: '0.00' } : {}),
+      ...(index === 0 ? { scoreLexeme: '0.00' } : {}),
     }),
   );
   const port: AniListImportPort = {
@@ -266,47 +266,54 @@ function recordingPort(
           ...(command.subjectId ? { subjectId: command.subjectId } : {}),
           ...(command.score ? { score: command.score } : {}),
         },
-        ...(command.score ? {
-          score: {
-            source: {
-              present: true,
-              value: current.source.evidence.score,
-              lexeme: current.scoreLexeme ?? null,
-              scale: 'POINT_10',
-              validity: 'valid',
-              reason: 'Exact source evidence.',
-            },
-            action: command.score.action,
-            units: command.score.action === 'vote' ? command.score.units : null,
-            conversion: 'owner-selected-native-units',
-            native: {
-              availability: 'available',
-              guard: { version: 1 },
-              question: {
-                id: QUESTION,
-                revision: 17,
-                label: 'Overall',
-                meaning: 'How strong is this work overall?',
-                grain: 'work',
-                minimumUnits: 0,
-                maximumUnits: 20,
-                stepUnits: 1,
-                lifecycleState: 'active',
-                lifecycleRevision: 1,
+        ...(command.score
+          ? {
+              score: {
+                source: {
+                  present: true,
+                  value: current.source.evidence.score,
+                  lexeme: current.scoreLexeme ?? null,
+                  scale: 'POINT_10',
+                  validity: 'valid',
+                  reason: 'Exact source evidence.',
+                },
+                action: command.score.action,
+                units: command.score.action === 'vote' ? command.score.units : null,
+                conversion: 'owner-selected-native-units',
+                native: {
+                  availability: 'available',
+                  guard: { version: 1 },
+                  question: {
+                    id: QUESTION,
+                    revision: 17,
+                    label: 'Overall',
+                    meaning: 'How strong is this work overall?',
+                    grain: 'work',
+                    minimumUnits: 0,
+                    maximumUnits: 20,
+                    stepUnits: 1,
+                    lifecycleState: 'active',
+                    lifecycleRevision: 1,
+                  },
+                  target: {
+                    subjectId: command.subjectId ?? subject,
+                    identityEpoch: '1',
+                    matchFingerprint: `fp-${command.ordinal}`,
+                  },
+                  currentVote: {
+                    status: 'current',
+                    vote:
+                      options.existingVote === undefined || options.existingVote === null
+                        ? null
+                        : { units: options.existingVote, revision: 3 },
+                  },
+                  commandKey: `vote-command-${command.ordinal}`,
+                  consentKey: `vote-consent-${command.ordinal}`,
+                  consented: false,
+                },
               },
-              target: { subjectId: command.subjectId ?? subject, identityEpoch: '1', matchFingerprint: `fp-${command.ordinal}` },
-              currentVote: {
-                status: 'current',
-                vote: options.existingVote === undefined || options.existingVote === null
-                  ? null
-                  : { units: options.existingVote, revision: 3 },
-              },
-              commandKey: `vote-command-${command.ordinal}`,
-              consentKey: `vote-consent-${command.ordinal}`,
-              consented: false,
-            },
-          },
-        } : {}),
+            }
+          : {}),
       });
       tokens.set(command.ordinal, review.id);
       stored[command.ordinal] = { ...current, review };
@@ -319,24 +326,38 @@ function recordingPort(
       const last = command.body.confirmations.at(-1);
       const outcomes = command.body.confirmations.map((item) => {
         const scoreInput = stored[item.ordinal]?.review?.input.score;
-        const scoreStatus = scoreInput && item.confirmNativeVoteEffects === true ? (options.scoreStatus ?? 'applied') : 'skipped';
+        const scoreStatus =
+          scoreInput && item.confirmNativeVoteEffects === true ? (options.scoreStatus ?? 'applied') : 'skipped';
         if (scoreInput && item.confirmNativeVoteEffects === true) {
           stored[item.ordinal] = {
             ...stored[item.ordinal]!,
-            currentScore: scoreStatus === 'unavailable'
-              ? { status: 'unavailable', reason: options.scoreReason ?? 'atomic_guard_unavailable' }
-              : {
-                  status: 'current',
-                  question: { id: QUESTION, revision: 17, label: 'Overall' },
-                  vote: scoreInput.action === 'clear' ? null : { units: scoreInput.units, revision: 4 },
-                },
+            currentScore:
+              scoreStatus === 'unavailable'
+                ? { status: 'unavailable', reason: options.scoreReason ?? 'atomic_guard_unavailable' }
+                : {
+                    status: 'current',
+                    question: { id: QUESTION, revision: 17, label: 'Overall' },
+                    vote: scoreInput.action === 'clear' ? null : { units: scoreInput.units, revision: 4 },
+                  },
           };
         }
         return {
           ordinal: item.ordinal,
-          status: options.partial && item.ordinal === last?.ordinal ? ('failed' as const) : (options.stateStatus ?? 'applied'),
+          status:
+            options.partial && item.ordinal === last?.ordinal
+              ? ('failed' as const)
+              : (options.stateStatus ?? 'applied'),
           retained: ['mediaId', 'score', 'progress', 'notes', 'extra_unknown'],
-          ...(scoreInput ? { score: { status: scoreStatus, ...(scoreStatus === 'unavailable' ? { reason: options.scoreReason ?? 'atomic_guard_unavailable' } : {}) } } : {}),
+          ...(scoreInput
+            ? {
+                score: {
+                  status: scoreStatus,
+                  ...(scoreStatus === 'unavailable'
+                    ? { reason: options.scoreReason ?? 'atomic_guard_unavailable' }
+                    : {}),
+                },
+              }
+            : {}),
         };
       });
       return {
@@ -552,7 +573,10 @@ test('native zero vote review, explicit replacement consent, exact uncertain ret
   await clickLabel(m.library_anilist_replace_vote_and_state());
   await click(m.library_anilist_save_review());
   expect(reviews).toHaveLength(2);
-  expect(reviews[1]).toMatchObject({ replace: true, score: { action: 'vote', units: 0, questionId: QUESTION, questionRevision: 17 } });
+  expect(reviews[1]).toMatchObject({
+    replace: true,
+    score: { action: 'vote', units: 0, questionId: QUESTION, questionRevision: 17 },
+  });
   await click(m.library_anilist_continue_confirm());
   expect(host.textContent).toContain(m.library_anilist_confirm_vote({ units: 0 }));
   expect(host.textContent).toContain(m.library_anilist_review_vote_present({ units: 7 }));
@@ -588,16 +612,18 @@ test('clear is explicit and results replace the supplied current vote observatio
           ...result,
           page: {
             ...result.page,
-            rows: result.page.rows.map((item) => item.ordinal === 0
-              ? {
-                  ...item,
-                  currentScore: {
-                    status: 'current',
-                    question: { id: QUESTION, revision: 18, label: 'Overall' },
-                    vote: { units: 6, revision: 5 },
-                  },
-                }
-              : item),
+            rows: result.page.rows.map((item) =>
+              item.ordinal === 0
+                ? {
+                    ...item,
+                    currentScore: {
+                      status: 'current',
+                      question: { id: QUESTION, revision: 18, label: 'Overall' },
+                      vote: { units: 6, revision: 5 },
+                    },
+                  }
+                : item,
+            ),
           },
         };
       }
@@ -771,7 +797,14 @@ test('installed AniList adapter forwards score consent and preserves owner readb
           status: 200,
           data: {
             complete: true,
-            outcomes: [{ ordinal: 0, status: 'applied', retained: [], score: { status: 'unavailable', reason: 'atomic_guard_unavailable' } }],
+            outcomes: [
+              {
+                ordinal: 0,
+                status: 'applied',
+                retained: [],
+                score: { status: 'unavailable', reason: 'atomic_guard_unavailable' },
+              },
+            ],
           },
         };
       },
@@ -806,12 +839,18 @@ test('installed AniList adapter forwards score consent and preserves owner readb
   const port = kernelAniListPort(client as never, request, {}, true);
   const readQuestion = await port.question();
   expect(readQuestion).toMatchObject({ kind: 'question', question: { id: QUESTION, revision: 17 } });
-  expect(pointRequest).toMatchObject({ input: { questionId: QUESTION }, options: { fetch: { cache: 'no-store', redirect: 'manual' } } });
+  expect(pointRequest).toMatchObject({
+    input: { questionId: QUESTION },
+    options: { fetch: { cache: 'no-store', redirect: 'manual' } },
+  });
   const reviewedResult = await port.review(command);
   expect(postedReview).toMatchObject({ score: command.score });
   expect(reviewedResult).toMatchObject({ kind: 'reviewed', review: { score: reviewScore } });
   const pageResult = await port.page({ kind: 'page', importId: id, after: -1 });
-  expect(pageResult).toMatchObject({ kind: 'page', page: { rows: [{ currentScore: ownerReadback, scoreLexeme: '0.00' }] } });
+  expect(pageResult).toMatchObject({
+    kind: 'page',
+    page: { rows: [{ currentScore: ownerReadback, scoreLexeme: '0.00' }] },
+  });
   const applyResult = await port.apply({
     kind: 'apply',
     importId: id,

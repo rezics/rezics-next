@@ -132,14 +132,13 @@ function makeJourneyPort() {
                 lifecycleRevision: 1,
               },
               target: { subjectId: subject, identityEpoch: '1', matchFingerprint: `match-${command.ordinal}` },
-              currentVote: command.ordinal === 2
-                ? { status: 'unavailable', reason: 'atomic_guard_unavailable' }
-                : {
-                    status: 'current',
-                    vote: existingVote === null
-                      ? null
-                      : { units: existingVote, revision: 2 },
-                  },
+              currentVote:
+                command.ordinal === 2
+                  ? { status: 'unavailable', reason: 'atomic_guard_unavailable' }
+                  : {
+                      status: 'current',
+                      vote: existingVote === null ? null : { units: existingVote, revision: 2 },
+                    },
               commandKey: `score-command-${command.ordinal}`,
               consentKey: `score-consent-${command.ordinal}`,
               consented: false,
@@ -196,7 +195,7 @@ function makeJourneyPort() {
         }
         return {
           ordinal,
-          status: ordinal === 1 ? 'failed' as const : 'applied' as const,
+          status: ordinal === 1 ? ('failed' as const) : ('applied' as const),
           retained: ['score', 'progress'],
           ...(hasScore
             ? { score: { status: scoreStatus, ...(ordinal === 2 ? { reason: 'atomic_guard_unavailable' } : {}) } }
@@ -236,13 +235,20 @@ function createJourneyPort() {
 
 function ScoreImportStory() {
   const fixture = useMemo(createJourneyPort, []);
-  const visit = useMemo(() => ({
-    subject: owner,
-    csrfToken: 'story-csrf',
-    controller: new AbortController(),
-    current() { return !this.controller.signal.aborted; },
-    retire() { this.controller.abort(); },
-  }), []);
+  const visit = useMemo(
+    () => ({
+      subject: owner,
+      csrfToken: 'story-csrf',
+      controller: new AbortController(),
+      current() {
+        return !this.controller.signal.aborted;
+      },
+      retire() {
+        this.controller.abort();
+      },
+    }),
+    [],
+  );
   return (
     <PatternStory path="/library/import-anilist" visitor="Signed In">
       <AniListImportPortContext.Provider value={fixture.port}>
@@ -267,7 +273,8 @@ export const ScoreReviewConsentAndReadback: Story = {
     const input = canvas.getByLabelText(m.library_anilist_file_label()) as HTMLInputElement;
     await userEvent.upload(input, new File(['[]'], 'collection.json', { type: 'application/json' }));
     await userEvent.click(canvas.getByRole('button', { name: m.library_anilist_upload() }));
-    const rowAt = (ordinal: number) => within(canvasElement.querySelector(`[data-anilist-row="${ordinal}"]`) as HTMLElement);
+    const rowAt = (ordinal: number) =>
+      within(canvasElement.querySelector(`[data-anilist-row="${ordinal}"]`) as HTMLElement);
     const row0 = rowAt(0);
 
     await expect(row0.getByRole('radio', { name: m.library_anilist_score_keep() })).toBeChecked();
@@ -278,7 +285,8 @@ export const ScoreReviewConsentAndReadback: Story = {
     await userEvent.click(row0.getByRole('button', { name: m.library_anilist_save_review() }));
     await expect(row0).toHaveTextContent(m.library_anilist_review_vote_present({ units: 5 }));
     await userEvent.click(canvas.getByRole('button', { name: m.library_anilist_continue_confirm() }));
-    const confirmAt = (ordinal: number) => within(canvasElement.querySelector(`[data-anilist-confirm="${ordinal}"]`) as HTMLElement);
+    const confirmAt = (ordinal: number) =>
+      within(canvasElement.querySelector(`[data-anilist-confirm="${ordinal}"]`) as HTMLElement);
     let confirm0 = confirmAt(0);
     await userEvent.click(confirm0.getByRole('checkbox', { name: m.library_anilist_confirm_native_vote_effects() }));
     await userEvent.click(canvas.getByRole('button', { name: m.library_anilist_return_review() }));
@@ -300,7 +308,9 @@ export const ScoreReviewConsentAndReadback: Story = {
     const confirm1 = confirmAt(1);
     const confirm2 = confirmAt(2);
     const confirm3 = confirmAt(3);
-    await expect(confirm0.getByRole('checkbox', { name: m.library_anilist_confirm_native_vote_effects() })).not.toBeChecked();
+    await expect(
+      confirm0.getByRole('checkbox', { name: m.library_anilist_confirm_native_vote_effects() }),
+    ).not.toBeChecked();
     await expect(confirm1).toHaveTextContent(m.library_anilist_confirm_clear());
     await expect(confirm3).toHaveTextContent(m.library_anilist_score_keep());
     for (const card of [confirm0, confirm1, confirm2]) {

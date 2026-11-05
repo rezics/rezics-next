@@ -65,7 +65,8 @@ export function AniListConfirmPage({
                     {m.library_anilist_score_source({
                       value:
                         row.scoreSource.lexeme ??
-                        (JSON.stringify(row.scoreSource.value) ?? String(row.scoreSource.value)),
+                        JSON.stringify(row.scoreSource.value) ??
+                        String(row.scoreSource.value),
                       scale: row.scoreSource.scale ?? m.library_anilist_score_scale_unknown(),
                       validity: aniListValidityLabel(row.scoreSource.validity),
                     })}
@@ -102,17 +103,21 @@ export function AniListConfirmPage({
                         </p>
                       ) : null}
                       {row.scoreReview.currentVote === 'present' ? (
-                        <p>
-                          {m.library_anilist_review_vote_present({ units: row.scoreReview.currentVoteUnits ?? 0 })}
-                        </p>
+                        <p>{m.library_anilist_review_vote_present({ units: row.scoreReview.currentVoteUnits ?? 0 })}</p>
                       ) : row.scoreReview.currentVote === 'absent' ? (
                         <p>{m.library_anilist_review_vote_absent()}</p>
                       ) : (
-                        <p>{m.library_anilist_review_vote_unavailable({ reason: row.scoreReview.currentVoteReason ?? '' })}</p>
+                        <p>
+                          {m.library_anilist_review_vote_unavailable({
+                            reason: row.scoreReview.currentVoteReason ?? '',
+                          })}
+                        </p>
                       )}
                       {row.scoreReview.currentVote === 'present' &&
                       row.scoreReview.action === 'vote' &&
-                      !row.replace ? <p>{m.library_anilist_existing_vote_preserved()}</p> : null}
+                      !row.replace ? (
+                        <p>{m.library_anilist_existing_vote_preserved()}</p>
+                      ) : null}
                       <p className="text-sm">
                         {row.scoreReview.availability === 'available'
                           ? m.library_anilist_review_observations_available()

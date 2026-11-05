@@ -211,7 +211,8 @@ function isRow(value: unknown): value is AniListRow {
   if (value.proposal !== null && value.proposal !== undefined && !isObservation(value.proposal)) return false;
   if (value.review !== null && value.review !== undefined && !isReview(value.review)) return false;
   if (value.outcome !== null && value.outcome !== undefined && !isOutcome(value.outcome)) return false;
-  if (value.currentScore !== undefined && value.currentScore !== null && !isCurrentScore(value.currentScore)) return false;
+  if (value.currentScore !== undefined && value.currentScore !== null && !isCurrentScore(value.currentScore))
+    return false;
   if (value.scoreLexeme !== undefined && typeof value.scoreLexeme !== 'string') return false;
   return true;
 }
@@ -330,9 +331,7 @@ export function kernelAniListPort(
       const session = await withSession(request, sessionEnv, originConfigured);
       if ('kind' in session) return session;
       const result = await readHomeQuestion(client, QUESTION, session.authorization);
-      return result.status === 'ready'
-        ? { kind: 'question', question: result.question }
-        : pointFailure(result.status);
+      return result.status === 'ready' ? { kind: 'question', question: result.question } : pointFailure(result.status);
     },
     async preview(command) {
       return call(

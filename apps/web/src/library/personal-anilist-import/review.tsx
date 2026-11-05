@@ -39,7 +39,10 @@ export function AniListReviewPage({
       ) : null}
       {snap.completeness?.hasNextChunk ? <p>{m.library_anilist_slice()}</p> : <p>{m.library_anilist_not_complete()}</p>}
       {snap.cancelled ? <p role="status">{m.library_anilist_canceled()}</p> : null}
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-md border p-3" data-anilist-standard-question>
+      <div
+        className="flex flex-wrap items-start justify-between gap-3 rounded-md border p-3"
+        data-anilist-standard-question
+      >
         <div className="min-w-0 space-y-1">
           {snap.question ? (
             <>
@@ -58,9 +61,7 @@ export function AniListReviewPage({
             </>
           ) : (
             <p role="status">
-              {snap.questionPending
-                ? m.library_anilist_question_loading()
-                : m.library_anilist_question_unavailable()}
+              {snap.questionPending ? m.library_anilist_question_loading() : m.library_anilist_question_unavailable()}
             </p>
           )}
         </div>

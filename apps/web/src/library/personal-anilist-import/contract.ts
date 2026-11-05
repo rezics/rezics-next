@@ -8,7 +8,9 @@ type NativeAniListItem = ReturnType<NativeAniList>;
 type NativeAniListPage = NonNullable<Awaited<ReturnType<NativeAniListItem['get']>>['data']>;
 type NativeAniListReviewBody = Parameters<NonNullable<NativeAniListItem['$review']>['post']>[0];
 type NativeAniListApplyBody = Parameters<NonNullable<NativeAniListItem['$apply']>['post']>[0];
-type NativeAniListApplyResult = NonNullable<Awaited<ReturnType<NonNullable<NativeAniListItem['$apply']>['post']>>['data']>;
+type NativeAniListApplyResult = NonNullable<
+  Awaited<ReturnType<NonNullable<NativeAniListItem['$apply']>['post']>>['data']
+>;
 type NativeAniListRow = NativeAniListPage['rows'][number];
 type NativeAniListReview = NonNullable<NativeAniListRow['review']>;
 type NativeAniListOutcome = NonNullable<NativeAniListRow['outcome']>;
@@ -108,7 +110,13 @@ export type AniListRowMeta = {
   started: boolean;
   outcome: AniListOutcome | null;
   reviewInvalidated: boolean;
-  scoreSource: { value: AniListJson; lexeme: string | null; scale: string | null; validity: AniListFieldValidity; reason: string } | null;
+  scoreSource: {
+    value: AniListJson;
+    lexeme: string | null;
+    scale: string | null;
+    validity: AniListFieldValidity;
+    reason: string;
+  } | null;
   scoreAction: 'keep' | 'vote' | 'clear';
   scoreUnits: number | null;
   scoreReview: {

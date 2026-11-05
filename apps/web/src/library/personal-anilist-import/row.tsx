@@ -60,7 +60,8 @@ function currentReadback(value: unknown): {
       ...(typeof score.reason === 'string' ? { reason: score.reason } : {}),
     };
   if (score.status !== 'current') return null;
-  const question = score.question && typeof score.question === 'object' ? score.question as Record<string, unknown> : {};
+  const question =
+    score.question && typeof score.question === 'object' ? (score.question as Record<string, unknown>) : {};
   const questionLabel = typeof question.label === 'string' ? question.label : undefined;
   const questionRevision = typeof question.revision === 'number' ? question.revision : undefined;
   if (score.vote === null)
@@ -227,12 +228,16 @@ export function AniListRowReview({
                   className="min-h-11 rounded-md border bg-background px-3"
                   value={draft.scoreUnits ?? ''}
                   placeholder={m.library_anilist_choose_native_units()}
-                  onChange={(event) => update({
-                    ...draft,
-                    scoreUnits: event.currentTarget.value === '' ? null : Number(event.currentTarget.value),
-                  })}
+                  onChange={(event) =>
+                    update({
+                      ...draft,
+                      scoreUnits: event.currentTarget.value === '' ? null : Number(event.currentTarget.value),
+                    })
+                  }
                 />
-                {draft.scoreUnits === 0 ? <span className="text-sm">{m.library_anilist_native_zero_is_vote()}</span> : null}
+                {draft.scoreUnits === 0 ? (
+                  <span className="text-sm">{m.library_anilist_native_zero_is_vote()}</span>
+                ) : null}
               </label>
             ) : null}
           </fieldset>

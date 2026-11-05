@@ -21,17 +21,17 @@ Decision: read the standard Rating question through its installed point method o
 score review; use the import page's supplied `currentScore` as the post-apply vote readback, with no parallel
 per-row vote hydration.
 
-| Step    | Native                                                                            | Page                                                                              |
-| ------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Upload  | `POST :preview` `{ upload, scoreFormat? }` with quoted Idempotency-Key            | File stays local until submit; bytes drop after native ownership                  |
-| Preview | `GET :importId?after=-1` pages of 20                                              | Current page only; titles assist display/search, never automatic identity         |
-| Question | `GET /v1/rating-questions/{standard-question-id}`                                 | One current point read on visit entry, before a vote/clear review, and on refresh |
-| Review  | `POST :importId:review` `{ ordinal, subjectId?, skip?, fields, replace, score? }` | Status and native score choices are reviewed together; source score is never converted |
-| Confirm | `POST :importId:apply` `{ confirmations: [{ ordinal, reviewId, confirmNativeVoteEffects? }] }` batches of 20 | Vote consent is separate and bound to the exact score review; `complete:false` is resumable |
-| Readback | `GET :importId?after=...` owner page supplies each reviewed row's `currentScore` | Fresh owner observation after apply/refresh; not a command receipt              |
-| Source  | `POST /v1/libraryEntries/{subjectId}/sourceObservations` after apply              | Separate typed command; only after privacy and original-timestamp confirmation    |
-| Stop    | `POST :importId:cancel` `{ remove:false }`                                        | Stops new admission; acknowledged effects remain                                  |
-| Discard | `POST :importId:cancel` `{ remove:true }`                                         | Clears this upload's evidence now; Library facts stay                             |
+| Step     | Native                                                                                                       | Page                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| Upload   | `POST :preview` `{ upload, scoreFormat? }` with quoted Idempotency-Key                                       | File stays local until submit; bytes drop after native ownership                            |
+| Preview  | `GET :importId?after=-1` pages of 20                                                                         | Current page only; titles assist display/search, never automatic identity                   |
+| Question | `GET /v1/rating-questions/{standard-question-id}`                                                            | One current point read on visit entry, before a vote/clear review, and on refresh           |
+| Review   | `POST :importId:review` `{ ordinal, subjectId?, skip?, fields, replace, score? }`                            | Status and native score choices are reviewed together; source score is never converted      |
+| Confirm  | `POST :importId:apply` `{ confirmations: [{ ordinal, reviewId, confirmNativeVoteEffects? }] }` batches of 20 | Vote consent is separate and bound to the exact score review; `complete:false` is resumable |
+| Readback | `GET :importId?after=...` owner page supplies each reviewed row's `currentScore`                             | Fresh owner observation after apply/refresh; not a command receipt                          |
+| Source   | `POST /v1/libraryEntries/{subjectId}/sourceObservations` after apply                                         | Separate typed command; only after privacy and original-timestamp confirmation              |
+| Stop     | `POST :importId:cancel` `{ remove:false }`                                                                   | Stops new admission; acknowledged effects remain                                            |
+| Discard  | `POST :importId:cancel` `{ remove:true }`                                                                    | Clears this upload's evidence now; Library facts stay                                       |
 
 Accepted shapes are a MediaList array, `{lists:[{entries:[]}]}`, `{MediaListCollection:…}` or
 `{data:{MediaListCollection:…}}`. Deprecated `statusLists`/`customLists` wrappers are refused. Repeated

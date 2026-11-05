@@ -17,9 +17,10 @@ function Outcome({
   row: AniListRowMeta | undefined;
 }) {
   const applied = outcome.status === 'applied' ? ['status'].filter((field) => !outcome.retained.includes(field)) : [];
-  const score = outcome.score && typeof outcome.score === 'object' && !Array.isArray(outcome.score)
-    ? (outcome.score as Record<string, unknown>)
-    : null;
+  const score =
+    outcome.score && typeof outcome.score === 'object' && !Array.isArray(outcome.score)
+      ? (outcome.score as Record<string, unknown>)
+      : null;
   const scoreStatus = score && typeof score.status === 'string' ? score.status : null;
   const scoreReason = score && typeof score.reason === 'string' ? score.reason : null;
   const readback = currentScoreReadback(row?.currentScore);
@@ -41,7 +42,7 @@ function Outcome({
           <>
             <p className="text-sm [overflow-wrap:anywhere]">
               {m.library_anilist_score_source({
-                value: row.scoreSource.lexeme ?? (JSON.stringify(row.scoreSource.value) ?? String(row.scoreSource.value)),
+                value: row.scoreSource.lexeme ?? JSON.stringify(row.scoreSource.value) ?? String(row.scoreSource.value),
                 scale: row.scoreSource.scale ?? m.library_anilist_score_scale_unknown(),
                 validity: aniListValidityLabel(row.scoreSource.validity),
               })}
@@ -54,7 +55,9 @@ function Outcome({
       </section>
       <section className="space-y-1" data-anilist-score-effect>
         <h4 className="font-medium">{m.library_anilist_score_effect()}</h4>
-        {scoreStatus ? <p>{scoreOutcomeLabel(scoreStatus)}</p> : row?.scoreAction === 'keep' ? (
+        {scoreStatus ? (
+          <p>{scoreOutcomeLabel(scoreStatus)}</p>
+        ) : row?.scoreAction === 'keep' ? (
           <p>{m.library_anilist_score_no_effect()}</p>
         ) : (
           <p>{m.library_anilist_score_effect_not_reported()}</p>
@@ -94,13 +97,20 @@ function Outcome({
 
 function scoreOutcomeLabel(status: string): string {
   switch (status) {
-    case 'applied': return m.library_anilist_score_outcome_applied();
-    case 'skipped': return m.library_anilist_score_outcome_skipped();
-    case 'stale': return m.library_anilist_score_outcome_stale();
-    case 'unsupported': return m.library_anilist_score_outcome_unsupported();
-    case 'failed': return m.library_anilist_score_outcome_failed();
-    case 'unavailable': return m.library_anilist_score_outcome_unavailable();
-    default: return m.library_anilist_score_effect_not_reported();
+    case 'applied':
+      return m.library_anilist_score_outcome_applied();
+    case 'skipped':
+      return m.library_anilist_score_outcome_skipped();
+    case 'stale':
+      return m.library_anilist_score_outcome_stale();
+    case 'unsupported':
+      return m.library_anilist_score_outcome_unsupported();
+    case 'failed':
+      return m.library_anilist_score_outcome_failed();
+    case 'unavailable':
+      return m.library_anilist_score_outcome_unavailable();
+    default:
+      return m.library_anilist_score_effect_not_reported();
   }
 }
 

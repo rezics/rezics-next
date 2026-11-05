@@ -95,8 +95,9 @@ export const readAniListImportPage = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }): Promise<AniListPageResult> => port().page(data));
 
-export const readAniListStandardQuestion = createServerFn({ method: 'GET' })
-  .handler(async (): Promise<AniListQuestionResult> => port().question());
+export const readAniListStandardQuestion = createServerFn({ method: 'GET' }).handler(
+  async (): Promise<AniListQuestionResult> => port().question(),
+);
 
 export const reviewAniListImport = createServerFn({ method: 'POST' })
   .validator((input: unknown): Extract<AniListCommand, { kind: 'review' }> => {
@@ -131,7 +132,14 @@ export const reviewAniListImport = createServerFn({ method: 'POST' })
       replace,
       ...(subjectId ? { subjectId } : {}),
       ...(skip ? { skip: true } : {}),
-      ...(score === undefined ? {} : { score: score as Extract<NonNullable<Extract<AniListCommand, { kind: 'review' }>['score']>, { action: 'vote' | 'clear' }> }),
+      ...(score === undefined
+        ? {}
+        : {
+            score: score as Extract<
+              NonNullable<Extract<AniListCommand, { kind: 'review' }>['score']>,
+              { action: 'vote' | 'clear' }
+            >,
+          }),
     };
   })
   .handler(async ({ data }): Promise<AniListReviewResult> => port().review(data));

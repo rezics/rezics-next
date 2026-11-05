@@ -111,11 +111,7 @@ function scoreReviewMeta(row: AniListRow): AniListRowMeta['scoreReview'] {
     matchFingerprint: typeof target.matchFingerprint === 'string' ? target.matchFingerprint : null,
     currentVoteUnits: vote ? finiteInteger(vote.units) : null,
     currentVote:
-      current.status === 'unavailable' || unavailable === 'unavailable'
-        ? 'unavailable'
-        : vote
-          ? 'present'
-          : 'absent',
+      current.status === 'unavailable' || unavailable === 'unavailable' ? 'unavailable' : vote ? 'present' : 'absent',
     currentVoteReason: reason,
     availability: unavailable,
     availabilityReason: typeof native.reason === 'string' ? native.reason : null,
@@ -124,10 +120,7 @@ function scoreReviewMeta(row: AniListRow): AniListRowMeta['scoreReview'] {
   };
 }
 
-function scoreSourceMeta(
-  row: AniListRow,
-  scoreFormat: AniListScoreFormat | null,
-): AniListRowMeta['scoreSource'] {
+function scoreSourceMeta(row: AniListRow, scoreFormat: AniListScoreFormat | null): AniListRowMeta['scoreSource'] {
   if (!Object.hasOwn(row.source.evidence, 'score')) return null;
   const field = row.source.fields.find((candidate) => candidate.field === 'score');
   return {
@@ -162,7 +155,7 @@ function metaFromRow(
     target: review?.input.subjectId ?? observation?.subjectId ?? previous?.target ?? null,
     proposedState: observation?.proposedState ?? previous?.proposedState ?? null,
     current: observation?.current ?? previous?.current ?? null,
-    reviewId: previous?.reviewInvalidated ? null : review?.id ?? previous?.reviewId ?? null,
+    reviewId: previous?.reviewInvalidated ? null : (review?.id ?? previous?.reviewId ?? null),
     skip: previous?.skip ?? review?.input.skip ?? false,
     replace: previous?.replace ?? review?.input.replace ?? false,
     applyStatus: previous?.applyStatus ?? review?.input.fields.includes('status') ?? true,
@@ -177,7 +170,7 @@ function metaFromRow(
     scoreUnits: previous?.reviewInvalidated
       ? (previous.scoreUnits ?? null)
       : (scoreReviewMeta(row)?.units ?? previous?.scoreUnits ?? null),
-    scoreReview: previous?.reviewInvalidated ? null : scoreReviewMeta(row) ?? previous?.scoreReview ?? null,
+    scoreReview: previous?.reviewInvalidated ? null : (scoreReviewMeta(row) ?? previous?.scoreReview ?? null),
     nativeVoteConsent:
       !previous?.reviewInvalidated &&
       previous?.nativeVoteConsent &&
@@ -458,7 +451,9 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     const replace = current?.replace ?? false;
     const applyStatus = current?.applyStatus ?? true;
     const scoreAction = skip ? 'keep' : (current?.scoreAction ?? 'keep');
-    let score: Extract<NonNullable<Extract<AniListCommand, { kind: 'review' }>['score']>, { action: 'vote' | 'clear' }> | undefined;
+    let score:
+      | Extract<NonNullable<Extract<AniListCommand, { kind: 'review' }>['score']>, { action: 'vote' | 'clear' }>
+      | undefined;
     if (scoreAction !== 'keep') {
       busy = true;
       let questionResult: AniListQuestionResult;
@@ -482,7 +477,8 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
       const units = current?.scoreUnits;
       if (
         scoreAction === 'vote' &&
-        (units === null || units === undefined ||
+        (units === null ||
+          units === undefined ||
           !Number.isSafeInteger(units) ||
           units < latest.scale.min ||
           units > latest.scale.max ||
@@ -562,7 +558,9 @@ export function createAniListJourney(input: { port: AniListImportPort; visit: An
     current.scoreAction = current.skip ? 'keep' : (choice.scoreAction ?? current.scoreAction);
     current.scoreUnits =
       current.scoreAction === 'vote'
-        ? (choice.scoreUnits === undefined ? current.scoreUnits : choice.scoreUnits)
+        ? choice.scoreUnits === undefined
+          ? current.scoreUnits
+          : choice.scoreUnits
         : null;
     const after = [current.skip, current.replace, current.applyStatus, current.scoreAction, current.scoreUnits];
     if (before.some((value, index) => value !== after[index])) {
