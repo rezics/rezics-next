@@ -776,14 +776,14 @@ export function createAniListImport(deps: Dependencies) {
         throw new LibraryConflictError();
       if (current.metadataReviews?.some((item) => item.confirmation && !item.confirmation.outcome))
         throw new LibraryConflictError();
-      return {
-        ...current,
-        review: value,
-        progress: undefined,
-        outcome: undefined,
-        consumptionDateReview: undefined,
-        consumptionDateIntent: undefined,
-      };
+      const {
+        progress: _progress,
+        outcome: _outcome,
+        consumptionDateReview: _consumptionDateReview,
+        consumptionDateIntent: _consumptionDateIntent,
+        ...retained
+      } = current;
+      return { ...retained, review: value };
     });
     // Receipt replay refers to the stored review, never freshly computed operands.
     const current = await load(actor, id, ordinal);
@@ -1092,7 +1092,7 @@ export function createAniListImport(deps: Dependencies) {
       const header = await load<Header>(actor, id, -1);
       if (header.cancelled) break;
       const stored = await load(actor, id, confirmation.ordinal);
-      let reviewed = stored.review;
+      const reviewed = stored.review;
       if (
         !reviewed ||
         reviewed.id !== confirmation.reviewId ||
@@ -1299,9 +1299,11 @@ export function createAniListImport(deps: Dependencies) {
       )
         await save(actor, id, confirmation.ordinal, 'finish', reviewed.commandKey, outcome, (row) => {
           if (row.review?.id !== reviewed.id) throw new LibraryConflictError();
-          return status === 'stale' && !row.started
-            ? { ...row, review: undefined, started: undefined, outcome: undefined }
-            : { ...row, outcome };
+          if (status === 'stale' && !row.started) {
+            const { review: _review, started: _started, outcome: _outcome, ...retained } = row;
+            return retained;
+          }
+          return { ...row, outcome };
         });
       outcomes.push(outcome);
     }
@@ -1450,12 +1452,14 @@ export function createAniListImport(deps: Dependencies) {
           (!current.consumptionDateIntent.outcome || current.consumptionDateIntent.outcome.status === 'failed'))
       )
         throw new LibraryConflictError();
-      return { ...current, consumptionDateReview: reviewed, consumptionDateIntent: undefined };
+      const { consumptionDateIntent: _consumptionDateIntent, ...retained } = current;
+      return { ...retained, consumptionDateReview: reviewed };
     });
-    if (saved.value.version !== result.version) throw new LibraryConflictError();
+    if (saved.value.reviewId !== sourceReview.id) throw new LibraryConflictError();
     const latest = await load(actor, id, input.ordinal);
-    if (latest.consumptionDateReview?.version !== saved.value.version) throw new LibraryConflictError();
-    return saved.value;
+    const published = latest.consumptionDateReview;
+    if (!published || published.version !== reviewed.version) throw new LibraryConflictError();
+    return published;
   }
   async function currentConsumptionDates(
     actor: Actor,
@@ -1655,6 +1659,8 @@ export function createAniListImport(deps: Dependencies) {
     page,
     review,
     reviewMetadata,
+    reviewConsumptionDates,
+    applyConsumptionDates,
     metadata: metadataView,
     applyMetadata,
     apply,

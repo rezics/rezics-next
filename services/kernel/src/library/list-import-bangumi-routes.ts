@@ -28,6 +28,9 @@ import {
 } from './list-import-bangumi-label-model.ts';
 import { ENTRY_IMPORT_METADATA_LIMITS } from './list-import-entry-metadata.ts';
 
+type Service = ReturnType<typeof createBangumiImport>;
+type Output<K extends keyof Service> = Awaited<ReturnType<Service[K]>>;
+
 const closed = { additionalProperties: false } as const;
 const id = t.String({ format: 'uuid' });
 const ordinal = t.Integer({ minimum: 0, maximum: 99 });
