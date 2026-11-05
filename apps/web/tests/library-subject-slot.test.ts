@@ -221,16 +221,14 @@ const codes = new Map<string, Grant>();
 const families = new Map<string, Family>();
 const assertions = new Set<string>();
 let counter = 0;
-let libraryEntry:
-  | {
-      subjectId: string;
-      state: string;
-      revision: number;
-      incarnationId?: string;
-      createdAt: string;
-      updatedAt: string;
-    }
-  | null = null;
+let libraryEntry: {
+  subjectId: string;
+  state: string;
+  revision: number;
+  incarnationId?: string;
+  createdAt: string;
+  updatedAt: string;
+} | null = null;
 let members = new Set<string>();
 let releaseWrite: (() => void) | undefined;
 let writeGate: Promise<void> | undefined;
@@ -883,7 +881,9 @@ test(
       expect(calls.filter((call) => call.method === 'DELETE' || call.method === 'PUT')).toHaveLength(0);
       await page.setViewportSize({ width: 390, height: 844 });
       expect(await removalReview.getByRole('button', { name: 'Keep this Entry', exact: true }).isVisible()).toBe(true);
-      expect(await removalReview.getByRole('button', { name: 'Remove from library', exact: true }).isVisible()).toBe(true);
+      expect(await removalReview.getByRole('button', { name: 'Remove from library', exact: true }).isVisible()).toBe(
+        true,
+      );
       await page.setViewportSize({ width: 1280, height: 860 });
       expect(
         await removalReview
@@ -941,7 +941,9 @@ test(
 
       await retry.click();
       await eventually(async () => libraryEntry === null);
-      const removals = calls.filter((call) => call.method === 'DELETE' && call.path === `/v1/libraryEntries/${subjectId}`);
+      const removals = calls.filter(
+        (call) => call.method === 'DELETE' && call.path === `/v1/libraryEntries/${subjectId}`,
+      );
       expect(removals).toHaveLength(2);
       expect(removals[1]?.key).toBe(removals[0]?.key);
       expect(removals[1]?.query).toBe(removals[0]?.query);

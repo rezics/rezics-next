@@ -23,8 +23,7 @@ function createLifetime(
     current: (...operations) =>
       active() &&
       operations.every(
-        (operation) =>
-          operation === 'library_entry.get' || (operation === 'library_entry.delete' && deleteAdmitted()),
+        (operation) => operation === 'library_entry.get' || (operation === 'library_entry.delete' && deleteAdmitted()),
       ),
   };
 }
@@ -32,7 +31,11 @@ function createLifetime(
 test('removal review retains the exact Entry, admits delete without put, and rejects retired origins', () => {
   let deleteAdmitted = true;
   let active = true;
-  const lifetime = createLifetime('subject-origin', () => deleteAdmitted, () => active);
+  const lifetime = createLifetime(
+    'subject-origin',
+    () => deleteAdmitted,
+    () => active,
+  );
   const entry = {
     subjectId: subject.id,
     state: 'planned',
