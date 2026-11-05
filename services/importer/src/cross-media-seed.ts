@@ -4237,6 +4237,8 @@ export async function runCrossMediaSeedCli(
         tagWeightRefreshes: publicTags.tagWeightRefreshes,
         tagAssociations: publicTags.associationBindings,
         tagAssociationRefreshes: publicTags.associationRefreshes,
+        tagParentEvidence: publicTags.tagParentEvidence,
+        tagParentGaps: publicTags.parentBindingGaps,
       });
     const { bangumiGenrePublication, bangumiGameGenrePublication, ...publicCombinedResultFields } = combinedResult;
     const publicCombinedResult = {

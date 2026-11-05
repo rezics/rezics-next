@@ -381,14 +381,16 @@ export async function importVndbPublicTags(input: {
   port: CrossMediaPort;
   bindings: SourceVocabularyBindings;
   ratings?: ReadonlyMap<string, VndbTagRatingSnapshot>;
+  admitted?: readonly AdmittedPublicTag[];
   destination?: { origin: string };
 }): Promise<VndbPublicTagsResult> {
   const plan = await planVndbPublicTags(input.tables);
+  const admitted = input.admitted ?? plan.admitted;
   const result = await seedCrossMedia(plan, input.path, input.port, input.destination, {
-    vocabularyAdmission: vndbPublicTagVocabularyAdmission(input.bindings, plan.admitted, input.ratings),
+    vocabularyAdmission: vndbPublicTagVocabularyAdmission(input.bindings, admitted, input.ratings),
     providers: ['vndb'],
   });
-  return { ...result, converterRevision: entityRevision, admitted: plan.admitted };
+  return { ...result, converterRevision: entityRevision, admitted };
 }
 
 export function parseAuthoredVndbCopy(table: VndbPublicTagTable, header: string, lines: readonly string[]): Row[] {

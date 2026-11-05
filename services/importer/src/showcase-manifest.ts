@@ -9,7 +9,7 @@ import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary
 import { vndbTagsRatingMetric, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
 import { sourceDigest, type VndbPublicTagCategory } from '../../../packages/conversion/src/support.ts';
 import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
-import type { CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
+import type { CrossMediaGap, CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
 import { bangumiAppearanceSource, graphEdgeCommandKey, graphEdgeSource } from './cross-media-bindings.ts';
 import { BANGUMI_MEDIA_BATCH_LIMIT, validAvailableCover, type CrossMediaMediaOutcome } from './showcase-media.ts';
 import type { VndbTagRatingObservation } from './showcase-vndb-tag-ratings.ts';
@@ -117,6 +117,22 @@ export type ShowcaseTagAssociation = Readonly<{
   releaseDigest: string;
 }>;
 
+/** Source parent evidence joined to exact current Concept and category Scheme identities, before hierarchy admission. */
+export type ShowcaseTagParentBinding = Readonly<{
+  child: string;
+  parent: string;
+  main: boolean;
+  category: VndbPublicTagCategory;
+  path: string;
+  childId: string;
+  parentId: string;
+  schemeId: string;
+  childUri: string;
+  parentUri: string;
+  schemeUri: string;
+  releaseDigest: string;
+}>;
+
 export function showcaseVocabularyExternalId(sourceKey: string): string {
   if (!/^[a-z][a-z0-9_.:-]{0,127}$/u.test(sourceKey)) throw new TypeError('Invalid showcase vocabulary source key');
   return `vocabulary:${sourceKey}`;
@@ -174,6 +190,8 @@ export type ShowcaseManifest = Readonly<{
   media: readonly ShowcaseMediaRecord[];
   tagAssociations?: readonly ShowcaseTagAssociation[];
   tagAssociationRefreshes?: readonly string[];
+  tagParentEvidence?: readonly ShowcaseTagParentBinding[];
+  tagParentGaps?: readonly CrossMediaGap[];
   tagWeightObservations: readonly VndbTagRatingObservation[];
   tagWeightRefreshes: readonly string[];
   omissions: readonly ShowcaseOmission[];
@@ -498,6 +516,8 @@ export function buildShowcaseManifest(input: {
   tagWeightRefreshes?: readonly string[];
   tagAssociations?: readonly ShowcaseTagAssociation[];
   tagAssociationRefreshes?: readonly string[];
+  tagParentEvidence?: readonly ShowcaseTagParentBinding[];
+  tagParentGaps?: readonly CrossMediaGap[];
   workRelations?: readonly GraphEdgeEvidence[];
 }): ShowcaseManifest {
   const { plan, readings, acknowledgements, aliases } = input;
@@ -519,6 +539,8 @@ export function buildShowcaseManifest(input: {
   const tagWeightObservations = input.tagWeightObservations ?? [];
   const tagAssociations = input.tagAssociations ?? [];
   const tagAssociationRefreshes = [...new Set(input.tagAssociationRefreshes ?? [])];
+  const tagParentEvidence = input.tagParentEvidence ?? [];
+  const tagParentGaps = input.tagParentGaps ?? [];
   const vndbCreditCandidateDigests = new Set(input.vndbCreditCandidateDigests ?? []);
   const tagWeightRefreshes = [...new Set(input.tagWeightRefreshes ?? [])].filter((id) =>
     /^v[1-9][0-9]{0,9}$/u.test(id),
@@ -932,6 +954,8 @@ export function buildShowcaseManifest(input: {
     media,
     tagAssociations,
     tagAssociationRefreshes,
+    tagParentEvidence,
+    tagParentGaps,
     tagWeightObservations,
     tagWeightRefreshes,
   });
@@ -943,6 +967,8 @@ export function buildShowcaseManifest(input: {
     media,
     tagAssociations,
     tagAssociationRefreshes,
+    tagParentEvidence,
+    tagParentGaps,
     tagWeightObservations,
     tagWeightRefreshes,
     omissions,

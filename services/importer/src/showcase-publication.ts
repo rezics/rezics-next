@@ -23,6 +23,7 @@ import {
   type ShowcaseManifest,
   type ShowcaseRecord,
   type ShowcaseTagAssociation,
+  type ShowcaseTagParentBinding,
   type ShowcaseVocabularyRecord,
   type ShowcaseVocabularyRequirement,
   showcaseMediaContext,
@@ -1279,6 +1280,8 @@ export async function publishShowcase(input: {
   tagWeightRefreshes?: ShowcaseManifest['tagWeightRefreshes'];
   tagAssociations?: ShowcaseManifest['tagAssociations'];
   tagAssociationRefreshes?: ShowcaseManifest['tagAssociationRefreshes'];
+  tagParentEvidence?: readonly ShowcaseTagParentBinding[];
+  tagParentGaps?: ShowcaseManifest['tagParentGaps'];
 }): Promise<ShowcasePublicationResult> {
   const mediaOutcomes = await currentCoverOutcomes(input.result, input.review);
   const result = { ...input.result, mediaOutcomes };
@@ -1318,6 +1321,8 @@ export async function publishShowcase(input: {
       ...(input.tagWeightRefreshes ? { tagWeightRefreshes: input.tagWeightRefreshes } : {}),
       ...(input.tagAssociations ? { tagAssociations: input.tagAssociations } : {}),
       ...(input.tagAssociationRefreshes ? { tagAssociationRefreshes: input.tagAssociationRefreshes } : {}),
+      ...(input.tagParentEvidence ? { tagParentEvidence: input.tagParentEvidence } : {}),
+      ...(input.tagParentGaps ? { tagParentGaps: input.tagParentGaps } : {}),
       ...(input.vocabularyRequirements ? { vocabularyRequirements: input.vocabularyRequirements } : {}),
       ...(genre
         ? {

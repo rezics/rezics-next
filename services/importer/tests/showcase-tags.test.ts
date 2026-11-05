@@ -185,7 +185,10 @@ test('default showcase adapter projects selected COPY tags with admitted, unsupp
     ['concept', 'g44', vndbPublicTagConceptUri('ero', 'g44')],
     ['concept', 'g88', vndbPublicTagConceptUri('cont', 'g88')],
   ]);
-  expect(plan.gaps.some((gap) => gap.reason.includes('Parent tag relationship is not admitted'))).toBe(true);
+  expect(plan.sourceParents).toEqual([
+    { child: 'g311', parent: 'g12', main: true, category: 'cont', path: '/tags_parents/g311/g12' },
+  ]);
+  expect(plan.tagParentEvidence).toEqual([]);
   expect(plan.gaps.some((gap) => gap.reason === 'Excluded false or confidence tag association')).toBe(true);
   expect(JSON.stringify(plan)).not.toContain('v999');
   expect(JSON.stringify(plan)).not.toContain('g900');

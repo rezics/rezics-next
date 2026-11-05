@@ -23,8 +23,10 @@ import {
   showcaseLimits,
   showcaseVocabularyExternalId,
   type ShowcaseTagAssociation,
+  type ShowcaseTagParentBinding,
   type ShowcaseVocabularyRequirement,
 } from './showcase-manifest.ts';
+import { bindShowcaseTagParents, withholdShowcaseTagAssociations } from './showcase-cross-provider-tags.ts';
 import type { ShowcaseJournal } from './showcase-publication.ts';
 import {
   acquireShowcaseVndbTagRatings,
@@ -91,6 +93,9 @@ export type ShowcaseTagManifest = Readonly<{
 export type ShowcaseTagPlan = VndbPublicTagPlan & {
   vocabulary: ShowcaseTagVocabularyRecord[];
   sourceParents: ShowcaseTagSourceParent[];
+  invalidParentTags: string[];
+  tagParentEvidence: ShowcaseTagParentBinding[];
+  parentBindingGaps: CrossMediaGap[];
   truncated: boolean;
 };
 
@@ -216,6 +221,7 @@ export async function projectShowcaseTagTables(
   truncated: boolean;
   dictionary: Map<string, VndbPublicTagDictionaryRow>;
   sourceParents: ShowcaseTagSourceParent[];
+  invalidParentTags: string[];
 }> {
   const selected = selectedWorkIds(selectedVids);
   const gaps: CrossMediaGap[] = [];
@@ -254,17 +260,21 @@ export async function projectShowcaseTagTables(
 
   const parentByChild = new Map<string, string[]>();
   const parentEvidence = new Map<string, ReturnType<typeof projectVndbPublicTagParent>>();
+  const invalidParentTags = new Set<string>();
   let parentCount = 0;
+  let parentInventoryTruncated = false;
   for await (const row of input.rows('vndb', 'tags_parents')) {
     if (parentCount >= vndbPublicTagLimits.parents) {
       if (!truncated.value) gap('tags_parents', row, 'Tag parent rows exceed the bounded import cap');
       truncated.value = true;
+      parentInventoryTruncated = true;
       continue;
     }
     parentCount += 1;
     const projected = tryProjectParent(row);
     if (!projected) {
       gap('tags_parents', row, 'Invalid VNDB tag parent row');
+      if (typeof row.id === 'string' && tagId.test(row.id)) invalidParentTags.add(row.id);
       continue;
     }
     parentEvidence.set(`${projected.id}/${projected.parent}`, projected);
@@ -321,6 +331,7 @@ export async function projectShowcaseTagTables(
     if (cached !== undefined) return cached;
     if (visiting.has(id)) {
       gap('tags_parents', { id }, 'Cyclic source tag ancestry');
+      invalidParentTags.add(id);
       return Infinity;
     }
     visiting.add(id);
@@ -330,23 +341,29 @@ export async function projectShowcaseTagTables(
       const parentRow = dictionary.get(parent);
       if (!childRow || !parentRow) {
         gap('tags_parents', { id, parent }, 'Missing source tag parent dictionary endpoint');
+        invalidParentTags.add(id);
         result = Infinity;
       } else if (childRow.category !== parentRow.category) {
         gap('tags_parents', { id, parent }, 'Source tag parent crosses Scheme category');
+        invalidParentTags.add(id);
         result = Infinity;
       } else {
-        result = Math.max(result, 1 + height(parent));
+        const parentHeight = height(parent);
+        if (!Number.isFinite(parentHeight)) invalidParentTags.add(id);
+        result = Math.max(result, 1 + parentHeight);
       }
     }
     visiting.delete(id);
     heights.set(id, result);
     return result;
   };
+  if (parentInventoryTruncated) for (const id of closed) invalidParentTags.add(id);
   const sourceParents: ShowcaseTagSourceParent[] = [];
   for (const id of closed) {
     const depth = height(id);
     if (depth > vndbPublicTagLimits.closureDepth) {
       if (Number.isFinite(depth)) gap('tags_parents', { id }, 'Source tag ancestry exceeds closure depth');
+      invalidParentTags.add(id);
       continue;
     }
     for (const parent of new Set(parentByChild.get(id) ?? [])) {
@@ -358,11 +375,6 @@ export async function projectShowcaseTagTables(
         category: dictionary.get(id)!.category,
         path: `/tags_parents/${id}/${parent}`,
       });
-      gap(
-        'tags_parents',
-        { id, parent },
-        'Parent tag relationship is not admitted for native writes; taxonomy closure keeps the dictionary record only',
-      );
     }
   }
   sourceParents.sort((left, right) => left.path.localeCompare(right.path));
@@ -436,6 +448,7 @@ export async function projectShowcaseTagTables(
     truncated: truncated.value,
     dictionary,
     sourceParents,
+    invalidParentTags: [...invalidParentTags].sort(),
   };
 }
 
@@ -510,6 +523,9 @@ function composePlan(
     gaps: mergeGaps([...projected.gaps, ...plan.gaps]),
     vocabulary: markProposed(vocabularyRecords(projected.dictionary, bindings), known),
     sourceParents: projected.sourceParents,
+    invalidParentTags: projected.invalidParentTags,
+    tagParentEvidence: [],
+    parentBindingGaps: [],
     truncated: projected.truncated,
   };
 }
@@ -551,20 +567,35 @@ export async function planShowcaseTags(input: {
   known?: VndbPublicTagKnownBindings;
 }): Promise<ShowcaseTagPlan> {
   const projected = await projectShowcaseTagTables(input.tables, input.selectedVids);
-  return composePlan(
+  const planned = composePlan(
     projected,
     await planVndbPublicTags(projected.tables),
     input.bindings ?? { releaseDigest: bundledDigest, schemes: [], concepts: [] },
     input.known ?? { schemes: [], concepts: [] },
   );
+  if (!input.bindings) return planned;
+  const parents = bindShowcaseTagParents({
+    sourceParents: planned.sourceParents,
+    invalidParentTags: planned.invalidParentTags,
+    bindings: input.bindings,
+  });
+  return {
+    ...planned,
+    admitted: withholdShowcaseTagAssociations(planned.admitted, parents.unavailableTagCodes),
+    tagParentEvidence: parents.tagParentEvidence,
+    parentBindingGaps: parents.gaps,
+  };
 }
 
 export type ShowcaseTagsResult = VndbPublicTagsResult & {
   vocabulary: ShowcaseTagVocabularyRecord[];
   sourceParents: ShowcaseTagSourceParent[];
+  invalidParentTags: string[];
   truncated: boolean;
   bindings: SourceVocabularyBindings;
   associationBindings: ShowcaseTagAssociation[];
+  tagParentEvidence: ShowcaseTagParentBinding[];
+  parentBindingGaps: CrossMediaGap[];
   associationRefreshes: string[];
   tagWeightObservations: readonly VndbTagRatingObservation[];
   tagWeightRefreshes: readonly string[];
@@ -587,9 +618,16 @@ export async function prepareShowcaseTags(input: {
   );
   const bindings = await readVndbPublicTagBindings(input.port, known);
   const planned = composePlan(projected, await planVndbPublicTags(projected.tables), bindings, known);
+  const parents = bindShowcaseTagParents({
+    sourceParents: planned.sourceParents,
+    invalidParentTags: planned.invalidParentTags,
+    bindings,
+  });
+  const admitted = withholdShowcaseTagAssociations(planned.admitted, parents.unavailableTagCodes);
+  const withParentGaps = { ...planned, gaps: mergeGaps([...planned.gaps, ...parents.gaps]) };
   const ratingAcquisition = await acquireShowcaseVndbTagRatings({
     selectedVids: input.selectedVids,
-    admitted: planned.admitted,
+    admitted,
     bindings,
     identity: tagRatingIdentity,
     ...(input.journal ? { journal: input.journal } : {}),
@@ -597,10 +635,14 @@ export async function prepareShowcaseTags(input: {
   });
   return {
     ...planned,
+    admitted,
     bindings,
-    associationBindings: associationBindings(planned.admitted, bindings),
-    associationRefreshes: associationRefreshes(planned, input.selectedVids),
-    vocabularyAdmission: vndbPublicTagVocabularyAdmission(bindings, planned.admitted, ratingAcquisition.snapshots),
+    associationBindings: associationBindings(admitted, bindings),
+    tagParentEvidence: parents.tagParentEvidence,
+    parentBindingGaps: parents.gaps,
+    gaps: withParentGaps.gaps,
+    associationRefreshes: associationRefreshes(withParentGaps, input.selectedVids),
+    vocabularyAdmission: vndbPublicTagVocabularyAdmission(bindings, admitted, ratingAcquisition.snapshots),
     tagWeightObservations: ratingAcquisition.observations,
     tagWeightRefreshes: [...new Set(input.selectedVids)],
   };
@@ -622,9 +664,16 @@ export async function importShowcaseTags(input: {
   const projected = await projectShowcaseTagTables(input.tables, input.selectedVids);
   const bindings = await readVndbPublicTagBindings(input.port, known);
   const planned = composePlan(projected, await planVndbPublicTags(projected.tables), bindings, known);
+  const parents = bindShowcaseTagParents({
+    sourceParents: planned.sourceParents,
+    invalidParentTags: planned.invalidParentTags,
+    bindings,
+  });
+  const admitted = withholdShowcaseTagAssociations(planned.admitted, parents.unavailableTagCodes);
+  const withParentGaps = { ...planned, gaps: mergeGaps([...planned.gaps, ...parents.gaps]) };
   const ratingAcquisition = await acquireShowcaseVndbTagRatings({
     selectedVids: input.selectedVids,
-    admitted: planned.admitted,
+    admitted,
     bindings,
     identity: tagRatingIdentity,
     ...(input.journal ? { journal: input.journal } : {}),
@@ -636,20 +685,26 @@ export async function importShowcaseTags(input: {
     path: input.path,
     port: input.port,
     bindings,
+    admitted,
     ratings: ratingAcquisition.snapshots,
     ...(input.destination ? { destination: input.destination } : {}),
   });
-  const gaps = mergeGaps([...planned.gaps, ...imported.gaps]);
+  const gaps = mergeGaps([...withParentGaps.gaps, ...imported.gaps]);
+  const withImportGaps = { ...planned, gaps };
   return {
     ...imported,
+    admitted,
     status: gaps.length ? 'imported-with-gaps' : imported.status,
     gaps,
     vocabulary: planned.vocabulary,
     sourceParents: planned.sourceParents,
+    invalidParentTags: planned.invalidParentTags,
+    tagParentEvidence: parents.tagParentEvidence,
+    parentBindingGaps: parents.gaps,
     truncated: planned.truncated,
     bindings,
-    associationBindings: associationBindings(planned.admitted, bindings),
-    associationRefreshes: associationRefreshes(planned, input.selectedVids),
+    associationBindings: associationBindings(admitted, bindings),
+    associationRefreshes: associationRefreshes(withImportGaps, input.selectedVids),
     tagWeightObservations: ratingAcquisition.observations,
     tagWeightRefreshes: [...new Set(input.selectedVids)],
   };

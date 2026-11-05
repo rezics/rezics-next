@@ -230,9 +230,11 @@ At most 32 admitted links per owner and a 64 KiB projection; public website URL 
 
 ### Cost: shared reviewed VNDB tags and Kana weights
 
+Decision: retain parent edges as source evidence with exact source paths and current native IDs; require both endpoints in the same current category Scheme before keeping dependent work-tag associations. `main` remains VNDB tree bookkeeping, not a native qualifier.
+
 - **Touches:** selected tags, tag parents, selected work associations, closed dictionary, current reviewed bindings and exact Kana response receipts.
 - **Bound:** at most 96 selected works, 512 dictionary tags, 256 associations, 1,024 parent edges, 8 closure steps, 512 vocabulary records and 64 KiB per selected-work record. Kana reads at most 512 bound tags; each response is at most 64 KiB, 6 MiB total, 3.5 seconds per request and 120 seconds per run. Pending replay adds no source request. No user vote aggregate or unrelated row materialization.
-- **Growth check:** services/importer/tests/showcase-tags.test.ts and showcase-publication.test.ts cover selected rows, bounded Kana reads, exact evidence, withheld ratings, refresh and replay; services/kernel/test/imports/vndb-public-tags.test.ts retains native review/adoption and independent reads.
+- **Growth check:** services/importer/tests/showcase-tags.test.ts and showcase-publication.test.ts cover selected rows, bounded Kana reads, exact evidence, withheld ratings, refresh and replay; showcase-cross-provider-tags.test.ts covers exact current parent bindings and dependent association withholding; services/kernel/test/imports/vndb-public-tags.test.ts retains native review/adoption and independent reads.
 
 ### Cost: VNDB work links and franchise relations
 
