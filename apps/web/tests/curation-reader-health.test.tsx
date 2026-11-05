@@ -115,12 +115,21 @@ test('mounted curation retires every stale cache owner and recovers only an expl
   let profileA = profileFor('/private-a', 'A saved source');
   const profileB = profileFor('/private-b', 'B private source');
   let initial = readFor(readerA, profileA, 7);
-  const reads: { reader: string; work: Deferred<CurationRead>; signal: AbortSignal | undefined }[] = [];
+  const reads: {
+    reader: string;
+    work: Deferred<CurationRead>;
+    signal: AbortSignal | undefined;
+    retiredAt: string | undefined;
+  }[] = [];
   const publishes: { reader: string; input: PublishInput; work: Deferred<PublishResult> }[] = [];
   const transport = {
     read: (reader: string, signal?: AbortSignal) => {
       const work = deferred<CurationRead>();
-      reads.push({ reader, work, signal });
+      const entry = { reader, work, signal, retiredAt: undefined as string | undefined };
+      signal?.addEventListener('abort', () => {
+        entry.retiredAt = new Error('opening retired').stack;
+      });
+      reads.push(entry);
       return work.promise;
     },
     readOpening: (reader: string, signal: AbortSignal) => transport.read(reader, signal),
@@ -313,7 +322,7 @@ test('mounted curation retires every stale cache owner and recovers only an expl
     expect(publishes).toHaveLength(2);
     expect(
       reads,
-      JSON.stringify(reads.map(({ reader, signal }) => ({ reader, aborted: signal?.aborted }))),
+      JSON.stringify(reads.map(({ reader, signal, retiredAt }) => ({ reader, aborted: signal?.aborted, retiredAt }))),
     ).toHaveLength(1);
     await settle(() => reads.length === 1, 'fresh A admission after batched ABA');
     await act(async () => reads[0]!.work.resolve(readFor(readerA, profileA, 7)));
