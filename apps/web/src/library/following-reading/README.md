@@ -62,4 +62,9 @@ the retained base requested one hundred rows and grouped them by type.
 Decision: route only current supplied Realm membership actions to the canonical Realm owner; unsupported Community
 actions stay unavailable in Following.
 
+Decision: Commerce receives an ordinary native Following list denial as a private permission page under the original
+kind, cursor and locale, replacing rows and inspection without supplying read or Follow authority. Explicit current-owner
+refresh may replace it; list denial never settles or replaces a captured uncertain Follow command. Accounts owns requested
+and issued website scope alignment; native permissions, preparations, admission and session ceilings remain authoritative.
+
 Kind navigation is owned by [Following kind navigation](../following-kind-navigation/README.md).
