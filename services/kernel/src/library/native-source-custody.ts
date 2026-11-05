@@ -317,10 +317,7 @@ function executor(
   strict = false,
   operationUse?: NativeSourceCustodyOperationUse,
 ) {
-  return async <R extends QueryResultRow = QueryResultRow>(
-    query: Query,
-    values: Parameters,
-  ): Promise<R[]> => {
+  return async <R extends QueryResultRow = QueryResultRow>(query: Query, values: Parameters): Promise<R[]> => {
     revalidateBoundLibraryIdentityWork(work);
     if (Date.now() >= deadline) throw new Refused('allowance');
     if (operationUse && !operationUse.statement(query)) throw new Refused('allowance');
@@ -351,13 +348,10 @@ function executor(
 }
 type Execute = ReturnType<typeof executor>;
 async function terminalOwner(run: Execute, values: Parameters): Promise<boolean> {
-  const [scope] = await run<{ version: number; outcome: string | null }>(
-    terminalScope,
-    {
-      ...values,
-      route: values.account_route,
-    },
-  );
+  const [scope] = await run<{ version: number; outcome: string | null }>(terminalScope, {
+    ...values,
+    route: values.account_route,
+  });
   return scope?.version === 1 && scope.outcome === null;
 }
 async function bindOwner(
@@ -706,8 +700,7 @@ function nativeLibrarySourceCustody(
         if (children.some((child) => !child.committed)) return blocked('release_uncommitted');
         let removed = 0;
         if (children.length) {
-          removed = (await run(retireChildren, { ...values, hold_ids: children.map((child) => child.id) }))
-            .length;
+          removed = (await run(retireChildren, { ...values, hold_ids: children.map((child) => child.id) })).length;
           if (removed !== children.length) throw new Refused('binding');
         }
         // Leave the two parent keys for another attempt when this raw page is full.
@@ -718,89 +711,86 @@ function nativeLibrarySourceCustody(
       });
     },
     capturePage(input) {
-      return account(input, async (work, operationUse) => {
-        if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100) throw new Refused('binding');
-        const result = await transaction(input, work, operationUse!, async (run) => {
-          const fences = await bindOwner(run, input.identity, true);
-          let state: State;
-          if (input.frontier === null) {
-            const captureId = crypto.randomUUID();
-            await run(
-              startQuery,
-              {
+      return account(
+        input,
+        async (work, operationUse) => {
+          if (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 100) throw new Refused('binding');
+          const result = await transaction(input, work, operationUse!, async (run) => {
+            const fences = await bindOwner(run, input.identity, true);
+            let state: State;
+            if (input.frontier === null) {
+              const captureId = crypto.randomUUID();
+              await run(startQuery, {
                 ...parameters(input.identity),
                 capture_id: captureId,
                 collection_fence: fences.collectionFence,
                 account_fence: fences.accountFence,
                 driver: input.identity.scope === 'active_explicit_output' ? 'output' : 'member',
-              },
-            );
-            state = {
-              ...input.identity,
-              ...fences,
-              captureId,
-              driver: input.identity.scope === 'active_explicit_output' ? 'output' : 'member',
-              after: '',
-              tie: '',
-              sessionId: null,
-              scanned: '0',
-              version: 0,
-              complete: false,
-            };
-          } else {
-            state = await readState(run, input.identity, input.frontier.captureId);
-            if (!sameFrontier(state, input.frontier) || state.complete) throw new Refused('binding');
-            compareFences(state, fences);
-          }
-          let rows: NativeSourceDependency[] = [];
-          if (state.driver !== 'done') {
-            const driver = state.driver;
-            // Sessions are native parent points, then bounded child ranges. No foreign per-row lookup.
-            const limit = driver === 'session' ? 1 : input.limit;
-            const after =
-              state.after || (driver === 'member' || driver === 'unit' ? '' : driver === 'change' ? '0' : null);
-            const raw = await run<Omit<NativeSourceDependency, 'driver'>>(
-              input.identity.scope === 'active_explicit_output' ? rawExplicitOutput : rawQueries[driver],
-              {
-                ...parameters(input.identity),
-                after: input.identity.scope === 'active_explicit_output' ? state.after || null : after,
-                tie: state.tie || zeroId,
-                session_id: state.sessionId,
-                limit,
-              },
-            );
-            rows = raw.map((row) => Object.freeze({ ...row, driver }));
-            state = { ...state, scanned: (BigInt(state.scanned) + BigInt(raw.length)).toString() };
-            const last = raw.at(-1);
-            if (driver === 'session' && last) {
-              state = { ...state, driver: 'unit', sessionId: last.key, after: '', tie: '' };
-            } else if (raw.length === limit && last) {
-              state = { ...state, after: last.key, tie: last.tie };
-            } else {
-              const next: Record<Exclude<NativeSourceDriver, 'done'>, NativeSourceDriver> = {
-                member: 'entry',
-                entry: 'entry_deleted',
-                entry_deleted: 'label',
-                label: 'assignment',
-                assignment: 'session',
-                session: 'copy',
-                unit: 'change',
-                change: 'session',
-                copy: 'output',
-                output: 'done',
-              };
+              });
               state = {
-                ...state,
-                driver: next[driver],
-                after: driver === 'change' ? state.sessionId! : '',
+                ...input.identity,
+                ...fences,
+                captureId,
+                driver: input.identity.scope === 'active_explicit_output' ? 'output' : 'member',
+                after: '',
                 tie: '',
-                sessionId: driver === 'unit' ? state.sessionId : null,
+                sessionId: null,
+                scanned: '0',
+                version: 0,
+                complete: false,
               };
+            } else {
+              state = await readState(run, input.identity, input.frontier.captureId);
+              if (!sameFrontier(state, input.frontier) || state.complete) throw new Refused('binding');
+              compareFences(state, fences);
             }
-            if (state.driver === 'done') compareOutputCount(state, fences);
-            await run(
-              advanceQuery,
-              {
+            let rows: NativeSourceDependency[] = [];
+            if (state.driver !== 'done') {
+              const driver = state.driver;
+              // Sessions are native parent points, then bounded child ranges. No foreign per-row lookup.
+              const limit = driver === 'session' ? 1 : input.limit;
+              const after =
+                state.after || (driver === 'member' || driver === 'unit' ? '' : driver === 'change' ? '0' : null);
+              const raw = await run<Omit<NativeSourceDependency, 'driver'>>(
+                input.identity.scope === 'active_explicit_output' ? rawExplicitOutput : rawQueries[driver],
+                {
+                  ...parameters(input.identity),
+                  after: input.identity.scope === 'active_explicit_output' ? state.after || null : after,
+                  tie: state.tie || zeroId,
+                  session_id: state.sessionId,
+                  limit,
+                },
+              );
+              rows = raw.map((row) => Object.freeze({ ...row, driver }));
+              state = { ...state, scanned: (BigInt(state.scanned) + BigInt(raw.length)).toString() };
+              const last = raw.at(-1);
+              if (driver === 'session' && last) {
+                state = { ...state, driver: 'unit', sessionId: last.key, after: '', tie: '' };
+              } else if (raw.length === limit && last) {
+                state = { ...state, after: last.key, tie: last.tie };
+              } else {
+                const next: Record<Exclude<NativeSourceDriver, 'done'>, NativeSourceDriver> = {
+                  member: 'entry',
+                  entry: 'entry_deleted',
+                  entry_deleted: 'label',
+                  label: 'assignment',
+                  assignment: 'session',
+                  session: 'copy',
+                  unit: 'change',
+                  change: 'session',
+                  copy: 'output',
+                  output: 'done',
+                };
+                state = {
+                  ...state,
+                  driver: next[driver],
+                  after: driver === 'change' ? state.sessionId! : '',
+                  tie: '',
+                  sessionId: driver === 'unit' ? state.sessionId : null,
+                };
+              }
+              if (state.driver === 'done') compareOutputCount(state, fences);
+              await run(advanceQuery, {
                 ...parameters(input.identity),
                 capture_id: state.captureId,
                 driver: state.driver,
@@ -808,120 +798,137 @@ function nativeLibrarySourceCustody(
                 tie: state.tie,
                 session_id: state.sessionId,
                 scanned: state.scanned,
-              },
-            );
-            state = { ...state, version: state.version + 1 };
-          }
-          return { status: 'pending' as const, frontier: frontier(state), rows };
-        });
-        return { ...result, work: work.receipt() };
-      }, 'capturePage');
+              });
+              state = { ...state, version: state.version + 1 };
+            }
+            return { status: 'pending' as const, frontier: frontier(state), rows };
+          });
+          return { ...result, work: work.receipt() };
+        },
+        'capturePage',
+      );
     },
     finishCapture(input) {
-      return account(input, async (work, operationUse) => {
-        const result = await transaction(input, work, operationUse!, async (run) => {
-          const fences = await bindOwner(run, input.identity, false);
-          const state = await readState(run, input.identity, input.frontier.captureId);
-          if (!sameFrontier(state, input.frontier) || state.driver !== 'done') throw new Refused('binding');
-          compareFences(state, fences);
-          compareOutputCount(state, fences);
-          const values = { ...parameters(input.identity), capture_id: state.captureId };
-          const [receipt] = state.complete
-            ? await run<{ transactionId: string; position: string }>(proofQuery, values)
-            : await run<{ transactionId: string; position: string }>(
-                finishQuery,
-                { ...values, transaction_id: crypto.randomUUID() },
-              );
-          if (!receipt) throw new Refused('binding');
-          validate(input.identity);
-          return {
-            status: 'complete' as const,
-            capture: Object.freeze({
-              [captureEvidence]: true as const,
-              identity: Object.freeze({ ...input.identity }),
-              captureId: state.captureId,
-              transactionId: receipt.transactionId,
-              position: receipt.position,
-              scanned: state.scanned,
-            }),
-          };
-        });
-        return { ...result, work: work.receipt() };
-      }, 'finishCapture');
+      return account(
+        input,
+        async (work, operationUse) => {
+          const result = await transaction(input, work, operationUse!, async (run) => {
+            const fences = await bindOwner(run, input.identity, false);
+            const state = await readState(run, input.identity, input.frontier.captureId);
+            if (!sameFrontier(state, input.frontier) || state.driver !== 'done') throw new Refused('binding');
+            compareFences(state, fences);
+            compareOutputCount(state, fences);
+            const values = { ...parameters(input.identity), capture_id: state.captureId };
+            const [receipt] = state.complete
+              ? await run<{ transactionId: string; position: string }>(proofQuery, values)
+              : await run<{ transactionId: string; position: string }>(finishQuery, {
+                  ...values,
+                  transaction_id: crypto.randomUUID(),
+                });
+            if (!receipt) throw new Refused('binding');
+            validate(input.identity);
+            return {
+              status: 'complete' as const,
+              capture: Object.freeze({
+                [captureEvidence]: true as const,
+                identity: Object.freeze({ ...input.identity }),
+                captureId: state.captureId,
+                transactionId: receipt.transactionId,
+                position: receipt.position,
+                scanned: state.scanned,
+              }),
+            };
+          });
+          return { ...result, work: work.receipt() };
+        },
+        'finishCapture',
+      );
     },
     readAndHold(input) {
-      return account(input, async (work, operationUse) => {
-        live(input);
-        if (!uuid.test(input.holdId)) throw new Refused('binding');
-        const run = executor(input.client, work, input.deadline, false, operationUse!);
-        const fences = await bindOwner(run, input.identity, false);
-        const state = await readState(run, input.identity, input.captureId);
-        compareFences(state, fences);
-        compareOutputCount(state, fences);
-        const values = { ...parameters(input.identity), capture_id: input.captureId, hold_id: input.holdId };
-        const [receipt] = await run<{ transactionId: string }>(proofQuery, values);
-        if (!receipt) throw new Refused('binding');
-        const [held] = await run<{ transactionId: string; released: boolean }>(
-          holdQuery,
-          { ...values, transaction_id: receipt.transactionId },
-        );
-        if (!held || held.released || held.transactionId !== receipt.transactionId) throw new Refused('binding');
-        return {
-          status: 'held' as const,
-          custody: Object.freeze({
-            [custodyEvidence]: true as const,
-            identity: Object.freeze({ ...input.identity }),
-            captureId: input.captureId,
-            holdId: input.holdId,
-            transactionId: receipt.transactionId,
-          }),
-          work: work.receipt(),
-        };
-      }, 'readAndHold');
+      return account(
+        input,
+        async (work, operationUse) => {
+          live(input);
+          if (!uuid.test(input.holdId)) throw new Refused('binding');
+          const run = executor(input.client, work, input.deadline, false, operationUse!);
+          const fences = await bindOwner(run, input.identity, false);
+          const state = await readState(run, input.identity, input.captureId);
+          compareFences(state, fences);
+          compareOutputCount(state, fences);
+          const values = { ...parameters(input.identity), capture_id: input.captureId, hold_id: input.holdId };
+          const [receipt] = await run<{ transactionId: string }>(proofQuery, values);
+          if (!receipt) throw new Refused('binding');
+          const [held] = await run<{ transactionId: string; released: boolean }>(holdQuery, {
+            ...values,
+            transaction_id: receipt.transactionId,
+          });
+          if (!held || held.released || held.transactionId !== receipt.transactionId) throw new Refused('binding');
+          return {
+            status: 'held' as const,
+            custody: Object.freeze({
+              [custodyEvidence]: true as const,
+              identity: Object.freeze({ ...input.identity }),
+              captureId: input.captureId,
+              holdId: input.holdId,
+              transactionId: receipt.transactionId,
+            }),
+            work: work.receipt(),
+          };
+        },
+        'readAndHold',
+      );
     },
     revalidateHold(input) {
-      return account(input, async (work, operationUse) => {
-        live(input);
-        if (!uuid.test(input.holdId)) throw new Refused('binding');
-        const run = executor(input.client, work, input.deadline, false, operationUse!);
-        // Current lifecycle/ownership fences still apply. Writer generations describe fresh reads,
-        // not the lifetime of an exact retained obligation from an earlier committed capture.
-        await bindOwner(run, input.identity, false, true);
-        await readState(run, input.identity, input.captureId);
-        const values = { ...parameters(input.identity), capture_id: input.captureId, hold_id: input.holdId };
-        const [receipt] = await run<{ transactionId: string }>(proofQuery, values);
-        if (!receipt) throw new Refused('binding');
-        const [held] = await run<{ transactionId: string }>(retainedQuery, values);
-        if (!held || held.transactionId !== receipt.transactionId) throw new Refused('binding');
-        return {
-          status: 'held' as const,
-          custody: Object.freeze({
-            [custodyEvidence]: true as const,
-            identity: Object.freeze({ ...input.identity }),
-            captureId: input.captureId,
-            holdId: input.holdId,
-            transactionId: receipt.transactionId,
-          }),
-          work: work.receipt(),
-        };
-      }, 'revalidateHold');
+      return account(
+        input,
+        async (work, operationUse) => {
+          live(input);
+          if (!uuid.test(input.holdId)) throw new Refused('binding');
+          const run = executor(input.client, work, input.deadline, false, operationUse!);
+          // Current lifecycle/ownership fences still apply. Writer generations describe fresh reads,
+          // not the lifetime of an exact retained obligation from an earlier committed capture.
+          await bindOwner(run, input.identity, false, true);
+          await readState(run, input.identity, input.captureId);
+          const values = { ...parameters(input.identity), capture_id: input.captureId, hold_id: input.holdId };
+          const [receipt] = await run<{ transactionId: string }>(proofQuery, values);
+          if (!receipt) throw new Refused('binding');
+          const [held] = await run<{ transactionId: string }>(retainedQuery, values);
+          if (!held || held.transactionId !== receipt.transactionId) throw new Refused('binding');
+          return {
+            status: 'held' as const,
+            custody: Object.freeze({
+              [custodyEvidence]: true as const,
+              identity: Object.freeze({ ...input.identity }),
+              captureId: input.captureId,
+              holdId: input.holdId,
+              transactionId: receipt.transactionId,
+            }),
+            work: work.receipt(),
+          };
+        },
+        'revalidateHold',
+      );
     },
     releaseHold(input) {
-      return account(input, async (work, operationUse) => {
-        live(input);
-        if (!uuid.test(input.holdId)) throw new Refused('binding');
-        const run = executor(input.client, work, input.deadline, false, operationUse!);
-        // Release checks exact native binding and current owner/account fences, but never requires unchanged facts.
-        // A stale fact generation cannot strand an existing hold or authorize deleting its business source.
-        await bindOwner(run, input.identity, false, true);
-        await readState(run, input.identity, input.captureId);
-        const values = { ...parameters(input.identity), capture_id: input.captureId, hold_id: input.holdId };
-        const [receipt] = await run<{ transactionId: string }>(proofQuery, values);
-        const [held] = await run<{ transactionId: string; released: boolean }>(heldQuery, values);
-        if (!receipt || !held || held.transactionId !== receipt.transactionId) throw new Refused('binding');
-        if (!held.released) await run(releaseQuery, values);
-        return { status: 'released' as const, work: work.receipt() };
-      }, 'releaseHold');
+      return account(
+        input,
+        async (work, operationUse) => {
+          live(input);
+          if (!uuid.test(input.holdId)) throw new Refused('binding');
+          const run = executor(input.client, work, input.deadline, false, operationUse!);
+          // Release checks exact native binding and current owner/account fences, but never requires unchanged facts.
+          // A stale fact generation cannot strand an existing hold or authorize deleting its business source.
+          await bindOwner(run, input.identity, false, true);
+          await readState(run, input.identity, input.captureId);
+          const values = { ...parameters(input.identity), capture_id: input.captureId, hold_id: input.holdId };
+          const [receipt] = await run<{ transactionId: string }>(proofQuery, values);
+          const [held] = await run<{ transactionId: string; released: boolean }>(heldQuery, values);
+          if (!receipt || !held || held.transactionId !== receipt.transactionId) throw new Refused('binding');
+          if (!held.released) await run(releaseQuery, values);
+          return { status: 'released' as const, work: work.receipt() };
+        },
+        'releaseHold',
+      );
     },
   };
 }
@@ -1000,24 +1007,18 @@ export async function readNativeIdentitySourceBasis(
         collectionFence: string;
         accountFence: string;
       }
-    >(
-      identityCapture,
-      {
-        ...parameters(identity),
-        capture_id: input.captureId ?? null,
-        collection_fence: fences.collectionFence,
-        account_fence: fences.accountFence,
-      },
-    );
+    >(identityCapture, {
+      ...parameters(identity),
+      capture_id: input.captureId ?? null,
+      collection_fence: fences.collectionFence,
+      account_fence: fences.accountFence,
+    });
     if (!capture) throw new Refused('binding');
     if (capture.complete) {
-      const [proof] = await run(
-        proofQuery,
-        {
-          ...parameters(identity),
-          capture_id: capture.captureId,
-        },
-      );
+      const [proof] = await run(proofQuery, {
+        ...parameters(identity),
+        capture_id: capture.captureId,
+      });
       if (!proof || capture.driver !== 'done') throw new Refused('binding');
     }
     return {

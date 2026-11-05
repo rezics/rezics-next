@@ -1,11 +1,4 @@
-import {
-  BOUND_AXES,
-  declareBound,
-  repeatBound,
-  sumBounds,
-  withinCeiling,
-  type Bound,
-} from '@rezics/bounds';
+import { BOUND_AXES, declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import type { WorkDimensions } from './collection-source.ts';
 import {
   nativeIdentityPartitionQuery,
@@ -275,13 +268,13 @@ const statementSpecs: readonly StatementSpec[] = Object.freeze([
               ? { after: maxEscapedText(128) }
               : driver === 'change'
                 ? { after: '2147483647', tie: maxUuid }
-              : driver === 'entry'
-                ? { after: maxUuid, tie: maxEscapedText(64) }
-                : driver === 'entry_deleted' || driver === 'label' || driver === 'session' || driver === 'output'
-                  ? { after: maxUuid }
-                : driver === 'assignment' || driver === 'copy'
-                  ? { after: maxUuid, tie: maxUuid }
-                  : {},
+                : driver === 'entry'
+                  ? { after: maxUuid, tie: maxEscapedText(64) }
+                  : driver === 'entry_deleted' || driver === 'label' || driver === 'session' || driver === 'output'
+                    ? { after: maxUuid }
+                    : driver === 'assignment' || driver === 'copy'
+                      ? { after: maxUuid, tie: maxUuid }
+                      : {},
         valid: (values) => validRawBinds(id, values),
       },
     );
@@ -673,7 +666,14 @@ function legacyFootprint(sql: string, values: readonly unknown[]): WorkDimension
     [retireCapture, 32, 2, 0],
     [nextCapture, 32, 2, 0, 1],
   ] as const) {
-    if (query.sql.replace(/--[^\n]*/g, '').replace(/\s+/g, ' ').trim().replace(/;$/, '') !== text) continue;
+    if (
+      query.sql
+        .replace(/--[^\n]*/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/;$/, '') !== text
+    )
+      continue;
     if (query.params.length !== values.length) return undefined;
     if (query === retireChildren) {
       const ids = values[query.params.indexOf('hold_ids')];
@@ -796,7 +796,8 @@ function choiceCost(statements: StatementCounts, maximum: number): CostDetail {
 
 function operationCost(definition: OperationDefinition): CostDetail {
   const costs: CostDetail[] = [];
-  if (definition.checkout) costs.push(repeatCost({ bound: checkoutBound, requestBytes: 0, projectionBytes: 0 }, definition.checkout));
+  if (definition.checkout)
+    costs.push(repeatCost({ bound: checkoutBound, requestBytes: 0, projectionBytes: 0 }, definition.checkout));
   for (const [id, multiplicity] of Object.entries(definition.fixed))
     costs.push(repeatCost(maximumStatementCost(id as StatementId), multiplicity!));
   for (const [id, multiplicity] of Object.entries(definition.optional))
@@ -827,7 +828,10 @@ function operationDeclaration(definition: OperationDefinition) {
 
 const operationDeclarations = Object.freeze(
   Object.fromEntries(
-    Object.entries(operationDefinitions).map(([operation, definition]) => [operation, operationDeclaration(definition)]),
+    Object.entries(operationDefinitions).map(([operation, definition]) => [
+      operation,
+      operationDeclaration(definition),
+    ]),
   ) as Record<CustodyOperation, ReturnType<typeof operationDeclaration>>,
 );
 const operationCompositions = Object.freeze(
@@ -856,7 +860,8 @@ for (const operation of Object.keys(operationCompositions) as CustodyOperation[]
 
 function deepFreezeOperation<T extends Record<string, unknown>>(value: T): Readonly<T> {
   for (const child of Object.values(value)) {
-    if (child && typeof child === 'object' && !Object.isFrozen(child)) deepFreezeOperation(child as Record<string, unknown>);
+    if (child && typeof child === 'object' && !Object.isFrozen(child))
+      deepFreezeOperation(child as Record<string, unknown>);
   }
   return Object.freeze(value);
 }
@@ -866,11 +871,31 @@ export const NATIVE_SOURCE_CUSTODY_OPERATION_PLAN = deepFreezeOperation({
   version: 1 as const,
   owner: 'Library' as const,
   operations: {
-    capturePage: { declaration: operationDeclarations.capturePage, ceiling: operationBounds.capturePage, cost: operationCosts.capturePage },
-    finishCapture: { declaration: operationDeclarations.finishCapture, ceiling: operationBounds.finishCapture, cost: operationCosts.finishCapture },
-    readAndHold: { declaration: operationDeclarations.readAndHold, ceiling: operationBounds.readAndHold, cost: operationCosts.readAndHold },
-    revalidateHold: { declaration: operationDeclarations.revalidateHold, ceiling: operationBounds.revalidateHold, cost: operationCosts.revalidateHold },
-    releaseHold: { declaration: operationDeclarations.releaseHold, ceiling: operationBounds.releaseHold, cost: operationCosts.releaseHold },
+    capturePage: {
+      declaration: operationDeclarations.capturePage,
+      ceiling: operationBounds.capturePage,
+      cost: operationCosts.capturePage,
+    },
+    finishCapture: {
+      declaration: operationDeclarations.finishCapture,
+      ceiling: operationBounds.finishCapture,
+      cost: operationCosts.finishCapture,
+    },
+    readAndHold: {
+      declaration: operationDeclarations.readAndHold,
+      ceiling: operationBounds.readAndHold,
+      cost: operationCosts.readAndHold,
+    },
+    revalidateHold: {
+      declaration: operationDeclarations.revalidateHold,
+      ceiling: operationBounds.revalidateHold,
+      cost: operationCosts.revalidateHold,
+    },
+    releaseHold: {
+      declaration: operationDeclarations.releaseHold,
+      ceiling: operationBounds.releaseHold,
+      cost: operationCosts.releaseHold,
+    },
   },
   captureStepCeiling: maximumBound(operationBounds.capturePage, operationBounds.finishCapture),
   statementAxes: BOUND_AXES,
@@ -934,13 +959,12 @@ const operationBindings = new Map<Query, StatementId | 'identityPartition' | 'co
 ]);
 
 /** Rejects a recognized statement when it is not bound to this native operation. */
-export function nativeSourceCustodyOperationAllows(
-  operation: CustodyOperation,
-  query: Query,
-): boolean {
+export function nativeSourceCustodyOperationAllows(operation: CustodyOperation, query: Query): boolean {
   const statement = controlSQL.includes(query.sql as ControlSQL) ? 'control' : operationBindings.get(query);
-  return statement !== undefined &&
-    NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.operations[operation].declaration.bindings.includes(statement);
+  return (
+    statement !== undefined &&
+    NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.operations[operation].declaration.bindings.includes(statement)
+  );
 }
 
 export type NativeSourceCustodyOperationUse = Readonly<{
@@ -949,9 +973,7 @@ export type NativeSourceCustodyOperationUse = Readonly<{
 }>;
 
 /** Runtime finite multiplicities from the operation declaration used to compose its ceiling. */
-export function createNativeSourceCustodyOperationUse(
-  operation: CustodyOperation,
-): NativeSourceCustodyOperationUse {
+export function createNativeSourceCustodyOperationUse(operation: CustodyOperation): NativeSourceCustodyOperationUse {
   const definition = operationDefinitions[operation];
   const statementCounts = new Map<string, number>();
   const choiceCounts = new Map<string, number>();
@@ -998,8 +1020,7 @@ export function nativeSourceCustodyOperationBound(operation: CustodyOperation): 
 }
 
 /** The Source-selected effect step invokes one raw page or its terminal finish path. */
-export const NATIVE_SOURCE_CUSTODY_CAPTURE_STEP_BOUND =
-  NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.captureStepCeiling;
+export const NATIVE_SOURCE_CUSTODY_CAPTURE_STEP_BOUND = NATIVE_SOURCE_CUSTODY_OPERATION_PLAN.captureStepCeiling;
 
 function convertedCost(query: Query, values: readonly unknown[]): CostDetail | undefined {
   if (basisQuerySet.has(query)) {
@@ -1041,10 +1062,7 @@ export function nativeSourceCustodyStatementBound(sql: string, values: readonly 
 }
 
 /** Lookup-only eight-axis receipt adapter for callers not yet using operation objects. */
-export function nativeSourceCustodyFootprint(
-  sql: string,
-  values: readonly unknown[],
-): WorkDimensions | undefined {
+export function nativeSourceCustodyFootprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined {
   const bound = nativeSourceCustodyStatementBound(sql, values);
   return bound ? nativeSourceCustodyWorkDimensions(bound) : undefined;
 }

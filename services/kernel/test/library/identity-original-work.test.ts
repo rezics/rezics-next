@@ -178,9 +178,12 @@ test('native custody statements share one closed nine-axis operation plan and re
   expect(bound).toBeDefined();
   expect(Object.keys(bound!).sort()).toEqual([...BOUND_AXES].sort());
   expect(bound!.engineRequests).toBe(0);
-  expect(nativeSourceCustodyStatementBound(query.sql, values.map((value, index) =>
-    query.params[index] === 'tie' ? 'wrong' : value,
-  ))).toBeUndefined();
+  expect(
+    nativeSourceCustodyStatementBound(
+      query.sql,
+      values.map((value, index) => (query.params[index] === 'tie' ? 'wrong' : value)),
+    ),
+  ).toBeUndefined();
   expect(nativeSourceCustodyStatementBound(`${query.sql} SELECT 1`, values)).toBeUndefined();
   expect(nativeSourceCustodyOperationAllows('capturePage', query)).toBe(true);
   expect(nativeSourceCustodyOperationAllows('readAndHold', query)).toBe(false);
@@ -204,9 +207,7 @@ test('native custody statements share one closed nine-axis operation plan and re
     expect(declaration.cost.requestBytes + declaration.cost.projectionBytes).toBe(declaration.ceiling.bytes);
   }
   const retained = declareLibraryIdentityCustodyOperation('revalidateHold');
-  expect(retained.work).toEqual(
-    nativeSourceCustodyWorkDimensions(nativeSourceCustodyOperationBound('revalidateHold')),
-  );
+  expect(retained.work).toEqual(nativeSourceCustodyWorkDimensions(nativeSourceCustodyOperationBound('revalidateHold')));
 });
 
 test('saved-job bytes require same-work size evidence and reject overflow instead of using a fixed estimate', () => {
