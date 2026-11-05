@@ -339,7 +339,7 @@ export function createRuntime(options: RuntimeOptions = {}): Runtime {
     db,
     ...settings,
     settings,
-    loadedCodeVersion: startedCodeVersion,
+    ...(startedCodeVersion ? { loadedCodeVersion: startedCodeVersion } : {}),
     codeRetirement,
     store,
     tasks,
