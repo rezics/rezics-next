@@ -58,43 +58,47 @@ class BrowserObservation {
     });
   }
 
-  /** The same lifetime, with cancellable, coalesced notification for useSyncExternalStore. */
-  subscribeSnapshot = (listener: () => void): (() => void) => {
-    const notify = () => listener();
-    const stop = this.subscribe(() => this.publish(notify));
-    return () => {
-      stop();
-      this.publications.delete(notify);
-    };
-  };
-
-  /** All browser readers share this cache subscription; domain response identity stays local. */
+  /** Raw cache observers process every transition before React publication. */
   subscribeCache = (listener: (event: BrowserCacheEvent) => void): (() => void) => {
     this.cacheListeners.add(listener);
-    const stop = this.subscribe(() => {});
+    this.connect();
     return () => {
       this.cacheListeners.delete(listener);
-      stop();
+      this.disconnectIfUnused();
     };
   };
 
   getServerSnapshot = (): BrowserObservationSnapshot => closedObservation;
 
+  /** Snapshot subscribers consume the latest authority after the current stack. */
   subscribe = (listener: () => void): (() => void) => {
-    if (this.listeners.size === 0) {
-      this.stopQueryCache = this.client.getQueryCache().subscribe((event) => {
-        if (isSessionKey(event.query.queryKey)) this.reconcile();
-        for (const notify of [...this.cacheListeners]) notify(event);
-      });
-      // A remount is a new incarnation even when the session cache still contains the same reader.
-      this.reconcile(true);
-    }
-    this.listeners.add(listener);
+    let active = true;
+    const notify = () => {
+      if (active) listener();
+    };
+    this.listeners.add(notify);
+    this.connect();
     return () => {
-      this.listeners.delete(listener);
-      if (this.listeners.size === 0) this.retireMountedIncarnation();
+      active = false;
+      this.listeners.delete(notify);
+      this.publications.delete(notify);
+      this.disconnectIfUnused();
     };
   };
+
+  private connect(): void {
+    if (this.stopQueryCache) return;
+    this.stopQueryCache = this.client.getQueryCache().subscribe((event) => {
+      if (isSessionKey(event.query.queryKey)) this.reconcile();
+      for (const notify of [...this.cacheListeners]) notify(event);
+    });
+    // A remount is a new incarnation even when the session cache still contains the same reader.
+    this.reconcile(true);
+  }
+
+  private disconnectIfUnused(): void {
+    if (this.listeners.size === 0 && this.cacheListeners.size === 0) this.retireMountedIncarnation();
+  }
 
   private reconcile(forceFresh = false): void {
     const state = this.client.getQueryState(sessionQueryKey);
@@ -159,7 +163,7 @@ class BrowserObservation {
 
     this.snapshot = next;
     this.retireExposure(previousObservation);
-    this.listeners.forEach((notify) => notify());
+    this.listeners.forEach((notify) => this.publish(notify));
   }
 
   private retireExposure(observation: BrowserReader | undefined): void {
