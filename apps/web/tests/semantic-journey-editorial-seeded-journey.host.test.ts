@@ -2,21 +2,15 @@ import { afterAll, expect } from 'bun:test';
 import { documentText, fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import type { Page } from 'playwright';
 import { expect as visible } from 'playwright/test';
-import { GLOBAL_CONTEXT } from '../../../services/kernel/src/semantic/definitions.ts';
 import { m } from '../src/paraglide/messages.js';
 import { authoredGlobalVisitHref, authoredPublicCorrectionHref } from '../src/features/catalogue/authored-public-visit';
 import { subjectHref } from '../src/subject/subject-href.ts';
 import { startAuthStack, type NativeAuthStack } from './native/auth-stack.ts';
-import {
-  createCatalogueReviewSubject,
-  grantCatalogueReviewAuthority,
-  listCatalogueReviewCandidates,
-  publicLanguages,
-  readPublicSubject,
-} from './native/catalogue-review-fixture.ts';
 import { NativeTestLifecycle, nativeAfterAll, nativeBeforeAll, nativeTest } from './native/lifecycle.ts';
 import { startNativeWebStack, type NativeWebStack } from './native/stack.ts';
 
+const globalContext = '00000000-0000-8000-8000-000000000000';
+const language = 'schema:inLanguage';
 const property = 'schema:abstract';
 const title = 'Cited editorial publication';
 const currentText = 'The existing public abstract remains selected.';
@@ -38,29 +32,97 @@ async function json<T>(response: Response, status: number, action: string): Prom
   return JSON.parse(text) as T;
 }
 
+async function command(path: string, body: unknown, persona: string, expected: number, label: string) {
+  return json<Record<string, unknown>>(
+    await stack.kernel(
+      path,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+        body: JSON.stringify(body),
+      },
+      persona,
+    ),
+    expected,
+    label,
+  );
+}
+
+async function grantAccount(accountId: string, actions: string[]) {
+  await command(
+    '/v1/grants',
+    { resource: { route: 0, id: globalContext }, subject: { kind: 'account', id: accountId }, actions, valid: '(,)' },
+    'governor',
+    201,
+    `grant ${actions.join(',')}`,
+  );
+}
+
+type ReviewSubject = {
+  id: string;
+  label: string;
+  href: string;
+  japanese: { id: string };
+  korean: { id: string };
+};
+
+async function createCompetingLanguages(): Promise<ReviewSubject> {
+  const label = `Native compare ${crypto.randomUUID().slice(0, 8)}`;
+  const created = await command('/v1/subjects', { type: 'schema:Book', labels: { en: label } }, 'editor', 201, 'book');
+  const id = (created.subject as { id: string }).id;
+  const propose = async (content: string, name: string) => {
+    const result = await command(
+      `/v1/subjects/${id}/candidates`,
+      {
+        statement: {
+          property: { id: language },
+          value: { type: 'value', content },
+          references: [
+            {
+              parts: [
+                {
+                  property: { id: 'schema:url' },
+                  value: { type: 'value', content: `https://catalogue.example.test/editorial/${content}` },
+                },
+              ],
+            },
+          ],
+        },
+      },
+      'alice',
+      201,
+      name,
+    );
+    if (typeof result.candidate !== 'string') throw new Error(`Proposal for ${name} returned no candidate`);
+    return { id: result.candidate };
+  };
+  return {
+    id,
+    label,
+    href: subjectHref({ id, label }, 'en').href,
+    japanese: await propose('ja', 'Japanese'),
+    korean: await propose('ko', 'Korean'),
+  };
+}
+
+function publicLanguages(subject: {
+  statements: Record<string, { id: string; rank: string; value: { content?: unknown } }[]>;
+}) {
+  return (subject.statements[language] ?? [])
+    .filter((statement) => statement.rank === 'normal' || statement.rank === 'preferred')
+    .map((statement) => ({ id: statement.id, rank: statement.rank, content: statement.value.content }));
+}
+
 nativeBeforeAll(lifecycle, 360_000, async () => {
   stack = await startNativeWebStack();
   auth = await startAuthStack(stack);
   const [alice, bob] = await Promise.all([auth.signIn('alice'), auth.signIn('bob')]);
   if ((await alice.response()).status() !== 200 || (await bob.response()).status() !== 200)
     throw new Error('Native Alice and Bob must sign in through the served Auth forms');
-  await grantCatalogueReviewAuthority(stack);
-  const aliceId = (await stack.authPersona('alice')).accountId;
-  const grant = await stack.kernel(
-    '/v1/grants',
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
-      body: JSON.stringify({
-        resource: { route: 0, id: GLOBAL_CONTEXT },
-        subject: { kind: 'account', id: aliceId },
-        actions: ['context:accept', 'context:adopt', 'context:create'],
-        valid: '(,)',
-      }),
-    },
-    'governor',
-  );
-  expect(grant.status, await grant.text()).toBe(201);
+  const [aliceAccount, bobAccount] = await Promise.all([stack.authPersona('alice'), stack.authPersona('bob')]);
+  await grantAccount(aliceAccount.accountId, ['subject:create', 'statement:propose']);
+  await grantAccount(bobAccount.accountId, ['context:accept', 'context:adopt']);
+  await grantAccount(aliceAccount.accountId, ['context:accept', 'context:adopt', 'context:create']);
 
   const created = await stack.kernel(
     '/v1/subjects',
@@ -108,7 +170,7 @@ nativeTest(
   'cited editorial contribution through publication completes for every served persona',
   900_000,
   async () => {
-    const competing = await createCatalogueReviewSubject(stack);
+    const competing = await createCompetingLanguages();
     const bobPage = await (await auth.context('bob')).newPage();
     bobPage.setDefaultTimeout(30_000);
     await bobPage.goto(new URL(`${competing.href}?candidateField=schema:inLanguage`, stack.web).href, {
@@ -128,7 +190,17 @@ nativeTest(
     await acceptRegion.waitFor({ state: 'visible' });
     await acceptRegion.getByRole('button', { name: 'Accept suggestion', exact: true }).click();
     await bobPage.getByRole('status').filter({ hasText: 'Suggestion accepted' }).waitFor({ state: 'visible' });
-    expect(publicLanguages((await readPublicSubject(stack, competing.id)).subject)).toEqual([]);
+    expect(
+      publicLanguages(
+        (
+          await json<{ subject: Parameters<typeof publicLanguages>[0] }>(
+            await stack.kernel(`/v1/subjects/${competing.id}`),
+            200,
+            'public before adopt',
+          )
+        ).subject,
+      ),
+    ).toEqual([]);
 
     await bobPage.getByRole('button', { name: 'Reload current values', exact: true }).click();
     const japanese = bobPage.locator('[data-candidate-choice]').filter({ hasText: 'Japanese' });
@@ -148,9 +220,25 @@ nativeTest(
       .waitFor({ state: 'visible' });
     await bobPage.close();
 
-    const publicAfter = publicLanguages((await readPublicSubject(stack, competing.id)).subject);
+    const publicAfter = publicLanguages(
+      (
+        await json<{ subject: Parameters<typeof publicLanguages>[0] }>(
+          await stack.kernel(`/v1/subjects/${competing.id}`),
+          200,
+          'public after adopt',
+        )
+      ).subject,
+    );
     expect(publicAfter).toEqual([{ id: competing.japanese.id, rank: 'preferred', content: 'ja' }]);
-    const listed = await listCatalogueReviewCandidates(stack, competing.id);
+    const listed = await json<{ candidates: { id: string; decision: string | null }[] }>(
+      await stack.kernel(
+        `/v1/subjects/${competing.id}/candidates?property=${encodeURIComponent(language)}&context=${globalContext}&limit=20`,
+        {},
+        'bob',
+      ),
+      200,
+      'list competing candidates',
+    );
     expect(listed.candidates.find((item) => item.id === competing.japanese.id)?.decision).toBe('accepted');
     expect(listed.candidates.find((item) => item.id === competing.korean.id)?.decision ?? null).toBeNull();
 
@@ -229,7 +317,7 @@ nativeTest(
         }[];
       }>(
         await stack.kernel(
-          `/v1/subjects/${subjectId}/candidates?property=${encodeURIComponent(property)}&context=${GLOBAL_CONTEXT}&limit=20`,
+          `/v1/subjects/${subjectId}/candidates?property=${encodeURIComponent(property)}&context=${globalContext}&limit=20`,
           {},
           'alice',
         ),
@@ -314,7 +402,7 @@ nativeTest(
       await page.goto(
         `${stack.web}${authoredPublicCorrectionHref(`${publicHref}/authored`, {
           subject: subjectId,
-          context: GLOBAL_CONTEXT,
+          context: globalContext,
           locale: 'en',
           returnHref: publicHref,
         })}`,
