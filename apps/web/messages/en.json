@@ -11406,5 +11406,15 @@
   "library_mal_retry_source_evidence": "Retry source evidence admission",
   "library_mal_score_zero_source": "{value} (zero means unrated)",
   "library_mal_score_source_details": "Value: {value}; MAL scale: {scale}",
-  "library_mal_score_source_scale": "MAL scale from {min} to {max}, step {step}"
+  "library_mal_score_source_scale": "MAL scale from {min} to {max}, step {step}",
+  "library_query_publication_heading": "Publish the whole saved query",
+  "library_query_publication_description": "Publish every supported match of the saved rule, including results beyond this page. The previous completed generation stays visible while this publication runs.",
+  "library_query_publication_visibility": "Publication visibility",
+  "library_query_publication_confirm": "I confirm publication of the whole saved query under its accepted meaning.",
+  "library_query_publication_publish": "Publish whole query",
+  "library_query_publication_recovery": "This original publication request is retained in this browser tab. Returning here lets you recover its actual outcome.",
+  "library_query_publication_complete": "The whole query is published. Open the Collection to read its completed generation.",
+  "library_query_publication_status": "Read publication status",
+  "library_query_publication_loading": "Checking publication…",
+  "library_query_publication_unknown": "The outcome is not confirmed. Retry the original request or read its status; its request key and saved revision are retained."
 }

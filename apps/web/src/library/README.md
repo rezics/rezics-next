@@ -321,7 +321,17 @@ The cursor path and page cost bounds are owned by [Progress index windows](progr
 
 Canonical session and Subject links remain ordinary shareable addresses. Same-tab Progress navigation carries the filtered index selectors and opaque cursor privately, then accepts focus only for the same admitted session ID, Subject ID and start time. A stale or changed source offers a safe restart instead of searching later pages. Subject return context is revalidated against the currently disclosed work before it is used.
 
-## Selected Collection publication
+## Collection publication
+
+Decision: the publication page offers the mounted whole-query command alongside explicit selection. Whole-query
+publication retains the original revision, visibility and request key in owner/Collection-scoped tab storage before
+dispatch. An accepted episode is recovered through its owner-private status endpoint; returning to the page never
+starts another command automatically. Only native `complete` status supplies the completed generation. The 25-second
+visible response deadline does not cancel the native operation. The page uses the installed `$publish.post` and
+`collectionPublications({ id }).get` bindings and consumes their responses into plain server-function values.
+Private facts and query populations are never stored in recovery. A terminal response clears the retained request.
+
+### Selected publication
 
 Saved population remains explicit: owner rules use Library facts; catalogue rules include matching Subjects
 without curator facts. Current catalogue membership and properties change fresh private results B, while shared
@@ -335,7 +345,7 @@ History/events, receipts, rollback and serialization across bounded attempts. Na
 explicit; an eight-axis receipt with zero engine work does not establish catalogue execution or receiving. Selected
 IDs and `[]` never certify whole-query exhaustion. Publication preserves the saved expanded rule and accepted release.
 
-The generated `collections({ collectionId }).$publishSelected.post` operation is the only publication transport.
+The generated `collections({ collectionId }).$publishSelected.post` operation owns selected publication transport.
 Session setup, server imports and response decoding stay inside safe result boundaries; the response is consumed into
 the plain feature result. The current-page read has a 10-second response phase and a dispatched publication has a
 separate 25-second response phase. A timeout only ends the visible wait. It does not cancel native work or prove
