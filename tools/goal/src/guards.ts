@@ -104,7 +104,7 @@ export const GUARDS = {
     owner: 'control-plane',
     since: '2026-11-05',
     repair:
-      'Import services/kernel/src/server.ts and worker.ts with one migrated throwaway database and explicit DATABASE_URL; return the first diagnostic and retained log to the original worker session; repair in place and re-import the recomposed candidate before landing. Cost target: <60000ms per Kernel-source landing. Measured disposable fixture recorded with the guard after the first representative candidate import.',
+      'Import services/kernel/src/server.ts and worker.ts with one migrated throwaway database and explicit DATABASE_URL; return the first diagnostic and retained log to the original worker session; repair in place and re-import the recomposed candidate before landing. Cost target: <60000ms per Kernel-source landing. Measured representative candidate: setup 37473ms, import 223297ms, cleanup 0ms, total 260770ms for both Kernel entries against a migrated throwaway database.',
   },
   'round-limit': {
     defect: 'The attempt reached its configured repair round limit.',

@@ -34,6 +34,7 @@ test('every attempt-ending failure and landing refusal has a non-empty priced gu
   expect(GUARDS['dev-landing-kernel-import'].repair).toContain('server.ts');
   expect(GUARDS['dev-landing-kernel-import'].repair).toContain('worker.ts');
   expect(GUARDS['dev-landing-kernel-import'].repair).toContain('Cost target: <60000ms');
+  expect(GUARDS['dev-landing-kernel-import'].repair).toContain('Measured representative candidate: setup 37473ms');
   expect(GUARDS['undeclared-risk-area'].defect).toContain('undeclared production change');
   expect(GUARDS['scope-failed'].defect).toContain('matched a protected production risk area');
   expect(GUARDS['scope-failed'].defect).not.toContain('unsafe source change');

@@ -147,7 +147,7 @@ test('interrupting the import removes owned driver files and keeps the diagnosti
       [
         "import { writeFileSync } from 'node:fs';",
         'export async function withThrowawayDatabase(work) {',
-        "  writeFileSync(process.env.KERNEL_IMPORT_READY!, 'ready');",
+        "  writeFileSync(process.env.KERNEL_IMPORT_READY!, String(process.pid));",
         '  await new Promise(() => {});',
         '  return work(process.env);',
         '}\n',
@@ -176,7 +176,7 @@ test('interrupting the import removes owned driver files and keeps the diagnosti
     const started = Date.now();
     while (!existsSync(ready) && Date.now() - started < 10_000) await Bun.sleep(50);
     expect(existsSync(ready)).toBe(true);
-    child.kill('SIGTERM');
+    process.kill(Number(readFileSync(ready, 'utf8')), 'SIGTERM');
     await new Promise<void>((resolveClose) => child!.once('close', () => resolveClose()));
     expect(existsSync(join(root, '.temp', 'landing.log'))).toBe(true);
     expect(readdirSync(join(root, '.temp')).every((name) => !name.startsWith('dev-kernel-import-'))).toBe(true);

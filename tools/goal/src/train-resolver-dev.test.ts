@@ -833,7 +833,7 @@ test('a Kernel-source TDZ on a dev landing returns to the original session and p
     expect(h.store.events(task.id, 1).filter((event) => event.kind === 'gate-outcome')).toHaveLength(0);
     expect(h.store.attempt({ taskId: task.id, attempt: 1 }).state).toBe('superseded');
     expect(h.store.task(task.id).state).toBe('integrated');
-    expect(git(h.root, 'show', `dev:${file}`)).toBe('export const a = 1;\n');
+    expect(git(h.root, 'show', `dev:${file}`)).toBe('export const a = 1;');
     const outcome = h.outcomes.find((item) => item.taskId === task.id && item.passed)!;
     expect(outcome.devKernelImport).toMatchObject({ outcome: 'passed' });
     const price = flowReport(readFlow(h.store.db), readFlowTasks(h.store.db));
@@ -923,7 +923,7 @@ test('control-plane landings on dev skip Kernel import when the candidate has no
     await h.train();
     const outcome = h.outcomes.find((item) => item.taskId === task.id && item.passed)!;
     expect(outcome.devKernelImport).toBeUndefined();
-    expect(git(h.root, 'show', `dev:${path}`)).toBe('export const controlPlaneKernelSkip = true;\n');
+    expect(git(h.root, 'show', `dev:${path}`)).toBe('export const controlPlaneKernelSkip = true;');
   } finally {
     h.dispose();
   }
