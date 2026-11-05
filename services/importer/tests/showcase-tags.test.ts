@@ -880,7 +880,23 @@ test('selected rating evidence survives response loss and reopen before terminal
   const commands: BatchCommand[] = [];
   let fetches = 0;
   let loseResponse = true;
-  const transport = port(commands);
+  const base = port([]);
+  const replies = new Map<string, BatchWriteResult['results'][number]>();
+  const transport: CrossMediaPort = {
+    ...base,
+    async batch(request) {
+      commands.push(...request.commands);
+      const results = [];
+      for (const command of request.commands) {
+        if (!replies.has(command.key)) {
+          const response = await base.batch({ commands: [command] });
+          replies.set(command.key, response.results[0]!);
+        }
+        results.push(replies.get(command.key)!);
+      }
+      return { results };
+    },
+  };
   const known = {
     schemes: [{ category: 'cont' as const, id: schemeIds.cont }],
     concepts: [{ category: 'cont' as const, code: 'g311', id: conceptIds.g311 }],
@@ -910,8 +926,10 @@ test('selected rating evidence survives response loss and reopen before terminal
     expect(sealed.length).toBeGreaterThan(0);
     journal.close();
     journal = new ShowcaseJournal(journalPath);
-    const reopened = await importShowcaseTags(input());
+    const reopening = importShowcaseTags(input());
+    await reopening.catch(() => {});
     expect(fetches).toBe(1);
+    const reopened = await reopening;
     expect(reopened.tagWeightObservations[0]?.responseDigest).toBe(sealed[0]!.command.source.digest);
     for (const row of sealed) expect(commands.filter(command => command.key === row.command.key)).toEqual([row.command, row.command]);
   } finally {
