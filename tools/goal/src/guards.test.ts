@@ -136,7 +136,7 @@ test('guard ledger preserves its seven-day window and immediate-next attempt sem
     ['new-failure', 1, 2, 0, 10, null, null, 'monitor'],
     ['question', 1, 0.5, 0, 5, null, null, 'monitor'],
   ]);
-  expect(rows.map(({ id }) => id).sort()).toEqual(Object.keys(GUARDS).sort());
+  expect(rows.map(({ id }) => id).sort()).toEqual((Object.keys(GUARDS) as GuardId[]).sort());
   expect(rows.filter(({ firings }) => !firings).every((row) => !row.attemptHours && !row.tokens && row.rewrittenShare === null && row.landedShare === null)).toBe(true);
 
   const output = formatGuardLedger(rows);
