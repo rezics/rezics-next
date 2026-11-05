@@ -15,6 +15,30 @@ The pure kernel-identity-core leaf inside native Semantic owns mapping DTOs, bou
 Effectful adapters remain in kernel-semantic. The lightweight identity read entry maps native results without loading the store or binding effects; the main store index remains effectful, and callers use the narrow public binding entry. Adapters keep SQL, authorization, independent observations, custody proofs, hashing, pre-arm, admission, publication and jobs. Deferred loading, error identity and function identity remain unchanged. The [identity epoch contract](identity-epoch-contract.md) owns the detailed native schedule and cost.
 
 No wildcard custody export, new package, module or protocol, second Library resolver, permission cache or baseline exception is introduced.
+Decision: canonical identity stays local to Semantic; `identity-core/index.ts` is the pure public entry,
+while `identity-adapters/read.ts` is the lightweight native mapping entry and `identity-adapters/index.ts`
+is the native store entry of the existing `kernel-semantic` adapter module. The existing
+`identity-adapters/identity-epoch-binding.ts` implementation is the exact public binding entry; callers retain the
+same named binding functions, proof objects and WeakMaps.
+Read-only callers use `read.ts` for `readIdentityMappings` and `readIdentityRatingReview`; both avoid loading the store or binding graph. Rating's exact reviewed identity operand and same-home COMMIT participant are documented in [identity-rating-currentness.md](identity-rating-currentness.md).
+The current static edges are `retention -> binding -> retention`, `binding -> index -> binding`,
+`binding -> identity -> retention`, and `reversal -> binding`. Deferred edges are `identity -> binding` for undo and
+lookup and `binding -> identity` for reversal verification. Declaring the existing file adds no node or value edge,
+preserves those static/deferred loads, and leaves `read.ts` and `index.ts` cold-load behavior unchanged. Remove only the
+four replaced Access-to-binding rule 2 exceptions; retain the existing rule 3 cycle records.
+The adapter remains in that module because its admission, closure and participant mechanisms already share native authority.
+
+The core owns mapping DTOs, bounded evidence classification, exact observation values and immutable merge/unmerge/repoint
+transforms. Evidence, requested source homes and the installed support job arrive explicitly. It imports no SQL, runtime,
+command/access authority, environment, clock, randomness or crypto. Its four states and existing reasons are unchanged;
+pending never implies self. Classification indexes the capped acquired evidence once, then uses bounded per-original
+lookups: O(N) time and space for at most 100 originals, without acquisition or query changes.
+
+Adapters own independent repeatable-read collection, route/home selection, ambient support jobs, SQL, authorization,
+prearm, native receipt hashing, opaque binding proofs, admission and publication. Control home zero remains compatibility
+topology. Compatibility entries retain callers of the former contract/read/store/binding paths. Library keeps originals
+and source fences, Search keeps membership/currentness, Rating keeps visibility witnesses and hashing, and Content keeps
+lifecycle writes. Native mapping/store/publication/admission and three-scale growth acceptance remain with their owners.
 
 ## Bounded current relation visits
 
