@@ -208,6 +208,11 @@ test('mounted entry, editorial menu and installed Facts route guard retain and r
     );
     const publicDom = within(window.document.body);
     await act(async () => publicDom.getByRole('button', { name: m.contribute_title() }).click());
+    await waitFor(() =>
+      expect(
+        publicDom.queryByRole('dialog', { name: m.contribute_title() }) ?? publicDom.queryByRole('menu'),
+      ).not.toBeNull(),
+    );
     await act(async () => publicDom.getByText(m.contribute_edit(), { exact: true }).click());
     const menuHref = host.querySelector<HTMLAnchorElement>('a[href*="/edit?origin="]')?.getAttribute('href');
     expect(menuHref).toBe(originHref);
