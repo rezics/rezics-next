@@ -91,6 +91,41 @@ test('destination return preserves the selected stream row address and never bor
   ).toBeUndefined();
 });
 
+test('overview preview destinations retain their selected native stream and bounded history', () => {
+  const stream = { node: 'preview-members', property: 'wdt:P179', direction: 'inverse' as const };
+  const history = [{
+    view: 'overview' as const,
+    node: stream.node,
+    streamProperty: stream.property,
+    streamDirection: stream.direction,
+    focus: 'members:assertion',
+  }];
+  const overview = literaryAddress({
+    id: literaryIds.series,
+    label: 'Harbour stories',
+    locale: 'ja',
+    view: 'overview',
+    stream,
+    focus: 'members:assertion',
+    previous: history,
+  });
+
+  expect(subjectVisitReturn(overview, 'ja')).toBe(overview);
+  const address = new URL(overview, 'https://site.test');
+  expect(address.pathname).not.toContain('/contents');
+  expect(address.searchParams.get('node')).toBe(stream.node);
+  expect(address.searchParams.get('streamProperty')).toBe(stream.property);
+  expect(address.searchParams.get('streamDirection')).toBe(stream.direction);
+  expect(address.searchParams.has('cursor')).toBe(false);
+  expect(literaryVisitLocation(address.search).previous).toEqual(history);
+
+  const destination = new URL(
+    literaryDestination(literaryIds.member, 'Harbour work', 'ja', overview),
+    'https://site.test',
+  );
+  expect(subjectVisitReturn(destination.searchParams.get('via'), 'ja')).toBe(overview);
+});
+
 test('aliased native reads keep a continuation attached only to its supplied node', () => {
   const document: CompositionDocument = {
     format: 'rezics.composition.v1',

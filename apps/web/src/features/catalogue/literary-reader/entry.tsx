@@ -165,7 +165,7 @@ export function LiteraryReaderEntry({
   const readingRetired = retired || contextMismatch;
   const routeFor = (native: ProfileRelationWindow) => {
     const kind = definitions ? literaryWindowKind(native, definitions) : undefined;
-    return kind === 'editions' ? 'editions' : 'contents';
+    return view === 'overview' ? 'overview' : kind === 'editions' ? 'editions' : 'contents';
   };
   const addressFor = (
     native: ProfileRelationWindow,
@@ -425,23 +425,27 @@ export function LiteraryReaderEntry({
                     active.property === native.property &&
                     active.direction === native.direction;
                   const currentAddressStream =
-                    requestedStream ??
-                    (view === 'contents' ? activeMembers : view === 'editions' ? activeEditions : undefined);
+                    view === 'overview'
+                      ? native
+                      : requestedStream ?? (view === 'contents' ? activeMembers : view === 'editions' ? activeEditions : undefined);
                   const currentPage: import('../literary-visit/navigation').LiteraryPreviousAddress = {
                     view: view === 'overview' ? 'overview' : view === 'editions' ? 'editions' : 'contents',
-                    ...(view !== 'overview' && currentAddressStream
+                    ...(currentAddressStream
                       ? {
                           node: currentAddressStream.node,
                           streamProperty: currentAddressStream.property,
                           streamDirection: currentAddressStream.direction,
-                          ...(continuation?.node === currentAddressStream.node ? { cursor: continuation.cursor } : {}),
+                          ...(view !== 'overview' && continuation?.node === currentAddressStream.node
+                            ? { cursor: continuation.cursor }
+                            : {}),
                         }
                       : {}),
                     ...(currentFocus ? { focus: currentFocus } : {}),
                   };
                   const nextHistory = appendLiteraryPrevious(currentPrevious, currentPage);
                   const rowContinuation = continuation?.node === native.node ? continuation : undefined;
-                  const rowReturnTo = (focus: string) => returnAddressFor(focus, streamView, rowContinuation, native);
+                  const returnView = view === 'overview' ? 'overview' : streamView;
+                  const rowReturnTo = (focus: string) => returnAddressFor(focus, returnView, rowContinuation, native);
                   const previous = currentPrevious.at(-1);
                   const previousHref =
                     current && previous

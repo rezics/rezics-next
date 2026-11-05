@@ -39,7 +39,9 @@ function previousAddress(value: unknown): value is LiteraryPreviousAddress {
         !/[\u0000-\u001f\u007f]/u.test(item.streamProperty) &&
         (item.streamDirection === 'forward' || item.streamDirection === 'inverse'))) &&
     (item.view !== 'overview' ||
-      (item.node === undefined && item.cursor === undefined && item.streamProperty === undefined && item.streamDirection === undefined)) &&
+      (item.cursor === undefined &&
+        ((item.node === undefined && item.streamProperty === undefined && item.streamDirection === undefined) ||
+          (item.node !== undefined && item.streamProperty !== undefined && item.streamDirection !== undefined)))) &&
     (item.focus === undefined || (typeof item.focus === 'string' && focusToken.test(item.focus)))
   );
 }

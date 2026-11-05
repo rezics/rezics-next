@@ -51,10 +51,9 @@ function validLiteraryHistory(value: string): boolean {
               !/[\u0000-\u001f\u007f]/u.test(item.streamProperty) &&
               (item.streamDirection === 'forward' || item.streamDirection === 'inverse'))) &&
           (item.view !== 'overview' ||
-            (item.node === undefined &&
-              item.cursor === undefined &&
-              item.streamProperty === undefined &&
-              item.streamDirection === undefined)) &&
+            (item.cursor === undefined &&
+              ((item.node === undefined && item.streamProperty === undefined && item.streamDirection === undefined) ||
+                (item.node !== undefined && item.streamProperty !== undefined && item.streamDirection !== undefined)))) &&
           (item.focus === undefined ||
             (typeof item.focus === 'string' && /^[A-Za-z0-9:._~-]{1,256}$/u.test(item.focus)))
         );
@@ -657,10 +656,18 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
     const screenEntry = /^#screen-episode-entry-([0-9a-f-]{36})$/i.exec(url.hash);
     const recordingStatement = new RegExp(`^#recording-statement-${uuid}$`, 'i').test(url.hash);
     const screenReturn = screenCursor !== null || screenSelection !== null || screenEntry !== null;
+    const literaryOverviewStream =
+      !!subject &&
+      !subject[2] &&
+      url.hash === '#literary-reader' &&
+      node !== null &&
+      cursor === null &&
+      streamProperty !== null &&
+      streamDirection !== null;
     if (
       (selectedRealm !== null && !new RegExp(`^${uuid}$`).test(selectedRealm)) ||
       (selectedContext !== null && (!subject || !new RegExp(`^${uuid}$`, 'i').test(selectedContext))) ||
-      (node !== null && (!subject?.[2] || !/^[A-Za-z0-9_-]{1,64}$/.test(node))) ||
+      (node !== null && (!(subject?.[2] || literaryOverviewStream) || !/^[A-Za-z0-9_-]{1,64}$/.test(node))) ||
       (cursor !== null &&
         (!subject?.[2] || node === null || !cursor || cursor.length > 8192 || /[\u0000-\u001f\u007f]/u.test(cursor))) ||
       (property !== null &&
@@ -668,9 +675,9 @@ function subjectVisitReturnAt(value: unknown, locale: string | undefined, nested
       (history !== null && (url.hash !== '#literary-reader' || !validLiteraryHistory(history))) ||
       (focus !== null && (url.hash !== '#literary-reader' || !/^[A-Za-z0-9:._~-]{1,256}$/u.test(focus))) ||
       (streamProperty !== null &&
-        (!subject?.[2] || node === null || !streamProperty.trim() || streamProperty.length > 256 || /[\u0000-\u001f\u007f]/u.test(streamProperty))) ||
+        (!(subject?.[2] || literaryOverviewStream) || node === null || !streamProperty.trim() || streamProperty.length > 256 || /[\u0000-\u001f\u007f]/u.test(streamProperty))) ||
       (streamDirection !== null &&
-        (!subject?.[2] || node === null || streamProperty === null || !['forward', 'inverse'].includes(streamDirection))) ||
+        (!(subject?.[2] || literaryOverviewStream) || node === null || streamProperty === null || !['forward', 'inverse'].includes(streamDirection))) ||
       (streamProperty !== null && streamDirection === null) ||
       (screenReturn &&
         (subject?.[2] !== undefined ||
