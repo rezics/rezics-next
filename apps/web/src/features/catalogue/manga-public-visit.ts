@@ -1,7 +1,7 @@
 import { candidateContext } from '../../subject/candidates';
 import { subjectHref } from '../../subject/subject-href';
 import { subjectVisitReturn } from '../pages/subject-visit-navigation';
-import { isMangaType, type MangaType } from './manga-profile';
+import type { MangaType } from './manga-profile';
 import { mangaCurrentAddress, mangaReaderAddress, mangaOccurrenceFromFragment } from './manga-reader/navigation';
 
 /** One public observation, never native advice, a selected assertion or a command operand. */
@@ -68,7 +68,7 @@ function publicOrigin(value: unknown, id: string, locale: string): MangaPublicOr
     ) ||
     origin.subject !== id ||
     !uuid.test(id) ||
-    !isMangaType(origin.type as string) ||
+    !['schema:ComicSeries', 'schema:PublicationVolume'].includes(origin.type as string) ||
     typeof origin.context !== 'string' ||
     !uuid.test(origin.context) ||
     (origin.definition !== undefined && (typeof origin.definition !== 'string' || !digest.test(origin.definition))) ||
