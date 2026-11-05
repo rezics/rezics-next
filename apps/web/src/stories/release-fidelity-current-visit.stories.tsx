@@ -5,14 +5,18 @@ import { ReleaseFidelityPage, type ReleaseFidelityTransport } from '../features/
 import { releaseVisitExample, visitContext, visitRelease } from '../features/catalogue/release-fidelity/examples';
 import { candidateContext } from '../subject/candidates';
 import { getLocale } from '../paraglide/runtime';
+import { subjectHref } from '../subject/subject-href';
+import { subjectVisitReturn } from '../features/pages/subject-visit-navigation';
 import { PatternStory } from './page';
 
 function CurrentVisit({
   context = 'selected',
   state = 'current',
+  origin = 'unavailable',
 }: {
   context?: 'selected' | 'global';
   state?: 'current' | 'empty' | 'concealed' | 'withheld' | 'unavailable' | 'destination-unavailable';
+  origin?: 'available' | 'unavailable';
 }) {
   const locale = getLocale();
   const selected = context === 'selected' ? visitContext : candidateContext;
@@ -36,6 +40,13 @@ function CurrentVisit({
       }),
       review: () => ({}) as never,
     };
+    const returnTo =
+      origin === 'available'
+        ? subjectVisitReturn(
+            `${subjectHref({ id: visitRelease, label: 'Current release' }, locale).href}?${new URLSearchParams({ context: selected })}`,
+            locale,
+          )
+        : undefined;
     return createRouter({
       routeTree: createRootRoute({
         component: () => (
@@ -46,13 +57,14 @@ function CurrentVisit({
               locale={locale}
               transport={transport}
               search={async () => []}
+              returnTo={returnTo}
             />
           </main>
         ),
       }),
       history: createMemoryHistory({ initialEntries: ['/'] }),
     });
-  }, [locale, selected, state]);
+  }, [locale, origin, selected, state]);
   return (
     <PatternStory path="/subjects/release/release" visitor="Signed Out">
       <RouterProvider router={router} />
@@ -68,6 +80,8 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const SelectedContext: Story = {};
+export const SelectedContextWithPublicOrigin: Story = { args: { origin: 'available' } };
+export const SelectedContextWithUnsupportedPublicReturns: Story = { args: { origin: 'unavailable' } };
 export const GlobalDestinations: Story = { args: { context: 'global' } };
 export const EmptyStream: Story = { args: { state: 'empty' } };
 export const ConcealedTargets: Story = { args: { state: 'concealed' } };

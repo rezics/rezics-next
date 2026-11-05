@@ -524,6 +524,7 @@ Sources and Changes visits are unavailable until those destination owners expose
 Their Global visits use the existing Subject `via` return facility. File and Changes routes expose that validated
 single return link without changing their reader or command controllers. A missing target label is unavailable.
 Decision: the installed release entry and editorial menu share one address description; an observed Subject Context stays explicit in the release URL, and one same-locale, same-Subject public origin is attached through validated `via` only when its Context matches. Menu collection adds no reads or selection identity.
+`SubjectFrame` passes `context ?? frame.context` as the optional outer selector and the current pathname as a candidate immediate origin. The shared release entry description uses `releaseSearch` and the canonical `subjectHref` route; an absent selector remains absent for a legacy direct visit, while a supplied selector is validated and retained. The origin is kept only after `subjectVisitReturn` accepts the same-locale, same-Subject address with the same explicit Context and no nested `via` or other search intent. A malformed selector never becomes Global. If the origin is invalid, incompatible or over budget, the release still opens in its selected Context without a return link.
 Release relations retain their released property and direction; qualified duplicate occurrences remain separate.
 Work binding and exact association inspection include their supplied qualifier and reference parts and historical
 release pin. File associations inspect that current row locally and restore its evidence control without reading the
@@ -587,6 +588,12 @@ One selected release or file/group visit uses C = 4 installed components: descri
 and at most one explicitly selected detail. Calls per visit are at most C. Web projection and retained response state
 are O(∑ L_i + ∑ B_i) for that visit, independent of catalogue/file history N. Each continuation replaces its page.
 Correction uses a fixed addressed native command/readback sequence.
+
+The release entry address adds no producer read or SQL during rendering or editorial menu collection. Its complete
+canonical local URL, including any percent-encoded `via`, is capped at 8,192 UTF-8 bytes; a retained origin also fits
+the existing 8,192-byte release/Subject return bounds and the tighter installed route parsers. Over-budget origin
+intent is omitted whole, never truncated, while the explicit release Context remains. Opening the link uses the
+existing canonical route admission and current four-component reader.
 
 The `/file` receiving visit adds no native read family: it reuses the existing profile window of one Subject read, one immutable Definition read, at most one 20-row association page, and the existing optional one-detail admission (2–4 profile requests). An exact admitted locator can open the existing candidate review, whose `readSubjectCandidates` path supplies current release, candidate and authority reads without target hydration. The existing statement refresh remains one Subject read, active Definition pointer, immutable Definition and one viewer-action batch for its two resources. The Web retains at most the bounded current profile window and a 2,048-character/UTF-8-byte origin descriptor; the native Subject and relation byte ceilings remain unavailable as documented above.
 

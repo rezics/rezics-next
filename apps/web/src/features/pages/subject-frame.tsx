@@ -56,6 +56,7 @@ import { assertSamePageContext } from './context-subject';
 import { contextHref } from './context-navigation';
 import { withSubjectVisitReturn } from './subject-visit-navigation';
 import { PageStreamHeadingContext, ViewHeadingActions } from './view-heading';
+import { useLocation } from '@tanstack/react-router';
 export { ViewHeading, ViewHeadingActions } from './view-heading';
 
 const DATE_PROPERTIES = ['schema:datePublished', 'schema:startDate', 'schema:dateCreated'];
@@ -269,8 +270,11 @@ export function SubjectFrame({
   /** A companion review route may select a Context independently of its public overview read. */
   context?: string | undefined;
 }) {
+  const location = useLocation();
   const title = frame.title.text || unlabelled;
   const base = subjectHref({ id: frame.id, label: title }, locale).href;
+  const observedContext = context ?? frame.context;
+  const releaseOrigin = `${location.pathname}${observedContext ? `?${new URLSearchParams({ context: observedContext })}` : ''}`;
   const facts = [typeLabel, frame.date].filter((fact): fact is string => !!fact);
   return (
     <div data-slot="subject-frame" className="flex min-w-0 flex-col gap-4">
@@ -319,7 +323,7 @@ export function SubjectFrame({
               id={frame.id}
               label={title}
               locale={locale}
-              context={context ?? frame.context}
+              context={observedContext}
               realm={realm}
             >
               {frame.type === 'wd:Q209163' ? (
@@ -374,18 +378,25 @@ export function SubjectFrame({
                   }
                 />
               )}
-              {!realm && (context ?? frame.context) === candidateContext && frame.type === 'schema:MusicAlbum' && (
+              {!realm && observedContext === candidateContext && frame.type === 'schema:MusicAlbum' && (
                 <AlbumProfileEntry id={frame.id} label={title} locale={locale} />
               )}
               <SubjectTermsEntry id={frame.id} label={title} locale={locale} />
-              <ReleaseFidelityEntry id={frame.id} type={frame.type} label={title} locale={locale} />
+              <ReleaseFidelityEntry
+                id={frame.id}
+                type={frame.type}
+                label={title}
+                locale={locale}
+                context={observedContext}
+                returnHref={releaseOrigin}
+              />
               <CatalogueFileProfileEntry id={frame.id} type={frame.type} label={title} locale={locale} />
               {view === 'contents' && (
                 <WorkPartsEntry
                   id={frame.id}
                   label={title}
                   locale={locale}
-                  context={context ?? frame.context}
+                  context={observedContext}
                   realm={realm}
                 />
               )}
@@ -398,7 +409,7 @@ export function SubjectFrame({
             id={frame.id}
             label={title}
             locale={locale}
-            context={context ?? frame.context}
+            context={observedContext}
             realm={realm}
           />
         )}
