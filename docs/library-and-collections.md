@@ -65,6 +65,9 @@ ordered and noted. Dynamic membership derives unique subjects from native facts 
 output. Canonical browsing may combine matching originals into one card but never rewrites curated occurrences.
 Presentation kind and client layout do not change membership or authorization.
 
+Decision: public Collection discovery keeps canonical filters and cursors in its address and delegates matching,
+ordering and pagination to Search; Commerce supplies only current publicly disclosed Collection summaries.
+
 Built-ins use the same Collection identity and members abstraction:
 
 - **Everything** contains the distinct subjects with at least one live explicit state, label assignment, progress
