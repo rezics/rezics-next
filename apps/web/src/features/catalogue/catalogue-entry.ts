@@ -13,6 +13,7 @@ import { factsPublicCorrectionHref, type FactsPublicOrigin } from './facts-publi
 import { conceptPublicOriginHref, type ConceptPublicOrigin } from './source-concept-explorer/public-visit';
 import { termsPublicCorrectionHref, type TermsPublicOrigin } from './terms-public-visit';
 import { graphPublicOriginHref, type GraphPublicOrigin } from '../pages/graph-browser/public-visit';
+import { musicContextAddressHref, validatedMusicContextReturn } from './music-context-profile/navigation';
 
 export type ContributionGroup = 'create' | 'edit' | 'review' | 'read';
 export type CatalogueEntry = { group: ContributionGroup; label: string; href: string };
@@ -414,11 +415,37 @@ export const catalogueEntries = {
       href: origin ? conceptPublicOriginHref(base, origin) : base,
     };
   },
-  musicContext: ({ id, label = '', locale }: Locale & { id: string; label?: string | undefined }): CatalogueEntry => ({
-    group: 'read',
-    label: m.music_context_title({}, options(locale)),
-    href: `${subject({ id, label, locale })}/music-context`,
-  }),
+  musicContext: ({
+    id,
+    label = '',
+    locale,
+    context,
+    realm,
+    returnTo,
+  }: Locale & {
+    id: string;
+    label?: string | undefined;
+    context?: string | undefined;
+    realm?: string | undefined;
+    returnTo?: string | undefined;
+  }): CatalogueEntry => {
+    const acceptedReturn = validatedMusicContextReturn(returnTo, locale, id, context, realm);
+    const base = `${subject({ id, label, locale })}/music-context`;
+    const selected = {
+      ...(context !== undefined ? { context } : {}),
+      ...(realm !== undefined ? { realm } : {}),
+    };
+    const href =
+      (acceptedReturn
+        ? musicContextAddressHref(base, { ...selected, returnTo: acceptedReturn }, locale, id)
+        : undefined) ?? musicContextAddressHref(base, selected, locale, id);
+    if (!href) throw new Error('Unable to compose the admitted music-context address');
+    return {
+      group: 'read',
+      label: m.music_context_title({}, options(locale)),
+      href,
+    };
+  },
   musicContextCreate: ({ locale }: Locale): CatalogueEntry => ({
     group: 'create',
     label: m.music_context_create_title({}, options(locale)),

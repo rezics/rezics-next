@@ -278,9 +278,30 @@ unsupported state while generic Subject facts and correction access remain avail
 
 Decision: related Subjects open in a same-locale new tab; closing it returns keyboard focus to the source relation link.
 
-The [reader Cost](../apps/web/src/features/catalogue/music-location-reader/README.md#cost) bounds each current Subject and
-one selected relation window, with no target hydration or writes. The existing dedicated MusicContext profile and
-correction route remain unchanged.
+Decision: carry the admitted Context through every music-context read and stream address; mark unsupported Realm or
+target/return destinations explicitly, and label any fresh Global visit as general.
+
+The dedicated MusicContext reader requests the admitted Subject and selected relation page with the same observed
+Context. A legacy direct visit with no Context keeps the installed Global default. The reader has no Realm operand: it
+states that Realm is unsupported, reads a supplied Context only, and offers a separately named fresh Global reading
+when Realm-only intent cannot be read. It never presents that Global reading as the Realm observation.
+
+Music-context addresses retain only Context, the selected stream and its native cursor, plus one compatible immediate
+public return or visit. The full encoded path and query stay within 32,768 UTF-8 bytes. Stream and cursor limits remain
+128 and 8,192 characters. Native session tokens and response bodies stay in the in-memory reader lifetime. The existing
+eight-entry Previous history stores cursors only and reacquires the selected Context on every visit.
+A `returnTo` cannot point back to another music-context route; the single `via` visit carries only its immediate source.
+
+A disclosed related Subject can open this reader with the same Context only when its current released Type is admitted.
+Other targets are labeled as general Subject visits; if their destination cannot carry the selected Context, the reader
+states that exact target/return is unsupported. Realm-bearing observations do not create target links that imply Realm
+continuity. The current Global correction link stays Global-only. The existing [reader Cost](../apps/web/src/features/catalogue/music-location-reader/README.md#cost)
+continues to bound each current Subject and one selected relation window, with no target hydration or writes. Each
+music-context operation retains the existing admission/release work, one current Subject read and at most one selected
+relation read limited by `MUSIC_CONTEXT_PAGE_CAP` (20 rows). Context adds no native request, row, target hydration or
+mutation; source bytes are the current selected Subject and relation responses under their existing native bounds. The
+serialized current address is capped at 32,768 UTF-8 bytes, and the reader keeps at most eight cursor addresses plus its
+current accepted page in memory.
 
 ## Create a catalogue subject
 

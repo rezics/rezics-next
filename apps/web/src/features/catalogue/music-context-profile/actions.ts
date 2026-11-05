@@ -14,6 +14,7 @@ export const readSubjectMusicContext = createServerFn({ method: 'POST', strict: 
       !isExploreId(input.id) ||
       typeof input.locale !== 'string' ||
       input.locale.length > 35 ||
+      (input.context !== undefined && (typeof input.context !== 'string' || !isExploreId(input.context))) ||
       (input.stream !== undefined && !isMusicContextStream(input.stream)) ||
       (input.cursor !== undefined && (!isMusicContextCursor(input.cursor) || !input.stream))
     )
@@ -22,6 +23,7 @@ export const readSubjectMusicContext = createServerFn({ method: 'POST', strict: 
       expectedReader: input.expectedReader === null ? null : expectedCandidateReader(input),
       id: input.id,
       locale: input.locale,
+      context: typeof input.context === 'string' ? input.context : undefined,
       stream: typeof input.stream === 'string' ? input.stream : undefined,
       cursor: typeof input.cursor === 'string' ? input.cursor : undefined,
       session: typeof input.session === 'string' && input.session.length <= 16384 ? input.session : undefined,

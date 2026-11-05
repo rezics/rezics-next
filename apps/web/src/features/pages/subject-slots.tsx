@@ -120,6 +120,7 @@ export function SubjectExploreSlot({
   realm,
   returnTo,
   publicReturnHref,
+  musicReturnTo,
 }: {
   subjectId: string;
   subjectType: string;
@@ -129,6 +130,7 @@ export function SubjectExploreSlot({
   realm?: string | undefined;
   returnTo?: string | undefined;
   publicReturnHref?: string | undefined;
+  musicReturnTo?: string | undefined;
 }) {
   const unsupportedId = useId();
   const address = { id: subjectId, label, locale };
@@ -172,7 +174,12 @@ export function SubjectExploreSlot({
     subjectType === 'schema:AdministrativeArea' ||
     subjectType === 'schema:MusicInstrument' ||
     subjectType === 'wd:Q34379'
-      ? catalogueEntries.musicContext(address)
+      ? catalogueEntries.musicContext({
+          ...address,
+          ...(context !== undefined ? { context } : {}),
+          ...(realm !== undefined ? { realm } : {}),
+          ...((musicReturnTo ?? returnTo) !== undefined ? { returnTo: musicReturnTo ?? returnTo } : {}),
+        })
       : undefined;
   return (
     <section data-slot="subject-explore" className="flex min-w-0 flex-wrap gap-2">
@@ -196,6 +203,7 @@ export function SubjectExploreSlot({
       ) : null}
       {concepts && <CompanionLink href={concepts.href} label={concepts.label} />}
       {music && <CompanionLink href={music.href} label={music.label} />}
+      {music && realm && <p role="status">{m.music_context_realm_unsupported({}, o)}</p>}
     </section>
   );
 }

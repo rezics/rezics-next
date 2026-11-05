@@ -11,19 +11,27 @@ import { readSubjectMusicContext } from './actions';
 export const MusicContextSession = candidateSession(function MusicContextSessionLive({
   id,
   locale,
+  context,
+  realm,
   returnTo,
+  via,
   stream,
   cursor,
   onAddressChange,
 }: {
   id: string;
   locale: string;
+  context?: string | undefined;
+  realm?: string | undefined;
   returnTo?: string | undefined;
+  via?: string | undefined;
   stream?: string | undefined;
   cursor?: string | undefined;
   onAddressChange?: ((address: MusicContextAddress & { stream: string }) => void) | undefined;
 }) {
-  const work = useCatalogueLifetime(JSON.stringify(['music-context', id, locale]));
+  const work = useCatalogueLifetime(
+    JSON.stringify(['music-context', id, locale, context ?? '', realm ?? '', returnTo ?? '', via ?? '']),
+  );
   const { state } = useSession();
   const expectedReader = state === 'signed-in' ? work.reader : null;
   const transport = useMemo<MusicContextTransport>(
@@ -33,6 +41,7 @@ export const MusicContextSession = candidateSession(function MusicContextSession
           data: {
             id,
             locale,
+            ...(context !== undefined ? { context } : {}),
             expectedReader,
             stream: next.stream,
             cursor: next.cursor,
@@ -41,14 +50,17 @@ export const MusicContextSession = candidateSession(function MusicContextSession
           headers: csrfHeaders(),
         }),
     }),
-    [expectedReader, id, locale],
+    [context, expectedReader, id, locale],
   );
   if (state === 'unknown') return <p>{m.music_context_loading({}, { locale: locale as never })}</p>;
   return (
     <MusicContextProfile
       id={id}
       locale={locale}
+      context={context}
+      realm={realm}
       returnTo={returnTo}
+      via={via}
       initialStream={stream}
       initialCursor={cursor}
       onAddressChange={onAddressChange}

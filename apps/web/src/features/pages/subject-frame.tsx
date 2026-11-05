@@ -432,6 +432,7 @@ export function SubjectFrame({
         realm={realm}
         returnTo={returnTo}
         publicReturnHref={conceptReturnHref}
+        musicReturnTo={location.publicHref}
       />
       <ReleaseFidelitySlot
         subjectId={frame.id}
