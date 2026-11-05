@@ -236,7 +236,7 @@ acceptance remain deferred to integration; this consumer check does not establis
 
 **Implementation choice:** Keep the eight outcome scenarios and their assertions intact; use deterministic fixture-only retention inputs and native `source.kind` Collection rules without selecting a production legal schedule.
 
-**Acceptance decision:** Bind all eight frozen scenarios to the production Kernel HTTP handler, native Auth and DBOS in an isolated migrated database; cover mounted pages on the ordinary seeded dev stack.
+**Acceptance decision:** Bind all eight frozen scenarios to the production Kernel HTTP handler, native Auth and DBOS in an isolated migrated database; provision fixture grants through the mounted grant API and its composed Access catalogue. Cover mounted pages on the ordinary seeded dev stack.
 
 **Personas:** Deleting owner; old-token owner; anonymous reader; Bob or other affected user; owner-specific data producers; ordinary restore attempt.
 
