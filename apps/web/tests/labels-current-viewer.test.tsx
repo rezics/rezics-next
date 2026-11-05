@@ -141,12 +141,15 @@ test('The actual private Labels route retires replaced-viewer names, dialogs, pe
     try {
       const load = Route.options.loader as unknown as (input: {
         deps: { cursor?: string; query?: string };
-      }) => Promise<LabelsCurrentRead>;
+      }) => Promise<{ kind: 'loaded'; result: LabelsCurrentRead }>;
       const loaded = await load({ deps: { cursor: 'exact+/cursor==', query: ' Private%_ ' } });
       expect(loaded).toMatchObject({
-        sessionSubject: 'A',
-        requested: { cursor: 'exact+/cursor==', query: ' Private%_ ', locale: 'en' },
-        page: { csrfToken: 'prepared-A', state: 'loaded', labels: [{ name: 'Private A' }] },
+        kind: 'loaded',
+        result: {
+          sessionSubject: 'A',
+          requested: { cursor: 'exact+/cursor==', query: ' Private%_ ', locale: 'en' },
+          page: { csrfToken: 'prepared-A', state: 'loaded', labels: [{ name: 'Private A' }] },
+        },
       });
       expect(preparations).toBe(1);
       const list = nativeCalls.find((call) => new URL(call.url).pathname === '/v1/libraryLabels')!;

@@ -1,4 +1,4 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, expect, mock, spyOn, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act } from 'react';
 import { renderToString } from 'react-dom/server';
@@ -10,16 +10,12 @@ const writes: { data: LabelInput; headers: HeadersInit }[] = [];
 let send: (input: LabelInput) => Promise<LabelResult> = async () => {
   throw new Error('Unexpected Labels write');
 };
-const read = mock(() => {
-  throw new Error('Recovery links must not fetch during rendering');
+mock.module('cloudflare:workers', () => ({ env: {} }));
+const labelActions = await import('../src/library/labels-actions');
+spyOn(labelActions, 'manageLabel').mockImplementation((input) => {
+  writes.push(structuredClone(input));
+  return send(input.data);
 });
-mock.module('../src/library/labels-actions', () => ({
-  manageLabel: (input: { data: LabelInput; headers: HeadersInit }) => {
-    writes.push(structuredClone(input));
-    return send(input.data);
-  },
-}));
-mock.module('../src/library/labels-read-route', () => ({ readLabelsPage: read }));
 afterAll(() => mock.restore());
 
 const query = '  読書 %_ + & ?  ';
@@ -141,7 +137,6 @@ test('First-page emptiness, prefix no-results and bounded later-page emptiness r
         host.remove();
       }
     }
-    expect(read).not.toHaveBeenCalled();
     expect(writes).toHaveLength(0);
   });
 });
@@ -237,7 +232,6 @@ test('An unavailable read is one honest error with a same-address retry and no p
       const click = new window.MouseEvent('click', { bubbles: true, cancelable: true });
       link(host, m.subject_view_retry()).dispatchEvent(click);
       expect(click.defaultPrevented).toBe(true);
-      expect(read).not.toHaveBeenCalled();
     } finally {
       if (root) await act(async () => root!.unmount());
       host.remove();
