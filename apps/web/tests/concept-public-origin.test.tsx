@@ -228,7 +228,7 @@ test('production route admits public scope before the original session transport
     await render(
       <SourceConceptPublicSession id={id} locale="en" pathname={routePath} publicVisit={fresh.publicVisit} />,
     );
-    await waitFor(() => expect(reads.length).toBeGreaterThan(publicReadCount));
+    await waitFor(() => expect(reads.length, 'fresh Global read').toBeGreaterThan(publicReadCount));
     const freshReadCount = reads.length;
 
     await render(
@@ -239,7 +239,7 @@ test('production route admits public scope before the original session transport
         publicVisit={observed.publicVisit}
       />,
     );
-    await waitFor(() => expect(reads.length).toBeGreaterThan(freshReadCount));
+    await waitFor(() => expect(reads.length, 'return to current public Concept').toBeGreaterThan(freshReadCount));
     const returnedReadCount = reads.length;
     const realmReturn = conceptPublicReturnHref(
       subjectHref({ id, label: 'Protagonist' }, 'en').href,
