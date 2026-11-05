@@ -4,6 +4,7 @@ import { PLATFORM_RESOURCE } from '../../src/access/bootstrap-governance.ts';
 import { createGrantCommands, GrantDeniedError } from '../../src/access/grant-commands.ts';
 import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
 import { readErasureStatus, resolveRetention } from '../../src/access/erasure.ts';
+import { resourceRoleCatalogue } from '../../src/access/resource-roles.ts';
 import { createCommerceCommands } from '../../src/commerce/commands.ts';
 import {
   advanceCommerceErasure,
@@ -253,6 +254,8 @@ beforeAll(async () => {
         JSON.stringify({
           row,
           actor: actor.kind === 'account' ? actor.accountId : actor.kind,
+          boardScope: actor.kind === 'account' && actor.scopes.includes('board:read'),
+          ownerRoleActions: resourceRoleCatalogue(kernel.testAccess)?.roles.get('content.board.owner'),
           boardAllowed,
           subjectAllowed,
         }),
