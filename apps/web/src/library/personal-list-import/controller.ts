@@ -410,9 +410,6 @@ export function createVndbJourney(input: { port: VndbPort; visit: VndbVisit }) {
     let response: T | VndbFailure | VndbUnknown;
     try {
       response = await send();
-    } catch (error) {
-      if (!(error instanceof TypeError || error instanceof DOMException || error instanceof SyntaxError)) throw error;
-      response = { kind: 'unknown', command };
     } finally {
       pending -= 1;
     }
