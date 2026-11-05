@@ -3,7 +3,6 @@ import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import type { Page } from 'playwright';
 import { PLATFORM_RESOURCE } from '../../../../services/kernel/src/access/bootstrap-governance.ts';
-import { projectSubjectOffer } from '../../../../services/kernel/src/commerce/subject-offer-work.ts';
 import { GLOBAL_CONTEXT } from '../../../../services/kernel/src/semantic/definitions.ts';
 import { routeOf } from '../../../../services/kernel/src/route/route.ts';
 import { startFakeStripe } from '../../../../services/kernel/test/commerce/support/fake-stripe.ts';
@@ -143,6 +142,8 @@ export async function startNativeCreatorOfferSalesFixture(): Promise<NativeCreat
         if (last.status === 200 && found) return found as Record<string, unknown>;
         await Bun.sleep(200);
       }
+      // Reylo SQL modules are registered only after the native stack starts.
+      const { projectSubjectOffer } = await import('../../../../services/kernel/src/commerce/subject-offer-work.ts');
       await projectSubjectOffer(observer!, offerId, Date.now() + 5_000);
       const projected = await kernel<{ offers: Record<string, unknown>[] }>(path);
       const found = projected.body.offers?.find((row) => row.id === offerId);
