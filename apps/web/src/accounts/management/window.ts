@@ -9,7 +9,7 @@ const feeds: Feed[] = ['organizationsCursor', 'operatorsCursor', 'membersCursor'
 export class ManagementWindow {
   private prior: Record<Feed, Coordinate[]> = { organizationsCursor: [], operatorsCursor: [], membersCursor: [] };
   private current: Cursors;
-  private pending?: { field: Feed; movement: Movement; target: Cursors };
+  private pending: { field: Feed; movement: Movement; target: Cursors } | undefined;
   private retired = false;
 
   constructor(cursors: Cursors) {

@@ -101,7 +101,7 @@ function WindowControls({
   cursor: string | null;
   field: keyof Cursors;
   cursors: Cursors;
-  navigation?: WindowNavigation;
+  navigation?: WindowNavigation | undefined;
 }) {
   const previous = navigation?.previous(field);
   const next = readCursors({ [field]: cursor })[field];
@@ -145,7 +145,7 @@ function Responsibilities({
 }: {
   page: Inventory['responsibilities'];
   cursors: Cursors;
-  navigation?: WindowNavigation;
+  navigation?: WindowNavigation | undefined;
 }) {
   return (
     <Card
@@ -206,7 +206,7 @@ export function ManagedAccountsPage({
   page: Page<Inventory>;
   cursors?: Cursors;
   retry: () => void;
-  navigation?: WindowNavigation;
+  navigation?: WindowNavigation | undefined;
 }) {
   if (page.state !== 'ready')
     return (
@@ -325,7 +325,7 @@ export function AccountManagementPage({
   page: Page<Detail>;
   cursors?: Cursors;
   retry: () => void;
-  navigation?: WindowNavigation;
+  navigation?: WindowNavigation | undefined;
 }) {
   if (page.state !== 'ready')
     return (
