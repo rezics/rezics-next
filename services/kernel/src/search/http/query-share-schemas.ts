@@ -4,9 +4,7 @@ export const QueryShareSchema = t.Object(
   {
     viewer: t.Union([t.Literal('anonymous'), t.Literal('signed-in')]),
     action: t.Union([t.Literal('allowed'), t.Literal('disabled'), t.Literal('unavailable')]),
-    reason: t.Union(
-      ['ready', 'private_context', 'unsupported', 'oversized', 'unavailable'].map((value) => t.Literal(value)),
-    ),
+    reason: t.Union([t.Literal('ready'), t.Literal('private_context'), t.Literal('unsupported'), t.Literal('oversized'), t.Literal('unavailable')]),
     document: t.Union([
       t.Null(),
       t.Object(

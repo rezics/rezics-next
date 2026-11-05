@@ -40,9 +40,9 @@ const appellantIdentitySchema = t.Union([
     },
     { additionalProperties: false },
   ),
-  ...(['deleted', 'concealed', 'unavailable'] as const).map((state) =>
-    t.Object({ state: t.Literal(state) }, { additionalProperties: false }),
-  ),
+  t.Object({ state: t.Literal('deleted') }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('concealed') }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
 ]);
 const targetContextSchema = t.Union([
   t.Object(
@@ -55,9 +55,8 @@ const targetContextSchema = t.Union([
     },
     { additionalProperties: false },
   ),
-  ...(['concealed', 'unavailable'] as const).map((state) =>
-    t.Object({ state: t.Literal(state) }, { additionalProperties: false }),
-  ),
+  t.Object({ state: t.Literal('concealed') }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
 ]);
 const appealReviewProperties = {
   id: t.String(),
