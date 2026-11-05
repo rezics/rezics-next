@@ -72,8 +72,18 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
       return store.advance(record, state, 5000);
     // Resume the original native job directly. Re-registering from today's Source definition
     // can replace its consumer and strand a retained fence or ambiguous alias intent.
-    let job: GenerationPublicationJob;
     if (state.publication === null) {
+      // prepare commits before this scheduler saves its locator. Recover that original
+      // job too when interruption falls between those two durable writes.
+      const existing = (
+        await options.pool.query<{ job: string }>(
+          `SELECT job FROM search.generation_publication
+         WHERE partition_no=0 AND physical_target=$1 AND native_incarnation=$2 AND consumer->>'meaningDigest'=$3
+         ORDER BY (fence IS NOT NULL) DESC,activated_at,job LIMIT 1`,
+          [index, state.uuid, state.meaning],
+        )
+      ).rows[0];
+      if (existing) return store.advance(record, { ...state, publication: existing.job, phase: 'native' });
       const prepared = await options.runtime.preparePublication(state.generation, context);
       if (prepared.status !== 'preparing') return store.advance(record, state, 1000);
       return store.advance(record, { ...state, publication: prepared.job.job, phase: 'native' });
@@ -83,7 +93,7 @@ export function createPublicPreparation(options: PublicPreparationOptions) {
        WHERE partition_no=0 AND job=$1 AND physical_target=$2`,
       [state.publication, index],
     );
-    job = { job: state.publication, consumer: retained.rows[0]!.consumer };
+    const job: GenerationPublicationJob = { job: state.publication, consumer: retained.rows[0]!.consumer };
     // Publication already enumerates complete native key pages, repairs through the ordinary
     // writer and reconciles engine extras. The retired fixed-cut scan was a second population
     // frontier whose Source adapter is unavailable; it must not gate this existing lifecycle.

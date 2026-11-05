@@ -1833,7 +1833,8 @@ then passes the returned consumer to `prepare`. It retains only the publication 
 Cold population and ordinary replay both use the delivered native writer's admission gate; no publication
 callback supplies authority. Maintenance resumes the stored job and its original consumer directly; it does
 not repeat the retired fixed-cut scan or register a replacement consumer on restart. Native complete key
-pages may retain their terminal cursor or advance past only filtered rows; the next home starts without
+Job recovery also covers interruption after native prepare commits and before maintenance saves its locator.
+Native complete key pages may retain their terminal cursor or advance past only filtered rows; the next home starts without
 that cursor. The publication's finite passes own population, repair, reconciliation and activation through
 the same worker. CLI rebuild waits for that worker-owned alias publication. Retirement
 still requires actual retained-copy and writer evidence. Live physical generations remain capped at three.

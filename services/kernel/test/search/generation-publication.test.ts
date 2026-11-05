@@ -366,13 +366,16 @@ test('ordinary maintenance resumes its stored publication and advances native po
     ).rows[0]!;
   let maintenance = start();
   try {
+    // Simulate interruption after native prepare committed but before the scheduler saved its ID.
+    const original = await f.operations.prepare(f.registered.consumer, context());
+    if (original.status !== 'preparing') throw new Error(original.reason);
     await maintenance.run(id, (await read()).revision);
     const retained = (await read()).locator.publication;
-    expect(retained).toBeString();
+    expect(retained).toBe(original.job.job);
     await maintenance.stop();
     maintenance = start();
     await maintenance.run(id, (await read()).revision);
-    expect(prepares).toBe(1);
+    expect(prepares).toBe(0);
     expect((await read()).locator).toMatchObject({ publication: retained, phase: 'native' });
     expect(
       (await pool.query('SELECT home FROM search.generation_publication WHERE partition_no=0 AND job=$1', [retained]))
