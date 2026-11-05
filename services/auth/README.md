@@ -1374,7 +1374,7 @@ policy. `fenceOperator` provides the durable fencing fanout itself.
 ## Operated actor session opening transport
 
 Decision: opening metadata has its own public C-independent byte allowance in
-`@rezics/auth-contract/operator-page-response-bounds` (exported from the package entry), derived from this closed
+`operator-page-response-bounds.ts` (exported from `@rezics/auth-contract`), derived from this closed
 projection and Kernel's `operator-opening-page-source.ts`. It includes every stage variant and the largest current
 body: fixed JSON syntax/literals plus S(1024) for the opaque native SessionProof viewer ID, three ASCII UUID36 IDs
 and canonical nonnegative PostgreSQL bigint19. `OPERATOR_OPENING_PAGE_MAX_RESPONSE_BYTES` includes JSON escaping and
