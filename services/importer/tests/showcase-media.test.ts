@@ -45,6 +45,78 @@ function selectedPlan(): CrossMediaPlan {
   return plan;
 }
 
+test('selected work source responses refresh only after the current media outcome is terminal', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'showcase-work-refresh-'));
+  const journalPath = join(directory, 'showcase.sqlite');
+  const journal = new ShowcaseJournal(journalPath);
+  const plan = selectedPlan();
+  const changedUrl = 'https://lain.bgm.tv/pic/cover/l/12/34/101-v2.jpg';
+  let version = 1;
+  let sourceReads = 0;
+  const fetch = (async (input: RequestInfo | URL) => {
+    expect(String(input)).toBe('https://api.bgm.tv/v0/subjects/101');
+    sourceReads += 1;
+    const image = version === 1 ? sourceUrl : changedUrl;
+    return new Response(
+      JSON.stringify({ ...apiSubject, images: { large: image, common: image, medium: image, small: image, grid: image } }),
+      { status: 200, headers: { etag: `"subject-101-v${version}"`, 'content-type': 'application/json' } },
+    );
+  }) as typeof globalThis.fetch;
+  const seal = (digest: string, status: 'pending' | 'available', source: NonNullable<CrossMediaPlan['coverSources']>[number]) =>
+    journal.sealIntent({
+      version: 1,
+      digest,
+      records: [],
+      vocabulary: [],
+      media: [
+        {
+          sourceAlias: source.sourceAlias,
+          sourceKey: source.externalId,
+          sourceUri: source.endpoint,
+          sourceRevision: source.sourceRevision,
+          archiveDigest: source.archiveDigest,
+          responseDigest: source.responseDigest,
+          sourceUrl: source.sourceUrl,
+          status,
+          containerId: randomUUID(),
+        },
+      ],
+      tagWeightObservations: [],
+      tagWeightRefreshes: [],
+      omissions: [],
+    } as ShowcaseManifest);
+
+  try {
+    const first = await acquireBangumiCoverSources(plan, { journal, fetch, sleep: async () => {} });
+    const original = first.coverSources![0]!;
+    seal('a'.repeat(64), 'pending', original);
+    version = 2;
+    const pending = await acquireBangumiCoverSources(plan, { journal, fetch, sleep: async () => {} });
+    expect(pending.coverSources).toEqual(first.coverSources);
+    expect(sourceReads).toBe(1);
+
+    seal('b'.repeat(64), 'available', original);
+    const refreshed = await acquireBangumiCoverSources(plan, { journal, fetch, sleep: async () => {} });
+    expect(refreshed.coverSources![0]).toMatchObject({ sourceUrl: changedUrl, archiveDigest: original.archiveDigest });
+    expect(refreshed.coverSources![0]!.responseDigest).not.toBe(original.responseDigest);
+    expect(sourceReads).toBe(2);
+
+    const database = new Database(journalPath);
+    try {
+      expect(
+        database
+          .query<{ count: number }, []>("SELECT COUNT(*) AS count FROM showcase_cover_source WHERE external_id='101'")
+          .get()!.count,
+      ).toBe(2);
+    } finally {
+      database.close();
+    }
+  } finally {
+    journal.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test(
   'default selected Bangumi media intent resumes its journalled reservation to actual availability',
   async () => {
