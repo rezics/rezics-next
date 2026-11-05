@@ -117,6 +117,10 @@ method/path exactly once.
 Publication retains the native memoized schema factories and derives public types from their schema return values.
 Literal tuple and nullable-response repairs belong inside those factories; integration retains current typed fixtures
 and native work dimensions rather than replacing them with earlier transport casts or estimates.
+Work ledgers use named classes behind their existing constructor factories so declaration emission retains private
+state without exposing anonymous class types. AniList review and page responses retain the native counted-vote
+observation, including distinct absent, counted and clear states; the native import test asserts counted and clear
+readback instead of the retired nullable vote projection.
 
 ## Development database
 

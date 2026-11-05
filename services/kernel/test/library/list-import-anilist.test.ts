@@ -269,7 +269,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
         ownVote: { state: 'present' },
       },
       question: { id: STANDARD_QUESTION_ID, revision: 1, minimumUnits: 0, maximumUnits: 20, stepUnits: 1 },
-      currentVote: { status: 'current', vote: { units: 11 } },
+      currentVote: { status: 'current', vote: { state: 'counted', units: 11, originalTargetId: subjectId } },
       consented: false,
     },
   });
@@ -425,7 +425,10 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     outcomes: [{ status: 'applied', score: { status: 'applied' }, retained: [] }],
   });
   expect(await votes.readOwnVote(importer.actor, STANDARD_QUESTION_ID, subjectId)).toBeNull();
-  expect((await (await f.send(importer.bearer, 'GET', path3)).json()).rows[2].currentScore.vote).toBeNull();
+  expect((await (await f.send(importer.bearer, 'GET', path3)).json()).rows[2].currentScore.vote).toMatchObject({
+    state: 'clear',
+    units: null,
+  });
   const guarded = await review(1, { subjectId, fields: ['status'], replace: true }, path3);
   const before = (await (await f.send(importer.bearer, 'GET', `/v1/libraryEntries/${subjectId}`)).json()).libraryEntry;
   const changed = await f.send(importer.bearer, 'PUT', `/v1/libraryEntries/${subjectId}`, {

@@ -60,7 +60,6 @@ function subjectSearchResponse() {
     ]),
   );
 }
-type SubjectSearchResponse = Static<ReturnType<typeof subjectSearchResponse>>;
 
 export function searchRoutes<App>(
   app: App,
@@ -223,7 +222,7 @@ export function searchRoutes<App>(
           security: [{ bearerAuth: [] }, {}],
         },
       },
-      async ({ body, authorize, admission, job, actor, set }): Promise<SubjectSearchResponse> => {
+      async ({ body, authorize, admission, job, actor, set }) => {
         const { emptyRecoveryActions: _emptyRecoveryActions, ...nativeBody } = body;
         if (body.population !== undefined || body.representation === 'discovery-v1')
           set.headers['cache-control'] = 'private, no-store';
