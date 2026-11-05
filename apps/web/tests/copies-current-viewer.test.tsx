@@ -558,6 +558,63 @@ test('The actual Copies route retires retained private rows and editor state on 
   try {
     await show(viewer('A'));
     expect(host.textContent).not.toContain('FOREIGN');
+    search = { subjectId: id(10), kind: 'print', status: 'shelf', cursor: 'opaque/cursor+exact' };
+    await show(viewer('A'));
+    await acceptList('A');
+    await click(m.library_copy_compare_select());
+    await click(m.library_copy_compare_open());
+    expect(host.querySelectorAll('article[data-copy-comparison-id]')).toHaveLength(1);
+    await inspect('A');
+    await fillNote('Captured before list denial');
+    await submit();
+    const unanswered = writes.at(-1)!;
+    const captured = unanswered.input.data;
+    const capturedHeaders = new Headers(unanswered.input.headers);
+    expect(captured).toEqual({
+      id: id(1),
+      revision: 7,
+      idempotencyKey: id(101),
+      location: 'Private location A',
+      source: 'Private source A',
+      acquiredOn: '2020-02-29',
+      disposedOn: '2025-03-01',
+      note: 'Captured before list denial',
+    });
+    await refetch();
+    const countBeforeDenial = lists.length;
+    await act(async () => lists.at(-1)!.resolve(forbiddenResponse('A', search)));
+    await tick();
+    absent('A');
+    expect(host.textContent).toContain(m.library_copy_inventory_forbidden());
+    expect(host.querySelectorAll('article[data-slot="list-row"]')).toHaveLength(0);
+    expect(host.querySelectorAll('article[data-copy-comparison-id]')).toHaveLength(0);
+    expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.library_copy_add())).toBe(false);
+    expect(listInputs.at(-1)).toMatchObject(search);
+    expect(lists).toHaveLength(countBeforeDenial);
+
+    await act(async () => unanswered.reject(new Error('Uncertain before list denial')));
+    const dialog = host.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain(m.library_copy_inventory_forbidden());
+    await click(m.subject_view_retry(), dialog);
+    const replay = writes.at(-1)!;
+    expect(replay.input.data).toEqual(captured);
+    expect(new Headers(replay.input.headers).get('x-csrf-token')).toBe(capturedHeaders.get('x-csrf-token'));
+    await act(async () =>
+      replay.resolve({ ok: true, copy: { ...copy('A'), note: 'Captured before list denial', revision: 8 } }),
+    );
+    await tick();
+    expect(host.querySelectorAll('article[data-slot="list-row"]')).toHaveLength(0);
+
+    await click(m.subject_view_retry(), host);
+    expect(listInputs.at(-1)).toMatchObject(search);
+    await act(async () => lists.at(-1)!.resolve(response('A', search)));
+    await tick();
+    expect(host.textContent).toContain('Private note A');
+    expect(host.querySelectorAll('article[data-slot="list-row"]')).toHaveLength(1);
+    search = { subjectId: id(10), cursor: 'first' };
+    await show(viewer('A'));
+    await acceptList('A');
+
     await click(m.library_copy_compare_select());
     await click(m.library_copy_compare_open());
     const comparisonTrigger = button(m.library_copy_compare_selected());
@@ -912,61 +969,6 @@ test('The actual Copies route retires retained private rows and editor state on 
     expect(
       [...host.querySelectorAll('a')].find((link) => link.textContent === m.library_copy_filter_reset())?.href,
     ).toContain(`subjectId=${id(10)}`);
-
-    search = { subjectId: id(10), kind: 'print', status: 'shelf', cursor: 'opaque/cursor+exact' };
-    await show(viewer('B'));
-    await acceptList('B');
-    await click(m.library_copy_compare_select());
-    await click(m.library_copy_compare_open());
-    expect(host.querySelectorAll('article[data-copy-comparison-id]')).toHaveLength(1);
-    await inspect('B');
-    await fillNote('Captured before list denial');
-    await submit();
-    const unanswered = writes.at(-1)!;
-    const captured = unanswered.input.data;
-    const capturedHeaders = new Headers(unanswered.input.headers);
-    expect(captured).toEqual({
-      id: id(1),
-      revision: 7,
-      idempotencyKey: id(101),
-      location: 'Private location B',
-      source: 'Private source B',
-      acquiredOn: '2020-02-29',
-      disposedOn: '2025-03-01',
-      note: 'Captured before list denial',
-    });
-    await refetch();
-    const countBeforeDenial = lists.length;
-    await act(async () => lists.at(-1)!.resolve(forbiddenResponse('B', search)));
-    await tick();
-    absent('B');
-    expect(host.textContent).toContain(m.library_copy_inventory_forbidden());
-    expect(host.querySelectorAll('article[data-slot="list-row"]')).toHaveLength(0);
-    expect(host.querySelectorAll('article[data-copy-comparison-id]')).toHaveLength(0);
-    expect([...host.querySelectorAll('button')].some((node) => node.textContent === m.library_copy_add())).toBe(false);
-    expect(listInputs.at(-1)).toMatchObject(search);
-    expect(lists).toHaveLength(countBeforeDenial);
-
-    await act(async () => unanswered.reject(new Error('Uncertain before list denial')));
-    const dialog = host.querySelector('[role="dialog"]')!;
-    expect(dialog.textContent).toContain(m.library_copy_inventory_forbidden());
-    await click(m.subject_view_retry(), dialog);
-    const replay = writes.at(-1)!;
-    expect(replay.input.data).toEqual(captured);
-    expect(new Headers(replay.input.headers).get('x-csrf-token')).toBe(capturedHeaders.get('x-csrf-token'));
-    await act(async () =>
-      replay.resolve({ ok: true, copy: { ...copy('B'), note: 'Captured before list denial', revision: 8 } }),
-    );
-    await tick();
-    expect(host.querySelectorAll('article[data-slot="list-row"]')).toHaveLength(0);
-
-    await click(m.subject_view_retry(), host);
-    expect(listInputs.at(-1)).toMatchObject(search);
-    await act(async () => lists.at(-1)!.resolve(response('B', search)));
-    await tick();
-    expect(host.textContent).toContain('Private note B');
-    expect(host.querySelectorAll('article[data-slot="list-row"]')).toHaveLength(1);
-
     expect(hydrationErrors).toEqual([]);
   } finally {
     if (root) await act(async () => root!.unmount());
