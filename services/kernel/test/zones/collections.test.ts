@@ -92,6 +92,8 @@ test('native mounted Collection pages preserve current Access, safe summaries, b
 
   await openSources('other');
   expect(page(await list(empty.id, 'other'))).toEqual({ collections: [], next: null });
+  const opened = await f.call('operator', 'POST', '/v1/platform/exposure/zone_sources:open', {});
+  expect(opened.status).toBe(200);
   const singleSource = await collection('single-unlisted', 'unlisted');
   const single = await zone([singleSource.id]);
   const one = page(await list(single.id, 'editor', '?limit=100'));
@@ -102,20 +104,36 @@ test('native mounted Collection pages preserve current Access, safe summaries, b
     index === 1 ? 'unlisted' : index === 8 || index === 14 ? 'public' : 'private',
   ) as Array<'private' | 'unlisted' | 'public'>;
   const sources = await Promise.all(visibilities.map((visibility, index) => collection(`mount-${index}`, visibility)));
+  const sharedSubject = await f.call('owner', 'POST', '/v1/subjects', {
+    type: 'schema:Book',
+    labels: { en: 'Shared mount member' },
+  });
+  expect(sharedSubject.status).toBe(201);
+  for (const source of [sources[1]!, sources[8]!]) {
+    const added = await f.call('owner', 'POST', `/v1/collections/${source.id}/members`, {
+      subjectId: sharedSubject.body.subject.id,
+      note: 'private occurrence note',
+    });
+    expect(added.status).toBe(201);
+  }
   const mounted = await zone(sources.map(({ id }) => id));
   const readable = [sources[1]!, sources[8]!, sources[14]!];
   const before = f.access.readChecks.length;
   const defaultPage = page(await list(mounted.id));
   expect(defaultPage.collections.map(({ id }) => id)).toEqual(readable.map(({ id }) => id));
+  expect(defaultPage.collections.map(({ memberCount }) => memberCount)).toEqual([1, 1, 0]);
   expect(defaultPage.next).toBeNull();
   expect(defaultPage).not.toHaveProperty('total');
   for (const item of defaultPage.collections) {
     expect(item).not.toHaveProperty('members');
     expect(item).not.toHaveProperty('sourcePosition');
+    expect(item).not.toHaveProperty('allowedVisibilityActions');
   }
   const inspected = f.access.readChecks.slice(before).filter(({ action }) => action === 'collection:read');
   expect(inspected).toHaveLength(32);
   const serialized = JSON.stringify(defaultPage);
+  expect(serialized).not.toContain(sharedSubject.body.subject.id);
+  expect(serialized).not.toContain('private occurrence note');
   for (const source of sources.filter((_, index) => ![1, 8, 14].includes(index))) {
     expect(serialized).not.toContain(source.id);
     expect(serialized).not.toContain(source.title);
@@ -136,6 +154,9 @@ test('native mounted Collection pages preserve current Access, safe summaries, b
 
   const second = page(await list(mounted.id, 'editor', `?limit=1&cursor=${encodeURIComponent(first.next!)}`));
   expect(second.collections.map(({ id }) => id)).toEqual([readable[1]!.id]);
+  expect(
+    page(await list(mounted.id, 'editor', `?limit=1&cursor=${encodeURIComponent(first.next!)}`)),
+  ).toEqual(second);
   const third = page(await list(mounted.id, 'editor', `?limit=1&cursor=${encodeURIComponent(second.next!)}`));
   expect(third.collections.map(({ id }) => id)).toEqual([readable[2]!.id]);
   expect(third.next).toBeNull();
@@ -156,6 +177,18 @@ test('native mounted Collection pages preserve current Access, safe summaries, b
   expect((await list(mounted.id, 'editor', '?limit=0')).status).toBe(400);
   expect(problem((await list(mounted.id, 'editor', '?cursor=invalid')).body).code).toBe('invalid_cursor');
 
+  const anonymousFirst = page(await list(mounted.id, 'anonymous', '?limit=1'));
+  expect(anonymousFirst.collections.map(({ id }) => id)).toEqual([sources[1]!.id]);
+  const anonymousReplay = page(await list(mounted.id, 'anonymous', '?limit=1'));
+  expect(anonymousReplay.next).toBe(anonymousFirst.next);
+  const anonymousBinding = { route: cursorRoute, viewer: null, query: { zoneId: mounted.id, limit: 1 } };
+  const anonymousCursor = await decodeListCursor(ring, anonymousBinding, anonymousFirst.next!, f.clock());
+  expect(anonymousCursor.ok && anonymousCursor.after[0]).toBe(sources[1]!.id);
+  const anonymousSecond = page(
+    await list(mounted.id, 'anonymous', `?limit=1&cursor=${encodeURIComponent(anonymousFirst.next!)}`),
+  );
+  expect(anonymousSecond.collections.map(({ id }) => id)).toEqual([sources[8]!.id]);
+
   const fetcher: typeof fetch = (input, init) => f.app.handle(new Request(input, init));
   const client = createKernelClient('http://kernel.test', {
     headers: { authorization: `Bearer ${f.access.bearer('editor')}` },
@@ -165,6 +198,13 @@ test('native mounted Collection pages preserve current Access, safe summaries, b
   expect(received.status).toBe(200);
   expect(received.error).toBeNull();
   expect(received.data?.collections.map(({ id }) => id)).toEqual(readable.map(({ id }) => id));
+  const receivedEmpty = await zoneCollections(client, empty.id).get();
+  expect(receivedEmpty.status).toBe(200);
+  expect(receivedEmpty.data).toEqual({ collections: [], next: null });
+  const receivedConcealed = await zoneCollections(client, hiddenZone.id).get();
+  expect(receivedConcealed.status).toBe(404);
+  expect(receivedConcealed.data).toBeNull();
+  expect(receivedConcealed.error?.value).toMatchObject({ code: 'not_found', status: 404 });
 
   const changed = await f.call('owner', 'PATCH', `/v1/collections/${readable[0]!.id}`, {
     revision: readable[0]!.revision,
@@ -223,6 +263,11 @@ test('native mounted Collection pages preserve current Access, safe summaries, b
   expect(problem(unavailable.body).code).toBe('dependency_unavailable');
   expect(unavailable.headers.get('retry-after')).toBe('7');
   expect(unavailable.headers.get('cache-control')).toBe('private, no-store');
+  unavailableId = readable[1]!.id;
+  const receivedUnavailable = await zoneCollections(client, mounted.id).get();
+  expect(receivedUnavailable.status).toBe(503);
+  expect(receivedUnavailable.data).toBeNull();
+  expect(receivedUnavailable.error?.value).toMatchObject({ code: 'dependency_unavailable', status: 503 });
 
   const finalWindowSource = await collection('final-window-private', 'private');
   const sourceRoute = routeOf(finalWindowSource.id)!;
@@ -255,6 +300,33 @@ test('native mounted Collection pages preserve current Access, safe summaries, b
   );
   expect(revokedCursor.status).toBe(409);
   expect(problem(revokedCursor.body).code).toBe('stale_cursor');
+
+  const lifecycleZone = await zone([sources[8]!.id, sources[14]!.id]);
+  const lifecyclePage = page(await list(lifecycleZone.id, 'editor', '?limit=1'));
+  const lifecycleCursor = lifecyclePage.next!;
+  const currentSource = await f.call('owner', 'GET', `/v1/collections/${sources[8]!.id}`);
+  const deletedSource = await f.call(
+    'owner',
+    'DELETE',
+    `/v1/collections/${sources[8]!.id}?revision=${currentSource.body.collection.revision}`,
+  );
+  expect(deletedSource.status).toBe(204);
+  const deletedContinuation = await list(
+    lifecycleZone.id,
+    'editor',
+    `?limit=1&cursor=${encodeURIComponent(lifecycleCursor)}`,
+  );
+  expect(deletedContinuation.status).toBe(409);
+  expect(problem(deletedContinuation.body).code).toBe('stale_cursor');
+  const restoredSource = await f.call('owner', 'POST', `/v1/collections/${sources[8]!.id}:restore`, {
+    deletionId: deletedSource.headers.get('library-collection-deletion-id'),
+    revision: Number(deletedSource.headers.get('library-collection-deletion-revision')),
+  });
+  expect(restoredSource.status).toBe(200);
+  const restoredContinuation = page(
+    await list(lifecycleZone.id, 'editor', `?limit=1&cursor=${encodeURIComponent(lifecycleCursor)}`),
+  );
+  expect(restoredContinuation.collections.map(({ id }) => id)).toEqual([sources[14]!.id]);
 
   await suspendAccount(f.db.admin, f.accounts.owner);
   const suspendedOwner = await list(mounted.id);
