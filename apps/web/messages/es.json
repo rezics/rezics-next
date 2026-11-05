@@ -10408,5 +10408,10 @@
   "library_copy_compare_previous_identity": "Identidad seleccionada anteriormente",
   "library_copy_compare_previous_revision": "Revisión observada anterior",
   "library_copy_compare_current_revision": "Revisión recibida actual",
-  "library_copy_compare_find_row": "Ir a la fila actual para volver a seleccionar"
+  "library_copy_compare_find_row": "Ir a la fila actual para volver a seleccionar",
+  "subject_synopsis_global_only": "Esta página de corrección solo admite lecturas Global. Vuelve a la lectura seleccionada para consultar su sinopsis y sus referencias.",
+  "subject_synopsis_visit_invalid": "No se ha podido abrir esta visita a la sinopsis. Vuelve a la lectura actual de la obra y selecciona de nuevo la sinopsis.",
+  "subject_synopsis_visit_changed": "No se ha podido volver a abrir la sinopsis solicitada con su documento original. La lectura actual puede haber cambiado o no estar disponible.",
+  "subject_synopsis_current_field": "Consultar el campo Global actual en una nueva visita",
+  "subject_synopsis_return_changed": "La sinopsis seleccionada anteriormente ha cambiado o ya no está disponible. Se muestra la lectura actual."
 }

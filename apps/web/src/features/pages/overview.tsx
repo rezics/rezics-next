@@ -82,6 +82,7 @@ import { countFromLinks, formatCount, sumCounts, type Count } from '../count';
 import { SignInPrompt } from '../../threads/write-prompts';
 import { useSession } from '../../session/query';
 import { subjectHref } from '../../subject/subject-href';
+import { synopsisVisitHref } from './subject-summary-reading/visit';
 import { withSubjectVisitReturn, summaryReadingFragment, summaryReadingReturn } from './subject-visit-navigation';
 import {
   SUMMARY_PROPERTY as SUMMARY_CHOICE_PROPERTY,
@@ -1302,6 +1303,11 @@ function SummaryContent({
     value.realm ?? null,
     value.releaseDigest ?? null,
     revision ?? null,
+    value.reader,
+    value.cacheReader,
+    session.state,
+    session.subject,
+    session.csrfToken,
   ]);
   const [selectionState, setSelectionState] = useState<{
     sourceKey: string;
@@ -1314,12 +1320,19 @@ function SummaryContent({
     choices.find((choice) => choice.statement.id === defaultId);
   const selectedId = selectedChoice?.statement.id;
   const returnedFocus = useRef<'reading' | 'evidence' | null>(null);
+  const [changedReturn, setChangedReturn] = useState<string>();
   const choicesRef = useRef(choices);
   choicesRef.current = choices;
   const expectedContext = value.context?.id ?? read.subject.context;
   useEffect(() => {
     const restore = () => {
       const descriptor = summaryReadingReturn(window.location.hash);
+      if (!window.location.hash.startsWith('#subject-summary-reading?')) return;
+      const changed = () => {
+        setSelectionState(null);
+        setChangedReturn(sourceKey);
+        returnedFocus.current = 'reading';
+      };
       if (
         !descriptor ||
         descriptor.locale !== value.locale ||
@@ -1327,10 +1340,16 @@ function SummaryContent({
         descriptor.realm !== value.realm ||
         descriptor.release !== value.releaseDigest ||
         descriptor.source !== revision
-      )
+      ) {
+        changed();
         return;
+      }
       const match = choicesRef.current.find((choice) => synopsisReturnMatches(choice, descriptor));
-      if (!match) return;
+      if (!match) {
+        changed();
+        return;
+      }
+      setChangedReturn(undefined);
       setSelectionState({
         sourceKey,
         candidateId: match.statement.id,
@@ -1350,7 +1369,7 @@ function SummaryContent({
       focus === 'evidence' ? 'subject-summary-evidence' : 'subject-summary-reading',
     );
     (target ?? document.getElementById('subject-summary-reading'))?.focus();
-  }, [selectedId, selectionState]);
+  }, [selectedId, selectionState, changedReturn, sourceKey]);
 
   const reference = summaryRetryReference(selectedChoice);
   const target = useMemo<SummaryRetryTarget | null>(
@@ -1603,12 +1622,26 @@ function SummaryContent({
       : 'none';
   const authoredHref =
     selectedChoice && readingReturn
-      ? withSubjectVisitReturn(
+      ? synopsisVisitHref(
           `${subjectHref({ id: read.subject.id, label: value.subjectLabel || value.unlabelled }, value.locale).href}/authored?${new URLSearchParams({ property: SUMMARY_CHOICE_PROPERTY })}`,
           readingReturn,
           value.locale,
         )
       : undefined;
+  const correctionIntent = (
+    <>
+      {advice === 'sign-in' && readingReturn && (
+        <SignInPrompt returnTo={readingReturn} label={m.account_sign_in({}, options)} compact />
+      )}
+      {advice === 'allowed' && authoredHref && (
+        <p className="text-sm">
+          <a className={`${linkClass} ${linkColor}`} href={authoredHref}>
+            {m.correction_title({}, options)}
+          </a>
+        </p>
+      )}
+    </>
+  );
   return (
     <section
       id={id}
@@ -1660,6 +1693,7 @@ function SummaryContent({
           {synopsisLanguageName(selectedChoice.language, value.locale)} ({selectedChoice.language})
         </p>
       )}
+      {changedReturn === sourceKey && <p role="status">{m.subject_synopsis_return_changed({}, options)}</p>}
       {selectorUnavailable && <p role="status">{m.subject_synopsis_choices_unavailable({}, options)}</p>}
       {noSynopsis && <p role="status">{m.subject_synopsis_none({}, options)}</p>}
       <div id="subject-summary-reading" tabIndex={-1} className="scroll-mt-32 focus-visible:outline-2">
@@ -1707,12 +1741,14 @@ function SummaryContent({
               <>
                 {passage}
                 {candidateEvidence}
+                {correctionIntent}
               </>
             </SpoilerGate>
           ) : (
             <>
               {passage}
               {candidateEvidence}
+              {correctionIntent}
             </>
           ))}
       </div>
@@ -1727,16 +1763,6 @@ function SummaryContent({
           />
           <LanguageTag lang={description.lang} locale={value.locale} />
         </div>
-      )}
-      {advice === 'sign-in' && readingReturn && (
-        <SignInPrompt returnTo={readingReturn} label={m.account_sign_in({}, options)} compact />
-      )}
-      {advice === 'allowed' && authoredHref && (
-        <p className="text-sm">
-          <a className={`${linkClass} ${linkColor}`} href={authoredHref}>
-            {m.correction_title({}, options)}
-          </a>
-        </p>
       )}
       {advice === 'denied' && (
         <p role="status" className="text-sm text-muted-foreground">

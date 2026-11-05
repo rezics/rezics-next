@@ -10408,5 +10408,10 @@
   "library_copy_compare_previous_identity": "이전에 선택한 기록 식별자",
   "library_copy_compare_previous_revision": "이전에 확인한 리비전",
   "library_copy_compare_current_revision": "현재 받은 리비전",
-  "library_copy_compare_find_row": "현재 행으로 이동하여 다시 선택"
+  "library_copy_compare_find_row": "현재 행으로 이동하여 다시 선택",
+  "subject_synopsis_global_only": "이 수정 페이지는 Global 읽기만 지원합니다. 선택한 읽기로 돌아가 해당 줄거리와 근거를 확인하세요.",
+  "subject_synopsis_visit_invalid": "이 줄거리 방문을 열 수 없습니다. 작품의 현재 읽기로 돌아가 줄거리를 다시 선택하세요.",
+  "subject_synopsis_visit_changed": "원래 문서 연결로 요청한 줄거리를 다시 열 수 없습니다. 현재 읽기가 변경되었거나 사용할 수 없습니다.",
+  "subject_synopsis_current_field": "새 방문으로 현재 Global 필드 확인",
+  "subject_synopsis_return_changed": "이전에 선택한 줄거리가 변경되었거나 더 이상 제공되지 않습니다. 현재 읽기를 표시합니다."
 }

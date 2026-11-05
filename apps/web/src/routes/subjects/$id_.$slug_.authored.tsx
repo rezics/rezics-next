@@ -19,7 +19,9 @@ import { useSession } from '../../session/query';
 import { getLocale } from '../../paraglide/runtime';
 import { m } from '../../paraglide/messages.js';
 import { canonicalRedirect, keepSearch } from '../../subject/subject-href';
-import { subjectVisitReturn } from '../../features/pages/subject-visit-navigation';
+import { synopsisVisit, SUMMARY_VISIT_ADDRESS_BYTE_CAP } from '../../features/pages/subject-summary-reading/visit';
+import { SUMMARY_PROPERTY } from '../../features/pages/subject-summary-reading/model';
+import { candidateContext } from '../../subject/candidates';
 
 const canonicalAuthored = createServerFn({ method: 'GET', strict: false })
   .validator((value: { id: string; slug: string; locale: string; search: string }) => {
@@ -31,13 +33,21 @@ const canonicalAuthored = createServerFn({ method: 'GET', strict: false })
       value.slug.length > 128 ||
       typeof value.locale !== 'string' ||
       typeof value.search !== 'string' ||
-      value.search.length > 2048
+      new TextEncoder().encode(value.search).byteLength > SUMMARY_VISIT_ADDRESS_BYTE_CAP
     )
       throw notFound();
     return value;
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
+    const search = new URL(data.search, 'https://rezics.invalid').searchParams;
+    const values = search.getAll('via');
+    const visit = synopsisVisit(values.length > 1 ? '' : values[0], data.id, data.locale);
+    // An unsupported reading must never borrow anonymous Global labels for its canonical identity.
+    if (visit.kind === 'invalid' || (visit.kind === 'selected' &&
+      (visit.selection.realm || visit.selection.context !== candidateContext || search.get('property') !== SUMMARY_PROPERTY)))
+      return { id: data.id };
+
     const [{ kernelClient }, { loadSubject }] = await Promise.all([
       import('../../kernel/client'),
       import('../../subject/load-subject'),
@@ -74,10 +84,18 @@ function AuthoredRoute() {
   const { id } = Route.useLoaderData();
   const { property } = Route.useSearch();
   const locale = getLocale();
-  const locationSearch = useRouterState({ select: (state) => state.location.searchStr });
-  const via = subjectVisitReturn(new URLSearchParams(locationSearch).get('via'), locale);
-  const candidateWork = useCandidateWork(JSON.stringify([id, locale]));
-  const editorWork = useCatalogueLifetime(JSON.stringify([id, locale, property]));
+  const location = useRouterState({ select: (state) => state.location });
+  const values = new URLSearchParams(location.searchStr).getAll('via');
+  const visit = synopsisVisit(values.length > 1 ? '' : values[0], id, locale);
+  const unsupported = visit.kind === 'selected' &&
+    (!!visit.selection.realm || visit.selection.context !== candidateContext);
+  const invalid = visit.kind === 'invalid' || (visit.kind === 'selected' && property !== SUMMARY_PROPERTY);
+  const via = visit.kind === 'selected' || visit.kind === 'ordinary' ? visit.returnTo : undefined;
+  const selectedVia = visit.kind === 'selected' ? via : undefined;
+  const identity = JSON.stringify([id, locale, property, selectedVia, invalid, unsupported]);
+  const candidateWork = useCandidateWork(identity);
+  const editorWork = useCatalogueLifetime(identity);
+  const currentFieldHref = `${location.pathname}?${new URLSearchParams({ property: SUMMARY_PROPERTY })}`;
   const { state } = useSession();
   const returnLink = via ? (
     <p className="px-6 text-sm">
@@ -88,21 +106,41 @@ function AuthoredRoute() {
   ) : null;
   const read = async (field = property, session?: string) => {
     const result = await loadAuthoredField({
-      data: editorRequest({ id, property: field, session }, editorWork),
+      data: editorRequest({ id, property: field, session, via: selectedVia }, editorWork),
       headers: csrfHeaders(),
     });
     return editorWork.live() ? result : ({ ok: false, reason: 'denied' } as const);
   };
   const query = useQuery({
-    queryKey: ['authored-field', id, property, locale, candidateWork.generation],
+    queryKey: ['authored-field', identity, candidateWork.generation],
     queryFn: () => (candidateWork.live() ? read() : Promise.resolve({ ok: false, reason: 'denied' } as const)),
-    enabled: state === 'signed-in',
+    enabled: state === 'signed-in' && !invalid && !unsupported,
     staleTime: 0,
     gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
+  if (invalid || unsupported)
+    return (
+      <div className="space-y-3 p-6">
+        <h1 className="text-xl font-semibold">{m.authored_title()}</h1>
+        <p role="status">{unsupported ? m.subject_synopsis_global_only() : m.subject_synopsis_visit_invalid()}</p>
+        {returnLink}
+      </div>
+    );
+  if (selectedVia && query.data && !query.data.ok)
+    return (
+      <div className="space-y-3 p-6">
+        <h1 className="text-xl font-semibold">{m.authored_title()}</h1>
+        <p role="status">{m.subject_synopsis_visit_changed()}</p>
+        <EditorFailure reason={query.data.reason} locale={locale} />
+        <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={currentFieldHref}>
+          {m.subject_synopsis_current_field()}
+        </a>
+        {returnLink}
+      </div>
+    );
   if (state === 'signed-out')
     return (
       <>
@@ -134,7 +172,7 @@ function AuthoredRoute() {
   return (
     <>
       <AuthoredField
-        key={`${id}:${property}:${locale}`}
+        key={editorWork.generation}
         initial={query.isError ? { ok: false, reason: 'unavailable' } : query.data}
         locale={locale}
         transport={{
@@ -144,7 +182,7 @@ function AuthoredRoute() {
             !work?.live()
               ? Promise.resolve({ comparison: { ok: false, reason: 'denied' }, body: null })
               : loadAuthoredReview({
-                  data: { id, property: field, candidate, cursor, session, expectedReader: work.reader },
+                  data: { id, property: field, candidate, cursor, session, via: selectedVia, expectedReader: work.reader },
                   headers: csrfHeaders(),
                 }),
         }}
@@ -154,6 +192,13 @@ function AuthoredRoute() {
             : confirmAuthoredField({ data, headers: csrfHeaders() })
         }
       />
+      {selectedVia && (
+        <p className="px-6 text-sm">
+          <a className="inline-flex min-h-11 items-center underline underline-offset-4" href={currentFieldHref}>
+            {m.subject_synopsis_current_field()}
+          </a>
+        </p>
+      )}
       {returnLink}
     </>
   );

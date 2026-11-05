@@ -2520,3 +2520,31 @@ render requests. It admits the complete choice metadata projection up to 256 KiB
 make the selector unavailable instead of dropping choices. This Web consumer limit is separate from native statement,
 provenance and document bounds. It retains one selected body, one active explicit read and one bounded return
 descriptor; no cross-visit body cache is added. Composition growth and native producer checks remain separate acceptance.
+
+### Selected synopsis correction visits
+
+Decision: a synopsis correction visit inspects the exact current Global assertion named by the existing bounded
+return locator. It never substitutes the ordinary language default for an explicit selection. Realm and other
+unsupported Contexts explain the Global-only destination before canonical Global label reads or editor reads;
+return remains a real link to the originating reading. Malformed, duplicate and mismatched visit locators cannot
+start an editor. A separate current Global field link retires the selection and starts an ordinary visit.
+
+The authored address and its refresh/review transport retain one validated `via`. The current native Subject,
+best-rank synopsis admission, active Definition release and exact candidate/document/digest/language binding must
+match before inspection. Failed body binding leaves a changed/unavailable view with a deliberate current-field link.
+Inspection does not initialize an editable draft or grant an action; the original authoring controller still owns
+independent drafts, current native advice, proposals, confirmation and uncertain-result recovery. Subject, locale,
+selection and observed reader changes retire the visit, including A/B/A revisits. The producer charges UTF-8 bytes
+and encoding expansion for the whole authored address against its existing 2,048-byte outer budget. The 512-entry,
+262,144-byte metadata admission and 2,048-character summary fragment bounds remain unchanged. No native request is
+added: inspection replaces selection inside the existing authored Subject/release/document/advice reads.
+
+The return reading announces a changed or unavailable selection and focuses the current synopsis when the saved
+binding no longer matches. Correction and sign-in hrefs are enclosed by the selected assertion's spoiler gate.
+
+Exact Sources receiving remains dependent on the Sources projection owner: `explainSubjectSources` currently
+redacts document values to `somevalue`, omits their document/digest/language binding and omits the Global resolved
+Context. Its language filter can also exclude a selected non-default-language assertion. `SubjectSourcesPage` cannot
+verify the required exact current binding from that result. The Sources reader and route remain unchanged until
+that owner supplies a compatible bounded projection; row indices, citation text and provider provenance cannot
+replace that seam. Native and browser acceptance, including complete Sources traversal, remains integration-owned.

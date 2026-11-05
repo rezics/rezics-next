@@ -10415,5 +10415,10 @@
   "library_copy_compare_previous_identity": "先前选中的记录标识",
   "library_copy_compare_previous_revision": "先前接收时的修订号",
   "library_copy_compare_current_revision": "当前接收的修订号",
-  "library_copy_compare_find_row": "前往当前行重新选择"
+  "library_copy_compare_find_row": "前往当前行重新选择",
+  "subject_synopsis_global_only": "此修正页面仅支持 Global 阅读。请返回所选阅读，继续查看其简介与证据。",
+  "subject_synopsis_visit_invalid": "无法打开这次简介查看。请返回作品当前的阅读页面，重新选择简介。",
+  "subject_synopsis_visit_changed": "无法按照原有的文档绑定重新打开所选简介。当前阅读可能已更改或不可用。",
+  "subject_synopsis_current_field": "单独查看当前的 Global 字段",
+  "subject_synopsis_return_changed": "先前所选的简介已更改或不再提供。此处显示当前阅读。"
 }

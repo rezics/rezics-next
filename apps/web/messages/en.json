@@ -10551,5 +10551,10 @@
   "library_copy_compare_previous_identity": "Previously selected identity",
   "library_copy_compare_previous_revision": "Previous observed revision",
   "library_copy_compare_current_revision": "Current received revision",
-  "library_copy_compare_find_row": "Go to current row to reselect"
+  "library_copy_compare_find_row": "Go to current row to reselect",
+  "subject_synopsis_global_only": "This correction destination supports Global readings only. Return to the selected reading to continue inspecting its synopsis and evidence.",
+  "subject_synopsis_visit_invalid": "This synopsis visit could not be opened. Return to the current work reading and choose the synopsis again.",
+  "subject_synopsis_visit_changed": "The requested synopsis could not be reopened with its original document binding. The current reading may have changed or be unavailable.",
+  "subject_synopsis_current_field": "Inspect the current Global field as a new visit",
+  "subject_synopsis_return_changed": "The previous synopsis selection has changed or is no longer available. This is the current reading."
 }

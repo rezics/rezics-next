@@ -10408,5 +10408,10 @@
   "library_copy_compare_previous_identity": "Zuvor ausgewählte Identität",
   "library_copy_compare_previous_revision": "Zuvor beobachtete Revision",
   "library_copy_compare_current_revision": "Aktuell empfangene Revision",
-  "library_copy_compare_find_row": "Zur aktuellen Zeile für erneute Auswahl"
+  "library_copy_compare_find_row": "Zur aktuellen Zeile für erneute Auswahl",
+  "subject_synopsis_global_only": "Diese Korrekturseite unterstützt nur Global-Lesarten. Kehren Sie zur ausgewählten Lesart zurück, um deren Zusammenfassung und Belege zu prüfen.",
+  "subject_synopsis_visit_invalid": "Diese Zusammenfassung konnte nicht geöffnet werden. Kehren Sie zur aktuellen Lesart des Werks zurück und wählen Sie die Zusammenfassung erneut aus.",
+  "subject_synopsis_visit_changed": "Die angeforderte Zusammenfassung konnte nicht mit ihrer ursprünglichen Dokumentzuordnung geöffnet werden. Die aktuelle Lesart hat sich möglicherweise geändert oder ist nicht verfügbar.",
+  "subject_synopsis_current_field": "Das aktuelle Global-Feld in einem neuen Besuch prüfen",
+  "subject_synopsis_return_changed": "Die zuvor ausgewählte Zusammenfassung wurde geändert oder ist nicht mehr verfügbar. Die aktuelle Lesart wird angezeigt."
 }

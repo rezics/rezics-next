@@ -10458,5 +10458,10 @@
   "library_copy_compare_previous_identity": "以前選択した記録の識別子",
   "library_copy_compare_previous_revision": "以前確認したリビジョン",
   "library_copy_compare_current_revision": "現在受信しているリビジョン",
-  "library_copy_compare_find_row": "現在の行に移動して選び直す"
+  "library_copy_compare_find_row": "現在の行に移動して選び直す",
+  "subject_synopsis_global_only": "この修正ページは Global の閲覧にのみ対応しています。選択した閲覧に戻り、そのあらすじと根拠を確認してください。",
+  "subject_synopsis_visit_invalid": "このあらすじを開けませんでした。作品の現在の閲覧ページに戻り、あらすじを選び直してください。",
+  "subject_synopsis_visit_changed": "元の文書との対応関係で、選択したあらすじを再表示できませんでした。現在の閲覧内容が変更されたか、利用できない可能性があります。",
+  "subject_synopsis_current_field": "新しい閲覧として現在の Global フィールドを確認",
+  "subject_synopsis_return_changed": "以前選択したあらすじは変更されたか、利用できなくなりました。現在の閲覧内容を表示しています。"
 }
