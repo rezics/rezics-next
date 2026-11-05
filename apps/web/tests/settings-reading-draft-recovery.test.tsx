@@ -15,6 +15,33 @@ const owner = () => ({
 const flushPromiseJobs = async () => {
   for (let index = 0; index < 8; index++) await Promise.resolve();
 };
+const withControlledTimeout = async (
+  run: (expire: () => void, delay: () => number | undefined) => Promise<void>,
+) => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  let callback: (() => void) | undefined;
+  let timeout: number | undefined;
+  globalThis.setTimeout = ((handler: Parameters<typeof setTimeout>[0], delay?: number) => {
+    timeout = delay;
+    callback = handler as unknown as () => void;
+    return 1 as ReturnType<typeof setTimeout>;
+  }) as typeof setTimeout;
+  globalThis.clearTimeout = (() => {}) as typeof clearTimeout;
+  try {
+    await run(
+      () => {
+        const current = callback;
+        callback = undefined;
+        current?.();
+      },
+      () => timeout,
+    );
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+};
 
 test('rejected choices survive failed and successful reads until explicit save or discard', async () => {
   for (const scenario of ['conflict', 'denied', 'closed'] as const) {
@@ -182,8 +209,7 @@ test('loading current values retains the exact uncertain original and later edit
 });
 
 test('a confirmed command keeps later edit-back and recovers a failed current read without replaying stale fields', async () => {
-  mock.timers.enable({ apis: ['setTimeout'] });
-  try {
+  await withControlledTimeout(async (expire, delay) => {
     const fixture = readingFixture('lost');
     let releaseRead!: (page: Awaited<ReturnType<typeof fixture.io.read>>) => void;
     let startRead!: () => void;
@@ -203,8 +229,9 @@ test('a confirmed command keeps later edit-back and recovers a failed current re
     await editor.edit({ spoilerLevel: 0 });
     const retrying = editor.retry();
     await readStarted;
+    expect(delay()).toBe(managedReadTimeout);
     const stalePage = await fixture.io.read();
-    mock.timers.tick(managedReadTimeout);
+    expire();
     await flushPromiseJobs();
     expect(editor.snapshot()).toMatchObject({
       phase: 'failed',
@@ -244,7 +271,5 @@ test('a confirmed command keeps later edit-back and recovers a failed current re
       draft: { spoilerLevel: 2, suitability: 'show' },
     });
     expect(live.calls).toHaveLength(1);
-  } finally {
-    mock.timers.restore();
-  }
+  });
 });
