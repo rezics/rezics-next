@@ -41,7 +41,6 @@ type MediaEntry = Journal & { accepted: string | null; status: string | null };
 const BYTES = 65536;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const fail = (): never => {
-  console.error(`DIAG record-binding stack\n${new Error('diag').stack}`);
   throw new TypeError('Invalid record binding operation');
 };
 function ensure(condition: unknown): asserts condition {
@@ -454,7 +453,6 @@ export class RecordBindings {
 
   /** Bind only a matching successful public command result; exact acknowledgements are replayable. */
   acknowledge(input: Owner, key: string, result: BatchWriteResult): void {
-    console.error(`DIAG batch result ${key}: ${JSON.stringify(result).slice(0, 3000)}`);
     const o = ownerInput(input);
     requestKey(o, key);
     const { value, bytes } = snapshot(result);
