@@ -69,6 +69,8 @@ test('Addon outer intent is closed, same-Subject and same-locale, with complete 
   expect(addonPublicCorrectionHref(base, { ...observed, returnHref: observed.returnHref + '界'.repeat(700) })).toBe(
     base + '?origin=!',
   );
+  const unicodeBase = base + '界'.repeat(180);
+  expect(addonPublicCorrectionHref(unicodeBase, observed)).toBe(unicodeBase + '?origin=!');
   expect(
     parseAddonPublicVisit(new URL(valid, 'https://site.test').search, addonProfileId, 'en', base + 'x'.repeat(1800)),
   ).toEqual({ kind: 'invalid' });
