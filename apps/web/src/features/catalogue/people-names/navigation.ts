@@ -23,8 +23,7 @@ export function peopleNamesAddress(subject: Subject, names: PeopleNames, locale:
 export function installPeopleNamesReturn(host: HTMLElement, returnHref: string | undefined, locale: string) {
   if (!returnHref) return;
   for (const anchor of host.querySelectorAll<HTMLAnchorElement>('[data-names-sources] a, [data-names-terms] a')) {
-    const destination = new URL(anchor.href);
-    if (destination.origin !== window.location.origin) continue;
+    const destination = new URL(anchor.href, 'https://rezics.invalid');
     const selectedReturn = contextHref(returnHref, destination.searchParams.get('realm') ?? undefined);
     destination.searchParams.delete('via');
     anchor.setAttribute(
