@@ -2,7 +2,14 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { Button } from '@rezics/ui/shadcn/button';
 import { useRouter } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useLayoutEffect, useMemo, useRef, useSyncExternalStore, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { Exposure, useOperation } from '../kernel/exposure';
 import { personalRead } from '../kernel/query';
 import {
@@ -65,17 +72,12 @@ export function MyLogsCurrentViewer({
     initial.page.state === 'loaded' ? initial.sessionSubject : null,
   );
   const windows = useMemo(
-    () =>
-      typeof window === 'undefined'
-        ? new MyLogsWindowNavigation()
-        : myLogsWindowNavigation(origin.client),
+    () => (typeof window === 'undefined' ? new MyLogsWindowNavigation() : myLogsWindowNavigation(origin.client)),
     [origin.client],
   );
   const windowSnapshot = useSyncExternalStore(windows.subscribe, windows.getSnapshot, windows.getSnapshot);
   const windowAuthorityKey =
-    !invalidPosition && origin.subject && origin.allowed[0]
-      ? JSON.stringify([origin.admissionKey(0), locale])
-      : null;
+    !invalidPosition && origin.subject && origin.allowed[0] ? JSON.stringify([origin.admissionKey(0), locale]) : null;
   useEffect(() => {
     const detach = windows.attach(() => router?.state.location.pathname.replace(/\/$/, '') === '/library/logs');
     const stopNavigation = router?.subscribe('onBeforeNavigate', ({ toLocation }) => {
@@ -241,7 +243,7 @@ export function MyLogsPageView({
   const listHeading = useRef<HTMLHeadingElement>(null);
   const locale = getLocale();
   const routeHref = router?.state.location.href ?? '/library/logs';
-  const effectiveCursor = page.state === 'loaded' && page.restarted ? null : cursor ?? null;
+  const effectiveCursor = page.state === 'loaded' && page.restarted ? null : (cursor ?? null);
   const acceptedCurrent =
     page.state === 'loaded' &&
     windowAuthorityKey !== null &&
@@ -266,11 +268,7 @@ export function MyLogsPageView({
     if (windows.consumeFocus(windowAuthorityKey)) listHeading.current?.focus();
   }, [page.state, windows, windowAuthorityKey, windowSnapshot.focusReady, origin]);
   const addressFor = (target: string | null) => myLogsWindowHrefs(routeHref, target, locale);
-  const move = (
-    action: MyLogsWindowAction,
-    target: string | null,
-    event: ReactMouseEvent<HTMLAnchorElement>,
-  ) => {
+  const move = (action: MyLogsWindowAction, target: string | null, event: ReactMouseEvent<HTMLAnchorElement>) => {
     if (
       event.defaultPrevented ||
       (event.button !== 0 && event.detail !== 0) ||

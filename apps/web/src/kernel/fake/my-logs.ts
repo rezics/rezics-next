@@ -115,7 +115,10 @@ export const routes: FakeRoute[] = [
     method: 'GET',
     path: /^\/v1\/publishedLogs\/([^/]+)$/,
     story: ({ match }) => {
-      if ((!scenario?.startsWith('public-') && scenario !== 'long' && scenario !== 'ready') || match?.[1] !== firstLog().id)
+      if (
+        (!scenario?.startsWith('public-') && scenario !== 'long' && scenario !== 'ready') ||
+        match?.[1] !== firstLog().id
+      )
         return undefined;
       detailReads += 1;
       detailId = match[1];

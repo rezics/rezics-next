@@ -304,7 +304,9 @@ test('My Logs keeps only nine accepted coordinates and preserves unrelated addre
   expect(visit.getSnapshot().coordinates).toHaveLength(9);
   expect(visit.getSnapshot().coordinates[0]).toBe('cursor-1');
   expect(visit.getSnapshot().coordinates.at(-1)).toBe('cursor-9');
-  expect(myLogsWindowHrefs('/library/logs?raw=%2f&cursor=old&%63ursor=duplicate&empty=#tab%2f', 'a/+==', 'zh-Hant')).toEqual({
+  expect(
+    myLogsWindowHrefs('/library/logs?raw=%2f&cursor=old&%63ursor=duplicate&empty=#tab%2f', 'a/+==', 'zh-Hant'),
+  ).toEqual({
     route: '/library/logs?raw=%2f&empty=&cursor=a%2F%2B%3D%3D#tab%2f',
     link: '/zh-Hant/library/logs?raw=%2f&empty=&cursor=a%2F%2B%3D%3D#tab%2f',
   });
