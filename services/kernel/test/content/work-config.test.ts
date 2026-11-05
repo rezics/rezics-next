@@ -103,14 +103,18 @@ test('each group is all or nothing and a partial group names its first missing v
 
 test('local storage is an explicit development-only root with the same object limit', () => {
   const local = readContentWorkConfig({ NODE_ENV: 'development', CONTENT_LOCAL_MEDIA_ROOT: LOCAL_MEDIA_ROOT });
-  expect(local.storage).toEqual({ kind: 'local', root: LOCAL_MEDIA_ROOT, maxObjectBytes: LOCAL_MEDIA_MAX_OBJECT_BYTES });
+  expect(local.storage).toEqual({
+    kind: 'local',
+    root: LOCAL_MEDIA_ROOT,
+    maxObjectBytes: LOCAL_MEDIA_MAX_OBJECT_BYTES,
+  });
   expect(local.absentGroups.map((group) => group.name)).toEqual(['sources']);
   expect(() => readContentWorkConfig({ CONTENT_LOCAL_MEDIA_ROOT: LOCAL_MEDIA_ROOT })).toThrow(
     'CONTENT_LOCAL_MEDIA_ROOT',
   );
-  expect(() =>
-    readContentWorkConfig({ NODE_ENV: 'production', CONTENT_LOCAL_MEDIA_ROOT: LOCAL_MEDIA_ROOT }),
-  ).toThrow('CONTENT_LOCAL_MEDIA_ROOT');
+  expect(() => readContentWorkConfig({ NODE_ENV: 'production', CONTENT_LOCAL_MEDIA_ROOT: LOCAL_MEDIA_ROOT })).toThrow(
+    'CONTENT_LOCAL_MEDIA_ROOT',
+  );
   expect(() =>
     readContentWorkConfig({ NODE_ENV: 'development', CONTENT_LOCAL_MEDIA_ROOT: '/tmp/outside-media' }),
   ).toThrow('CONTENT_LOCAL_MEDIA_ROOT');

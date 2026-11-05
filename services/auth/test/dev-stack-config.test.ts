@@ -71,9 +71,7 @@ test('local content setup selects exact Bangumi media hosts and preserves comple
   expect(() => developmentContentBindings({ CONTENT_R2_BUCKET: 'content-media' }, repository)).toThrow(
     'CONTENT_R2_ENDPOINT',
   );
-  expect(() =>
-    developmentContentBindings({ NODE_ENV: 'production' }, repository),
-  ).toThrow('NODE_ENV');
+  expect(() => developmentContentBindings({ NODE_ENV: 'production' }, repository)).toThrow('NODE_ENV');
 });
 
 test('local content reset removes only its configured media root', async () => {

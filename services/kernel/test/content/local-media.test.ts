@@ -1,10 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterEach, expect, test } from 'bun:test';
-import {
-  LOCAL_MEDIA_MAX_OBJECT_BYTES,
-  LOCAL_MEDIA_ROOT,
-  LocalMediaStorage,
-} from '../../src/content/local-media.ts';
+import { LOCAL_MEDIA_MAX_OBJECT_BYTES, LOCAL_MEDIA_ROOT, LocalMediaStorage } from '../../src/content/local-media.ts';
 
 const storage = () => new LocalMediaStorage({ root: LOCAL_MEDIA_ROOT, maxObjectBytes: LOCAL_MEDIA_MAX_OBJECT_BYTES });
 const ownedMediaIds = new Set<string>();
@@ -43,10 +39,8 @@ test('local media rejects path-shaped keys and writes larger than the shared obj
   );
   expect(() => writer.deletePrefix('m/../')).toThrow('Invalid local media prefix');
   expect(() =>
-    writer.put(
-      `m/${randomUUID()}/original`,
-      new Uint8Array(LOCAL_MEDIA_MAX_OBJECT_BYTES + 1),
-      { mediaType: 'image/jpeg' },
-    ),
+    writer.put(`m/${randomUUID()}/original`, new Uint8Array(LOCAL_MEDIA_MAX_OBJECT_BYTES + 1), {
+      mediaType: 'image/jpeg',
+    }),
   ).toThrow('byte limit');
 });

@@ -118,9 +118,12 @@ export function developmentContentBindings(
 
   const currentHosts = env.CONTENT_SOURCE_HOSTS;
   if (currentHosts === '') throw new Error('CONTENT_SOURCE_HOSTS');
-  const hosts = currentHosts === undefined ? LOCAL_MEDIA_SOURCE_HOST : currentHosts.split(',').includes(LOCAL_MEDIA_SOURCE_HOST)
-    ? currentHosts
-    : `${currentHosts},${LOCAL_MEDIA_SOURCE_HOST}`;
+  const hosts =
+    currentHosts === undefined
+      ? LOCAL_MEDIA_SOURCE_HOST
+      : currentHosts.split(',').includes(LOCAL_MEDIA_SOURCE_HOST)
+        ? currentHosts
+        : `${currentHosts},${LOCAL_MEDIA_SOURCE_HOST}`;
   if (hosts.split(',').length > 100) throw new Error('CONTENT_SOURCE_HOSTS');
   const bindings: Record<string, string> = { CONTENT_SOURCE_HOSTS: hosts };
   if (configuredR2.length === CONTENT_R2_VARIABLES.length) {
@@ -261,10 +264,7 @@ async function setup() {
   const keys = await developmentKeys();
   const contentBindings = developmentContentBindings(env);
   const kernelEnvFile = resolve(root, 'services/kernel/.env');
-  await privateFile(
-    kernelEnvFile,
-    updateEnvironmentText(await readFile(kernelEnvFile, 'utf8'), contentBindings),
-  );
+  await privateFile(kernelEnvFile, updateEnvironmentText(await readFile(kernelEnvFile, 'utf8'), contentBindings));
   await privateFile(resolve(state, 'importer.jwk'), JSON.stringify(keys.importer));
   await privateFile(
     resolve(root, 'apps/web/.dev.vars'),

@@ -94,9 +94,7 @@ async function boundedBytes(file: Awaited<ReturnType<typeof open>>, maximum: num
 export class LocalMediaStorage implements MediaStorage {
   #tail: Promise<void> = Promise.resolve();
 
-  constructor(
-    private readonly options: Readonly<{ root: string; maxObjectBytes: number }>,
-  ) {
+  constructor(private readonly options: Readonly<{ root: string; maxObjectBytes: number }>) {
     if (options.root !== LOCAL_MEDIA_ROOT || options.maxObjectBytes !== LOCAL_MEDIA_MAX_OBJECT_BYTES)
       throw new TypeError('Invalid local content media configuration');
   }
@@ -124,7 +122,8 @@ export class LocalMediaStorage implements MediaStorage {
 
   put(key: string, bytes: Uint8Array, _options: { mediaType: string }): Promise<void> {
     const { mediaId, variant } = parsedKey(key);
-    if (bytes.byteLength > this.options.maxObjectBytes) throw new RangeError('Local media object exceeds its byte limit');
+    if (bytes.byteLength > this.options.maxObjectBytes)
+      throw new RangeError('Local media object exceeds its byte limit');
     return this.#exclusive(async () => {
       const directory = await checkMediaDirectory(mediaId, true);
       if (directory === null) throw new Error('Local media directory is unavailable');

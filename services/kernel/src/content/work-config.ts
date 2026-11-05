@@ -72,7 +72,8 @@ function readStorage(env: Environment): ContentStorageConfig | null {
   }
   if (localRoot === undefined) return null;
   if (env.NODE_ENV !== 'development') throw new ConfigError('CONTENT_LOCAL_MEDIA_ROOT');
-  if (storageValue(env, 'CONTENT_LOCAL_MEDIA_ROOT') !== LOCAL_MEDIA_ROOT) throw new ConfigError('CONTENT_LOCAL_MEDIA_ROOT');
+  if (storageValue(env, 'CONTENT_LOCAL_MEDIA_ROOT') !== LOCAL_MEDIA_ROOT)
+    throw new ConfigError('CONTENT_LOCAL_MEDIA_ROOT');
   return Object.freeze({ kind: 'local', root: LOCAL_MEDIA_ROOT, maxObjectBytes: LOCAL_MEDIA_MAX_OBJECT_BYTES });
 }
 

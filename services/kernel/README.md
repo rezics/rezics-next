@@ -1306,7 +1306,7 @@ variable, never a value. Startup logs one line for each absent group.
 | `CONTENT_R2_BUCKET`            | Media bucket name, 3–63 lowercase letters, digits and hyphens.                                                                                                      |
 | `CONTENT_R2_ACCESS_KEY_ID`     | Private host-side R2 access key with media read/write/delete permission.                                                                                            |
 | `CONTENT_R2_SECRET_ACCESS_KEY` | Corresponding private secret.                                                                                                                                       |
-| `CONTENT_LOCAL_MEDIA_ROOT`     | Development only: exact repository path `.temp/local-stack/content-media`, with `NODE_ENV=development`; mutually exclusive with all R2 settings.                   |
+| `CONTENT_LOCAL_MEDIA_ROOT`     | Development only: exact repository path `.temp/local-stack/content-media`, with `NODE_ENV=development`; mutually exclusive with all R2 settings.                    |
 | `CONTENT_SOURCE_HOSTS`         | Comma-separated exact lowercase DNS source hosts, at most 100, for trusted HTTPS source imports. No schemes, ports, wildcard suffixes, IP literals or whitespace.   |
 
 Decision: the documented local stack selects a confined file-backed `MediaStorage` at `.temp/local-stack/content-media`
