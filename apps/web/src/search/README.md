@@ -85,6 +85,12 @@ the initiating control retires the queued handoff; the live status still announc
 Range controls show a localized Remove range link only for a committed property range; lower/upper strings and units
 stay local to the SearchPage committed-state identity across Filters dismissal and desktop/phone changes, and blank
 bounds remain invalid on Apply. The condition/language Revert action does not reset range drafts.
+Decision: quantity controls use the shared subject unit symbols, keep exact IDs inspectable in control titles and
+retained options, label unitless `1` as a count, and ask before changing a unit when a magnitude is present. Search's
+released unit roster has no related unit-label projection, so other unavailable labels keep the exact ID in the
+display message and control title. A declared `*` remains a marker, not a physical unit.
+The current quantity matcher requires exact unit identity and applies present `gte` and `lte` bounds inclusively;
+omitting either endpoint leaves that side open. Display labels do not convert values or change admission.
 
 Property changes preserve values only when released datatypes and value definitions match, ranges only when both
 definitions support the selected unit, and statement qualifiers only when both properties allow the same released

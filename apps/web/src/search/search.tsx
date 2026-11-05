@@ -59,6 +59,7 @@ import { useDiscoveryPersonalResults } from './discovery-personal-host';
 
 import { useRegisterHeaderSearchFilters } from './header-search/filter-region';
 import { ConditionEditor } from './condition-editor';
+import { searchQuantityUnitText } from './condition-quantity';
 import type { ConditionEntityContext } from './condition-entity';
 import { SearchRealmDiscovery } from './realm-discovery';
 import { isRealmDiscoverySearch, type RealmDiscoveryReader } from './realm-discovery-loader';
@@ -814,8 +815,14 @@ export function SearchPage({
   for (const [property, range] of Object.entries(data?.ranges ?? {}))
     add(
       `range:${property}`,
-      `${label(data?.conditionMetadata?.properties[property]?.labels, m.search_constraint_identity_property_unavailable({}, options))}: ${range.gte ?? '…'} – ${range.lte ?? '…'}${
-        range.unit ? ` (${m.search_constraint_identity_unit_unavailable({}, options)})` : ''
+      `${label(data?.conditionMetadata?.properties[property]?.labels, m.search_constraint_identity_property_unavailable({}, options))}: ${
+        range.gte === undefined ? '…' : `≥ ${range.gte}`
+      } – ${range.lte === undefined ? '…' : `≤ ${range.lte}`}${
+        data?.conditionMetadata?.properties[property]?.datatype === 'quantity'
+          ? ` (${searchQuantityUnitText(range.unit, data.conditionMetadata.properties[property]?.units ?? [], locale)})`
+          : range.unit
+            ? ` (${range.unit})`
+            : ''
       }`,
       {
         ...navigationState,

@@ -3,15 +3,24 @@ import type { ReactNode } from 'react';
 import { m } from '../../paraglide/messages.js';
 import { locales } from '../../paraglide/runtime.js';
 
-export function rangeDescription(range: FilterRange): string {
+export function rangeDescription(
+  range: FilterRange,
+  unitText?: (unit: string | undefined) => string | undefined,
+): ReactNode {
   const end = (value: unknown) => (typeof value === 'object' ? JSON.stringify(value) : String(value));
-  return [
-    range.gte === undefined ? '' : `≥ ${end(range.gte)}`,
-    range.lte === undefined ? '' : `≤ ${end(range.lte)}`,
-    range.unit ?? '',
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const unit = range.type === 'time' ? undefined : (unitText?.(range.unit) ?? range.unit);
+  return (
+    <>
+      {range.gte !== undefined && <span>≥ {end(range.gte)}</span>}
+      {range.lte !== undefined && <span>{range.gte !== undefined ? ' ' : ''}≤ {end(range.lte)}</span>}
+      {unit !== undefined && (
+        <span title={range.type === 'time' ? undefined : range.unit} data-unit-id={range.type === 'time' ? undefined : range.unit}>
+          {range.gte !== undefined || range.lte !== undefined ? ' ' : ''}
+          {unit}
+        </span>
+      )}
+    </>
+  );
 }
 
 /** Preserve the executed Boolean structure and same-statement qualifiers in the explanation. */
@@ -19,12 +28,14 @@ export function PredicateDescription({
   value,
   locale,
   label,
+  unitText,
   saved,
   previewNodes,
 }: {
   value: DiscoveryFilterDocument;
   locale: string;
   label: (id: string) => ReactNode;
+  unitText?: ((property: string, unit: string | undefined) => string | undefined) | undefined;
   saved?: ((id: string) => ReactNode) | undefined;
   previewNodes?: ReadonlySet<DiscoveryFilterDocument> | undefined;
 }) {
@@ -51,6 +62,7 @@ export function PredicateDescription({
               value={node}
               locale={locale}
               label={label}
+              unitText={unitText}
               saved={saved}
               previewNodes={previewNodes}
             />
@@ -87,7 +99,10 @@ export function PredicateDescription({
     const statement = value.statement;
     return (
       <>
-        {label(statement.property)}: {'in' in statement ? terms(statement.in) : rangeDescription(statement.range)}
+        {label(statement.property)}:{' '}
+        {'in' in statement
+          ? terms(statement.in)
+          : rangeDescription(statement.range, (unit) => unitText?.(statement.property, unit))}
         {'inverse' in statement && statement.inverse ? ' ←' : null}
         {'in' in statement && statement.concept
           ? ` (${statement.concept.scheme}${statement.concept.includeChildren ? ' + ↓' : ''})`

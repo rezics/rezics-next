@@ -9925,5 +9925,15 @@
   "music_release_retry_previous": "Reintentar volverá a leer exactamente la ventana anterior.",
   "music_release_retry_next": "Reintentar solicitará exactamente la ventana siguiente.",
   "music_release_retry_start": "Reintentar solicitará la primera ventana de la relación seleccionada.",
-  "music_release_retry_scope": "La ventana visible conserva su relación y sus apariciones hasta que otra solicitud tenga éxito."
+  "music_release_retry_scope": "La ventana visible conserva su relación y sus apariciones hasta que otra solicitud tenga éxito.",
+  "search_quantity_range_help": "Ambos límites incluyen los valores iguales. Deja un extremo vacío para mantener ese lado abierto.",
+  "search_quantity_unitless_count": "Recuento sin unidad (1)",
+  "search_quantity_unit_marker": "Marcador {unit} declarado; no es una unidad física",
+  "search_quantity_unit_not_admitted": "No admitida para esta propiedad: {unit}",
+  "search_quantity_unit_label_unavailable": "Nombre visible no disponible: {unit}",
+  "search_quantity_unit_missing": "Falta la unidad; elige una unidad publicada",
+  "search_quantity_unit_change_title": "¿Reemplazar el significado de la unidad?",
+  "search_quantity_unit_change_message": "Las magnitudes introducidas no cambiarán, pero significarán {to} en lugar de {from}. Confirma para reemplazar la unidad.",
+  "search_quantity_unit_change_confirm": "Reemplazar unidad",
+  "search_quantity_unit_change_cancel": "Mantener la unidad actual"
 }

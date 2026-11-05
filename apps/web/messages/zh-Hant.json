@@ -9935,5 +9935,15 @@
   "music_release_retry_previous": "重試會重新讀取相同的先前視窗。",
   "music_release_retry_next": "重試會要求相同的下一個視窗。",
   "music_release_retry_start": "重試會要求所選關聯的第一個視窗。",
-  "music_release_retry_scope": "在其他要求成功之前，畫面會保留原本視窗的關聯與收錄項目。"
+  "music_release_retry_scope": "在其他要求成功之前，畫面會保留原本視窗的關聯與收錄項目。",
+  "search_quantity_range_help": "兩個界限都包含相等的值。留空一端可保持該側開放。",
+  "search_quantity_unitless_count": "無單位計數 (1)",
+  "search_quantity_unit_marker": "已宣告的 {unit} 標記；不是物理單位",
+  "search_quantity_unit_not_admitted": "此屬性不允許使用：{unit}",
+  "search_quantity_unit_label_unavailable": "顯示名稱無法使用：{unit}",
+  "search_quantity_unit_missing": "缺少單位；請選擇已發布的單位",
+  "search_quantity_unit_change_title": "要取代單位的意義嗎？",
+  "search_quantity_unit_change_message": "已輸入的數值會保持不變，但意義會從 {from} 改為 {to}。確認後取代單位。",
+  "search_quantity_unit_change_confirm": "取代單位",
+  "search_quantity_unit_change_cancel": "保留目前單位"
 }

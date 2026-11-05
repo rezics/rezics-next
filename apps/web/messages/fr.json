@@ -9925,5 +9925,15 @@
   "music_release_retry_previous": "Réessayer relira exactement la fenêtre précédente.",
   "music_release_retry_next": "Réessayer demandera exactement la fenêtre suivante.",
   "music_release_retry_start": "Réessayer demandera la première fenêtre de la relation sélectionnée.",
-  "music_release_retry_scope": "La fenêtre visible conserve sa relation et ses occurrences jusqu’à la réussite d’une autre demande."
+  "music_release_retry_scope": "La fenêtre visible conserve sa relation et ses occurrences jusqu’à la réussite d’une autre demande.",
+  "search_quantity_range_help": "Les deux bornes incluent les valeurs égales. Laissez une extrémité vide pour garder ce côté ouvert.",
+  "search_quantity_unitless_count": "Compte sans unité (1)",
+  "search_quantity_unit_marker": "Marqueur {unit} déclaré ; ce n’est pas une unité physique",
+  "search_quantity_unit_not_admitted": "Non admise pour cette propriété : {unit}",
+  "search_quantity_unit_label_unavailable": "Nom d’affichage indisponible : {unit}",
+  "search_quantity_unit_missing": "Unité manquante ; choisissez une unité publiée",
+  "search_quantity_unit_change_title": "Remplacer le sens de l’unité ?",
+  "search_quantity_unit_change_message": "Les valeurs saisies resteront identiques, mais signifieront {to} au lieu de {from}. Confirmez pour remplacer l’unité.",
+  "search_quantity_unit_change_confirm": "Remplacer l’unité",
+  "search_quantity_unit_change_cancel": "Garder l’unité actuelle"
 }

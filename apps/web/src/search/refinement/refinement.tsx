@@ -13,6 +13,7 @@ import { useSearchRetryWait } from '../search-recovery-retry';
 import { FacetContinuationLedger, MAX_CACHED_FACET_PROPERTIES } from './facet-continuation';
 import { refinementHref, type RefinementConditions, type RefinementProperty } from './model';
 import { PropertyPicker } from './property-picker';
+import { quantityUnitChangeNeedsConfirmation, searchQuantityUnitText } from '../condition-quantity';
 import {
   createRangeDraftState,
   getRangeDraft,
@@ -474,31 +475,38 @@ function RefinementInstance({
                   </li>
                 );
               })}
-              {Object.entries(conditions.ranges ?? {}).map(([property, range]) => (
-                <li key={property}>
-                  <a
-                    className={buttonVariants({ variant: 'outline', size: 'sm' })}
-                    aria-label={m.refinement_remove(
-                      {
-                        value:
-                          label(data.properties.find((entry) => entry.property === property)?.labels ?? {}) ||
-                          m.refinement_range({}, options),
-                      },
-                      options,
-                    )}
-                    href={href({
-                      ...conditions,
-                      ranges: Object.fromEntries(
-                        Object.entries(conditions.ranges ?? {}).filter(([key]) => key !== property),
-                      ),
-                    })}
-                  >
-                    {label(data.properties.find((entry) => entry.property === property)?.labels ?? {})}:{' '}
-                    {range.gte ?? '…'} – {range.lte ?? '…'} {range.unit}
-                    <XIcon aria-hidden="true" className="size-3" />
-                  </a>
-                </li>
-              ))}
+              {Object.entries(conditions.ranges ?? {}).map(([property, range]) => {
+                const definition = data.properties.find((entry) => entry.property === property);
+                return (
+                  <li key={property}>
+                    <a
+                      className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                      aria-label={m.refinement_remove(
+                        {
+                          value: label(definition?.labels ?? {}) || m.refinement_range({}, options),
+                        },
+                        options,
+                      )}
+                      href={href({
+                        ...conditions,
+                        ranges: Object.fromEntries(
+                          Object.entries(conditions.ranges ?? {}).filter(([key]) => key !== property),
+                        ),
+                      })}
+                    >
+                      {label(definition?.labels ?? {})}:{' '}
+                      {range.gte === undefined ? '…' : `≥ ${range.gte}`} –{' '}
+                      {range.lte === undefined ? '…' : `≤ ${range.lte}`}{' '}
+                      {definition?.datatype === 'quantity' && (
+                        <span title={range.unit} data-unit-id={range.unit}>
+                          {searchQuantityUnitText(range.unit, definition.units ?? [], locale)}
+                        </span>
+                      )}
+                      <XIcon aria-hidden="true" className="size-3" />
+                    </a>
+                  </li>
+                );
+              })}
             </ul>
             <a
               className={buttonVariants({ variant: 'link', size: 'sm' })}
@@ -613,6 +621,14 @@ function RefinementInstance({
         ];
         const title =
           definition.mode === 'types' ? m.search_subject_types({}, options) : label(definition.labels) || property;
+        const propertyDisabled =
+          (busy && !keepSelectedEditable) ||
+          (!perPropertyState &&
+            !keepSelectedEditable &&
+            (state?.status === 'refused' ||
+              state?.status === 'restart' ||
+              state?.status === 'preparing' ||
+              (definition.mode !== 'range' && disabled)));
         return (
           <FieldSet
             key={property}
@@ -622,15 +638,7 @@ function RefinementInstance({
             }}
             tabIndex={-1}
             className="min-w-0 gap-2 border-t border-border/60 pt-4"
-            disabled={
-              (busy && !keepSelectedEditable) ||
-              (!perPropertyState &&
-                !keepSelectedEditable &&
-                (state?.status === 'refused' ||
-                  state?.status === 'restart' ||
-                  state?.status === 'preparing' ||
-                  (definition.mode !== 'range' && disabled)))
-            }
+            disabled={propertyDisabled}
           >
             <FieldLegend variant="label">{title}</FieldLegend>
             {definition.help && <p className="text-sm text-muted-foreground">{definition.help}</p>}
@@ -644,10 +652,14 @@ function RefinementInstance({
                 href={href}
                 navigate={navigate}
                 locale={locale}
+                identity={queryIdentity}
+                disabled={propertyDisabled}
                 draft={getRangeDraft(rangeDraftState, draftKey, definition.property, {
                   lower: conditions.ranges?.[definition.property]?.gte?.toString() ?? '',
                   upper: conditions.ranges?.[definition.property]?.lte?.toString() ?? '',
-                  unit: conditions.ranges?.[definition.property]?.unit ?? definition.units[0] ?? '',
+                  unit: conditions.ranges?.[definition.property]
+                    ? (conditions.ranges[definition.property]?.unit ?? '')
+                    : (definition.units[0] ?? ''),
                   invalid: false,
                 })}
                 onDraftChange={(draft) => changeRangeDraft(definition.property, draft)}
@@ -818,6 +830,8 @@ function RangeControl({
   href,
   navigate,
   locale,
+  identity,
+  disabled,
   draft,
   onDraftChange,
   deferNavigation = false,
@@ -829,6 +843,8 @@ function RangeControl({
   href: (conditions: RefinementConditions) => string;
   navigate: (href: string) => void;
   locale: string;
+  identity: string;
+  disabled: boolean;
   draft: RangeDraft;
   onDraftChange: (draft: RangeDraft) => void;
   deferNavigation?: boolean;
@@ -841,38 +857,92 @@ function RangeControl({
   const applied = range !== undefined;
   const { lower, upper, unit, invalid } = draft;
   const time = definition.datatype === 'time';
+  const [pendingUnitChange, setPendingUnitChange] = useState<
+    { from?: string; to?: string; identity: string; magnitudes: readonly string[] } | undefined
+  >();
+  const unitChangeDialog = useRef<HTMLDialogElement>(null);
+  const unitChangeId = useId();
+  useEffect(() => {
+    if (pendingUnitChange?.identity === identity && unitChangeDialog.current && !unitChangeDialog.current.open)
+      unitChangeDialog.current.showModal();
+  }, [identity, pendingUnitChange]);
+  useEffect(() => {
+    if (
+      pendingUnitChange &&
+      (disabled ||
+        pendingUnitChange.identity !== identity ||
+        (unit || undefined) !== pendingUnitChange.from ||
+        JSON.stringify(pendingUnitChange.magnitudes) !== JSON.stringify([lower, upper]))
+    )
+      setPendingUnitChange(undefined);
+  }, [disabled, identity, lower, pendingUnitChange, unit, upper]);
+  const unitText = (value: string | undefined) => searchQuantityUnitText(value, definition.units, locale);
+  const resolvePendingUnitChange = (confirmed: boolean) => {
+    if (!pendingUnitChange) return;
+    if (
+      confirmed &&
+      !disabled &&
+      pendingUnitChange.identity === identity &&
+      (unit || undefined) === pendingUnitChange.from &&
+      JSON.stringify(pendingUnitChange.magnitudes) === JSON.stringify([lower, upper])
+    )
+      onDraftChange({ ...draft, unit: pendingUnitChange.to ?? '' });
+    setPendingUnitChange(undefined);
+  };
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-2">
         <Field>
           <FieldLabel htmlFor={`${id}-lower`}>{m.refinement_lower({}, options)}</FieldLabel>
-          <Input
-            id={`${id}-lower`}
-            type="number"
-            name={rangeName?.(definition.property, 'from')}
-            min={time ? -Number.MAX_SAFE_INTEGER : undefined}
-            max={time ? Number.MAX_SAFE_INTEGER : undefined}
-            step={time ? '1' : 'any'}
-            value={lower}
-            onChange={(event) => {
-              onDraftChange({ ...draft, lower: event.currentTarget.value, invalid: false });
-            }}
-          />
+          <div className="flex min-w-0 items-center gap-2">
+            <Input
+              id={`${id}-lower`}
+              type="number"
+              name={rangeName?.(definition.property, 'from')}
+              min={time ? -Number.MAX_SAFE_INTEGER : undefined}
+              max={time ? Number.MAX_SAFE_INTEGER : undefined}
+              step={time ? '1' : 'any'}
+              value={lower}
+              onChange={(event) => {
+                onDraftChange({ ...draft, lower: event.currentTarget.value, invalid: false });
+              }}
+            />
+            {!time && (
+              <span
+                className="shrink-0 text-sm text-muted-foreground"
+                title={unit || undefined}
+                data-unit-id={unit || undefined}
+              >
+                {unitText(unit || undefined)}
+              </span>
+            )}
+          </div>
         </Field>
         <Field>
           <FieldLabel htmlFor={`${id}-upper`}>{m.refinement_upper({}, options)}</FieldLabel>
-          <Input
-            id={`${id}-upper`}
-            type="number"
-            name={rangeName?.(definition.property, 'to')}
-            min={time ? -Number.MAX_SAFE_INTEGER : undefined}
-            max={time ? Number.MAX_SAFE_INTEGER : undefined}
-            step={time ? '1' : 'any'}
-            value={upper}
-            onChange={(event) => {
-              onDraftChange({ ...draft, upper: event.currentTarget.value, invalid: false });
-            }}
-          />
+          <div className="flex min-w-0 items-center gap-2">
+            <Input
+              id={`${id}-upper`}
+              type="number"
+              name={rangeName?.(definition.property, 'to')}
+              min={time ? -Number.MAX_SAFE_INTEGER : undefined}
+              max={time ? Number.MAX_SAFE_INTEGER : undefined}
+              step={time ? '1' : 'any'}
+              value={upper}
+              onChange={(event) => {
+                onDraftChange({ ...draft, upper: event.currentTarget.value, invalid: false });
+              }}
+            />
+            {!time && (
+              <span
+                className="shrink-0 text-sm text-muted-foreground"
+                title={unit || undefined}
+                data-unit-id={unit || undefined}
+              >
+                {unitText(unit || undefined)}
+              </span>
+            )}
+          </div>
         </Field>
       </div>
       {!time && (
@@ -881,15 +951,32 @@ function RangeControl({
           <NativeSelect
             id={`${id}-unit`}
             value={unit}
-            onChange={(event) => onDraftChange({ ...draft, unit: event.currentTarget.value })}
+            onChange={(event) => {
+              const next = event.currentTarget.value || undefined;
+              if (quantityUnitChangeNeedsConfirmation(unit || undefined, next, [lower, upper]))
+                setPendingUnitChange({ from: unit || undefined, to: next, identity, magnitudes: [lower, upper] });
+              else onDraftChange({ ...draft, unit: next ?? '' });
+            }}
           >
+            <NativeSelectOption value="">{unitText(undefined)}</NativeSelectOption>
+            {unit && !definition.units.includes(unit) && (
+              <NativeSelectOption value={unit} title={unit}>
+                {unitText(unit)}
+              </NativeSelectOption>
+            )}
             {definition.units.map((value) => (
-              <NativeSelectOption key={value} value={value}>
-                {value}
+              <NativeSelectOption key={value} value={value} title={value}>
+                {unitText(value)}
               </NativeSelectOption>
             ))}
           </NativeSelect>
         </Field>
+      )}
+      {!time && <p className="text-sm text-muted-foreground">{m.search_quantity_range_help({}, options)}</p>}
+      {!time && ((applied && !unit) || (Boolean(unit) && !definition.units.includes(unit))) && (
+        <p role="alert" className="text-sm text-destructive">
+          {unitText(unit || undefined)}
+        </p>
       )}
       {time && <p className="text-sm text-muted-foreground">{m.refinement_year_hint({}, options)}</p>}
       {invalid && (
@@ -934,7 +1021,7 @@ function RangeControl({
             type="button"
             variant="outline"
             size="sm"
-            disabled={!time && !unit}
+            disabled={!time && (!unit || !definition.units.includes(unit))}
             onClick={() => {
               const gte = lower === '' ? undefined : Number(lower);
               const lte = upper === '' ? undefined : Number(upper);
@@ -968,6 +1055,43 @@ function RangeControl({
           </Button>
         )}
       </div>
+      {pendingUnitChange?.identity === identity && (
+        <dialog
+          ref={unitChangeDialog}
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby={`${unitChangeId}-title`}
+          aria-describedby={`${unitChangeId}-description`}
+          className="max-w-lg rounded-lg border border-border bg-background p-4 text-foreground shadow-xl backdrop:bg-black/50"
+          onCancel={(event) => {
+            event.preventDefault();
+            resolvePendingUnitChange(false);
+          }}
+        >
+          <h2 id={`${unitChangeId}-title`} className="font-semibold">
+            {m.search_quantity_unit_change_title({}, options)}
+          </h2>
+          <p id={`${unitChangeId}-description`} className="mt-2 text-sm text-muted-foreground">
+            {m.search_quantity_unit_change_message(
+              { from: unitText(pendingUnitChange.from), to: unitText(pendingUnitChange.to) },
+              options,
+            )}
+          </p>
+          <p className="mt-2 text-xs text-muted-foreground">
+            <code title={pendingUnitChange.from}>{pendingUnitChange.from ?? ''}</code>
+            {' → '}
+            <code title={pendingUnitChange.to}>{pendingUnitChange.to ?? ''}</code>
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button type="button" variant="outline" autoFocus onClick={() => resolvePendingUnitChange(false)}>
+              {m.search_quantity_unit_change_cancel({}, options)}
+            </Button>
+            <Button type="button" onClick={() => resolvePendingUnitChange(true)}>
+              {m.search_quantity_unit_change_confirm({}, options)}
+            </Button>
+          </div>
+        </dialog>
+      )}
     </div>
   );
 }

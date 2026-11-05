@@ -12,6 +12,7 @@ import type { SearchPageData } from '../search';
 import type { SearchLoaderDeps } from '../search-params';
 import { localizedLabel } from '../results';
 import { resultFreshness } from './observation';
+import { searchQuantityUnitText } from '../condition-quantity';
 
 /** Result context always consumes the executed state, independently of the editable form. */
 export function SearchCoverage({
@@ -37,6 +38,10 @@ export function SearchCoverage({
   const freshness = resultFreshness(observation.freshness, observation.as_of);
   const scope = state.resourceScope;
   const label = (id: string) => localizedLabel(data.conditionMetadata?.properties[id]?.labels ?? {}, locale).text || id;
+  const unitText = (property: string, unit: string | undefined) => {
+    const definition = data.conditionMetadata?.properties[property];
+    return definition?.datatype === 'quantity' ? searchQuantityUnitText(unit, definition.units ?? [], locale) : unit;
+  };
   const presets = useMemo(
     () => (data.conditionMetadata ? conditionPresetCatalogue(data.conditionMetadata, locale) : undefined),
     [data.conditionMetadata, locale],
@@ -128,15 +133,15 @@ export function SearchCoverage({
             ))}
             {Object.entries(state.ranges ?? {}).map(([property, range]) => (
               <li key={property}>
-                {label(property)}: {rangeDescription(range)}
+                {label(property)}: {rangeDescription(range, (unit) => unitText(property, unit))}
               </li>
             ))}
           </ul>
           {state.condition && (
-            <PredicateDescription value={state.condition} locale={locale} label={label} saved={saved} />
+            <PredicateDescription value={state.condition} locale={locale} label={label} unitText={unitText} saved={saved} />
           )}
           {resourcePredicate && (
-            <PredicateDescription value={resourcePredicate} locale={locale} label={label} saved={saved} />
+            <PredicateDescription value={resourcePredicate} locale={locale} label={label} unitText={unitText} saved={saved} />
           )}
           {(state.condition || state.filter) && <p>{m.search_context_predicates({}, options)}</p>}
           <p>{m.search_context_limits({}, options)}</p>

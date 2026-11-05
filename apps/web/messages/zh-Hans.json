@@ -9932,5 +9932,15 @@
   "music_release_retry_previous": "重试会重新读取相同的先前窗口。",
   "music_release_retry_next": "重试会请求相同的下一个窗口。",
   "music_release_retry_start": "重试会请求所选关联的第一个窗口。",
-  "music_release_retry_scope": "在其他请求成功之前，画面会保留原窗口的关联与收录项目。"
+  "music_release_retry_scope": "在其他请求成功之前，画面会保留原窗口的关联与收录项目。",
+  "search_quantity_range_help": "两个边界都包含相等的值。留空一端可保持该侧开放。",
+  "search_quantity_unitless_count": "无单位计数 (1)",
+  "search_quantity_unit_marker": "已声明的 {unit} 标记；不是物理单位",
+  "search_quantity_unit_not_admitted": "此属性不允许使用：{unit}",
+  "search_quantity_unit_label_unavailable": "显示名称不可用：{unit}",
+  "search_quantity_unit_missing": "缺少单位；请选择已发布的单位",
+  "search_quantity_unit_change_title": "替换单位含义？",
+  "search_quantity_unit_change_message": "已输入的数值会保持不变，但含义会从 {from} 改为 {to}。确认后替换单位。",
+  "search_quantity_unit_change_confirm": "替换单位",
+  "search_quantity_unit_change_cancel": "保留当前单位"
 }
