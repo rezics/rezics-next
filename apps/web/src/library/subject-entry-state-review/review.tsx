@@ -304,7 +304,12 @@ export function SubjectEntryStateReview({
       heading.current?.focus();
       return;
     }
-    if (!restoreControlFocus.current || draft || stage) return;
+    if (
+      !restoreControlFocus.current ||
+      (draft !== null && stage !== 'edit') ||
+      (draft === null && stage !== null)
+    )
+      return;
     restoreControlFocus.current = false;
     if (lifetime.current('library_entry.get', 'library_entry.put'))
       control.current?.querySelector<HTMLButtonElement>('[data-entry-state-trigger]')?.focus();
