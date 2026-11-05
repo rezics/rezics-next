@@ -77,12 +77,14 @@ test('public Organization entry preserves Context and current return, refuses un
   const { ProducerHistoryEntry } = await import('../src/features/catalogue/producer-history/entry');
   const { Route: ProducerRoute } = await import('../src/routes/subjects/$id_.$slug.producer');
   const { setLocale } = await import('../src/paraglide/runtime.js');
+  const { browserObservation } = await import('../src/session/observation');
   const { producerHistoryEntryVisit, producerHistoryVisitReturn } = await import(
     '../src/features/catalogue/producer-history/visit'
   );
   const messages = await import('../src/paraglide/messages.js');
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   queryClient.setQueryData(['session'], { state: 'signed-in', subject: 'origin-reader', csrfToken: 'csrf-origin' });
+  const stopObservation = browserObservation(queryClient).subscribeCache(() => {});
 
   const rootRoute = createRootRouteWithContext<{ queryClient: typeof queryClient }>()({ component: Outlet });
   const localeRoute = createRoute({ getParentRoute: () => rootRoute, path: '/$locale', component: Outlet });
@@ -159,6 +161,8 @@ test('public Organization entry preserves Context and current return, refuses un
 
     await navigate(`${admittedHref.pathname}${admittedHref.search}`);
     await act(async () => tick());
+    expect(router.state.location.pathname).toBe(admittedHref.pathname);
+    expect(host.textContent).toContain(messages.m.producer_history_intro());
     expect(producerReads.length).toBe(1);
     expect(producerReads[0]!.data.id).toBe(producerStudioId);
     expect(producerReads[0]!.data.context).toBeUndefined();
@@ -267,6 +271,7 @@ test('public Organization entry preserves Context and current return, refuses un
     expect(() => validate({ via: 'x'.repeat(2049) })).toThrow();
   } finally {
     await act(async () => root.unmount());
+    stopObservation();
     queryClient.clear();
     await window.happyDOM.abort();
     setLocale(previousLocale, { reload: false });
