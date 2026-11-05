@@ -91,6 +91,11 @@ export function MineCollectionsCurrentViewer({
   const address: MineCollectionsAddress = { ...admittedAddress, cursor: admittedAddress.cursor ?? null };
   const locale = getLocale();
   const origin = useLibraryReadOrigin(JSON.stringify([address, locale]), initial.sessionSubject);
+  const [mountedOrigin, setMountedOrigin] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    if (origin.mounted()) setMountedOrigin(origin.lifetime);
+  }, [origin.lifetime]);
+  const originMounted = mountedOrigin === origin.lifetime && origin.mounted();
   const authorityKey = admittedAddress.addressError ? null : mineCollectionsWindowAuthority(origin, locale);
   useLayoutEffect(() => {
     windows?.observe(authorityKey, address.cursor, address.layout, locationKey);
@@ -122,6 +127,7 @@ export function MineCollectionsCurrentViewer({
       pinsAdmitted={pinsAdmitted}
       collectionsAdmitted={admitted}
       origin={origin}
+      originMounted={originMounted}
       initial={initial}
       seed={lifetime.seed}
       {...(windows ? { windows } : {})}
@@ -163,6 +169,7 @@ function MineCollectionsViewerRead({
   pinsAdmitted,
   collectionsAdmitted,
   origin,
+  originMounted,
   initial,
   seed,
   windows,
@@ -175,6 +182,7 @@ function MineCollectionsViewerRead({
   pinsAdmitted: boolean;
   collectionsAdmitted: boolean;
   origin: ReturnType<typeof useLibraryReadOrigin>;
+  originMounted: boolean;
   initial: MineCollectionsViewerPage;
   seed: boolean;
   windows?: MineCollectionsWindowsVisit;
@@ -227,6 +235,7 @@ function MineCollectionsViewerRead({
   const admittedCollections =
     !!accepted &&
     collectionsAdmitted &&
+    originMounted &&
     origin.mounted() &&
     origin.isCurrent() &&
     origin.collectionsCurrent() &&
