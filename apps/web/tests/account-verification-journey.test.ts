@@ -9,6 +9,18 @@ import {
   type AgentVerificationRequest,
   type Operation,
 } from '../src/account-verification/transport';
+import {
+  readVerification,
+  requestVerification,
+  withdrawVerification,
+} from '../src/settings/verification-core';
+import {
+  canRequestVerification,
+  canRetryVerification,
+  canWithdrawVerification,
+  VerificationRecovery,
+  verificationWithdrawalObservation,
+} from '../src/settings/verification-recovery';
 
 const accountId = '0192f3a0-6c1e-7b2a-9d4e-000100000001';
 const requestId = '0192f3a0-6c1e-7b2a-9d4e-000000000001';
@@ -202,4 +214,88 @@ test('all remaining operations use the declared account/request methods with no 
   expect(validOperation({ ...operation, approved: true })).toBe(false);
   expect(validOperation({ ...operation, reason: 'unexpected' })).toBe(false);
   expect(validOperation({ ...operation, key: 'not-a-key' })).toBe(false);
+});
+
+test('an applicant reads current status, keeps original operands through uncertainty, and withdraws only the current native request', async () => {
+  const draft = {
+    subject: subjectId,
+    statement: request.statement,
+    links: request.links.map((link) => ({ ...link })),
+  };
+  const pendingAdvice = [{ action: 'account:update', operations: ['account.withdraw_verification'] }];
+  const requestAdvice = [{ action: 'account:update', operations: ['account.request_verification'] }];
+  const calls: string[] = [];
+  let reads = 0;
+  const client = clientFor((incoming) => {
+    const url = new URL(incoming.url);
+    calls.push(`${incoming.method} ${url.pathname}`);
+    if (url.pathname === `/v1/accounts/${accountId}/verification`) {
+      reads++;
+      if (reads === 1)
+        return Response.json({ verificationRequest: null, viewerActions: requestAdvice });
+      if (reads === 2)
+        return Response.json(
+          { detail: 'Current status unavailable', code: 'overloaded', retryable: true, request_id: 'status-1' },
+          { status: 503, headers: { 'Retry-After': '5' } },
+        );
+      if (reads === 3)
+        return Response.json({ verificationRequest: request, viewerActions: pendingAdvice });
+      return Response.json({
+        verificationRequest: { ...request, state: 'withdrawn' },
+        viewerActions: requestAdvice,
+      });
+    }
+    if (url.pathname === `/v1/accounts/${accountId}:requestVerification`)
+      return Response.json({ verificationRequest: request }, { status: 201 });
+    if (url.pathname === `/v1/accounts/${accountId}:withdrawVerification`)
+      return Response.json({ verificationRequest: { ...request, state: 'withdrawn' } });
+    throw new Error(`Unexpected applicant path: ${url.pathname}`);
+  });
+  const sent: unknown[] = [];
+  const controller = new VerificationRecovery(accountId, {
+    read: async (currentAccountId) => ({
+      accountId: currentAccountId,
+      ...(await readVerification(client, currentAccountId, 'Bearer applicant')),
+      subjectTitle: 'Mira',
+    }),
+    request: async (currentAccountId, input) => {
+      sent.push(input);
+      return requestVerification(client, currentAccountId, 'Bearer applicant', input);
+    },
+    withdraw: async (currentAccountId, input) =>
+      withdrawVerification(client, currentAccountId, 'Bearer applicant', input.idempotencyKey),
+  });
+  await controller.reload();
+  expect(canRequestVerification(controller.snapshot().current)).toBe(true);
+  await controller.submit(draft);
+  const original = controller.snapshot().attempt;
+  expect(controller.snapshot()).toMatchObject({
+    phase: 'uncertain',
+    readStatus: 'error',
+    attempt: { receipt: request, input: original?.input },
+    failure: { status: 503, code: 'overloaded', retryable: true, requestId: 'status-1', retryAfter: '5' },
+  });
+  expect(canRetryVerification(controller.snapshot().attempt, controller.snapshot().current)).toBe(false);
+  draft.statement = 'Later draft';
+  await controller.retry();
+  expect(sent).toHaveLength(1);
+  expect(sent[0]).toBe(original?.input);
+  expect(JSON.stringify(original?.input)).toContain(request.statement);
+  await controller.reload();
+  expect(controller.snapshot()).toMatchObject({ phase: 'review', attempt: null, current: { verificationRequest: request } });
+  expect(canWithdrawVerification(controller.snapshot().current)).toBe(true);
+  const confirmation = verificationWithdrawalObservation(controller.snapshot().current);
+  await controller.withdraw(false);
+  expect(controller.snapshot().attempt).toBeNull();
+  await controller.withdraw(true);
+  expect(controller.snapshot().current?.verificationRequest?.state).toBe('withdrawn');
+  expect(verificationWithdrawalObservation(controller.snapshot().current)).not.toBe(confirmation);
+  expect(calls).toEqual([
+    `GET /v1/accounts/${accountId}/verification`,
+    `POST /v1/accounts/${accountId}:requestVerification`,
+    `GET /v1/accounts/${accountId}/verification`,
+    `GET /v1/accounts/${accountId}/verification`,
+    `POST /v1/accounts/${accountId}:withdrawVerification`,
+    `GET /v1/accounts/${accountId}/verification`,
+  ]);
 });

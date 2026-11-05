@@ -19,14 +19,19 @@ import {
 } from '../src/settings/verification-recovery';
 
 mock.module('@tanstack/react-start', () => start);
+let setupFault: unknown = new Error('Unexpected native read');
 mock.module('@tanstack/react-start/server', () => ({
   getRequest() {
-    throw new Error('Unexpected native read');
+    if (setupFault !== undefined) throw setupFault;
+    return new Request('https://site.example.test/en/settings');
   },
   setResponseHeader() {},
 }));
 mock.module('cloudflare:workers', () => ({ env: {} }));
 const { VerificationCard } = await import('../src/settings/verification');
+const { readVerificationState, requestVerificationAction, withdrawVerificationAction } =
+  await import('../src/settings/verification-actions');
+const { MediaProblem } = await import('../src/media/kernel');
 
 const empty: VerificationSnapshot = {
   accountId: 'alice',
@@ -377,7 +382,10 @@ test('a validated receipt survives a failed read, then yields to the newer curre
   expect(controller.snapshot()).toMatchObject({ phase: 'review', readStatus: 'success', current, attempt: null });
   expect(received).not.toContain(m.settings_verification_uncertain_request());
   expect(received).toContain(m.settings_verification_request_received());
+  expect(received).toContain(m.settings_verification_check_guidance());
+  expect(received).toContain(m.settings_verification_read_current());
   expect(received).not.toContain(m.settings_verification_retry_original());
+  expect(received).not.toContain(m.settings_verification_retry_request_guidance());
   expect(received).toContain('Later draft');
   expect(canRequestVerification(controller.snapshot().current)).toBe(true);
   await controller.withdraw(true);
@@ -408,4 +416,71 @@ test('read-only Verification recovery cannot mint request or withdrawal attempts
   expect(controller.snapshot().current).toEqual(empty);
   expect(controller.snapshot().attempt).toBeNull();
   expect(reads).toBe(1);
+});
+
+const commandDraft = {
+  accountId: 'alice',
+  subject: 'subject-1',
+  statement: 'Official domain challenge supplied for independent review.',
+  links: [{ label: 'Official site', url: 'https://example.org' }],
+  idempotencyKey: '00000000-0000-4000-8000-000000000001',
+};
+
+test('setup, transport and body faults return the private current-read and command envelopes without leaking the cause', async () => {
+  const leaked = 'Unexpected native read';
+  const previous = setupFault;
+  try {
+    setupFault = new Error(leaked);
+    const read = await readVerificationState({ data: { accountId: 'alice' } });
+    expect(read).toEqual({
+      ok: false,
+      failure: { status: 0, message: m.settings_verification_load_failed() },
+    });
+    expect(JSON.stringify(read)).not.toContain(leaked);
+    const requested = await requestVerificationAction({ data: commandDraft });
+    expect(requested).toEqual({ ok: false, status: 0, message: m.settings_verification_request_failed() });
+    expect(JSON.stringify(requested)).not.toContain(leaked);
+    const withdrawn = await withdrawVerificationAction({
+      data: { accountId: 'alice', idempotencyKey: commandDraft.idempotencyKey },
+    });
+    expect(withdrawn).toEqual({ ok: false, status: 0, message: m.settings_verification_request_failed() });
+    setupFault = new MediaProblem(
+      {
+        type: 'https://example.test/problems/overloaded',
+        title: 'private response body',
+        status: 503,
+        code: 'overloaded',
+      },
+      { 'Retry-After': '12' },
+    );
+    Object.defineProperty((setupFault as MediaProblem).problem, 'retryable', { value: true });
+    Object.defineProperty((setupFault as MediaProblem).problem, 'request_id', { value: 'native-request-id' });
+    const nativeRead = await readVerificationState({ data: { accountId: 'alice' } });
+    expect(nativeRead).toEqual({
+      ok: false,
+      failure: {
+        status: 503,
+        message: m.settings_verification_request_failed(),
+        code: 'overloaded',
+        retryable: true,
+        requestId: 'native-request-id',
+        retryAfter: '12',
+      },
+    });
+    expect(JSON.stringify(nativeRead)).not.toContain('private response body');
+    const overloadedCommand = await requestVerificationAction({ data: commandDraft });
+    expect(overloadedCommand).toMatchObject({ ok: false, status: 503, retryAfter: '12', code: 'overloaded' });
+    expect(JSON.stringify(overloadedCommand)).not.toContain('private response body');
+    setupFault = new DOMException('Verification request timed out', 'TimeoutError');
+    const timeoutRead = await readVerificationState({ data: { accountId: 'alice' } });
+    expect(timeoutRead).toEqual({
+      ok: false,
+      failure: { status: 0, message: m.settings_verification_load_failed() },
+    });
+    expect(JSON.stringify(timeoutRead)).not.toContain('timed out');
+    const timeoutCommand = await requestVerificationAction({ data: commandDraft });
+    expect(timeoutCommand).toEqual({ ok: false, status: 0, message: m.settings_verification_request_failed() });
+  } finally {
+    setupFault = previous;
+  }
 });

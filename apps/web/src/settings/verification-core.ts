@@ -1,8 +1,10 @@
 import type { KernelClient } from '@rezics/client';
-import { withVerificationDeadline } from './verification-request-deadline';
+import { isPlatformClosedError } from '../kernel/platform-closed';
+import { MediaProblem } from '../media/kernel';
 import { m } from '../paraglide/messages.js';
 import { validateVerificationDraft } from './verification-validation';
 import { settingsCommandKeyHeader } from './command-headers';
+import { withVerificationDeadline } from './verification-request-deadline';
 
 export type VerificationInput = {
   subject: string;
@@ -115,13 +117,23 @@ function apiMessage(error: unknown): string {
   return m.settings_verification_request_failed();
 }
 
+function retryAfterHeader(headers: HeadersInit | undefined): string | undefined {
+  if (headers === undefined) return undefined;
+  try {
+    const header = new Headers(headers).get('retry-after');
+    return header !== null && header.length <= 128 ? header : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function nativeFailure(result: {
   status: number;
   error?: unknown;
   headers?: HeadersInit | undefined;
 }): VerificationFailure {
   const problem = record(result.error) && record(result.error.value) ? result.error.value : undefined;
-  const retryAfter = result.headers === undefined ? null : new Headers(result.headers).get('retry-after');
+  const retryAfter = retryAfterHeader(result.headers);
   return {
     status: result.status,
     message: apiMessage(result.error),
@@ -132,8 +144,43 @@ function nativeFailure(result: {
       : typeof problem?.requestId === 'string'
         ? { requestId: problem.requestId }
         : {}),
-    ...(retryAfter === null ? {} : { retryAfter }),
+    ...(retryAfter === undefined ? {} : { retryAfter }),
   };
+}
+
+/** Classified native/setup failures only; ordinary Errors and framework control flow stay undefined. */
+export function verificationFailureFromException(
+  error: unknown,
+  fallbackMessage = m.settings_verification_request_failed(),
+): VerificationFailure | undefined {
+  if (error instanceof VerificationReadError) return error.failure;
+  if (error instanceof MediaProblem)
+    return nativeFailure({
+      status: error.problem.status,
+      error: { value: error.problem },
+      headers: error.headers,
+    });
+  if (isPlatformClosedError(error))
+    return nativeFailure({
+      status: error.status,
+      error: record(error.problem) ? { value: error.problem } : undefined,
+    });
+  if (error instanceof DOMException && error.name === 'TimeoutError') return { status: 0, message: fallbackMessage };
+  return undefined;
+}
+
+/** Private current-read/command envelope used by the server functions; never leaks stacks or credentials. */
+export function verificationSafeFailure(
+  error: unknown,
+  fallbackMessage = m.settings_verification_request_failed(),
+): VerificationFailure {
+  return verificationFailureFromException(error, fallbackMessage) ?? { status: 0, message: fallbackMessage };
+}
+
+function asReadError(error: unknown): VerificationReadError | undefined {
+  if (error instanceof VerificationReadError) return error;
+  const failure = verificationFailureFromException(error, m.settings_verification_load_failed());
+  return failure ? new VerificationReadError(failure) : undefined;
 }
 
 export async function readVerification(
@@ -142,15 +189,27 @@ export async function readVerification(
   authorization: string,
   caller?: AbortSignal,
 ) {
-  const result = await withVerificationDeadline(
-    (signal) => client.accounts({ accountId }).verification.get({ headers: { authorization }, fetch: { signal } }),
-    caller,
-  );
-  if (result.error) throw new VerificationReadError(nativeFailure(result));
-  if (!result.data) throw new Error(m.settings_verification_request_failed());
-  const data: unknown = result.data;
-  if (!validStatus(data, accountId)) throw new Error(m.settings_verification_load_failed());
-  return data;
+  try {
+    const result = await withVerificationDeadline(
+      (signal) => client.accounts({ accountId }).verification.get({ headers: { authorization }, fetch: { signal } }),
+      caller,
+    );
+    if (result.error) throw new VerificationReadError(nativeFailure(result));
+    if (!result.data)
+      throw new VerificationReadError({
+        status: result.status || 0,
+        message: m.settings_verification_request_failed(),
+      });
+    const data: unknown = result.data;
+    if (!validStatus(data, accountId))
+      throw new VerificationReadError({
+        status: result.status || 0,
+        message: m.settings_verification_load_failed(),
+      });
+    return data;
+  } catch (error) {
+    throw asReadError(error) ?? error;
+  }
 }
 
 export async function requestVerification(
@@ -162,22 +221,28 @@ export async function requestVerification(
 ): Promise<VerificationCommandResult> {
   if (validateVerificationDraft(input).length)
     return { ok: false, status: 0, message: m.settings_verification_validation(), outcome: 'refused' };
-  const result = await withVerificationDeadline(
-    (signal) =>
-      client.accounts({ accountId }).$requestVerification.post(
-        { subject: input.subject, statement: input.statement, links: input.links },
-        {
-          headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(input.idempotencyKey) } as {
-            'idempotency-key': string;
+  try {
+    const result = await withVerificationDeadline(
+      (signal) =>
+        client.accounts({ accountId }).$requestVerification.post(
+          { subject: input.subject, statement: input.statement, links: input.links },
+          {
+            headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(input.idempotencyKey) } as {
+              'idempotency-key': string;
+            },
+            fetch: { signal },
           },
-          fetch: { signal },
-        },
-      ),
-    caller,
-  );
-  if (result.status === 201 && validRequest(result.data?.verificationRequest, accountId))
-    return { ok: true, verificationRequest: result.data!.verificationRequest };
-  return { ok: false, ...nativeFailure(result) };
+        ),
+      caller,
+    );
+    if (result.status === 201 && validRequest(result.data?.verificationRequest, accountId))
+      return { ok: true, verificationRequest: result.data!.verificationRequest };
+    return { ok: false, ...nativeFailure(result) };
+  } catch (error) {
+    const failure = verificationFailureFromException(error);
+    if (failure) return { ok: false, ...failure };
+    throw error;
+  }
 }
 
 export async function withdrawVerification(
@@ -187,22 +252,28 @@ export async function withdrawVerification(
   idempotencyKey: string,
   caller?: AbortSignal,
 ): Promise<VerificationCommandResult> {
-  const result = await withVerificationDeadline(
-    (signal) =>
-      client.accounts({ accountId }).$withdrawVerification.post(
-        {},
-        {
-          headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(idempotencyKey) } as {
-            'idempotency-key': string;
+  try {
+    const result = await withVerificationDeadline(
+      (signal) =>
+        client.accounts({ accountId }).$withdrawVerification.post(
+          {},
+          {
+            headers: { authorization, 'idempotency-key': settingsCommandKeyHeader(idempotencyKey) } as {
+              'idempotency-key': string;
+            },
+            fetch: { signal },
           },
-          fetch: { signal },
-        },
-      ),
-    caller,
-  );
-  if (result.status === 200 && validRequest(result.data?.verificationRequest, accountId))
-    return { ok: true, verificationRequest: result.data!.verificationRequest };
-  return { ok: false, ...nativeFailure(result) };
+        ),
+      caller,
+    );
+    if (result.status === 200 && validRequest(result.data?.verificationRequest, accountId))
+      return { ok: true, verificationRequest: result.data!.verificationRequest };
+    return { ok: false, ...nativeFailure(result) };
+  } catch (error) {
+    const failure = verificationFailureFromException(error);
+    if (failure) return { ok: false, ...failure };
+    throw error;
+  }
 }
 
 /** Optional display data has its own request, never part of authoritative review/readback. */
