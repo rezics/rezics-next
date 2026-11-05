@@ -195,6 +195,9 @@ test('Mapped Wikidata facts and terms are cited command proposals accepted by th
     type: 'value',
     content: {
       time: '+2001-02-03T00:00:00Z',
+      timezone: 0,
+      before: 0,
+      after: 0,
       precision: 11,
       calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
     },
@@ -530,6 +533,9 @@ test('Wikidata month precision stays a cited month without inventing a day', asy
       type: 'value',
       content: {
         time: '+1980-05-00T00:00:00Z',
+        timezone: 0,
+        before: 0,
+        after: 0,
         precision: 10,
         calendarmodel: 'http://www.wikidata.org/entity/Q1985727',
       },

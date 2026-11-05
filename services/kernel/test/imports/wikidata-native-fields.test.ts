@@ -216,6 +216,9 @@ test('Wikidata synthetic native Book rich fields retain ranks qualifiers referen
       type: 'value',
       content: {
         time: '+2001-02-03T00:00:00Z',
+        timezone: 0,
+        before: 0,
+        after: 0,
         precision: 11,
         calendarmodel: identity('Q1985727'),
       },

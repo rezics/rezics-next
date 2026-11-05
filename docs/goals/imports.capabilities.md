@@ -490,8 +490,9 @@ bytes, and limitations remain in the linked receipts; none closes the whole Impo
   Historical receipts remain qualified to their tested source and contract.
   Released time/quantity fidelity now uses the actual public Definitions validator
   on the complete cited candidate. The [source mapping contract](../../packages/conversion/README.md#conservative-exact-quantity-source-handoff)
-  preserves signed partial Gregorian/Julian time metadata and lexical quantity
-  bounds/unit, withholding unsupported values and incomplete exact measurements.
+  preserves signed partial Gregorian/Julian time metadata, including present zero
+  optional components while absent components stay absent, and lexical quantity
+  bounds/unit; unsupported values and incomplete exact measurements are withheld.
   The [ordinary importer contract](../../services/importer/README.md#wikidata-released-time-and-quantity)
   names the focused source-to-native scenarios and unchanged cost bounds. Native
   acceptance and broader integration verification remain separate obligations.

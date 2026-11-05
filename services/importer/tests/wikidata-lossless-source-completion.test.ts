@@ -4,7 +4,7 @@ import { bundledRelease } from '@rezics/definitions/bundled';
 import { checkStatementInput } from '@rezics/definitions/validate';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { readDump } from '../src/dumps.ts';
-import { birth, height, losslessRecord, claim } from './wikidata-lossless-fixture.ts';
+import { birth, height, losslessRecord, claim, zeroDate } from './wikidata-lossless-fixture.ts';
 
 test('production JSONL registration carries complete released values and withholds unsupported neighbours', async () => {
   const registration = createSourceRegistration('wikidata');
@@ -22,16 +22,30 @@ test('production JSONL registration carries complete released values and withhol
   const first = registration.convert(input, context);
   expect(registration.converter_revision).toBe(converter_revision);
   const statements = first.proposals.flatMap((c) => (c.op === 'propose' ? [c.statement] : []));
-  expect(statements).toHaveLength(5);
+  expect(statements).toHaveLength(6);
   expect(statements.filter((s) => s.property.id === 'schema:birthDate').map((s) => s.value)).toEqual([
     { type: 'value', content: birth },
   ]);
   expect(statements.filter((s) => s.property.id === 'schema:height').map((s) => s.value)).toEqual([
     { type: 'value', content: height },
   ]);
-  expect(statements.filter((s) => s.property.id === 'schema:deathDate').map((s) => s.value)).toEqual(
+  const deathDates = statements.filter((s) => s.property.id === 'schema:deathDate');
+  expect(deathDates.map((s) => s.value)).toEqual(
     record.claims.P570.map((c) => ({ type: 'value', content: c.mainsnak.datavalue.value })),
   );
+  expect(deathDates.map((s) => s.value)).toContainEqual({
+    type: 'value',
+    content: zeroDate,
+  });
+  const yearOnly = deathDates.find(
+    (statement) =>
+      statement.value.type === 'value' &&
+      (statement.value.content as { time?: unknown }).time === '+2000-00-00T00:00:00Z',
+  );
+  expect(yearOnly).toBeDefined();
+  expect(yearOnly!.value).not.toHaveProperty('content.timezone');
+  expect(yearOnly!.value).not.toHaveProperty('content.before');
+  expect(yearOnly!.value).not.toHaveProperty('content.after');
   for (const statement of statements) expect(checkStatementInput(statement, bundledRelease).violations).toEqual([]);
   expect(first.diagnostics.length).toBeGreaterThanOrEqual(7);
   const reopened = registration.convert({ ...input, record: JSON.parse(JSON.stringify(first.normalized)) }, context);
