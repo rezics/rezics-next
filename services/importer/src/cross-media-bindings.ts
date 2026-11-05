@@ -901,7 +901,10 @@ export class CrossMediaGraph {
         nativeSubjectId: string,
         expectedType: string | undefined,
       ): Promise<RelationEndpointCurrentness>;
-      currentFactFence(source: string, externalId: string): Promise<{ fenced: boolean; securityRevision: string | null }>;
+      currentFactFence(
+        source: string,
+        externalId: string,
+      ): Promise<{ fenced: boolean; securityRevision: string | null }>;
       journal?: {
         prepare(command: BatchCommand): { bytes: string };
         acknowledge(command: BatchCommand, result: BatchWriteResult['results'][number]): void;

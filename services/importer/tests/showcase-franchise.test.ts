@@ -84,9 +84,7 @@ test('finite observed members use existing mapper semantics and ignore unrelated
   ]);
   // Keep these inventory strings unavailable until the selected typed-relation owner returns its exact result.
   expect(
-    small.gaps.filter(
-      (row) => row.source === 'vndb' && ['side', 'par'].includes(String(row.record.relation)),
-    ),
+    small.gaps.filter((row) => row.source === 'vndb' && ['side', 'par'].includes(String(row.record.relation))),
   ).toHaveLength(2);
   expect(small.edges.some((edge) => edge.source === 'vndb' && edge.table === 'vn_relations')).toBe(false);
   expect(small.edges.some((edge) => edge.property === 'wdt:P144')).toBe(false);

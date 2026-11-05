@@ -290,8 +290,20 @@ test('current endpoints and facts fences gate relation writes and exact retireme
       sourceEndpoint: '11',
       mappingRevision: 'bangumi-relation-2@2:12:6',
       evidence: [
-        { path: '/subject-relations/10/11', code: 12, sourceSubject: '10', sourceEndpoint: '11', digest: 'a'.repeat(64) },
-        { path: '/subject-relations/11/10', code: 6, sourceSubject: '11', sourceEndpoint: '10', digest: 'b'.repeat(64) },
+        {
+          path: '/subject-relations/10/11',
+          code: 12,
+          sourceSubject: '10',
+          sourceEndpoint: '11',
+          digest: 'a'.repeat(64),
+        },
+        {
+          path: '/subject-relations/11/10',
+          code: 6,
+          sourceSubject: '11',
+          sourceEndpoint: '10',
+          digest: 'b'.repeat(64),
+        },
       ],
     },
   };
@@ -381,9 +393,9 @@ test('current endpoints and facts fences gate relation writes and exact retireme
     expect(reopened.unresolved).toEqual([]);
     expect(sent.at(-1)).toEqual(lost);
     expect(sent.at(-1)?.[0]?.key).toBe(lost?.[0]?.key);
-    expect(database
-      .query('SELECT status FROM cross_media_graph WHERE edge_key=?')
-      .get(graphEdgeKey(draft))).toEqual({ status: 'retracted' });
+    expect(database.query('SELECT status FROM cross_media_graph WHERE edge_key=?').get(graphEdgeKey(draft))).toEqual({
+      status: 'retracted',
+    });
   } finally {
     database.close();
     await rm(directory, { recursive: true, force: true });

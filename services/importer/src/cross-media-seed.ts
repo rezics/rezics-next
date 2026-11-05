@@ -2261,9 +2261,7 @@ function currentBangumiRelationEndpoint(
   if (!identity) return 'wrong_type';
   const statements = subject.statements?.[identity.property];
   if (!Array.isArray(statements)) return 'unknown';
-  return statements.some(
-    (statement) => statement.value?.type === 'value' && statement.value.content === identity.value,
-  )
+  return statements.some((statement) => statement.value?.type === 'value' && statement.value.content === identity.value)
     ? 'current'
     : 'identity_mismatch';
 }
