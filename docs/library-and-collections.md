@@ -58,17 +58,15 @@ is background evidence, not implementation evidence.
 
 ## Private consumption diary
 
-The [private diary](library-consumption-diary.md) navigates native sessions across subjects, separately from public
-logs and shelf summaries. Order by immutable recorded start descending, then full session UUID descending. Use eight
-expiring owner slots and the existing presented-session method for exact reopening. Keep repeats and unfinished
-sessions separate; label recording times as audit facts. Read partial dates and their independent journal revision
-in the bounded session seek; unknown dates stay null, without an invented historical sort. Native subject visibility
-controls optional labels. The linked contract owns caller binding, continuation lifecycle, edits, terminal fences
-and Web recovery.
+The [private diary](library-consumption-diary.md) browses native sessions across subjects apart from public logs and
+shelf summaries. Order by immutable recorded start descending, then full session UUID descending. Keep repeats and
+unfinished sessions separate; recording times are audit facts. Use eight expiring owner slots and the presented-session
+method for exact reopening. The bounded seek reads partial dates and their journal revision; unknown dates stay null
+and never invent historical order. Subject visibility controls optional labels.
 
-Decision: Diary page and period reads preserve ordinary permission denial and account-independent platform closure
-as separate region outcomes, without retained facts or Retry. A refused reported-year summary cannot admit
-occurrences without the existing page/summary revision agreement; independently admitted regions remain visible.
+Decision: Diary page and period reads retain separate permission denial and account-independent platform closure,
+without retained facts or Retry. A refused year summary cannot admit occurrences without page/summary revision
+agreement. Independently admitted regions remain visible.
 
 ## Personal facts and one Collection abstraction
 
