@@ -10,7 +10,6 @@ import {
   type PolicyOperand,
   type PolicyOperandName,
   type PolicyRequest,
-  type PolicySubjectFacts,
   type RequiredPolicyOperand,
   type TemporalEvidence,
 } from './policy-contract.ts';
@@ -74,17 +73,185 @@ function unavailable(): PolicyDecision {
   return result('unavailable', 'evidence', []);
 }
 
-function subjectGrant(
-  facts: PolicySubjectFacts | undefined,
-  mode: PolicyRequest['mode'],
-  ownAccountAuthority: boolean,
-  benefitAuthority: boolean,
-): Truth {
-  const direct = truth(facts?.actionGrant);
-  const role = mode === 'explicit' ? 'false' : truth(facts?.resourceRoleGrant);
-  const ownAccount = ownAccountAuthority ? truth(facts?.ownAccount) : 'false';
-  const benefit = mode === 'explicit' || !benefitAuthority ? 'false' : truth(facts?.authenticatedBenefit);
-  return or([direct, role, ownAccount, benefit]);
+export type PolicyFormulaNode =
+  | Readonly<{ op: 'constant'; value: boolean }>
+  | Readonly<{ op: 'operand'; name: PolicyOperandName }>
+  | Readonly<{ op: 'not'; value: PolicyFormulaNode }>
+  | Readonly<{ op: 'and' | 'or'; values: readonly PolicyFormulaNode[] }>;
+
+export type PolicyFormulaProfile = Readonly<{
+  action: NonNullable<PolicyCatalogue['actionByName'][string]>;
+  root: PolicyFormulaNode;
+  local: PolicyFormulaNode;
+  localGrant: PolicyFormulaNode;
+  actorGrant: PolicyFormulaNode;
+  principalGrant: PolicyFormulaNode;
+  global?: PolicyFormulaNode;
+  globalActorGrant?: PolicyFormulaNode;
+  globalPrincipalGrant?: PolicyFormulaNode;
+}>;
+
+const constant = (value: boolean): PolicyFormulaNode => Object.freeze({ op: 'constant', value });
+const operand = (name: PolicyOperandName): PolicyFormulaNode => Object.freeze({ op: 'operand', name });
+const negate = (value: PolicyFormulaNode): PolicyFormulaNode => Object.freeze({ op: 'not', value });
+const conjunction = (values: readonly PolicyFormulaNode[]): PolicyFormulaNode =>
+  values.length === 1
+    ? values[0]!
+    : Object.freeze({ op: 'and', values: Object.freeze([...values]) });
+const disjunction = (values: readonly PolicyFormulaNode[]): PolicyFormulaNode =>
+  values.length === 1
+    ? values[0]!
+    : Object.freeze({ op: 'or', values: Object.freeze([...values]) });
+
+type GrantSide = 'actor' | 'principal' | 'global-actor' | 'global-principal';
+
+function grantOperand(side: GrantSide, field: 'action' | 'role' | 'own-account' | 'benefit'): PolicyOperandName {
+  if (side === 'actor') {
+    if (field === 'action') return 'actor.action-grant';
+    if (field === 'role') return 'actor.resource-role-grant';
+    if (field === 'own-account') return 'actor.own-account';
+    return 'actor.authenticated-benefit';
+  }
+  if (side === 'principal') {
+    if (field === 'action') return 'principal.action-grant';
+    if (field === 'role') return 'principal.resource-role-grant';
+    if (field === 'own-account') return 'principal.own-account';
+    return 'principal.authenticated-benefit';
+  }
+  if (side === 'global-actor') {
+    if (field === 'action') return 'global.actor-action-grant';
+    if (field === 'role') return 'global.actor-resource-role-grant';
+    if (field === 'own-account') return 'global.actor.own-account';
+    return 'global.actor.authenticated-benefit';
+  }
+  if (field === 'action') return 'global.principal-action-grant';
+  if (field === 'role') return 'global.principal-resource-role-grant';
+  if (field === 'own-account') return 'global.principal.own-account';
+  return 'global.principal.authenticated-benefit';
+}
+
+function grantFormula(
+  side: GrantSide,
+  request: PolicyRequest,
+  action: PolicyFormulaProfile['action'],
+): PolicyFormulaNode {
+  const terms = [operand(grantOperand(side, 'action'))];
+  if (request.mode === 'ordinary') terms.push(operand(grantOperand(side, 'role')));
+  if (action.authority === 'own-account') terms.push(operand(grantOperand(side, 'own-account')));
+  if (request.authenticatedBenefit === true && request.mode === 'ordinary')
+    terms.push(operand(grantOperand(side, 'benefit')));
+  return disjunction(terms);
+}
+
+/** The one fixed policy formula used by scalar evaluation and specialization. */
+export function policyFormulaProfile(catalogue: PolicyCatalogue, request: PolicyRequest): PolicyFormulaProfile | null {
+  if (!validRequest(request)) return null;
+  const action = catalogue.actionByName[request.action];
+  if (
+    !action ||
+    !catalogue.resourceTypeByName[request.resourceType] ||
+    !action.resourceTypes.includes(request.resourceType) ||
+    (request.anonymous && !action.anonymous)
+  )
+    return null;
+
+  const actorGrant = grantFormula('actor', request, action);
+  const principalGrant = request.hasPrincipal ? grantFormula('principal', request, action) : constant(true);
+  const localGrant = conjunction([operand('scope'), actorGrant, principalGrant]);
+  const floor = action.anonymous && request.mode === 'ordinary' ? operand('public.floor') : constant(false);
+  const local = conjunction([negate(operand('local.denial')), disjunction([floor, localGrant])]);
+  let global: PolicyFormulaNode | undefined;
+  let globalActorGrant: PolicyFormulaNode | undefined;
+  let globalPrincipalGrant: PolicyFormulaNode | undefined;
+  let granting: PolicyFormulaNode = local;
+  if (action.globalReach) {
+    globalActorGrant = grantFormula('global-actor', request, action);
+    globalPrincipalGrant = request.hasPrincipal
+      ? grantFormula('global-principal', request, action)
+      : constant(true);
+    global = conjunction([
+      negate(operand('global.denial')),
+      operand('scope'),
+      globalActorGrant,
+      globalPrincipalGrant,
+    ]);
+    granting = disjunction([local, global]);
+  }
+  return Object.freeze({
+    action,
+    root: conjunction([operand('standing'), operand('assignment'), operand('deadline'), granting]),
+    local,
+    localGrant,
+    actorGrant,
+    principalGrant,
+    ...(global ? { global } : {}),
+    ...(globalActorGrant ? { globalActorGrant } : {}),
+    ...(globalPrincipalGrant ? { globalPrincipalGrant } : {}),
+  });
+}
+
+export function evaluatePolicyFormula(node: PolicyFormulaNode, resolve: (name: PolicyOperandName) => Truth): Truth {
+  switch (node.op) {
+    case 'constant':
+      return node.value ? 'true' : 'false';
+    case 'operand':
+      return resolve(node.name);
+    case 'not':
+      return not(evaluatePolicyFormula(node.value, resolve));
+    case 'and':
+      return and(node.values.map((value) => evaluatePolicyFormula(value, resolve)));
+    case 'or':
+      return or(node.values.map((value) => evaluatePolicyFormula(value, resolve)));
+  }
+}
+
+const FACT_PATHS: Readonly<Record<PolicyOperandName, readonly string[]>> = Object.freeze({
+  standing: ['standing'],
+  assignment: ['assignment'],
+  deadline: ['deadlineLive'],
+  scope: ['scope'],
+  'actor.action-grant': ['actor', 'actionGrant'],
+  'actor.resource-role-grant': ['actor', 'resourceRoleGrant'],
+  'actor.own-account': ['actor', 'ownAccount'],
+  'actor.authenticated-benefit': ['actor', 'authenticatedBenefit'],
+  'principal.action-grant': ['principal', 'actionGrant'],
+  'principal.resource-role-grant': ['principal', 'resourceRoleGrant'],
+  'principal.own-account': ['principal', 'ownAccount'],
+  'principal.authenticated-benefit': ['principal', 'authenticatedBenefit'],
+  'local.denial': ['localDenial'],
+  'public.floor': ['publicFloor'],
+  'global.denial': ['global', 'denial'],
+  'global.actor-action-grant': ['global', 'actor', 'actionGrant'],
+  'global.actor-resource-role-grant': ['global', 'actor', 'resourceRoleGrant'],
+  'global.actor.own-account': ['global', 'actor', 'ownAccount'],
+  'global.actor.authenticated-benefit': ['global', 'actor', 'authenticatedBenefit'],
+  'global.principal-action-grant': ['global', 'principal', 'actionGrant'],
+  'global.principal-resource-role-grant': ['global', 'principal', 'resourceRoleGrant'],
+  'global.principal.own-account': ['global', 'principal', 'ownAccount'],
+  'global.principal.authenticated-benefit': ['global', 'principal', 'authenticatedBenefit'],
+});
+
+export type PolicyFactEvidence =
+  | Readonly<{ status: 'present'; value: PolicyFact }>
+  | Readonly<{ status: 'missing' | 'malformed' }>;
+
+/** Read data-only facts without invoking getters; absence and explicit unknown stay distinct. */
+export function policyFactEvidence(facts: unknown, name: PolicyOperandName): PolicyFactEvidence {
+  let current: unknown = facts;
+  for (const key of FACT_PATHS[name]) {
+    if (typeof current !== 'object' || current === null || Array.isArray(current)) return { status: 'missing' };
+    let descriptor: PropertyDescriptor | undefined;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(current, key);
+    } catch {
+      return { status: 'malformed' };
+    }
+    if (!descriptor) return { status: 'missing' };
+    if (!('value' in descriptor) || !descriptor.enumerable) return { status: 'malformed' };
+    current = descriptor.value;
+  }
+  if (current === true || current === false || current === null) return { status: 'present', value: current };
+  return { status: 'malformed' };
 }
 
 function addOperand(
@@ -148,7 +315,7 @@ export function describeRequiredOperands(
   }
   required.push({ name: 'local.denial', required: true });
   if (action.anonymous && request.mode === 'ordinary')
-    required.push({ name: 'public.floor', required: true, independentOfScope: true });
+    required.push({ name: 'public.floor', required: true, independentOfScope: true, residualizable: true });
   if (action.globalReach) {
     required.push({ name: 'global.denial', required: true });
     required.push({ name: 'global.actor-action-grant', required: true });
@@ -169,49 +336,37 @@ export function describeRequiredOperands(
 
 /** Pure, bounded decision over qualified primitive facts. */
 export function decidePolicy(catalogue: PolicyCatalogue, request: PolicyRequest, facts: PolicyFacts): PolicyDecision {
-  if (!validRequest(request)) return invalid();
-  const action = catalogue.actionByName[request.action];
-  if (
-    !action ||
-    !catalogue.resourceTypeByName[request.resourceType] ||
-    !action.resourceTypes.includes(request.resourceType) ||
-    (request.anonymous && !action.anonymous)
-  )
-    return invalid();
+  const profile = policyFormulaProfile(catalogue, request);
+  if (!profile) return invalid();
   if (!facts || typeof facts !== 'object') return unavailable();
 
+  const action = profile.action;
   const isExplicit = request.mode === 'explicit';
   const canUseFloor = action.anonymous && !isExplicit;
   const useBenefit = request.authenticatedBenefit === true;
-  const actorGrant = subjectGrant(facts.actor, request.mode, action.authority === 'own-account', useBenefit);
-  const principalGrant = request.hasPrincipal
-    ? subjectGrant(facts.principal, request.mode, action.authority === 'own-account', useBenefit)
-    : 'true';
-  const localDenial = truth(facts.localDenial);
-  const localGrant = and([truth(facts.scope), actorGrant, principalGrant]);
-  const floor = canUseFloor ? truth(facts.publicFloor) : 'false';
-  const localDecision = and([not(localDenial), or([floor, localGrant])]);
-  const standing = truth(facts.standing);
-  const assignment = truth(facts.assignment);
-  const deadline = truth(facts.deadlineLive);
-  const ceiling = and([standing, assignment, deadline]);
-
-  let globalDecision: Truth = 'false';
-  let globalDenial: Truth = 'false';
-  let globalActor: Truth = 'false';
-  let globalPrincipal: Truth = 'true';
-  if (action.globalReach) {
-    globalDenial = truth(facts.global?.denial);
-    globalActor = subjectGrant(facts.global?.actor, request.mode, action.authority === 'own-account', useBenefit);
-    globalPrincipal = request.hasPrincipal
-      ? subjectGrant(facts.global?.principal, request.mode, action.authority === 'own-account', useBenefit)
-      : 'true';
-    globalDecision = and([not(globalDenial), truth(facts.scope), globalActor, globalPrincipal]);
-  }
-  const decision = and([ceiling, action.globalReach ? or([localDecision, globalDecision]) : localDecision]);
+  const factTruth = (name: PolicyOperandName): Truth => {
+    const evidence = policyFactEvidence(facts, name);
+    return evidence.status === 'present' ? truth(evidence.value) : 'unknown';
+  };
+  const evaluate = (node: PolicyFormulaNode | undefined): Truth =>
+    node ? evaluatePolicyFormula(node, factTruth) : 'false';
+  const actorGrant = evaluate(profile.actorGrant);
+  const principalGrant = evaluate(profile.principalGrant);
+  const localDenial = factTruth('local.denial');
+  const localGrant = evaluate(profile.localGrant);
+  const floor = canUseFloor ? factTruth('public.floor') : 'false';
+  const localDecision = evaluate(profile.local);
+  const standing = factTruth('standing');
+  const assignment = factTruth('assignment');
+  const deadline = factTruth('deadline');
+  const globalDecision = evaluate(profile.global);
+  const globalDenial = action.globalReach ? factTruth('global.denial') : 'false';
+  const globalActor = evaluate(profile.globalActorGrant);
+  const globalPrincipal = profile.globalPrincipalGrant ? evaluate(profile.globalPrincipalGrant) : 'true';
+  const decision = evaluate(profile.root);
   const localGrantActive =
     decision === 'true' &&
-    truth(facts.scope) === 'true' &&
+    factTruth('scope') === 'true' &&
     localDenial === 'false' &&
     actorGrant === 'true' &&
     principalGrant === 'true';
@@ -224,63 +379,64 @@ export function decidePolicy(catalogue: PolicyCatalogue, request: PolicyRequest,
   addOperand(
     operands,
     'scope',
-    truth(facts.scope),
-    localGrantActive || globalGrantActive || (!canUseFloor && decision === 'false' && truth(facts.scope) === 'false'),
+    factTruth('scope'),
+    localGrantActive || globalGrantActive || (!canUseFloor && decision === 'false' && factTruth('scope') === 'false'),
   );
   addOperand(
     operands,
     'actor.action-grant',
-    truth(facts.actor?.actionGrant),
-    (localGrantActive && facts.actor?.actionGrant === true) || (decision === 'false' && actorGrant === 'false'),
+    factTruth('actor.action-grant'),
+    (localGrantActive && factTruth('actor.action-grant') === 'true') || (decision === 'false' && actorGrant === 'false'),
   );
   addOperand(
     operands,
     'actor.resource-role-grant',
-    isExplicit ? 'not-required' : truth(facts.actor?.resourceRoleGrant),
-    localGrantActive && facts.actor?.resourceRoleGrant === true,
+    isExplicit ? 'not-required' : factTruth('actor.resource-role-grant'),
+    localGrantActive && factTruth('actor.resource-role-grant') === 'true',
   );
   if (action.authority === 'own-account')
     addOperand(
       operands,
       'actor.own-account',
-      truth(facts.actor?.ownAccount),
-      (localGrantActive && facts.actor?.ownAccount === true) || (decision === 'false' && actorGrant === 'false'),
+        factTruth('actor.own-account'),
+        (localGrantActive && factTruth('actor.own-account') === 'true') ||
+          (decision === 'false' && actorGrant === 'false'),
     );
   if (useBenefit)
     addOperand(
       operands,
       'actor.authenticated-benefit',
-      isExplicit ? 'not-required' : truth(facts.actor?.authenticatedBenefit),
-      localGrantActive && facts.actor?.authenticatedBenefit === true,
+        isExplicit ? 'not-required' : factTruth('actor.authenticated-benefit'),
+        localGrantActive && factTruth('actor.authenticated-benefit') === 'true',
     );
   if (request.hasPrincipal) {
     addOperand(
       operands,
       'principal.action-grant',
-      truth(facts.principal?.actionGrant),
-      (localGrantActive && facts.principal?.actionGrant === true) ||
+      factTruth('principal.action-grant'),
+      (localGrantActive && factTruth('principal.action-grant') === 'true') ||
         (decision === 'false' && principalGrant === 'false'),
     );
     addOperand(
       operands,
       'principal.resource-role-grant',
-      isExplicit ? 'not-required' : truth(facts.principal?.resourceRoleGrant),
-      localGrantActive && facts.principal?.resourceRoleGrant === true,
+      isExplicit ? 'not-required' : factTruth('principal.resource-role-grant'),
+      localGrantActive && factTruth('principal.resource-role-grant') === 'true',
     );
     if (action.authority === 'own-account')
       addOperand(
         operands,
         'principal.own-account',
-        truth(facts.principal?.ownAccount),
-        (localGrantActive && facts.principal?.ownAccount === true) ||
+        factTruth('principal.own-account'),
+        (localGrantActive && factTruth('principal.own-account') === 'true') ||
           (decision === 'false' && principalGrant === 'false'),
       );
     if (useBenefit)
       addOperand(
         operands,
         'principal.authenticated-benefit',
-        isExplicit ? 'not-required' : truth(facts.principal?.authenticatedBenefit),
-        localGrantActive && facts.principal?.authenticatedBenefit === true,
+        isExplicit ? 'not-required' : factTruth('principal.authenticated-benefit'),
+        localGrantActive && factTruth('principal.authenticated-benefit') === 'true',
       );
   }
   addOperand(operands, 'local.denial', localDenial, decision === 'false' && localDenial === 'true');
@@ -295,55 +451,55 @@ export function decidePolicy(catalogue: PolicyCatalogue, request: PolicyRequest,
     addOperand(
       operands,
       'global.actor-action-grant',
-      truth(facts.global?.actor?.actionGrant),
-      globalGrantActive && facts.global?.actor?.actionGrant === true,
+      factTruth('global.actor-action-grant'),
+      globalGrantActive && factTruth('global.actor-action-grant') === 'true',
     );
     addOperand(
       operands,
       'global.actor-resource-role-grant',
-      isExplicit ? 'not-required' : truth(facts.global?.actor?.resourceRoleGrant),
-      globalGrantActive && !isExplicit && facts.global?.actor?.resourceRoleGrant === true,
+      isExplicit ? 'not-required' : factTruth('global.actor-resource-role-grant'),
+      globalGrantActive && !isExplicit && factTruth('global.actor-resource-role-grant') === 'true',
     );
     if (action.authority === 'own-account')
       addOperand(
         operands,
         'global.actor.own-account',
-        truth(facts.global?.actor?.ownAccount),
-        globalGrantActive && facts.global?.actor?.ownAccount === true,
+        factTruth('global.actor.own-account'),
+        globalGrantActive && factTruth('global.actor.own-account') === 'true',
       );
     if (useBenefit)
       addOperand(
         operands,
         'global.actor.authenticated-benefit',
-        isExplicit ? 'not-required' : truth(facts.global?.actor?.authenticatedBenefit),
-        globalGrantActive && !isExplicit && facts.global?.actor?.authenticatedBenefit === true,
+        isExplicit ? 'not-required' : factTruth('global.actor.authenticated-benefit'),
+        globalGrantActive && !isExplicit && factTruth('global.actor.authenticated-benefit') === 'true',
       );
     if (request.hasPrincipal) {
       addOperand(
         operands,
         'global.principal-action-grant',
-        truth(facts.global?.principal?.actionGrant),
-        globalGrantActive && facts.global?.principal?.actionGrant === true,
+        factTruth('global.principal-action-grant'),
+        globalGrantActive && factTruth('global.principal-action-grant') === 'true',
       );
       addOperand(
         operands,
         'global.principal-resource-role-grant',
-        isExplicit ? 'not-required' : truth(facts.global?.principal?.resourceRoleGrant),
-        globalGrantActive && !isExplicit && facts.global?.principal?.resourceRoleGrant === true,
+        isExplicit ? 'not-required' : factTruth('global.principal-resource-role-grant'),
+        globalGrantActive && !isExplicit && factTruth('global.principal-resource-role-grant') === 'true',
       );
       if (action.authority === 'own-account')
         addOperand(
           operands,
           'global.principal.own-account',
-          truth(facts.global?.principal?.ownAccount),
-          globalGrantActive && facts.global?.principal?.ownAccount === true,
+          factTruth('global.principal.own-account'),
+          globalGrantActive && factTruth('global.principal.own-account') === 'true',
         );
       if (useBenefit)
         addOperand(
           operands,
           'global.principal.authenticated-benefit',
-          isExplicit ? 'not-required' : truth(facts.global?.principal?.authenticatedBenefit),
-          globalGrantActive && !isExplicit && facts.global?.principal?.authenticatedBenefit === true,
+          isExplicit ? 'not-required' : factTruth('global.principal.authenticated-benefit'),
+          globalGrantActive && !isExplicit && factTruth('global.principal.authenticated-benefit') === 'true',
         );
     }
   }
@@ -357,7 +513,7 @@ export function decidePolicy(catalogue: PolicyCatalogue, request: PolicyRequest,
   else if (decision === 'true' && floor === 'true') reason = 'local-floor';
   else if (decision === 'true') reason = 'local-grant';
   else if (localDenial === 'true' || (action.globalReach && globalDenial === 'true')) reason = 'denial';
-  else if (truth(facts.scope) === 'false' && floor !== 'true') reason = 'scope';
+  else if (factTruth('scope') === 'false' && floor !== 'true') reason = 'scope';
   return result(decision === 'true' ? 'allow' : decision === 'false' ? 'deny' : 'unavailable', reason, operands);
 }
 

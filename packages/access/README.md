@@ -68,6 +68,26 @@ The native read cost includes the existing preparation and membership/assignment
 statement, existing before/after validity checks, and the Collection disclosure gates. The pure evaluation adds no
 query, per-row read, clock read, runtime ledger or retry.
 
+### Residual specialization
+
+`specializePolicy(catalogue, request, qualifiedFacts, resourceOperandNames)` uses the same compiled action profile,
+required-operand description and formula as `decidePolicy`. It binds known request facts and simplifies them into
+closed residual data. `public.floor` is the only currently residualizable resource operand. A missing operand,
+explicit `null`, malformed fact, unsupported operand or oversized result cannot become an allow. Missing and unknown
+evidence retain distinct outcomes. `evaluatePolicyResidual` evaluates that data with the same strong three-valued
+rules; it has no SQL vocabulary, callback slot, clock or host-code operator.
+
+Residuals use the versioned `{ format, root }` shape and the constant, operand, not, and/or grammar. Residuals cap at
+64 nodes and 4 KiB of encoded data. Explanations retain the existing 32-node and 4 KiB caps. These are package-wide
+bounds; the current Collection directory specializes to either constant allow or the single `public.floor` operand.
+Scalar and residual decisions share the admitted core formula, including explicit mode, denial precedence, public
+floor independence from scope, missing evidence and half-open temporal qualifications.
+
+The Collection account face uses the public-floor profile even for its owner. The curator list binds the native
+full-view result before query lowering. Per-Collection management grants do not widen another account's directory.
+The package receives those qualified facts as values; Kernel continues to own their snapshot, currentness and source
+completeness.
+
 ## Full-call bounds
 
 The core adds no I/O, request cache, per-row permission check or history scan. Kernel retains these fixed deployment

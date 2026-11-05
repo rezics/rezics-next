@@ -1,0 +1,67 @@
+{
+  "format": "rezics-access-policy-filter/1",
+  "catalogue": {
+    "actions": [
+      {
+        "action": "collection:read",
+        "anonymous": true,
+        "authority": "resource",
+        "resourceTypes": ["library.collection"],
+        "globalReach": false
+      }
+    ],
+    "roles": [{ "role": "library.collection.owner", "actions": ["collection:read"] }],
+    "resourceTypes": [
+      { "type": "library.collection", "ownerRole": "library.collection.owner", "standingRoles": [] }
+    ]
+  },
+  "cases": [
+    {
+      "id": "public-floor-allows-row",
+      "request": { "action": "collection:read", "resourceType": "library.collection", "mode": "ordinary", "anonymous": true, "hasPrincipal": false },
+      "facts": { "standing": true, "assignment": true, "deadlineLive": true, "scope": false, "localDenial": false, "actor": { "actionGrant": false, "resourceRoleGrant": false, "ownAccount": false, "authenticatedBenefit": false } },
+      "resourceFacts": { "public.floor": true },
+      "expected": "allow"
+    },
+    {
+      "id": "explicit-grant-does-not-need-public-floor",
+      "request": { "action": "collection:read", "resourceType": "library.collection", "mode": "ordinary", "anonymous": true, "hasPrincipal": false },
+      "facts": { "standing": true, "assignment": true, "deadlineLive": true, "scope": true, "localDenial": false, "actor": { "actionGrant": true, "resourceRoleGrant": false, "ownAccount": false, "authenticatedBenefit": false } },
+      "resourceFacts": { "public.floor": false },
+      "expected": "allow"
+    },
+    {
+      "id": "denial-overrides-grant-and-floor",
+      "request": { "action": "collection:read", "resourceType": "library.collection", "mode": "ordinary", "anonymous": true, "hasPrincipal": false },
+      "facts": { "standing": true, "assignment": true, "deadlineLive": true, "scope": true, "localDenial": true, "actor": { "actionGrant": true, "resourceRoleGrant": false, "ownAccount": false, "authenticatedBenefit": false } },
+      "resourceFacts": { "public.floor": true },
+      "expected": "deny"
+    },
+    {
+      "id": "expired-ceiling-overrides-floor",
+      "request": { "action": "collection:read", "resourceType": "library.collection", "mode": "ordinary", "anonymous": true, "hasPrincipal": false },
+      "facts": { "standing": true, "assignment": true, "deadlineLive": false, "scope": false, "localDenial": false, "actor": { "actionGrant": false, "resourceRoleGrant": false, "ownAccount": false, "authenticatedBenefit": false } },
+      "resourceFacts": { "public.floor": true },
+      "expected": "deny"
+    },
+    {
+      "id": "explicit-mode-ignores-floor-and-role-grant",
+      "request": { "action": "collection:read", "resourceType": "library.collection", "mode": "explicit", "anonymous": false, "hasPrincipal": false },
+      "facts": { "standing": true, "assignment": true, "deadlineLive": true, "scope": true, "localDenial": false, "publicFloor": true, "actor": { "actionGrant": false, "resourceRoleGrant": true, "ownAccount": false, "authenticatedBenefit": false } },
+      "resourceFacts": {},
+      "expected": "deny"
+    }
+  ],
+  "incomplete": [
+    {
+      "id": "absent-grant-is-missing-evidence",
+      "facts": { "standing": true, "assignment": true, "deadlineLive": true, "scope": true, "localDenial": false, "actor": { "resourceRoleGrant": false, "ownAccount": false, "authenticatedBenefit": false } },
+      "expected": "missing-evidence"
+    },
+    {
+      "id": "null-grant-is-unknown-evidence",
+      "facts": { "standing": true, "assignment": true, "deadlineLive": true, "scope": true, "localDenial": false, "actor": { "actionGrant": null, "resourceRoleGrant": false, "ownAccount": false, "authenticatedBenefit": false } },
+      "expected": "unknown-evidence"
+    }
+  ]
+}

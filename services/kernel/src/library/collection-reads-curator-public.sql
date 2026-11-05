@@ -4,6 +4,7 @@ WITH args AS NOT MATERIALIZED (
          :after_updated_at::timestamptz AS after_updated_at,
          :after_id::uuid AS after_id,
          :has_cursor::boolean AS has_cursor,
+         :policy_visibility::text AS policy_visibility,
          :limit::integer AS page_limit
 ),
 candidates AS (
@@ -20,6 +21,7 @@ candidates AS (
       AND collection.curator_account_id = args.curator_account_id
       AND collection.state = 'active'
       AND collection.visibility = 'public'
+      AND collection.visibility = args.policy_visibility
       AND collection.updated_at < CASE WHEN args.has_cursor THEN args.after_updated_at ELSE 'infinity'::timestamptz END
     ORDER BY collection.updated_at DESC, collection.collection_id DESC
     LIMIT (SELECT page_limit FROM args)
@@ -38,6 +40,7 @@ candidates AS (
       AND collection.curator_account_id = args.curator_account_id
       AND collection.state = 'active'
       AND collection.visibility = 'public'
+      AND collection.visibility = args.policy_visibility
       AND args.has_cursor
       AND collection.updated_at = args.after_updated_at
       AND collection.collection_id < args.after_id

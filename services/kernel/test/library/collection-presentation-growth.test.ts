@@ -295,6 +295,7 @@ test('a real foreign-home wait cannot disclose a Collection whose native visibil
 test('native fixed selection branches and first/deep keyset reads stay bounded over unrelated history', async () => {
   const cover = await f.importedCover();
   let row = await f.collection({ presentationKind: type, coverMediaId: cover.mediaId, visibility: 'public' });
+  const secondPublic = await f.collection({ visibility: 'public' });
   let deep: string | null = null;
   let reduced = await f.credential('ordinary', ['collection:read']);
   await checkGrowth(f.database, {
@@ -354,6 +355,29 @@ test('native fixed selection branches and first/deep keyset reads stay bounded o
         expect(page.status).toBe(200);
         expect(((await page.json()) as { collections: unknown[] }).collections).toHaveLength(1);
       }
+      const accountFace = await f.send(
+        f.owner.bearer,
+        'GET',
+        `/v1/accounts/${f.owner.accountId}/collections?limit=1`,
+      );
+      expect(accountFace.status).toBe(200);
+      const firstFace = (await accountFace.json()) as { collections: CollectionView[]; next: string | null };
+      expect(firstFace.collections).toHaveLength(1);
+      expect(firstFace.collections[0]?.visibility).toBe('public');
+      expect(firstFace.next).toBeString();
+      const lastFace = await f.send(
+        f.owner.bearer,
+        'GET',
+        `/v1/accounts/${f.owner.accountId}/collections?limit=1&cursor=${encodeURIComponent(firstFace.next!)}`,
+      );
+      expect(lastFace.status).toBe(200);
+      const lastFaceBody = (await lastFace.json()) as { collections: CollectionView[]; next: string | null };
+      expect(lastFaceBody.collections).toHaveLength(1);
+      expect(lastFaceBody.collections[0]?.visibility).toBe('public');
+      expect(lastFaceBody.next).toBeNull();
+      expect([firstFace.collections[0]!.id, lastFaceBody.collections[0]!.id].sort()).toEqual(
+        [row.id, secondPublic.id].sort(),
+      );
     },
   });
 }, 240_000);
