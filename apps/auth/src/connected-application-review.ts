@@ -87,6 +87,8 @@ export function useConnectedApplicationReview({
   const pendingRef = useRef(false);
   const requestedRead = useRef<NavigationTransition | null>(null);
   const reviewOperation = useRef<ConsentReviewOperation | null>(null);
+  const reviewLifetime = useRef(new AbortController());
+  const reviewDispatched = useRef(false);
   const reviewElement = useRef<HTMLFieldSetElement>(null);
   const acceptedCursorRef = useRef<string | undefined>(undefined);
   const historyRef = useRef<(string | undefined)[]>([]);
@@ -97,6 +99,15 @@ export function useConnectedApplicationReview({
   onSessionEndedRef.current = onSessionEnded;
 
   useLayoutEffect(() => {
+    reviewLifetime.current = new AbortController();
+    function retireReview() {
+      const held = reviewOperation.current;
+      if (phase.current === 'submitting' && reviewDispatched.current) held?.record('unknown');
+      else if (phase.current === 'review' || phase.current === 'submitting') held?.finish();
+      reviewLifetime.current.abort();
+      reviewOperation.current = null;
+      phase.current = 'idle';
+    }
     function clearReadState(retireLifetime: boolean) {
       generation.current++;
       pendingRef.current = false;
@@ -127,6 +138,7 @@ export function useConnectedApplicationReview({
     }
 
     function retire() {
+      retireReview();
       clearReadState(true);
     }
 
@@ -136,6 +148,7 @@ export function useConnectedApplicationReview({
     if (!lifetime?.aborted) void navigate(undefined, 'first');
     return () => {
       lifetime?.removeEventListener('abort', retire);
+      retireReview();
       generation.current++;
       pendingRef.current = false;
       requestedRead.current = null;
@@ -196,6 +209,7 @@ export function useConnectedApplicationReview({
     const held = operation?.begin();
     if (operation && !held) return;
     reviewOperation.current = held ?? null;
+    reviewDispatched.current = false;
     phase.current = 'review';
     setFocusReturnClientId('');
     setError('');
@@ -266,7 +280,11 @@ export function useConnectedApplicationReview({
     let result: ConsentReductionResult;
     if (row?.pending_reduction) result = { kind: 'pending' };
     else if (!matches) result = { kind: 'denied' };
-    else result = await reduceConsent(consent, target.retained, held ?? undefined, lifetime);
+    else result = await reduceConsent(consent, target.retained, {
+      isCurrent: () => generation.current === current && !reviewLifetime.current.signal.aborted && (!held || held.isCurrent()),
+      record: history => { if (history === 'dispatched') reviewDispatched.current = true; held?.record(history); },
+      finish: () => held?.finish(),
+    }, reviewLifetime.current.signal);
 
     if (generation.current !== current || lifetime?.aborted || (held && !held.isCurrent())) return;
     if (result.kind === 'retired') return;
