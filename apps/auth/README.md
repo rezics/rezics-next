@@ -372,8 +372,16 @@ for 1,578 bytes. It uses the installed `privateAuthRead` signal and five-second 
 timer or retry. Sign-in keeps its native 16,384-byte allowance, five-second full-call bound and request count: zero
 extra requests.
 
-Security allowances require native bounds for session `user_agent` length and mounted `siteActions` scope count
-before migrating decodes. Keep valid configured names/scopes, native DTO/account checks, row caps and classifications.
+Decision: the received native exports are `securityResponseLimits`, `securityScopeLimit(siteActions?)`,
+`securityJsonStringBytes(units)` and `securityResponseByteBudgets(scopeLimit, selectedLimit=20)`. The combined
+budget helper requires a scope operand even though `securityPage`, `passkeys` and `registrationPage` are fixed
+independently of that operand. No public scope-independent fixed-budget accessor is present, so this receiver
+does not guess C or duplicate the native formulas. No Security fixed-shape endpoint is qualified for bounded
+reading yet: `/security-page`, `/passkeys` and both `/registration-page` reads (registration advice and password
+change limits) still need the native budgets through `readJsonBounded`. `issuerSecurityRequest` also needs to expose
+the live request/deadline signal to that body reader. Preserve valid configured names/scopes, native DTO/account
+checks, row caps and classifications. The separate `/session`, `/clients` and `/consents` receivers still need C
+from trusted deployment composition; the public consent approval page remains outside this slice.
 
 ## Security
 
