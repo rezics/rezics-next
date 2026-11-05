@@ -72,11 +72,8 @@ evidence. Native and browser acceptance remains with integration execution.
 
 ## Private selected reader
 
-Decision: the local `AuthorContributionActionsWire` defaults to unavailable until the complete-input publisher
-installs the native method and DTO; the initial receiver retains only an immutable native selection per episode.
-
-Decision: resume installed row adaptation only when the public client includes both the callable and anonymous
-`actionSelection`; retain the prepared native compositions and existing focused host assertions until then.
+Decision: derive the private receiver only from the installed public `@rezics/client` action callable and anonymous
+page `actionSelection`; while either output is absent, keep the production wire unavailable and expose no row controls.
 
 `contribution-actions/receiver.ts` validates the anonymous page's actual `actionSelection`, caps its cohort at twenty,
 retains the original author/view/cursor/proof, and coalesces refreshes. Failure keeps that exact input for retry.
