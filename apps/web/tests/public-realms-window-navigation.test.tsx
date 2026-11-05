@@ -29,6 +29,10 @@ export async function setup(entry = '/en/@mira/realms?keep=a%20b&keep=%2f#readin
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
   );
   const window = new Window({ url: `https://rezics.test${entry}` });
+  const canonical = window.document.createElement('link');
+  canonical.rel = 'canonical';
+  canonical.href = 'https://rezics.test/en/@mira/realms';
+  window.document.head.append(canonical);
   const globals = {
     window,
     document: window.document,
@@ -106,9 +110,17 @@ export async function setup(entry = '/en/@mira/realms?keep=a%20b&keep=%2f#readin
   const host = window.document.createElement('div');
   window.document.body.append(host);
   const root = createRoot(host as unknown as HTMLElement);
+  const loaded = new Promise<void>((resolve) => {
+    const release = router.subscribe('onResolved', () => {
+      release();
+      resolve();
+    });
+  });
   await act(async () => {
-    await router.load();
     root.render(createElement(RouterProvider, { router }));
+  });
+  await act(async () => {
+    await loaded;
   });
   const link = (label: string) => [...host.querySelectorAll('a')].find((node) => node.textContent === label);
   const click = async (label: string, focus = false) => {
