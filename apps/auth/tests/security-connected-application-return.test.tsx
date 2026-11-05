@@ -237,3 +237,28 @@ test('an unknown write remains separate from the replacement viewer inventory an
   expect(fetchCalls.filter(({ path, method }) => path === '/consent' && method === 'POST')).toHaveLength(1);
   expect(host.textContent).toContain(m.auth_connected_operation_unknown());
 });
+
+
+test('an old late acknowledgement cannot release the replacement lease or erase first unknown', async () => {
+  await mount({ holdWrite: true });
+  await flush(() => findButton(m.auth_inventory_remove_named({ name: 'Reading companion' })).click());
+  await flush(() => findButton(m.auth_inventory_remove()).click());
+  const oldReply = releaseWrite!;
+  await flush(() => dispatch('pagehide'));
+  replacementViewer = true;
+  identityAccount = 'replacement-viewer';
+  await flush(() => dispatch('pageshow'));
+  await waitFor(() => host.textContent?.includes('Different application'));
+  releaseWrite = Promise.withResolvers<Response>();
+  await flush(() => findButton(m.auth_inventory_remove_named({ name: 'Different application' })).click());
+  await flush(() => findButton(m.auth_inventory_remove()).click());
+  await waitFor(() => fetchCalls.filter(c => c.path === '/consent' && c.method === 'POST').length === 2);
+  await flush(() => oldReply.resolve(Response.json({ client_id: 'former-client', scope: [] })));
+  expect(host.textContent).toContain(m.auth_connected_operation_dispatched());
+  expect(host.textContent).toContain(m.auth_connected_operation_unknown());
+  expect(host.querySelector<HTMLButtonElement>('form button[type="submit"]')?.disabled).toBe(true);
+  await flush(() => releaseWrite!.resolve(Response.json({ error: 'authentication_denied' }, { status: 403 })));
+  await waitFor(() => host.textContent?.includes(m.auth_connected_operation_refused()));
+  expect(host.textContent).toContain(m.auth_connected_operation_unknown());
+  expect(fetchCalls.filter(c => c.path === '/consent' && c.method === 'POST')).toHaveLength(2);
+});

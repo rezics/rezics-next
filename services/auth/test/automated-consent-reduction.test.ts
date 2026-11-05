@@ -239,7 +239,9 @@ test('an operator-opened session reduces the automated account consent through t
   expect(await accepted(fresh)).toBe(true);
 
   // Reducing to nothing removes every scope; a later approved opening grants again.
-  expect((await reduce(retained, [])).status).toBe(200);
+  const empty = await reduce(retained, []);
+  expect(empty.status).toBe(200);
+  expect(await empty.json()).toEqual({ client_id: 'automated-ext', scope: [] });
   expect(await consentOf('agent')).toEqual({ scopes: [], pending_scopes: null });
   expect(await accepted(fresh)).toBe(false);
   const again = await issued(await operatorSession('agent', 'operator-human', 'automated-ext', ['read']));
