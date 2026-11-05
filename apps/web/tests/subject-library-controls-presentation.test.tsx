@@ -285,7 +285,7 @@ beforeEach(async () => {
   // A foreign legacy global cache neither opens nor closes the scoped owner.
   client.setQueryData(['exposure', 'viewer'], []);
   client.setQueryData(['exposure', 'anonymous'], ['collections', 'personal_library']);
-  notifyManager.setScheduler((callback) => callback());
+  notifyManager.setScheduler((callback) => setTimeout(callback, 0));
   router = createRouter({
     routeTree: createRootRoute({ component: Journey }),
     history: createMemoryHistory({ initialEntries: [canonical] }),
