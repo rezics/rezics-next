@@ -30,6 +30,11 @@ the shelf chooser's 20 Type slots); a subject frame needs one descriptor. Each d
 1,024-Type/4 MiB Release bounds and at most 64 property points. Whole-release consumers and historical pinned
 readers keep their existing contracts, as do subject access, session/no-store handling, rendering and links.
 
+Decision: the anonymous whole-release display cache shared by Search's released controls and Subject relation labels
+retains at most 16 validated definitions, 16 concurrent definition reads, and 16 immutable release results per Web
+worker. Its identity includes the native origin and exact digest; active pointers remain fresh for 60 seconds, and
+explicit refresh clears and rereads the pointer from native.
+
 ## Imported music and live-action profiles
 
 An ordinary imported `schema:MusicAlbum`, `schema:Movie` or `schema:TVSeries` overview groups admitted scalar facts,

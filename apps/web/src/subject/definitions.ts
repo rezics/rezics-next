@@ -6,6 +6,7 @@ import { relationDefinitions, type RelationDefinition } from './relations.ts';
 import type { KernelClient } from '@rezics/client';
 import { fetchGuideRelease, type GuideRelease } from '../features/catalogue/definition-guide';
 import { readTypeDescriptor, readTypeDescriptors } from '../features/catalogue/type-directory';
+import { createDisplayDefinitionCache } from './display-definition-cache/index.ts';
 
 export type Release = FilterRelease & {
   digest?: string;
@@ -50,53 +51,11 @@ export function displayTypeLabel(label: string, locale: string): string {
   return `${first.toLocaleUpperCase(locale)}${label.slice(first.length)}`;
 }
 
-const definitionMemory = new Map<string, { storedAt: number; value: unknown }>();
-const displayReleaseMemory = new Map<string, Promise<Release>>();
-
-async function cachedDefinition<T>(url: string, ttl?: number): Promise<T> {
-  const now = Date.now();
-  const remembered = definitionMemory.get(url);
-  const cache = typeof caches === 'undefined' ? undefined : (caches as unknown as { default?: Cache }).default;
-  const request = new Request(url, { method: 'GET' });
-
-  if (cache) {
-    try {
-      const cached = await cache.match(request);
-      if (cached) {
-        const storedAt = Number(cached.headers.get('x-rezics-definition-stored-at'));
-        if (ttl === undefined || (Number.isFinite(storedAt) && now - storedAt < ttl)) {
-          const value = (await cached.json()) as T;
-          definitionMemory.set(url, { storedAt: Number.isFinite(storedAt) ? storedAt : now, value });
-          return value;
-        }
-        await cache.delete(request);
-      }
-    } catch {
-      // The memory copy below keeps local development working if the Cache API is unavailable.
-    }
-  }
-
-  if (remembered && (ttl === undefined || now - remembered.storedAt < ttl)) return remembered.value as T;
-
-  const response = await fetch(request);
-  if (!response.ok) throw new Error('Definitions read failed');
-  const value = (await response.json()) as T;
-  const storedAt = Date.now();
-  definitionMemory.set(url, { storedAt, value });
-  if (cache) {
-    const cacheHeaders = new Headers({
-      'content-type': 'application/json',
-      'cache-control': ttl === undefined ? 'public, max-age=31536000, immutable' : 'public, max-age=60',
-      'x-rezics-definition-stored-at': String(storedAt),
-    });
-    try {
-      await cache.put(request, new Response(JSON.stringify(value), { headers: cacheHeaders }));
-    } catch {
-      // Some local Cache API implementations reject entries; the bounded memory copy is the fallback.
-    }
-  }
-  return value;
-}
+const displayDefinitionCache = createDisplayDefinitionCache({
+  fetch: (request) => fetch(request),
+  cache: () => (typeof caches === 'undefined' ? undefined : (caches as unknown as { default?: Cache }).default),
+  now: () => Date.now(),
+});
 
 function kernelOrigin(): string {
   const origin = configuredKernelOrigin();
@@ -117,52 +76,46 @@ export async function readReleaseForCaller(options: {
 export async function readRelease(): Promise<Release> {
   const origin = kernelOrigin();
   const activeUrl = new URL('/v1/definitions/active', origin).href;
-  const active = await cachedDefinition<{ digest?: unknown }>(activeUrl, 60_000);
-  if (typeof active.digest !== 'string' || active.digest.length === 0 || active.digest.length > 256)
-    throw new Error('Active definitions release is invalid');
-  let pending = displayReleaseMemory.get(active.digest);
-  if (!pending) {
-    const releaseUrl = new URL(`/v1/definitions/releases/${encodeURIComponent(active.digest)}`, origin).href;
-    pending = (async () => {
-      const response = await cachedDefinition<{ digest?: unknown; release?: unknown }>(releaseUrl);
-      const value = response.release;
+  const digest = await displayDefinitionCache.read(activeUrl, 60_000, (active) => {
+    if (!isRecord(active) || typeof active.digest !== 'string' || active.digest.length === 0 || active.digest.length > 256)
+      throw new Error('Active definitions release is invalid');
+    return active.digest;
+  });
+  return displayDefinitionCache.readRelease(origin, digest, async () => {
+    const releaseUrl = new URL(`/v1/definitions/releases/${encodeURIComponent(digest)}`, origin).href;
+    const envelope = await displayDefinitionCache.read(releaseUrl, undefined, (response) => {
+      const value = isRecord(response) ? response.release : undefined;
       if (
-        response.digest !== active.digest ||
+        !isRecord(response) ||
+        response.digest !== digest ||
         !isRecord(value) ||
         !isRecord(value.types) ||
         !isRecord(value.properties)
       )
         throw new Error('Definitions release is invalid');
-      const types = Object.fromEntries(
-        Object.entries(value.types).map(([type, definition]) => {
-          if (!isRecord(definition) || !isRecord(definition.labels)) return [type, definition];
-          const labels = Object.fromEntries(
-            Object.entries(definition.labels).map(([locale, label]) => [
-              locale,
-              typeof label === 'string' ? displayTypeLabel(label, locale) : label,
-            ]),
-          );
-          return [type, { ...definition, labels }];
-        }),
-      );
-      return { ...value, digest: active.digest, types } as unknown as Release;
-    })();
-    displayReleaseMemory.set(active.digest, pending);
-  }
-  try {
-    return await pending;
-  } catch (error) {
-    if (displayReleaseMemory.get(active.digest) === pending) displayReleaseMemory.delete(active.digest);
-    throw error;
-  }
+      return { digest, release: value };
+    });
+    const value = envelope.release;
+    const types = Object.fromEntries(
+      Object.entries(value.types).map(([type, definition]) => {
+        if (!isRecord(definition) || !isRecord(definition.labels)) return [type, definition];
+        const labels = Object.fromEntries(
+          Object.entries(definition.labels).map(([locale, label]) => [
+            locale,
+            typeof label === 'string' ? displayTypeLabel(label, locale) : label,
+          ]),
+        );
+        return [type, { ...definition, labels }];
+      }),
+    );
+    return { ...value, digest, types } as unknown as Release;
+  });
 }
 
 /** Revalidate the active pointer after a command rejects values; immutable releases retain their normal cache. */
 export async function refreshRelease(): Promise<Release> {
   const url = new URL('/v1/definitions/active', kernelOrigin()).href;
-  definitionMemory.delete(url);
-  const cache = typeof caches === 'undefined' ? undefined : (caches as unknown as { default?: Cache }).default;
-  if (cache) await cache.delete(new Request(url, { method: 'GET' }));
+  await displayDefinitionCache.refresh(url);
   return readRelease();
 }
 
