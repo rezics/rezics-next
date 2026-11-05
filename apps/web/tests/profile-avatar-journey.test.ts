@@ -832,7 +832,12 @@ test('command waits keep the longest response-time Retry-After through delayed c
     mode = 'date';
     boundary.controller.retry();
     const paused = await refuse();
-    expect(paused).toMatchObject({ reason: 'unavailable', retryAfterHeader: httpDate, mediaId, responseTime: 7_201_000 });
+    expect(paused).toMatchObject({
+      reason: 'unavailable',
+      retryAfterHeader: httpDate,
+      mediaId,
+      responseTime: 7_201_000,
+    });
     boundary.calls[2]!.result.reject(paused);
     await settle();
     expect(boundary.controller.snapshot()).toMatchObject({
