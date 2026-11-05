@@ -81,12 +81,9 @@ function renderComponent({ component, slots }: PageRenderer) {
       if (key === 'puck' || key === 'editMode') continue;
       const value = props[key];
       if (slots.has(key)) {
-        next[key] =
-          typeof value === 'function'
-            ? createElement(value as ComponentType<{ as?: ComponentType<{ children?: ReactNode }> }>, {
-                as: SlotContent,
-              })
-            : null;
+        // Puck creates a new slot callback on each render. Invoke that callback so its stable
+        // SlotRender child keeps the mounted controls, rather than using the callback as their component type.
+        next[key] = typeof value === 'function' ? value({ as: SlotContent }) : null;
       } else {
         next[key] = value;
       }
