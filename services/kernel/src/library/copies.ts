@@ -11,6 +11,7 @@ import {
 } from '../command/command.ts';
 import type { KernelClock } from '../clock.ts';
 import { withConnection } from '../database/pool.ts';
+import { receiptKeysFor } from '../command/receipt-key.ts';
 import { ProblemError } from '../http/problem.ts';
 import { readPartition } from '../partition/partition.ts';
 import { accessCheck, type Access, type AccountActor, type Actor } from '../request/access.ts';
@@ -24,6 +25,7 @@ import {
   requireRoute,
   sameAccountRoute,
   WORK_STEP_DEADLINE_MS,
+  workStepDeadline,
 } from './command-support.ts';
 import type { Copy, CopyChanges, CopyStatus } from './entry-model.ts';
 import * as store from './entry-store.ts';
@@ -33,12 +35,24 @@ import { admitEntryAttempt } from './entry-lifecycle.ts';
 import { resolveSubject } from './subject-anchor.ts';
 import { decodeLibraryProfilePin } from './profile-pin.ts';
 import {
+  bindCopyCommandOperation,
+  consumeCopyCommandAttempt,
+  copyAccountGatePlan,
   copyDetailReadStatementPlan,
+  copyInventoryOperationPlan,
+  copyMutationOperationPlan,
   copyPrivateReadStatementPlan,
+  copyPresentationOperationPlan,
+  copyReadOperationPlan,
   copyRetentionReadStatementPlan,
   copyRetentionRestoreStatementPlan,
+  executeCopyOperation,
 } from './copy-operation-bounds.ts';
-import { readLibraryProfileSource } from './profile-source.ts';
+import {
+  readLibraryProfileSourceObservation,
+  sameLibraryProfileAnchor,
+  type LibraryProfileSource,
+} from './profile-source.ts';
 import { deadlineClient, within as withinDeadline } from '../access/authenticate.ts';
 import type { CopyPresentation } from './copy-model.ts';
 import { prepareCopyPresentation } from './copy-presentation.ts';
@@ -301,9 +315,12 @@ export function createCopyCommands(config: Dependencies) {
   const { pool, access, tokens, clock } = config;
   const runner = createLibraryCommandRunner({ pool, ...(clock === undefined ? {} : { clock }) });
 
-  async function gate(actor: Actor, action: string): Promise<AccountActor> {
+  async function gate(actor: Actor, action: string, deadline: number): Promise<AccountActor> {
     const owner = requireActor(actor, action);
-    await withConnection(pool, (client) => admitAccount(client, owner));
+    const route = requireRoute(owner.accountId);
+    await executeCopyOperation(copyAccountGatePlan(route, owner.accountId), () =>
+      withConnection(pool, (client) => admitAccount(deadlineClient(client, deadline), owner)),
+    );
     return owner;
   }
 
@@ -327,11 +344,11 @@ export function createCopyCommands(config: Dependencies) {
     });
   }
 
-  async function prepareSource(owner: AccountActor, subjectId: string, at: AuthoritativeTime) {
+  async function prepareSource(owner: AccountActor, subjectId: string, at: AuthoritativeTime, deadline: number) {
     try {
       return {
-        source: await readLibraryProfileSource(
-          { pool, access, actor: owner, at, deadline: deadlineFor(WORK_STEP_DEADLINE_MS) },
+        observation: await readLibraryProfileSourceObservation(
+          { pool, access, actor: owner, at, deadline },
           subjectId,
         ),
       };
@@ -341,9 +358,53 @@ export function createCopyCommands(config: Dependencies) {
     }
   }
 
+  function preparedCurrentSource(
+    before: Awaited<ReturnType<typeof prepareSource>>,
+    current: Awaited<ReturnType<typeof prepareSource>>,
+  ): LibraryProfileSource {
+    if ('error' in before) throw before.error;
+    if ('error' in current) throw current.error;
+    const original = before.observation;
+    const latest = current.observation;
+    if (original && !sameLibraryProfileAnchor(original.anchor, latest?.anchor ?? null))
+      throw new ProblemError('semantic_not_ready');
+    if (!original && latest) throw new ProblemError('semantic_not_ready');
+    if (!original || !latest) return null;
+    if (
+      original.source.kind !== latest.source.kind ||
+      (original.source.kind === 'supported' &&
+        latest.source.kind === 'supported' &&
+        (original.source.pin.releaseDigest !== latest.source.pin.releaseDigest ||
+          original.source.pin.profileId !== latest.source.pin.profileId ||
+          original.source.pin.acceptingType !== latest.source.pin.acceptingType))
+    )
+      throw new ProblemError('semantic_not_ready');
+    return latest.source;
+  }
+
   async function createCopy(actor: Actor, input: unknown, requestKey: string) {
-    const owner = await gate(actor, 'copy:create');
+    const deadline = workStepDeadline();
+    const owner = await gate(actor, 'copy:create', deadline);
     const parsed = parseCreate(input);
+    const route = requireRoute(owner.accountId);
+    const plan = copyMutationOperationPlan('create', {
+      route,
+      accountId: owner.accountId,
+      subjectId: parsed.subjectId,
+      requestKey,
+      receiptKeys: receiptKeysFor(pool).keys.size,
+      commandInput: parsed,
+      copyId: '00000000-0000-0000-0000-000000000000',
+      kind: parsed.kind,
+      status: parsed.status,
+      location: parsed.location,
+      source: parsed.source,
+      acquiredOn: parsed.acquiredOn,
+      disposedOn: parsed.disposedOn,
+      note: parsed.note,
+      mediaCondition: parsed.mediaCondition,
+      packagingCondition: parsed.packagingCondition,
+    });
     return runner.ownAccountPrepared(
       owner,
       {
@@ -351,16 +412,20 @@ export function createCopyCommands(config: Dependencies) {
         kind: 'library.copy.create',
         requestKey,
         input: parsed,
+        deadline,
+        execution: (dispatch) => bindCopyCommandOperation(plan, dispatch),
         async prepare(attempt) {
-          await admitEntryAttempt(config, owner, 'copy:create', attempt, deadlineFor(WORK_STEP_DEADLINE_MS));
-          return prepareSource(owner, parsed.subjectId, attempt.time);
+          await consumeCopyCommandAttempt(plan);
+          await admitEntryAttempt(config, owner, 'copy:create', attempt, deadline);
+          const original = await prepareSource(owner, parsed.subjectId, attempt.time, deadline);
+          const current = await prepareSource(owner, parsed.subjectId, attempt.time, deadline);
+          return { original, current };
         },
       },
       async (tx, command, prepared) => {
         if (parsed.kind === undefined) throw new CopyInvalidError('kind');
         if (parsed.status === undefined) throw new CopyInvalidError('status');
-        if ('error' in prepared) throw prepared.error;
-        const source = prepared.source;
+        const source = preparedCurrentSource(prepared.original, prepared.current);
         if (!source) throw new LibraryNotFoundError();
         if (source.kind !== 'supported' || !hasCopyStatus(source.profile, parsed.kind, parsed.status))
           throw new ProblemError('unsupported_library_profile');
@@ -372,7 +437,6 @@ export function createCopyCommands(config: Dependencies) {
             throw new ProblemError('unsupported_library_profile');
           conditionFacts = mergeCopyConditionFields({}, requestedConditions, { kind: acceptedKind, pin: source.pin });
         }
-        const route = requireRoute(owner.accountId);
         const { mediaCondition: _mediaCondition, packagingCondition: _packagingCondition, ...copyInput } = parsed;
         const copy = await store.insertCopy(
           tx,
@@ -394,23 +458,46 @@ export function createCopyCommands(config: Dependencies) {
   }
 
   async function updateCopy(actor: Actor, copyId: string, input: unknown, requestKey: string) {
-    const owner = await gate(actor, 'copy:update');
+    const deadline = workStepDeadline();
+    const owner = await gate(actor, 'copy:update', deadline);
     const patch = parseUpdate(input);
     const route = sameAccountRoute(owner.accountId, copyId);
+    const commandInput = { copyId, ...patch };
+    const plan = copyMutationOperationPlan('update', {
+      route,
+      accountId: owner.accountId,
+      copyId,
+      requestKey,
+      receiptKeys: receiptKeysFor(pool).keys.size,
+      commandInput,
+      revision: patch.revision,
+      status: patch.status,
+      location: patch.location,
+      source: patch.source,
+      acquiredOn: patch.acquiredOn,
+      disposedOn: patch.disposedOn,
+      note: patch.note,
+      mediaCondition: patch.mediaCondition,
+      packagingCondition: patch.packagingCondition,
+    });
     return runner.ownAccountPrepared(
       owner,
       {
         action: 'copy:update',
         kind: 'library.copy.update',
         requestKey,
-        input: { copyId, ...patch },
+        input: commandInput,
+        deadline,
+        execution: (dispatch) => bindCopyCommandOperation(plan, dispatch),
         async prepare(attempt) {
-          await admitEntryAttempt(config, owner, 'copy:update', attempt, deadlineFor(WORK_STEP_DEADLINE_MS));
+          await consumeCopyCommandAttempt(plan);
+          await admitEntryAttempt(config, owner, 'copy:update', attempt, deadline);
           // Release the owner's read checkout before visiting source and Global anchors.
-          const current = await readOnly(owner, (client) => store.readCopy(client, route, copyId));
-          return current?.accountId === owner.accountId
-            ? prepareSource(owner, current.subjectId, attempt.time)
-            : { source: null };
+          const current = await readOnly(owner, (client) => store.readCopy(client, route, copyId), deadline);
+          if (current?.accountId !== owner.accountId) return { subjectId: null, original: null, current: null };
+          const original = await prepareSource(owner, current.subjectId, attempt.time, deadline);
+          const latest = await prepareSource(owner, current.subjectId, attempt.time, deadline);
+          return { subjectId: current.subjectId, original, current: latest };
         },
       },
       async (tx, command, prepared) => {
@@ -421,8 +508,9 @@ export function createCopyCommands(config: Dependencies) {
         const changes = merged(fact.copy, patch);
         if (changes.disposedOn !== null || changes.status === 'disposed')
           await assertNoOpenLoan(tx, route, owner.accountId, copyId);
-        if ('error' in prepared) throw prepared.error;
-        const source = prepared.source;
+        if (prepared.subjectId !== fact.copy.subjectId || !prepared.original || !prepared.current)
+          throw new CopyConflictError();
+        const source = preparedCurrentSource(prepared.original, prepared.current);
         if (!source || source.subjectId !== fact.copy.subjectId) throw new LibraryNotFoundError();
         if (
           source.kind !== 'supported' ||
@@ -464,18 +552,33 @@ export function createCopyCommands(config: Dependencies) {
   }
 
   async function deleteCopy(actor: Actor, copyId: string, revision: number | undefined, requestKey: string) {
-    const owner = await gate(actor, 'copy:delete');
+    const deadline = workStepDeadline();
+    const owner = await gate(actor, 'copy:delete', deadline);
     const expected = revision === undefined ? undefined : revisionValue(revision);
     const route = sameAccountRoute(owner.accountId, copyId);
+    const commandInput = { copyId, ...(expected === undefined ? {} : { revision: expected }) };
+    const plan = copyMutationOperationPlan('delete', {
+      route,
+      accountId: owner.accountId,
+      copyId,
+      requestKey,
+      receiptKeys: receiptKeysFor(pool).keys.size,
+      commandInput,
+      revision: expected,
+    });
     return runner.ownAccountPrepared(
       owner,
       {
         action: 'copy:delete',
         kind: 'library.copy.delete',
         requestKey,
-        input: { copyId, ...(expected === undefined ? {} : { revision: expected }) },
-        prepare: (attempt) =>
-          admitEntryAttempt(config, owner, 'copy:delete', attempt, deadlineFor(WORK_STEP_DEADLINE_MS)),
+        input: commandInput,
+        deadline,
+        execution: (dispatch) => bindCopyCommandOperation(plan, dispatch),
+        async prepare(attempt) {
+          await consumeCopyCommandAttempt(plan);
+          await admitEntryAttempt(config, owner, 'copy:delete', attempt, deadline);
+        },
       },
       async (tx, command) => {
         const current = await lockOwned(tx, route, owner.accountId, copyId);
@@ -495,7 +598,8 @@ export function createCopyCommands(config: Dependencies) {
   }
 
   async function restoreCopy(actor: Actor, copyId: string, input: unknown, requestKey: string) {
-    const owner = await gate(actor, 'copy:update');
+    const deadline = workStepDeadline();
+    const owner = await gate(actor, 'copy:update', deadline);
     const value = plain(input);
     const foreign = unexpected(value, ['deletionId', 'revision']);
     if (foreign !== null) throw new CopyInvalidError(foreign);
@@ -506,6 +610,16 @@ export function createCopyCommands(config: Dependencies) {
       throw new CopyInvalidError('deletionId');
     const selected = { copyId, deletionId: value.deletionId, revision: revisionValue(value.revision) };
     const route = sameAccountRoute(owner.accountId, copyId);
+    const plan = copyMutationOperationPlan('restore', {
+      route,
+      accountId: owner.accountId,
+      copyId,
+      requestKey,
+      receiptKeys: receiptKeysFor(pool).keys.size,
+      commandInput: selected,
+      revision: selected.revision,
+      deletionId: selected.deletionId,
+    });
     return runner.ownAccountPrepared(
       owner,
       {
@@ -513,8 +627,11 @@ export function createCopyCommands(config: Dependencies) {
         kind: 'library.copy.restore',
         requestKey,
         input: selected,
+        deadline,
+        execution: (dispatch) => bindCopyCommandOperation(plan, dispatch),
         async prepare(attempt) {
-          await admitEntryAttempt(config, owner, 'copy:update', attempt, deadlineFor(WORK_STEP_DEADLINE_MS));
+          await consumeCopyCommandAttempt(plan);
+          await admitEntryAttempt(config, owner, 'copy:update', attempt, deadline);
           try {
             // This exact read owns no checkout while immutable release and original/terminal
             // disclosure adapters visit their own anchors. Errors are deferred until receipt miss.
@@ -524,18 +641,18 @@ export function createCopyCommands(config: Dependencies) {
                 copy_id: copyId,
                 account_id: owner.accountId,
               }).run(client);
-            });
+            }, deadline);
             if (!row) throw new LibraryNotFoundError();
             const pin = decodeLibraryProfilePin(row.status_profile_pin ?? row.library_profile_pin);
             if (pin) {
-              const release = await readRelease(pool, pin.releaseDigest);
+              const release = await withConnection(pool, (client) => readRelease(deadlineClient(client, deadline), pin.releaseDigest));
               const profile = release ? resolveLibraryProfilePin({ digest: pin.releaseDigest, release }, pin) : null;
               if (!profile || row.kind === null || !hasCopyStatus(profile, row.kind, row.status))
                 throw new Error('Retained copy accepted profile is unavailable');
             }
             const kindPin = decodeLibraryProfilePin(row.kind_profile_pin);
             if (kindPin) {
-              const release = await readRelease(pool, kindPin.releaseDigest, { composed: false });
+              const release = await withConnection(pool, (client) => readRelease(deadlineClient(client, deadline), kindPin.releaseDigest, { composed: false }));
               const profile = release
                 ? resolveLibraryProfilePin({ digest: kindPin.releaseDigest, release }, kindPin)
                 : null;
@@ -582,12 +699,14 @@ export function createCopyCommands(config: Dependencies) {
 
   async function readCopy(actor: Actor, copyId: string): Promise<Copy> {
     const owner = requireActor(actor, 'copy:read');
-    return readOnly(owner, async (client) => {
-      const route = sameAccountRoute(owner.accountId, copyId);
-      const copy = await store.readCopy(client, route, copyId);
-      if (!copy || copy.accountId !== owner.accountId) throw new LibraryNotFoundError();
-      return copy;
-    });
+    const route = sameAccountRoute(owner.accountId, copyId);
+    return executeCopyOperation(copyReadOperationPlan(route, owner.accountId, copyId), () =>
+      readOnly(owner, async (client) => {
+        const copy = await store.readCopy(client, route, copyId);
+        if (!copy || copy.accountId !== owner.accountId) throw new LibraryNotFoundError();
+        return copy;
+      }),
+    );
   }
 
   function readPresentedCopy(
@@ -611,7 +730,8 @@ export function createCopyCommands(config: Dependencies) {
     const owner = requireActor(actor, 'copy:read');
     const route = sameAccountRoute(owner.accountId, copyId);
     const deadline = deadlineFor(WORK_STEP_DEADLINE_MS);
-    return withRequestDeadline(deadline, () =>
+    return executeCopyOperation(copyPresentationOperationPlan(route, owner.accountId, copyId, copyId), () =>
+      withRequestDeadline(deadline, () =>
       withinDeadline(deadline, async () => {
         const time = () => withConnection(pool, (client) => mintReadTime(deadlineClient(client, deadline), clock));
         async function observed(at: AuthoritativeTime) {
@@ -692,6 +812,7 @@ export function createCopyCommands(config: Dependencies) {
           releaseOperationalTime(at);
         }
       }),
+      ),
     );
   }
 
@@ -780,24 +901,36 @@ export function createCopyCommands(config: Dependencies) {
         deadline,
       );
 
-    return withRequestDeadline(deadline, async () => {
-      const first = await readPage();
-      const filterOptions = await prepareCopyInventory(pool, first.inventoryValues, deadline, languages);
-      const current = await readPage();
-      if (
-        JSON.stringify(first.copies) !== JSON.stringify(current.copies) ||
-        first.next !== current.next ||
-        first.accountEpoch !== current.accountEpoch ||
-        JSON.stringify(first.inventoryValues) !== JSON.stringify(current.inventoryValues)
-      )
-        throw new ProblemError('semantic_not_ready');
-      return {
-        copies: first.copies,
-        next: first.next,
-        accountEpoch: first.accountEpoch,
-        filterOptions,
-      };
-    });
+    return executeCopyOperation(
+      copyInventoryOperationPlan({
+        route: accountRoute,
+        accountId: owner.accountId,
+        limit: size,
+        subjectId: filterSubjectId,
+        kind: filterKind,
+        status: filterStatus,
+        cursor: options.cursor ?? null,
+      }),
+      () =>
+        withRequestDeadline(deadline, async () => {
+          const first = await readPage();
+          const filterOptions = await prepareCopyInventory(pool, first.inventoryValues, deadline, languages);
+          const current = await readPage();
+          if (
+            JSON.stringify(first.copies) !== JSON.stringify(current.copies) ||
+            first.next !== current.next ||
+            first.accountEpoch !== current.accountEpoch ||
+            JSON.stringify(first.inventoryValues) !== JSON.stringify(current.inventoryValues)
+          )
+            throw new ProblemError('semantic_not_ready');
+          return {
+            copies: first.copies,
+            next: first.next,
+            accountEpoch: first.accountEpoch,
+            filterOptions,
+          };
+        }),
+    );
   }
 
   async function listCopies(actor: Actor, options: PageOptions = {}) {
