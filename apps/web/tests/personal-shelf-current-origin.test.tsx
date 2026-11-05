@@ -383,7 +383,8 @@ test('Whole personal Shelf reads, sequential commands and Undo retire on actual 
 test('Received Entry reading uses supplied state, exact dates and active Progress without another read or write, then restores trigger focus', async () => {
   const ui = await mount();
   try {
-    await ui.settle(ui.reads[0]!, receivedReadingResponse('A'));
+    await ui.refresh();
+    await ui.settle(ui.reads.at(-1)!, receivedReadingResponse('A'));
     const trigger = () => ui.host.querySelector<HTMLButtonElement>('[data-received-entry-reading-trigger]')!;
     const before = { reads: ui.reads.length, writes: ui.writes.length, continues: ui.continues.length };
     await ui.run(() => trigger().click());
@@ -427,7 +428,8 @@ test('Received Entry reading uses supplied state, exact dates and active Progres
 test('Received Entry reading keeps uncertain commands unconfirmed and retires on replacement and viewer change', async () => {
   const ui = await mount();
   try {
-    await ui.settle(ui.reads[0]!, receivedReadingResponse('A'));
+    await ui.refresh();
+    await ui.settle(ui.reads.at(-1)!, receivedReadingResponse('A'));
     await ui.run(() => {
       void ui.controls.changeState(id(1), 'completed');
     });
