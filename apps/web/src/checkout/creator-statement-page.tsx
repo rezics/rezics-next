@@ -55,6 +55,13 @@ export function CreatorStatementPage({
   onRetry?: () => void;
 }) {
   const href = statementHref(locale, id, cursor, from);
+  const noticeRetry = onRetry ? { onRetry } : {};
+  const pagination = {
+    ...(from !== undefined ? { from } : {}),
+    ...(cursor !== undefined ? { cursor } : {}),
+    ...(navigation ? { navigation } : {}),
+    ...(onMovement ? { onMovement } : {}),
+  };
   const statement = page.kind === 'ready' ? page.statement : undefined;
   const summary = statement
     ? ([
@@ -98,14 +105,11 @@ export function CreatorStatementPage({
       </div>
       {page.kind !== 'ready' ? (
         <>
-          <StatementNotice kind={page.kind} retryHref={href} onRetry={onRetry} />
+          <StatementNotice kind={page.kind} retryHref={href} {...noticeRetry} />
           <StatementLinePagination
             id={id}
-            from={from}
-            cursor={cursor}
             page={page}
-            navigation={navigation}
-            onMovement={onMovement}
+            {...pagination}
           />
         </>
       ) : (
@@ -144,14 +148,11 @@ export function CreatorStatementPage({
             <p className="max-w-prose text-sm leading-relaxed text-muted-foreground">{m.statements_lines_note()}</p>
             {page.lines.kind !== 'ready' ? (
               <>
-                <StatementNotice kind={page.lines.kind} retryHref={href} onRetry={onRetry} />
+                <StatementNotice kind={page.lines.kind} retryHref={href} {...noticeRetry} />
                 <StatementLinePagination
                   id={id}
-                  from={from}
-                  cursor={cursor}
                   page={page}
-                  navigation={navigation}
-                  onMovement={onMovement}
+                  {...pagination}
                 />
               </>
             ) : (
@@ -265,11 +266,8 @@ export function CreatorStatementPage({
                 )}
                 <StatementLinePagination
                   id={id}
-                  from={from}
-                  cursor={cursor}
                   page={page}
-                  navigation={navigation}
-                  onMovement={onMovement}
+                  {...pagination}
                 />
               </>
             )}

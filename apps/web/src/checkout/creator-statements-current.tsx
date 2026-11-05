@@ -73,27 +73,28 @@ function StatementPresentation({
   onMovement?: (event: MouseEvent<HTMLAnchorElement>) => void;
   onRetry?: () => void;
 }) {
-  const search = address.cursor ? { cursor: address.cursor } : {};
+  const search = address.cursor !== null ? { cursor: address.cursor } : {};
+  const shared = {
+    ...(navigation ? { navigation } : {}),
+    ...(onMovement ? { onMovement } : {}),
+    ...(onRetry ? { onRetry } : {}),
+  };
   return address.kind === 'list' ? (
     <CreatorStatementsPage
       page={page as CreatorStatementsData | { kind: 'preparing' }}
       locale={address.locale}
       {...search}
-      navigation={navigation}
-      onMovement={onMovement}
-      onRetry={onRetry}
+      {...shared}
     />
   ) : (
     <CreatorStatementPage
       page={page as CreatorStatementData | { kind: 'preparing' }}
       locale={address.locale}
       id={address.id}
-      payment={payment}
+      {...(payment !== undefined ? { payment } : {})}
       {...search}
       {...(address.from ? { from: address.from } : {})}
-      navigation={navigation}
-      onMovement={onMovement}
-      onRetry={onRetry}
+      {...shared}
     />
   );
 }
