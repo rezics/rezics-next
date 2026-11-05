@@ -6,7 +6,12 @@ import { authoritativeTimeValue, commandAttemptDeadline, type CommandEvent } fro
 import type { SessionComponent } from '../tokens/session.ts';
 import { withConnection } from '../database/pool.ts';
 import { withReadTransaction } from '../semantic/read.ts';
-import { LibraryNotFoundError, createLibraryCommandRunner, requireRoute } from '../library/command-support.ts';
+import {
+  LibraryNotFoundError,
+  createLibraryCommandRunner,
+  libraryCommandReceiptDigestForActor,
+  requireRoute,
+} from '../library/command-support.ts';
 import { resolveSubject } from '../library/subject-anchor.ts';
 import type { Access, AccountActor, Actor } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
@@ -96,6 +101,15 @@ export type VoteCommandAdmission = {
   input: unknown;
   prepare(): Promise<(tx: import('../command/command.ts').CommandTransaction) => Promise<void>>;
 };
+
+/** Bounded native linkage retained after the provider input has been scrubbed. */
+export type PutVoteReceipt = Readonly<{
+  requestKey: string;
+  digest: string;
+  questionId: string;
+  targetId: string;
+}>;
+export type PreparedPutVote = Readonly<{ input: PutVoteInput; receipt: PutVoteReceipt }>;
 
 export type VoteReviewCurrentVote = Exclude<OwnCountedVoteObservation, { state: 'unavailable' }>;
 export type VoteReview = Readonly<{
@@ -264,6 +278,40 @@ class VoteUnchanged extends Error {
   }
 }
 
+const PUT_VOTE_KIND = 'rating.vote.put';
+
+/** The producer owns the canonical command input for both execution and receipt linkage. */
+function normalizePutVoteInput(input: PutVoteInput): PutVoteInput {
+  if (!input || typeof input !== 'object' || typeof input.questionId !== 'string' || typeof input.targetId !== 'string')
+    throw new VoteInvalidError('vote');
+  if (input.units !== null && typeof input.units !== 'number') throw new VoteInvalidError('units');
+
+  let observation: VoteObservation | undefined;
+  if (input.observation !== undefined) {
+    try {
+      observation = parseVoteObservation(JSON.stringify(input.observation));
+    } catch {
+      throw new VoteInvalidError('observation');
+    }
+    requireVoteObservationProvider(input.questionId);
+  }
+  let guard: VoteReviewGuard | undefined;
+  if (input.guard !== undefined) {
+    try {
+      guard = normalizeVoteReviewGuard(input.guard, input.targetId);
+    } catch {
+      throw new VoteInvalidError('guard');
+    }
+  }
+  return {
+    questionId: input.questionId,
+    targetId: input.targetId,
+    units: input.units,
+    ...(guard ? { guard } : {}),
+    ...(observation ? { observation } : {}),
+  };
+}
+
 /** Writes and reads the signed-in person's current rating vote on the account's partition. */
 export function createVoteCommands(config: Dependencies) {
   const { pool, clock } = config;
@@ -278,6 +326,48 @@ export function createVoteCommands(config: Dependencies) {
   });
   const countedVoteReader = createOwnCountedVoteReader({ pool, access: config.access });
 
+  /** Prepare once before starting a command; only receipt needs bounded retention after scrubbing. */
+  function preparePutVote(
+    actor: Actor,
+    input: PutVoteInput,
+    idempotencyKey: string,
+    admission?: VoteCommandAdmission,
+  ): PreparedPutVote {
+    voteAccount(actor);
+    const normalized = normalizePutVoteInput(input);
+    return {
+      input: normalized,
+      receipt: Object.freeze({
+        requestKey: idempotencyKey,
+        digest: libraryCommandReceiptDigestForActor(actor, PUT_VOTE_KIND, {
+          ...normalized,
+          ...(admission ? { admission: admission.input } : {}),
+        }),
+        questionId: normalized.questionId,
+        targetId: normalized.targetId,
+      }),
+    };
+  }
+
+  /** Historical command evidence only; absence never executes or records a vote. */
+  async function reconcilePutVote(actor: Actor, receipt: PutVoteReceipt): Promise<PutVoteOutcome | null> {
+    voteAccount(actor);
+    const outcome = await guardedRunner.ownAccountReceiptOnly<unknown, Vote | null>(actor, {
+      action: VOTE_SCOPE,
+      kind: PUT_VOTE_KIND,
+      requestKey: receipt.requestKey,
+      digest: receipt.digest,
+      prepare: (attempt) => prepareVoteTarget(config, actor, receipt, commandAttemptDeadline(attempt)),
+      async authorize() {},
+    });
+    return outcome
+      ? {
+          vote: outcome.value,
+          component: { partition: outcome.partition, epoch: outcome.epoch, position: outcome.position },
+        }
+      : null;
+  }
+
   async function putVoteOutcome(
     actor: Actor,
     input: PutVoteInput,
@@ -285,39 +375,8 @@ export function createVoteCommands(config: Dependencies) {
     admission?: VoteCommandAdmission,
   ): Promise<PutVoteOutcome> {
     const owner = voteAccount(actor);
-    if (
-      !input ||
-      typeof input !== 'object' ||
-      typeof input.questionId !== 'string' ||
-      typeof input.targetId !== 'string'
-    )
-      throw new VoteInvalidError('vote');
-    if (input.units !== null && typeof input.units !== 'number') throw new VoteInvalidError('units');
-
-    let observation: VoteObservation | undefined;
-    if (input.observation !== undefined) {
-      try {
-        observation = parseVoteObservation(JSON.stringify(input.observation));
-      } catch {
-        throw new VoteInvalidError('observation');
-      }
-      requireVoteObservationProvider(input.questionId);
-    }
-    let guard: VoteReviewGuard | undefined;
-    if (input.guard !== undefined) {
-      try {
-        guard = normalizeVoteReviewGuard(input.guard, input.targetId);
-      } catch {
-        throw new VoteInvalidError('guard');
-      }
-    }
-    input = {
-      questionId: input.questionId,
-      targetId: input.targetId,
-      units: input.units,
-      ...(guard ? { guard } : {}),
-      ...(observation ? { observation } : {}),
-    };
+    input = normalizePutVoteInput(input);
+    const { guard, observation } = input;
     const initial = guard ? null : await prepareVoteTarget(config, actor, input, deadlineFor(5_000));
 
     try {
@@ -325,14 +384,10 @@ export function createVoteCommands(config: Dependencies) {
         actor,
         {
           action: VOTE_SCOPE,
-          kind: 'rating.vote.put',
+          kind: PUT_VOTE_KIND,
           requestKey: idempotencyKey,
           input: {
-            questionId: input.questionId,
-            targetId: input.targetId,
-            units: input.units,
-            ...(guard ? { guard } : {}),
-            ...(observation ? { observation } : {}),
+            ...input,
             ...(admission ? { admission: admission.input } : {}),
           },
           // Current question provenance is checked again on each native attempt,
@@ -619,5 +674,5 @@ export function createVoteCommands(config: Dependencies) {
     return Object.freeze({ question, currentVote, guard });
   }
 
-  return { putVote, putVoteOutcome, readOwnVote, readRatingQuestion, readVoteReview };
+  return { preparePutVote, reconcilePutVote, putVote, putVoteOutcome, readOwnVote, readRatingQuestion, readVoteReview };
 }
