@@ -129,7 +129,7 @@ test('the navigation exposes only actual Everything and Liked records beside tra
 test('a missing list operation makes no pins request, while a failed read is not an empty list', async () => {
   const calls: string[] = [];
   const client = {
-    openapi: { json: { get: async () => ({ data: { paths: {} } }) } },
+    'openapi.json': { get: async () => ({ data: { paths: {} } }) },
     libraryPins: { get: async () => (calls.push('pins'), { data: { pins: [], revision: 0, next: null } }) },
   };
   expect(libraryPinsListExposed({ paths: {} })).toBe(false);
@@ -138,12 +138,10 @@ test('a missing list operation makes no pins request, while a failed read is not
   expect(calls).toEqual([]);
 
   const exposed = {
-    openapi: {
-      json: {
-        get: async () => ({
-          data: { paths: { '/v1/libraryPins': { get: { operationId: 'library_pin.list' } } } },
-        }),
-      },
+    'openapi.json': {
+      get: async () => ({
+        data: { paths: { '/v1/libraryPins': { get: { operationId: 'library_pin.list' } } } },
+      }),
     },
     libraryPins: { get: async () => ({ error: { status: 503 } }) },
   };
@@ -351,20 +349,17 @@ test('the first-page pins read remains one request for 0, 8, and 100 pins', asyn
   for (const count of [0, 8, 100]) {
     const paths: string[] = [];
     const client = {
-      openapi: {
-        json: {
-          get: async () => ({
-            data: {
-              paths: {
-                '/v1/libraryPins': { get: { operationId: 'library_pin.list' } },
-                '/v1/libraryPins/{collectionId}': {
-                  put: { operationId: 'library_pin.put' },
-                  delete: { operationId: 'library_pin.delete' },
-                },
+      'openapi.json': {
+        get: async () => ({
+          data: {
+            paths: {
+              '/v1/libraryPins': { get: { operationId: 'library_pin.list' } },
+              '/v1/libraryPins/{collectionId}': {
+                put: { operationId: 'library_pin.put' },
+                delete: { operationId: 'library_pin.delete' },
               },
             },
           }),
-        },
       },
       libraryPins: {
         get: async ({ query }: { query: { limit: number } }) => {
@@ -440,20 +435,17 @@ test('the library navigation reads one first page of pins and owner Collections,
     const collectionQueries: unknown[] = [];
     const collectionItemReads: string[] = [];
     const client = {
-      openapi: {
-        json: {
-          get: async () => ({
-            data: {
-              paths: {
-                '/v1/libraryPins': { get: { operationId: 'library_pin.list' } },
-                '/v1/libraryPins/{collectionId}': {
-                  put: { operationId: 'library_pin.put' },
-                  delete: { operationId: 'library_pin.delete' },
-                },
+      'openapi.json': {
+        get: async () => ({
+          data: {
+            paths: {
+              '/v1/libraryPins': { get: { operationId: 'library_pin.list' } },
+              '/v1/libraryPins/{collectionId}': {
+                put: { operationId: 'library_pin.put' },
+                delete: { operationId: 'library_pin.delete' },
               },
             },
           }),
-        },
       },
       libraryPins: {
         get: async ({ query }: { query: { limit: number } }) => {

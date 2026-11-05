@@ -165,7 +165,9 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
   const { createRoot } = await import('react-dom/client');
   const { createRootRoute, createRouter, createMemoryHistory, RouterContextProvider } =
     await import('@tanstack/react-router');
-  const { sessionQuery, exposureQuery } = await import('../src/session/query');
+  const { sessionQuery } = await import('../src/session/query');
+  const { viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
+  const { browserObservation } = await import('../src/session/observation');
   const { useCurrentLibraryNavigation } = await import('../src/library/pins-current');
   const { usePinControlActions: useActions, PinControlNotice } = await import('../src/library/pin-control');
   const { LibraryNavigation } = await import('../src/library/library-nav');
@@ -194,8 +196,18 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const session = (subject: string, csrfToken = 'csrf') => ({ state: 'signed-in' as const, subject, csrfToken });
+  const viewer = browserObservation(client);
+  const stopViewer = viewer.subscribeCache(() => {});
+  const admit = (admitted: string[]) => {
+    const snapshot = viewer.getSnapshot();
+    if (snapshot.state !== 'signed-in') throw new Error('Missing current viewer observation');
+    client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {
+      subject: snapshot.observation.subject,
+      admitted,
+    });
+  };
   client.setQueryData(sessionQuery.queryKey, session('A'));
-  client.setQueryData(exposureQuery.queryKey, ['personal_library', 'collections']);
+  admit(['personal_library', 'collections']);
   const router = createRouter({ routeTree: createRootRoute(), history: createMemoryHistory() });
   const invalidate = spyOn(router, 'invalidate').mockResolvedValue(undefined);
   const cache = spyOn(client, 'invalidateQueries').mockResolvedValue(undefined);
@@ -265,7 +277,10 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
   });
   try {
     await show(); // A remains unresolved while B becomes immediately usable.
-    await act(async () => client.setQueryData(sessionQuery.queryKey, session('B')));
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, session('B'));
+      admit(['personal_library', 'collections']);
+    });
     await tick();
     expect(pendingReads).toHaveLength(2);
     await settle(1, response('B', ['a', 'x', 'b', 'c']));
@@ -283,6 +298,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, session('C'));
       oldMove();
+      admit(['personal_library', 'collections']);
     });
     expect(writes).toHaveLength(1);
     await tick();
@@ -302,6 +318,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
       // Viewer ABA is observed even when both replacements precede the next render.
       client.setQueryData(sessionQuery.queryKey, session('D'));
       client.setQueryData(sessionQuery.queryKey, session('C'));
+      admit(['personal_library', 'collections']);
       oldPin();
     });
     await tick();
@@ -309,8 +326,8 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     expect(host.textContent).not.toContain('Private C');
     await settle(3, response('C', ['b']));
     await act(async () => {
-      client.setQueryData(exposureQuery.queryKey, ['collections']);
-      client.setQueryData(exposureQuery.queryKey, ['personal_library', 'collections']);
+      admit(['collections']);
+      admit(['personal_library', 'collections']);
     });
     await tick();
     expect(navigation.data.pins.state).not.toBe('loaded');
@@ -339,7 +356,10 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     const exact = writes[2]!.input.data;
     expect(exact).toEqual({ collectionId: 'b', revision: 7, after: 'a', idempotencyKey: exact.idempotencyKey });
     await act(async () => writes[2]!.work.reject(new Error('Uncertain response')));
-    await act(async () => client.setQueryData(sessionQuery.queryKey, session('C', 'rotated-csrf')));
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, session('C', 'rotated-csrf'));
+      admit(['personal_library', 'collections']);
+    });
     await refetch();
     await settle(8, response('C', ['b', 'c'], 42));
     expect(writes).toHaveLength(3); // Refresh/rotation never automatically replays a command.
@@ -372,7 +392,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     await settle(restoredRead, response('C', ['a', 'x', 'b', 'c']));
 
     // Unrelated owner Collections admission cannot revoke this same-viewer removal of a null target.
-    await act(async () => client.setQueryData(exposureQuery.queryKey, ['personal_library']));
+    await act(async () => admit(['personal_library']));
     await tick();
     await act(async () => select(m.library_pin_unpin())());
     expect(writes[4]!.operation).toBe('delete');
@@ -435,7 +455,10 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     await tick();
     await settle(refreshRead, response('C', [], 99));
     publicPage = { ...publicPage }; // Keep the public retry/member remount, retain the outer originating pin action.
-    await act(async () => client.setQueryData(sessionQuery.queryKey, session('C', 'next-csrf')));
+    await act(async () => {
+      client.setQueryData(sessionQuery.queryKey, session('C', 'next-csrf'));
+      admit(['personal_library', 'collections']);
+    });
     await showDynamic();
     await act(async () => writes[5]!.work.reject(new Error('Unknown native result')));
     await act(async () => dynamicPin()());
@@ -445,6 +468,7 @@ test('Prepared navigation origin, independent admissions, retired callbacks and 
     await act(async () => writes[6]!.work.resolve({ ok: true, revision: 8 }));
   } finally {
     await act(async () => root.unmount());
+    stopViewer();
     client.clear();
     host.remove();
     for (const spy of [read, put, remove, invalidate, cache, observeMenu]) spy.mockRestore();
