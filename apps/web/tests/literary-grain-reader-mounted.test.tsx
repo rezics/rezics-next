@@ -74,7 +74,45 @@ test('mounted work, series and edition use supplied grain, authors, directed ord
     expect(host.textContent).toContain('上巻・02a');
     expect(host.querySelector('[data-type="schema:Book"]')?.textContent).toBe('book');
     expect(host.querySelector('[data-slot="literary-window"] a')?.textContent).toBe('Harbour, 2nd edition');
+    expect(host.querySelector('[data-property="schema:wordCount"] dd')?.textContent).toBe(m.subject_value_unknown());
+    const quantity = (property: string, amount: string) => [
+      {
+        id: property,
+        rank: 'normal',
+        property: { id: property, data_type: 'quantity' },
+        value: { type: 'value', content: { amount, unit: '1' } },
+        qualifiers: [],
+        references: [],
+      },
+    ];
+    input = {
+      ...input,
+      source: {},
+      work: {
+        ...input.work,
+        statements: {
+          ...input.work.statements,
+          'schema:wordCount': quantity('schema:wordCount', '+1200001'),
+        },
+      },
+    };
+    await render();
+    expect(host.querySelector('[data-property="schema:wordCount"] dd')?.textContent).toContain('1,200,001');
     await fresh('bf:Instance');
+    input = {
+      ...input,
+      source: {},
+      work: {
+        ...input.work,
+        statements: {
+          ...input.work.statements,
+          'schema:numberOfPages': quantity('schema:numberOfPages', '+392'),
+        },
+      },
+    };
+    await render();
+    expect(host.querySelector('[data-property="schema:numberOfPages"] dd')?.textContent).toContain('392');
+    expect(host.querySelector('[data-property="schema:wordCount"]')).toBeNull();
     expect(host.querySelector('[data-type="bf:Instance"]')?.textContent).toBe('edition');
     expect(host.textContent).toContain('Harbour work');
     expect(host.textContent).not.toContain('Supplied author');

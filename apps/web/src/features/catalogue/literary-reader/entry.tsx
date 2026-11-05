@@ -36,6 +36,8 @@ const fields = [
   'schema:datePublished',
   'schema:startDate',
   'schema:endDate',
+  'wdt:P7937',
+  'schema:wordCount',
   'wdt:P2635',
   'schema:isbn',
   'schema:numberOfPages',
@@ -322,7 +324,9 @@ export function LiteraryReaderEntry({
               const label = pageText(definitions.properties[property]?.labels, locale);
               const membership = property === 'wdt:P179' || property === 'schema:isPartOf';
               const canonical = property === 'schema:exampleOfWork';
-              if (!statements.length && !canonical) return [];
+              // Work length is unknown without its own assertion; edition pages never supply it.
+              const wordCount = property === 'schema:wordCount';
+              if (!statements.length && !canonical && !wordCount) return [];
               const relation = definitions.properties[property]?.relation;
               const admitted = directions?.find(
                 (direction) => direction.property === property && direction.direction === 'forward',
@@ -377,7 +381,9 @@ export function LiteraryReaderEntry({
                       (withheld ? (
                         <LiteraryStatus state="withheld" locale={locale} />
                       ) : (
-                        <p role="status">{m.literary_grain_mapping_missing({}, o)}</p>
+                        <p role="status">
+                          {wordCount ? m.subject_value_unknown({}, o) : m.literary_grain_mapping_missing({}, o)}
+                        </p>
                       ))}
                   </dd>
                 </div>,
