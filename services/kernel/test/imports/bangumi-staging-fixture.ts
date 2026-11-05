@@ -10,6 +10,7 @@ import { ImportSession } from '../../../importer/src/import-session.ts';
 import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 import { identitySupport } from './identity-fixture.ts';
+import { fixtureFetch } from './type-helpers.ts';
 
 const encoder = new TextEncoder();
 const rows = [
@@ -133,14 +134,14 @@ export async function runBangumiStagingJourney() {
           };
         },
       },
-      fetch: (async (input: Request | string | URL, init?: RequestInit) => {
+      fetch: fixtureFetch(async (input, init) => {
         const request = input instanceof Request ? input : new Request(input, init);
         const url = new URL(request.url);
         if (url.origin === auth) return support.host.service.handler(request);
         native++;
         expect(sealed).toBe(true);
         return runtime.replay(request);
-      }) as typeof fetch,
+      }),
     });
     const prefixConversions = conversions;
     const preSealNative = native;
@@ -159,7 +160,7 @@ export async function runBangumiStagingJourney() {
             };
           },
         },
-        fetch: (async (input: Request | string | URL, init?: RequestInit) => {
+        fetch: fixtureFetch(async (input, init) => {
           const request = input instanceof Request ? input : new Request(input, init);
           const url = new URL(request.url);
           if (url.origin === auth) return support.host.service.handler(request);
@@ -174,7 +175,7 @@ export async function runBangumiStagingJourney() {
             expect(body.commands.length).toBeGreaterThan(0);
           }
           return runtime.replay(request);
-        }) as typeof fetch,
+        }),
       },
     );
     const observer = await openApiObserver(runtime);
@@ -184,14 +185,15 @@ export async function runBangumiStagingJourney() {
       for (const row of rows) {
         const bound = session.bindings.claim({ source: 'bangumi', external_id: String(row.id) });
         expect(bound?.state).toBe('bound');
-        const view = await observer.http(`/v1/subjects/${bound!.subject}`);
+        if (bound?.state !== 'bound') throw new Error('Missing native Bangumi subject binding');
+        const view = await observer.http(`/v1/subjects/${bound.subject}`);
         expect(view.status).toBe(200);
         const subject = view.body.subject as {
           type: string;
           sourceRecords?: { source: string; external_id: string }[];
         };
         subjects.push({
-          id: bound!.subject,
+          id: bound.subject,
           type: subject.type,
           sourceRecords: Boolean(
             subject.sourceRecords?.some(
@@ -199,19 +201,21 @@ export async function runBangumiStagingJourney() {
             ),
           ),
         });
-        expect(subject.type).toBe(expectedTypes[row.id]);
+        const expectedType = expectedTypes[row.id];
+        if (expectedType === undefined) throw new Error(`Missing expected type for Bangumi subject ${row.id}`);
+        expect(subject.type).toBe(expectedType);
       }
     } finally {
       session.close();
     }
     const reopen = await runImportCli(argv('ordinary'), {
       testOrigin: api,
-      fetch: (async (input: Request | string | URL, init?: RequestInit) => {
+      fetch: fixtureFetch(async (input, init) => {
         const request = input instanceof Request ? input : new Request(input, init);
         const url = new URL(request.url);
         if (url.origin === auth) return support.host.service.handler(request);
         return runtime.replay(request);
-      }) as typeof fetch,
+      }),
     });
     return {
       interrupted: { code: interrupted.code, stderr: interrupted.stderr },

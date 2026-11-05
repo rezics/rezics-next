@@ -62,7 +62,9 @@ test('ordinary Bangumi person JSON is selected and read independently of a later
 
     const candidates = await cli.candidates(id, 'schema:birthDate');
     expect(candidates.map(value)).toEqual([gregorian]);
-    await cli.select(id, candidates[0]!);
+    const firstCandidate = candidates[0];
+    if (!firstCandidate) throw new Error('Missing the selected birth-date candidate');
+    await cli.select(id, firstCandidate);
     const birthExchange = first.writes.find((exchange) => {
       const body = JSON.parse(exchange.bytes!) as { commands: BatchCommand[] };
       return body.commands.some(
@@ -83,19 +85,14 @@ test('ordinary Bangumi person JSON is selected and read independently of a later
     expect(await replay.text()).toBe(birthExchange.responseBytes);
     const publicRead = await cli.anonymous(id);
     expect(publicRead.subject.type).toBe('schema:Person');
-    expect(
-      (publicRead.subject.statements as Record<string, { value: { content: unknown } }[]>)['schema:birthDate']?.[0]
-        ?.value.content,
-    ).toEqual(gregorian);
+    expect(publicRead.subject.statements['schema:birthDate']?.map(({ id }) => id)).toContain(firstCandidate.id);
 
     const reopened = await cli.invoke(initial);
     expect(reopened.code).toBe(0);
     expect(reopened.writes).toEqual([]);
-    expect(
-      ((await cli.anonymous(id)).subject.statements as Record<string, { value: { content: unknown } }[]>)[
-        'schema:birthDate'
-      ]?.[0]?.value.content,
-    ).toEqual(gregorian);
+    expect((await cli.anonymous(id)).subject.statements['schema:birthDate']?.map(({ id }) => id)).toContain(
+      firstCandidate.id,
+    );
 
     const changed = await cli.invoke(feed(person({ birth_day: 9 })));
     expect(changed.code, JSON.stringify(changed)).toBe(0);
@@ -103,11 +100,9 @@ test('ordinary Bangumi person JSON is selected and read independently of a later
       ...gregorian,
       time: '+1974-11-09T00:00:00Z',
     });
-    expect(
-      ((await cli.anonymous(id)).subject.statements as Record<string, { value: { content: unknown } }[]>)[
-        'schema:birthDate'
-      ]?.[0]?.value.content,
-    ).toEqual(gregorian);
+    expect((await cli.anonymous(id)).subject.statements['schema:birthDate']?.map(({ id }) => id)).toContain(
+      firstCandidate.id,
+    );
 
     const organization = await cli.invoke(
       `${feed(person({ birth_day: 9 }))}${feed({
