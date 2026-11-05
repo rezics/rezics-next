@@ -43,6 +43,7 @@ test('current Person credit returns from work, Character and Sources with exact 
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
+  await import('../src/features/catalogue/credit-inspection/session');
   const { CoverList } = await import('../src/features/pages/cover-list');
   const { holderItems } = await import('../src/features/pages/overview');
   const { sessionQuery } = await import('../src/session/query');
