@@ -498,9 +498,6 @@ export async function bindNativeOwnerFilterRead(
   const admitted = readNativeCollectionMemberAdmission(admission);
   if (!admitted || admitted.actor !== actor || admitted.pool !== dependencies.pool)
     throw new TypeError('Foreign native owner admission');
-  // Saved catalogue meaning must reach the mounted Search population producer. Until that producer
-  // is installed here, never prepare the owner's Library capture as a substitute population.
-  if (admitted.source.kind === 'catalogue') return { status: 'unavailable' } as const;
   deadline = Math.min(deadline, admitted.deadline);
   const inherited = reads.getStore();
   if (inherited && inherited.actor !== actor) throw new TypeError('Foreign native owner reader');

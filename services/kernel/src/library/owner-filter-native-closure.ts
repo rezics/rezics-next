@@ -222,6 +222,7 @@ export async function readNativeOwnerFilterClosure(
   subjectId: string,
   work: NativeCollectionWork,
   deferDisclosure = false,
+  includeCatalogueEvidence = true,
 ) {
   const saved = nativeOwnerFilterBinding(binding);
   if (
@@ -264,8 +265,9 @@ export async function readNativeOwnerFilterClosure(
       return { status: 'unavailable' } as const;
     after = page.examinedThrough;
   }
-  // A missing group cannot be a successful empty closure, nor can a terminal point prove alias coverage.
-  if (!keys.length) return { status: 'unavailable' } as const;
+  // Catalogue membership is supplied by Search and may have no Library source references at all.
+  // Owner population still requires a complete nonempty canonical group.
+  if (!keys.length && admission.source !== 'catalogue') return { status: 'unavailable' } as const;
   const originalIds = [...new Set([...keys.map((key) => key.storedSubjectId), subjectId])];
   if (originalIds.length + keys.length > OWNER_FILTER_CLOSURE_REFERENCE_LIMIT)
     return { status: 'unavailable' } as const;
@@ -370,7 +372,9 @@ export async function readNativeOwnerFilterClosure(
     if (!release) return { status: 'unavailable' } as const;
     releases.set(digest, release);
   }
-  const catalogue = await catalogueEvidence(binding, subjectId, work);
+  const catalogue: ReadonlyMap<string, LeafEvidence> | null = includeCatalogueEvidence
+    ? await catalogueEvidence(binding, subjectId, work)
+    : new Map<string, LeafEvidence>();
   if (catalogue === null) return { status: 'unavailable' } as const;
   // Ordinary enclosing readers repeat ALL retained originals at disclosure, including rejections.
   // Existing point/command consumers retain their immediate closure checks.

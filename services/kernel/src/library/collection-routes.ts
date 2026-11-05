@@ -523,7 +523,9 @@ export function collectionRoutes(app: ReturnType<typeof definitionRoutes>, depen
       pool,
       access: dependencies.access(),
       tokens,
+      routeKey: dependencies.routeKey,
       clock,
+      ...(dependencies.search ? { search: dependencies.search } : {}),
     }));
   const viewDependencies = () => ({
     ...dependencies,

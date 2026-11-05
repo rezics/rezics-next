@@ -27,12 +27,19 @@ const path = (id: string) => `/v1/collections/${id}:publishSelected`;
 test('selected publication declares an immutable nine-axis plan, including the full alias closure for each selection', () => {
   const empty = collectionSelectedPublicationPlan(0);
   const full = collectionSelectedPublicationPlan(100);
+  const emptyCatalogue = collectionSelectedPublicationPlan(0, 'catalogue');
+  const oneCatalogue = collectionSelectedPublicationPlan(1, 'catalogue');
+  const fullCatalogue = collectionSelectedPublicationPlan(100, 'catalogue');
   expect(Object.isFrozen(empty)).toBe(true);
   expect(Object.isFrozen(full.terms.selectedBranches)).toBe(true);
   expect(empty.terms.selectedBranches.candidateKeys).toBe(0);
   expect(empty.perAttempt.nativeRows).toBeGreaterThan(0);
   expect(full.terms.selectedBranches.candidateKeys).toBeGreaterThan(100);
   expect(full.perAttempt.engineRequests).toBe(0);
+  expect(emptyCatalogue.perAttempt.engineRequests).toBe(0);
+  expect(oneCatalogue.perAttempt.engineRequests).toBe(6);
+  expect(fullCatalogue.perAttempt.engineRequests).toBe(105);
+  expect(() => nativeWorkDimensions(oneCatalogue.terms.searchScopeEngineRequests)).toThrow();
   expect(withinCeiling(full.perAttempt, full.ceiling)).toBe(true);
   expect(nativeWorkDimensions(nativeReceiptBound({ reservationId: 'native', used: full.bindingWork }))).toEqual(
     full.bindingWork,
