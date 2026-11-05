@@ -57,8 +57,7 @@ test('The default Subject reader does not describe admitted incoming editions as
     .filter(([, read]) => read.kind === 'subject' && read.id === page.subject)
     .map(([key]) => key);
   if (subjectKeys.length === 0) throw new Error('Expected the composition Subject read.');
-  for (const key of subjectKeys)
-    (page.reads[key]!.body as { summary?: unknown }).summary = structuredClone(recordedSubject.summary);
+  for (const key of subjectKeys) page.reads[key] = { status: 200, body: structuredClone(recordedSubject) };
   const recorded = await loadSubjectPage(
     createKernelClient('https://kernel.invalid', {
       fetch: createRecordedKernelFetch({ 'subject-page': page as never }),
