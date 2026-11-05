@@ -1,5 +1,8 @@
 # Feed results
 
+Decision: Home loader regressions include both the native route catalogue and mixed-feed reads, keeping both
+anonymous before the separate member read. Install Worker bindings before importing their production component graph.
+
 Decision: Home omits conversation activity when the optional native summary field is absent; only an explicit
 withheld result shows unavailable activity and its native retry destination. A current exact zero remains visible.
 
