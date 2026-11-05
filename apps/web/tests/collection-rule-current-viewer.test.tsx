@@ -1,8 +1,7 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, StrictMode, type ComponentProps } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { CollectionRuleCurrent } from '../src/library/collection-rule-current';
 import { CollectionRuleEditor } from '../src/library/collection-rule-editor';
 import { unavailableRuleChoices, type RuleChoicePage, type RulePage } from '../src/library/collection-rule-read';
 import type { CollectionWriteResult } from '../src/library/collection-records';
@@ -10,6 +9,8 @@ import type { RuleWrite } from '../src/library/collection-rule-actions';
 import { m } from '../src/paraglide/messages.js';
 import { viewerExposureLifetime, viewerExposureQuery } from '../src/kernel/viewer-exposure';
 import { sessionQuery } from '../src/session/query';
+
+afterAll(() => mock.restore());
 
 type Props = ComponentProps<typeof CollectionRuleEditor>;
 const admitted = ['collection.create', 'collection_rule.get', 'collection_rule.update', 'library_label.list'];
@@ -167,6 +168,12 @@ async function mountCurrent(page: RulePage) {
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const { createRoot } = await import('react-dom/client');
+  mock.module('../src/library/collection-rule-actions', () => ({
+    readCollectionRule: async () => ({ state: 'unavailable' }),
+    readCollectionRuleChoices: async () => null,
+    saveCollectionRule: async () => ({ ok: false, reason: 'unavailable' }),
+  }));
+  const { CollectionRuleCurrent } = await import('../src/library/collection-rule-current');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   client.setQueryData(sessionQuery.queryKey, { state: 'signed-in', subject: 'alice', csrfToken: 'csrf-alice' });
   const lifetime = viewerExposureLifetime(client);
