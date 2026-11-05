@@ -104,7 +104,7 @@ for (const [options, expectedSends] of [
       sleep: async (ms) => {
         clock += ms;
       },
-      fetch: (async () => {
+      fetch: (async (_request: Request) => {
         sends++;
         return Response.json({
           results: [
@@ -130,7 +130,7 @@ test('one batch deadline cancels a pending member retry and releases its timer',
   const transport = createImportTransport({
     origin: 'https://api.importer.test',
     tokenProvider: async () => 'test-token',
-    importFetch: (async () => {
+    importFetch: (async (_request: Request) => {
       sends++;
       return Response.json({
         results: [
