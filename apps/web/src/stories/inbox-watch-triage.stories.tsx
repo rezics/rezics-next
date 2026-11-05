@@ -29,7 +29,7 @@ const meta = {
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
-type View = 'mixed' | 'sparse' | 'report' | 'unavailable' | 'uncertain';
+type View = 'mixed' | 'mixed-previous' | 'sparse' | 'report' | 'unavailable' | 'uncertain';
 
 const timestamp = '2026-11-03T10:00:00.000Z';
 
@@ -122,7 +122,9 @@ function Preview({
         if (view === 'report')
           return readyPage([nativeNotice('report-outcome', 'moderation_decision')], null, query.selection);
         if (view === 'uncertain') return readyPage([nativeNotice('reply-1', 'reply')], null, query.selection);
-        return readyPage(mixedNotices, null, query.selection);
+        if (view === 'mixed-previous' && query.cursor === 'opaque/+older==')
+          return readyPage([nativeNotice('older-reply', 'reply'), nativeNotice('older-report', 'moderation_decision')], null, query.selection);
+        return readyPage(mixedNotices, view === 'mixed-previous' ? 'opaque/+older==' : null, query.selection);
       },
     [cursors, view],
   );
@@ -148,7 +150,7 @@ function journey(view: View, viewport: 'phone390' | 'desktop1280', theme: 'light
     play: async ({ canvasElement }) => {
       const canvas = within(canvasElement);
       await canvas.findByRole('heading', { name: m.inbox_heading() });
-      if (view === 'mixed') {
+      if (view === 'mixed' || view === 'mixed-previous') {
         const list = within(await canvas.findByRole('list', { name: m.inbox_heading() }));
         const rows = await list.findAllByRole('listitem');
         await expect(rows).toHaveLength(5);
@@ -156,6 +158,14 @@ function journey(view: View, viewport: 'phone390' | 'desktop1280', theme: 'light
         await within(rows[0]!).findByText(m.inbox_notice_marked_seen());
         await expect(rows[1]).toHaveAttribute('data-unread', 'true');
         await expect(attempts[0]).toMatchObject({ accountId: 'alice', noticeId: 'reply-1' });
+        if (view === 'mixed-previous') {
+          await userEvent.click(await canvas.findByRole('button', { name: m.inbox_load_more() }));
+          await canvas.findByRole('link', { name: 'A useful update summary' });
+          await userEvent.click(await canvas.findByRole('button', { name: m.inbox_previous_page() }));
+          await expect(cursors).toEqual([null, 'opaque/+older==', null]);
+          await expect(within(await canvas.findByRole('list', { name: m.inbox_heading() })).getAllByRole('listitem'))
+            .toHaveLength(5);
+        }
       } else if (view === 'sparse') {
         await canvas.findByText(m.inbox_selection_sparse());
         const next = await canvas.findByRole('button', { name: m.inbox_next_page() });
@@ -184,7 +194,7 @@ function journey(view: View, viewport: 'phone390' | 'desktop1280', theme: 'light
   };
 }
 
-export const MixedPhoneLight = journey('mixed', 'phone390', 'light');
+export const MixedPhoneLight = journey('mixed-previous', 'phone390', 'light');
 export const MixedPhoneDark = journey('mixed', 'phone390', 'dark');
 export const MixedDesktopLight = journey('mixed', 'desktop1280', 'light');
 export const MixedDesktopDark = journey('mixed', 'desktop1280', 'dark');
