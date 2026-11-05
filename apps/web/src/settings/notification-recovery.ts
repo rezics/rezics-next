@@ -72,13 +72,7 @@ export function admittedNotificationPatch(
   if (intent === undefined) return undefined;
   if (intent === null) return preferencePageAllows(page, 'reset') ? null : undefined;
   const entries = Object.entries(intent);
-  if (
-    entries.length === 0 ||
-    !entries.every(
-      (entry): entry is [string, boolean] => admittedOptionalKind(page, entry[0]) && typeof entry[1] === 'boolean',
-    )
-  )
-    return undefined;
+  if (entries.length === 0 || !entries.every(([kind]) => admittedOptionalKind(page, kind))) return undefined;
   return Object.fromEntries(entries);
 }
 
@@ -90,23 +84,17 @@ export function notificationIntentAllowed(intent: NotificationPatch | undefined,
 export function unavailableNotificationIntent(
   intent: NotificationPatch | undefined,
   page: PreferencePage,
-): NotificationPreferences {
+): Exclude<NotificationPatch, null> {
   if (intent === undefined || intent === null) return {};
-  return Object.fromEntries(
-    Object.entries(intent).filter(
-      (entry): entry is [string, boolean] => typeof entry[1] === 'boolean' && !admittedOptionalKind(page, entry[0]),
-    ),
-  );
+  return Object.fromEntries(Object.entries(intent).filter(([kind]) => !admittedOptionalKind(page, kind)));
 }
 
-function projectOptionalIntent(
-  known: NotificationPreferences,
-  intent: NotificationPatch | undefined,
-): NotificationPreferences {
-  const draft = { ...known };
+function projectOptionalIntent(known: Snapshot, intent: NotificationPatch | undefined): NotificationPreferences {
+  const draft = { ...known.notifications };
   if (intent === undefined || intent === null) return draft;
   for (const [kind, enabled] of Object.entries(intent)) {
-    if (Object.prototype.hasOwnProperty.call(known, kind)) draft[kind] = enabled;
+    const policy = known.page.kinds.find((entry) => entry.kind === kind && entry.optional);
+    if (policy) draft[kind] = enabled ?? policy.default;
   }
   return draft;
 }
@@ -115,17 +103,7 @@ export function notificationOriginalAllowed(
   input: Pick<NotificationChange, 'notifications'> | null,
   page: PreferencePage | null,
 ): boolean {
-  if (!input || !page) return false;
-  const patch = input.notifications;
-  if (patch === null) return preferencePageAllows(page, 'reset');
-  if (!preferencePageAllows(page, 'edit')) return false;
-  const admitted = admittedNotificationPatch(patch, page);
-  return (
-    admitted !== undefined &&
-    admitted !== null &&
-    Object.keys(admitted).length === Object.keys(patch).length &&
-    Object.entries(admitted).every(([kind, enabled]) => patch[kind] === enabled)
-  );
+  return input !== null && page !== null && notificationIntentAllowed(input.notifications, page);
 }
 
 function snapshotFrom(page: PreferencePage): Snapshot {
@@ -223,7 +201,7 @@ export class NotificationEditor {
   private adoptPage(page: PreferencePage, preserveDraft: boolean, phase: NotificationEditorState['phase']) {
     const known = snapshotFrom(page);
     const intent = preserveDraft ? this.state.intent : undefined;
-    const draft = projectOptionalIntent(known.notifications, intent);
+    const draft = projectOptionalIntent(known, intent);
     const edited = intent !== undefined || !sameNotifications(draft, known.notifications);
     this.confirm(known);
     this.update({
@@ -244,7 +222,7 @@ export class NotificationEditor {
   private reviewPending(page: PreferencePage) {
     const known = snapshotFrom(page);
     const intent = this.state.intent;
-    const draft = projectOptionalIntent(known.notifications, intent);
+    const draft = projectOptionalIntent(known, intent);
     this.confirm(known);
     this.update({
       currentAdvice: page,
@@ -261,7 +239,7 @@ export class NotificationEditor {
     const known = snapshotFrom(page);
     const laterIntent = intentSince(confirmation.attempt.intent, this.state.intent);
     const intent = laterIntent;
-    const draft = projectOptionalIntent(known.notifications, laterIntent);
+    const draft = projectOptionalIntent(known, laterIntent);
     const newer = known.version > confirmation.receipt.version;
     this.confirm(known);
     this.update({
@@ -308,7 +286,7 @@ export class NotificationEditor {
     const next = { ...intent };
     delete next[kind];
     const intentNext: NotificationPatch | undefined = Object.keys(next).length ? next : undefined;
-    const draft = projectOptionalIntent(this.state.known.notifications, intentNext);
+    const draft = projectOptionalIntent(this.state.known, intentNext);
     const edited = intentNext !== undefined || !sameNotifications(draft, this.state.known.notifications);
     this.update({
       intent: intentNext,
@@ -457,7 +435,7 @@ export class NotificationEditor {
       const laterIntent = intentSince(attempt.intent, this.state.intent);
       // This command is confirmed, but a later shared version makes its values historical.
       this.confirm(receipt);
-      const draft = projectOptionalIntent(receipt.notifications, laterIntent);
+      const draft = projectOptionalIntent(receipt, laterIntent);
       this.update({
         pending: null,
         draft,

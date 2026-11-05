@@ -217,6 +217,31 @@ test('a readable account with denied update keeps confirmed values and receives 
   });
 });
 
+test('additive native policy fields and individual notification actions retain their catalogue', async () => {
+  for (const name of ['edit', 'reset'] as const) {
+    const native = {
+      ...envelope,
+      status: 200,
+      shelfAdvice: { effective: {} },
+      page: { ...page, actions: [{ name, expectedVersion: 7 }] },
+    };
+    const read = harness(() => Response.json(native));
+    expect(await loadSettingsPage(read.client, read.request, read.env)).toMatchObject({
+      notifications: optional,
+      page: native.page,
+    });
+    expect(notificationIntentAllowed({ reply: null }, native.page)).toBe(name === 'edit');
+    const write = harness(() => Response.json(native), 'POST');
+    expect(
+      await changeNotifications(write.client, write.request, write.env, {
+        expectedVersion: 7,
+        notifications: { reply: false },
+        idempotencyKey,
+      }),
+    ).toMatchObject({ ok: true, version: 7, page: native.page });
+  }
+});
+
 test('Settings preserves preparing, closed and unavailable native read and write failures', async () => {
   for (const [status, code, state] of [
     [503, 'dependency_unavailable', 'unavailable'],

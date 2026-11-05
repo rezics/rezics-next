@@ -670,7 +670,6 @@ export function presentPreferencePage(value: unknown, version?: number): Prefere
   if (new Set(presentedKinds.map((entry) => entry.kind)).size !== presentedKinds.length) return undefined;
   const presentedActions = actions as PreferencePageAction[];
   if (new Set(presentedActions.map((entry) => entry.name)).size !== presentedActions.length) return undefined;
-  if (presentedActions.length === 1) return undefined;
   if (presentedActions.some((entry) => entry.expectedVersion !== pageVersion)) return undefined;
   return { version: pageVersion, kinds: presentedKinds, actions: presentedActions };
 }
@@ -712,7 +711,6 @@ function currentPageFrom(value: unknown, version: number, expectedWritable?: boo
   ] as const;
   if (
     !isRecord(value) ||
-    !onlyKeys(value, keys) ||
     keys.some((key) => !(key in value)) ||
     !isRecord(value.notifications) ||
     Object.values(value.notifications).some((enabled) => typeof enabled !== 'boolean')
@@ -723,8 +721,7 @@ function currentPageFrom(value: unknown, version: number, expectedWritable?: boo
   const writable = advice.allowedActions.update.allowed;
   if (expectedWritable !== undefined && writable !== expectedWritable) return undefined;
   const page = presentPreferencePage(value.page, version);
-  if (!page || preferencePageAllows(page, 'edit') !== writable || preferencePageAllows(page, 'reset') !== writable)
-    return undefined;
+  if (!page || page.actions.length > 0 !== writable) return undefined;
   return page;
 }
 
