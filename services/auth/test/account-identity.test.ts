@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair } from 'jose';
 import { Pool } from 'pg';
 import { testDatabase } from '../scripts/database.ts';
+import { readNativeAccountIdentity } from '../src/account-identity.ts';
 import { createAuthService, type AccessAccount, type AuthService } from '../src/index.ts';
 import { trustedAccessPorts } from './support/trusted-access.ts';
 
@@ -109,6 +110,18 @@ afterEach(async () => {
 afterAll(async () => {
   await database?.end();
   fixture?.close();
+});
+
+test('native identity fails closed for historical non-UUID IDs before disclosure lookup', async () => {
+  let queries = 0;
+  const unavailableDatabase = {
+    async query() {
+      queries++;
+      return { rows: [] };
+    },
+  } as unknown as Pool;
+  await expect(readNativeAccountIdentity(unavailableDatabase, 'legacy-account')).rejects.toMatchObject({ status: 503 });
+  expect(queries).toBe(0);
 });
 
 test('default Auth handler reads only the current native login email, without synthetic name or verification claims', async () => {

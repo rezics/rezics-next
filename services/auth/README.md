@@ -1678,6 +1678,14 @@ independent: this display read makes no verification claim and does not expose
 that flag. An absent address stays null; malformed native values fail unavailable.
 There is no installed exact-current-account handle reader in this composition.
 
+Access account IDs are lowercase UUIDs of 36 ASCII bytes. The native projection
+rejects a session ID outside that existing contract as unavailable before the
+`user` lookup; historical Auth rows with invalid IDs are not normalized or
+disclosed. The existing email maximum is 254 JavaScript UTF-16 code units. Its
+worst compact JSON value has 252 escapable code units at six bytes each, plus the
+required one-byte `@` and `.`. Together with the 36-byte ID and 28 bytes of fixed
+JSON syntax, the exact response allowance is 1,578 bytes.
+
 The service retains human/session, account floor, client coverage and current
 consent admission, holds the existing native issuance guard, and rechecks the
 same account, source session, client, scope, epoch, authentication time and methods
@@ -1688,8 +1696,9 @@ their existing contracts.
 Cost: one indexed exact-self `user` lookup, plus the existing constant native
 session/client/consent checks before and after I/O. No enumeration, join across
 homes, scans of account history, per-row requests or polling. Existing native
-request body bounds and issuance guards apply. `test/account-identity.test.ts`
-covers the closed projection, source semantics, privacy refusals and changes
+request body bounds and issuance guards apply. The response byte allowance adds
+no query or session probe. `test/account-identity.test.ts`
+covers invalid historical ID refusal, the closed projection, source semantics, privacy refusals and changes
 while the native read is in flight; its execution is separate from typechecking.
 
 ## Ordinary native host assembly
