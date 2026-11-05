@@ -34,6 +34,7 @@ and outcomes are historical. Web received this additive response contract throug
 scale fields are adapted to the existing nested review scale; the existing privacy literal typing was repaired.
 
 Final worker checks on the complete source:
+
 - `bun run --cwd services/kernel check test/library/list-import-mal.test.ts`: exit 1 before assertions,
   `error: Schema dump differs from db/semantic/schema.sql.` No schema/migration files changed. Full log:
   `.temp/mal-test-final.log`.

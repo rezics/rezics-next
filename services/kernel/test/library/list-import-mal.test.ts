@@ -361,8 +361,12 @@ test('MAL score review records explicit native units, preserves corrections and 
     units: 19,
     baseline: { state: 'absent', units: null, revision: null, at: null },
     admission: { status: 'conditional', reason: null },
-    guard: { version: 1, question: { revision: 1, lifecycleRevision: 1 },
-      subject: { canonicalId: targets[0] }, ownVote: { state: 'absent' } },
+    guard: {
+      version: 1,
+      question: { revision: 1, lifecycleRevision: 1 },
+      subject: { canonicalId: targets[0] },
+      ownVote: { state: 'absent' },
+    },
   });
   expect(page.rows[0].review.score.question).toHaveProperty('meaning');
   expect(page.rows[0].currentScoreVote).toBeNull();
@@ -448,7 +452,11 @@ test('MAL score review records explicit native units, preserves corrections and 
         actor.bearer,
       )
     ).outcomes[0],
-  ).toMatchObject({ status: 'unsupported', applied: ['status'], score: { status: 'unsupported', reason: 'score-action-not-reviewed' } });
+  ).toMatchObject({
+    status: 'unsupported',
+    applied: ['status'],
+    score: { status: 'unsupported', reason: 'score-action-not-reviewed' },
+  });
 
   const unsupported = await reviewScore(3, adopt(13)),
     refreshed = await reviewScore(3, adopt(15));
@@ -500,9 +508,17 @@ test('MAL score review records explicit native units, preserves corrections and 
   expect(checkpoint.score.started).toBe(true);
   expect(checkpoint.review.score.guard).toEqual(unsupportedPage.rows[3].review.score.guard);
   expect(checkpoint.score.outcome.reason).toBe('atomic_guard_unavailable');
-  expect((await json('POST', `${base}/${id}/apply`,
-    { confirm: true, rows: [{ row: 3, version: refreshed, fields: ['score'] }] },
-    randomUUID(), actor.bearer)).outcomes[0]).toEqual(unavailable.outcomes[0]);
+  expect(
+    (
+      await json(
+        'POST',
+        `${base}/${id}/apply`,
+        { confirm: true, rows: [{ row: 3, version: refreshed, fields: ['score'] }] },
+        randomUUID(),
+        actor.bearer,
+      )
+    ).outcomes[0],
+  ).toEqual(unavailable.outcomes[0]);
   await json('GET', `${base}/${id}`, undefined, randomUUID(), 'other', 404);
   await json('DELETE', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
 });
