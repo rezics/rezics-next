@@ -1145,7 +1145,7 @@ export async function listSubjectLinks(
           // A qualified Character lookup may need to pass stale projection entries while filling its
           // selected page. Its reader page is capped at 20, with one metadata row returned separately.
           page_limit: options.qualifier ? 21 : (options.type ? 4 * options.limit : options.limit) + 1,
-          scan_limit: options.qualifier ? 20 : null,
+          scan_limit: options.qualifier ? 20 : 0,
         })) as {
           subject: string | null;
           property: string | null;

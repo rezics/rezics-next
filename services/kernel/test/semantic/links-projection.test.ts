@@ -478,7 +478,7 @@ test('native relation seeks merge equal keys, skip suppressions and exhaust ever
               after_order: after[0]!,
               after_statement: after[2]!,
               page_limit: pageLimit,
-              scan_limit: null,
+              scan_limit: 0,
             };
             const page =
               direction === 'outbound'

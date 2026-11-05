@@ -5,7 +5,7 @@ WITH RECURSIVE input AS (
          :context_id::uuid AS r_context_id, :property::text AS r_property,
          :filter_value::uuid AS r_filter_value, :after_order::text AS r_after_order,
          :after_source::uuid AS r_after_source, :after_statement::uuid AS r_after_statement,
-         :page_limit::integer AS r_page_limit, :scan_limit::integer AS r_scan_limit
+         :page_limit::integer AS r_page_limit, NULLIF(:scan_limit::integer, 0) AS r_scan_limit
 ), page AS (
   SELECT following.*, input.r_context_id AS selected_context, input.r_page_limit AS page_size,
          input.r_scan_limit AS scan_limit, (NOT following.suppressed)::integer AS emitted, 1 AS examined
