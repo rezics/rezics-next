@@ -37,7 +37,12 @@ export class ClassificationWindows {
     if (pair !== this.selected) this.path = [];
     this.selected = pair;
     const index = this.path.lastIndexOf(frontier.cursor);
-    this.path = frontier.cursor === null ? [null] : index < 0 ? [...this.path, frontier.cursor].slice(-9) : this.path.slice(0, index + 1);
+    this.path =
+      frontier.cursor === null
+        ? [null]
+        : index < 0
+          ? [...this.path, frontier.cursor].slice(-9)
+          : this.path.slice(0, index + 1);
     this.staged = null;
     this.focus = false;
     return focus;
