@@ -246,7 +246,8 @@ test('session preparation preserves public rows; Context replacements fence late
     });
     await act(async () => settle(visit()));
     expect(host.querySelectorAll('article')).toHaveLength(6);
-    expect(host.textContent).toContain('Work 10');
+    expect(host.textContent).toContain('海の物語／作品長標題');
+    expect(host.innerHTML).toContain('https://source.test/assertion-10');
     let late!: (v: ConnectionVisit) => void;
     let reads = 0;
     const contextual = async () =>

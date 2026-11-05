@@ -216,7 +216,8 @@ test('Character local choices preserve exact recovery on Stay and fence abandone
     await act(async () => oldWorkPicker([{ id: 'retired-work' }]));
     expect(loads.at(-1)?.work).toBe(fixture.work.id);
 
-    const reload = canvas.getByRole('button', { name: m.correction_reload() });
+    const reload = host.querySelector<HTMLButtonElement>('article > button[aria-busy]')!;
+    expect(reload.textContent).toBe(m.correction_reload());
     const pointerTarget = window.document.createElement('button');
     host.append(pointerTarget);
     loadCount = loads.length;
