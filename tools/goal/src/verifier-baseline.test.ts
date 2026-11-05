@@ -168,7 +168,7 @@ test('an existing baseline failure is recorded durably while a healthy landing a
   let affectedCalls = 0;
   const runGate = gateRunner(10_000, ctx.stateDirectory);
   const observeGate: GateRunner = async (command, cwd, log) => {
-    if (command.join(' ') === affected.join(' ')) affectedCalls++;
+    if (command.slice(-2).join('\0') === affected.slice(-2).join('\0')) affectedCalls++;
     return runGate(command, cwd, log);
   };
 
