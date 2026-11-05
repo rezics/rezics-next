@@ -13,7 +13,7 @@ import { creationDeclares } from '../access/index.ts';
 import { accessCommandAuthorization, type Access, type Actor } from '../request/access.ts';
 import { newId, partitionOf, routeOf } from '../route/route.ts';
 import { ACCOUNT_ROLE_BITS } from '../history/contracts.ts';
-import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
+import { declareCommandHistory } from '../history/record.ts';
 import { declareCommandRecordSources } from '../history/record-source.ts';
 import { ContentNotFoundError } from './commands.ts';
 import { readAuthoredFieldHistorySource } from './authored-fields-history.ts';
@@ -28,7 +28,6 @@ import type { RequestContext } from './model.ts';
 
 // Permanent Content-owned command kind, independent of registration order.
 const eraseCommandKind = 'content.authored_field.erase';
-registerCommandHistoryKind(eraseCommandKind, 2000);
 
 export type AuthoredFieldInput = Readonly<{
   subject: string;

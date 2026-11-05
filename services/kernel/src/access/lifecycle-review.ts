@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { mintReadTime, releaseOperationalTime } from '../command/command.ts';
 import { withConnection } from '../database/pool.ts';
@@ -13,7 +14,9 @@ import { activeHome, effects, hash, originalResult, sameHome, unknownOriginal } 
 import type { LifecycleReview, LifecycleReviewInput, LifecycleOriginalResult } from './lifecycle-review-contract.ts';
 import { classifyUnavailability } from './unavailable.ts';
 
-const declarations = [suspensionDeclaration, reinstatementDeclaration] as const;
+function declarations() {
+  return memoizedValue(declarations, () => [suspensionDeclaration, reinstatementDeclaration] as const);
+}
 type Target = LifecycleReview['account'] &
   LifecycleReview['current'] & { transactionId: string; fenceReceiptId: string | null };
 async function target(client: AccessClient, route: number, accountId: string) {
@@ -52,7 +55,7 @@ export async function readLifecycleReview(
     Object.keys(input).some((key) => !['accountId', 'original', 'operatorPageKey'].includes(key)) ||
     (original &&
       (Object.keys(original).some((key) => !['operationId', 'key', 'reason'].includes(key)) ||
-        !declarations.some((d) => d.operationId === original.operationId) ||
+        !declarations().some((d) => d.operationId === original.operationId) ||
         typeof original.key !== 'string' ||
         original.key.length < 1 ||
         original.key.length > 255 ||
@@ -69,7 +72,7 @@ export async function readLifecycleReview(
         const time = await withConnection(pool, (c) => mintReadTime(deadlineClient(c, deadline), deps.clock));
         try {
           const allowed: boolean[] = [];
-          for (const declaration of declarations) {
+          for (const declaration of declarations()) {
             // Installed Access validates actor identity, client scopes/consent, delegation, roles and gates.
             // Preparation can contact foreign homes; no checkout is held here.
             const check = await accessCheck(access, identity, declaration.action, PLATFORM_RESOURCE, {
@@ -174,7 +177,7 @@ export async function readLifecycleReview(
           handle: a.state === 'deleted' ? null : a.handle,
         },
         current: { state: a.state, minimumAuthnEpoch: a.minimumAuthnEpoch, fenced: a.fenced },
-        actions: declarations
+        actions: declarations()
           .filter(
             (d, i) =>
               allowed[i] &&

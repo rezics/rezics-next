@@ -42,7 +42,7 @@ test('title policy and cursor query distinguish language precedence, state, Type
 
 test('denied/hidden/partial title observations stay unavailable; visible missing labels are explicit', async () => {
   const missingProducer = currentShelfTitleBasis(undefined, owner, ['en'], actor);
-  await expect(missingProducer).rejects.toBeInstanceOf(ShelfReadUnavailableError);
+  await expect(missingProducer).rejects.toBeInstanceOf(ShelfReadUnavailableError());
   await expect(missingProducer).rejects.toMatchObject({
     binding: 'Content shelfTitleInputs.observe complete-source producer installation',
   });
@@ -52,24 +52,24 @@ test('denied/hidden/partial title observations stay unavailable; visible missing
     ['en'],
     actor,
   );
-  await expect(incompleteSource).rejects.toBeInstanceOf(ShelfReadUnavailableError);
+  await expect(incompleteSource).rejects.toBeInstanceOf(ShelfReadUnavailableError());
   await expect(incompleteSource).rejects.toMatchObject({
     binding: 'Content complete whole-source title/disclosure/redirect/identity/source-owner observation',
   });
-  expect(() => shelfTitleObservations([subjectId], [])).toThrow(ShelfReadUnavailableError);
+  expect(() => shelfTitleObservations([subjectId], [])).toThrow(ShelfReadUnavailableError());
   const observation = { subjectId, sourceId: subjectId, sourceBasis: 'owner:revision:1', labels: {} };
   expect(shelfTitleObservations([subjectId], [observation]).get(subjectId)?.labels).toEqual({});
-  expect(() => shelfTitleObservations([subjectId], [observation, observation])).toThrow(ShelfReadUnavailableError);
+  expect(() => shelfTitleObservations([subjectId], [observation, observation])).toThrow(ShelfReadUnavailableError());
   expect(() =>
     shelfTitleObservations([subjectId, subjectId], [observation, { ...observation, subjectId: newId(0x7b20) }]),
-  ).toThrow(ShelfReadUnavailableError);
+  ).toThrow(ShelfReadUnavailableError());
   const oversized = Array.from({ length: 101 }, () => ({ ...observation, subjectId: newId(0x7b20) }));
   expect(() =>
     shelfTitleObservations(
       oversized.map((row) => row.subjectId),
       oversized,
     ),
-  ).toThrow(ShelfReadUnavailableError);
+  ).toThrow(ShelfReadUnavailableError());
 });
 
 test('an uninstalled or currentness-mismatched native generation cannot supply a title cursor', async () => {
@@ -82,7 +82,7 @@ test('an uninstalled or currentness-mismatched native generation cannot supply a
     fields: [],
   }));
   await expect(shelfTitleBinding(client, route, accountId, ['en'], 'new-source-basis')).rejects.toBeInstanceOf(
-    ShelfReadUnavailableError,
+    ShelfReadUnavailableError(),
   );
   expect(validShelfTitleSeek('m:')).toBe(true);
   expect(validShelfTitleSeek('l:')).toBe(true);
@@ -154,5 +154,5 @@ test('native title rows retain returned order, missing coverage and the exact pr
       },
       null,
     ),
-  ).rejects.toBeInstanceOf(ShelfReadUnavailableError);
+  ).rejects.toBeInstanceOf(ShelfReadUnavailableError());
 });

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { RatingQuestionLifecycleSchema, RatingQuestionResponseSchema } from './vote-response-schemas.ts';
 export { RatingQuestionResponseSchema, RatingVoteResponseSchema } from './vote-response-schemas.ts';
@@ -9,11 +10,20 @@ const id = t.String({ format: 'uuid' });
 const revision = t.Integer({ minimum: 1, maximum: 2_147_483_647 });
 const grain = t.Union([t.Literal('work'), t.Literal('release'), t.Literal('episode'), t.Literal('character')]);
 
-export const RatingVoteInputSchema = strictContentSchema(t.Object({ units: t.Integer() }, closed));
+export function RatingVoteInputSchema() {
+  return memoizedValue(RatingVoteInputSchema, () => strictContentSchema(t.Object({ units: t.Integer() }, closed)));
+}
 
-export const ClassificationBallotInputSchema = strictContentSchema(
-  t.Object({ assessment: t.Union([t.Literal('support'), t.Literal('oppose')]), falsePositive: t.Boolean() }, closed),
-);
+export function ClassificationBallotInputSchema() {
+  return memoizedValue(ClassificationBallotInputSchema, () =>
+    strictContentSchema(
+      t.Object(
+        { assessment: t.Union([t.Literal('support'), t.Literal('oppose')]), falsePositive: t.Boolean() },
+        closed,
+      ),
+    ),
+  );
+}
 export const ClassificationBallotMutationQuerySchema = t.Object(
   { expectedRevision: t.Optional(t.String({ minLength: 1, maxLength: 19, pattern: '^[1-9][0-9]*$' })) },
   closed,
@@ -55,33 +65,42 @@ export const ClassificationBallotAggregateResponseSchema = t.Union([
   ),
 ]);
 
-export const RatingQuestionLifecycleInputSchema = strictContentSchema(
-  t.Object({ expectedLifecycleRevision: t.Integer({ minimum: 1, maximum: 2_147_483_646 }) }, closed),
-);
+export function RatingQuestionLifecycleInputSchema() {
+  return memoizedValue(RatingQuestionLifecycleInputSchema, () =>
+    strictContentSchema(
+      t.Object({ expectedLifecycleRevision: t.Integer({ minimum: 1, maximum: 2_147_483_646 }) }, closed),
+    ),
+  );
+}
 
-export const RatingQuestionLifecycleResultSchema = t.Object(
-  { questionId: id, lifecycle: RatingQuestionLifecycleSchema },
-  closed,
-);
+export function RatingQuestionLifecycleResultSchema() {
+  return memoizedValue(RatingQuestionLifecycleResultSchema, () =>
+    t.Object({ questionId: id, lifecycle: RatingQuestionLifecycleSchema }, closed),
+  );
+}
 
-export const RatingQuestionCreateInputSchema = strictContentSchema(
-  t.Object(
-    {
-      meaning: t.String({ minLength: 1, maxLength: 2000 }),
-      label: t.String({ minLength: 1, maxLength: 200 }),
-      grain,
-      scale: t.Object(
+export function RatingQuestionCreateInputSchema() {
+  return memoizedValue(RatingQuestionCreateInputSchema, () =>
+    strictContentSchema(
+      t.Object(
         {
-          min: t.Integer({ minimum: 0, maximum: 19 }),
-          max: t.Integer({ minimum: 1, maximum: 20 }),
-          displayStep: t.Integer({ minimum: 1, maximum: 20 }),
+          meaning: t.String({ minLength: 1, maxLength: 2000 }),
+          label: t.String({ minLength: 1, maxLength: 200 }),
+          grain,
+          scale: t.Object(
+            {
+              min: t.Integer({ minimum: 0, maximum: 19 }),
+              max: t.Integer({ minimum: 1, maximum: 20 }),
+              displayStep: t.Integer({ minimum: 1, maximum: 20 }),
+            },
+            closed,
+          ),
         },
         closed,
       ),
-    },
-    closed,
-  ),
-);
+    ),
+  );
+}
 
 export const RatingQuestionDirectoryQuerySchema = t.Object(
   {
@@ -92,13 +111,17 @@ export const RatingQuestionDirectoryQuerySchema = t.Object(
   closed,
 );
 
-export const RatingQuestionDirectoryResponseSchema = t.Object(
-  {
-    ratingQuestions: t.Array(RatingQuestionResponseSchema, { maxItems: 20 }),
-    next: t.Union([t.String(), t.Null()]),
-  },
-  closed,
-);
+export function RatingQuestionDirectoryResponseSchema() {
+  return memoizedValue(RatingQuestionDirectoryResponseSchema, () =>
+    t.Object(
+      {
+        ratingQuestions: t.Array(RatingQuestionResponseSchema, { maxItems: 20 }),
+        next: t.Union([t.String(), t.Null()]),
+      },
+      closed,
+    ),
+  );
+}
 
 export const QuestionManagementQuerySchema = t.Object(
   {
@@ -109,65 +132,76 @@ export const QuestionManagementQuerySchema = t.Object(
 );
 
 const managementHref = t.String({ minLength: 1, maxLength: 128 });
-const managementQuestion = t.Object(
-  {
-    ...RatingQuestionResponseSchema.properties,
-    realmId: id,
-    meaning: t.String({ minLength: 1, maxLength: 2000 }),
-    canonicalLabel: t.String({ minLength: 1, maxLength: 200 }),
-    labelRevision: revision,
-    lifecycle: RatingQuestionLifecycleSchema,
-  },
-  closed,
-);
+function managementQuestion() {
+  return memoizedValue(managementQuestion, () =>
+    t.Object(
+      {
+        ...RatingQuestionResponseSchema.properties,
+        realmId: id,
+        meaning: t.String({ minLength: 1, maxLength: 2000 }),
+        canonicalLabel: t.String({ minLength: 1, maxLength: 200 }),
+        labelRevision: revision,
+        lifecycle: RatingQuestionLifecycleSchema,
+      },
+      closed,
+    ),
+  );
+}
 
-export const QuestionManagementResponseSchema = t.Object(
-  {
-    viewer: t.Object({ accountId: id }, closed),
-    realmId: id,
-    directory: t.Object(
+export function QuestionManagementResponseSchema() {
+  return memoizedValue(QuestionManagementResponseSchema, () =>
+    t.Object(
       {
-        ratingQuestions: t.Array(managementQuestion, { maxItems: 20 }),
-        next: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]),
-      },
-      closed,
-    ),
-    actions: t.Object(
-      {
-        create: t.Union([t.Object({ method: t.Literal('POST'), href: managementHref }, closed), t.Null()]),
-      },
-      closed,
-    ),
-    selected: t.Union([
-      t.Object(
-        {
-          question: managementQuestion,
-          readback: managementHref,
-          history: managementHref,
-          actions: t.Object(
+        viewer: t.Object({ accountId: id }, closed),
+        realmId: id,
+        directory: t.Object(
+          {
+            ratingQuestions: t.Array(managementQuestion(), { maxItems: 20 }),
+            next: t.Union([t.String({ minLength: 1, maxLength: 4096 }), t.Null()]),
+          },
+          closed,
+        ),
+        actions: t.Object(
+          {
+            create: t.Union([t.Object({ method: t.Literal('POST'), href: managementHref }, closed), t.Null()]),
+          },
+          closed,
+        ),
+        selected: t.Union([
+          t.Object(
             {
-              caption: t.Union([
-                t.Object({ method: t.Literal('PUT'), href: managementHref, expectedLabelRevision: revision }, closed),
-                t.Null(),
-              ]),
-              lifecycle: t.Union([
-                t.Object(
-                  { method: t.Literal('POST'), href: managementHref, expectedLifecycleRevision: revision },
-                  closed,
-                ),
-                t.Null(),
-              ]),
+              question: managementQuestion(),
+              readback: managementHref,
+              history: managementHref,
+              actions: t.Object(
+                {
+                  caption: t.Union([
+                    t.Object(
+                      { method: t.Literal('PUT'), href: managementHref, expectedLabelRevision: revision },
+                      closed,
+                    ),
+                    t.Null(),
+                  ]),
+                  lifecycle: t.Union([
+                    t.Object(
+                      { method: t.Literal('POST'), href: managementHref, expectedLifecycleRevision: revision },
+                      closed,
+                    ),
+                    t.Null(),
+                  ]),
+                },
+                closed,
+              ),
             },
             closed,
           ),
-        },
-        closed,
-      ),
-      t.Null(),
-    ]),
-  },
-  closed,
-);
+          t.Null(),
+        ]),
+      },
+      closed,
+    ),
+  );
+}
 
 const RatingFreshnessSchema = t.Object(
   {
@@ -217,67 +251,87 @@ const sourceScale = t.Object(
   closed,
 );
 
-export const SourceStatisticInputSchema = strictContentSchema(
-  t.Object(
-    {
-      expectedObservation: t.Optional(t.Union([t.String({ pattern: '^[0-9a-f]{64}$' }), t.Null()])),
-      sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
-      sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
-      figures: t.Optional(SourceFiguresSchema),
-      scale: sourceScale,
-      mean: t.Number(),
-      count: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
-      asOf: t.String({ format: 'date' }),
-      licence: t.String({ minLength: 1, maxLength: 1024 }),
-      attribution: t.String({ minLength: 1, maxLength: 2000 }),
-    },
-    closed,
-  ),
-);
-
-export const SourceStatisticClearInputSchema = strictContentSchema(
-  t.Object(
-    {
-      expectedObservation: t.Optional(t.Union([t.String({ pattern: '^[0-9a-f]{64}$' }), t.Null()])),
-      sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
-      sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
-      count: t.Literal(0),
-      asOf: t.String({ format: 'date' }),
-    },
-    closed,
-  ),
-);
-
-export const SourceStatisticResponseSchema = t.Object(
-  {
-    source: t.Union([t.Literal('vndb'), t.Literal('bangumi')]),
-    observation: t.Optional(
-      t.Object({ kind: t.Literal('unversioned'), digest: t.String({ pattern: '^[0-9a-f]{64}$' }) }, closed),
+export function SourceStatisticInputSchema() {
+  return memoizedValue(SourceStatisticInputSchema, () =>
+    strictContentSchema(
+      t.Object(
+        {
+          expectedObservation: t.Optional(t.Union([t.String({ pattern: '^[0-9a-f]{64}$' }), t.Null()])),
+          sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
+          sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
+          figures: t.Optional(SourceFiguresSchema),
+          scale: sourceScale,
+          mean: t.Number(),
+          count: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
+          asOf: t.String({ format: 'date' }),
+          licence: t.String({ minLength: 1, maxLength: 1024 }),
+          attribution: t.String({ minLength: 1, maxLength: 2000 }),
+        },
+        closed,
+      ),
     ),
-    sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
-    sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
-    figures: t.Optional(SourceFiguresSchema),
-    scale: sourceScale,
-    mean: t.Number(),
-    count: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
-    asOf: t.String({ format: 'date' }),
-    licence: t.String({ minLength: 1, maxLength: 1024 }),
-    attribution: t.String({ minLength: 1, maxLength: 2000 }),
-  },
-  closed,
-);
+  );
+}
 
-export const SourceStatisticListResponseSchema = t.Array(SourceStatisticResponseSchema, { maxItems: 2 });
+export function SourceStatisticClearInputSchema() {
+  return memoizedValue(SourceStatisticClearInputSchema, () =>
+    strictContentSchema(
+      t.Object(
+        {
+          expectedObservation: t.Optional(t.Union([t.String({ pattern: '^[0-9a-f]{64}$' }), t.Null()])),
+          sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
+          sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
+          count: t.Literal(0),
+          asOf: t.String({ format: 'date' }),
+        },
+        closed,
+      ),
+    ),
+  );
+}
 
-export const RatingQuestionLabelInputSchema = strictContentSchema(
-  t.Object(
-    {
-      expectedLabelRevision: t.Integer({ minimum: 1, maximum: 2_147_483_646 }),
-      label: t.String({ minLength: 1, maxLength: 200 }),
-    },
-    closed,
-  ),
-);
+export function SourceStatisticResponseSchema() {
+  return memoizedValue(SourceStatisticResponseSchema, () =>
+    t.Object(
+      {
+        source: t.Union([t.Literal('vndb'), t.Literal('bangumi')]),
+        observation: t.Optional(
+          t.Object({ kind: t.Literal('unversioned'), digest: t.String({ pattern: '^[0-9a-f]{64}$' }) }, closed),
+        ),
+        sourceAlias: t.Optional(SourceFenceQuerySchema.properties.source),
+        sourceRecordId: t.String({ minLength: 1, maxLength: 1024 }),
+        figures: t.Optional(SourceFiguresSchema),
+        scale: sourceScale,
+        mean: t.Number(),
+        count: t.Integer({ minimum: 1, maximum: 2_147_483_647 }),
+        asOf: t.String({ format: 'date' }),
+        licence: t.String({ minLength: 1, maxLength: 1024 }),
+        attribution: t.String({ minLength: 1, maxLength: 2000 }),
+      },
+      closed,
+    ),
+  );
+}
+
+export function SourceStatisticListResponseSchema() {
+  return memoizedValue(SourceStatisticListResponseSchema, () =>
+    t.Array(SourceStatisticResponseSchema(), { maxItems: 2 }),
+  );
+}
+
+export function RatingQuestionLabelInputSchema() {
+  return memoizedValue(RatingQuestionLabelInputSchema, () =>
+    strictContentSchema(
+      t.Object(
+        {
+          expectedLabelRevision: t.Integer({ minimum: 1, maximum: 2_147_483_646 }),
+          label: t.String({ minLength: 1, maxLength: 200 }),
+        },
+        closed,
+      ),
+    ),
+  );
+}
 
 export const RatingQuestionLabelResultSchema = t.Object(
   {

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { BOUND_AXES, declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { MEMBERSHIP_LIMIT } from '../access/membership-inverse.ts';
 import { accessNativeDeclaration, type AccessWork } from '../access/work.ts';
@@ -54,7 +55,9 @@ const partitionBytes = 4; // Core partition number 0..4095, text format.
 const uuidBytes = 36;
 const integerBytes = 10; // PostgreSQL signed integer domain, text format.
 const bigintBytes = 19; // PostgreSQL signed bigint domain, text format.
-const ordinalBytes = MAX_ORDINAL_KEY_LENGTH;
+function ordinalBytes() {
+  return memoizedValue(ordinalBytes, () => MAX_ORDINAL_KEY_LENGTH);
+}
 export const COLLECTION_ORDER_MAX_STEP = 2_147_483_647;
 
 /** These are the exact SQL literals used by the Library repair callers. */
@@ -129,13 +132,17 @@ const STRUCTURE_HISTORY_RETAINED = 1_000;
 const STRUCTURE_HISTORY_OPERATIONS = 32;
 const ACCESS_GRANT_ROLES = 1;
 /** Existing native resolveSubject ceiling; add pays it once, move does not. */
-const subjectDisclosure = dimensions({
-  candidateKeys: 1,
-  nativeRows: 8_192,
-  nativePoints: 128,
-  statements: 128,
-  bytes: 1024 * 1024,
-});
+function subjectDisclosure() {
+  return memoizedValue(subjectDisclosure, () =>
+    dimensions({
+      candidateKeys: 1,
+      nativeRows: 8_192,
+      nativePoints: 128,
+      statements: 128,
+      bytes: 1024 * 1024,
+    }),
+  );
+}
 
 function commandHistoryAbsence(kind: string): Bound {
   if (Object.hasOwn(COMMAND_HISTORY_KINDS, kind))
@@ -148,54 +155,85 @@ const query = (text: string, inputBytes: number, projectedBytes: number, counts:
   sumBounds(dimensions({ statements: 1, ...counts }), bytes(sql(text) + inputBytes + projectedBytes));
 
 const parentProjectionBytes = uuidBytes + 7 + 7 + integerBytes + integerBytes + bigintBytes + integerBytes;
-const repairProjectionBytes =
-  uuidBytes +
-  integerBytes +
-  3 * ordinalBytes +
-  integerBytes +
-  bigintBytes +
-  integerBytes +
-  integerBytes +
-  integerBytes +
-  ordinalBytes +
-  uuidBytes +
-  9;
-const rawProjectionBytes = uuidBytes + ordinalBytes + 5;
+function repairProjectionBytes() {
+  return memoizedValue(
+    repairProjectionBytes,
+    () =>
+      uuidBytes +
+      integerBytes +
+      3 * ordinalBytes() +
+      integerBytes +
+      bigintBytes +
+      integerBytes +
+      integerBytes +
+      integerBytes +
+      ordinalBytes() +
+      uuidBytes +
+      9,
+  );
+}
+function rawProjectionBytes() {
+  return memoizedValue(rawProjectionBytes, () => uuidBytes + ordinalBytes() + 5);
+}
 const bindParent = routeBytes + uuidBytes;
-const parentLock = query(COLLECTION_ORDER_SQL.parent, bindParent, parentProjectionBytes, {
-  candidateKeys: 1,
-  nativeRows: 1,
-  nativePoints: 1,
-  emptySeeks: 1,
-});
-const beginRepairRead = query(COLLECTION_ORDER_SQL.beginRepair, bindParent, uuidBytes + integerBytes + 9, {
-  candidateKeys: 1,
-  nativeRows: 1,
-  nativePoints: 1,
-  emptySeeks: 1,
-});
-const terminalRepairDelete = query(COLLECTION_ORDER_SQL.removeTerminalRepair, bindParent + uuidBytes, 0, {
-  nativeRows: 1,
-  nativePoints: 1,
-});
-const originalMinimum = query(COLLECTION_ORDER_SQL.originalMinimum, bindParent, ordinalBytes, {
-  candidateKeys: 1,
-  nativeRows: 1,
-  nativePoints: 1,
-  emptySeeks: 1,
-});
-const repairInsert = query(
-  COLLECTION_ORDER_SQL.insertRepair,
-  routeBytes + 2 * uuidBytes + integerBytes + 3 * ordinalBytes + integerBytes + bigintBytes + integerBytes,
-  0,
-  { nativeRows: 1, nativePoints: 1 },
-);
-const activeBarrier = query(COLLECTION_ORDER_SQL.barrier, bindParent, 1, {
-  candidateKeys: 1,
-  nativeRows: 1,
-  nativePoints: 1,
-  emptySeeks: 1,
-});
+function parentLock() {
+  return memoizedValue(parentLock, () =>
+    query(COLLECTION_ORDER_SQL.parent, bindParent, parentProjectionBytes, {
+      candidateKeys: 1,
+      nativeRows: 1,
+      nativePoints: 1,
+      emptySeeks: 1,
+    }),
+  );
+}
+function beginRepairRead() {
+  return memoizedValue(beginRepairRead, () =>
+    query(COLLECTION_ORDER_SQL.beginRepair, bindParent, uuidBytes + integerBytes + 9, {
+      candidateKeys: 1,
+      nativeRows: 1,
+      nativePoints: 1,
+      emptySeeks: 1,
+    }),
+  );
+}
+function terminalRepairDelete() {
+  return memoizedValue(terminalRepairDelete, () =>
+    query(COLLECTION_ORDER_SQL.removeTerminalRepair, bindParent + uuidBytes, 0, {
+      nativeRows: 1,
+      nativePoints: 1,
+    }),
+  );
+}
+function originalMinimum() {
+  return memoizedValue(originalMinimum, () =>
+    query(COLLECTION_ORDER_SQL.originalMinimum, bindParent, ordinalBytes(), {
+      candidateKeys: 1,
+      nativeRows: 1,
+      nativePoints: 1,
+      emptySeeks: 1,
+    }),
+  );
+}
+function repairInsert() {
+  return memoizedValue(repairInsert, () =>
+    query(
+      COLLECTION_ORDER_SQL.insertRepair,
+      routeBytes + 2 * uuidBytes + integerBytes + 3 * ordinalBytes() + integerBytes + bigintBytes + integerBytes,
+      0,
+      { nativeRows: 1, nativePoints: 1 },
+    ),
+  );
+}
+function activeBarrier() {
+  return memoizedValue(activeBarrier, () =>
+    query(COLLECTION_ORDER_SQL.barrier, bindParent, 1, {
+      candidateKeys: 1,
+      nativeRows: 1,
+      nativePoints: 1,
+      emptySeeks: 1,
+    }),
+  );
+}
 
 const triggerParent = `SELECT curator_account_id,state FROM library.collection
     WHERE route=owner_route AND collection_id=owner_id FOR UPDATE`;
@@ -203,103 +241,156 @@ const triggerRepair = `SELECT * FROM library.collection_order_repair
     WHERE route=owner_route AND collection_id=owner_id AND state='active'`;
 const triggerAccount = `SELECT state <> 'active' OR authn_fenced INTO terminal FROM access.account
       WHERE route=get_byte(uuid_send(curator),10)*256+get_byte(uuid_send(curator),11) AND account_id=curator`;
-const triggerParentGuard = query(triggerParent, 0, uuidBytes + 7, {
-  candidateKeys: 1,
-  nativeRows: 1,
-  nativePoints: 1,
-});
+function triggerParentGuard() {
+  return memoizedValue(triggerParentGuard, () =>
+    query(triggerParent, 0, uuidBytes + 7, {
+      candidateKeys: 1,
+      nativeRows: 1,
+      nativePoints: 1,
+    }),
+  );
+}
 // SELECT * is intentional in both migration triggers; derive the maximum row
 // projection from the repair table's fixed integer/UUID/text/xid8 columns.
-const repairTriggerProjectionBytes =
-  routeBytes +
-  2 * uuidBytes +
-  integerBytes +
-  3 * ordinalBytes +
-  4 * integerBytes +
-  2 * bigintBytes +
-  2 * integerBytes +
-  ordinalBytes +
-  uuidBytes +
-  9 +
-  20;
-const triggerRepairGuard = query(triggerRepair, 0, repairTriggerProjectionBytes, {
-  candidateKeys: 1,
-  nativeRows: 1,
-  nativePoints: 1,
-});
-const triggerRepairMissing = query(triggerRepair, 0, 0, {
-  candidateKeys: 1,
-  nativePoints: 1,
-  emptySeeks: 1,
-});
-const triggerAccountGuard = query(triggerAccount, 0, 5, {
-  candidateKeys: 1,
-  nativeRows: 1,
-  nativePoints: 1,
-});
-const memberGuardTriggers = sumBounds(triggerParentGuard, triggerRepairGuard, triggerAccountGuard);
-const memberUpdate = query(
-  COLLECTION_ORDER_SQL.rewriteOriginal,
-  routeBytes + 3 * uuidBytes + ordinalBytes + GENERATED_ORDINAL_KEY_LENGTH,
-  0,
-  { nativeRows: 1, nativePoints: 1, witnessKeys: 1 },
-);
-const progressUpdate = query(
-  COLLECTION_ORDER_SQL.advanceRepair,
-  routeBytes +
-    2 * uuidBytes +
-    integerBytes +
-    integerBytes +
-    ordinalBytes +
-    uuidBytes +
-    9 +
-    integerBytes +
-    integerBytes +
-    bigintBytes +
-    integerBytes,
-  uuidBytes,
-  { nativeRows: 1, nativePoints: 1 },
-);
-const parentUpdate = query(
-  COLLECTION_ORDER_SQL.advanceParent,
-  routeBytes + uuidBytes + integerBytes + integerBytes + bigintBytes + integerBytes + 29 + uuidBytes,
-  uuidBytes,
-  { nativeRows: 1, nativePoints: 1 },
-);
-const removeRepair = query(COLLECTION_ORDER_SQL.removeExactRepair, bindParent + uuidBytes, 0, {
-  nativeRows: 1,
-  nativePoints: 1,
-});
-const repairLock = query(COLLECTION_ORDER_SQL.lockRepair, bindParent + uuidBytes, repairProjectionBytes, {
-  candidateKeys: 1,
-  nativeRows: 1,
-  nativePoints: 1,
-  emptySeeks: 1,
-});
-const accountShareCost = query(accountShare.sql, bindParent, 13, {
-  candidateKeys: 1,
-  nativeRows: 1,
-  nativePoints: 1,
-  emptySeeks: 1,
-});
+function repairTriggerProjectionBytes() {
+  return memoizedValue(
+    repairTriggerProjectionBytes,
+    () =>
+      routeBytes +
+      2 * uuidBytes +
+      integerBytes +
+      3 * ordinalBytes() +
+      4 * integerBytes +
+      2 * bigintBytes +
+      2 * integerBytes +
+      ordinalBytes() +
+      uuidBytes +
+      9 +
+      20,
+  );
+}
+function triggerRepairGuard() {
+  return memoizedValue(triggerRepairGuard, () =>
+    query(triggerRepair, 0, repairTriggerProjectionBytes(), {
+      candidateKeys: 1,
+      nativeRows: 1,
+      nativePoints: 1,
+    }),
+  );
+}
+function triggerRepairMissing() {
+  return memoizedValue(triggerRepairMissing, () =>
+    query(triggerRepair, 0, 0, {
+      candidateKeys: 1,
+      nativePoints: 1,
+      emptySeeks: 1,
+    }),
+  );
+}
+function triggerAccountGuard() {
+  return memoizedValue(triggerAccountGuard, () =>
+    query(triggerAccount, 0, 5, {
+      candidateKeys: 1,
+      nativeRows: 1,
+      nativePoints: 1,
+    }),
+  );
+}
+function memberGuardTriggers() {
+  return memoizedValue(memberGuardTriggers, () =>
+    sumBounds(triggerParentGuard(), triggerRepairGuard(), triggerAccountGuard()),
+  );
+}
+function memberUpdate() {
+  return memoizedValue(memberUpdate, () =>
+    query(
+      COLLECTION_ORDER_SQL.rewriteOriginal,
+      routeBytes + 3 * uuidBytes + ordinalBytes() + GENERATED_ORDINAL_KEY_LENGTH,
+      0,
+      { nativeRows: 1, nativePoints: 1, witnessKeys: 1 },
+    ),
+  );
+}
+function progressUpdate() {
+  return memoizedValue(progressUpdate, () =>
+    query(
+      COLLECTION_ORDER_SQL.advanceRepair,
+      routeBytes +
+        2 * uuidBytes +
+        integerBytes +
+        integerBytes +
+        ordinalBytes() +
+        uuidBytes +
+        9 +
+        integerBytes +
+        integerBytes +
+        bigintBytes +
+        integerBytes,
+      uuidBytes,
+      { nativeRows: 1, nativePoints: 1 },
+    ),
+  );
+}
+function parentUpdate() {
+  return memoizedValue(parentUpdate, () =>
+    query(
+      COLLECTION_ORDER_SQL.advanceParent,
+      routeBytes + uuidBytes + integerBytes + integerBytes + bigintBytes + integerBytes + 29 + uuidBytes,
+      uuidBytes,
+      { nativeRows: 1, nativePoints: 1 },
+    ),
+  );
+}
+function removeRepair() {
+  return memoizedValue(removeRepair, () =>
+    query(COLLECTION_ORDER_SQL.removeExactRepair, bindParent + uuidBytes, 0, {
+      nativeRows: 1,
+      nativePoints: 1,
+    }),
+  );
+}
+function repairLock() {
+  return memoizedValue(repairLock, () =>
+    query(COLLECTION_ORDER_SQL.lockRepair, bindParent + uuidBytes, repairProjectionBytes(), {
+      candidateKeys: 1,
+      nativeRows: 1,
+      nativePoints: 1,
+      emptySeeks: 1,
+    }),
+  );
+}
+function accountShareCost() {
+  return memoizedValue(accountShareCost, () =>
+    query(accountShare.sql, bindParent, 13, {
+      candidateKeys: 1,
+      nativeRows: 1,
+      nativePoints: 1,
+      emptySeeks: 1,
+    }),
+  );
+}
 
 const rawPage = (size: number): Bound => {
   const limitBytes = String(size).length;
   return query(
     COLLECTION_ORDER_SQL.originals,
-    routeBytes + uuidBytes + ordinalBytes + ordinalBytes + uuidBytes + limitBytes,
-    size * rawProjectionBytes,
+    routeBytes + uuidBytes + ordinalBytes() + ordinalBytes() + uuidBytes + limitBytes,
+    size * rawProjectionBytes(),
     { candidateKeys: size, nativeRows: size, emptySeeks: size === 0 ? 1 : 0 },
   );
 };
 const rewriteRows = (active: number, completes: boolean): Bound =>
   sumBounds(
-    repeatBound(memberUpdate, active),
-    repeatBound(completes ? sumBounds(triggerParentGuard, triggerRepairMissing) : memberGuardTriggers, active),
+    repeatBound(memberUpdate(), active),
+    repeatBound(completes ? sumBounds(triggerParentGuard(), triggerRepairMissing()) : memberGuardTriggers(), active),
   );
 
-const accountLifecycleShare = accountShareCost;
-const pageCurrentness = sumBounds(parentLock, repairLock, accountLifecycleShare);
+function accountLifecycleShare() {
+  return memoizedValue(accountLifecycleShare, () => accountShareCost());
+}
+function pageCurrentness() {
+  return memoizedValue(pageCurrentness, () => sumBounds(parentLock(), repairLock(), accountLifecycleShare()));
+}
 
 const locatorBytes = Buffer.byteLength(
   JSON.stringify({ collectionId: '0'.repeat(uuidBytes), repairId: '0'.repeat(uuidBytes), step: 2_147_483_647 }),
@@ -321,22 +412,38 @@ const eventRepairBytes = Buffer.byteLength(
   }),
 );
 const beginResultBytes = locatorBytes;
-const retryLimit = COMMAND_STEP_RETRIES.maxAttempts;
+function retryLimit() {
+  return memoizedValue(retryLimit, () => COMMAND_STEP_RETRIES.maxAttempts);
+}
 
-const timeoutSql = `SET LOCAL statement_timeout = '${WORK_STEP_DEADLINE_MS}ms'`;
+function timeoutSql() {
+  return memoizedValue(timeoutSql, () => `SET LOCAL statement_timeout = '${WORK_STEP_DEADLINE_MS}ms'`);
+}
 const lockTimeoutSql = "SET LOCAL lock_timeout = '200ms'";
 const beginSql = 'BEGIN ISOLATION LEVEL SERIALIZABLE';
-const beginControl = dimensions({
-  statements: 3,
-  bytes: sql(beginSql) + sql(lockTimeoutSql) + sql(timeoutSql),
-});
-const pageControls = sumBounds(
-  beginControl,
-  query(readTime.sql, 24, 29, { nativeRows: 1, nativePoints: 1 }),
-  dimensions({ statements: 1, bytes: sql(timeoutSql) }),
-);
-const commitControl = dimensions({ statements: 1, bytes: sql('COMMIT') });
-const rollbackControl = dimensions({ statements: 1, bytes: sql('ROLLBACK') });
+function beginControl() {
+  return memoizedValue(beginControl, () =>
+    dimensions({
+      statements: 3,
+      bytes: sql(beginSql) + sql(lockTimeoutSql) + sql(timeoutSql()),
+    }),
+  );
+}
+function pageControls() {
+  return memoizedValue(pageControls, () =>
+    sumBounds(
+      beginControl(),
+      query(readTime.sql, 24, 29, { nativeRows: 1, nativePoints: 1 }),
+      dimensions({ statements: 1, bytes: sql(timeoutSql()) }),
+    ),
+  );
+}
+function commitControl() {
+  return memoizedValue(commitControl, () => dimensions({ statements: 1, bytes: sql('COMMIT') }));
+}
+function rollbackControl() {
+  return memoizedValue(rollbackControl, () => dimensions({ statements: 1, bytes: sql('ROLLBACK') }));
+}
 const eventFenceCost = (eventCount: number, eventBytes: number): Bound =>
   query(eventFence.sql, eventBytes + eventCount + 1 + uuidBytes + partitionBytes + 8, integerBytes + bigintBytes, {
     candidateKeys: 1,
@@ -344,24 +451,28 @@ const eventFenceCost = (eventCount: number, eventBytes: number): Bound =>
     nativeRows: eventCount + 1,
     nativePoints: eventCount + 1,
   });
-const noEffectCost = query(noEffectFence.sql, partitionBytes + uuidBytes + 4, integerBytes + bigintBytes, {
-  candidateKeys: 1,
-  nativeRows: 1,
-  nativePoints: 1,
-  emptySeeks: 1,
-});
+function noEffectCost() {
+  return memoizedValue(noEffectCost, () =>
+    query(noEffectFence.sql, partitionBytes + uuidBytes + 4, integerBytes + bigintBytes, {
+      candidateKeys: 1,
+      nativeRows: 1,
+      nativePoints: 1,
+      emptySeeks: 1,
+    }),
+  );
+}
 
 const pageData = (size: number, active: number, completes: boolean): Bound =>
   sumBounds(
-    pageCurrentness,
+    pageCurrentness(),
     rawPage(size),
     rewriteRows(active, completes),
-    progressUpdate,
-    parentUpdate,
+    progressUpdate(),
+    parentUpdate(),
     // Active pages hit the lifecycle guard per rewritten occurrence and on the
     // parent CAS. A terminal page has already marked the capture complete, so its
     // triggers perform the bounded empty active-repair seek without account reads.
-    repeatBound(completes ? triggerRepairMissing : sumBounds(triggerRepairGuard, triggerAccountGuard), 1),
+    repeatBound(completes ? triggerRepairMissing() : sumBounds(triggerRepairGuard(), triggerAccountGuard()), 1),
     dimensions({
       nativeRows: 1,
       nativePoints: 1,
@@ -370,45 +481,74 @@ const pageData = (size: number, active: number, completes: boolean): Bound =>
     dimensions({ bytes: Buffer.byteLength(JSON.stringify({ state: completes ? 'complete' : 'more' })) }),
   );
 
-const stalePage = sumBounds(pageControls, pageCurrentness, noEffectCost, commitControl);
-const terminalPage = sumBounds(
-  pageControls,
-  pageCurrentness,
-  removeRepair,
-  dimensions({ bytes: eventUpdatedBytes }),
-  eventFenceCost(1, eventUpdatedBytes),
-  commitControl,
-);
-const fullPageData = pageData(ORDER_WINDOW_SIZE, ORDER_WINDOW_SIZE, false);
-const fullPageSuccess = sumBounds(
-  pageControls,
-  fullPageData,
-  eventFenceCost(2, eventUpdatedBytes + eventRepairBytes),
-  commitControl,
-);
-const shortPageSuccess = sumBounds(
-  pageControls,
-  pageData(ORDER_WINDOW_SIZE - 1, ORDER_WINDOW_SIZE - 1, true),
-  eventFenceCost(2, eventUpdatedBytes + eventRepairBytes),
-  commitControl,
-);
-const exhaustionSuccess = sumBounds(
-  pageControls,
-  pageData(0, 0, true),
-  eventFenceCost(2, eventUpdatedBytes + eventRepairBytes),
-  commitControl,
-);
-const changedFenceRollback = sumBounds(pageControls, pageCurrentness, rollbackControl);
-const failedFullPage = sumBounds(
-  pageControls,
-  fullPageData,
-  eventFenceCost(2, eventUpdatedBytes + eventRepairBytes),
-  commitControl,
-  rollbackControl,
-);
-const failedFullThenSuccess = sumBounds(repeatBound(failedFullPage, retryLimit - 1), fullPageSuccess);
-const allFullAttemptsFail = repeatBound(failedFullPage, retryLimit);
-const committedReplay = sumBounds(fullPageSuccess, repeatBound(stalePage, retryLimit - 1));
+function stalePage() {
+  return memoizedValue(stalePage, () => sumBounds(pageControls(), pageCurrentness(), noEffectCost(), commitControl()));
+}
+function terminalPage() {
+  return memoizedValue(terminalPage, () =>
+    sumBounds(
+      pageControls(),
+      pageCurrentness(),
+      removeRepair(),
+      dimensions({ bytes: eventUpdatedBytes }),
+      eventFenceCost(1, eventUpdatedBytes),
+      commitControl(),
+    ),
+  );
+}
+function fullPageData() {
+  return memoizedValue(fullPageData, () => pageData(ORDER_WINDOW_SIZE, ORDER_WINDOW_SIZE, false));
+}
+function fullPageSuccess() {
+  return memoizedValue(fullPageSuccess, () =>
+    sumBounds(pageControls(), fullPageData(), eventFenceCost(2, eventUpdatedBytes + eventRepairBytes), commitControl()),
+  );
+}
+function shortPageSuccess() {
+  return memoizedValue(shortPageSuccess, () =>
+    sumBounds(
+      pageControls(),
+      pageData(ORDER_WINDOW_SIZE - 1, ORDER_WINDOW_SIZE - 1, true),
+      eventFenceCost(2, eventUpdatedBytes + eventRepairBytes),
+      commitControl(),
+    ),
+  );
+}
+function exhaustionSuccess() {
+  return memoizedValue(exhaustionSuccess, () =>
+    sumBounds(
+      pageControls(),
+      pageData(0, 0, true),
+      eventFenceCost(2, eventUpdatedBytes + eventRepairBytes),
+      commitControl(),
+    ),
+  );
+}
+function changedFenceRollback() {
+  return memoizedValue(changedFenceRollback, () => sumBounds(pageControls(), pageCurrentness(), rollbackControl()));
+}
+function failedFullPage() {
+  return memoizedValue(failedFullPage, () =>
+    sumBounds(
+      pageControls(),
+      fullPageData(),
+      eventFenceCost(2, eventUpdatedBytes + eventRepairBytes),
+      commitControl(),
+      rollbackControl(),
+    ),
+  );
+}
+function failedFullThenSuccess() {
+  return memoizedValue(failedFullThenSuccess, () =>
+    sumBounds(repeatBound(failedFullPage(), retryLimit() - 1), fullPageSuccess()),
+  );
+}
+function allFullAttemptsFail() {
+  return memoizedValue(allFullAttemptsFail, () => repeatBound(failedFullPage(), retryLimit()));
+}
+function committedReplay() {
+  return memoizedValue(committedReplay, () => sumBounds(fullPageSuccess(), repeatBound(stalePage(), retryLimit() - 1)));
+}
 
 function maxBound(...values: readonly Bound[]): Bound {
   return declareBound(
@@ -416,43 +556,61 @@ function maxBound(...values: readonly Bound[]): Bound {
   );
 }
 
-const pageCeiling = maxBound(
-  stalePage,
-  terminalPage,
-  changedFenceRollback,
-  fullPageSuccess,
-  shortPageSuccess,
-  exhaustionSuccess,
-  failedFullThenSuccess,
-  allFullAttemptsFail,
-  committedReplay,
-);
-
-const beginReuse = sumBounds(parentLock, beginRepairRead);
-const beginEmpty = sumBounds(parentLock, beginRepairRead, terminalRepairDelete);
-const beginFresh = sumBounds(parentLock, beginRepairRead, originalMinimum, repairInsert);
-const beginReplaceTerminal = sumBounds(
-  parentLock,
-  beginRepairRead,
-  terminalRepairDelete,
-  originalMinimum,
-  repairInsert,
-);
-const beginSqlCeiling = maxBound(beginReuse, beginEmpty, beginFresh, beginReplaceTerminal);
-const barrierCeiling = sumBounds(parentLock, activeBarrier);
-const continuationRequest = dimensions({
-  engineRequests: 1,
-  bytes:
-    locatorBytes +
-    Buffer.byteLength(
-      JSON.stringify({
-        workflowName: COLLECTION_ORDER_WORKFLOW,
-        queueName: 'maintenance',
-        workflowID: `${COLLECTION_ORDER_WORKFLOW}:${'0'.repeat(uuidBytes)}:2147483647`,
-        workflowIDReusePolicy: 'return-existing',
-      }),
+function pageCeiling() {
+  return memoizedValue(pageCeiling, () =>
+    maxBound(
+      stalePage(),
+      terminalPage(),
+      changedFenceRollback(),
+      fullPageSuccess(),
+      shortPageSuccess(),
+      exhaustionSuccess(),
+      failedFullThenSuccess(),
+      allFullAttemptsFail(),
+      committedReplay(),
     ),
-});
+  );
+}
+
+function beginReuse() {
+  return memoizedValue(beginReuse, () => sumBounds(parentLock(), beginRepairRead()));
+}
+function beginEmpty() {
+  return memoizedValue(beginEmpty, () => sumBounds(parentLock(), beginRepairRead(), terminalRepairDelete()));
+}
+function beginFresh() {
+  return memoizedValue(beginFresh, () => sumBounds(parentLock(), beginRepairRead(), originalMinimum(), repairInsert()));
+}
+function beginReplaceTerminal() {
+  return memoizedValue(beginReplaceTerminal, () =>
+    sumBounds(parentLock(), beginRepairRead(), terminalRepairDelete(), originalMinimum(), repairInsert()),
+  );
+}
+function beginSqlCeiling() {
+  return memoizedValue(beginSqlCeiling, () =>
+    maxBound(beginReuse(), beginEmpty(), beginFresh(), beginReplaceTerminal()),
+  );
+}
+function barrierCeiling() {
+  return memoizedValue(barrierCeiling, () => sumBounds(parentLock(), activeBarrier()));
+}
+function continuationRequest() {
+  return memoizedValue(continuationRequest, () =>
+    dimensions({
+      engineRequests: 1,
+      bytes:
+        locatorBytes +
+        Buffer.byteLength(
+          JSON.stringify({
+            workflowName: COLLECTION_ORDER_WORKFLOW,
+            queueName: 'maintenance',
+            workflowID: `${COLLECTION_ORDER_WORKFLOW}:${'0'.repeat(uuidBytes)}:2147483647`,
+            workflowIDReusePolicy: 'return-existing',
+          }),
+        ),
+    }),
+  );
+}
 
 const jsonSize = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
 const uuid = '0'.repeat(uuidBytes);
@@ -460,15 +618,19 @@ const timestamp = '\0'.repeat(64);
 const actorAccount = { route: 65535, account_id: uuid };
 const collectionPoint = { route: 65535, collection_id: uuid };
 const memberPoint = { ...collectionPoint, member_id: uuid };
-const memberResult = {
-  collectionId: uuid,
-  id: uuid,
-  subjectId: uuid,
-  note: '\0'.repeat(NOTE_LIMIT),
-  ordinalKey: '\0'.repeat(ordinalBytes),
-  addedAt: timestamp,
-};
-const memberResultBytes = jsonSize(memberResult);
+function memberResult() {
+  return memoizedValue(memberResult, () => ({
+    collectionId: uuid,
+    id: uuid,
+    subjectId: uuid,
+    note: '\0'.repeat(NOTE_LIMIT),
+    ordinalKey: '\0'.repeat(ordinalBytes()),
+    addedAt: timestamp,
+  }));
+}
+function memberResultBytes() {
+  return memoizedValue(memberResultBytes, () => jsonSize(memberResult()));
+}
 const memberEventBytes = jsonSize({
   type: 'com.rezics.library.collection.member.changed.v1',
   subject: uuid,
@@ -515,8 +677,12 @@ function accessLeaf(
 }
 
 const accessMembers = ACTOR_MEMBERS;
-const accessGroups = accessMembers * MEMBERSHIP_LIMIT;
-const accessRoles = accessGroups * 2;
+function accessGroups() {
+  return memoizedValue(accessGroups, () => accessMembers * MEMBERSHIP_LIMIT);
+}
+function accessRoles() {
+  return memoizedValue(accessRoles, () => accessGroups() * 2);
+}
 const accessFormulaInput = {
   route: 65535,
   action: 'collection:update',
@@ -525,237 +691,301 @@ const accessFormulaInput = {
   principal_id: uuid,
   deadline: timestamp,
 };
-const accessPreparation = sumBounds(
-  accessLeaf('time', permissionTime.sql, { at: timestamp }, {}, 1),
-  accessLeaf('account-state', accountRead.sql, actorAccount, { targets: 1 }, 1),
-  accessLeaf(
-    'inverse',
-    permissionInverse.sql,
-    { ...actorAccount, members: Array.from({ length: accessMembers }, () => actorAccount) },
-    { members: accessMembers, groups: MEMBERSHIP_LIMIT },
-    accessMembers,
-  ),
-  accessLeaf(
-    'assignment',
-    permissionAssignment.sql,
-    { route: 65535, principal_id: uuid, request_id: uuid, actor_id: uuid, at: timestamp },
-    {},
-    1,
-  ),
-  accessLeaf(
-    'membership',
-    permissionMembership.sql,
-    {
-      route: 65535,
-      organization_id: uuid,
-      member_id: uuid,
-      at: timestamp,
-      pairs: Array.from({ length: MEMBERSHIP_LIMIT }, () => ({
-        route: 65535,
-        organization_id: uuid,
-        member_id: uuid,
-      })),
-    },
-    { groups: MEMBERSHIP_LIMIT },
-    1,
-  ),
-  accessLeaf(
-    'membership',
-    permissionMembership.sql,
-    {
-      pairs: Array.from({ length: MEMBERSHIP_LIMIT }, () => ({ realmId: uuid, accountId: uuid })),
-      at: timestamp,
-    },
-    { groups: MEMBERSHIP_LIMIT },
-    1,
-  ),
-  accessLeaf(
-    'candidates',
-    permissionCandidates.sql,
-    accessFormulaInput,
-    {
-      targets: 1,
-      members: accessMembers,
-      roles: accessRoles,
-      grantRoles: ACCESS_GRANT_ROLES,
-      explicit: true,
-      global: true,
-      assignment: true,
-    },
-    1,
-  ),
-  accessLeaf(
-    'formula',
-    permissionCheck.sql,
-    accessFormulaInput,
-    {
-      targets: 1,
-      members: accessMembers,
-      roles: accessRoles,
-      grantRoles: ACCESS_GRANT_ROLES,
-      explicit: true,
-      global: true,
-      assignment: true,
-    },
-    1,
-  ),
-  query(collectionAuthorization.sql, bindParent, uuidBytes + 7 + 7 + 7 + 16 + 5, {
-    candidateKeys: 1,
-    nativeRows: 1,
-    nativePoints: 1,
-    emptySeeks: 1,
-  }),
-  sumBounds(
-    ...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'].map((text) =>
-      dimensions({ statements: 1, bytes: sql(text) }),
+function accessPreparation() {
+  return memoizedValue(accessPreparation, () =>
+    sumBounds(
+      accessLeaf('time', permissionTime.sql, { at: timestamp }, {}, 1),
+      accessLeaf('account-state', accountRead.sql, actorAccount, { targets: 1 }, 1),
+      accessLeaf(
+        'inverse',
+        permissionInverse.sql,
+        { ...actorAccount, members: Array.from({ length: accessMembers }, () => actorAccount) },
+        { members: accessMembers, groups: MEMBERSHIP_LIMIT },
+        accessMembers,
+      ),
+      accessLeaf(
+        'assignment',
+        permissionAssignment.sql,
+        { route: 65535, principal_id: uuid, request_id: uuid, actor_id: uuid, at: timestamp },
+        {},
+        1,
+      ),
+      accessLeaf(
+        'membership',
+        permissionMembership.sql,
+        {
+          route: 65535,
+          organization_id: uuid,
+          member_id: uuid,
+          at: timestamp,
+          pairs: Array.from({ length: MEMBERSHIP_LIMIT }, () => ({
+            route: 65535,
+            organization_id: uuid,
+            member_id: uuid,
+          })),
+        },
+        { groups: MEMBERSHIP_LIMIT },
+        1,
+      ),
+      accessLeaf(
+        'membership',
+        permissionMembership.sql,
+        {
+          pairs: Array.from({ length: MEMBERSHIP_LIMIT }, () => ({ realmId: uuid, accountId: uuid })),
+          at: timestamp,
+        },
+        { groups: MEMBERSHIP_LIMIT },
+        1,
+      ),
+      accessLeaf(
+        'candidates',
+        permissionCandidates.sql,
+        accessFormulaInput,
+        {
+          targets: 1,
+          members: accessMembers,
+          roles: accessRoles(),
+          grantRoles: ACCESS_GRANT_ROLES,
+          explicit: true,
+          global: true,
+          assignment: true,
+        },
+        1,
+      ),
+      accessLeaf(
+        'formula',
+        permissionCheck.sql,
+        accessFormulaInput,
+        {
+          targets: 1,
+          members: accessMembers,
+          roles: accessRoles(),
+          grantRoles: ACCESS_GRANT_ROLES,
+          explicit: true,
+          global: true,
+          assignment: true,
+        },
+        1,
+      ),
+      query(collectionAuthorization.sql, bindParent, uuidBytes + 7 + 7 + 7 + 16 + 5, {
+        candidateKeys: 1,
+        nativeRows: 1,
+        nativePoints: 1,
+        emptySeeks: 1,
+      }),
+      sumBounds(
+        ...['BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY', 'COMMIT', 'ROLLBACK'].map((text) =>
+          dimensions({ statements: 1, bytes: sql(text) }),
+        ),
+        dimensions({ nativePoints: 2, emptySeeks: 2 }),
+      ),
     ),
-    dimensions({ nativePoints: 2, emptySeeks: 2 }),
-  ),
-);
+  );
+}
 
-const authorizationCollection = query(collectionAuthorization.sql, bindParent, uuidBytes + 7 + 7 + 7 + 16 + 5, {
-  candidateKeys: 1,
-  nativeRows: 1,
-  nativePoints: 1,
-  emptySeeks: 1,
-});
-const collectionRow = query(
-  collectionRead.sql,
-  bindParent,
-  jsonSize({
-    id: uuid,
-    curatorAccountId: uuid,
-    title: '\0'.repeat(200),
-    description: '\0'.repeat(2000),
-    visibility: 'unlisted',
-    presentationKind: '\0'.repeat(64),
-    coverMediaId: uuid,
-    state: 'deleted',
-    revision: 2_147_483_647,
-    memberCount: 2_147_483_647,
-    orderEpoch: 2_147_483_647,
-    membershipKind: 'dynamic',
-    builtinKind: '\0'.repeat(64),
-    hasSavedRule: true,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  }),
-  { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
-);
-const shelfCurator = query(shelfAuthorizedCollection.sql, bindParent + uuidBytes, uuidBytes, {
-  candidateKeys: 1,
-  nativeRows: 1,
-  nativePoints: 1,
-  emptySeeks: 1,
-});
-const neighborSeek = query(
-  memberNeighbors.sql,
-  routeBytes + uuidBytes + 5 + uuidBytes + uuidBytes,
-  ordinalBytes * 2 + 5,
-  { candidateKeys: 3, nativeRows: 3, nativePoints: 3, emptySeeks: 3 },
-);
-const windowSide = ORDER_WINDOW_SIZE / 2;
+function authorizationCollection() {
+  return memoizedValue(authorizationCollection, () =>
+    query(collectionAuthorization.sql, bindParent, uuidBytes + 7 + 7 + 7 + 16 + 5, {
+      candidateKeys: 1,
+      nativeRows: 1,
+      nativePoints: 1,
+      emptySeeks: 1,
+    }),
+  );
+}
+function collectionRow() {
+  return memoizedValue(collectionRow, () =>
+    query(
+      collectionRead.sql,
+      bindParent,
+      jsonSize({
+        id: uuid,
+        curatorAccountId: uuid,
+        title: '\0'.repeat(200),
+        description: '\0'.repeat(2000),
+        visibility: 'unlisted',
+        presentationKind: '\0'.repeat(64),
+        coverMediaId: uuid,
+        state: 'deleted',
+        revision: 2_147_483_647,
+        memberCount: 2_147_483_647,
+        orderEpoch: 2_147_483_647,
+        membershipKind: 'dynamic',
+        builtinKind: '\0'.repeat(64),
+        hasSavedRule: true,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+      { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
+    ),
+  );
+}
+function shelfCurator() {
+  return memoizedValue(shelfCurator, () =>
+    query(shelfAuthorizedCollection.sql, bindParent + uuidBytes, uuidBytes, {
+      candidateKeys: 1,
+      nativeRows: 1,
+      nativePoints: 1,
+      emptySeeks: 1,
+    }),
+  );
+}
+function neighborSeek() {
+  return memoizedValue(neighborSeek, () =>
+    query(memberNeighbors.sql, routeBytes + uuidBytes + 5 + uuidBytes + uuidBytes, ordinalBytes() * 2 + 5, {
+      candidateKeys: 3,
+      nativeRows: 3,
+      nativePoints: 3,
+      emptySeeks: 3,
+    }),
+  );
+}
+function windowSide() {
+  return memoizedValue(windowSide, () => ORDER_WINDOW_SIZE / 2);
+}
 const windowSeek = (text: string): Bound =>
   query(
     text,
-    routeBytes + uuidBytes + ordinalBytes + uuidBytes + String(windowSide).length,
-    windowSide * (uuidBytes + ordinalBytes),
-    { candidateKeys: windowSide, nativeRows: windowSide, emptySeeks: windowSide === 0 ? 1 : 0 },
+    routeBytes + uuidBytes + ordinalBytes() + uuidBytes + String(windowSide()).length,
+    windowSide() * (uuidBytes + ordinalBytes()),
+    { candidateKeys: windowSide(), nativeRows: windowSide(), emptySeeks: windowSide() === 0 ? 1 : 0 },
   );
-const placementFence = query(COLLECTION_ORDER_SQL.editFence, bindParent, 4 * bigintBytes + 3, {
-  candidateKeys: 2,
-  nativeRows: 2,
-  nativePoints: 2,
-  emptySeeks: 2,
-});
-const memberReadCost = query(memberRead.sql, routeBytes + 2 * uuidBytes, memberResultBytes, {
-  candidateKeys: 1,
-  nativeRows: 1,
-  nativePoints: 1,
-  emptySeeks: 1,
-});
-const deferredConstraint = query(collectionDefer.sql, 0, 0, {});
-const generatedWindowKeys = dimensions({ bytes: GENERATED_ORDINAL_KEY_LENGTH * (ORDER_WINDOW_SIZE + 1) });
-const structurePosition = sumBounds(
-  query(
-    'SELECT member_id FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL AND member_id <> $3 AND ordinal_key < $4 ORDER BY ordinal_key DESC, member_id DESC LIMIT 1',
-    bindParent + uuidBytes + ordinalBytes,
-    uuidBytes,
-    { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
-  ),
-  query(
-    'SELECT member_id FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL AND member_id <> $3 AND ordinal_key > $4 ORDER BY ordinal_key, member_id LIMIT 1',
-    bindParent + uuidBytes + ordinalBytes,
-    uuidBytes,
-    { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
-  ),
-);
-const structureAppend = sumBounds(
-  query(COLLECTION_ORDER_SQL.parent, bindParent, parentProjectionBytes, {
-    candidateKeys: 1,
-    nativeRows: 1,
-    nativePoints: 1,
-  }),
-  structurePosition,
-  query(
-    'INSERT INTO library.collection_structure_history_head (route, collection_id, next_change_no, unknown_before_tracking) VALUES ($1,$2,1,true) ON CONFLICT (route, collection_id) DO UPDATE SET next_change_no = library.collection_structure_history_head.next_change_no + 1 RETURNING next_change_no',
-    bindParent,
-    bigintBytes,
-    { nativeRows: 2, nativePoints: 1 },
-  ),
-  query(
-    'INSERT INTO library.collection_structure_history (route, collection_id, change_no, transaction_id, change_kind, member_id, subject_id, member_revision, before_state, after_state) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
-    bindParent + uuidBytes + bigintBytes + uuidBytes + 16 + 2 * uuidBytes + bigintBytes + 2 * 32_768,
-    0,
-    { nativeRows: 1, nativePoints: 1 },
-  ),
-  query(
-    'DELETE FROM library.collection_structure_history WHERE route=$1 AND collection_id=$2 AND change_no <= $3',
-    bindParent + bigintBytes,
-    0,
-    { nativeRows: 1, nativePoints: 1 },
-  ),
-  query(
-    'SELECT transaction_id FROM library.collection_structure_history WHERE route=$1 AND member_id=$2 GROUP BY transaction_id ORDER BY max(recorded_at) DESC, transaction_id DESC LIMIT 16',
-    routeBytes + uuidBytes,
-    STRUCTURE_HISTORY_OPERATIONS * uuidBytes,
-    { candidateKeys: STRUCTURE_HISTORY_OPERATIONS, nativeRows: STRUCTURE_HISTORY_OPERATIONS },
-  ),
-  dimensions({ nativeRows: 1, nativePoints: 1, bytes: STRUCTURE_HISTORY_RETAINED }),
-);
-const structurePending = query(
-  'INSERT INTO library.collection_structure_pending_change (transaction_id, route, collection_id, member_id, before_state) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (transaction_id, route, collection_id, member_id) DO UPDATE SET before_state = EXCLUDED.before_state',
-  uuidBytes + bindParent + uuidBytes + 32_768,
-  0,
-  { nativeRows: 1, nativePoints: 1 },
-);
-const insertMemberCost = query(
-  memberInsert.sql,
-  routeBytes + 3 * uuidBytes + NOTE_LIMIT * 6 + ordinalBytes + 29 + uuidBytes,
-  memberResultBytes,
-  { nativeRows: 3, nativePoints: 2, witnessKeys: 1 },
-);
-const moveMemberCost = query(memberMove.sql, routeBytes + 2 * uuidBytes + ordinalBytes + uuidBytes, memberResultBytes, {
-  nativeRows: 1,
-  nativePoints: 1,
-  witnessKeys: 1,
-});
-const moveSetting = query(COLLECTION_ORDER_SQL.moveMemberSetting, uuidBytes, uuidBytes, { nativeRows: 0 });
-const touchStructural = query(COLLECTION_ORDER_SQL.touchCollection, 29 + uuidBytes + bindParent + 1, integerBytes, {
-  nativeRows: 1,
-  nativePoints: 1,
-});
+function placementFence() {
+  return memoizedValue(placementFence, () =>
+    query(COLLECTION_ORDER_SQL.editFence, bindParent, 4 * bigintBytes + 3, {
+      candidateKeys: 2,
+      nativeRows: 2,
+      nativePoints: 2,
+      emptySeeks: 2,
+    }),
+  );
+}
+function memberReadCost() {
+  return memoizedValue(memberReadCost, () =>
+    query(memberRead.sql, routeBytes + 2 * uuidBytes, memberResultBytes(), {
+      candidateKeys: 1,
+      nativeRows: 1,
+      nativePoints: 1,
+      emptySeeks: 1,
+    }),
+  );
+}
+function deferredConstraint() {
+  return memoizedValue(deferredConstraint, () => query(collectionDefer.sql, 0, 0, {}));
+}
+function generatedWindowKeys() {
+  return memoizedValue(generatedWindowKeys, () =>
+    dimensions({ bytes: GENERATED_ORDINAL_KEY_LENGTH * (ORDER_WINDOW_SIZE + 1) }),
+  );
+}
+function structurePosition() {
+  return memoizedValue(structurePosition, () =>
+    sumBounds(
+      query(
+        'SELECT member_id FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL AND member_id <> $3 AND ordinal_key < $4 ORDER BY ordinal_key DESC, member_id DESC LIMIT 1',
+        bindParent + uuidBytes + ordinalBytes(),
+        uuidBytes,
+        { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
+      ),
+      query(
+        'SELECT member_id FROM library.collection_member WHERE route=$1 AND collection_id=$2 AND deletion_id IS NULL AND member_id <> $3 AND ordinal_key > $4 ORDER BY ordinal_key, member_id LIMIT 1',
+        bindParent + uuidBytes + ordinalBytes(),
+        uuidBytes,
+        { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
+      ),
+    ),
+  );
+}
+function structureAppend() {
+  return memoizedValue(structureAppend, () =>
+    sumBounds(
+      query(COLLECTION_ORDER_SQL.parent, bindParent, parentProjectionBytes, {
+        candidateKeys: 1,
+        nativeRows: 1,
+        nativePoints: 1,
+      }),
+      structurePosition(),
+      query(
+        'INSERT INTO library.collection_structure_history_head (route, collection_id, next_change_no, unknown_before_tracking) VALUES ($1,$2,1,true) ON CONFLICT (route, collection_id) DO UPDATE SET next_change_no = library.collection_structure_history_head.next_change_no + 1 RETURNING next_change_no',
+        bindParent,
+        bigintBytes,
+        { nativeRows: 2, nativePoints: 1 },
+      ),
+      query(
+        'INSERT INTO library.collection_structure_history (route, collection_id, change_no, transaction_id, change_kind, member_id, subject_id, member_revision, before_state, after_state) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+        bindParent + uuidBytes + bigintBytes + uuidBytes + 16 + 2 * uuidBytes + bigintBytes + 2 * 32_768,
+        0,
+        { nativeRows: 1, nativePoints: 1 },
+      ),
+      query(
+        'DELETE FROM library.collection_structure_history WHERE route=$1 AND collection_id=$2 AND change_no <= $3',
+        bindParent + bigintBytes,
+        0,
+        { nativeRows: 1, nativePoints: 1 },
+      ),
+      query(
+        'SELECT transaction_id FROM library.collection_structure_history WHERE route=$1 AND member_id=$2 GROUP BY transaction_id ORDER BY max(recorded_at) DESC, transaction_id DESC LIMIT 16',
+        routeBytes + uuidBytes,
+        STRUCTURE_HISTORY_OPERATIONS * uuidBytes,
+        { candidateKeys: STRUCTURE_HISTORY_OPERATIONS, nativeRows: STRUCTURE_HISTORY_OPERATIONS },
+      ),
+      dimensions({ nativeRows: 1, nativePoints: 1, bytes: STRUCTURE_HISTORY_RETAINED }),
+    ),
+  );
+}
+function structurePending() {
+  return memoizedValue(structurePending, () =>
+    query(
+      'INSERT INTO library.collection_structure_pending_change (transaction_id, route, collection_id, member_id, before_state) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (transaction_id, route, collection_id, member_id) DO UPDATE SET before_state = EXCLUDED.before_state',
+      uuidBytes + bindParent + uuidBytes + 32_768,
+      0,
+      { nativeRows: 1, nativePoints: 1 },
+    ),
+  );
+}
+function insertMemberCost() {
+  return memoizedValue(insertMemberCost, () =>
+    query(
+      memberInsert.sql,
+      routeBytes + 3 * uuidBytes + NOTE_LIMIT * 6 + ordinalBytes() + 29 + uuidBytes,
+      memberResultBytes(),
+      { nativeRows: 3, nativePoints: 2, witnessKeys: 1 },
+    ),
+  );
+}
+function moveMemberCost() {
+  return memoizedValue(moveMemberCost, () =>
+    query(memberMove.sql, routeBytes + 2 * uuidBytes + ordinalBytes() + uuidBytes, memberResultBytes(), {
+      nativeRows: 1,
+      nativePoints: 1,
+      witnessKeys: 1,
+    }),
+  );
+}
+function moveSetting() {
+  return memoizedValue(moveSetting, () =>
+    query(COLLECTION_ORDER_SQL.moveMemberSetting, uuidBytes, uuidBytes, { nativeRows: 0 }),
+  );
+}
+function touchStructural() {
+  return memoizedValue(touchStructural, () =>
+    query(COLLECTION_ORDER_SQL.touchCollection, 29 + uuidBytes + bindParent + 1, integerBytes, {
+      nativeRows: 1,
+      nativePoints: 1,
+    }),
+  );
+}
 const respaceBody = (count: number): Bound =>
   query(
     membersRespace.sql,
-    routeBytes + uuidBytes + count * (uuidBytes + ordinalBytes + 40) + 29 + uuidBytes,
+    routeBytes + uuidBytes + count * (uuidBytes + ordinalBytes() + 40) + 29 + uuidBytes,
     integerBytes * 2,
     { candidateKeys: count, nativeRows: 1 + count * 2, nativePoints: 1 + count, witnessKeys: count },
   );
 const respaceRewrites = (count: number): Bound =>
   sumBounds(
     respaceBody(count),
-    repeatBound(memberGuardTriggers, count),
+    repeatBound(memberGuardTriggers(), count),
     repeatBound(
       query(COLLECTION_ORDER_SQL.parent, bindParent, parentProjectionBytes, {
         candidateKeys: 1,
@@ -803,56 +1033,80 @@ const actorReceiptFence = (eventCount: number, eventBytes: number, responseBytes
       nativePoints: 1 + 5 + 3 + 3,
     },
   );
-const actorNoEffectFence = query(
-  noEffectFence.sql,
-  partitionBytes +
-    uuidBytes +
-    jsonSize({
-      principal: { kind: 'account', id: uuid },
-      kind: COLLECTION_ORDER_COMMAND_KINDS.begin,
-      key: `rk1.255.${'f'.repeat(64)}`,
-      digest: 'f'.repeat(44),
-      response: { collectionId: uuid, repairId: uuid, step: 0 },
-    }),
-  integerBytes + bigintBytes,
-  { candidateKeys: 1, nativeRows: 1 + 4, nativePoints: 1 + 3, emptySeeks: 1 },
-);
-const actorTimeMint = sumBounds(
-  ...[
-    'BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY',
-    "SET LOCAL statement_timeout = '200ms'",
-    'COMMIT',
-    'ROLLBACK',
-  ].map((text) => dimensions({ statements: 1, bytes: sql(text) })),
-  query(readTime.sql, 24, 29, { nativeRows: 1, nativePoints: 1 }),
-);
-const actorControls = sumBounds(
-  beginControl,
-  query(readTime.sql, 24, 29, { nativeRows: 1, nativePoints: 1 }),
-  dimensions({ statements: 1, bytes: sql(timeoutSql) }),
-);
-const partitionProbe = query(
-  partitionRead.sql,
-  partitionBytes,
-  jsonSize({
-    partitionNo: 4095,
-    node: uuid,
-    writeState: 'fenced',
-    movedTo: '9'.repeat(integerBytes),
-    epoch: 2_147_483_647,
-    position: '-9223372036854775808',
-  }),
-  { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
-);
-const actorRecovery = repeatBound(sumBounds(actorTimeMint, partitionProbe), 1 + Math.ceil(WORK_STEP_DEADLINE_MS / 25));
-const shelfWrite = sumBounds(sessionShelfWork(65535, uuid, true), shelfCurator, accountShareCost);
+function actorNoEffectFence() {
+  return memoizedValue(actorNoEffectFence, () =>
+    query(
+      noEffectFence.sql,
+      partitionBytes +
+        uuidBytes +
+        jsonSize({
+          principal: { kind: 'account', id: uuid },
+          kind: COLLECTION_ORDER_COMMAND_KINDS.begin,
+          key: `rk1.255.${'f'.repeat(64)}`,
+          digest: 'f'.repeat(44),
+          response: { collectionId: uuid, repairId: uuid, step: 0 },
+        }),
+      integerBytes + bigintBytes,
+      { candidateKeys: 1, nativeRows: 1 + 4, nativePoints: 1 + 3, emptySeeks: 1 },
+    ),
+  );
+}
+function actorTimeMint() {
+  return memoizedValue(actorTimeMint, () =>
+    sumBounds(
+      ...[
+        'BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY',
+        "SET LOCAL statement_timeout = '200ms'",
+        'COMMIT',
+        'ROLLBACK',
+      ].map((text) => dimensions({ statements: 1, bytes: sql(text) })),
+      query(readTime.sql, 24, 29, { nativeRows: 1, nativePoints: 1 }),
+    ),
+  );
+}
+function actorControls() {
+  return memoizedValue(actorControls, () =>
+    sumBounds(
+      beginControl(),
+      query(readTime.sql, 24, 29, { nativeRows: 1, nativePoints: 1 }),
+      dimensions({ statements: 1, bytes: sql(timeoutSql()) }),
+    ),
+  );
+}
+function partitionProbe() {
+  return memoizedValue(partitionProbe, () =>
+    query(
+      partitionRead.sql,
+      partitionBytes,
+      jsonSize({
+        partitionNo: 4095,
+        node: uuid,
+        writeState: 'fenced',
+        movedTo: '9'.repeat(integerBytes),
+        epoch: 2_147_483_647,
+        position: '-9223372036854775808',
+      }),
+      { candidateKeys: 1, nativeRows: 1, nativePoints: 1, emptySeeks: 1 },
+    ),
+  );
+}
+function actorRecovery() {
+  return memoizedValue(actorRecovery, () =>
+    repeatBound(sumBounds(actorTimeMint(), partitionProbe()), 1 + Math.ceil(WORK_STEP_DEADLINE_MS / 25)),
+  );
+}
+function shelfWrite() {
+  return memoizedValue(shelfWrite, () =>
+    sumBounds(sessionShelfWork(65535, uuid, true), shelfCurator(), accountShareCost()),
+  );
+}
 const currentAuthorization = (includeBarrier: boolean): Bound =>
   sumBounds(
-    authorizationCollection,
-    accountShareCost,
-    collectionRow,
-    shelfWrite,
-    ...(includeBarrier ? [barrierCeiling] : []),
+    authorizationCollection(),
+    accountShareCost(),
+    collectionRow(),
+    shelfWrite(),
+    ...(includeBarrier ? [barrierCeiling()] : []),
   );
 const actorEnvelope = (
   kind: string,
@@ -863,252 +1117,315 @@ const actorEnvelope = (
 ): Bound =>
   sumBounds(
     commandHistoryAbsence(kind),
-    actorTimeMint,
-    accessPreparation,
-    actorControls,
+    actorTimeMint(),
+    accessPreparation(),
+    actorControls(),
     currentAuthorization(includeBarrier),
     receiptLookup(responseBytes),
     actorReceiptFence(1, eventBytes, responseBytes),
-    commitControl,
-    rollbackControl,
-    actorRecovery,
+    commitControl(),
+    rollbackControl(),
+    actorRecovery(),
     dimensions({ bytes: requestBytes + 3 * responseBytes + eventBytes }),
   );
 
-const addPlacementDirect = neighborSeek;
-const addPlacementWindow = sumBounds(
-  neighborSeek,
-  windowSeek(COLLECTION_ORDER_SQL.editLeft),
-  windowSeek(COLLECTION_ORDER_SQL.editRight),
-);
-const addPlacementFailed = sumBounds(addPlacementWindow, placementFence);
-const addInsert = sumBounds(insertMemberCost, memberGuardTriggers, structureAppend);
-const addRespace = (count: number) => sumBounds(deferredConstraint, respaceRewrites(count), generatedWindowKeys);
-const addSuccessDirect = sumBounds(
-  actorEnvelope(COLLECTION_ORDER_COMMAND_KINDS.add, httpAddBytes, memberResultBytes, memberEventBytes, true),
-  subjectDisclosure,
-  addPlacementDirect,
-  addInsert,
-);
-const addSuccessRespace = sumBounds(
-  actorEnvelope(COLLECTION_ORDER_COMMAND_KINDS.add, httpAddBytes, memberResultBytes, memberEventBytes, true),
-  subjectDisclosure,
-  addPlacementWindow,
-  addRespace(ORDER_WINDOW_SIZE - 2),
-  addInsert,
-);
-const addFailed = sumBounds(
-  actorTimeMint,
-  accessPreparation,
-  actorControls,
-  currentAuthorization(true),
-  receiptLookup(memberResultBytes),
-  subjectDisclosure,
-  addPlacementFailed,
-  rollbackControl,
-  commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.add),
-  dimensions({ bytes: httpAddBytes }),
-);
-const addReplay = sumBounds(
-  actorTimeMint,
-  accessPreparation,
-  actorControls,
-  currentAuthorization(true),
-  receiptLookup(memberResultBytes),
-  commitControl,
-  commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.add),
-  dimensions({ bytes: httpAddBytes + memberResultBytes }),
-);
-const movePlacementDirect = sumBounds(memberReadCost, neighborSeek);
-const movePlacementWindow = sumBounds(memberReadCost, addPlacementWindow);
-const movePlacementFailed = sumBounds(memberReadCost, addPlacementFailed);
-const moveWrite = sumBounds(
-  moveSetting,
-  moveMemberCost,
-  moveSetting,
-  memberGuardTriggers,
-  structurePending,
-  structureAppend,
-  touchStructural,
-);
-const moveSuccessDirect = sumBounds(
-  actorEnvelope(COLLECTION_ORDER_COMMAND_KINDS.move, httpMoveBytes, memberResultBytes, memberEventBytes, true),
-  movePlacementDirect,
-  moveWrite,
-);
-const moveSuccessRespace = sumBounds(
-  actorEnvelope(COLLECTION_ORDER_COMMAND_KINDS.move, httpMoveBytes, memberResultBytes, memberEventBytes, true),
-  movePlacementWindow,
-  addRespace(ORDER_WINDOW_SIZE - 2),
-  moveWrite,
-);
-const moveFailed = sumBounds(
-  actorTimeMint,
-  accessPreparation,
-  actorControls,
-  currentAuthorization(true),
-  receiptLookup(memberResultBytes),
-  movePlacementFailed,
-  rollbackControl,
-  commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.move),
-  dimensions({ bytes: httpMoveBytes }),
-);
-const moveReplay = sumBounds(
-  actorTimeMint,
-  accessPreparation,
-  actorControls,
-  currentAuthorization(true),
-  receiptLookup(memberResultBytes),
-  commitControl,
-  commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.move),
-  dimensions({ bytes: httpMoveBytes + memberResultBytes }),
-);
-const editCeiling = maxBound(
-  addSuccessDirect,
-  addSuccessRespace,
-  addFailed,
-  addReplay,
-  moveSuccessDirect,
-  moveSuccessRespace,
-  moveFailed,
-  moveReplay,
-);
+function addPlacementDirect() {
+  return memoizedValue(addPlacementDirect, () => neighborSeek());
+}
+function addPlacementWindow() {
+  return memoizedValue(addPlacementWindow, () =>
+    sumBounds(neighborSeek(), windowSeek(COLLECTION_ORDER_SQL.editLeft), windowSeek(COLLECTION_ORDER_SQL.editRight)),
+  );
+}
+function addPlacementFailed() {
+  return memoizedValue(addPlacementFailed, () => sumBounds(addPlacementWindow(), placementFence()));
+}
+function addInsert() {
+  return memoizedValue(addInsert, () => sumBounds(insertMemberCost(), memberGuardTriggers(), structureAppend()));
+}
+const addRespace = (count: number) => sumBounds(deferredConstraint(), respaceRewrites(count), generatedWindowKeys());
+function addSuccessDirect() {
+  return memoizedValue(addSuccessDirect, () =>
+    sumBounds(
+      actorEnvelope(COLLECTION_ORDER_COMMAND_KINDS.add, httpAddBytes, memberResultBytes(), memberEventBytes, true),
+      subjectDisclosure(),
+      addPlacementDirect(),
+      addInsert(),
+    ),
+  );
+}
+function addSuccessRespace() {
+  return memoizedValue(addSuccessRespace, () =>
+    sumBounds(
+      actorEnvelope(COLLECTION_ORDER_COMMAND_KINDS.add, httpAddBytes, memberResultBytes(), memberEventBytes, true),
+      subjectDisclosure(),
+      addPlacementWindow(),
+      addRespace(ORDER_WINDOW_SIZE - 2),
+      addInsert(),
+    ),
+  );
+}
+function addFailed() {
+  return memoizedValue(addFailed, () =>
+    sumBounds(
+      actorTimeMint(),
+      accessPreparation(),
+      actorControls(),
+      currentAuthorization(true),
+      receiptLookup(memberResultBytes()),
+      subjectDisclosure(),
+      addPlacementFailed(),
+      rollbackControl(),
+      commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.add),
+      dimensions({ bytes: httpAddBytes }),
+    ),
+  );
+}
+function addReplay() {
+  return memoizedValue(addReplay, () =>
+    sumBounds(
+      actorTimeMint(),
+      accessPreparation(),
+      actorControls(),
+      currentAuthorization(true),
+      receiptLookup(memberResultBytes()),
+      commitControl(),
+      commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.add),
+      dimensions({ bytes: httpAddBytes + memberResultBytes() }),
+    ),
+  );
+}
+function movePlacementDirect() {
+  return memoizedValue(movePlacementDirect, () => sumBounds(memberReadCost(), neighborSeek()));
+}
+function movePlacementWindow() {
+  return memoizedValue(movePlacementWindow, () => sumBounds(memberReadCost(), addPlacementWindow()));
+}
+function movePlacementFailed() {
+  return memoizedValue(movePlacementFailed, () => sumBounds(memberReadCost(), addPlacementFailed()));
+}
+function moveWrite() {
+  return memoizedValue(moveWrite, () =>
+    sumBounds(
+      moveSetting(),
+      moveMemberCost(),
+      moveSetting(),
+      memberGuardTriggers(),
+      structurePending(),
+      structureAppend(),
+      touchStructural(),
+    ),
+  );
+}
+function moveSuccessDirect() {
+  return memoizedValue(moveSuccessDirect, () =>
+    sumBounds(
+      actorEnvelope(COLLECTION_ORDER_COMMAND_KINDS.move, httpMoveBytes, memberResultBytes(), memberEventBytes, true),
+      movePlacementDirect(),
+      moveWrite(),
+    ),
+  );
+}
+function moveSuccessRespace() {
+  return memoizedValue(moveSuccessRespace, () =>
+    sumBounds(
+      actorEnvelope(COLLECTION_ORDER_COMMAND_KINDS.move, httpMoveBytes, memberResultBytes(), memberEventBytes, true),
+      movePlacementWindow(),
+      addRespace(ORDER_WINDOW_SIZE - 2),
+      moveWrite(),
+    ),
+  );
+}
+function moveFailed() {
+  return memoizedValue(moveFailed, () =>
+    sumBounds(
+      actorTimeMint(),
+      accessPreparation(),
+      actorControls(),
+      currentAuthorization(true),
+      receiptLookup(memberResultBytes()),
+      movePlacementFailed(),
+      rollbackControl(),
+      commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.move),
+      dimensions({ bytes: httpMoveBytes }),
+    ),
+  );
+}
+function moveReplay() {
+  return memoizedValue(moveReplay, () =>
+    sumBounds(
+      actorTimeMint(),
+      accessPreparation(),
+      actorControls(),
+      currentAuthorization(true),
+      receiptLookup(memberResultBytes()),
+      commitControl(),
+      commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.move),
+      dimensions({ bytes: httpMoveBytes + memberResultBytes() }),
+    ),
+  );
+}
+function editCeiling() {
+  return memoizedValue(editCeiling, () =>
+    maxBound(
+      addSuccessDirect(),
+      addSuccessRespace(),
+      addFailed(),
+      addReplay(),
+      moveSuccessDirect(),
+      moveSuccessRespace(),
+      moveFailed(),
+      moveReplay(),
+    ),
+  );
+}
 
 const beginEventBytes = eventRepairBytes;
-const beginEnvelope = actorEnvelope(
-  COLLECTION_ORDER_COMMAND_KINDS.begin,
-  httpBeginBytes,
-  beginResultBytes,
-  beginEventBytes,
-  false,
-);
-const beginSuccess = sumBounds(beginEnvelope, beginFresh);
-const beginReuseCommand = sumBounds(
-  actorTimeMint,
-  accessPreparation,
-  actorControls,
-  currentAuthorization(false),
-  receiptLookup(beginResultBytes),
-  beginReuse,
-  actorNoEffectFence,
-  commitControl,
-  commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.begin),
-  dimensions({ bytes: httpBeginBytes + beginResultBytes }),
-);
-const beginEmptyCommand = sumBounds(
-  actorTimeMint,
-  accessPreparation,
-  actorControls,
-  currentAuthorization(false),
-  receiptLookup(beginResultBytes),
-  beginEmpty,
-  rollbackControl,
-  commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.begin),
-  dimensions({ bytes: httpBeginBytes }),
-);
-const beginReplaceCommand = sumBounds(beginEnvelope, beginReplaceTerminal);
-const beginActorCeiling = maxBound(beginSuccess, beginReuseCommand, beginEmptyCommand, beginReplaceCommand);
-const failedAddAndBegin = sumBounds(addFailed, beginActorCeiling);
-const failedMoveAndBegin = sumBounds(moveFailed, beginActorCeiling);
+function beginEnvelope() {
+  return memoizedValue(beginEnvelope, () =>
+    actorEnvelope(COLLECTION_ORDER_COMMAND_KINDS.begin, httpBeginBytes, beginResultBytes, beginEventBytes, false),
+  );
+}
+function beginSuccess() {
+  return memoizedValue(beginSuccess, () => sumBounds(beginEnvelope(), beginFresh()));
+}
+function beginReuseCommand() {
+  return memoizedValue(beginReuseCommand, () =>
+    sumBounds(
+      actorTimeMint(),
+      accessPreparation(),
+      actorControls(),
+      currentAuthorization(false),
+      receiptLookup(beginResultBytes),
+      beginReuse(),
+      actorNoEffectFence(),
+      commitControl(),
+      commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.begin),
+      dimensions({ bytes: httpBeginBytes + beginResultBytes }),
+    ),
+  );
+}
+function beginEmptyCommand() {
+  return memoizedValue(beginEmptyCommand, () =>
+    sumBounds(
+      actorTimeMint(),
+      accessPreparation(),
+      actorControls(),
+      currentAuthorization(false),
+      receiptLookup(beginResultBytes),
+      beginEmpty(),
+      rollbackControl(),
+      commandHistoryAbsence(COLLECTION_ORDER_COMMAND_KINDS.begin),
+      dimensions({ bytes: httpBeginBytes }),
+    ),
+  );
+}
+function beginReplaceCommand() {
+  return memoizedValue(beginReplaceCommand, () => sumBounds(beginEnvelope(), beginReplaceTerminal()));
+}
+function beginActorCeiling() {
+  return memoizedValue(beginActorCeiling, () =>
+    maxBound(beginSuccess(), beginReuseCommand(), beginEmptyCommand(), beginReplaceCommand()),
+  );
+}
+function failedAddAndBegin() {
+  return memoizedValue(failedAddAndBegin, () => sumBounds(addFailed(), beginActorCeiling()));
+}
+function failedMoveAndBegin() {
+  return memoizedValue(failedMoveAndBegin, () => sumBounds(moveFailed(), beginActorCeiling()));
+}
 
-export const COLLECTION_ORDER_DECLARATION = Object.freeze({
-  status: 'finite-owner-declarations' as const,
-  axes: BOUND_AXES,
-  limits: Object.freeze({
-    rawWindow: ORDER_WINDOW_SIZE,
-    sourcePage: ORDER_BATCH_SIZE,
-    repairStep: COLLECTION_ORDER_MAX_STEP,
-    activeOccurrences: ORDER_WINDOW_SIZE,
-    generatedKeyBytes: ORDER_WINDOW_SIZE * GENERATED_ORDINAL_KEY_LENGTH,
-    storedKeyBytes: MAX_ORDINAL_KEY_LENGTH,
-    memberCount: 2_147_483_647,
-    retries: retryLimit,
-    pageCommandReceipts: 0,
-    deferredUniqueConstraintStatements: 0,
-    occurrenceHistoryEventsPerRewrite: 0,
-    commandHistoryWrites: 0,
-    receiptKeyCandidates: RECEIPT_KEY_CANDIDATES,
-    accessMemberships: MEMBERSHIP_LIMIT,
-  }),
-  terms: Object.freeze({
-    barrier: barrierCeiling,
-    beginSql: beginSqlCeiling,
-    beginLocatorSerialization: dimensions({ bytes: beginResultBytes }),
-    accessPreparation,
-    addFailed,
-    addSuccessDirect,
-    addSuccessRespace,
-    addReplay,
-    moveFailed,
-    moveSuccessDirect,
-    moveSuccessRespace,
-    moveReplay,
-    beginSuccess,
-    beginReuse: beginReuseCommand,
-    beginEmpty: beginEmptyCommand,
-    failedAddAndBegin,
-    failedMoveAndBegin,
-    retryAdd: addSuccessRespace,
-    retryMove: moveSuccessRespace,
-    pageCurrentness,
-    pageRawWindow: rawPage(ORDER_WINDOW_SIZE),
-    pageActiveWrites: rewriteRows(ORDER_WINDOW_SIZE, false),
-    pageFull: fullPageSuccess,
-    pageShort: shortPageSuccess,
-    pageExhaustion: exhaustionSuccess,
-    pageStale: stalePage,
-    pageTerminalCleanup: terminalPage,
-    pageChangedFenceRollback: changedFenceRollback,
-    pageRetryFailure: failedFullPage,
-    continuationRequest,
-  }),
-  paths: Object.freeze({
-    edit: Object.freeze({
-      status: 'complete-static-no-admission' as const,
-      cost: editCeiling,
-      ceiling: editCeiling,
-      missing:
-        'runCommand has no owner Bound admission port; this declaration describes bounded actor add/move work without reserving or funding dispatch.',
+export function COLLECTION_ORDER_DECLARATION() {
+  return memoizedValue(COLLECTION_ORDER_DECLARATION, () =>
+    Object.freeze({
+      status: 'finite-owner-declarations' as const,
+      axes: BOUND_AXES,
+      limits: Object.freeze({
+        rawWindow: ORDER_WINDOW_SIZE,
+        sourcePage: ORDER_BATCH_SIZE,
+        repairStep: COLLECTION_ORDER_MAX_STEP,
+        activeOccurrences: ORDER_WINDOW_SIZE,
+        generatedKeyBytes: ORDER_WINDOW_SIZE * GENERATED_ORDINAL_KEY_LENGTH,
+        storedKeyBytes: MAX_ORDINAL_KEY_LENGTH,
+        memberCount: 2_147_483_647,
+        retries: retryLimit(),
+        pageCommandReceipts: 0,
+        deferredUniqueConstraintStatements: 0,
+        occurrenceHistoryEventsPerRewrite: 0,
+        commandHistoryWrites: 0,
+        receiptKeyCandidates: RECEIPT_KEY_CANDIDATES,
+        accessMemberships: MEMBERSHIP_LIMIT,
+      }),
+      terms: Object.freeze({
+        barrier: barrierCeiling(),
+        beginSql: beginSqlCeiling(),
+        beginLocatorSerialization: dimensions({ bytes: beginResultBytes }),
+        accessPreparation: accessPreparation(),
+        addFailed: addFailed(),
+        addSuccessDirect: addSuccessDirect(),
+        addSuccessRespace: addSuccessRespace(),
+        addReplay: addReplay(),
+        moveFailed: moveFailed(),
+        moveSuccessDirect: moveSuccessDirect(),
+        moveSuccessRespace: moveSuccessRespace(),
+        moveReplay: moveReplay(),
+        beginSuccess: beginSuccess(),
+        beginReuse: beginReuseCommand(),
+        beginEmpty: beginEmptyCommand(),
+        failedAddAndBegin: failedAddAndBegin(),
+        failedMoveAndBegin: failedMoveAndBegin(),
+        retryAdd: addSuccessRespace(),
+        retryMove: moveSuccessRespace(),
+        pageCurrentness: pageCurrentness(),
+        pageRawWindow: rawPage(ORDER_WINDOW_SIZE),
+        pageActiveWrites: rewriteRows(ORDER_WINDOW_SIZE, false),
+        pageFull: fullPageSuccess(),
+        pageShort: shortPageSuccess(),
+        pageExhaustion: exhaustionSuccess(),
+        pageStale: stalePage(),
+        pageTerminalCleanup: terminalPage(),
+        pageChangedFenceRollback: changedFenceRollback(),
+        pageRetryFailure: failedFullPage(),
+        continuationRequest: continuationRequest(),
+      }),
+      paths: Object.freeze({
+        edit: Object.freeze({
+          status: 'complete-static-no-admission' as const,
+          cost: editCeiling(),
+          ceiling: editCeiling(),
+          missing:
+            'runCommand has no owner Bound admission port; this declaration describes bounded actor add/move work without reserving or funding dispatch.',
+        }),
+        barrier: Object.freeze({
+          status: 'library-sql-only' as const,
+          cost: barrierCeiling(),
+          ceiling: barrierCeiling(),
+          missing: 'The enclosing actor command has no whole-operation Bound admission port.',
+        }),
+        begin: Object.freeze({
+          status: 'complete-static-no-admission' as const,
+          cost: beginActorCeiling(),
+          ceiling: beginActorCeiling(),
+          missing:
+            'runCommand has no owner Bound admission port; this declaration describes bounded actor begin work without reserving or funding dispatch.',
+        }),
+        page: Object.freeze({
+          status: 'complete-static-no-admission' as const,
+          cost: pageCeiling(),
+          ceiling: pageCeiling(),
+          missing:
+            'runCommand has no owner Bound admission port; this declaration describes bounded page work without reserving or funding dispatch. The committed outbox enqueue is a separately declared continuation request.',
+        }),
+        continuation: Object.freeze({
+          status: 'payload-only' as const,
+          cost: continuationRequest(),
+          ceiling: continuationRequest(),
+          missing: 'The DBOS client does not accept this nine-axis declaration for its durable enqueue transaction.',
+        }),
+      }),
     }),
-    barrier: Object.freeze({
-      status: 'library-sql-only' as const,
-      cost: barrierCeiling,
-      ceiling: barrierCeiling,
-      missing: 'The enclosing actor command has no whole-operation Bound admission port.',
-    }),
-    begin: Object.freeze({
-      status: 'complete-static-no-admission' as const,
-      cost: beginActorCeiling,
-      ceiling: beginActorCeiling,
-      missing:
-        'runCommand has no owner Bound admission port; this declaration describes bounded actor begin work without reserving or funding dispatch.',
-    }),
-    page: Object.freeze({
-      status: 'complete-static-no-admission' as const,
-      cost: pageCeiling,
-      ceiling: pageCeiling,
-      missing:
-        'runCommand has no owner Bound admission port; this declaration describes bounded page work without reserving or funding dispatch. The committed outbox enqueue is a separately declared continuation request.',
-    }),
-    continuation: Object.freeze({
-      status: 'payload-only' as const,
-      cost: continuationRequest,
-      ceiling: continuationRequest,
-      missing: 'The DBOS client does not accept this nine-axis declaration for its durable enqueue transaction.',
-    }),
-  }),
-});
-
-if (
-  !withinCeiling(barrierCeiling, barrierCeiling) ||
-  !withinCeiling(beginSqlCeiling, beginSqlCeiling) ||
-  !withinCeiling(beginActorCeiling, beginActorCeiling) ||
-  !withinCeiling(editCeiling, editCeiling) ||
-  !withinCeiling(pageCeiling, pageCeiling) ||
-  !withinCeiling(failedAddAndBegin, sumBounds(editCeiling, beginActorCeiling)) ||
-  !withinCeiling(failedMoveAndBegin, sumBounds(editCeiling, beginActorCeiling))
-)
-  throw new TypeError('Collection order declaration is not a finite ceiling');
+  );
+}
 
 /** A static ceiling check only. It does not authorize work, reserve a Source ledger or fund dispatch. */
 export function withinCollectionOrderCeiling<T>(cost: unknown, ceiling: Bound, dispatch: () => T): T {
@@ -1117,10 +1434,10 @@ export function withinCollectionOrderCeiling<T>(cost: unknown, ceiling: Bound, d
   return dispatch();
 }
 
-export type CollectionOrderPath = keyof typeof COLLECTION_ORDER_DECLARATION.paths;
+export type CollectionOrderPath = keyof ReturnType<typeof COLLECTION_ORDER_DECLARATION>['paths'];
 
 export function withCollectionOrderDeclaration<T>(path: CollectionOrderPath, dispatch: () => T): T {
-  const declaration = COLLECTION_ORDER_DECLARATION.paths[path];
+  const declaration = COLLECTION_ORDER_DECLARATION().paths[path];
   if (!('cost' in declaration)) return dispatch();
   return withinCollectionOrderCeiling(declaration.cost, declaration.ceiling, dispatch);
 }

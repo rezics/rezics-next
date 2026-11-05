@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -17,24 +18,28 @@ type Output<K extends keyof Service> = Awaited<ReturnType<Service[K]>>;
 const closed = { additionalProperties: false } as const;
 const uuid = t.String({ format: 'uuid' });
 const params = t.Object({ uploadId: uuid }, closed);
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const errors = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  413: problemSchema('content_too_large'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'semantic_not_ready',
-  ),
-};
-const response = <T>() => ({ 200: t.Unsafe<T>(t.Any()), ...errors });
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }));
+}
+function errors() {
+  return memoizedValue(errors, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    413: problemSchema('content_too_large'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'semantic_not_ready',
+    ),
+  }));
+}
+const response = <T>() => ({ 200: t.Unsafe<T>(t.Any()), ...errors() });
 const detail = (operation: string, write = true) => ({
   operationId: `library_vndb_labels.${operation}`,
   'x-action': 'library_entry:update',
@@ -66,7 +71,7 @@ export function vndbLabelAdoptionRoutes(
       customMethod('/v1/libraryImports/vndb/:uploadId/labels', 'review'),
       {
         params,
-        headers,
+        headers: headers(),
         body: vndbLabelChoiceSchema,
         response: response<Output<'review'>['value']>(),
         detail: detail('review'),
@@ -129,7 +134,7 @@ export function vndbLabelAdoptionRoutes(
       customMethod('/v1/libraryImports/vndb/:uploadId/labels', 'cancel'),
       {
         params,
-        headers,
+        headers: headers(),
         body: t.Object({ previewId: uuid }, closed),
         response: response<Output<'cancel'>['value']>(),
         detail: detail('cancel'),

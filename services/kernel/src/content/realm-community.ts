@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { isDeepStrictEqual } from 'node:util';
 import { AccessUnavailableError } from '../access/unavailable.ts';
@@ -23,16 +24,20 @@ export type RealmCommunityRecent = Readonly<{
   complete: boolean;
 }>;
 const closed = { additionalProperties: false } as const;
-export const RealmCommunityRecentSchema = t.Object(
-  {
-    state: t.Literal('current'),
-    threads: t.Array(t.Pick(BoardOpeningCardSchema, ['thread', 'target', 'comments'], closed), {
-      maxItems: BOARD_RECENT_THREAD_LIMIT,
-    }),
-    complete: t.Boolean(),
-  },
-  closed,
-);
+export function RealmCommunityRecentSchema() {
+  return memoizedValue(RealmCommunityRecentSchema, () =>
+    t.Object(
+      {
+        state: t.Literal('current'),
+        threads: t.Array(t.Pick(BoardOpeningCardSchema(), ['thread', 'target', 'comments'], closed), {
+          maxItems: BOARD_RECENT_THREAD_LIMIT,
+        }),
+        complete: t.Boolean(),
+      },
+      closed,
+    ),
+  );
+}
 
 /** One activity batch for the entire admitted Board window: 20 × 3 keys fits
  * the producer's 100-key bound. Missing coverage stays unavailable, never zero.

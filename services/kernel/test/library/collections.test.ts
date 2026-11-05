@@ -175,7 +175,7 @@ async function commandEvents(partition: number, position: bigint) {
     [partition, position.toString()],
   );
   for (const row of result.rows) {
-    const schema = EVENT_TYPES[row.type as keyof typeof EVENT_TYPES];
+    const schema = EVENT_TYPES()[row.type as keyof ReturnType<typeof EVENT_TYPES>];
     expect(schema, row.type).toBeDefined();
     expect(Value.Check(schema!, row.data)).toBe(true);
     expect(row.data.collectionId).toBe(row.subject);

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../memoized.ts';
 import { TextDiagnosticSchema } from './text-diagnostic.ts';
 export { FactSchema } from './catalogue.ts';
 import { FILTER_LIMITS } from '@rezics/filter';
@@ -39,17 +40,27 @@ export type SearchService = Omit<SearchServiceImplementation, 'releaseGroups'> &
 };
 
 const object = { additionalProperties: false } as const;
-const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
-const unavailable = problemSchema('index_not_ready', 'overloaded', 'deadline_exceeded');
-const resource = { route: 0, id: GLOBAL_CONTEXT };
-const subjectSearchResponse = t.Union([
-  searchResponse,
-  DiscoveryPageSchema,
-  releaseGroupsResponse,
-  releaseChildrenResponse,
-  QueryShareSchema,
-]);
-type SubjectSearchResponse = Static<typeof subjectSearchResponse>;
+function unauthorized() {
+  return memoizedValue(unauthorized, () => problemSchema('authentication_required', 'invalid_credentials'));
+}
+function unavailable() {
+  return memoizedValue(unavailable, () => problemSchema('index_not_ready', 'overloaded', 'deadline_exceeded'));
+}
+function resource() {
+  return memoizedValue(resource, () => ({ route: 0, id: GLOBAL_CONTEXT }));
+}
+function subjectSearchResponse() {
+  return memoizedValue(subjectSearchResponse, () =>
+    t.Union([
+      searchResponse(),
+      DiscoveryPageSchema(),
+      releaseGroupsResponse(),
+      releaseChildrenResponse(),
+      QueryShareSchema,
+    ]),
+  );
+}
+type SubjectSearchResponse = Static<ReturnType<typeof subjectSearchResponse>>;
 
 export function searchRoutes<App>(
   app: App,
@@ -105,7 +116,7 @@ export function searchRoutes<App>(
             object,
           ),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           503: problemSchema('semantic_not_ready', 'index_not_ready', 'overloaded', 'deadline_exceeded'),
         },
@@ -119,7 +130,7 @@ export function searchRoutes<App>(
       async ({ query, authorize, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         const check = await authorize({
-          ...resource,
+          ...resource(),
           ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
         });
         return admission.run('normal', job, async () => {
@@ -197,12 +208,12 @@ export function searchRoutes<App>(
           object,
         ),
         response: {
-          200: subjectSearchResponse,
+          200: subjectSearchResponse(),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           409: problemSchema('search_restart_required'),
-          422: problemSchema('unsupported_query', { textDiagnostic: t.Optional(TextDiagnosticSchema) }),
+          422: problemSchema('unsupported_query', { textDiagnostic: t.Optional(TextDiagnosticSchema()) }),
           503: problemSchema('semantic_not_ready', 'index_not_ready', 'overloaded', 'deadline_exceeded'),
         },
         detail: {
@@ -234,7 +245,7 @@ export function searchRoutes<App>(
               clock,
             });
           return authorize({
-            ...resource,
+            ...resource(),
             ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
           });
         }
@@ -465,10 +476,10 @@ export function searchRoutes<App>(
         response: {
           200: facetResponse,
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           409: problemSchema('search_restart_required'),
-          422: problemSchema('unsupported_query', { textDiagnostic: t.Optional(TextDiagnosticSchema) }),
+          422: problemSchema('unsupported_query', { textDiagnostic: t.Optional(TextDiagnosticSchema()) }),
           503: problemSchema('semantic_not_ready', 'index_not_ready', 'overloaded', 'deadline_exceeded'),
         },
         detail: {
@@ -482,7 +493,7 @@ export function searchRoutes<App>(
       },
       async ({ body, authorize, admission, job, actor }) => {
         const check = await authorize({
-          ...resource,
+          ...resource(),
           ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
         });
         return admission.run('normal', job, async () => {
@@ -514,13 +525,13 @@ export function searchRoutes<App>(
           object,
         ),
         response: {
-          200: suggestResponse,
+          200: suggestResponse(),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           409: problemSchema('search_restart_required'),
-          422: problemSchema('unsupported_query', { textDiagnostic: t.Optional(TextDiagnosticSchema) }),
-          503: unavailable,
+          422: problemSchema('unsupported_query', { textDiagnostic: t.Optional(TextDiagnosticSchema()) }),
+          503: unavailable(),
         },
         detail: {
           operationId: 'subject.suggest',
@@ -544,7 +555,7 @@ export function searchRoutes<App>(
           }
         }
         const check = await authorize({
-          ...resource,
+          ...resource(),
           ...(includeEligibility ? { eligibility: globalReadEligibility('subject:read') } : {}),
         });
         return admission.run('normal', job, async () => {
@@ -554,7 +565,7 @@ export function searchRoutes<App>(
           const suggestionWorkContext = scopeAccess
             ? createNativeSuggestionWorkContextReader({ pool, access: scopeAccess, actor, routeKey })
             : undefined;
-          let completed: Static<typeof suggestResponse> | undefined;
+          let completed: Static<ReturnType<typeof suggestResponse>> | undefined;
           await search.suggest(query.q, query.limit, query.languages, {
             deadline: job.deadline,
             ...(filter === undefined ? {} : { filter }),

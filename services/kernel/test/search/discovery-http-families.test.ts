@@ -127,7 +127,7 @@ test('mixed and empty native pages preserve the closed wire, defaults, cursors a
       matchEvidence: { state: hit.summary.kind === 'subject' ? 'absent' : 'unsupported' },
     })),
   });
-  expect(Compile(DiscoveryPageSchema).Check(wire)).toBe(true);
+  expect(Compile(DiscoveryPageSchema()).Check(wire)).toBe(true);
   for (const viewerFacts of [
     undefined,
     null,

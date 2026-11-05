@@ -143,7 +143,7 @@ async function admitSameHomeMerge(
   survivor: string,
 ): Promise<IdentityJobRef> {
   const key = randomUUID();
-  const job = await identityEpochStore.prepareAdmission(
+  const job = await identityEpochStore().prepareAdmission(
     f.pool,
     {
       basis: {
@@ -613,10 +613,10 @@ test('the authorized vote transaction excludes native control writes through com
     expect(committed.component).not.toBeNull();
     const mapping = await drainMapping(f.pool, job);
     expect(mapping.state).toBe('complete');
-    const reconciled = await identityEpochStore.reconcileStepReceipt(f.pool, mapping.receipt);
+    const reconciled = await identityEpochStore().reconcileStepReceipt(f.pool, mapping.receipt);
     expect(reconciled.state).toBe('complete');
     expect(reconciled.receipt).toEqual(mapping.receipt);
-    const saved = await withConnection(f.pool, (tx) => identityEpochStore.readJob(tx, job));
+    const saved = await withConnection(f.pool, (tx) => identityEpochStore().readJob(tx, job));
     expect(saved?.mapping?.state).toBe('complete');
     await expect(votes.putVoteOutcome(caller.actor, prior, randomUUID())).rejects.toMatchObject({
       reason: 'identity_pending',

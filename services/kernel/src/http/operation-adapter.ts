@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { OperationCatalogue, OperationDescriptor, OperationMethod, OperationRateLimit } from '@rezics/operations';
 import type { TSchema } from 'typebox';
 import { defineRateLimit, type RateLimitDeclaration } from './rate-limit.ts';
@@ -12,11 +13,15 @@ export type OperationSchemaBindings = Readonly<{
   response: SchemaBinding<Readonly<Record<number, TSchema>>>;
 }>;
 
-const rateLimits: Readonly<Record<OperationRateLimit, RateLimitDeclaration>> = Object.freeze({
-  'kernel.write.single': defineRateLimit({ family: 'write', units: 1 }),
-  'kernel.write.commands': defineRateLimit({ family: 'write', units: 'commands' }),
-  'kernel.provider.single': defineRateLimit({ family: 'provider', units: 1 }),
-});
+function rateLimits(): Readonly<Record<OperationRateLimit, RateLimitDeclaration>> {
+  return memoizedValue(rateLimits, () =>
+    Object.freeze({
+      'kernel.write.single': defineRateLimit({ family: 'write', units: 1 }),
+      'kernel.write.commands': defineRateLimit({ family: 'write', units: 'commands' }),
+      'kernel.provider.single': defineRateLimit({ family: 'provider', units: 1 }),
+    }),
+  );
+}
 
 function operationDetail(descriptor: OperationDescriptor) {
   const security = descriptor.security.map(({ scheme }) => (scheme === 'anonymous' ? {} : { bearerAuth: [] }));
@@ -35,7 +40,7 @@ function operationDetail(descriptor: OperationDescriptor) {
           'x-authority-anchor': descriptor.authority.anchor,
           'x-authority-resource-types': descriptor.authority.resourceTypes,
         }),
-    ...(descriptor.rateLimit === undefined ? {} : { 'x-rate-limit': rateLimits[descriptor.rateLimit] }),
+    ...(descriptor.rateLimit === undefined ? {} : { 'x-rate-limit': rateLimits()[descriptor.rateLimit] }),
   };
 }
 

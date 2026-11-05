@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -26,37 +27,48 @@ import {
 } from './schemas.ts';
 
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
-const headers = t.Object(
-  { [IDEMPOTENCY_HEADER]: t.String(), 'if-match': t.Optional(t.String()) },
-  { additionalProperties: true },
-);
+function headers() {
+  return memoizedValue(headers, () =>
+    t.Object({ [IDEMPOTENCY_HEADER]: t.String(), 'if-match': t.Optional(t.String()) }, { additionalProperties: true }),
+  );
+}
 const identityHeaders = t.Object(
   { 'rezics-edition-identity': t.Optional(t.Literal('true')) },
   { additionalProperties: true },
 );
-const cacheHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
-const command = strictContentSchema(ContentEditionCommandSchema);
-const empty = strictContentSchema(t.Object({}, { additionalProperties: false }));
-const writeRate = defineRateLimit({ family: 'write', units: 1 });
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  412: problemSchema('precondition_failed'),
-  413: problemSchema('content_too_large'),
-  422: problemSchema('idempotency_conflict', 'too_many_events'),
-  429: problemSchema('rate_limited'),
-  500: problemSchema('internal_error'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-    'rate_limit_unavailable',
-  ),
-};
+function cacheHeaders() {
+  return memoizedValue(cacheHeaders, () => ({ [SESSION_HEADER]: t.String(), 'cache-control': t.String() }));
+}
+function command() {
+  return memoizedValue(command, () => strictContentSchema(ContentEditionCommandSchema));
+}
+function empty() {
+  return memoizedValue(empty, () => strictContentSchema(t.Object({}, { additionalProperties: false })));
+}
+function writeRate() {
+  return memoizedValue(writeRate, () => defineRateLimit({ family: 'write', units: 1 }));
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    412: problemSchema('precondition_failed'),
+    413: problemSchema('content_too_large'),
+    422: problemSchema('idempotency_conflict', 'too_many_events'),
+    429: problemSchema('rate_limited'),
+    500: problemSchema('internal_error'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+      'rate_limit_unavailable',
+    ),
+  }));
+}
 async function operation<T>(read: () => Promise<T>): Promise<T> {
   try {
     return await read();
@@ -110,7 +122,7 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
             ),
             { 'cache-control': t.String() },
           ),
-          ...failures,
+          ...failures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
         },
         detail: {
@@ -139,16 +151,16 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
     .post(
       '/v1/contentEditions',
       {
-        headers,
+        headers: headers(),
         body: strictContentSchema(ContentEditionInputSchema),
-        response: { 201: withHeaders(command, cacheHeaders), ...failures },
+        response: { 201: withHeaders(command(), cacheHeaders()), ...failures() },
         detail: {
           operationId: 'content_edition.create',
           'x-authority-resource-types': ['content.post'],
           'x-exposure': 'public',
           'x-action': 'post:revise',
           'x-resource-types': ['content.edition'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: [{ bearerAuth: [] }],
         },
       },
@@ -172,15 +184,15 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
       customMethod('/v1/contentEditions/:id', 'publish'),
       {
         params,
-        headers,
-        body: empty,
-        response: { 200: withHeaders(command, cacheHeaders), ...failures },
+        headers: headers(),
+        body: empty(),
+        response: { 200: withHeaders(command(), cacheHeaders()), ...failures() },
         detail: {
           operationId: 'content_edition.publish',
           'x-resource-types': ['content.edition'],
           'x-exposure': 'public',
           'x-action': 'edition:sell',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: [{ bearerAuth: [] }],
         },
       },
@@ -204,15 +216,15 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
       customMethod('/v1/contentEditions/:id', 'unpublish'),
       {
         params,
-        headers,
-        body: empty,
-        response: { 200: withHeaders(command, cacheHeaders), ...failures },
+        headers: headers(),
+        body: empty(),
+        response: { 200: withHeaders(command(), cacheHeaders()), ...failures() },
         detail: {
           operationId: 'content_edition.unpublish',
           'x-resource-types': ['content.edition'],
           'x-exposure': 'public',
           'x-action': 'edition:unpublish',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: [{ bearerAuth: [] }],
         },
       },
@@ -237,7 +249,7 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
       {
         params,
         headers: identityHeaders,
-        response: { 200: withHeaders(strictContentSchema(ContentEditionSchema), cacheHeaders), ...failures },
+        response: { 200: withHeaders(strictContentSchema(ContentEditionSchema), cacheHeaders()), ...failures() },
         detail: {
           operationId: 'content_edition.get',
           'x-resource-types': ['content.edition'],
@@ -270,7 +282,10 @@ export function editionRoutes(app: ReturnType<typeof appealRoutes>, deps: Editio
       '/v1/contentEditions/:id/revision',
       {
         params,
-        response: { 200: withHeaders(strictContentSchema(ContentEditionRevisionSchema), cacheHeaders), ...failures },
+        response: {
+          200: withHeaders(strictContentSchema(ContentEditionRevisionSchema()), cacheHeaders()),
+          ...failures(),
+        },
         detail: {
           operationId: 'content_edition.get_revision',
           'x-resource-types': ['content.edition'],

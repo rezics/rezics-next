@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import type { PoolClient, QueryResultRow } from 'pg';
 import { currentCommandWorkAssociation } from '../command/work-context.ts';
@@ -109,38 +110,42 @@ function plan<Row extends QueryResultRow>(
 
 const pointOperands = ({ route, accountId, id }: Point) => [route, accountId, id] as const;
 const uuid = 'f'.repeat(36);
-const copyProjection = {
-  copyId: uuid,
-  accountId: uuid,
-  subjectId: uuid,
-  revision: MAX_LOAN_REVISION,
-  kind: 'k'.repeat(64),
-  status: 's'.repeat(64),
-  disposedOn: '9999-12-31',
-  deletionId: uuid,
-};
+function copyProjection() {
+  return memoizedValue(copyProjection, () => ({
+    copyId: uuid,
+    accountId: uuid,
+    subjectId: uuid,
+    revision: MAX_LOAN_REVISION,
+    kind: 'k'.repeat(64),
+    status: 's'.repeat(64),
+    disposedOn: '9999-12-31',
+    deletionId: uuid,
+  }));
+}
 // Copy writers admit only the existing 1..64 ASCII vocabulary IDs. Loan names
 // admit 300 Unicode scalars, so four UTF-8 bytes per scalar bounds their JSON
 // projection without changing the private operand.
-const loanProjection = {
-  loanId: uuid,
-  accountId: uuid,
-  copyId: uuid,
-  direction: 'borrowed',
-  counterpartyKind: 'name',
-  counterpartyName: '\u{1f9ed}'.repeat(MAX_LOAN_PARTY_SCALARS),
-  counterpartyPersonId: uuid,
-  startedOn: '9999-12-31T00:00:00.000Z',
-  dueOn: '9999-12-31T00:00:00.000Z',
-  returnedOn: '9999-12-31T00:00:00.000Z',
-  revision: MAX_LOAN_REVISION,
-  copySubjectId: uuid,
-  copyRevision: MAX_LOAN_REVISION,
-  copyKind: 'k'.repeat(64),
-  copyStatus: 's'.repeat(64),
-  copyDisposedOn: '9999-12-31',
-  copyDeletionId: uuid,
-};
+function loanProjection() {
+  return memoizedValue(loanProjection, () => ({
+    loanId: uuid,
+    accountId: uuid,
+    copyId: uuid,
+    direction: 'borrowed',
+    counterpartyKind: 'name',
+    counterpartyName: '\u{1f9ed}'.repeat(MAX_LOAN_PARTY_SCALARS),
+    counterpartyPersonId: uuid,
+    startedOn: '9999-12-31T00:00:00.000Z',
+    dueOn: '9999-12-31T00:00:00.000Z',
+    returnedOn: '9999-12-31T00:00:00.000Z',
+    revision: MAX_LOAN_REVISION,
+    copySubjectId: uuid,
+    copyRevision: MAX_LOAN_REVISION,
+    copyKind: 'k'.repeat(64),
+    copyStatus: 's'.repeat(64),
+    copyDisposedOn: '9999-12-31',
+    copyDeletionId: uuid,
+  }));
+}
 
 const loanColumns = `l.loan_id::text AS "loanId", l.account_id::text AS "accountId", l.copy_id::text AS "copyId",
        l.direction, l.counterparty_kind AS "counterpartyKind", l.counterparty_name AS "counterpartyName",
@@ -198,7 +203,7 @@ export function loanCopyReadPlan(input: Point): LoanNativePlan<{ copyId: string 
     pointOperands(input),
     1,
     1,
-    copyProjection,
+    copyProjection(),
   );
 }
 
@@ -214,7 +219,7 @@ export function loanReadPlan(input: Point): LoanNativePlan<LoanNativeRow> {
     pointOperands(input),
     2,
     2,
-    loanProjection,
+    loanProjection(),
   );
 }
 
@@ -230,7 +235,7 @@ export function loanCursorDuePlan(input: Point): LoanNativePlan<{ dueOn: string 
 }
 
 function pageProjection(): Record<string, Operand> {
-  return loanProjection;
+  return loanProjection();
 }
 
 function pagePlan(

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool, QueryResultRow } from 'pg';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
@@ -117,12 +118,16 @@ WHERE j.partition_no=$1 AND j.job_id=$2 AND j.epoch=$3 AND j.state='published'
   AND octet_length(j.scope_digest)<=128
   AND c.published_epoch>=j.epoch AND c.pending_job IS DISTINCT FROM j.job_id
 FOR SHARE OF j,n,p,c`;
-export const IDENTITY_SOURCE_LOCAL_SQL = Object.freeze({
-  retained: select.sql,
-  progress: progressSQL.sql,
-  accepted: selectedClaimSQL,
-  published: selectedPublishedSQL,
-});
+export function IDENTITY_SOURCE_LOCAL_SQL() {
+  return memoizedValue(IDENTITY_SOURCE_LOCAL_SQL, () =>
+    Object.freeze({
+      retained: select.sql,
+      progress: progressSQL.sql,
+      accepted: selectedClaimSQL,
+      published: selectedPublishedSQL,
+    }),
+  );
+}
 const sourcePrice = (rows: number, points: number, statements: number, bytes: number, seeks: number) =>
   Object.freeze({
     engineRequests: 0 as const,
@@ -143,87 +148,101 @@ const sourcePrice = (rows: number, points: number, statements: number, bytes: nu
 const scalarJSONBytes = (row: object) => Buffer.byteLength(JSON.stringify([row]));
 const n19 = '9'.repeat(19),
   uuid36 = 'f'.repeat(36);
-const sourceLiterals = Object.freeze({
-  retained: Object.freeze({
-    sql: select.sql,
-    rows: 6,
-    points: 6,
-    output: scalarJSONBytes({
-      erasure_key: n19,
-      binding_generation: n19,
-      transaction_id: uuid36,
-      owner_epoch: 2147483647,
-      position: n19,
+function sourceLiterals() {
+  return memoizedValue(sourceLiterals, () =>
+    Object.freeze({
+      retained: Object.freeze({
+        sql: select.sql,
+        rows: 6,
+        points: 6,
+        output: scalarJSONBytes({
+          erasure_key: n19,
+          binding_generation: n19,
+          transaction_id: uuid36,
+          owner_epoch: 2147483647,
+          position: n19,
+        }),
+        // 13 operands: receipt_key<=160, digest64, three UUIDs, position/job
+        // bigint strings, timestamp<=128, closed role<=9, four bounded integers.
+        binds: 2 + 12 + 2 * 9 + 6 * (160 + 64 + 36 * 3 + 19 * 2 + 128 + 9) + 4 * 10,
+      }),
+      progress: Object.freeze({
+        sql: progressSQL.sql,
+        rows: 3,
+        points: 3,
+        // Combined directory/effect JSON is schema-bounded to 2048 bytes. The
+        // literal scalar projection is separately bounded; NULLs are not a bound
+        // on the eventual cursor. LIMIT 1 and the leading custody index bound reads.
+        output:
+          2048 +
+          scalarJSONBytes({
+            sequence: n19,
+            state: 'transferred',
+            directory_after: null,
+            ticket_key: 'f'.repeat(64),
+            effect_after: null,
+            seal_digest: 'f'.repeat(64),
+            replay_generation: n19,
+            undo_generation: n19,
+            restore_generation: n19,
+            transaction_id: uuid36,
+            owner_epoch: 2147483647,
+            position: n19,
+            native_current: false,
+            receiving_partition: 4095,
+            receiving_epoch: 2147483647,
+            receiving_position: n19,
+            receiving_transaction_id: uuid36,
+          }),
+        binds: 2 + 1 + 4 + 2 + 19,
+      }),
+      accepted: Object.freeze({
+        sql: selectedClaimSQL,
+        rows: 5,
+        points: 5,
+        output:
+          5 * 128 +
+          scalarJSONBytes({
+            generation: n19,
+            scope_digest: 'f'.repeat(128),
+            job_home: 4095,
+            binding_transaction_id: uuid36,
+          }),
+        binds: 2 + 5 + 10 + 2 * 5 + 6 * (160 + 64 + 36 + 19 + 256),
+      }),
+      published: Object.freeze({
+        sql: selectedPublishedSQL,
+        rows: 4,
+        points: 4,
+        output: 5 * 128 + scalarJSONBytes({ scope_digest: 'f'.repeat(128) }),
+        binds: 2 + 2 + 4 + 2 * 2 + 36 + 19,
+      }),
     }),
-    // 13 operands: receipt_key<=160, digest64, three UUIDs, position/job
-    // bigint strings, timestamp<=128, closed role<=9, four bounded integers.
-    binds: 2 + 12 + 2 * 9 + 6 * (160 + 64 + 36 * 3 + 19 * 2 + 128 + 9) + 4 * 10,
-  }),
-  progress: Object.freeze({
-    sql: progressSQL.sql,
-    rows: 3,
-    points: 3,
-    // Combined directory/effect JSON is schema-bounded to 2048 bytes. The
-    // literal scalar projection is separately bounded; NULLs are not a bound
-    // on the eventual cursor. LIMIT 1 and the leading custody index bound reads.
-    output:
-      2048 +
-      scalarJSONBytes({
-        sequence: n19,
-        state: 'transferred',
-        directory_after: null,
-        ticket_key: 'f'.repeat(64),
-        effect_after: null,
-        seal_digest: 'f'.repeat(64),
-        replay_generation: n19,
-        undo_generation: n19,
-        restore_generation: n19,
-        transaction_id: uuid36,
-        owner_epoch: 2147483647,
-        position: n19,
-        native_current: false,
-        receiving_partition: 4095,
-        receiving_epoch: 2147483647,
-        receiving_position: n19,
-        receiving_transaction_id: uuid36,
-      }),
-    binds: 2 + 1 + 4 + 2 + 19,
-  }),
-  accepted: Object.freeze({
-    sql: selectedClaimSQL,
-    rows: 5,
-    points: 5,
-    output:
-      5 * 128 +
-      scalarJSONBytes({
-        generation: n19,
-        scope_digest: 'f'.repeat(128),
-        job_home: 4095,
-        binding_transaction_id: uuid36,
-      }),
-    binds: 2 + 5 + 10 + 2 * 5 + 6 * (160 + 64 + 36 + 19 + 256),
-  }),
-  published: Object.freeze({
-    sql: selectedPublishedSQL,
-    rows: 4,
-    points: 4,
-    output: 5 * 128 + scalarJSONBytes({ scope_digest: 'f'.repeat(128) }),
-    binds: 2 + 2 + 4 + 2 * 2 + 36 + 19,
-  }),
-});
+  );
+}
 
 /** Complete fixed local READ declarations, independent of all foreign children.
  * Bytes include the actual SQL text, bounded serialized binds and full schema
  * projection. A hit/absence reserves the same leading-key probes and one EOF.
  */
-export const IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS = Object.freeze(
-  Object.fromEntries(
-    Object.entries(sourceLiterals).map(([name, literal]) => [
-      name,
-      sourcePrice(literal.rows, literal.points, 1, Buffer.byteLength(literal.sql) + literal.binds + literal.output, 1),
-    ]),
-  ) as Readonly<Record<keyof typeof sourceLiterals, ReturnType<typeof sourcePrice>>>,
-);
+export function IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS() {
+  return memoizedValue(IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS, () =>
+    Object.freeze(
+      Object.fromEntries(
+        Object.entries(sourceLiterals()).map(([name, literal]) => [
+          name,
+          sourcePrice(
+            literal.rows,
+            literal.points,
+            1,
+            Buffer.byteLength(literal.sql) + literal.binds + literal.output,
+            1,
+          ),
+        ]),
+      ) as Readonly<Record<keyof ReturnType<typeof sourceLiterals>, ReturnType<typeof sourcePrice>>>,
+    ),
+  );
+}
 
 /** Disjoint local INSERT bodies. These are not successful whole commands: default
  * sequence allocation, FK checks, erasure capture and terminal binding triggers
@@ -231,101 +250,109 @@ export const IDENTITY_SOURCE_LOCAL_READ_DECLARATIONS = Object.freeze(
  * work cannot inherit Core's single-no-effect envelope.
  * Parameter maxima include JSON escaping (six bytes per bounded text byte).
  */
-export const IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS = Object.freeze({
-  custodyInsert: Object.freeze({
-    body: sourcePrice(
-      1,
-      1,
-      1,
-      Buffer.byteLength(insert.sql) + 2 + 17 + 18 * 2 + 6 * (160 + 64 + 19 * 3 + 36 * 5 + 128 + 9 + 128) + 5 * 10,
-      1,
-    ),
-    foreignKeys: Object.freeze([
-      'identity_epoch_receipt_claim(partition_no,receipt_key,generation)',
-      'erasure_source_commit(partition_no,transaction_id)',
-    ]),
-    children: Object.freeze([
-      'semantic.erasure_record_key default',
-      'semantic.capture_identity_source_consumer_custody_erasure / capture_erasure_roles',
-    ]),
-  }),
-  terminalAppend: Object.freeze({
-    body: sourcePrice(
-      1,
-      1,
-      1,
-      Buffer.byteLength(appendSQL.sql) + 2 + 21 + 22 * 2 + 6 * (19 * 8 + 11 + 2048 * 2 + 64 * 2 + 36 * 3) + 6 * 10,
-      1,
-    ),
-    foreignKeys: Object.freeze([
-      'identity_epoch_source_consumer_custody(partition_no,erasure_key)',
-      'identity_epoch_source_consumer_terminal(partition_no,custody_key,sequence)',
-      'erasure_source_commit(partition_no,transaction_id)',
-    ]),
-    children: Object.freeze([
-      'semantic.erasure_record_key default',
-      'semantic.capture_identity_source_consumer_custody_erasure / capture_erasure_roles',
-      'semantic.bind_identity_source_consumer_terminal / keep_identity_epoch_accepted_binding',
-    ]),
-  }),
-});
+export function IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS() {
+  return memoizedValue(IDENTITY_SOURCE_LOCAL_MUTATION_COMPONENTS, () =>
+    Object.freeze({
+      custodyInsert: Object.freeze({
+        body: sourcePrice(
+          1,
+          1,
+          1,
+          Buffer.byteLength(insert.sql) + 2 + 17 + 18 * 2 + 6 * (160 + 64 + 19 * 3 + 36 * 5 + 128 + 9 + 128) + 5 * 10,
+          1,
+        ),
+        foreignKeys: Object.freeze([
+          'identity_epoch_receipt_claim(partition_no,receipt_key,generation)',
+          'erasure_source_commit(partition_no,transaction_id)',
+        ]),
+        children: Object.freeze([
+          'semantic.erasure_record_key default',
+          'semantic.capture_identity_source_consumer_custody_erasure / capture_erasure_roles',
+        ]),
+      }),
+      terminalAppend: Object.freeze({
+        body: sourcePrice(
+          1,
+          1,
+          1,
+          Buffer.byteLength(appendSQL.sql) + 2 + 21 + 22 * 2 + 6 * (19 * 8 + 11 + 2048 * 2 + 64 * 2 + 36 * 3) + 6 * 10,
+          1,
+        ),
+        foreignKeys: Object.freeze([
+          'identity_epoch_source_consumer_custody(partition_no,erasure_key)',
+          'identity_epoch_source_consumer_terminal(partition_no,custody_key,sequence)',
+          'erasure_source_commit(partition_no,transaction_id)',
+        ]),
+        children: Object.freeze([
+          'semantic.erasure_record_key default',
+          'semantic.capture_identity_source_consumer_custody_erasure / capture_erasure_roles',
+          'semantic.bind_identity_source_consumer_terminal / keep_identity_epoch_accepted_binding',
+        ]),
+      }),
+    }),
+  );
+}
 
 /** Closed body composition, independently useful to the declaration owners. The
  * same SQL component can appear at multiple reached sites; no receipt cache or
  * alternative branch makes repeated work free. Each list names its exact child
  * rather than accepting a caller-supplied total.
  */
-export const IDENTITY_SOURCE_LOCAL_CALLS = Object.freeze({
-  retainedDiscovery: Object.freeze({
-    controls: COMMAND_DISPATCH_ALLOWANCE,
-    reads: Object.freeze({ retained: 1, progress: 1 }),
-    foreign: Object.freeze([]),
-  }),
-  acceptedBinding: Object.freeze({
-    controls: COMMAND_DISPATCH_ALLOWANCE,
-    reads: Object.freeze({ accepted: 1 }),
-    foreign: Object.freeze([]),
-  }),
-  published: Object.freeze({
-    controls: COMMAND_DISPATCH_ALLOWANCE,
-    reads: Object.freeze({ published: 1 }),
-    foreign: Object.freeze(['identityEpochStore.readJob; fixed mapping/Search/Library reconcileStepReceipt']),
-  }),
-  terminalVerify: Object.freeze({
-    controls: COMMAND_DISPATCH_ALLOWANCE,
-    reads: Object.freeze({ retained: 1, accepted: 1, progress: 1 }),
-    foreign: Object.freeze(['binding.verifyIdentitySourceConsumerCut; Account technical/reversal verifier']),
-  }),
-  progress: Object.freeze({
-    controls: COMMAND_DISPATCH_ALLOWANCE,
-    reads: Object.freeze({ progress: 1 }),
-    foreign: Object.freeze([]),
-  }),
-  prepare: Object.freeze({
-    profile: 'event-callback-source-association',
-    reads: Object.freeze({ accepted: 1, retained: 1 }),
-    mutation: 'custodyInsert',
-    foreign: Object.freeze([
-      'readAccountIdentitySource; readPartition; bindSemanticProducerRoles; recordSemanticSourceCommit',
-    ]),
-  }),
-  checkpoint: Object.freeze({
-    profile: 'event-callback-source-association',
-    reads: Object.freeze({ accepted: 1, progress: 1 }),
-    mutation: 'terminalAppend',
-    foreign: Object.freeze([
-      'readAccountIdentitySource; readPartition; bindSemanticProducerRoles; recordSemanticSourceCommit',
-    ]),
-  }),
-  finish: Object.freeze({
-    profile: 'event-callback-source-association',
-    reads: Object.freeze({ accepted: 1, progress: 1 }),
-    mutation: 'terminalAppend',
-    foreign: Object.freeze([
-      'verifyIdentityPrearmCustodyCut; binding cut; Account receiving/reversal; erasure roles; source commit',
-    ]),
-  }),
-});
+export function IDENTITY_SOURCE_LOCAL_CALLS() {
+  return memoizedValue(IDENTITY_SOURCE_LOCAL_CALLS, () =>
+    Object.freeze({
+      retainedDiscovery: Object.freeze({
+        controls: COMMAND_DISPATCH_ALLOWANCE,
+        reads: Object.freeze({ retained: 1, progress: 1 }),
+        foreign: Object.freeze([]),
+      }),
+      acceptedBinding: Object.freeze({
+        controls: COMMAND_DISPATCH_ALLOWANCE,
+        reads: Object.freeze({ accepted: 1 }),
+        foreign: Object.freeze([]),
+      }),
+      published: Object.freeze({
+        controls: COMMAND_DISPATCH_ALLOWANCE,
+        reads: Object.freeze({ published: 1 }),
+        foreign: Object.freeze(['identityEpochStore.readJob; fixed mapping/Search/Library reconcileStepReceipt']),
+      }),
+      terminalVerify: Object.freeze({
+        controls: COMMAND_DISPATCH_ALLOWANCE,
+        reads: Object.freeze({ retained: 1, accepted: 1, progress: 1 }),
+        foreign: Object.freeze(['binding.verifyIdentitySourceConsumerCut; Account technical/reversal verifier']),
+      }),
+      progress: Object.freeze({
+        controls: COMMAND_DISPATCH_ALLOWANCE,
+        reads: Object.freeze({ progress: 1 }),
+        foreign: Object.freeze([]),
+      }),
+      prepare: Object.freeze({
+        profile: 'event-callback-source-association',
+        reads: Object.freeze({ accepted: 1, retained: 1 }),
+        mutation: 'custodyInsert',
+        foreign: Object.freeze([
+          'readAccountIdentitySource; readPartition; bindSemanticProducerRoles; recordSemanticSourceCommit',
+        ]),
+      }),
+      checkpoint: Object.freeze({
+        profile: 'event-callback-source-association',
+        reads: Object.freeze({ accepted: 1, progress: 1 }),
+        mutation: 'terminalAppend',
+        foreign: Object.freeze([
+          'readAccountIdentitySource; readPartition; bindSemanticProducerRoles; recordSemanticSourceCommit',
+        ]),
+      }),
+      finish: Object.freeze({
+        profile: 'event-callback-source-association',
+        reads: Object.freeze({ accepted: 1, progress: 1 }),
+        mutation: 'terminalAppend',
+        foreign: Object.freeze([
+          'verifyIdentityPrearmCustodyCut; binding cut; Account receiving/reversal; erasure roles; source commit',
+        ]),
+      }),
+    }),
+  );
+}
 
 export function identitySourceCustodyFootprint(sql: string, values: readonly unknown[]): WorkDimensions | undefined {
   const id = (v: unknown) => typeof v === 'string' && uuid.test(v);
@@ -348,7 +375,7 @@ export function identitySourceCustodyFootprint(sql: string, values: readonly unk
       return false;
     }
   };
-  let name: keyof typeof sourceLiterals;
+  let name: keyof ReturnType<typeof sourceLiterals>;
   if (sql === select.sql) {
     if (
       values.length !== 13 ||
@@ -402,7 +429,7 @@ export function identitySourceCustodyFootprint(sql: string, values: readonly unk
     }
     name = 'accepted';
   } else return undefined;
-  const literal = sourceLiterals[name];
+  const literal = sourceLiterals()[name];
   const binds = Buffer.byteLength(json(values));
   if (binds > literal.binds) return undefined;
   return sourcePrice(literal.rows, literal.points, 1, Buffer.byteLength(sql) + binds + literal.output, 1).work;
@@ -774,7 +801,7 @@ async function published(
   }
   const read = () =>
     runCommand(pool, { partition: home, deadline }, async (tx) => {
-      const saved = await identityEpochStore.readJob(tx, reference.job);
+      const saved = await identityEpochStore().readJob(tx, reference.job);
       const native = (
         await tx.query<{ scope_digest: string }>(job.sql, [home, reference.job.jobId, reference.job.epoch.toString()])
       ).rows[0];
@@ -804,7 +831,7 @@ async function published(
       progress.receipt.job.epoch !== reference.job.epoch
     )
       return false;
-    const reconciled = await identityEpochStore.reconcileStepReceipt(pool, progress.receipt);
+    const reconciled = await identityEpochStore().reconcileStepReceipt(pool, progress.receipt);
     if (reconciled.state !== 'complete' || json(reconciled) !== json(progress)) return false;
   }
   return (await read()).value?.state === 'published';
@@ -1888,7 +1915,7 @@ export async function lockIdentitySourceHistoryAuthority(
           }
         : IDENTITY_SOURCE_HISTORY_GUARD_COST,
       {
-        ...IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION.work,
+        ...IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION().work,
         bytes:
           Buffer.byteLength(historySQL.sql) +
           Buffer.byteLength(json([serialized, expectedJSON])) +
@@ -1912,19 +1939,23 @@ export async function lockIdentitySourceHistoryAuthority(
  * or engine request occurs. Failed exact-key lookup reserves one empty seek.
  * SQL/parameter bytes include the 2048/4096 inputs and the closed native output
  * projection above. The independent legacy allowance is not the prepaid price. */
-export const IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION = Object.freeze({
-  engineRequests: 0 as const,
-  work: Object.freeze({
-    candidateKeys: 0,
-    nativeRows: 17,
-    identityMetadataRows: 0,
-    nativePoints: 15,
-    witnessKeys: 0,
-    statements: 2,
-    bytes: Buffer.byteLength(historySQL.sql) + 6 * (2048 + 4096) + 7 + historyAuthorityOutputBytes,
-    emptySeeks: 1,
-  }),
-});
+export function IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION() {
+  return memoizedValue(IDENTITY_SOURCE_HISTORY_GUARD_DECLARATION, () =>
+    Object.freeze({
+      engineRequests: 0 as const,
+      work: Object.freeze({
+        candidateKeys: 0,
+        nativeRows: 17,
+        identityMetadataRows: 0,
+        nativePoints: 15,
+        witnessKeys: 0,
+        statements: 2,
+        bytes: Buffer.byteLength(historySQL.sql) + 6 * (2048 + 4096) + 7 + historyAuthorityOutputBytes,
+        emptySeeks: 1,
+      }),
+    }),
+  );
+}
 
 /** Default owner composition on the genuine original Source command. Both phases
  * re-run native History/Source/Account verification and exact receiving admission,

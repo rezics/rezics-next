@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { readAuthorErasureAdmission, type AuthorErasureAdmission } from './author-erasure-admission.ts';
 import { readEditionSourceIdentity } from './edition-reads.ts';
 import { readNativeModerationDirectory } from './moderation-directory.ts';
@@ -154,64 +155,99 @@ export type Dependencies = ContentCommandDependencies &
   ContentRuntime &
   Readonly<{ viewerActionRuntime?: () => ReadingPageViewerActionRuntime }>;
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
-const readFailures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  500: problemSchema('internal_error'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-  ),
-};
-const writeFailures = {
-  ...readFailures,
-  403: problemSchema('forbidden'),
-  429: problemSchema('rate_limited', 'board_slow_mode', {
-    retryAt: t.Optional(t.String({ format: 'date-time' })),
-    intervalSeconds: t.Optional(t.Integer({ minimum: 1, maximum: 86400 })),
-  }),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-    'rate_limit_unavailable',
-  ),
-  413: problemSchema('content_too_large'),
-  422: problemSchema('idempotency_conflict', 'too_many_events'),
-};
+function readFailures() {
+  return memoizedValue(readFailures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    500: problemSchema('internal_error'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+    ),
+  }));
+}
+function writeFailures() {
+  return memoizedValue(writeFailures, () => ({
+    ...readFailures(),
+    403: problemSchema('forbidden'),
+    429: problemSchema('rate_limited', 'board_slow_mode', {
+      retryAt: t.Optional(t.String({ format: 'date-time' })),
+      intervalSeconds: t.Optional(t.Integer({ minimum: 1, maximum: 86400 })),
+    }),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+      'rate_limit_unavailable',
+    ),
+    413: problemSchema('content_too_large'),
+    422: problemSchema('idempotency_conflict', 'too_many_events'),
+  }));
+}
 const SITEMAP_DESCRIPTION = (kind: 'boards' | 'threads') =>
   `Keyset feed of the public ${kind} for sitemaps, the same for every caller: it lists exactly what an anonymous ` +
   `reader can open, whatever bearer the request carries. Each page examines at most 4 × \`limit\` candidate rows, so it ` +
   `may return fewer than \`limit\` items, even none, with a non-null \`next\`. Follow \`next\` until it is ` +
   `\`null\`. \`lastModified\` is the last significant change of what the page shows; a post edit or removal does ` +
   `not advance it.`;
-const sessionHeader = { [SESSION_HEADER]: t.String() };
-const commandHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
-const reviseHeaders = t.Object(
-  { [IDEMPOTENCY_HEADER]: t.String(), 'if-match': t.Optional(t.String()) },
-  { additionalProperties: true },
-);
+function sessionHeader() {
+  return memoizedValue(sessionHeader, () => ({ [SESSION_HEADER]: t.String() }));
+}
+function commandHeaders() {
+  return memoizedValue(commandHeaders, () =>
+    t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
+  );
+}
+function reviseHeaders() {
+  return memoizedValue(reviseHeaders, () =>
+    t.Object({ [IDEMPOTENCY_HEADER]: t.String(), 'if-match': t.Optional(t.String()) }, { additionalProperties: true }),
+  );
+}
 const readSecurity = [{ bearerAuth: [] }, {}];
 const writeSecurity = [{ bearerAuth: [] }];
-const writeRate = defineRateLimit({ family: 'write', units: 1 });
+function writeRate() {
+  return memoizedValue(writeRate, () => defineRateLimit({ family: 'write', units: 1 }));
+}
 const subjectReactionKinds: ReadonlySet<string> = new Set(['like', 'love', 'laugh', 'insightful', 'sad']);
-const reactionInput = strictContentSchema(ReactionInputSchema);
-const reactionResponse = strictContentSchema(ReactionResponseSchema);
-const subjectReactionInput = strictContentSchema(SubjectReactionInputSchema);
-const subjectReactionResponse = strictContentSchema(SubjectReactionResponseSchema);
-const subjectOwnReactionResponse = strictContentSchema(SubjectOwnReactionResponseSchema);
-const threadInput = strictContentSchema(ThreadInputSchema);
-const postInput = strictContentSchema(PostInputSchema);
-const revisionInput = strictContentSchema(RevisionInputSchema);
-const threadResponse = strictContentSchema(ThreadResponseSchema);
-const postResponse = strictContentSchema(PostResponseSchema);
-const boardResponse = strictContentSchema(BoardResponseSchema);
+function reactionInput() {
+  return memoizedValue(reactionInput, () => strictContentSchema(ReactionInputSchema()));
+}
+function reactionResponse() {
+  return memoizedValue(reactionResponse, () => strictContentSchema(ReactionResponseSchema()));
+}
+function subjectReactionInput() {
+  return memoizedValue(subjectReactionInput, () => strictContentSchema(SubjectReactionInputSchema));
+}
+function subjectReactionResponse() {
+  return memoizedValue(subjectReactionResponse, () => strictContentSchema(SubjectReactionResponseSchema));
+}
+function subjectOwnReactionResponse() {
+  return memoizedValue(subjectOwnReactionResponse, () => strictContentSchema(SubjectOwnReactionResponseSchema));
+}
+function threadInput() {
+  return memoizedValue(threadInput, () => strictContentSchema(ThreadInputSchema()));
+}
+function postInput() {
+  return memoizedValue(postInput, () => strictContentSchema(PostInputSchema()));
+}
+function revisionInput() {
+  return memoizedValue(revisionInput, () => strictContentSchema(RevisionInputSchema()));
+}
+function threadResponse() {
+  return memoizedValue(threadResponse, () => strictContentSchema(ThreadResponseSchema()));
+}
+function postResponse() {
+  return memoizedValue(postResponse, () => strictContentSchema(PostResponseSchema()));
+}
+function boardResponse() {
+  return memoizedValue(boardResponse, () => strictContentSchema(BoardResponseSchema()));
+}
 const slowModeInput = t.Object(
   { intervalSeconds: t.Integer({ minimum: 0, maximum: 86400 }) },
   { additionalProperties: false },
@@ -228,8 +264,12 @@ const slowModeResponse = t.Object(
   },
   { additionalProperties: false },
 );
-const globalBoardDirectoryQuery = strictContentSchema(GlobalBoardDirectoryQuerySchema);
-const globalBoardDirectoryResponse = strictContentSchema(GlobalBoardDirectoryResponseSchema);
+function globalBoardDirectoryQuery() {
+  return memoizedValue(globalBoardDirectoryQuery, () => strictContentSchema(GlobalBoardDirectoryQuerySchema));
+}
+function globalBoardDirectoryResponse() {
+  return memoizedValue(globalBoardDirectoryResponse, () => strictContentSchema(GlobalBoardDirectoryResponseSchema()));
+}
 const realmBoardsQuery = t.Object(
   {
     cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
@@ -237,10 +277,14 @@ const realmBoardsQuery = t.Object(
   },
   { additionalProperties: false },
 );
-const realmBoardsResponse = t.Object(
-  { items: t.Array(BoardViewSchema, { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
-  { additionalProperties: false },
-);
+function realmBoardsResponse() {
+  return memoizedValue(realmBoardsResponse, () =>
+    t.Object(
+      { items: t.Array(BoardViewSchema(), { maxItems: 100 }), next: t.Union([t.String(), t.Null()]) },
+      { additionalProperties: false },
+    ),
+  );
+}
 const reviewDestinationQuery = t.Object(
   {
     subjectId: t.String({ minLength: 1, maxLength: 64 }),
@@ -258,39 +302,92 @@ const boardCreateInput = t.Object(
   },
   { additionalProperties: false },
 );
-const boardCreateBody = strictContentSchema(boardCreateInput);
-const globalBoardCreateBody = strictContentSchema(
-  t.Object(
-    {
-      ...boardCreateInput.properties,
-      visibility: t.Union([t.Literal('published'), t.Literal('protected')]),
-      purpose: t.Union([t.Literal('discussion'), t.Literal('reviews')]),
-    },
-    { additionalProperties: false },
-  ),
-);
-const boardThreadsQuery = strictContentSchema(BoardThreadsQuerySchema);
-const boardThreadsResponse = strictContentSchema(BoardThreadsResponseSchema);
-const boardPageQuery = strictContentSchema(BoardPageQuerySchema);
-const boardPageResponse = strictContentSchema(BoardPageResponseSchema);
-const boardPinAdviceInput = strictContentSchema(BoardPinAdviceInputSchema);
-const boardPinAdviceResponse = strictContentSchema(BoardPinAdviceResponseSchema);
-const boardThreadPinInput = strictContentSchema(BoardThreadPinInputSchema);
-const boardThreadPinResponse = strictContentSchema(BoardThreadPinResponseSchema);
-const sitemapQuery = strictContentSchema(SitemapQuerySchema);
-const sitemapBoardPage = strictContentSchema(SitemapBoardPageSchema);
-const sitemapThreadPage = strictContentSchema(SitemapThreadPageSchema);
-const sitemapFailures = { ...readFailures, 400: problemSchema('invalid_request', 'invalid_cursor') };
-const subjectThreadsQuery = strictContentSchema(SubjectThreadsQuerySchema);
-const subjectThreadsResponse = strictContentSchema(SubjectThreadsResponseSchema);
-const authorThreadsQuery = strictContentSchema(AuthorThreadsQuerySchema);
-const authorThreadsResponse = strictContentSchema(AuthorThreadsResponseSchema);
-const authorPostsQuery = strictContentSchema(AuthorPostsQuerySchema);
-const authorPostsResponse = strictContentSchema(AuthorPostsResponseSchema);
-const ownDraftQuery = strictContentSchema(OwnDraftQuerySchema);
-const ownDraftResponse = strictContentSchema(OwnDraftResponseSchema);
-const postPageResponse = strictContentSchema(PostPageResponseSchema);
-const revisionPageResponse = strictContentSchema(RevisionPageResponseSchema);
+function boardCreateBody() {
+  return memoizedValue(boardCreateBody, () => strictContentSchema(boardCreateInput));
+}
+function globalBoardCreateBody() {
+  return memoizedValue(globalBoardCreateBody, () =>
+    strictContentSchema(
+      t.Object(
+        {
+          ...boardCreateInput.properties,
+          visibility: t.Union([t.Literal('published'), t.Literal('protected')]),
+          purpose: t.Union([t.Literal('discussion'), t.Literal('reviews')]),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+  );
+}
+function boardThreadsQuery() {
+  return memoizedValue(boardThreadsQuery, () => strictContentSchema(BoardThreadsQuerySchema));
+}
+function boardThreadsResponse() {
+  return memoizedValue(boardThreadsResponse, () => strictContentSchema(BoardThreadsResponseSchema()));
+}
+function boardPageQuery() {
+  return memoizedValue(boardPageQuery, () => strictContentSchema(BoardPageQuerySchema));
+}
+function boardPageResponse() {
+  return memoizedValue(boardPageResponse, () => strictContentSchema(BoardPageResponseSchema()));
+}
+function boardPinAdviceInput() {
+  return memoizedValue(boardPinAdviceInput, () => strictContentSchema(BoardPinAdviceInputSchema));
+}
+function boardPinAdviceResponse() {
+  return memoizedValue(boardPinAdviceResponse, () => strictContentSchema(BoardPinAdviceResponseSchema));
+}
+function boardThreadPinInput() {
+  return memoizedValue(boardThreadPinInput, () => strictContentSchema(BoardThreadPinInputSchema));
+}
+function boardThreadPinResponse() {
+  return memoizedValue(boardThreadPinResponse, () => strictContentSchema(BoardThreadPinResponseSchema));
+}
+function sitemapQuery() {
+  return memoizedValue(sitemapQuery, () => strictContentSchema(SitemapQuerySchema));
+}
+function sitemapBoardPage() {
+  return memoizedValue(sitemapBoardPage, () => strictContentSchema(SitemapBoardPageSchema));
+}
+function sitemapThreadPage() {
+  return memoizedValue(sitemapThreadPage, () => strictContentSchema(SitemapThreadPageSchema));
+}
+function sitemapFailures() {
+  return memoizedValue(sitemapFailures, () => ({
+    ...readFailures(),
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+  }));
+}
+function subjectThreadsQuery() {
+  return memoizedValue(subjectThreadsQuery, () => strictContentSchema(SubjectThreadsQuerySchema));
+}
+function subjectThreadsResponse() {
+  return memoizedValue(subjectThreadsResponse, () => strictContentSchema(SubjectThreadsResponseSchema()));
+}
+function authorThreadsQuery() {
+  return memoizedValue(authorThreadsQuery, () => strictContentSchema(AuthorThreadsQuerySchema));
+}
+function authorThreadsResponse() {
+  return memoizedValue(authorThreadsResponse, () => strictContentSchema(AuthorThreadsResponseSchema()));
+}
+function authorPostsQuery() {
+  return memoizedValue(authorPostsQuery, () => strictContentSchema(AuthorPostsQuerySchema));
+}
+function authorPostsResponse() {
+  return memoizedValue(authorPostsResponse, () => strictContentSchema(AuthorPostsResponseSchema()));
+}
+function ownDraftQuery() {
+  return memoizedValue(ownDraftQuery, () => strictContentSchema(OwnDraftQuerySchema));
+}
+function ownDraftResponse() {
+  return memoizedValue(ownDraftResponse, () => strictContentSchema(OwnDraftResponseSchema));
+}
+function postPageResponse() {
+  return memoizedValue(postPageResponse, () => strictContentSchema(PostPageResponseSchema()));
+}
+function revisionPageResponse() {
+  return memoizedValue(revisionPageResponse, () => strictContentSchema(RevisionPageResponseSchema()));
+}
 
 /** Bound byte consumption before JSON parsing or entering a command. */
 async function parseContentBody(
@@ -490,10 +587,10 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         query: strictContentSchema(ModerationDirectoryQuerySchema),
         response: {
           200: withHeaders(strictContentSchema(ModerationDirectoryPageSchema, moderationDirectoryPageIssues), {
-            ...sessionHeader,
+            ...sessionHeader(),
             'cache-control': t.String(),
           }),
-          ...readFailures,
+          ...readFailures(),
         },
         detail: {
           operationId: 'moderation.directory',
@@ -521,7 +618,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/boards/:id/slowMode',
       {
         params,
-        response: { 200: withHeaders(slowModeResponse, sessionHeader), ...readFailures },
+        response: { 200: withHeaders(slowModeResponse, sessionHeader()), ...readFailures() },
         detail: {
           operationId: 'board.get_slow_mode',
           'x-action': 'board:read',
@@ -561,15 +658,15 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/boards/:id/slowMode',
       {
         params,
-        headers: commandHeaders,
+        headers: commandHeaders(),
         body: strictContentSchema(slowModeInput),
-        response: { 200: withHeaders(slowModeResponse, sessionHeader), ...writeFailures },
+        response: { 200: withHeaders(slowModeResponse, sessionHeader()), ...writeFailures() },
         detail: {
           operationId: 'board.set_slow_mode',
           'x-action': 'moderation:takedown',
           'x-exposure': 'public',
           'x-resource-types': ['content.board'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -594,10 +691,10 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
     .get(
       '/v1/boards',
       {
-        query: globalBoardDirectoryQuery,
+        query: globalBoardDirectoryQuery(),
         response: {
-          200: withHeaders(globalBoardDirectoryResponse, sessionHeader),
-          ...readFailures,
+          200: withHeaders(globalBoardDirectoryResponse(), sessionHeader()),
+          ...readFailures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
         },
         detail: {
@@ -633,11 +730,11 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         parse: [parseBody, 'json'],
         transform: rejectOversized,
-        headers: commandHeaders,
-        body: globalBoardCreateBody,
+        headers: commandHeaders(),
+        body: globalBoardCreateBody(),
         response: {
-          201: withHeaders(boardResponse, { ...sessionHeader, location: t.String() }),
-          ...writeFailures,
+          201: withHeaders(boardResponse(), { ...sessionHeader(), location: t.String() }),
+          ...writeFailures(),
           409: problemSchema('conflict'),
         },
         detail: {
@@ -647,7 +744,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           'x-exposure': 'public',
           'x-action': 'board:create',
           'x-resource-types': ['content.board'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -677,11 +774,11 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         params: t.Object({ realmId: t.String() }, { additionalProperties: false }),
         parse: [parseBody, 'json'],
         transform: rejectOversized,
-        headers: commandHeaders,
-        body: boardCreateBody,
+        headers: commandHeaders(),
+        body: boardCreateBody(),
         response: {
-          201: withHeaders(boardResponse, { ...sessionHeader, location: t.String() }),
-          ...writeFailures,
+          201: withHeaders(boardResponse(), { ...sessionHeader(), location: t.String() }),
+          ...writeFailures(),
           409: problemSchema('conflict'),
         },
         detail: {
@@ -690,7 +787,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           'x-exposure': 'public',
           'x-action': 'board:create',
           'x-resource-types': ['content.board'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -720,7 +817,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params: t.Object({ realmId: t.String() }, { additionalProperties: false }),
         query: realmBoardsQuery,
-        response: { 200: withHeaders(realmBoardsResponse, sessionHeader), ...readFailures },
+        response: { 200: withHeaders(realmBoardsResponse(), sessionHeader()), ...readFailures() },
         detail: {
           operationId: 'board.list',
           'x-exposure': 'public',
@@ -744,7 +841,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params: t.Object({ realmId: t.String() }, { additionalProperties: false }),
         query: reviewDestinationQuery,
-        response: { 200: withHeaders(ReviewDestinationPageSchema, sessionHeader), ...readFailures },
+        response: { 200: withHeaders(ReviewDestinationPageSchema, sessionHeader()), ...readFailures() },
         detail: {
           operationId: 'review_destinations.list',
           'x-exposure': 'public',
@@ -806,11 +903,11 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         parse: [parseBody, 'json'],
         transform: rejectOversized,
-        headers: commandHeaders,
-        body: threadInput,
+        headers: commandHeaders(),
+        body: threadInput(),
         response: {
-          201: withHeaders(threadResponse, { ...sessionHeader, location: t.String() }),
-          ...writeFailures,
+          201: withHeaders(threadResponse(), { ...sessionHeader(), location: t.String() }),
+          ...writeFailures(),
           409: problemSchema('conflict', 'media_unavailable', {
             existingThreadId: t.Optional(t.String({ format: 'uuid' })),
           }),
@@ -822,7 +919,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           'x-exposure': 'public',
           'x-action': 'thread:create',
           'x-resource-types': ['content.thread', 'content.post'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -891,7 +988,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/threads/:id',
       {
         params,
-        response: { 200: withHeaders(threadResponse, sessionHeader), ...readFailures },
+        response: { 200: withHeaders(threadResponse(), sessionHeader()), ...readFailures() },
         detail: {
           operationId: 'thread.get',
           'x-resource-types': ['content.thread'],
@@ -931,11 +1028,11 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         params,
         parse: [parseBody, 'json'],
         transform: rejectOversized,
-        headers: commandHeaders,
-        body: postInput,
+        headers: commandHeaders(),
+        body: postInput(),
         response: {
-          201: withHeaders(postResponse, sessionHeader),
-          ...writeFailures,
+          201: withHeaders(postResponse(), sessionHeader()),
+          ...writeFailures(),
           409: problemSchema('media_unavailable'),
         },
         detail: {
@@ -945,7 +1042,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           'x-exposure': 'public',
           'x-action': 'post:create',
           'x-resource-types': ['content.post'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -976,7 +1073,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         query: ContentPageQuerySchema,
-        response: { 200: withHeaders(postPageResponse, sessionHeader), ...readFailures },
+        response: { 200: withHeaders(postPageResponse(), sessionHeader()), ...readFailures() },
         detail: {
           operationId: 'post.list',
           'x-resource-types': ['content.thread'],
@@ -1011,9 +1108,9 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         response: {
           200: withHeaders(
             t.Object({ cursor: t.Union([t.String(), t.Null()]) }, { additionalProperties: false }),
-            sessionHeader,
+            sessionHeader(),
           ),
-          ...readFailures,
+          ...readFailures(),
         },
         detail: { operationId: 'post.locate', 'x-exposure': 'public', 'x-action': 'post:read', security: readSecurity },
       },
@@ -1035,8 +1132,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         response: {
-          200: withHeaders(postResponse, { ...sessionHeader, etag: t.Optional(t.String()) }),
-          ...readFailures,
+          200: withHeaders(postResponse(), { ...sessionHeader(), etag: t.Optional(t.String()) }),
+          ...readFailures(),
         },
         detail: {
           operationId: 'post.get',
@@ -1069,8 +1166,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         params,
         query: ReadingPageQuerySchema,
         response: {
-          200: withHeaders(ReadingPageResponseSchema, sessionHeader),
-          ...readFailures,
+          200: withHeaders(ReadingPageResponseSchema(), sessionHeader()),
+          ...readFailures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           413: problemSchema('content_too_large'),
         },
@@ -1103,11 +1200,11 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       customMethod('/v1/posts/:id', 'restore'),
       {
         params,
-        headers: commandHeaders,
+        headers: commandHeaders(),
         response: {
-          204: withHeaders(t.Void(), sessionHeader),
+          204: withHeaders(t.Void(), sessionHeader()),
           409: problemSchema('conflict', { existingThreadId: t.Optional(t.String({ format: 'uuid' })) }),
-          ...writeFailures,
+          ...writeFailures(),
         },
         detail: {
           operationId: 'post.restore',
@@ -1115,7 +1212,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           'x-exposure': 'public',
           'x-action': 'post:erase',
           'x-replay-authorization': 'self-account-read',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1142,15 +1239,15 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/posts/:id',
       {
         params,
-        headers: commandHeaders,
-        response: { 204: withHeaders(t.Void(), sessionHeader), ...writeFailures },
+        headers: commandHeaders(),
+        response: { 204: withHeaders(t.Void(), sessionHeader()), ...writeFailures() },
         detail: {
           operationId: 'post.erase',
           'x-resource-types': ['content.post'],
           'x-exposure': 'public',
           'x-action': 'post:erase',
           'x-replay-authorization': 'self-account-read',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1181,11 +1278,11 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         params,
         parse: [parseBody, 'json'],
         transform: rejectOversized,
-        headers: reviseHeaders,
-        body: revisionInput,
+        headers: reviseHeaders(),
+        body: revisionInput(),
         response: {
-          200: withHeaders(postResponse, sessionHeader),
-          ...writeFailures,
+          200: withHeaders(postResponse(), sessionHeader()),
+          ...writeFailures(),
           409: problemSchema('media_unavailable'),
           412: problemSchema('precondition_failed'),
         },
@@ -1194,7 +1291,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           'x-resource-types': ['content.post'],
           'x-exposure': 'public',
           'x-action': 'post:revise',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1236,8 +1333,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         params,
         query: ContentPageQuerySchema,
         response: {
-          200: withHeaders(revisionPageResponse, { ...sessionHeader, 'cache-control': t.Optional(t.String()) }),
-          ...readFailures,
+          200: withHeaders(revisionPageResponse(), { ...sessionHeader(), 'cache-control': t.Optional(t.String()) }),
+          ...readFailures(),
         },
         detail: {
           operationId: 'post.history',
@@ -1264,7 +1361,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
             );
             for (const anchor of page.anchors) session.record(sessionComponent(anchor));
             return { revisions: page.revisions, next: page.next, page: page.page } satisfies Static<
-              typeof RevisionPageResponseSchema
+              ReturnType<typeof RevisionPageResponseSchema>
             >;
           }),
         ),
@@ -1279,13 +1376,13 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
           200: withHeaders(
             strictContentSchema(
               t.Object(
-                { ...PostResponseSchema.properties, editionIdentity: t.Optional(EditionSourceIdentitySchema) },
+                { ...PostResponseSchema().properties, editionIdentity: t.Optional(EditionSourceIdentitySchema) },
                 { additionalProperties: false },
               ),
             ),
-            { ...sessionHeader, 'cache-control': t.Optional(t.String()) },
+            { ...sessionHeader(), 'cache-control': t.Optional(t.String()) },
           ),
-          ...readFailures,
+          ...readFailures(),
         },
         detail: {
           operationId: 'post.revision',
@@ -1318,9 +1415,9 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         query: BoardThreadsQuerySchema,
         transform: ({ query }) => {
           // Board query failures expose the same generic problem as invalid cursors.
-          if ('issues' in boardThreadsQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
+          if ('issues' in boardThreadsQuery()['~standard'].validate(query)) throw new ProblemError('invalid_request');
         },
-        response: { 200: withHeaders(boardThreadsResponse, sessionHeader), ...readFailures },
+        response: { 200: withHeaders(boardThreadsResponse(), sessionHeader()), ...readFailures() },
         detail: {
           operationId: 'board_threads.list',
           'x-resource-types': ['content.board'],
@@ -1352,11 +1449,11 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         params,
         query: BoardPageQuerySchema,
         transform: ({ query }) => {
-          if ('issues' in boardPageQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
+          if ('issues' in boardPageQuery()['~standard'].validate(query)) throw new ProblemError('invalid_request');
         },
         response: {
-          200: withHeaders(boardPageResponse, sessionHeader),
-          ...readFailures,
+          200: withHeaders(boardPageResponse(), sessionHeader()),
+          ...readFailures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
         },
         detail: {
@@ -1407,7 +1504,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
               })),
             };
             const { anchors: _anchors, ...body } = response;
-            return body satisfies Static<typeof BoardPageResponseSchema>;
+            return body satisfies Static<ReturnType<typeof BoardPageResponseSchema>>;
           }),
         );
       },
@@ -1417,8 +1514,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         parse: [parseBody, 'json'],
-        body: boardPinAdviceInput,
-        response: { 200: withHeaders(boardPinAdviceResponse, sessionHeader), ...readFailures },
+        body: boardPinAdviceInput(),
+        response: { 200: withHeaders(boardPinAdviceResponse(), sessionHeader()), ...readFailures() },
         detail: {
           operationId: 'board_pin_advice.inspect',
           description: 'Inspect current native pin actions for at most twenty-five exact displayed thread sources.',
@@ -1450,20 +1547,20 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/boards/:id/threads/:threadId/pin',
       {
         params: t.Object({ id: t.String(), threadId: t.String() }, { additionalProperties: false }),
-        headers: commandHeaders,
+        headers: commandHeaders(),
         parse: [parseBody, 'json'],
-        body: boardThreadPinInput,
+        body: boardThreadPinInput(),
         response: {
-          200: withHeaders(boardThreadPinResponse, sessionHeader),
+          200: withHeaders(boardThreadPinResponse(), sessionHeader()),
           409: problemSchema('conflict'),
-          ...writeFailures,
+          ...writeFailures(),
         },
         detail: {
           operationId: 'board_thread.set_pin',
           'x-resource-types': ['content.board', 'content.thread'],
           'x-exposure': 'public',
           'x-action': 'moderation:takedown',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1489,8 +1586,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/accounts/:accountId/drafts',
       {
         params: t.Object({ accountId: t.String() }, { additionalProperties: false }),
-        query: ownDraftQuery,
-        response: { 200: withHeaders(ownDraftResponse, sessionHeader), ...readFailures },
+        query: ownDraftQuery(),
+        response: { 200: withHeaders(ownDraftResponse(), sessionHeader()), ...readFailures() },
         detail: {
           operationId: 'own_drafts.list',
           'x-exposure': 'public',
@@ -1523,7 +1620,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params: t.Object({ accountId: t.String(), id: t.String() }, { additionalProperties: false }),
         query: t.Object({ threadId: t.String() }, { additionalProperties: false }),
-        response: { 200: withHeaders(postResponse, { ...sessionHeader, etag: t.String() }), ...readFailures },
+        response: { 200: withHeaders(postResponse(), { ...sessionHeader(), etag: t.String() }), ...readFailures() },
         detail: {
           operationId: 'own_drafts.resume',
           'x-exposure': 'public',
@@ -1554,8 +1651,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/accounts/:accountId/threads',
       {
         params: t.Object({ accountId: t.String() }, { additionalProperties: false }),
-        query: authorThreadsQuery,
-        response: { 200: withHeaders(authorThreadsResponse, sessionHeader), ...readFailures },
+        query: authorThreadsQuery(),
+        response: { 200: withHeaders(authorThreadsResponse(), sessionHeader()), ...readFailures() },
         detail: {
           operationId: 'author_threads.list',
           'x-exposure': 'public',
@@ -1591,8 +1688,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/accounts/:accountId/posts',
       {
         params: t.Object({ accountId: t.String() }, { additionalProperties: false }),
-        query: authorPostsQuery,
-        response: { 200: withHeaders(authorPostsResponse, sessionHeader), ...readFailures },
+        query: authorPostsQuery(),
+        response: { 200: withHeaders(authorPostsResponse(), sessionHeader()), ...readFailures() },
         detail: {
           operationId: 'author_posts.list',
           'x-exposure': 'public',
@@ -1631,8 +1728,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
         transform: rejectOversized,
         body: strictContentSchema(AuthorContributionActionsInputSchema),
         response: {
-          200: withHeaders(strictContentSchema(AuthorContributionActionsResponseSchema), sessionHeader),
-          ...readFailures,
+          200: withHeaders(strictContentSchema(AuthorContributionActionsResponseSchema), sessionHeader()),
+          ...readFailures(),
         },
         detail: {
           operationId: 'author_contributions.actions',
@@ -1664,8 +1761,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/subjects/:id/threads',
       {
         params,
-        query: subjectThreadsQuery,
-        response: { 200: withHeaders(subjectThreadsResponse, sessionHeader), ...readFailures },
+        query: subjectThreadsQuery(),
+        response: { 200: withHeaders(subjectThreadsResponse(), sessionHeader()), ...readFailures() },
         detail: {
           operationId: 'subject_threads.list',
           'x-exposure': 'public',
@@ -1708,9 +1805,9 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         query: SitemapQuerySchema,
         transform: ({ query }) => {
-          if ('issues' in sitemapQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
+          if ('issues' in sitemapQuery()['~standard'].validate(query)) throw new ProblemError('invalid_request');
         },
-        response: { 200: sitemapBoardPage, ...sitemapFailures },
+        response: { 200: sitemapBoardPage(), ...sitemapFailures() },
         detail: {
           operationId: 'sitemap_boards.list',
           description: SITEMAP_DESCRIPTION('boards'),
@@ -1729,9 +1826,9 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         query: SitemapQuerySchema,
         transform: ({ query }) => {
-          if ('issues' in sitemapQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
+          if ('issues' in sitemapQuery()['~standard'].validate(query)) throw new ProblemError('invalid_request');
         },
-        response: { 200: sitemapThreadPage, ...sitemapFailures },
+        response: { 200: sitemapThreadPage(), ...sitemapFailures() },
         detail: {
           operationId: 'sitemap_threads.list',
           description: SITEMAP_DESCRIPTION('threads'),
@@ -1749,7 +1846,7 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/boards/:id',
       {
         params,
-        response: { 200: withHeaders(boardResponse, sessionHeader), ...readFailures },
+        response: { 200: withHeaders(boardResponse(), sessionHeader()), ...readFailures() },
         detail: {
           operationId: 'board.get',
           'x-resource-types': ['content.board'],
@@ -1774,15 +1871,15 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/threads/:id/reaction',
       {
         params: t.Object({ id: t.String() }, { additionalProperties: false }),
-        headers: commandHeaders,
-        body: reactionInput,
-        response: { 200: reactionResponse, ...writeFailures },
+        headers: commandHeaders(),
+        body: reactionInput(),
+        response: { 200: reactionResponse(), ...writeFailures() },
         detail: {
           operationId: 'thread.set_reaction',
           'x-resource-types': ['content.thread'],
           'x-exposure': 'public',
           'x-action': 'reaction:set',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1795,14 +1892,14 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/threads/:id/reaction',
       {
         params: t.Object({ id: t.String() }, { additionalProperties: false }),
-        headers: commandHeaders,
-        response: { 204: t.Void(), ...writeFailures },
+        headers: commandHeaders(),
+        response: { 204: t.Void(), ...writeFailures() },
         detail: {
           operationId: 'thread.clear_reaction',
           'x-resource-types': ['content.thread'],
           'x-exposure': 'public',
           'x-action': 'reaction:set',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1815,15 +1912,15 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/posts/:id/reaction',
       {
         params: t.Object({ id: t.String() }, { additionalProperties: false }),
-        headers: commandHeaders,
-        body: reactionInput,
-        response: { 200: reactionResponse, ...writeFailures },
+        headers: commandHeaders(),
+        body: reactionInput(),
+        response: { 200: reactionResponse(), ...writeFailures() },
         detail: {
           operationId: 'post.set_reaction',
           'x-resource-types': ['content.post'],
           'x-exposure': 'public',
           'x-action': 'reaction:set',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1836,14 +1933,14 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/posts/:id/reaction',
       {
         params: t.Object({ id: t.String() }, { additionalProperties: false }),
-        headers: commandHeaders,
-        response: { 204: t.Void(), ...writeFailures },
+        headers: commandHeaders(),
+        response: { 204: t.Void(), ...writeFailures() },
         detail: {
           operationId: 'post.clear_reaction',
           'x-resource-types': ['content.post'],
           'x-exposure': 'public',
           'x-action': 'reaction:set',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1859,8 +1956,8 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       {
         params,
         response: {
-          200: withHeaders(t.Object({ watching: t.Boolean() }, { additionalProperties: false }), sessionHeader),
-          ...readFailures,
+          200: withHeaders(t.Object({ watching: t.Boolean() }, { additionalProperties: false }), sessionHeader()),
+          ...readFailures(),
         },
         detail: {
           operationId: 'thread.watch_state',
@@ -1889,14 +1986,14 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/threads/:id/watch',
       {
         params,
-        response: { 204: withHeaders(t.Void(), sessionHeader), ...readFailures },
+        response: { 204: withHeaders(t.Void(), sessionHeader()), ...readFailures() },
         detail: {
           operationId: 'thread.watch',
           'x-authority-resource-types': ['content.thread'],
           'x-resource-types': ['content.thread'],
           'x-exposure': 'public',
           'x-action': 'thread:watch',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1916,14 +2013,14 @@ export function contentRoutes(app: ReturnType<typeof definitionRoutes>, dependen
       '/v1/threads/:id/watch',
       {
         params,
-        response: { 204: t.Void(), ...readFailures },
+        response: { 204: t.Void(), ...readFailures() },
         detail: {
           operationId: 'thread.unwatch',
           'x-authority-resource-types': ['content.thread'],
           'x-resource-types': ['content.thread'],
           'x-exposure': 'public',
           'x-action': 'thread:watch',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1941,14 +2038,14 @@ export function subjectReactionRoutes(routes: ReturnType<typeof createApp>, depe
       '/v1/subjects/:id/reaction',
       {
         params: t.Object({ id: t.String() }, { additionalProperties: false }),
-        headers: commandHeaders,
-        body: subjectReactionInput,
-        response: { 200: subjectReactionResponse, ...writeFailures },
+        headers: commandHeaders(),
+        body: subjectReactionInput(),
+        response: { 200: subjectReactionResponse(), ...writeFailures() },
         detail: {
           operationId: 'subject.set_reaction',
           'x-exposure': 'public',
           'x-action': 'reaction:set',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1961,13 +2058,13 @@ export function subjectReactionRoutes(routes: ReturnType<typeof createApp>, depe
       '/v1/subjects/:id/reaction',
       {
         params: t.Object({ id: t.String() }, { additionalProperties: false }),
-        headers: commandHeaders,
-        response: { 204: t.Void(), ...writeFailures },
+        headers: commandHeaders(),
+        response: { 204: t.Void(), ...writeFailures() },
         detail: {
           operationId: 'subject.clear_reaction',
           'x-exposure': 'public',
           'x-action': 'reaction:set',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1981,9 +2078,9 @@ export function subjectReactionRoutes(routes: ReturnType<typeof createApp>, depe
       {
         params,
         response: {
-          200: withHeaders(subjectOwnReactionResponse, sessionHeader),
+          200: withHeaders(subjectOwnReactionResponse(), sessionHeader()),
           308: withHeaders(SubjectReactionRedirectResponseSchema, { location: t.String() }),
-          ...readFailures,
+          ...readFailures(),
         },
         detail: {
           operationId: 'subject.get_own_reaction',

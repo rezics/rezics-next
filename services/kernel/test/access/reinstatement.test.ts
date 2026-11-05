@@ -337,8 +337,8 @@ test('platform governance reinstates a suspended account and the person signs in
   ).rows;
   expect(audit).toHaveLength(1);
   expect(audit[0].type).toBe('com.rezics.access.account.reinstated.v1');
-  const schema = ACCESS_EVENTS['com.rezics.access.account.reinstated.v1'];
-  expect(EVENT_TYPES['com.rezics.access.account.reinstated.v1']).toBe(schema);
+  const schema = ACCESS_EVENTS()['com.rezics.access.account.reinstated.v1'];
+  expect(EVENT_TYPES()['com.rezics.access.account.reinstated.v1']).toBe(schema);
   expect(Value.Check(schema, audit[0].data)).toBe(true);
   expect(JSON.stringify(audit)).not.toContain(reason);
   expect(await account(operated.accountId)).toEqual(operatedBefore);

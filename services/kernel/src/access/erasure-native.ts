@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { minimizeLiveCopyInventory } from './live-copy-erasure.ts';
 import { LiveCopyPendingError } from './live-copy.ts';
 import {
@@ -37,20 +38,26 @@ import { discoverErasurePage, ERASURE_DISCOVERY_ROLES, type ErasureDiscoveryPage
  * Ordering consumes handle effect children before their terminal operation parents.
  * Cursor-bearing groups require their deployed native cutover before mutation.
  */
-export const NATIVE_ERASURE_GROUPS = [
-  ['account_preferences', 'account_id'],
-  ['resource_grant', 'resource_id'],
-  ['resource_grant', 'subject_id'],
-  ['resource_role_grant', 'resource_id'],
-  ['resource_role_grant', 'subject_id'],
-  ['resource_denial', 'resource_id'],
-  ['resource_denial', 'subject_id'],
-  ['standing_parent_installation', 'resource_id'],
-  ['handle_claim', 'account_id'],
-  ['lifecycle_handle_effect', 'account_id'],
-  ['lifecycle_handle_operation', 'account_id'],
-  ...ADDITIONAL_NATIVE_ERASURE_GROUPS,
-] as const;
+export function NATIVE_ERASURE_GROUPS() {
+  return memoizedValue(
+    NATIVE_ERASURE_GROUPS,
+    () =>
+      [
+        ['account_preferences', 'account_id'],
+        ['resource_grant', 'resource_id'],
+        ['resource_grant', 'subject_id'],
+        ['resource_role_grant', 'resource_id'],
+        ['resource_role_grant', 'subject_id'],
+        ['resource_denial', 'resource_id'],
+        ['resource_denial', 'subject_id'],
+        ['standing_parent_installation', 'resource_id'],
+        ['handle_claim', 'account_id'],
+        ['lifecycle_handle_effect', 'account_id'],
+        ['lifecycle_handle_operation', 'account_id'],
+        ...ADDITIONAL_NATIVE_ERASURE_GROUPS,
+      ] as const,
+  );
+}
 
 type Progress = {
   route: number;
@@ -122,7 +129,7 @@ export async function advanceNativeErasure(
   const anchor = initial.rows[0];
   allow(anchor);
   let expected: Work = { ...anchor, retry: false };
-  if (anchor.phase === NATIVE_ERASURE_GROUPS.length) {
+  if (anchor.phase === NATIVE_ERASURE_GROUPS().length) {
     // Two ordered point-prefix seeks rotate only the fixed inventory's blocked
     // phases. No account graph, workflow enumeration or population scan.
     const blocked = await withConnection(pool, async (tx) => {
@@ -147,14 +154,14 @@ export async function advanceNativeErasure(
           `UPDATE access.erasure_native_progress SET native_complete_at=COALESCE(native_complete_at,statement_timestamp()),
           pending='shared-history-producer' WHERE progress_id=$1 AND phase=$2
           AND NOT EXISTS (SELECT 1 FROM access.erasure_native_blocked WHERE progress_id=$1)`,
-          [progressId, NATIVE_ERASURE_GROUPS.length],
+          [progressId, NATIVE_ERASURE_GROUPS().length],
         );
       });
       return 'pending-shared-custody';
     }
     expected = { ...anchor, ...blocked, retry: true };
   }
-  const group = NATIVE_ERASURE_GROUPS[expected.phase];
+  const group = NATIVE_ERASURE_GROUPS()[expected.phase];
   allow(group);
   const [store, role] = group;
   const spec = ERASURE_DISCOVERY_ROLES.find((entry) => entry[0] === store && entry[1] === role);
@@ -426,7 +433,7 @@ export async function advanceNativeErasure(
           current.account_id,
           progressId,
           expected.phase,
-          current.phase === NATIVE_ERASURE_GROUPS.length,
+          current.phase === NATIVE_ERASURE_GROUPS().length,
           authRetirement,
         )) ??
         (await nativeStoreBlocker(tx, store, key, current.account_id, role));
@@ -525,7 +532,7 @@ export async function advanceNativeErasure(
         progressId,
         nextPhase,
         page.done ? 0 : expected.page + 1,
-        nextPhase === NATIVE_ERASURE_GROUPS.length ? 'native-inventory' : null,
+        nextPhase === NATIVE_ERASURE_GROUPS().length ? 'native-inventory' : null,
       ]);
     }
     // Discovery replay contains account-linked raw keys. Drop each consumed page in

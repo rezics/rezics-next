@@ -120,7 +120,7 @@ function rest(parent: IdentityOriginalSourceContext, keep: WorkDimensions): Work
 const oneStatement = { ...COMMAND_DISPATCH_ALLOWANCE.cleanup.work };
 
 test('Selected History publishes the actual executable effect plus disjoint cleanup quote', () => {
-  const declaration = IDENTITY_HISTORY_ACCOUNTS_DECLARATION;
+  const declaration = IDENTITY_HISTORY_ACCOUNTS_DECLARATION();
   expect(declaration.selectedCommand).toBe(COMMAND_DISPATCH_ALLOWANCE);
   expect(declaration.selectedCommand.total.work).toEqual({
     candidateKeys: 0,

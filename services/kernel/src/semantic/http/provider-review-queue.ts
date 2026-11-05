@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { SourceSchema } from '@rezics/definitions/bulk';
 import { t } from 'elysia';
@@ -27,20 +28,28 @@ import { withReadTransaction } from '../read.ts';
 import { readStatementAs } from '../statement-disclosure.ts';
 import type { subjectRoutes } from './subjects.ts';
 
-const scope = {
-  source: SourceSchema.properties.source,
-  context: t.Optional(t.String({ format: 'uuid' })),
-  status: t.Optional(t.Union([t.Literal('pending'), t.Literal('accepted_unselected')])),
-};
-export const ProviderReviewQuerySchema = t.Object(
-  {
-    ...scope,
-    limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
-    cursor: t.Optional(t.String()),
-  },
-  { additionalProperties: false },
-);
-export const ProviderReviewPrepareSchema = t.Object(scope, { additionalProperties: false });
+function scope() {
+  return memoizedValue(scope, () => ({
+    source: SourceSchema.properties.source,
+    context: t.Optional(t.String({ format: 'uuid' })),
+    status: t.Optional(t.Union([t.Literal('pending'), t.Literal('accepted_unselected')])),
+  }));
+}
+export function ProviderReviewQuerySchema() {
+  return memoizedValue(ProviderReviewQuerySchema, () =>
+    t.Object(
+      {
+        ...scope(),
+        limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
+        cursor: t.Optional(t.String()),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
+export function ProviderReviewPrepareSchema() {
+  return memoizedValue(ProviderReviewPrepareSchema, () => t.Object(scope(), { additionalProperties: false }));
+}
 
 /** Reuse the mounted native schemas themselves; no second statement/candidate/freshness vocabulary. */
 export function providerReviewSchemas(app: ReturnType<typeof subjectRoutes>) {
@@ -71,13 +80,15 @@ function failure(error: unknown): never {
   if (error instanceof GrantDeniedError) throw new ProblemError('forbidden');
   throw error;
 }
-const errors = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  503: problemSchema('semantic_not_ready', 'overloaded', 'partition_unavailable', 'deadline_exceeded'),
-};
+function errors() {
+  return memoizedValue(errors, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    503: problemSchema('semantic_not_ready', 'overloaded', 'partition_unavailable', 'deadline_exceeded'),
+  }));
+}
 
 export function providerReviewQueueRoutes(
   app: ReturnType<typeof subjectRoutes>,
@@ -95,7 +106,7 @@ export function providerReviewQueueRoutes(
     .get(
       '/v1/review-candidates',
       {
-        query: ProviderReviewQuerySchema,
+        query: ProviderReviewQuerySchema(),
         response: {
           200: withHeaders(
             t.Object(
@@ -121,7 +132,7 @@ export function providerReviewQueueRoutes(
             ...privateHeaders,
             'retry-after': t.String(),
           }),
-          ...errors,
+          ...errors(),
         },
         detail: {
           operationId: 'provider_review.list',
@@ -190,13 +201,13 @@ export function providerReviewQueueRoutes(
     .post(
       customMethod('/v1/review-candidates', 'prepare'),
       {
-        body: ProviderReviewPrepareSchema,
+        body: ProviderReviewPrepareSchema(),
         response: {
           202: withHeaders(t.Object({ preparing: t.Literal(true) }, { additionalProperties: false }), {
             'retry-after': t.String(),
             'cache-control': t.Literal('private, no-store'),
           }),
-          ...errors,
+          ...errors(),
         },
         detail: {
           operationId: 'provider_review.prepare',

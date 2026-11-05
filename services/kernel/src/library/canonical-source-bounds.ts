@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 /** Closed Library-owned plan for canonical Collection generation repair, publication and completed-pointer readback.
  * Declarations constrain dispatch; they never fund a ledger or mint native authority.
  */
@@ -19,11 +20,15 @@ import labelOriginalsSql from './owner-index-native-label-originals.sql';
 import { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
 export { CANONICAL_SOURCE_RAW_KEY_LIMIT } from './canonical-source-limits.ts';
 
-export const CANONICAL_SOURCE_AXES = BOUND_AXES;
+export function CANONICAL_SOURCE_AXES() {
+  return memoizedValue(CANONICAL_SOURCE_AXES, () => BOUND_AXES);
+}
 export const CANONICAL_SOURCE_ZONE_AGGREGATE = 256;
 export const CANONICAL_SOURCE_GENERATION_CAPACITY = 2;
 export const CANONICAL_SOURCE_SCOPE_CAPACITY = 2;
-export const CANONICAL_SOURCE_ATTEMPTS = WORK_EXECUTION_ATTEMPT_BOUND;
+export function CANONICAL_SOURCE_ATTEMPTS() {
+  return memoizedValue(CANONICAL_SOURCE_ATTEMPTS, () => WORK_EXECUTION_ATTEMPT_BOUND);
+}
 export const CANONICAL_SOURCE_IDENTITY_SWEEP_HOMES = 4096;
 export const CANONICAL_SOURCE_IDENTITY_SWEEPS = 2;
 
@@ -307,182 +312,190 @@ const commitScopeValues = [
 ];
 const insertScopeValues = [maxRoute, maxUuid, 'f'.repeat(64), 'a'.repeat(identityJsonCeiling)];
 
-export const CANONICAL_SOURCE_STATEMENTS = Object.freeze({
-  scope: statement(
-    'canonical-source-scope',
-    CANONICAL_SOURCE_SQL.scope,
-    maxScopeValues,
-    maxScopeRow,
-    1,
-    point(CANONICAL_SOURCE_SQL.scope, maxScopeValues, maxScopeRow, 1, 4),
-  ),
-  head: statement(
-    'canonical-source-head',
-    CANONICAL_SOURCE_SQL.head,
-    maxPointValues,
-    maxHeadRow,
-    1,
-    point(CANONICAL_SOURCE_SQL.head, maxPointValues, maxHeadRow),
-  ),
-  generation: statement(
-    'canonical-source-generation',
-    CANONICAL_SOURCE_SQL.generation,
-    maxGenerationValues,
-    maxGenerationRow,
-    1,
-    point(CANONICAL_SOURCE_SQL.generation, maxGenerationValues, maxGenerationRow, 1, 8),
-  ),
-  workingGeneration: statement(
-    'canonical-source-working-generation',
-    CANONICAL_SOURCE_SQL.workingGeneration,
-    maxWorkingValues,
-    maxGenerationRow,
-    1,
-    point(CANONICAL_SOURCE_SQL.workingGeneration, maxWorkingValues, maxGenerationRow, 1, 8),
-  ),
-  generationLock: statement(
-    'canonical-source-generation-lock',
-    CANONICAL_SOURCE_SQL.generationLock,
-    maxGenerationValues,
-    maxGenerationRow,
-    1,
-    point(CANONICAL_SOURCE_SQL.generationLock, maxGenerationValues, maxGenerationRow, 1, 8),
-  ),
-  sourceLock: statement(
-    'canonical-source-collection-lock',
-    CANONICAL_SOURCE_SQL.sourceLock,
-    maxSourceLockValues,
-    maxLockRow,
-    1,
-    point(CANONICAL_SOURCE_SQL.sourceLock, maxSourceLockValues, maxLockRow),
-  ),
-  factLock: statement(
-    'canonical-source-fact-lock',
-    CANONICAL_SOURCE_SQL.factLock,
-    maxFactLockValues,
-    maxLockRow,
-    1,
-    point(CANONICAL_SOURCE_SQL.factLock, maxFactLockValues, maxLockRow),
-  ),
-  abandon: statement(
-    'canonical-source-abandon',
-    CANONICAL_SOURCE_SQL.abandon,
-    maxGenerationValues,
-    0,
-    0,
-    point(CANONICAL_SOURCE_SQL.abandon, maxGenerationValues, 0),
-  ),
-  retainedGenerations: statement(
-    'canonical-source-retained-generations',
-    CANONICAL_SOURCE_SQL.retainedGenerations,
-    maxPointValues,
-    maxRetainedRow * CANONICAL_SOURCE_GENERATION_CAPACITY,
-    CANONICAL_SOURCE_GENERATION_CAPACITY,
-    point(
-      CANONICAL_SOURCE_SQL.retainedGenerations,
-      maxPointValues,
-      maxRetainedRow * CANONICAL_SOURCE_GENERATION_CAPACITY,
-      CANONICAL_SOURCE_GENERATION_CAPACITY,
-      8,
-    ),
-  ),
-  insertGeneration: statement(
-    'canonical-source-insert-generation',
-    CANONICAL_SOURCE_SQL.insertGeneration,
-    insertGenerationValues,
-    0,
-    0,
-    point(CANONICAL_SOURCE_SQL.insertGeneration, insertGenerationValues, 0, 0, 6),
-  ),
-  seek: statement(
-    'canonical-group-seek',
-    CANONICAL_SOURCE_SQL.seek,
-    seekValues,
-    maxSeekRow,
-    1,
-    sqlBound({
-      candidateKeys: 1,
-      nativeRows: 8,
-      identityMetadataRows: 0,
-      emptySeeks: 1,
-      nativePoints: 1,
-      witnessKeys: 0,
-      statements: 1,
-      bytes: bytesOf(CANONICAL_SOURCE_SQL.seek, seekValues, maxSeekRow),
+export function CANONICAL_SOURCE_STATEMENTS() {
+  return memoizedValue(CANONICAL_SOURCE_STATEMENTS, () =>
+    Object.freeze({
+      scope: statement(
+        'canonical-source-scope',
+        CANONICAL_SOURCE_SQL.scope,
+        maxScopeValues,
+        maxScopeRow,
+        1,
+        point(CANONICAL_SOURCE_SQL.scope, maxScopeValues, maxScopeRow, 1, 4),
+      ),
+      head: statement(
+        'canonical-source-head',
+        CANONICAL_SOURCE_SQL.head,
+        maxPointValues,
+        maxHeadRow,
+        1,
+        point(CANONICAL_SOURCE_SQL.head, maxPointValues, maxHeadRow),
+      ),
+      generation: statement(
+        'canonical-source-generation',
+        CANONICAL_SOURCE_SQL.generation,
+        maxGenerationValues,
+        maxGenerationRow,
+        1,
+        point(CANONICAL_SOURCE_SQL.generation, maxGenerationValues, maxGenerationRow, 1, 8),
+      ),
+      workingGeneration: statement(
+        'canonical-source-working-generation',
+        CANONICAL_SOURCE_SQL.workingGeneration,
+        maxWorkingValues,
+        maxGenerationRow,
+        1,
+        point(CANONICAL_SOURCE_SQL.workingGeneration, maxWorkingValues, maxGenerationRow, 1, 8),
+      ),
+      generationLock: statement(
+        'canonical-source-generation-lock',
+        CANONICAL_SOURCE_SQL.generationLock,
+        maxGenerationValues,
+        maxGenerationRow,
+        1,
+        point(CANONICAL_SOURCE_SQL.generationLock, maxGenerationValues, maxGenerationRow, 1, 8),
+      ),
+      sourceLock: statement(
+        'canonical-source-collection-lock',
+        CANONICAL_SOURCE_SQL.sourceLock,
+        maxSourceLockValues,
+        maxLockRow,
+        1,
+        point(CANONICAL_SOURCE_SQL.sourceLock, maxSourceLockValues, maxLockRow),
+      ),
+      factLock: statement(
+        'canonical-source-fact-lock',
+        CANONICAL_SOURCE_SQL.factLock,
+        maxFactLockValues,
+        maxLockRow,
+        1,
+        point(CANONICAL_SOURCE_SQL.factLock, maxFactLockValues, maxLockRow),
+      ),
+      abandon: statement(
+        'canonical-source-abandon',
+        CANONICAL_SOURCE_SQL.abandon,
+        maxGenerationValues,
+        0,
+        0,
+        point(CANONICAL_SOURCE_SQL.abandon, maxGenerationValues, 0),
+      ),
+      retainedGenerations: statement(
+        'canonical-source-retained-generations',
+        CANONICAL_SOURCE_SQL.retainedGenerations,
+        maxPointValues,
+        maxRetainedRow * CANONICAL_SOURCE_GENERATION_CAPACITY,
+        CANONICAL_SOURCE_GENERATION_CAPACITY,
+        point(
+          CANONICAL_SOURCE_SQL.retainedGenerations,
+          maxPointValues,
+          maxRetainedRow * CANONICAL_SOURCE_GENERATION_CAPACITY,
+          CANONICAL_SOURCE_GENERATION_CAPACITY,
+          8,
+        ),
+      ),
+      insertGeneration: statement(
+        'canonical-source-insert-generation',
+        CANONICAL_SOURCE_SQL.insertGeneration,
+        insertGenerationValues,
+        0,
+        0,
+        point(CANONICAL_SOURCE_SQL.insertGeneration, insertGenerationValues, 0, 0, 6),
+      ),
+      seek: statement(
+        'canonical-group-seek',
+        CANONICAL_SOURCE_SQL.seek,
+        seekValues,
+        maxSeekRow,
+        1,
+        sqlBound({
+          candidateKeys: 1,
+          nativeRows: 8,
+          identityMetadataRows: 0,
+          emptySeeks: 1,
+          nativePoints: 1,
+          witnessKeys: 0,
+          statements: 1,
+          bytes: bytesOf(CANONICAL_SOURCE_SQL.seek, seekValues, maxSeekRow),
+        }),
+        true,
+      ),
+      insertReference: statement(
+        'canonical-source-insert-reference',
+        CANONICAL_SOURCE_SQL.insertReference,
+        maxInsertValues,
+        0,
+        0,
+        point(CANONICAL_SOURCE_SQL.insertReference, maxInsertValues, 0, 0, 4),
+      ),
+      updateFrontier: statement(
+        'canonical-source-update-frontier',
+        CANONICAL_SOURCE_SQL.updateFrontier,
+        updateFrontierValues,
+        0,
+        0,
+        point(CANONICAL_SOURCE_SQL.updateFrontier, updateFrontierValues, 0, 0, 6),
+      ),
+      completeGeneration: statement(
+        'canonical-source-complete-generation',
+        CANONICAL_SOURCE_SQL.completeGeneration,
+        maxGenerationValues,
+        0,
+        0,
+        point(CANONICAL_SOURCE_SQL.completeGeneration, maxGenerationValues, 0),
+      ),
+      publishHead: statement(
+        'canonical-source-publish-head',
+        CANONICAL_SOURCE_SQL.publishHead,
+        [maxRoute, maxUuid, maxUuid],
+        0,
+        0,
+        point(CANONICAL_SOURCE_SQL.publishHead, [maxRoute, maxUuid, maxUuid], 0, 0, 6),
+      ),
+      retainedScopes: statement(
+        'canonical-source-retained-scopes',
+        CANONICAL_SOURCE_SQL.retainedScopes,
+        maxPointValues,
+        maxScopeFenceRow * CANONICAL_SOURCE_SCOPE_CAPACITY,
+        CANONICAL_SOURCE_SCOPE_CAPACITY,
+        point(
+          CANONICAL_SOURCE_SQL.retainedScopes,
+          maxPointValues,
+          maxScopeFenceRow * CANONICAL_SOURCE_SCOPE_CAPACITY,
+          CANONICAL_SOURCE_SCOPE_CAPACITY,
+          8,
+        ),
+      ),
+      insertScope: statement(
+        'canonical-source-insert-scope',
+        CANONICAL_SOURCE_SQL.insertScope,
+        insertScopeValues,
+        0,
+        0,
+        point(CANONICAL_SOURCE_SQL.insertScope, insertScopeValues, 0, 0, 6),
+      ),
+      updateScopeFrontier: statement(
+        'canonical-source-update-scope-frontier',
+        CANONICAL_SOURCE_SQL.updateScopeFrontier,
+        updateScopeFrontierValues,
+        jsonBytes([{ collection_id: maxUuid }]),
+        1,
+        point(
+          CANONICAL_SOURCE_SQL.updateScopeFrontier,
+          updateScopeFrontierValues,
+          jsonBytes([{ collection_id: maxUuid }]),
+        ),
+      ),
+      commitScopeCapture: statement(
+        'canonical-source-commit-scope-capture',
+        CANONICAL_SOURCE_SQL.commitScopeCapture,
+        commitScopeValues,
+        0,
+        0,
+        point(CANONICAL_SOURCE_SQL.commitScopeCapture, commitScopeValues, 0, 0, 12),
+      ),
     }),
-    true,
-  ),
-  insertReference: statement(
-    'canonical-source-insert-reference',
-    CANONICAL_SOURCE_SQL.insertReference,
-    maxInsertValues,
-    0,
-    0,
-    point(CANONICAL_SOURCE_SQL.insertReference, maxInsertValues, 0, 0, 4),
-  ),
-  updateFrontier: statement(
-    'canonical-source-update-frontier',
-    CANONICAL_SOURCE_SQL.updateFrontier,
-    updateFrontierValues,
-    0,
-    0,
-    point(CANONICAL_SOURCE_SQL.updateFrontier, updateFrontierValues, 0, 0, 6),
-  ),
-  completeGeneration: statement(
-    'canonical-source-complete-generation',
-    CANONICAL_SOURCE_SQL.completeGeneration,
-    maxGenerationValues,
-    0,
-    0,
-    point(CANONICAL_SOURCE_SQL.completeGeneration, maxGenerationValues, 0),
-  ),
-  publishHead: statement(
-    'canonical-source-publish-head',
-    CANONICAL_SOURCE_SQL.publishHead,
-    [maxRoute, maxUuid, maxUuid],
-    0,
-    0,
-    point(CANONICAL_SOURCE_SQL.publishHead, [maxRoute, maxUuid, maxUuid], 0, 0, 6),
-  ),
-  retainedScopes: statement(
-    'canonical-source-retained-scopes',
-    CANONICAL_SOURCE_SQL.retainedScopes,
-    maxPointValues,
-    maxScopeFenceRow * CANONICAL_SOURCE_SCOPE_CAPACITY,
-    CANONICAL_SOURCE_SCOPE_CAPACITY,
-    point(
-      CANONICAL_SOURCE_SQL.retainedScopes,
-      maxPointValues,
-      maxScopeFenceRow * CANONICAL_SOURCE_SCOPE_CAPACITY,
-      CANONICAL_SOURCE_SCOPE_CAPACITY,
-      8,
-    ),
-  ),
-  insertScope: statement(
-    'canonical-source-insert-scope',
-    CANONICAL_SOURCE_SQL.insertScope,
-    insertScopeValues,
-    0,
-    0,
-    point(CANONICAL_SOURCE_SQL.insertScope, insertScopeValues, 0, 0, 6),
-  ),
-  updateScopeFrontier: statement(
-    'canonical-source-update-scope-frontier',
-    CANONICAL_SOURCE_SQL.updateScopeFrontier,
-    updateScopeFrontierValues,
-    jsonBytes([{ collection_id: maxUuid }]),
-    1,
-    point(CANONICAL_SOURCE_SQL.updateScopeFrontier, updateScopeFrontierValues, jsonBytes([{ collection_id: maxUuid }])),
-  ),
-  commitScopeCapture: statement(
-    'canonical-source-commit-scope-capture',
-    CANONICAL_SOURCE_SQL.commitScopeCapture,
-    commitScopeValues,
-    0,
-    0,
-    point(CANONICAL_SOURCE_SQL.commitScopeCapture, commitScopeValues, 0, 0, 12),
-  ),
-});
+  );
+}
 
 export function canonicalSourceGroupStatement(limit: number): CanonicalSourceStatement {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > CANONICAL_SOURCE_RAW_KEY_LIMIT)
@@ -501,82 +514,116 @@ export function canonicalSourceGroupStatement(limit: number): CanonicalSourceSta
   return statement('canonical-group-page', CANONICAL_SOURCE_SQL.group, maxGroupValues, resultBytes, limit, bound, true);
 }
 
-const metadataBound = sqlBound({
-  candidateKeys: 0,
-  nativeRows: 24,
-  identityMetadataRows: 0,
-  emptySeeks: 5,
-  nativePoints: 5,
-  witnessKeys: 0,
-  statements: 5,
-  bytes: 2_097_152,
-});
-const identitySweepBound = sqlBound({
-  candidateKeys: 0,
-  nativeRows: CANONICAL_SOURCE_IDENTITY_SWEEP_HOMES * CANONICAL_SOURCE_IDENTITY_SWEEPS,
-  identityMetadataRows: CANONICAL_SOURCE_IDENTITY_SWEEP_HOMES * CANONICAL_SOURCE_IDENTITY_SWEEPS,
-  emptySeeks: CANONICAL_SOURCE_IDENTITY_SWEEPS,
-  nativePoints: CANONICAL_SOURCE_IDENTITY_SWEEPS,
-  witnessKeys: 0,
-  statements: CANONICAL_SOURCE_IDENTITY_SWEEPS,
-  bytes: identityJsonCeiling * CANONICAL_SOURCE_IDENTITY_SWEEPS,
-});
+function metadataBound() {
+  return memoizedValue(metadataBound, () =>
+    sqlBound({
+      candidateKeys: 0,
+      nativeRows: 24,
+      identityMetadataRows: 0,
+      emptySeeks: 5,
+      nativePoints: 5,
+      witnessKeys: 0,
+      statements: 5,
+      bytes: 2_097_152,
+    }),
+  );
+}
+function identitySweepBound() {
+  return memoizedValue(identitySweepBound, () =>
+    sqlBound({
+      candidateKeys: 0,
+      nativeRows: CANONICAL_SOURCE_IDENTITY_SWEEP_HOMES * CANONICAL_SOURCE_IDENTITY_SWEEPS,
+      identityMetadataRows: CANONICAL_SOURCE_IDENTITY_SWEEP_HOMES * CANONICAL_SOURCE_IDENTITY_SWEEPS,
+      emptySeeks: CANONICAL_SOURCE_IDENTITY_SWEEPS,
+      nativePoints: CANONICAL_SOURCE_IDENTITY_SWEEPS,
+      witnessKeys: 0,
+      statements: CANONICAL_SOURCE_IDENTITY_SWEEPS,
+      bytes: identityJsonCeiling * CANONICAL_SOURCE_IDENTITY_SWEEPS,
+    }),
+  );
+}
 
-const mappingOwners = sqlBound({
-  candidateKeys: 0,
-  nativeRows: 2,
-  identityMetadataRows: 0,
-  emptySeeks: 1,
-  nativePoints: 1,
-  witnessKeys: 0,
-  statements: 1,
-  bytes: bytesOf(ownersSql.sql, maxOwnersValues, maxPartitionRow),
-});
-const mappingSources = sqlBound({
-  candidateKeys: 0,
-  nativeRows: 8,
-  identityMetadataRows: 0,
-  emptySeeks: 1,
-  nativePoints: 4,
-  witnessKeys: 0,
-  statements: 1,
-  bytes: bytesOf(sourcesSql.sql, maxSourcesValues, maxMappingSourceRow),
-});
-const mappingPending = sqlBound({
-  candidateKeys: 0,
-  nativeRows: 2,
-  identityMetadataRows: 0,
-  emptySeeks: 1,
-  nativePoints: 1,
-  witnessKeys: 0,
-  statements: 1,
-  bytes: bytesOf(pendingSql.sql, maxPendingValues, maxPendingRow),
-});
-const mappingCurrent = sqlBound({
-  candidateKeys: 0,
-  nativeRows: 6,
-  identityMetadataRows: 0,
-  emptySeeks: 1,
-  nativePoints: 4,
-  witnessKeys: 0,
-  statements: 1,
-  bytes: bytesOf(currentSql.sql, maxCurrentValues, maxCurrentRow),
-});
-const mappingCollect = sumBounds(mappingOwners, mappingSources, mappingOwners, mappingPending, mappingCurrent);
-const mappingOriginal = sumBounds(mappingCollect, mappingCollect);
+function mappingOwners() {
+  return memoizedValue(mappingOwners, () =>
+    sqlBound({
+      candidateKeys: 0,
+      nativeRows: 2,
+      identityMetadataRows: 0,
+      emptySeeks: 1,
+      nativePoints: 1,
+      witnessKeys: 0,
+      statements: 1,
+      bytes: bytesOf(ownersSql.sql, maxOwnersValues, maxPartitionRow),
+    }),
+  );
+}
+function mappingSources() {
+  return memoizedValue(mappingSources, () =>
+    sqlBound({
+      candidateKeys: 0,
+      nativeRows: 8,
+      identityMetadataRows: 0,
+      emptySeeks: 1,
+      nativePoints: 4,
+      witnessKeys: 0,
+      statements: 1,
+      bytes: bytesOf(sourcesSql.sql, maxSourcesValues, maxMappingSourceRow),
+    }),
+  );
+}
+function mappingPending() {
+  return memoizedValue(mappingPending, () =>
+    sqlBound({
+      candidateKeys: 0,
+      nativeRows: 2,
+      identityMetadataRows: 0,
+      emptySeeks: 1,
+      nativePoints: 1,
+      witnessKeys: 0,
+      statements: 1,
+      bytes: bytesOf(pendingSql.sql, maxPendingValues, maxPendingRow),
+    }),
+  );
+}
+function mappingCurrent() {
+  return memoizedValue(mappingCurrent, () =>
+    sqlBound({
+      candidateKeys: 0,
+      nativeRows: 6,
+      identityMetadataRows: 0,
+      emptySeeks: 1,
+      nativePoints: 4,
+      witnessKeys: 0,
+      statements: 1,
+      bytes: bytesOf(currentSql.sql, maxCurrentValues, maxCurrentRow),
+    }),
+  );
+}
+function mappingCollect() {
+  return memoizedValue(mappingCollect, () =>
+    sumBounds(mappingOwners(), mappingSources(), mappingOwners(), mappingPending(), mappingCurrent()),
+  );
+}
+function mappingOriginal() {
+  return memoizedValue(mappingOriginal, () => sumBounds(mappingCollect(), mappingCollect()));
+}
 
 export function canonicalSourceMappingBound(originalCount: number): CanonicalSourceSqlBound {
   if (!Number.isSafeInteger(originalCount) || originalCount < 0 || originalCount > CANONICAL_SOURCE_RAW_KEY_LIMIT)
     throw new RangeError('Canonical Source mapping page must contain at most 100 originals');
-  const total = repeatBound(mappingOriginal, originalCount);
+  const total = repeatBound(mappingOriginal(), originalCount);
   if (total.engineRequests !== 0) throw new TypeError('Canonical Source mapping cannot issue engine requests');
   return Object.freeze({ ...total, engineRequests: 0 });
 }
 
-const ownerFactsCeiling = Math.max(
-  bytesOf(ownerFactsSql.sql, maxOwnerFactValues, maxOwnerFactRow * CANONICAL_SOURCE_RAW_KEY_LIMIT),
-  bytesOf(labelOriginalsSql.sql, maxOwnerFactValues, maxOwnerFactRow * CANONICAL_SOURCE_RAW_KEY_LIMIT),
-);
+function ownerFactsCeiling() {
+  return memoizedValue(ownerFactsCeiling, () =>
+    Math.max(
+      bytesOf(ownerFactsSql.sql, maxOwnerFactValues, maxOwnerFactRow * CANONICAL_SOURCE_RAW_KEY_LIMIT),
+      bytesOf(labelOriginalsSql.sql, maxOwnerFactValues, maxOwnerFactRow * CANONICAL_SOURCE_RAW_KEY_LIMIT),
+    ),
+  );
+}
 
 export function canonicalSourceOwnerFactBound(limit: number): CanonicalSourceSqlBound {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > CANONICAL_SOURCE_RAW_KEY_LIMIT)
@@ -606,114 +653,151 @@ export function canonicalSourceRawWindowBound(limit: number): CanonicalSourceSql
     nativePoints: 1,
     witnessKeys: 0,
     statements: 1,
-    bytes: Math.max(owner.bytes, ownerFactsCeiling),
+    bytes: Math.max(owner.bytes, ownerFactsCeiling()),
   });
   return owner.bytes >= collection.bytes ? owner : collection;
 }
 
-export const CANONICAL_SOURCE_RECEIVING_COST = Object.freeze({
-  metadata: metadataBound,
-  sourceScope: CANONICAL_SOURCE_STATEMENTS.scope.bound,
-  sourceHead: CANONICAL_SOURCE_STATEMENTS.head.bound,
-  sourceGeneration: CANONICAL_SOURCE_STATEMENTS.generation.bound,
-  seek: CANONICAL_SOURCE_STATEMENTS.seek.bound,
-  group(limit: number): CanonicalSourceSqlBound {
-    return canonicalSourceGroupStatement(limit).bound;
-  },
-  state: sumBounds(
-    metadataBound,
-    CANONICAL_SOURCE_STATEMENTS.scope.bound,
-    CANONICAL_SOURCE_STATEMENTS.head.bound,
-    CANONICAL_SOURCE_STATEMENTS.generation.bound,
-  ),
-});
+export function CANONICAL_SOURCE_RECEIVING_COST() {
+  return memoizedValue(CANONICAL_SOURCE_RECEIVING_COST, () =>
+    Object.freeze({
+      metadata: metadataBound(),
+      sourceScope: CANONICAL_SOURCE_STATEMENTS().scope.bound,
+      sourceHead: CANONICAL_SOURCE_STATEMENTS().head.bound,
+      sourceGeneration: CANONICAL_SOURCE_STATEMENTS().generation.bound,
+      seek: CANONICAL_SOURCE_STATEMENTS().seek.bound,
+      group(limit: number): CanonicalSourceSqlBound {
+        return canonicalSourceGroupStatement(limit).bound;
+      },
+      state: sumBounds(
+        metadataBound(),
+        CANONICAL_SOURCE_STATEMENTS().scope.bound,
+        CANONICAL_SOURCE_STATEMENTS().head.bound,
+        CANONICAL_SOURCE_STATEMENTS().generation.bound,
+      ),
+    }),
+  );
+}
 
-const observation = sumBounds(metadataBound, CANONICAL_SOURCE_STATEMENTS.scope.bound, identitySweepBound);
-const begin = sumBounds(
-  CANONICAL_SOURCE_STATEMENTS.sourceLock.bound,
-  CANONICAL_SOURCE_STATEMENTS.factLock.bound,
-  CANONICAL_SOURCE_STATEMENTS.workingGeneration.bound,
-  CANONICAL_SOURCE_STATEMENTS.abandon.bound,
-  CANONICAL_SOURCE_STATEMENTS.retainedGenerations.bound,
-  CANONICAL_SOURCE_STATEMENTS.insertGeneration.bound,
-  SELECTED_COST.enqueue,
-);
+function observation() {
+  return memoizedValue(observation, () =>
+    sumBounds(metadataBound(), CANONICAL_SOURCE_STATEMENTS().scope.bound, identitySweepBound()),
+  );
+}
+function begin() {
+  return memoizedValue(begin, () =>
+    sumBounds(
+      CANONICAL_SOURCE_STATEMENTS().sourceLock.bound,
+      CANONICAL_SOURCE_STATEMENTS().factLock.bound,
+      CANONICAL_SOURCE_STATEMENTS().workingGeneration.bound,
+      CANONICAL_SOURCE_STATEMENTS().abandon.bound,
+      CANONICAL_SOURCE_STATEMENTS().retainedGenerations.bound,
+      CANONICAL_SOURCE_STATEMENTS().insertGeneration.bound,
+      SELECTED_COST().enqueue,
+    ),
+  );
+}
 const repairWrite = (limit: number) =>
   sumBounds(
-    CANONICAL_SOURCE_STATEMENTS.sourceLock.bound,
-    CANONICAL_SOURCE_STATEMENTS.factLock.bound,
-    CANONICAL_SOURCE_STATEMENTS.generationLock.bound,
-    repeatBound(CANONICAL_SOURCE_STATEMENTS.insertReference.bound, limit),
-    CANONICAL_SOURCE_STATEMENTS.updateFrontier.bound,
-    SELECTED_COST.enqueue,
+    CANONICAL_SOURCE_STATEMENTS().sourceLock.bound,
+    CANONICAL_SOURCE_STATEMENTS().factLock.bound,
+    CANONICAL_SOURCE_STATEMENTS().generationLock.bound,
+    repeatBound(CANONICAL_SOURCE_STATEMENTS().insertReference.bound, limit),
+    CANONICAL_SOURCE_STATEMENTS().updateFrontier.bound,
+    SELECTED_COST().enqueue,
   );
-const publish = sumBounds(
-  CANONICAL_SOURCE_STATEMENTS.sourceLock.bound,
-  CANONICAL_SOURCE_STATEMENTS.factLock.bound,
-  CANONICAL_SOURCE_STATEMENTS.generationLock.bound,
-  CANONICAL_SOURCE_STATEMENTS.completeGeneration.bound,
-  CANONICAL_SOURCE_STATEMENTS.publishHead.bound,
-);
-const readback = sumBounds(
-  observation,
-  CANONICAL_SOURCE_STATEMENTS.head.bound,
-  CANONICAL_SOURCE_STATEMENTS.generation.bound,
-);
-const executionAttempt = sumBounds(OPERATIONAL_WORK_COST.attempt, SELECTED_COST.enqueue, SELECTED_COST.rollback);
-const executionEnvelope = sumBounds(
-  SELECTED_COST.consume,
-  repeatBound(executionAttempt, CANONICAL_SOURCE_ATTEMPTS),
-  SELECTED_CLEANUP_DECLARATION,
-);
+function publish() {
+  return memoizedValue(publish, () =>
+    sumBounds(
+      CANONICAL_SOURCE_STATEMENTS().sourceLock.bound,
+      CANONICAL_SOURCE_STATEMENTS().factLock.bound,
+      CANONICAL_SOURCE_STATEMENTS().generationLock.bound,
+      CANONICAL_SOURCE_STATEMENTS().completeGeneration.bound,
+      CANONICAL_SOURCE_STATEMENTS().publishHead.bound,
+    ),
+  );
+}
+function readback() {
+  return memoizedValue(readback, () =>
+    sumBounds(observation(), CANONICAL_SOURCE_STATEMENTS().head.bound, CANONICAL_SOURCE_STATEMENTS().generation.bound),
+  );
+}
+function executionAttempt() {
+  return memoizedValue(executionAttempt, () =>
+    sumBounds(OPERATIONAL_WORK_COST().attempt, SELECTED_COST().enqueue, SELECTED_COST().rollback),
+  );
+}
+function executionEnvelope() {
+  return memoizedValue(executionEnvelope, () =>
+    sumBounds(
+      SELECTED_COST().consume,
+      repeatBound(executionAttempt(), CANONICAL_SOURCE_ATTEMPTS()),
+      SELECTED_CLEANUP_DECLARATION(),
+    ),
+  );
+}
 
-export const CANONICAL_SOURCE_TERMS = Object.freeze({
-  observation,
-  begin,
-  rawWindow: canonicalSourceRawWindowBound(CANONICAL_SOURCE_RAW_KEY_LIMIT),
-  mapping: canonicalSourceMappingBound(CANONICAL_SOURCE_RAW_KEY_LIMIT),
-  repairWrite: repairWrite(CANONICAL_SOURCE_RAW_KEY_LIMIT),
-  publish,
-  readback,
-  seek: CANONICAL_SOURCE_STATEMENTS.seek.bound,
-  group: canonicalSourceGroupStatement(CANONICAL_SOURCE_RAW_KEY_LIMIT).bound,
-  executionEnvelope,
-});
+export function CANONICAL_SOURCE_TERMS() {
+  return memoizedValue(CANONICAL_SOURCE_TERMS, () =>
+    Object.freeze({
+      observation: observation(),
+      begin: begin(),
+      rawWindow: canonicalSourceRawWindowBound(CANONICAL_SOURCE_RAW_KEY_LIMIT),
+      mapping: canonicalSourceMappingBound(CANONICAL_SOURCE_RAW_KEY_LIMIT),
+      repairWrite: repairWrite(CANONICAL_SOURCE_RAW_KEY_LIMIT),
+      publish: publish(),
+      readback: readback(),
+      seek: CANONICAL_SOURCE_STATEMENTS().seek.bound,
+      group: canonicalSourceGroupStatement(CANONICAL_SOURCE_RAW_KEY_LIMIT).bound,
+      executionEnvelope: executionEnvelope(),
+    }),
+  );
+}
 
-export const CANONICAL_SOURCE_REPAIR_STEP = sumBounds(
-  observation,
-  observation,
-  CANONICAL_SOURCE_TERMS.rawWindow,
-  CANONICAL_SOURCE_TERMS.mapping,
-  CANONICAL_SOURCE_TERMS.repairWrite,
-  executionEnvelope,
-);
-export const CANONICAL_SOURCE_PUBLICATION_STEP = sumBounds(observation, publish, executionEnvelope);
-export const CANONICAL_SOURCE_COMPLETED_READBACK = readback;
+export function CANONICAL_SOURCE_REPAIR_STEP() {
+  return memoizedValue(CANONICAL_SOURCE_REPAIR_STEP, () =>
+    sumBounds(
+      observation(),
+      observation(),
+      CANONICAL_SOURCE_TERMS().rawWindow,
+      CANONICAL_SOURCE_TERMS().mapping,
+      CANONICAL_SOURCE_TERMS().repairWrite,
+      executionEnvelope(),
+    ),
+  );
+}
+export function CANONICAL_SOURCE_PUBLICATION_STEP() {
+  return memoizedValue(CANONICAL_SOURCE_PUBLICATION_STEP, () =>
+    sumBounds(observation(), publish(), executionEnvelope()),
+  );
+}
+export function CANONICAL_SOURCE_COMPLETED_READBACK() {
+  return memoizedValue(CANONICAL_SOURCE_COMPLETED_READBACK, () => readback());
+}
 
-if (CANONICAL_SOURCE_REPAIR_STEP.candidateKeys > CANONICAL_SOURCE_RAW_KEY_LIMIT)
-  throw new TypeError('Canonical Source repair step exceeds the native 100 raw ceiling');
-if (CANONICAL_SOURCE_REPAIR_STEP.engineRequests !== 0)
-  throw new TypeError('Canonical Source repair cannot issue engine requests');
-
-export const CANONICAL_SOURCE_DECLARATION = Object.freeze({
-  status: 'complete' as const,
-  axes: CANONICAL_SOURCE_AXES,
-  limits: Object.freeze({
-    rawKeys: CANONICAL_SOURCE_RAW_KEY_LIMIT,
-    zoneAggregate: CANONICAL_SOURCE_ZONE_AGGREGATE,
-    generations: CANONICAL_SOURCE_GENERATION_CAPACITY,
-    scopes: CANONICAL_SOURCE_SCOPE_CAPACITY,
-    attempts: CANONICAL_SOURCE_ATTEMPTS,
-    identitySweepHomes: CANONICAL_SOURCE_IDENTITY_SWEEP_HOMES,
-    identitySweeps: CANONICAL_SOURCE_IDENTITY_SWEEPS,
-  }),
-  statements: CANONICAL_SOURCE_STATEMENTS,
-  terms: CANONICAL_SOURCE_TERMS,
-  repair: CANONICAL_SOURCE_REPAIR_STEP,
-  publication: CANONICAL_SOURCE_PUBLICATION_STEP,
-  readback: CANONICAL_SOURCE_COMPLETED_READBACK,
-  receiving: CANONICAL_SOURCE_RECEIVING_COST,
-});
+export function CANONICAL_SOURCE_DECLARATION() {
+  return memoizedValue(CANONICAL_SOURCE_DECLARATION, () =>
+    Object.freeze({
+      status: 'complete' as const,
+      axes: CANONICAL_SOURCE_AXES(),
+      limits: Object.freeze({
+        rawKeys: CANONICAL_SOURCE_RAW_KEY_LIMIT,
+        zoneAggregate: CANONICAL_SOURCE_ZONE_AGGREGATE,
+        generations: CANONICAL_SOURCE_GENERATION_CAPACITY,
+        scopes: CANONICAL_SOURCE_SCOPE_CAPACITY,
+        attempts: CANONICAL_SOURCE_ATTEMPTS(),
+        identitySweepHomes: CANONICAL_SOURCE_IDENTITY_SWEEP_HOMES,
+        identitySweeps: CANONICAL_SOURCE_IDENTITY_SWEEPS,
+      }),
+      statements: CANONICAL_SOURCE_STATEMENTS(),
+      terms: CANONICAL_SOURCE_TERMS(),
+      repair: CANONICAL_SOURCE_REPAIR_STEP(),
+      publication: CANONICAL_SOURCE_PUBLICATION_STEP(),
+      readback: CANONICAL_SOURCE_COMPLETED_READBACK(),
+      receiving: CANONICAL_SOURCE_RECEIVING_COST(),
+    }),
+  );
+}
 
 /** Adapter edge for the existing eight-axis native observer. Canonical SQL declares zero engine requests. */
 export function canonicalSourceWorkDimensions(bound: Bound): WorkDimensions {
@@ -732,7 +816,7 @@ export function canonicalSourceWorkDimensions(bound: Bound): WorkDimensions {
   });
 }
 
-export function canonicalSourceCallAllowance(bound: Bound = CANONICAL_SOURCE_REPAIR_STEP): Readonly<{
+export function canonicalSourceCallAllowance(bound: Bound = CANONICAL_SOURCE_REPAIR_STEP()): Readonly<{
   rawKeys: number;
   nativeRows: number;
   nativePoints: number;

@@ -1,8 +1,11 @@
+import { memoizedValue } from '../memoized.ts';
 import type { PoolClient } from 'pg';
 import { partitionOf, routeOf } from '../route/route.ts';
 import historyPageQuery from './maintenance-history-page.sql';
 import { shelfMaintenanceQuery } from './shelf-maintenance-bounds.ts';
-const historyPage = shelfMaintenanceQuery(historyPageQuery);
+function historyPage() {
+  return memoizedValue(historyPage, () => shelfMaintenanceQuery(historyPageQuery));
+}
 
 export type MaintenanceHistoryPage = {
   count: number;
@@ -25,7 +28,7 @@ export async function readMaintenanceHistoryPage(
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
     throw new RangeError('History page limit must be an integer from 1 to 100');
 
-  const row = await historyPage.run(client, {
+  const row = await historyPage().run(client, {
     route,
     account_id: accountId,
     session_id: sessionId,

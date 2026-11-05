@@ -1,11 +1,14 @@
+import { memoizedValue } from '../memoized.ts';
 import type { PoolClient } from 'pg';
 import { ROUTES, routeOf } from '../route/route.ts';
 import sessionPageQuery from './maintenance-session-page.sql';
 import { shelfMaintenanceQuery } from './shelf-maintenance-bounds.ts';
-const sessionPage = shelfMaintenanceQuery(sessionPageQuery);
+function sessionPage() {
+  return memoizedValue(sessionPage, () => shelfMaintenanceQuery(sessionPageQuery));
+}
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
-type MaintenanceSession = Awaited<ReturnType<typeof sessionPage.run>>[number];
+type MaintenanceSession = Awaited<ReturnType<ReturnType<typeof sessionPage>['run']>>[number];
 
 /**
  * Private source inputs only, with exact stored timestamps. The caller owns the repeatable-read snapshot and
@@ -23,7 +26,7 @@ export async function readMaintenanceSessions(
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
     throw new RangeError('Limit must be an integer from 1 to 100');
 
-  const sessions = await sessionPage.run(client, {
+  const sessions = await sessionPage().run(client, {
     route,
     account_id: accountId,
     after: after ?? NIL_UUID,

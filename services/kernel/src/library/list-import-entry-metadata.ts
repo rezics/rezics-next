@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import type {
   PersonalEntryFieldChange,
@@ -26,17 +27,23 @@ import {
 import { ProblemError } from '../http/problem.ts';
 import type { LabelCommandAdmission } from './label-command-admission.ts';
 
-export const ENTRY_IMPORT_METADATA_LIMITS = {
-  fields: 5,
-  reviewsPerRow: 2,
-  requestBytes: 2048,
-  reviewBytes: 32768,
-  rowBytes: 65536,
-  noteBytes: MAX_PERSONAL_NOTE_BYTES,
-  privacyValueBytes: MAX_SOURCE_PRIVACY_VALUE_BYTES,
-  timestampBytes: MAX_SOURCE_TIMESTAMP_LENGTH,
-  responseBytes: 65536,
-} as const;
+export function ENTRY_IMPORT_METADATA_LIMITS() {
+  return memoizedValue(
+    ENTRY_IMPORT_METADATA_LIMITS,
+    () =>
+      ({
+        fields: 5,
+        reviewsPerRow: 2,
+        requestBytes: 2048,
+        reviewBytes: 32768,
+        rowBytes: 65536,
+        noteBytes: MAX_PERSONAL_NOTE_BYTES,
+        privacyValueBytes: MAX_SOURCE_PRIVACY_VALUE_BYTES,
+        timestampBytes: MAX_SOURCE_TIMESTAMP_LENGTH,
+        responseBytes: 65536,
+      }) as const,
+  );
+}
 
 export type EntryImportMetadataField = 'note' | 'priority' | 'privacy' | 'sourceCreated' | 'sourceUpdated';
 export type EntryImportMetadataProposal = Readonly<{
@@ -119,7 +126,7 @@ export type EntryImportMetadataView = Readonly<{
 const fields = new Set<EntryImportMetadataField>(['note', 'priority', 'privacy', 'sourceCreated', 'sourceUpdated']);
 
 export function parseEntryImportMetadataSelections(value: unknown): EntryImportMetadataSelection[] {
-  if (!Array.isArray(value) || value.length < 1 || value.length > ENTRY_IMPORT_METADATA_LIMITS.fields)
+  if (!Array.isArray(value) || value.length < 1 || value.length > ENTRY_IMPORT_METADATA_LIMITS().fields)
     throw new ProblemError('invalid_request');
   const result: EntryImportMetadataSelection[] = [];
   for (const item of value) {
@@ -140,7 +147,7 @@ export function parseEntryImportMetadataSelections(value: unknown): EntryImportM
     });
   }
   if (new Set(result.map((item) => item.field)).size !== result.length) throw new ProblemError('invalid_request');
-  if (Buffer.byteLength(JSON.stringify(result)) > ENTRY_IMPORT_METADATA_LIMITS.requestBytes)
+  if (Buffer.byteLength(JSON.stringify(result)) > ENTRY_IMPORT_METADATA_LIMITS().requestBytes)
     throw new ProblemError('invalid_request');
   return result;
 }
@@ -179,9 +186,9 @@ export function metadataValueState(value: EntryImportMetadataProposal): string {
 
 export function assertEntryImportMetadataHistorySize(history: readonly EntryImportMetadataReview[]): void {
   if (
-    history.length > ENTRY_IMPORT_METADATA_LIMITS.reviewsPerRow ||
-    history.some((item) => Buffer.byteLength(JSON.stringify(item)) > ENTRY_IMPORT_METADATA_LIMITS.reviewBytes) ||
-    Buffer.byteLength(JSON.stringify(history)) > ENTRY_IMPORT_METADATA_LIMITS.rowBytes
+    history.length > ENTRY_IMPORT_METADATA_LIMITS().reviewsPerRow ||
+    history.some((item) => Buffer.byteLength(JSON.stringify(item)) > ENTRY_IMPORT_METADATA_LIMITS().reviewBytes) ||
+    Buffer.byteLength(JSON.stringify(history)) > ENTRY_IMPORT_METADATA_LIMITS().rowBytes
   )
     throw new ProblemError('invalid_request');
 }
@@ -251,7 +258,7 @@ export async function applyEntryImportMetadataCommands(input: {
     if (selection.field === 'note')
       return (
         typeof proposal.value === 'string' &&
-        Buffer.byteLength(proposal.value) <= ENTRY_IMPORT_METADATA_LIMITS.noteBytes
+        Buffer.byteLength(proposal.value) <= ENTRY_IMPORT_METADATA_LIMITS().noteBytes
       );
     if (selection.field === 'priority') {
       if (

@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
-import { Type } from 'typebox';
 import { systemClock, type KernelClock } from '../clock.ts';
 import {
   authoritativeTimeValue,
@@ -9,7 +8,6 @@ import {
   runCommand,
   type CommandTransaction,
 } from '../command/command.ts';
-import { registerEventTypes } from '../events/catalogue.ts';
 import { ProblemError } from '../http/problem.ts';
 import type { Actor } from '../request/access.ts';
 import { parseText } from './text.ts';
@@ -28,7 +26,6 @@ export const TRENDING = Object.freeze({
 });
 const DAY = 86_400_000;
 const EVENT = 'com.rezics.search.trending.changed.v1';
-registerEventTypes({ [EVENT]: Type.Object({}, { additionalProperties: false }) });
 export type TrendingSearches = { trendingSearches: { query: string; display: string }[]; next: null };
 export type TrendingOutcome = { status: 'preparing' | 'unavailable' } | { status: 'ready'; page: TrendingSearches };
 export type TrendingTerm = { key: string; language: string; source: string; display: string };

@@ -123,7 +123,7 @@ for (const boundary of [
       expect(await stepIdentityEpochMapping(f.pool, input.job)).toEqual(complete);
       expect(await f.snapshot([input.original, input.survivor])).toEqual(before);
       expect(await f.nativeDirectRedirect(input.original)).toBe(input.survivor);
-      expect(await identityEpochStore.reconcileStepReceipt(f.pool, complete.receipt)).toEqual(complete);
+      expect(await identityEpochStore().reconcileStepReceipt(f.pool, complete.receipt)).toEqual(complete);
       await assertCustody(f, input.job);
       await expect(f.publish(input.job)).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
     } finally {

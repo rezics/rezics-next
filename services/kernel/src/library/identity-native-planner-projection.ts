@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { sql as planSQL } from './identity-native-planner-read.sql';
 import { sql as jobSQL } from './identity-native-planner-job.sql';
 import { sql as currentSQL } from './identity-native-planner-current.sql';
@@ -5,10 +6,14 @@ import { sql as sealSQL } from './identity-scope-effects-seal.sql';
 import { libraryIdentitySQL } from './identity-native-planner-statements.ts';
 
 /** The SQL source owns the bounds so compiled formatting does not shape the native projection. */
-export const libraryIdentityBoundedPlanSQL = planSQL;
+export function libraryIdentityBoundedPlanSQL() {
+  return memoizedValue(libraryIdentityBoundedPlanSQL, () => planSQL);
+}
 
 /** Keep the compiled admission SQL itself within the source-owned digest bound. */
-export const libraryIdentityBoundedJobSQL = jobSQL;
+export function libraryIdentityBoundedJobSQL() {
+  return memoizedValue(libraryIdentityBoundedJobSQL, () => jobSQL);
+}
 
 /** Inclusive JSON projection from schema widths: four <=2048-byte JSON values, UTF8 scope <=256,
  * UUIDs, signed bigint decimal widths and the retained native state (two UUIDs/two <=256-byte bases).
@@ -78,38 +83,42 @@ export const libraryIdentityBoundedEffectPageSQL = projectNativeSQL(libraryIdent
 const nativeId = 'f'.repeat(36),
   decimal = '9'.repeat(20),
   escaped = String.fromCharCode(1);
-export const LIBRARY_IDENTITY_SELECTED_STATEMENTS = Object.freeze({
-  plan: Object.freeze({
-    sql: libraryIdentityBoundedPlanSQL.replace(/;\s*$/, ' FOR UPDATE'),
-    values: Object.freeze([65535, nativeId, 'f'.repeat(64)]),
-  }),
-  current: Object.freeze({
-    sql: currentSQL,
-    values: Object.freeze([
-      65535,
-      nativeId,
-      nativeId,
-      65535,
-      nativeId,
-      2147483647,
-      escaped.repeat(128),
-      decimal,
-      'active_explicit_output',
-      decimal,
-      escaped.repeat(256),
-      decimal,
-      decimal,
-      2147483647,
-      decimal,
-    ]),
-  }),
-  job: Object.freeze({ sql: libraryIdentityBoundedJobSQL, values: Object.freeze([4095, nativeId, decimal]) }),
-  seal: Object.freeze({ sql: sealSQL, values: Object.freeze([65535, nativeId, 'f'.repeat(64)]) }),
-  page: Object.freeze({
-    sql: libraryIdentityBoundedEffectPageSQL,
-    values: Object.freeze([65535, nativeId, 'f'.repeat(64), escaped.repeat(256), 'first-apply', 1]),
-  }),
-});
+export function LIBRARY_IDENTITY_SELECTED_STATEMENTS() {
+  return memoizedValue(LIBRARY_IDENTITY_SELECTED_STATEMENTS, () =>
+    Object.freeze({
+      plan: Object.freeze({
+        sql: libraryIdentityBoundedPlanSQL().replace(/;\s*$/, ' FOR UPDATE'),
+        values: Object.freeze([65535, nativeId, 'f'.repeat(64)]),
+      }),
+      current: Object.freeze({
+        sql: currentSQL,
+        values: Object.freeze([
+          65535,
+          nativeId,
+          nativeId,
+          65535,
+          nativeId,
+          2147483647,
+          escaped.repeat(128),
+          decimal,
+          'active_explicit_output',
+          decimal,
+          escaped.repeat(256),
+          decimal,
+          decimal,
+          2147483647,
+          decimal,
+        ]),
+      }),
+      job: Object.freeze({ sql: libraryIdentityBoundedJobSQL(), values: Object.freeze([4095, nativeId, decimal]) }),
+      seal: Object.freeze({ sql: sealSQL, values: Object.freeze([65535, nativeId, 'f'.repeat(64)]) }),
+      page: Object.freeze({
+        sql: libraryIdentityBoundedEffectPageSQL,
+        values: Object.freeze([65535, nativeId, 'f'.repeat(64), escaped.repeat(256), 'first-apply', 1]),
+      }),
+    }),
+  );
+}
 
 /** Bound original serialized binds before dispatch, including invalid/foreign runtime inputs.
  * Ordinary <=100 paging keeps its own enforced LIMIT; only the selected original declares LIMIT1.
@@ -122,16 +131,16 @@ export function libraryIdentitySelectedBindBound(sql: string, values: readonly u
       .trim()
       .replace(/;$/, '');
   const identity = normalize(sql);
-  const statement = Object.values(LIBRARY_IDENTITY_SELECTED_STATEMENTS).find(
+  const statement = Object.values(LIBRARY_IDENTITY_SELECTED_STATEMENTS()).find(
     (item) =>
       normalize(item.sql) === identity ||
-      (item === LIBRARY_IDENTITY_SELECTED_STATEMENTS.plan && normalize(libraryIdentityBoundedPlanSQL) === identity),
+      (item === LIBRARY_IDENTITY_SELECTED_STATEMENTS().plan && normalize(libraryIdentityBoundedPlanSQL()) === identity),
   );
   if (!statement) return true;
   const binds = JSON.stringify(values, (_key, entry: unknown) =>
     typeof entry === 'bigint' ? entry.toString() : entry,
   );
-  const ordinaryLimitDigits = statement === LIBRARY_IDENTITY_SELECTED_STATEMENTS.page ? 2 : 0;
+  const ordinaryLimitDigits = statement === LIBRARY_IDENTITY_SELECTED_STATEMENTS().page ? 2 : 0;
   return (
     values.length === statement.values.length &&
     Buffer.byteLength(binds) <= Buffer.byteLength(JSON.stringify(statement.values)) + ordinaryLimitDigits

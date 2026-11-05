@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 /** Static cost declarations for one ordinary Collection members page. */
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import {
@@ -13,47 +14,63 @@ export const ORDINARY_COLLECTION_PREFIX_GROUP_LIMIT = COLLECTION_SOURCE_WORK_GRO
 export const ORDINARY_COLLECTION_DRIVER_COUNT = COLLECTION_SOURCE_DRIVER_COUNT;
 export const ORDINARY_COLLECTION_ALIAS_LIMIT = CANONICAL_SOURCE_RAW_KEY_LIMIT;
 
-const fixedPageWork = declareBound({
-  candidateKeys: 0,
-  nativeRows: 64,
-  identityMetadataRows: 0,
-  emptySeeks: 3,
-  nativePoints: 16,
-  witnessKeys: 16,
-  statements: 12,
-  bytes: 80 * 1024,
-  engineRequests: 0,
-});
+function fixedPageWork() {
+  return memoizedValue(fixedPageWork, () =>
+    declareBound({
+      candidateKeys: 0,
+      nativeRows: 64,
+      identityMetadataRows: 0,
+      emptySeeks: 3,
+      nativePoints: 16,
+      witnessKeys: 16,
+      statements: 12,
+      bytes: 80 * 1024,
+      engineRequests: 0,
+    }),
+  );
+}
 
-const candidateWork = declareBound({
-  candidateKeys: 1,
-  nativeRows: 16,
-  identityMetadataRows: 0,
-  emptySeeks: 0,
-  nativePoints: 8,
-  witnessKeys: 8,
-  statements: 0,
-  bytes: 5120,
-  engineRequests: 0,
-});
+function candidateWork() {
+  return memoizedValue(candidateWork, () =>
+    declareBound({
+      candidateKeys: 1,
+      nativeRows: 16,
+      identityMetadataRows: 0,
+      emptySeeks: 0,
+      nativePoints: 8,
+      witnessKeys: 8,
+      statements: 0,
+      bytes: 5120,
+      engineRequests: 0,
+    }),
+  );
+}
 
-const fullFactsPerMember = declareBound({
-  candidateKeys: 1,
-  nativeRows: 32,
-  identityMetadataRows: 2,
-  emptySeeks: 2,
-  nativePoints: 8,
-  witnessKeys: 2,
-  statements: 12,
-  bytes: 64 * 1024,
-  engineRequests: 0,
-});
+function fullFactsPerMember() {
+  return memoizedValue(fullFactsPerMember, () =>
+    declareBound({
+      candidateKeys: 1,
+      nativeRows: 32,
+      identityMetadataRows: 2,
+      emptySeeks: 2,
+      nativePoints: 8,
+      witnessKeys: 2,
+      statements: 12,
+      bytes: 64 * 1024,
+      engineRequests: 0,
+    }),
+  );
+}
 
-const maximumBound = sumBounds(
-  fixedPageWork,
-  repeatBound(candidateWork, Math.min(600, 6 * ORDINARY_COLLECTION_PAGE_LIMIT + 3)),
-  repeatBound(fullFactsPerMember, ORDINARY_COLLECTION_PAGE_LIMIT),
-);
+function maximumBound() {
+  return memoizedValue(maximumBound, () =>
+    sumBounds(
+      fixedPageWork(),
+      repeatBound(candidateWork(), Math.min(600, 6 * ORDINARY_COLLECTION_PAGE_LIMIT + 3)),
+      repeatBound(fullFactsPerMember(), ORDINARY_COLLECTION_PAGE_LIMIT),
+    ),
+  );
+}
 
 export type OrdinaryCollectionPagePlan = Readonly<{
   limit: number;
@@ -81,9 +98,9 @@ export function ordinaryCollectionPagePlan(
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > ORDINARY_COLLECTION_PAGE_LIMIT)
     throw new RangeError('Ordinary Collection page limit must be 1..100');
   const candidateLimit = Math.min(600, 6 * limit + 3);
-  const sourceBound = sumBounds(fixedPageWork, repeatBound(candidateWork, candidateLimit));
-  const total = sumBounds(sourceBound, ...(view === 'FULL' ? [repeatBound(fullFactsPerMember, limit)] : []));
-  if (!withinCeiling(total, maximumBound)) throw new TypeError('Ordinary Collection page exceeds its static ceiling');
+  const sourceBound = sumBounds(fixedPageWork(), repeatBound(candidateWork(), candidateLimit));
+  const total = sumBounds(sourceBound, ...(view === 'FULL' ? [repeatBound(fullFactsPerMember(), limit)] : []));
+  if (!withinCeiling(total, maximumBound())) throw new TypeError('Ordinary Collection page exceeds its static ceiling');
   return Object.freeze({
     limit,
     view,

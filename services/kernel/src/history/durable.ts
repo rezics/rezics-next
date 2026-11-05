@@ -217,7 +217,7 @@ async function prepareIdentitySDKWorkRetirement(
         pool,
         addNativeWork(
           IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativePairWrite,
-          AGENT_IDENTITY_HISTORY_GUARD_COST,
+          AGENT_IDENTITY_HISTORY_GUARD_COST(),
           HISTORY_WORK_INVALIDATION,
         ),
       );
@@ -298,8 +298,8 @@ async function minimizeIdentitySDKWork(
       pool,
       addNativeWork(
         IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativePairWrite,
-        AGENT_IDENTITY_HISTORY_GUARD_COST,
-        AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+        AGENT_IDENTITY_HISTORY_GUARD_COST(),
+        AGENT_IDENTITY_HISTORY_ABSENCE_COST(),
         HISTORY_WORK_INVALIDATION,
         HISTORY_WORK_WAKE,
       ),
@@ -311,8 +311,8 @@ async function minimizeIdentitySDKWork(
       pool,
       addNativeWork(
         IDENTITY_HISTORY_ACCOUNTS_LOCAL_WORK.nativeLocatorWrite,
-        AGENT_IDENTITY_HISTORY_GUARD_COST,
-        AGENT_IDENTITY_HISTORY_ABSENCE_COST,
+        AGENT_IDENTITY_HISTORY_GUARD_COST(),
+        AGENT_IDENTITY_HISTORY_ABSENCE_COST(),
         HISTORY_LOCATOR_INVALIDATION,
       ),
     );

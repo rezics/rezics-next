@@ -98,7 +98,7 @@ async function source(originals: string[]) {
 async function prepare(original: string, terminal: string) {
   const actor = await f.actor();
   const key = randomUUID();
-  return identityEpochStore.prepareAdmission(
+  return identityEpochStore().prepareAdmission(
     f.pool,
     {
       basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
@@ -181,7 +181,7 @@ test('an unchanged finite complete Source remains current during real disjoint i
     expect((await current(s)).status).toBe('current');
     const coordinator = await nativeCutoverCoordinator();
     await coordinator(f.pool, job);
-    expect((await identityEpochStore.readJob(f.pool, job))?.state).toBe('published');
+    expect((await identityEpochStore().readJob(f.pool, job))?.state).toBe('published');
     expect((await current(s)).status).toBe('current');
   }
 }, 120000);
@@ -274,7 +274,7 @@ test('native cancellation retains the closed scope attempt against delayed and d
   for (let step = 0; step < 100; step++) {
     if ((await stepIdentityEpochAdmission(f.pool, job)).state === 'cancelled') break;
   }
-  expect((await identityEpochStore.readJob(f.pool, job))?.state).toBe('cancelled');
+  expect((await identityEpochStore().readJob(f.pool, job))?.state).toBe('cancelled');
   let repaired: IdentityScopeObservation | null = null;
   for (let step = 0; step < 100; step++) {
     const result = await s.observations.repair({ key: s.key, limit: 1, deadline: Date.now() + 5000 });

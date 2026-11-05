@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../memoized.ts';
 import { SearchFreshnessSchema } from '../search-context.ts';
 import { chooseLabel } from '../../semantic/language.ts';
 import { compileKinds } from '../query.ts';
@@ -34,27 +35,35 @@ export const FactSchema = t.Union([
 ]);
 const publicLabel = t.Object({ value: t.String(), language: t.String() }, object);
 const nullableLabel = t.Union([publicLabel, t.Null()]);
-const publicImage = t.Union([
-  t.Object(
-    {
-      ...CoverSummarySchema.anyOf[0].properties,
-      aspect: t.Object({ width: t.Integer({ minimum: 1 }), height: t.Integer({ minimum: 1 }) }, object),
-    },
-    object,
-  ),
-  t.Null(),
-]);
-const genericBase = t.Object(
-  {
-    id: t.String({ format: 'uuid' }),
-    kind: t.String(),
-    kindLabel: publicLabel,
-    title: nullableLabel,
-    image: publicImage,
-    url: t.Object({ id: t.String({ format: 'uuid' }), label: nullableLabel }, object),
-  },
-  object,
-);
+function publicImage() {
+  return memoizedValue(publicImage, () =>
+    t.Union([
+      t.Object(
+        {
+          ...CoverSummarySchema.anyOf[0].properties,
+          aspect: t.Object({ width: t.Integer({ minimum: 1 }), height: t.Integer({ minimum: 1 }) }, object),
+        },
+        object,
+      ),
+      t.Null(),
+    ]),
+  );
+}
+function genericBase() {
+  return memoizedValue(genericBase, () =>
+    t.Object(
+      {
+        id: t.String({ format: 'uuid' }),
+        kind: t.String(),
+        kindLabel: publicLabel,
+        title: nullableLabel,
+        image: publicImage(),
+        url: t.Object({ id: t.String({ format: 'uuid' }), label: nullableLabel }, object),
+      },
+      object,
+    ),
+  );
+}
 const kindPage = t.Object(
   {
     values: t.Array(
@@ -73,33 +82,41 @@ const kindPage = t.Object(
   },
   object,
 );
-export const searchHit = t.Object(
-  {
-    id: t.String({ format: 'uuid' }),
-    type: t.String(),
-    kind: t.String(),
-    base: genericBase,
-    labels: t.Record(t.String(), t.String()),
-    summary: t.Union([SubjectSummarySchema, t.Null()]),
-    matchEvidence: t.Optional(MatchEvidenceSchema),
-    descriptions: t.Optional(t.Record(t.String(), t.String())),
-    facts: t.Optional(t.Record(t.String(), t.Array(FactSchema))),
-    figure: t.Ref('PublicFigure'),
-  },
-  object,
-);
-export const searchResponse = t.Object(
-  {
-    subjects: t.Array(searchHit),
-    kinds: t.Optional(kindPage),
-    next: t.Union([t.String(), t.Null()]),
-    as_of: t.String({ format: 'date-time' }),
-    freshness: t.Optional(SearchFreshnessSchema),
-    emptyRecovery: t.Optional(EmptyRecoverySchema),
-  },
-  object,
-);
-export type SearchHttpBase = Static<typeof genericBase>;
+export function searchHit() {
+  return memoizedValue(searchHit, () =>
+    t.Object(
+      {
+        id: t.String({ format: 'uuid' }),
+        type: t.String(),
+        kind: t.String(),
+        base: genericBase(),
+        labels: t.Record(t.String(), t.String()),
+        summary: t.Union([SubjectSummarySchema, t.Null()]),
+        matchEvidence: t.Optional(MatchEvidenceSchema),
+        descriptions: t.Optional(t.Record(t.String(), t.String())),
+        facts: t.Optional(t.Record(t.String(), t.Array(FactSchema))),
+        figure: t.Ref('PublicFigure'),
+      },
+      object,
+    ),
+  );
+}
+export function searchResponse() {
+  return memoizedValue(searchResponse, () =>
+    t.Object(
+      {
+        subjects: t.Array(searchHit()),
+        kinds: t.Optional(kindPage),
+        next: t.Union([t.String(), t.Null()]),
+        as_of: t.String({ format: 'date-time' }),
+        freshness: t.Optional(SearchFreshnessSchema),
+        emptyRecovery: t.Optional(EmptyRecoverySchema),
+      },
+      object,
+    ),
+  );
+}
+export type SearchHttpBase = Static<ReturnType<typeof genericBase>>;
 export type SearchHttpResponse = Omit<PublicSearchPage, 'subjects'> & {
   emptyRecovery?: Static<typeof EmptyRecoverySchema>;
   subjects: (PublicSearchPage['subjects'][number] & {

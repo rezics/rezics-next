@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { GLOBAL_CONTEXT } from '../semantic/definitions.ts';
 import { ClassificationBallotAggregateResponseSchema } from './schemas.ts';
@@ -27,23 +28,27 @@ const SummarySchema = t.Object(
   closed,
 );
 
-const AssociationSchema = t.Object(
-  {
-    subjectId: id,
-    associationId: id,
-    slotId: id,
-    property: t.String({ minLength: 1, maxLength: 256 }),
-    targetId: id,
-    contextId: t.Literal(GLOBAL_CONTEXT),
-    origin: t.Literal('global'),
-    release: t.String({ minLength: 1, maxLength: 128 }),
-    revision: t.Integer({ minimum: 1 }),
-    bindingHash: digest,
-    statementDigest: digest,
-    qualifiersDigest: digest,
-  },
-  closed,
-);
+function AssociationSchema() {
+  return memoizedValue(AssociationSchema, () =>
+    t.Object(
+      {
+        subjectId: id,
+        associationId: id,
+        slotId: id,
+        property: t.String({ minLength: 1, maxLength: 256 }),
+        targetId: id,
+        contextId: t.Literal(GLOBAL_CONTEXT),
+        origin: t.Literal('global'),
+        release: t.String({ minLength: 1, maxLength: 128 }),
+        revision: t.Integer({ minimum: 1 }),
+        bindingHash: digest,
+        statementDigest: digest,
+        qualifiersDigest: digest,
+      },
+      closed,
+    ),
+  );
+}
 
 const OwnSchema = t.Object(
   {
@@ -65,20 +70,24 @@ const ActionsSchema = t.Object(
   closed,
 );
 
-const AvailableItemSchema = t.Object(
-  {
-    state: t.Literal('available'),
-    subjectId: id,
-    associationId: id,
-    subject: SummarySchema,
-    target: SummarySchema,
-    association: AssociationSchema,
-    own: OwnSchema,
-    aggregate: t.Union([ClassificationBallotAggregateResponseSchema, t.Null()]),
-    actions: ActionsSchema,
-  },
-  closed,
-);
+function AvailableItemSchema() {
+  return memoizedValue(AvailableItemSchema, () =>
+    t.Object(
+      {
+        state: t.Literal('available'),
+        subjectId: id,
+        associationId: id,
+        subject: SummarySchema,
+        target: SummarySchema,
+        association: AssociationSchema(),
+        own: OwnSchema,
+        aggregate: t.Union([ClassificationBallotAggregateResponseSchema, t.Null()]),
+        actions: ActionsSchema,
+      },
+      closed,
+    ),
+  );
+}
 
 const WithheldItemSchema = t.Object(
   {
@@ -95,21 +104,25 @@ const WithheldItemSchema = t.Object(
   closed,
 );
 
-export const ClassificationBallotOwnPageSchema = t.Object(
-  {
-    viewer: t.Object({ accountId: id }, closed),
-    inventory: t.Object(
+export function ClassificationBallotOwnPageSchema() {
+  return memoizedValue(ClassificationBallotOwnPageSchema, () =>
+    t.Object(
       {
-        kind: t.Literal('current-retained'),
-        complete: t.Literal(false),
-        generation: t.Union([t.String({ pattern: '^[1-9][0-9]*$' }), t.Null()]),
-        cleanup: t.Union([t.Literal('not-started'), t.Literal('pending'), t.Literal('settled')]),
+        viewer: t.Object({ accountId: id }, closed),
+        inventory: t.Object(
+          {
+            kind: t.Literal('current-retained'),
+            complete: t.Literal(false),
+            generation: t.Union([t.String({ pattern: '^[1-9][0-9]*$' }), t.Null()]),
+            cleanup: t.Union([t.Literal('not-started'), t.Literal('pending'), t.Literal('settled')]),
+          },
+          closed,
+        ),
+        items: t.Array(t.Union([AvailableItemSchema(), WithheldItemSchema]), { maxItems: 21 }),
+        traversal: t.Union([t.Literal('more'), t.Literal('complete')]),
+        next: t.Union([cursor, t.Null()]),
       },
       closed,
     ),
-    items: t.Array(t.Union([AvailableItemSchema, WithheldItemSchema]), { maxItems: 21 }),
-    traversal: t.Union([t.Literal('more'), t.Literal('complete')]),
-    next: t.Union([cursor, t.Null()]),
-  },
-  closed,
-);
+  );
+}

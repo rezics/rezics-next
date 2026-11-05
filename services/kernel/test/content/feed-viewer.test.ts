@@ -104,7 +104,7 @@ test('Home keeps native private states, duplicate occurrence keys and independen
         { rowKey: 'second', entry: { state: 'unavailable' }, vote: { state: 'absent' } },
       ],
     });
-    for (const page of pages) expect(Value.Check(FeedViewerPersonalActionsSchema, page)).toBe(true);
+    for (const page of pages) expect(Value.Check(FeedViewerPersonalActionsSchema(), page)).toBe(true);
     const native = await composeFeedViewerPersonalActions(
       {
         ...deps,
@@ -126,7 +126,7 @@ test('Home keeps native private states, duplicate occurrence keys and independen
       async () => [first],
     );
     expect(native).toEqual({ state: 'unavailable', reason: 'currentness', retryable: true });
-    expect(Value.Check(FeedViewerPersonalActionsSchema, native)).toBe(true);
+    expect(Value.Check(FeedViewerPersonalActionsSchema(), native)).toBe(true);
     const refused: ViewerPersonalActionsPage = { state: 'unavailable', reason: 'response_limit', retryable: false };
     expect(
       await composeFeedViewerPersonalActions(

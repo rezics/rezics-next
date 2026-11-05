@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../memoized.ts';
 import { createBuiltinRuntime } from '../../library/builtin-runtime.ts';
 import { withHeaders } from '@elysia/openapi';
 import canonicalize from 'canonicalize';
@@ -60,16 +61,28 @@ import { readPage, PageReadBudget, PageReadError } from '../reads.ts';
 import { selectPage, guardSelectedPage, type SelectedPage } from '../selected-page.ts';
 export { PageResponseSchema, extendPageResponseSchema } from './page-contract.ts';
 
-const resource = { route: 0, id: GLOBAL_CONTEXT };
+function resource() {
+  return memoizedValue(resource, () => ({ route: 0, id: GLOBAL_CONTEXT }));
+}
 const closed = { additionalProperties: false } as const;
 const subjectIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const profileRoute = new RegExp(PROFILE_ROUTE_PATTERN, 'u');
+function profileRoute() {
+  return memoizedValue(profileRoute, () => new RegExp(PROFILE_ROUTE_PATTERN, 'u'));
+}
 const handlePattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
-const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
-const pageResponse = PageResponseSchema;
-const draftResponse = extendPageResponseSchema({
-  draft: t.Object({ digest: t.String(), target: t.Any(), advice: t.Literal('allowed') }, closed),
-});
+function unauthorized() {
+  return memoizedValue(unauthorized, () => problemSchema('authentication_required', 'invalid_credentials'));
+}
+function pageResponse() {
+  return memoizedValue(pageResponse, () => PageResponseSchema);
+}
+function draftResponse() {
+  return memoizedValue(draftResponse, () =>
+    extendPageResponseSchema({
+      draft: t.Object({ digest: t.String(), target: t.Any(), advice: t.Literal('allowed') }, closed),
+    }),
+  );
+}
 const pageRedirect = t.Object({ redirect: t.Object({ from: t.String(), to: t.String() }, closed) }, closed);
 
 type ReadResult = { status: number; body: unknown };
@@ -158,7 +171,8 @@ function targetOf(body: unknown): PageTarget {
     else if (errors.length === 0) return { account, ...(view ? { view } : {}) };
   } else {
     const route = target.route;
-    const routeKey = typeof route === 'string' && route.length <= PROFILE_ROUTE_MAX_LENGTH && profileRoute.test(route);
+    const routeKey =
+      typeof route === 'string' && route.length <= PROFILE_ROUTE_MAX_LENGTH && profileRoute().test(route);
     if (!routeKey)
       errors.push({ pointer: '/target/route', code: typeof route === 'string' ? 'invalid_format' : 'invalid_type' });
     else if (errors.length === 0) return { route };
@@ -271,10 +285,10 @@ function nativePageRoute<App, const Path extends string>(
       body: t.Any(),
       query: t.Object({ target: t.Optional(t.String()) }),
       response: {
-        200: withHeaders(draftPreview ? draftResponse : pageResponse, { 'cache-control': t.String() }),
+        200: withHeaders(draftPreview ? draftResponse() : pageResponse(), { 'cache-control': t.String() }),
         308: withHeaders(pageRedirect, { location: t.String() }),
         400: problemSchema('invalid_request'),
-        401: unauthorized,
+        401: unauthorized(),
         403: problemSchema('forbidden'),
         404: problemSchema('not_found'),
         503: problemSchema('presentation_not_ready', 'dependency_unavailable', 'overloaded', 'deadline_exceeded'),
@@ -345,7 +359,7 @@ function nativePageRoute<App, const Path extends string>(
       const languages = languagesOf(body);
       const continuation = continuationOf(body);
       const check = await authorize({
-        ...resource,
+        ...resource(),
         ...(!draftPreview && includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
       });
       const pageAccess: Access =
@@ -358,7 +372,7 @@ function nativePageRoute<App, const Path extends string>(
           throw new ProblemError(draftPreview ? 'forbidden' : 'not_found');
         if (!captured) return activeProfile(pool);
         const readResource = {
-          ...resource,
+          ...resource(),
           ...(includeEligibility ? { eligibility: globalReadEligibility('presentation:read') } : {}),
         };
         // Validity does not confer authority. Both the curator and public reader must be admitted.
@@ -544,7 +558,7 @@ function nativePageRoute<App, const Path extends string>(
           ? async () => {
               let statementPropose: 'allowed' | 'denied' | 'unavailable';
               try {
-                const check = await accessCheck(authority.deps.access, actor, 'statement:propose', resource, {
+                const check = await accessCheck(authority.deps.access, actor, 'statement:propose', resource(), {
                   pool,
                   deadline: job.deadline,
                 });

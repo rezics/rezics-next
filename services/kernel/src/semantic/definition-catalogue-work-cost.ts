@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { CatalogueArtifactError } from '@rezics/definitions';
 import nativeWithdrawalAck from './definition-catalogue-withdrawal-ack.sql';
 import nativeactivationCAS from './definition-catalogue-activation-cas.sql';
@@ -292,7 +293,7 @@ export async function catalogueBodyWork<T>(
   }
 }
 export function catalogueSQLCost(base: WorkDimensions, sql: string, params: unknown): WorkDimensions {
-  const operation = Object.values(CATALOGUE_NATIVE_OPERATIONS).find((op) => op.sql === sql && op.bound === base);
+  const operation = Object.values(CATALOGUE_NATIVE_OPERATIONS()).find((op) => op.sql === sql && op.bound === base);
   const values = params as Record<string, unknown>;
   if (operation) {
     const maxima: Readonly<Record<string, number>> = operation.parameters;
@@ -833,55 +834,59 @@ function ledgerOperation(
  * ONE component; it cannot price the remaining job. Input vectors are PostgreSQL
  * text arrays: braces + 8 sixteen-digit safe integers + 7 commas = 137 bytes.
  */
-export const CATALOGUE_LEDGER_OPERATIONS = Object.freeze({
-  originalAdmit: ledgerOperation(ledgerOriginalAdmit.sql, 2, 5, 0, 64, {
-    original_key: 64,
-    root: 71,
-    phase: 15,
-    input_digest: 32,
-    episode: 36,
-    deadline: 16,
-    admitted: 137,
-    position: 20,
-  }),
-  originalRead: ledgerOperation(ledgerOriginalRead.sql, 1, 1, 0, 768, { original_key: 64 }),
-  ticketAdmit: ledgerOperation(ledgerTicketAdmit.sql, 2, 3, 0, 4, {
-    original_key: 64,
-    slot: 1,
-    kind: 13,
-    allowance: 137,
-  }),
-  ticketSpend: ledgerOperation(ledgerTicketSpend.sql, 16, 19, 7, 112, { original_key: 64, transaction_id: 36 }),
-  originalTerminal: ledgerOperation(ledgerOriginalTerminal.sql, 2, 4, 0, 64, {
-    transaction_id: 36,
-    result_digest: 32,
-    original_key: 64,
-  }),
-  position: ledgerOperation(ledgerPosition.sql, 12, 16, 2, 64, { root: 71, original_key: 64, transaction_id: 36 }),
-  retirementStart: ledgerOperation(ledgerRetirementStart.sql, 4, 5, 0, 12, { transaction_id: 36, root: 71 }),
-  retirementRead: ledgerOperation(ledgerRetirementRead.sql, 1, 1, 0, 100, { root: 71 }),
-  retirementCaptures: ledgerOperation(ledgerRetirementCaptures.sql, 100, 1, 100, 16600, { root: 71 }),
-  retirementConsumers: ledgerOperation(ledgerRetirementConsumers.sql, 400, 401, 100, 2000, { root: 71 }),
-  retirementTickets: ledgerOperation(ledgerRetirementTickets.sql, 22, 24, 7, 476, { root: 71, original_key: 64 }),
-  retirementPositions: ledgerOperation(ledgerRetirementPositions.sql, 400, 401, 100, 3600, { root: 71 }),
-  retirementProbe: ledgerOperation(ledgerRetirementProbe.sql, 4, 4, 0, 4, { root: 71 }),
-  retirementProgress: ledgerOperation(ledgerRetirementProgress.sql, 1, 1, 0, 12, {
-    next: 9,
-    after: 64,
-    sequence: 20,
-    root: 71,
-    expected: 9,
-  }),
-  retirementOriginal: ledgerOperation(ledgerRetirementOriginal.sql, 1, 1, 0, 72, { root: 71, after: 64 }),
-  headLock: ledgerOperation(ledgerHeadLock.sql, 1, 1, 0, 80, {}),
-  rootLock: ledgerOperation(ledgerRootLock.sql, 1, 1, 0, 128, { root: 71 }),
-} as const);
-export type CatalogueLedgerOperation = keyof typeof CATALOGUE_LEDGER_OPERATIONS;
+export function CATALOGUE_LEDGER_OPERATIONS() {
+  return memoizedValue(CATALOGUE_LEDGER_OPERATIONS, () =>
+    Object.freeze({
+      originalAdmit: ledgerOperation(ledgerOriginalAdmit.sql, 2, 5, 0, 64, {
+        original_key: 64,
+        root: 71,
+        phase: 15,
+        input_digest: 32,
+        episode: 36,
+        deadline: 16,
+        admitted: 137,
+        position: 20,
+      }),
+      originalRead: ledgerOperation(ledgerOriginalRead.sql, 1, 1, 0, 768, { original_key: 64 }),
+      ticketAdmit: ledgerOperation(ledgerTicketAdmit.sql, 2, 3, 0, 4, {
+        original_key: 64,
+        slot: 1,
+        kind: 13,
+        allowance: 137,
+      }),
+      ticketSpend: ledgerOperation(ledgerTicketSpend.sql, 16, 19, 7, 112, { original_key: 64, transaction_id: 36 }),
+      originalTerminal: ledgerOperation(ledgerOriginalTerminal.sql, 2, 4, 0, 64, {
+        transaction_id: 36,
+        result_digest: 32,
+        original_key: 64,
+      }),
+      position: ledgerOperation(ledgerPosition.sql, 12, 16, 2, 64, { root: 71, original_key: 64, transaction_id: 36 }),
+      retirementStart: ledgerOperation(ledgerRetirementStart.sql, 4, 5, 0, 12, { transaction_id: 36, root: 71 }),
+      retirementRead: ledgerOperation(ledgerRetirementRead.sql, 1, 1, 0, 100, { root: 71 }),
+      retirementCaptures: ledgerOperation(ledgerRetirementCaptures.sql, 100, 1, 100, 16600, { root: 71 }),
+      retirementConsumers: ledgerOperation(ledgerRetirementConsumers.sql, 400, 401, 100, 2000, { root: 71 }),
+      retirementTickets: ledgerOperation(ledgerRetirementTickets.sql, 22, 24, 7, 476, { root: 71, original_key: 64 }),
+      retirementPositions: ledgerOperation(ledgerRetirementPositions.sql, 400, 401, 100, 3600, { root: 71 }),
+      retirementProbe: ledgerOperation(ledgerRetirementProbe.sql, 4, 4, 0, 4, { root: 71 }),
+      retirementProgress: ledgerOperation(ledgerRetirementProgress.sql, 1, 1, 0, 12, {
+        next: 9,
+        after: 64,
+        sequence: 20,
+        root: 71,
+        expected: 9,
+      }),
+      retirementOriginal: ledgerOperation(ledgerRetirementOriginal.sql, 1, 1, 0, 72, { root: 71, after: 64 }),
+      headLock: ledgerOperation(ledgerHeadLock.sql, 1, 1, 0, 80, {}),
+      rootLock: ledgerOperation(ledgerRootLock.sql, 1, 1, 0, 128, { root: 71 }),
+    } as const),
+  );
+}
+export type CatalogueLedgerOperation = keyof ReturnType<typeof CATALOGUE_LEDGER_OPERATIONS>;
 export function catalogueLedgerCost(
   id: CatalogueLedgerOperation,
   params: Readonly<Record<string, unknown>>,
 ): WorkDimensions {
-  const operation = CATALOGUE_LEDGER_OPERATIONS[id];
+  const operation = CATALOGUE_LEDGER_OPERATIONS()[id];
   if (!operation) throw new TypeError('Unknown catalogue ledger operation');
   const maxima: Readonly<Record<string, number>> = operation.parameters;
   if (Object.keys(params).length !== Object.keys(maxima).length || Object.keys(params).some((key) => !(key in maxima)))
@@ -895,105 +900,116 @@ export function catalogueLedgerCost(
   return Object.freeze({ ...operation.bound, bytes: operation.bound.bytes + bytes });
 }
 
-export const CATALOGUE_NATIVE_OPERATIONS = Object.freeze({
-  withdrawalAck: Object.freeze({
-    sql: nativeWithdrawalAck.sql,
-    bound: CATALOGUE_BODY_COST.withdrawalAck,
-    parameters: Object.freeze({
-      root: 71,
-      activation_id: 36,
-      slot: 3,
-      previous: 71,
-      id: 71,
-      sequence: 20,
-      generation: 20,
-      consumer: 8192,
-      provenance: 8192,
-      dependency: 65536,
-      enrollment_generation: 20,
-      receipt: 8192,
-      owner: 1024,
-      restore: 1024,
+export function CATALOGUE_NATIVE_OPERATIONS() {
+  return memoizedValue(CATALOGUE_NATIVE_OPERATIONS, () =>
+    Object.freeze({
+      withdrawalAck: Object.freeze({
+        sql: nativeWithdrawalAck.sql,
+        bound: CATALOGUE_BODY_COST.withdrawalAck,
+        parameters: Object.freeze({
+          root: 71,
+          activation_id: 36,
+          slot: 3,
+          previous: 71,
+          id: 71,
+          sequence: 20,
+          generation: 20,
+          consumer: 8192,
+          provenance: 8192,
+          dependency: 65536,
+          enrollment_generation: 20,
+          receipt: 8192,
+          owner: 1024,
+          restore: 1024,
+        }),
+      }),
+      registerRoot: Object.freeze({
+        sql: nativeregisterRoot.sql,
+        bound: CATALOGUE_BODY_COST.registerRoot,
+        parameters: Object.freeze({ root: 71, transaction_id: 36 }),
+      }),
+      headLock: Object.freeze({
+        sql: nativeheadLock.sql,
+        bound: CATALOGUE_BODY_COST.headLock,
+        parameters: Object.freeze({}),
+      }),
+      rootLock: Object.freeze({
+        sql: nativerootLock.sql,
+        bound: CATALOGUE_BODY_COST.rootLock,
+        parameters: Object.freeze({ root: 71 }),
+      }),
+      consumerRead: Object.freeze({
+        sql: nativeconsumerRead.sql,
+        bound: CATALOGUE_BODY_COST.consumerRead,
+        parameters: Object.freeze({ root: 71, id: 71 }),
+      }),
+      enroll: Object.freeze({
+        sql: nativeenroll.sql,
+        bound: CATALOGUE_BODY_COST.enroll,
+        parameters: Object.freeze({
+          root: 71,
+          id: 71,
+          consumer: 8192,
+          provenance: 8192,
+          dependency: 65536,
+          generation: 20,
+        }),
+      }),
+      activationRead: Object.freeze({
+        sql: nativeactivationRead.sql,
+        bound: CATALOGUE_BODY_COST.activationRead,
+        parameters: Object.freeze({ root: 71 }),
+      }),
+      activationRequest: Object.freeze({
+        sql: nativeactivationRequest.sql,
+        bound: CATALOGUE_BODY_COST.activationRequest,
+        parameters: Object.freeze({ root: 71, activation_id: 36, previous: 71, head: 10, transaction_id: 36 }),
+      }),
+      closeRoot: Object.freeze({
+        sql: nativecloseRoot.sql,
+        bound: CATALOGUE_BODY_COST.closeRoot,
+        parameters: Object.freeze({ root: 71, generation: 20 }),
+      }),
+      activationClosing: Object.freeze({
+        sql: nativeactivationClosing.sql,
+        bound: CATALOGUE_BODY_COST.activationClosing,
+        parameters: Object.freeze({ root: 71, activation_id: 36 }),
+      }),
+      activationCut: Object.freeze({
+        sql: nativeactivationCut.sql,
+        bound: CATALOGUE_BODY_COST.activationCut,
+        parameters: Object.freeze({ root: 71, activation_id: 36, generation: 20, sequence: 20 }),
+      }),
+      frontierPoint: Object.freeze({
+        sql: nativefrontierPoint.sql,
+        bound: CATALOGUE_BODY_COST.frontierPoint,
+        parameters: Object.freeze({ root: 71 }),
+      }),
+      frontierStage: Object.freeze({
+        sql: nativefrontierStage.sql,
+        bound: CATALOGUE_BODY_COST.frontierStage,
+        parameters: Object.freeze({
+          root: 71,
+          activation_id: 36,
+          previous: 71,
+          generation: 20,
+          through: 20,
+          after: 20,
+        }),
+      }),
+      frontierRead: Object.freeze({
+        sql: nativefrontierRead.sql,
+        bound: CATALOGUE_BODY_COST.frontierRead,
+        parameters: Object.freeze({ root: 71, previous: 71 }),
+      }),
+      activationCAS: Object.freeze({
+        sql: nativeactivationCAS.sql,
+        bound: CATALOGUE_BODY_COST.activationCAS,
+        parameters: Object.freeze({ root: 71, activation_id: 36, previous: 71, head: 10, transaction_id: 36 }),
+      }),
     }),
-  }),
-  registerRoot: Object.freeze({
-    sql: nativeregisterRoot.sql,
-    bound: CATALOGUE_BODY_COST.registerRoot,
-    parameters: Object.freeze({ root: 71, transaction_id: 36 }),
-  }),
-  headLock: Object.freeze({
-    sql: nativeheadLock.sql,
-    bound: CATALOGUE_BODY_COST.headLock,
-    parameters: Object.freeze({}),
-  }),
-  rootLock: Object.freeze({
-    sql: nativerootLock.sql,
-    bound: CATALOGUE_BODY_COST.rootLock,
-    parameters: Object.freeze({ root: 71 }),
-  }),
-  consumerRead: Object.freeze({
-    sql: nativeconsumerRead.sql,
-    bound: CATALOGUE_BODY_COST.consumerRead,
-    parameters: Object.freeze({ root: 71, id: 71 }),
-  }),
-  enroll: Object.freeze({
-    sql: nativeenroll.sql,
-    bound: CATALOGUE_BODY_COST.enroll,
-    parameters: Object.freeze({
-      root: 71,
-      id: 71,
-      consumer: 8192,
-      provenance: 8192,
-      dependency: 65536,
-      generation: 20,
-    }),
-  }),
-  activationRead: Object.freeze({
-    sql: nativeactivationRead.sql,
-    bound: CATALOGUE_BODY_COST.activationRead,
-    parameters: Object.freeze({ root: 71 }),
-  }),
-  activationRequest: Object.freeze({
-    sql: nativeactivationRequest.sql,
-    bound: CATALOGUE_BODY_COST.activationRequest,
-    parameters: Object.freeze({ root: 71, activation_id: 36, previous: 71, head: 10, transaction_id: 36 }),
-  }),
-  closeRoot: Object.freeze({
-    sql: nativecloseRoot.sql,
-    bound: CATALOGUE_BODY_COST.closeRoot,
-    parameters: Object.freeze({ root: 71, generation: 20 }),
-  }),
-  activationClosing: Object.freeze({
-    sql: nativeactivationClosing.sql,
-    bound: CATALOGUE_BODY_COST.activationClosing,
-    parameters: Object.freeze({ root: 71, activation_id: 36 }),
-  }),
-  activationCut: Object.freeze({
-    sql: nativeactivationCut.sql,
-    bound: CATALOGUE_BODY_COST.activationCut,
-    parameters: Object.freeze({ root: 71, activation_id: 36, generation: 20, sequence: 20 }),
-  }),
-  frontierPoint: Object.freeze({
-    sql: nativefrontierPoint.sql,
-    bound: CATALOGUE_BODY_COST.frontierPoint,
-    parameters: Object.freeze({ root: 71 }),
-  }),
-  frontierStage: Object.freeze({
-    sql: nativefrontierStage.sql,
-    bound: CATALOGUE_BODY_COST.frontierStage,
-    parameters: Object.freeze({ root: 71, activation_id: 36, previous: 71, generation: 20, through: 20, after: 20 }),
-  }),
-  frontierRead: Object.freeze({
-    sql: nativefrontierRead.sql,
-    bound: CATALOGUE_BODY_COST.frontierRead,
-    parameters: Object.freeze({ root: 71, previous: 71 }),
-  }),
-  activationCAS: Object.freeze({
-    sql: nativeactivationCAS.sql,
-    bound: CATALOGUE_BODY_COST.activationCAS,
-    parameters: Object.freeze({ root: 71, activation_id: 36, previous: 71, head: 10, transaction_id: 36 }),
-  }),
-});
+  );
+}
 const nativeReadLiterals: readonly (readonly [string, WorkDimensions])[] = [
   [
     'SELECT id_key,declaration_digest,body FROM semantic.definition_catalogue_kind WHERE route=0 AND root_digest=$1 AND id_key=ANY($2::text[])',
@@ -1037,21 +1053,25 @@ const controlOperation = (bytes: number) =>
     bytes,
     emptySeeks: 0,
   } satisfies WorkDimensions);
-export const CATALOGUE_PUBLISHER_CONTROLS = Object.freeze({
-  artifactDecode: controlOperation(2 * 4194304),
-  artifactValidate: controlOperation(4194304),
-  rootDecode: controlOperation(2 * 262144),
-  nodeDecode: controlOperation(2 * 262144),
-  releaseDecode: controlOperation(2 * 4194304),
-  declarationDecode: controlOperation(2 * 65536),
-  memberIdentity: controlOperation(2 * 4194304),
-  // Input canonicalization, identity encoding and digest; bounded result
-  // canonicalization and output copy. No native IO occurs in either component.
-  mechanicalInput: controlOperation(3 * CATALOGUE_MECHANICAL_REPRESENTATION.inputBytes),
-  mechanicalResult: controlOperation(
-    3 * CATALOGUE_MECHANICAL_REPRESENTATION.inputBytes + 2 * CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes,
-  ),
-});
+export function CATALOGUE_PUBLISHER_CONTROLS() {
+  return memoizedValue(CATALOGUE_PUBLISHER_CONTROLS, () =>
+    Object.freeze({
+      artifactDecode: controlOperation(2 * 4194304),
+      artifactValidate: controlOperation(4194304),
+      rootDecode: controlOperation(2 * 262144),
+      nodeDecode: controlOperation(2 * 262144),
+      releaseDecode: controlOperation(2 * 4194304),
+      declarationDecode: controlOperation(2 * 65536),
+      memberIdentity: controlOperation(2 * 4194304),
+      // Input canonicalization, identity encoding and digest; bounded result
+      // canonicalization and output copy. No native IO occurs in either component.
+      mechanicalInput: controlOperation(3 * CATALOGUE_MECHANICAL_REPRESENTATION.inputBytes),
+      mechanicalResult: controlOperation(
+        3 * CATALOGUE_MECHANICAL_REPRESENTATION.inputBytes + 2 * CATALOGUE_MECHANICAL_REPRESENTATION.resultBytes,
+      ),
+    }),
+  );
+}
 
 /** Local control representation only: immutable input plus bounded decoded/canonical
  * output. The 256-byte lifecycle tuple covers root(71), activation/transaction

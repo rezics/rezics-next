@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 /** Finite Kind raw-original input. Values describe work only and never grant Type or catalogue admission. */
 import { declareBound, repeatBound, sumBounds, withinCeiling, type Bound } from '@rezics/bounds';
 import { ProblemError } from '../http/problem.ts';
@@ -73,51 +74,83 @@ const statement = (
     bytes(projection),
   );
 
-const custodySql = [
-  custodyPartition,
-  custodyAccount,
-  custodySource,
-  custodyFences,
-  custodyRead,
-  custodyProof,
-  custodyHold,
-] as const;
+function custodySql() {
+  return memoizedValue(
+    custodySql,
+    () =>
+      [custodyPartition, custodyAccount, custodySource, custodyFences, custodyRead, custodyProof, custodyHold] as const,
+  );
+}
 
-const admissionEpisode = statement(admitEpisode.sql, 8, 8, 9, 0, { escaped: 2 * (ESCAPED_BODY + 2048) });
-const admissionSource = statement(readSource.sql, 3, 3, 3, 10240, { escaped: 0 });
-const custody = sumBounds(
-  work(0, 208, 10, 0, 7),
-  ...custodySql.map((query) => bytes(Buffer.byteLength(query.sql) + ENVELOPE + ENVELOPE)),
-);
-const state = statement(readState.sql, 3, 3, 3, ESCAPED_BODY);
-const read = statement(readInput.sql, 2, 2, 1, 2 * (ESCAPED_BODY + 512));
-const sourceMetadata = declareBound({
-  candidateKeys: 0,
-  nativeRows: 16,
-  identityMetadataRows: 0,
-  emptySeeks: 4,
-  nativePoints: 4,
-  witnessKeys: 0,
-  statements: 4,
-  bytes: 32 * 1024,
-  engineRequests: 0,
-});
-const sourcePage = declareBound({
-  candidateKeys: COLLECTION_KIND_INPUT_QUANTUM,
-  nativeRows: 32,
-  identityMetadataRows: 0,
-  emptySeeks: 5,
-  nativePoints: 5,
-  witnessKeys: 0,
-  statements: 5,
-  bytes: 32 * 1024,
-  engineRequests: 0,
-});
-const source = sumBounds(sourceMetadata, sourcePage);
-const insert = sumBounds(statement(insertInput.sql, 9, 12, 9, 128), work(0, 0, 0, 1, 1), bytes(ENVELOPE));
-const retire = statement(retireInput.sql, 1, 3, 2, 0);
-const collisionReads = repeatBound(read, 2);
-const admission = sumBounds(admissionEpisode, admissionSource, custody);
+function admissionEpisode() {
+  return memoizedValue(admissionEpisode, () =>
+    statement(admitEpisode.sql, 8, 8, 9, 0, { escaped: 2 * (ESCAPED_BODY + 2048) }),
+  );
+}
+function admissionSource() {
+  return memoizedValue(admissionSource, () => statement(readSource.sql, 3, 3, 3, 10240, { escaped: 0 }));
+}
+function custody() {
+  return memoizedValue(custody, () =>
+    sumBounds(
+      work(0, 208, 10, 0, 7),
+      ...custodySql().map((query) => bytes(Buffer.byteLength(query.sql) + ENVELOPE + ENVELOPE)),
+    ),
+  );
+}
+function state() {
+  return memoizedValue(state, () => statement(readState.sql, 3, 3, 3, ESCAPED_BODY));
+}
+function read() {
+  return memoizedValue(read, () => statement(readInput.sql, 2, 2, 1, 2 * (ESCAPED_BODY + 512)));
+}
+function sourceMetadata() {
+  return memoizedValue(sourceMetadata, () =>
+    declareBound({
+      candidateKeys: 0,
+      nativeRows: 16,
+      identityMetadataRows: 0,
+      emptySeeks: 4,
+      nativePoints: 4,
+      witnessKeys: 0,
+      statements: 4,
+      bytes: 32 * 1024,
+      engineRequests: 0,
+    }),
+  );
+}
+function sourcePage() {
+  return memoizedValue(sourcePage, () =>
+    declareBound({
+      candidateKeys: COLLECTION_KIND_INPUT_QUANTUM,
+      nativeRows: 32,
+      identityMetadataRows: 0,
+      emptySeeks: 5,
+      nativePoints: 5,
+      witnessKeys: 0,
+      statements: 5,
+      bytes: 32 * 1024,
+      engineRequests: 0,
+    }),
+  );
+}
+function source() {
+  return memoizedValue(source, () => sumBounds(sourceMetadata(), sourcePage()));
+}
+function insert() {
+  return memoizedValue(insert, () =>
+    sumBounds(statement(insertInput.sql, 9, 12, 9, 128), work(0, 0, 0, 1, 1), bytes(ENVELOPE)),
+  );
+}
+function retire() {
+  return memoizedValue(retire, () => statement(retireInput.sql, 1, 3, 2, 0));
+}
+function collisionReads() {
+  return memoizedValue(collisionReads, () => repeatBound(read(), 2));
+}
+function admission() {
+  return memoizedValue(admission, () => sumBounds(admissionEpisode(), admissionSource(), custody()));
+}
 const libraryPoint = (nativeRows: number, nativePoints: number, bytes: number): Bound =>
   declareBound({
     candidateKeys: 0,
@@ -130,39 +163,65 @@ const libraryPoint = (nativeRows: number, nativePoints: number, bytes: number): 
     bytes,
     engineRequests: 0,
   });
-const preparationScope = libraryPoint(16, 3, 12_288);
-const preparationObservation = libraryPoint(1, 1, 8192);
-const preparationRetired = libraryPoint(1, 1, 256);
-const preparationClock = libraryPoint(1, 1, 256);
+function preparationScope() {
+  return memoizedValue(preparationScope, () => libraryPoint(16, 3, 12_288));
+}
+function preparationObservation() {
+  return memoizedValue(preparationObservation, () => libraryPoint(1, 1, 8192));
+}
+function preparationRetired() {
+  return memoizedValue(preparationRetired, () => libraryPoint(1, 1, 256));
+}
+function preparationClock() {
+  return memoizedValue(preparationClock, () => libraryPoint(1, 1, 256));
+}
 
-export const COLLECTION_KIND_INPUT_TERMS = Object.freeze({
-  admissionEpisode,
-  admissionSource,
-  custody,
-  state,
-  read,
-  collisionReads,
-  sourceMetadata,
-  sourcePage,
-  source,
-  insert,
-  retire,
-  admission,
-});
+export function COLLECTION_KIND_INPUT_TERMS() {
+  return memoizedValue(COLLECTION_KIND_INPUT_TERMS, () =>
+    Object.freeze({
+      admissionEpisode: admissionEpisode(),
+      admissionSource: admissionSource(),
+      custody: custody(),
+      state: state(),
+      read: read(),
+      collisionReads: collisionReads(),
+      sourceMetadata: sourceMetadata(),
+      sourcePage: sourcePage(),
+      source: source(),
+      insert: insert(),
+      retire: retire(),
+      admission: admission(),
+    }),
+  );
+}
 
-export const COLLECTION_KIND_PREPARATION_TERMS = Object.freeze({
-  scope: preparationScope,
-  observation: preparationObservation,
-  retired: preparationRetired,
-  clock: preparationClock,
-  custody,
-});
+export function COLLECTION_KIND_PREPARATION_TERMS() {
+  return memoizedValue(COLLECTION_KIND_PREPARATION_TERMS, () =>
+    Object.freeze({
+      scope: preparationScope(),
+      observation: preparationObservation(),
+      retired: preparationRetired(),
+      clock: preparationClock(),
+      custody: custody(),
+    }),
+  );
+}
 
 /** Complete one-attempt sequence: admission, state, two reads, source observations, insert fence, retirement. */
-export const COLLECTION_KIND_INPUT_COST = sumBounds(admission, state, collisionReads, source, insert, retire);
+export function COLLECTION_KIND_INPUT_COST() {
+  return memoizedValue(COLLECTION_KIND_INPUT_COST, () =>
+    sumBounds(admission(), state(), collisionReads(), source(), insert(), retire()),
+  );
+}
 
-export const COLLECTION_KIND_PREPARATION_OBSERVATION = sumBounds(preparationScope, custody);
-export const COLLECTION_KIND_PREPARATION_RETIREMENT = sumBounds(preparationRetired, preparationScope, custody);
+export function COLLECTION_KIND_PREPARATION_OBSERVATION() {
+  return memoizedValue(COLLECTION_KIND_PREPARATION_OBSERVATION, () => sumBounds(preparationScope(), custody()));
+}
+export function COLLECTION_KIND_PREPARATION_RETIREMENT() {
+  return memoizedValue(COLLECTION_KIND_PREPARATION_RETIREMENT, () =>
+    sumBounds(preparationRetired(), preparationScope(), custody()),
+  );
+}
 
 export const COLLECTION_KIND_INPUT_PATHS = Object.freeze({
   quantum: COLLECTION_KIND_INPUT_QUANTUM,
@@ -175,26 +234,27 @@ export const COLLECTION_KIND_INPUT_PATHS = Object.freeze({
   nativeAttempts: 3,
 });
 
-export const COLLECTION_KIND_INPUT_DECLARATION = Object.freeze({
-  status: 'complete' as const,
-  axes: [
-    'candidateKeys',
-    'nativeRows',
-    'identityMetadataRows',
-    'emptySeeks',
-    'nativePoints',
-    'witnessKeys',
-    'statements',
-    'bytes',
-    'engineRequests',
-  ] as const,
-  cost: COLLECTION_KIND_INPUT_COST,
-  terms: COLLECTION_KIND_INPUT_TERMS,
-  paths: COLLECTION_KIND_INPUT_PATHS,
-});
-
-if (!withinCeiling(COLLECTION_KIND_INPUT_COST, COLLECTION_KIND_INPUT_COST))
-  throw new TypeError('Collection Kind input plan is not a finite ceiling');
+export function COLLECTION_KIND_INPUT_DECLARATION() {
+  return memoizedValue(COLLECTION_KIND_INPUT_DECLARATION, () =>
+    Object.freeze({
+      status: 'complete' as const,
+      axes: [
+        'candidateKeys',
+        'nativeRows',
+        'identityMetadataRows',
+        'emptySeeks',
+        'nativePoints',
+        'witnessKeys',
+        'statements',
+        'bytes',
+        'engineRequests',
+      ] as const,
+      cost: COLLECTION_KIND_INPUT_COST(),
+      terms: COLLECTION_KIND_INPUT_TERMS(),
+      paths: COLLECTION_KIND_INPUT_PATHS,
+    }),
+  );
+}
 
 /** Adapter edge for the existing eight-axis native observer. Kind input declares zero engine requests. */
 export function collectionKindInputWorkDimensions(bound: Bound): WorkDimensions {
@@ -214,11 +274,11 @@ export function collectionKindInputWorkDimensions(bound: Bound): WorkDimensions 
 }
 
 export function collectionKindInputWork(): WorkDimensions {
-  return collectionKindInputWorkDimensions(COLLECTION_KIND_INPUT_COST);
+  return collectionKindInputWorkDimensions(COLLECTION_KIND_INPUT_COST());
 }
 
 export function collectionKindInputAdmissionWork(): WorkDimensions {
-  return collectionKindInputWorkDimensions(admission);
+  return collectionKindInputWorkDimensions(admission());
 }
 
 export function collectionKindInputRemaining(work: NativeCollectionWork): Bound {
@@ -237,7 +297,7 @@ export function collectionKindInputRemaining(work: NativeCollectionWork): Bound 
 
 export function collectionKindInputAdmitted(
   work: NativeCollectionWork,
-  bound: Bound = COLLECTION_KIND_INPUT_COST,
+  bound: Bound = COLLECTION_KIND_INPUT_COST(),
 ): boolean {
   return withinCeiling(bound, collectionKindInputRemaining(work));
 }

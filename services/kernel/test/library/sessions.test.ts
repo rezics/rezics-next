@@ -460,7 +460,7 @@ test('signed keyset cursors bind the operation, account and session or subject',
 });
 
 test('events are closed, ID-only, and use the account as their subject in its partition', async () => {
-  const schema = EVENT_TYPES[eventType];
+  const schema = EVENT_TYPES()[eventType];
   expect(Value.Check(schema, { sessionId: newId(route) })).toBe(true);
   expect(Value.Check(schema, { sessionId: newId(route), subjectId })).toBe(false);
   const rows = await database.admin.query('SELECT partition_no, subject, data FROM core.outbox WHERE type = $1', [

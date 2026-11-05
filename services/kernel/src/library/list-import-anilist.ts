@@ -308,7 +308,7 @@ export function anilistMetadataProposals(row: AniListRow): EntryImportMetadataPr
         ? { state: 'empty', sourceField: 'notes', sourceValue: '' }
         : !evidence.notes.isWellFormed() || evidence.notes.includes('\0')
           ? { state: 'invalid', sourceField: 'notes', reason: 'The retained note is not valid text.' }
-          : Buffer.byteLength(evidence.notes) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
+          : Buffer.byteLength(evidence.notes) > ENTRY_IMPORT_METADATA_LIMITS().noteBytes
             ? {
                 state: 'unsupported',
                 sourceField: 'notes',
@@ -353,7 +353,7 @@ export function anilistMetadataProposals(row: AniListRow): EntryImportMetadataPr
     if (
       typeof value === 'string' &&
       value.length > 0 &&
-      Buffer.byteLength(value) <= ENTRY_IMPORT_METADATA_LIMITS.timestampBytes &&
+      Buffer.byteLength(value) <= ENTRY_IMPORT_METADATA_LIMITS().timestampBytes &&
       !/[\u0000-\u001f\u007f]/.test(value)
     )
       return {

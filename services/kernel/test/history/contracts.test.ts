@@ -285,7 +285,7 @@ test('scope accepts at most 64 distinct routed accounts with artifact-valid role
 });
 
 test('every exact catalogue type has an explicit payload classification, including indirect account links', () => {
-  const catalogue = Object.keys(EVENT_TYPES);
+  const catalogue = Object.keys(EVENT_TYPES());
   expect(Object.keys(EVENT_CLASSIFICATIONS).sort()).toEqual(catalogue.sort());
   assertEventClassifications(catalogue);
   for (const type of catalogue) {

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { AccessUnavailableError } from '../access/unavailable.ts';
 import { deadlineClient } from '../access/authenticate.ts';
@@ -23,24 +24,28 @@ export const RealmHomeBoardQuerySchema = t.Object(
   { cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })) },
   closed,
 );
-export const RealmHomeBoardPageSchema = t.Unsafe<RealmHomeBoardPage>(
-  t.Object(
-    {
-      items: t.Array(
-        t.Object(
-          {
-            ...BoardRecordSchema.properties,
-            recent: t.Union([RealmCommunityRecentSchema, t.Object({ state: t.Literal('unavailable') }, closed)]),
-          },
-          closed,
-        ),
-        { maxItems: REALM_HOME_BOARD_LIMIT },
+export function RealmHomeBoardPageSchema() {
+  return memoizedValue(RealmHomeBoardPageSchema, () =>
+    t.Unsafe<RealmHomeBoardPage>(
+      t.Object(
+        {
+          items: t.Array(
+            t.Object(
+              {
+                ...BoardRecordSchema.properties,
+                recent: t.Union([RealmCommunityRecentSchema(), t.Object({ state: t.Literal('unavailable') }, closed)]),
+              },
+              closed,
+            ),
+            { maxItems: REALM_HOME_BOARD_LIMIT },
+          ),
+          next: t.Union([t.String(), t.Null()]),
+        },
+        closed,
       ),
-      next: t.Union([t.String(), t.Null()]),
-    },
-    closed,
-  ),
-);
+    ),
+  );
+}
 
 /** The ordinary raw board window and exact-key native disclosure, without a
  * second community presentation or a refill after concealed rows. */

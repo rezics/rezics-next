@@ -64,7 +64,7 @@ test('Exact retained original account identity admission input and native accept
   await recordPendingAgentVerification(f.pool, { ...decision.value, receiptId: receipt }, () => new Date());
   const identityReceipt = { kind: 'account-agent.verify' as const, account: accounts.owner, receipt };
   const input = (await loadAccountIdentitySource(f.pool, identityReceipt)).input;
-  const admitted = await runCommand(f.pool, { partition: home }, (tx) => store.admit(tx, input));
+  const admitted = await runCommand(f.pool, { partition: home }, (tx) => store().admit(tx, input));
   const selection = { account: accounts.owner, direction: identityReceipt.kind, receipt };
 
   // Change the real active release AFTER admission; recovery must retain the original release.

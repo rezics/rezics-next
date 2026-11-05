@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { accessEvidence } from './evidence.ts';
 import type { AccessClient } from '../request/access.ts';
@@ -43,14 +44,21 @@ export class MembershipLimitError extends Error {
 }
 export const MEMBERSHIP_INVERSE_DEPLOYMENT_BARRIER =
   'Stop all old membership writers before migration; backfill each authoritative membership change through stable source cursors, reconcile outstanding reservations, then certify each actor anchor complete before enabling inverse reads. Mixed-version writers are forbidden.';
-export class MembershipInverseIncompleteError extends LifecycleDeniedError {
-  readonly code = 'membership_inverse_incomplete';
-  constructor() {
-    super();
-    this.name = 'MembershipInverseIncompleteError';
-    this.message = MEMBERSHIP_INVERSE_DEPLOYMENT_BARRIER;
-  }
+export function MembershipInverseIncompleteError() {
+  return memoizedValue(
+    MembershipInverseIncompleteError,
+    () =>
+      class MembershipInverseIncompleteError extends LifecycleDeniedError {
+        readonly code = 'membership_inverse_incomplete';
+        constructor() {
+          super();
+          this.name = 'MembershipInverseIncompleteError';
+          this.message = MEMBERSHIP_INVERSE_DEPLOYMENT_BARRIER;
+        }
+      },
+  );
 }
+export type MembershipInverseIncompleteError = InstanceType<ReturnType<typeof MembershipInverseIncompleteError>>;
 const NAMESPACE = '8c058b06-1993-8bb2-81f8-15f709707fa1';
 function requireAllowed(value: unknown): asserts value {
   if (!value) throw new LifecycleDeniedError();
@@ -89,7 +97,7 @@ function requireCompleteAnchor(
       !account.fenced &&
       account.operatorAccountId === null,
   );
-  if (!account.complete) throw new MembershipInverseIncompleteError();
+  if (!account.complete) throw new (MembershipInverseIncompleteError())();
 }
 
 /** Point-read the same registration/cut barrier without expanding the inverse.
@@ -226,7 +234,8 @@ export function createMembershipInverseCommands(config: {
             account.operatorAccountId === null,
         );
         requireAllowed(!sourceTransactionId || sourceProof);
-        if (!sourceTransactionId && !account.membershipInverseComplete) throw new MembershipInverseIncompleteError();
+        if (!sourceTransactionId && !account.membershipInverseComplete)
+          throw new (MembershipInverseIncompleteError())();
         const priorReservationId = sourceProof?.reservationId;
         if (priorReservationId) requireAllowed(route(priorReservationId) === route(input.accountId));
         const rows = await reserve.run(tx, {

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { withHeaders } from '@elysia/openapi';
 import { customMethod } from '../http/custom-method.ts';
@@ -29,107 +30,122 @@ type Dependencies = {
 };
 const params = t.Object({ accountId: t.String() }, { additionalProperties: false });
 const noticeParams = t.Object({ accountId: t.String(), noticeId: t.String() }, { additionalProperties: false });
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  500: problemSchema('internal_error'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-  ),
-};
-const sessionHeader = { [SESSION_HEADER]: t.String() };
-const item = t.Object({
-  id: t.String(),
-  kind: t.Union([
-    t.Literal('reply'),
-    t.Literal('mention'),
-    t.Literal('thread_watch'),
-    t.Literal('board_activity'),
-    t.Literal('moderation_decision'),
-  ]),
-  createdAt: t.String(),
-  actorId: t.Union([t.String(), t.Null()]),
-  threadId: t.Union([t.String(), t.Null()]),
-  postId: t.Union([t.String(), t.Null()]),
-  decisionId: t.Union([t.String(), t.Null()]),
-  reportId: t.Union([t.String(), t.Null()]),
-  actor: t.Union([
-    t.Object(
-      {
-        state: t.Literal('available'),
-        accountId: t.String(),
-        displayName: t.String(),
-        handle: t.Union([t.String(), t.Null()]),
-        avatar: AvatarSummarySchema,
-        avatarUrl: t.Null(),
-        automated: t.Boolean(),
-      },
-      { additionalProperties: false },
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    500: problemSchema('internal_error'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
     ),
-    t.Object(
-      {
-        state: t.Literal('withheld'),
-        displayName: t.Literal('Former or unavailable account'),
-        handle: t.Null(),
-        avatar: t.Null(),
-        avatarUrl: t.Null(),
-      },
-      { additionalProperties: false },
-    ),
-    t.Object(
-      {
-        state: t.Literal('system'),
-        displayName: t.Literal('Moderation team'),
-        handle: t.Null(),
-        avatar: t.Null(),
-        avatarUrl: t.Null(),
-      },
-      { additionalProperties: false },
-    ),
-  ]),
-  target: t.Object(
-    {
-      state: t.Union([t.Literal('available'), t.Literal('withheld')]),
+  }));
+}
+function sessionHeader() {
+  return memoizedValue(sessionHeader, () => ({ [SESSION_HEADER]: t.String() }));
+}
+function item() {
+  return memoizedValue(item, () =>
+    t.Object({
+      id: t.String(),
+      kind: t.Union([
+        t.Literal('reply'),
+        t.Literal('mention'),
+        t.Literal('thread_watch'),
+        t.Literal('board_activity'),
+        t.Literal('moderation_decision'),
+      ]),
+      createdAt: t.String(),
+      actorId: t.Union([t.String(), t.Null()]),
       threadId: t.Union([t.String(), t.Null()]),
       postId: t.Union([t.String(), t.Null()]),
-      boardId: t.Union([t.String(), t.Null()]),
-      threadTitle: t.Union([t.String(), t.Null()]),
-      boardTitle: t.Union([t.String(), t.Null()]),
-    },
-    { additionalProperties: false },
-  ),
-  summary: t.String(),
-  actions: t.Object(
-    {
-      open: t.Union([
-        t.Object({ kind: t.Literal('board'), boardId: t.String() }, { additionalProperties: false }),
-        t.Object({ kind: t.Literal('thread'), threadId: t.String() }, { additionalProperties: false }),
+      decisionId: t.Union([t.String(), t.Null()]),
+      reportId: t.Union([t.String(), t.Null()]),
+      actor: t.Union([
         t.Object(
-          { kind: t.Literal('thread_post'), threadId: t.String(), postId: t.String() },
+          {
+            state: t.Literal('available'),
+            accountId: t.String(),
+            displayName: t.String(),
+            handle: t.Union([t.String(), t.Null()]),
+            avatar: AvatarSummarySchema,
+            avatarUrl: t.Null(),
+            automated: t.Boolean(),
+          },
           { additionalProperties: false },
         ),
-        t.Object({ kind: t.Literal('moderation_decision'), decisionId: t.String() }, { additionalProperties: false }),
-        t.Object({ kind: t.Literal('report_outcome'), reportId: t.String() }, { additionalProperties: false }),
-        t.Null(),
+        t.Object(
+          {
+            state: t.Literal('withheld'),
+            displayName: t.Literal('Former or unavailable account'),
+            handle: t.Null(),
+            avatar: t.Null(),
+            avatarUrl: t.Null(),
+          },
+          { additionalProperties: false },
+        ),
+        t.Object(
+          {
+            state: t.Literal('system'),
+            displayName: t.Literal('Moderation team'),
+            handle: t.Null(),
+            avatar: t.Null(),
+            avatarUrl: t.Null(),
+          },
+          { additionalProperties: false },
+        ),
       ]),
-      markSeen: t.Object({ method: t.Literal('POST'), path: t.String() }, { additionalProperties: false }),
-    },
-    { additionalProperties: false },
-  ),
-  unread: t.Boolean(),
-});
-const noticeDetail = t.Object(
-  {
-    viewer: t.Object({ state: t.Literal('current') }, { additionalProperties: false }),
-    notice: item,
-  },
-  { additionalProperties: false },
-);
+      target: t.Object(
+        {
+          state: t.Union([t.Literal('available'), t.Literal('withheld')]),
+          threadId: t.Union([t.String(), t.Null()]),
+          postId: t.Union([t.String(), t.Null()]),
+          boardId: t.Union([t.String(), t.Null()]),
+          threadTitle: t.Union([t.String(), t.Null()]),
+          boardTitle: t.Union([t.String(), t.Null()]),
+        },
+        { additionalProperties: false },
+      ),
+      summary: t.String(),
+      actions: t.Object(
+        {
+          open: t.Union([
+            t.Object({ kind: t.Literal('board'), boardId: t.String() }, { additionalProperties: false }),
+            t.Object({ kind: t.Literal('thread'), threadId: t.String() }, { additionalProperties: false }),
+            t.Object(
+              { kind: t.Literal('thread_post'), threadId: t.String(), postId: t.String() },
+              { additionalProperties: false },
+            ),
+            t.Object(
+              { kind: t.Literal('moderation_decision'), decisionId: t.String() },
+              { additionalProperties: false },
+            ),
+            t.Object({ kind: t.Literal('report_outcome'), reportId: t.String() }, { additionalProperties: false }),
+            t.Null(),
+          ]),
+          markSeen: t.Object({ method: t.Literal('POST'), path: t.String() }, { additionalProperties: false }),
+        },
+        { additionalProperties: false },
+      ),
+      unread: t.Boolean(),
+    }),
+  );
+}
+function noticeDetail() {
+  return memoizedValue(noticeDetail, () =>
+    t.Object(
+      {
+        viewer: t.Object({ state: t.Literal('current') }, { additionalProperties: false }),
+        notice: item(),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
 const countResponse = t.Object(
   {
     count: t.Integer({ minimum: 0, maximum: 100 }),
@@ -139,9 +155,20 @@ const countResponse = t.Object(
   },
   { additionalProperties: false },
 );
-const seenBody = strictContentSchema(t.Object({ through: t.String() }, { additionalProperties: false }));
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
-const listFailures = { ...failures, 400: problemSchema('invalid_request', 'invalid_cursor') };
+function seenBody() {
+  return memoizedValue(seenBody, () =>
+    strictContentSchema(t.Object({ through: t.String() }, { additionalProperties: false })),
+  );
+}
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }));
+}
+function listFailures() {
+  return memoizedValue(listFailures, () => ({
+    ...failures(),
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+  }));
+}
 
 function requireViewer(actor: { kind: string; accountId?: string }, accountId: string): void {
   if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
@@ -168,7 +195,7 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
           200: withHeaders(
             t.Object(
               {
-                items: t.Array(item),
+                items: t.Array(item()),
                 next: t.Union([t.String(), t.Null()]),
                 viewer: t.Object({ accountId: t.String() }, { additionalProperties: false }),
                 selection: t.Union([t.Literal('all'), t.Literal('unread')]),
@@ -191,9 +218,9 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
               },
               { additionalProperties: false },
             ),
-            sessionHeader,
+            sessionHeader(),
           ),
-          ...listFailures,
+          ...listFailures(),
         },
         detail: {
           operationId: 'notifications.list',
@@ -235,7 +262,7 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/accounts/:accountId/notifications/:noticeId',
       {
         params: noticeParams,
-        response: { 200: withHeaders(noticeDetail, sessionHeader), ...failures },
+        response: { 200: withHeaders(noticeDetail(), sessionHeader()), ...failures() },
         detail: {
           operationId: 'notifications.read_notice',
           'x-exposure': 'public',
@@ -272,7 +299,7 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       '/v1/accounts/:accountId/notifications/count',
       {
         params,
-        response: { 200: withHeaders(countResponse, sessionHeader), ...failures },
+        response: { 200: withHeaders(countResponse, sessionHeader()), ...failures() },
         detail: {
           operationId: 'notifications.count',
           'x-exposure': 'public',
@@ -307,11 +334,11 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       customMethod('/v1/accounts/:accountId/notifications', 'markSeen'),
       {
         params,
-        headers,
-        body: seenBody,
+        headers: headers(),
+        body: seenBody(),
         response: {
-          204: withHeaders(t.Void(), sessionHeader),
-          ...failures,
+          204: withHeaders(t.Void(), sessionHeader()),
+          ...failures(),
           403: problemSchema('forbidden'),
           429: problemSchema('rate_limited'),
           422: problemSchema('idempotency_conflict', 'too_many_events'),
@@ -353,10 +380,10 @@ export function noticeRoutes(app: ReturnType<typeof definitionRoutes>, dependenc
       customMethod('/v1/accounts/:accountId/notifications/:noticeId', 'markSeen'),
       {
         params: noticeParams,
-        headers,
+        headers: headers(),
         response: {
-          204: withHeaders(t.Void(), sessionHeader),
-          ...failures,
+          204: withHeaders(t.Void(), sessionHeader()),
+          ...failures(),
           403: problemSchema('forbidden'),
           429: problemSchema('rate_limited'),
           422: problemSchema('idempotency_conflict', 'too_many_events'),

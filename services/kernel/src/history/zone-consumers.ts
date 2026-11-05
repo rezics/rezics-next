@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { CommandTransaction } from '../command/command.ts';
 import { ZONE_EVENTS } from '../zones/events.ts';
 import {
@@ -10,25 +11,31 @@ import type { HistoryArtifact, HistoryBarrier, HistoryFamilySource, HistoryRegis
 import type { HistoryReceivingContext } from './receiving.ts';
 import { observeZoneHistoryConsumerClosure } from './receiving.ts';
 
-const eventTypes = [...ZONE_HISTORY_EVENT_TYPES].sort();
-const actualEventTypes = Object.keys(ZONE_EVENTS).sort();
-if (JSON.stringify(eventTypes) !== JSON.stringify(actualEventTypes))
-  throw new TypeError('Zone event producer inventory changed without History adoption');
-
-for (const type of ZONE_HISTORY_EVENT_TYPES) {
-  if (classifyEvent(type).kind !== 'non-personal') throw new TypeError('Zone base event classification changed');
+function eventTypes() {
+  return memoizedValue(eventTypes, () => [...ZONE_HISTORY_EVENT_TYPES].sort());
+}
+function actualEventTypes() {
+  return memoizedValue(actualEventTypes, () => Object.keys(ZONE_EVENTS).sort());
 }
 
 /** The current rebuilt producer cut: five receipt codecs and five closed ID/revision events.
  * No Zone durable-work producer is registered until its actual native owner exists. */
-export const ZONE_HISTORY_FAMILY_SOURCES: readonly HistoryFamilySource[] = Object.freeze([
-  ...ZONE_HISTORY_RECEIPT_KINDS.map((producer) => ({
-    artifactType: 'command-receipt/v1' as const,
-    producer,
-    version: 1,
-  })),
-  ...ZONE_HISTORY_EVENT_TYPES.map((producer) => ({ artifactType: 'outbox-event/v1' as const, producer, version: 1 })),
-]);
+export function ZONE_HISTORY_FAMILY_SOURCES(): readonly HistoryFamilySource[] {
+  return memoizedValue(ZONE_HISTORY_FAMILY_SOURCES, () =>
+    Object.freeze([
+      ...ZONE_HISTORY_RECEIPT_KINDS.map((producer) => ({
+        artifactType: 'command-receipt/v1' as const,
+        producer,
+        version: 1,
+      })),
+      ...ZONE_HISTORY_EVENT_TYPES.map((producer) => ({
+        artifactType: 'outbox-event/v1' as const,
+        producer,
+        version: 1,
+      })),
+    ]),
+  );
+}
 
 export type ZoneHistoryConsumerDependencies = Readonly<{ history: HistoryRegistry }>;
 
@@ -47,8 +54,13 @@ async function readiness(
  * Durable work remains an explicit family gap; neither an empty scan nor an unconditional owner
  * can claim that future Zone work has no consumer. */
 export function registerZoneHistoryConsumers({ history }: ZoneHistoryConsumerDependencies): void {
+  if (JSON.stringify(eventTypes()) !== JSON.stringify(actualEventTypes()))
+    throw new TypeError('Zone event producer inventory changed without History adoption');
+  for (const type of ZONE_HISTORY_EVENT_TYPES) {
+    if (classifyEvent(type).kind !== 'non-personal') throw new TypeError('Zone base event classification changed');
+  }
   history.registerCoverage('zones', ['command-receipt/v1', 'outbox-event/v1']);
-  history.registerFamilySources('zones', 1, ZONE_HISTORY_FAMILY_SOURCES);
+  history.registerFamilySources('zones', 1, ZONE_HISTORY_FAMILY_SOURCES());
 
   for (const kind of ZONE_HISTORY_RECEIPT_KINDS) {
     history.registerOwner({
@@ -74,8 +86,12 @@ export type ZoneHistoryProducerInventory = Readonly<{
   durableWork: readonly [];
 }>;
 
-export const ZONE_HISTORY_PRODUCER_INVENTORY: ZoneHistoryProducerInventory = Object.freeze({
-  receipts: ZONE_HISTORY_RECEIPT_KINDS,
-  events: ZONE_HISTORY_EVENT_TYPES,
-  durableWork: Object.freeze([] as const),
-});
+export function ZONE_HISTORY_PRODUCER_INVENTORY(): ZoneHistoryProducerInventory {
+  return memoizedValue(ZONE_HISTORY_PRODUCER_INVENTORY, () =>
+    Object.freeze({
+      receipts: ZONE_HISTORY_RECEIPT_KINDS,
+      events: ZONE_HISTORY_EVENT_TYPES,
+      durableWork: Object.freeze([] as const),
+    }),
+  );
+}

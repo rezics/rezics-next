@@ -93,7 +93,7 @@ async function publish(source: Input) {
     () => new Error('Native coordinator growth merge denied'),
   );
   const key = randomUUID();
-  const job = await store.prepareAdmission(
+  const job = await store().prepareAdmission(
     nativePool,
     {
       basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
@@ -140,7 +140,7 @@ async function publication(job: IdentityJobRef) {
 }
 
 async function custody(job: IdentityJobRef, source: Input) {
-  const saved = await store.readJob(db.pool, job);
+  const saved = await store().readJob(db.pool, job);
   expect(saved?.ref).toEqual(job);
   expect(saved?.state).toBe('published');
   const steps = [
@@ -161,9 +161,9 @@ async function custody(job: IdentityJobRef, source: Input) {
     expect(progress.frontier.after.length).toBeLessThanOrEqual(8);
     expect(Buffer.byteLength(JSON.stringify(progress.frontier))).toBeLessThanOrEqual(2048);
     expect(progress.work.rows).toBeLessThanOrEqual(100);
-    expect(await store.reconcileStepReceipt(nativePool, progress.receipt)).toEqual(progress);
+    expect(await store().reconcileStepReceipt(nativePool, progress.receipt)).toEqual(progress);
   }
-  expect(await store.readMapping(db.pool, source.original)).toMatchObject({
+  expect(await store().readMapping(db.pool, source.original)).toMatchObject({
     state: 'mapped',
     original: source.original,
     terminal: source.terminal,
@@ -212,12 +212,12 @@ test('actual fixed coordinator publication and receipt replay stay bounded acros
     async operation() {
       const job = await publish(current);
       const committed = await publication(job);
-      const saved = await store.readJob(db.pool, job);
+      const saved = await store().readJob(db.pool, job);
       // Lost caller results redeliver the original job, never a second epoch or publication.
       await resumeIdentityEpochJob(nativePool, job);
       await waitIdentityEpochPublished(nativePool, job);
       expect(await publication(job)).toEqual(committed);
-      expect(await store.readJob(db.pool, job)).toEqual(saved);
+      expect(await store().readJob(db.pool, job)).toEqual(saved);
       await custody(job, current);
     },
   });

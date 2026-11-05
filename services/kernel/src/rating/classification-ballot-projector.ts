@@ -133,7 +133,7 @@ async function ensureActorState(tx: Parameters<typeof actorStateRead.run>[0], ac
 async function applyLifecycle(pool: Pool, event: CloudEvent, envelope: Envelope, clock?: () => Date) {
   const type = event.type;
   if (!ACTOR_LIFECYCLE.has(type)) return;
-  const schema = ACCESS_EVENTS[type as keyof typeof ACCESS_EVENTS];
+  const schema = ACCESS_EVENTS()[type as keyof ReturnType<typeof ACCESS_EVENTS>];
   if (!schema || !Value.Check(schema, event.data)) throw new TypeError('Invalid account lifecycle event');
   const accountId = (event.data as { accountId: string }).accountId;
   const route = routeOfRequired(accountId);
@@ -178,7 +178,7 @@ async function applyLifecycle(pool: Pool, event: CloudEvent, envelope: Envelope,
 async function applyCleanup(pool: Pool, event: CloudEvent, envelope: Envelope, clock?: () => Date) {
   if (
     event.type !== CLASSIFICATION_BALLOT_CLEANUP ||
-    !Value.Check(RATING_EVENTS[CLASSIFICATION_BALLOT_CLEANUP], event.data)
+    !Value.Check(RATING_EVENTS()[CLASSIFICATION_BALLOT_CLEANUP], event.data)
   )
     throw new TypeError('Invalid classification ballot cleanup event');
   const data = event.data as { actorId: string; generation: string };
@@ -258,7 +258,7 @@ async function applyCleanup(pool: Pool, event: CloudEvent, envelope: Envelope, c
 async function applyChanged(pool: Pool, event: CloudEvent, envelope: Envelope, clock?: () => Date) {
   if (
     event.type !== CLASSIFICATION_BALLOT_CHANGED ||
-    !Value.Check(RATING_EVENTS[CLASSIFICATION_BALLOT_CHANGED], event.data)
+    !Value.Check(RATING_EVENTS()[CLASSIFICATION_BALLOT_CHANGED], event.data)
   )
     throw new TypeError('Invalid classification ballot event');
   const data = event.data as {

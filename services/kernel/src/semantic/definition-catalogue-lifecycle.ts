@@ -422,7 +422,7 @@ export async function enrollCatalogueConsumer(
     catalogueBytes([consumer.toString('base64'), provenance.toString('base64'), dependency.toString('base64')]),
   );
   const work = new NativeCollectionWork(
-    { reservationId: command.transactionId, remaining: CATALOGUE_COMMAND_BOUND },
+    { reservationId: command.transactionId, remaining: CATALOGUE_COMMAND_BOUND() },
     resources.deadline,
   );
   const { head, enrollment } = await lockEnrollmentRows(tx, root, work);

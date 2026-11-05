@@ -162,7 +162,7 @@ export const createIdentitySourceSupportReader: IdentitySourceSupportReaderFacto
       const owner = await readPartition(tx, partition);
       if (!owner || owner.writeState !== 'active') throw new SupportState('unavailable');
       charge(1);
-      const job = await identityEpochStore.readJob(tx, request.job);
+      const job = await identityEpochStore().readJob(tx, request.job);
       if (!job || job.state === 'cancelled' || job.state === 'cancelling' || job.state === 'published')
         throw new SupportState('changed');
       if (job.state !== 'pending' || job.mapping?.state !== 'complete') throw new SupportState('unready');
@@ -331,7 +331,7 @@ export const createIdentitySourceSupportReader: IdentitySourceSupportReaderFacto
           const original = next.pending;
           charge(1);
           const mapping = await withIdentitySourceSupportJob(request.job, () =>
-            identityEpochStore.readMapping(config.pool, original),
+            identityEpochStore().readMapping(config.pool, original),
           );
           if (mapping.state === 'pending') return { status: 'unready', cost };
           if (mapping.state !== 'mapped') return { status: 'unavailable', cost };

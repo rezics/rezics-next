@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Access } from '../request/access.ts';
 import type { Pool } from 'pg';
 import {
@@ -37,22 +38,30 @@ export type AuthenticationWorkProducer = AccessWorkProducer<OriginalAuthenticati
 const maximumRoute = 65535;
 const maximumUuid = 'x'.repeat(36);
 const maximumTimestamp = 'x'.repeat(64);
-const accountState = accessNativeDeclaration(
-  'account-state',
-  { route: maximumRoute, account_id: maximumUuid },
-  { targets: 1 },
-).bound;
-const assignment = accessNativeDeclaration(
-  'assignment',
-  {
-    route: maximumRoute,
-    principal_id: maximumUuid,
-    request_id: maximumUuid,
-    actor_id: maximumUuid,
-    at: maximumTimestamp,
-  },
-  {},
-).bound;
+function accountState() {
+  return memoizedValue(
+    accountState,
+    () =>
+      accessNativeDeclaration('account-state', { route: maximumRoute, account_id: maximumUuid }, { targets: 1 }).bound,
+  );
+}
+function assignment() {
+  return memoizedValue(
+    assignment,
+    () =>
+      accessNativeDeclaration(
+        'assignment',
+        {
+          route: maximumRoute,
+          principal_id: maximumUuid,
+          request_id: maximumUuid,
+          actor_id: maximumUuid,
+          at: maximumTimestamp,
+        },
+        {},
+      ).bound,
+  );
+}
 const checkout: AccessWork = Object.freeze({
   keys: 0,
   points: 1,
@@ -83,7 +92,7 @@ export function authenticationVerificationWorkBound(token: string): AccessWork {
  * come from the existing account-state and assignment producers.
  */
 export function authenticationWorkBound(token: string): AccessWork {
-  return addAccessWork(authenticationVerificationWorkBound(token), checkout, accountState, checkout, assignment);
+  return addAccessWork(authenticationVerificationWorkBound(token), checkout, accountState(), checkout, assignment());
 }
 
 function producer(): AuthenticationWorkProducer {

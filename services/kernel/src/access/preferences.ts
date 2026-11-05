@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool, PoolClient } from 'pg';
 import { runCommand } from '../command/command.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -92,13 +93,17 @@ export type AccountPreferences = {
   notifications: Notifications;
   version: number;
 };
-export const DEFAULT_ACCOUNT_PREFERENCES: Readonly<AccountPreferences> = Object.freeze({
-  spoilerLevel: 0,
-  suitability: 'blur',
-  shelf: Object.freeze({}),
-  notifications: DEFAULT_NOTIFICATIONS,
-  version: 0,
-});
+export function DEFAULT_ACCOUNT_PREFERENCES(): Readonly<AccountPreferences> {
+  return memoizedValue(DEFAULT_ACCOUNT_PREFERENCES, () =>
+    Object.freeze({
+      spoilerLevel: 0,
+      suitability: 'blur',
+      shelf: Object.freeze({}),
+      notifications: DEFAULT_NOTIFICATIONS,
+      version: 0,
+    }),
+  );
+}
 export const READING_SPOILER_LEVELS = [0, 1, 2] as const;
 export const READING_SUITABILITY = ['blur', 'show'] as const;
 export const READING_DEFAULTS = Object.freeze({ spoilerLevel: 0, suitability: 'blur' } as const);
@@ -382,7 +387,7 @@ export async function readAccountPreferences(
         shelf: row.shelf as Shelf,
         notifications: effectiveNotifications(row.notifications as NotificationsPatch),
       }
-    : { ...DEFAULT_ACCOUNT_PREFERENCES, shelf: {}, notifications: { ...DEFAULT_NOTIFICATIONS } };
+    : { ...DEFAULT_ACCOUNT_PREFERENCES(), shelf: {}, notifications: { ...DEFAULT_NOTIFICATIONS } };
 }
 
 /** Serializable read/compare/write touches one preference row and the command receipt.

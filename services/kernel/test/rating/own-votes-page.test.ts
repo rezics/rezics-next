@@ -234,7 +234,7 @@ test('a suppressed raw page keeps continuation; dependency failure retries the s
   expect(await body(await native.request(`${pagePath}?cursor=${encodeURIComponent(sparse.next)}`, viewer))).toEqual(
     resumed,
   );
-  const unavailable = spyOn(identityEpochStore, 'readMappings').mockImplementationOnce(async () => {
+  const unavailable = spyOn(identityEpochStore(), 'readMappings').mockImplementationOnce(async () => {
     throw new AccessUnavailableError('overloaded');
   });
   try {

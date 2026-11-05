@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import canonicalize from 'canonicalize';
 import { Value } from 'typebox/value';
 import type { Pool } from 'pg';
@@ -31,42 +32,70 @@ export const IDENTITY_FX_CHILD_DECLARATION_MISSING = 'identity-fx-original-child
 
 // Closed local graph. Source: exact intent/inventory/obligation/receipt/outbox, role cut (65 is
 // the overflow sentinel), one prior original, one INSERT. No Source/Library/SDK price is included.
-export const IDENTITY_FX_SOURCE_CONTROL = Object.freeze({
-  command: ORIGINAL_NATIVE_CONTROL,
-  source: originalControlWork(7, 7, 1, 16384, 7),
-  roles: originalControlWork(65, 1, 1, 8192, 1),
-  barriers: originalControlWork(64, 64, 1, 16384, 64),
-  previous: originalControlWork(1, 1, 1, 32768, 1),
-  insert: originalControlWork(1, 1, 1, 32768),
-});
-export const IDENTITY_FX_SOURCE_ADMISSION = sumOriginalControl(...Object.values(IDENTITY_FX_SOURCE_CONTROL));
-export const IDENTITY_FX_RECEIVING_CONTROL = Object.freeze({
-  command: ORIGINAL_NATIVE_CONTROL,
-  home: originalControlWork(1, 1, 1, 128, 1),
-  domain: originalControlWork(1, 1, 1, 128, 1),
-  previous: originalControlWork(1, 1, 1, 32768, 1),
-  insert: originalControlWork(1, 1, 1, 32768),
-});
-export const IDENTITY_FX_RECEIVING_ADMISSION = sumOriginalControl(...Object.values(IDENTITY_FX_RECEIVING_CONTROL));
-export const IDENTITY_FX_REPLAY_CONTROL = sumOriginalControl(
-  ORIGINAL_NATIVE_CONTROL,
-  originalControlWork(1, 1, 1, 32768, 1),
-  originalControlWork(1, 1, 1, 0),
-);
+export function IDENTITY_FX_SOURCE_CONTROL() {
+  return memoizedValue(IDENTITY_FX_SOURCE_CONTROL, () =>
+    Object.freeze({
+      command: ORIGINAL_NATIVE_CONTROL,
+      source: originalControlWork(7, 7, 1, 16384, 7),
+      roles: originalControlWork(65, 1, 1, 8192, 1),
+      barriers: originalControlWork(64, 64, 1, 16384, 64),
+      previous: originalControlWork(1, 1, 1, 32768, 1),
+      insert: originalControlWork(1, 1, 1, 32768),
+    }),
+  );
+}
+export function IDENTITY_FX_SOURCE_ADMISSION() {
+  return memoizedValue(IDENTITY_FX_SOURCE_ADMISSION, () =>
+    sumOriginalControl(...Object.values(IDENTITY_FX_SOURCE_CONTROL())),
+  );
+}
+export function IDENTITY_FX_RECEIVING_CONTROL() {
+  return memoizedValue(IDENTITY_FX_RECEIVING_CONTROL, () =>
+    Object.freeze({
+      command: ORIGINAL_NATIVE_CONTROL,
+      home: originalControlWork(1, 1, 1, 128, 1),
+      domain: originalControlWork(1, 1, 1, 128, 1),
+      previous: originalControlWork(1, 1, 1, 32768, 1),
+      insert: originalControlWork(1, 1, 1, 32768),
+    }),
+  );
+}
+export function IDENTITY_FX_RECEIVING_ADMISSION() {
+  return memoizedValue(IDENTITY_FX_RECEIVING_ADMISSION, () =>
+    sumOriginalControl(...Object.values(IDENTITY_FX_RECEIVING_CONTROL())),
+  );
+}
+export function IDENTITY_FX_REPLAY_CONTROL() {
+  return memoizedValue(IDENTITY_FX_REPLAY_CONTROL, () =>
+    sumOriginalControl(
+      ORIGINAL_NATIVE_CONTROL,
+      originalControlWork(1, 1, 1, 32768, 1),
+      originalControlWork(1, 1, 1, 0),
+    ),
+  );
+}
 // Projection columns outside the bounded JSON: source/replay UUID(36)+deadline(16)
 // twice; receiving UUID(36)+epoch(10)+generation(19)+deadline(16); replay RETURNING UUID(36).
-export const IDENTITY_FX_ENCODED_COLUMNS = originalControlWork(0, 0, 0, 2 * 52 + 81 + 36);
+export function IDENTITY_FX_ENCODED_COLUMNS() {
+  return memoizedValue(IDENTITY_FX_ENCODED_COLUMNS, () => originalControlWork(0, 0, 0, 2 * 52 + 81 + 36));
+}
 // This is a local admission cap, not a change to DBOS retries or a whole-wrapper price.
 const FX_LOCAL_ATTEMPTS = 10;
-export const IDENTITY_FX_LOCAL_ATTEMPT = sumOriginalControl(
-  IDENTITY_FX_SOURCE_ADMISSION,
-  IDENTITY_FX_RECEIVING_ADMISSION,
-  IDENTITY_FX_REPLAY_CONTROL,
-  IDENTITY_FX_ENCODED_COLUMNS,
-);
-export const IDENTITY_FX_LOCAL_ALLOWANCE = sumOriginalControl(
-  ...Array.from({ length: FX_LOCAL_ATTEMPTS }, () => IDENTITY_FX_LOCAL_ATTEMPT),
-);
+export function IDENTITY_FX_LOCAL_ATTEMPT() {
+  return memoizedValue(IDENTITY_FX_LOCAL_ATTEMPT, () =>
+    sumOriginalControl(
+      IDENTITY_FX_SOURCE_ADMISSION(),
+      IDENTITY_FX_RECEIVING_ADMISSION(),
+      IDENTITY_FX_REPLAY_CONTROL(),
+      IDENTITY_FX_ENCODED_COLUMNS(),
+    ),
+  );
+}
+export function IDENTITY_FX_LOCAL_ALLOWANCE() {
+  return memoizedValue(IDENTITY_FX_LOCAL_ALLOWANCE, () =>
+    sumOriginalControl(...Array.from({ length: FX_LOCAL_ATTEMPTS }, () => IDENTITY_FX_LOCAL_ATTEMPT())),
+  );
+}
 
 type Route = Readonly<{ pool: Pool; client: WorkClient }>;
 const routes = new WeakMap<Effect, Route>();
@@ -100,7 +129,7 @@ export function validateIdentityOriginalEvent(envelope: Envelope, eventSeq: numb
   if (
     !event ||
     event.type !== IDENTITY_FX_EVENT ||
-    !Value.Check(ACCESS_EVENTS[IDENTITY_FX_EVENT], event.data) ||
+    !Value.Check(ACCESS_EVENTS()[IDENTITY_FX_EVENT], event.data) ||
     !Number.isSafeInteger(envelope.partition) ||
     envelope.partition < 0 ||
     envelope.partition > 4095 ||
@@ -201,9 +230,9 @@ export async function associateIdentityFxOriginal(
   )
     throw new IdentityOriginalUnavailable('identity-fx-original-workflow-mismatch');
   // Receiving spends the original's prepaid local prefix, not another Source frame.
-  const sourceBudget = originalWorkVector(IDENTITY_FX_LOCAL_ALLOWANCE);
-  const attemptBudget = originalWorkVector(IDENTITY_FX_LOCAL_ATTEMPT);
-  const receivingBudget = originalWorkVector(IDENTITY_FX_RECEIVING_ADMISSION);
+  const sourceBudget = originalWorkVector(IDENTITY_FX_LOCAL_ALLOWANCE());
+  const attemptBudget = originalWorkVector(IDENTITY_FX_LOCAL_ATTEMPT());
+  const receivingBudget = originalWorkVector(IDENTITY_FX_RECEIVING_ADMISSION());
   const deadline = Date.now() + IDENTITY_ORIGINAL_DEADLINE_MS;
   // A replay debits its complete repeated source/receiving/control path in a separate
   // committed command. Failure of any later native transaction cannot refund it.

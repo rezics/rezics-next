@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import { ProblemError, problemSchema } from '../http/problem.ts';
@@ -25,32 +26,40 @@ const page = t.Object(
   },
   closed,
 );
-const sessionHeader = { [SESSION_HEADER]: t.String() };
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
-const failures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden', 'platform_closed'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  422: problemSchema('idempotency_conflict', 'too_many_events'),
-  429: problemSchema('rate_limited'),
-  500: problemSchema('internal_error'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-  ),
-};
+function sessionHeader() {
+  return memoizedValue(sessionHeader, () => ({ [SESSION_HEADER]: t.String() }));
+}
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }));
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden', 'platform_closed'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict', 'too_many_events'),
+    429: problemSchema('rate_limited'),
+    500: problemSchema('internal_error'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+    ),
+  }));
+}
 const readDetail = { 'x-exposure': 'public', 'x-action': 'account:read', security: [{ bearerAuth: [] }] };
-const writeDetail = {
-  'x-exposure': 'public',
-  'x-action': 'account:update',
-  'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
-  security: [{ bearerAuth: [] }],
-};
+function writeDetail() {
+  return memoizedValue(writeDetail, () => ({
+    'x-exposure': 'public',
+    'x-action': 'account:update',
+    'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }),
+    security: [{ bearerAuth: [] }],
+  }));
+}
 
 /** Native Content methods consumed by board controls and Settings. No alternate board list exists. */
 export function watchRoutes(app: ReturnType<typeof editionRoutes>, deps: WatchDependencies) {
@@ -59,7 +68,7 @@ export function watchRoutes(app: ReturnType<typeof editionRoutes>, deps: WatchDe
       '/v1/boards/:id/watch/page',
       {
         params: t.Object({ id: t.String() }, closed),
-        response: { 200: withHeaders(page, sessionHeader), ...failures },
+        response: { 200: withHeaders(page, sessionHeader()), ...failures() },
         detail: { ...readDetail, operationId: 'board.watch_page' },
       },
       async ({ params: { id }, actor, admission, job, session, set }) => {
@@ -82,7 +91,7 @@ export function watchRoutes(app: ReturnType<typeof editionRoutes>, deps: WatchDe
       '/v1/boards/:id/watch',
       {
         params: t.Object({ id: t.String() }, closed),
-        response: { 200: withHeaders(state, sessionHeader), ...failures },
+        response: { 200: withHeaders(state, sessionHeader()), ...failures() },
         detail: { ...readDetail, operationId: 'board.watch_state' },
       },
       async ({ params: { id }, actor, admission, job, session, set }) => {
@@ -105,10 +114,10 @@ export function watchRoutes(app: ReturnType<typeof editionRoutes>, deps: WatchDe
       '/v1/boards/:id/watch',
       {
         params: t.Object({ id: t.String() }, closed),
-        headers,
+        headers: headers(),
         body: strictContentSchema(t.Object({ watching: t.Boolean(), expectedRevision: revision }, closed)),
-        response: { 200: withHeaders(state, sessionHeader), ...failures },
-        detail: { ...writeDetail, operationId: 'board.set_watch' },
+        response: { 200: withHeaders(state, sessionHeader()), ...failures() },
+        detail: { ...writeDetail(), operationId: 'board.set_watch' },
       },
       async ({ params: { id }, body, headers: requestHeaders, actor, admission, job, session, set }) => {
         try {
@@ -146,8 +155,8 @@ export function watchRoutes(app: ReturnType<typeof editionRoutes>, deps: WatchDe
           closed,
         ),
         response: {
-          200: withHeaders(WatchManagementPageSchema, sessionHeader),
-          ...failures,
+          200: withHeaders(WatchManagementPageSchema, sessionHeader()),
+          ...failures(),
         },
         detail: { ...readDetail, operationId: 'watch.list' },
       },
@@ -163,11 +172,11 @@ export function watchRoutes(app: ReturnType<typeof editionRoutes>, deps: WatchDe
       '/v1/accounts/:accountId/watches/:watchId',
       {
         params: t.Object({ accountId: t.String(), watchId: t.String() }, closed),
-        headers,
+        headers: headers(),
         query: t.Object({ kind: WatchManagementKindSchema }, closed),
         body: strictContentSchema(t.Object({ expectedRevision: revision }, closed)),
-        response: { 200: withHeaders(t.Object({ removed: t.Boolean() }, closed), sessionHeader), ...failures },
-        detail: { ...writeDetail, operationId: 'watch.remove' },
+        response: { 200: withHeaders(t.Object({ removed: t.Boolean() }, closed), sessionHeader()), ...failures() },
+        detail: { ...writeDetail(), operationId: 'watch.remove' },
       },
       async ({
         params: { accountId, watchId },

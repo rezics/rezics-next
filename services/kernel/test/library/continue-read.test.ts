@@ -32,21 +32,21 @@ const header = {
 };
 
 test('Continue response keeps BASIC closed and permits only the nullable native FULL subject summary', () => {
-  expect(Value.Check(continuePageSchema, page)).toBe(true);
+  expect(Value.Check(continuePageSchema(), page)).toBe(true);
   expect(
-    Value.Check(continuePageSchema, {
+    Value.Check(continuePageSchema(), {
       ...page,
       subjects: [{ ...page.subjects[0], subject: header }],
     }),
   ).toBe(true);
   expect(
-    Value.Check(continuePageSchema, {
+    Value.Check(continuePageSchema(), {
       ...page,
       subjects: [{ ...page.subjects[0], subject: null }],
     }),
   ).toBe(true);
   expect(
-    Value.Check(continuePageSchema, {
+    Value.Check(continuePageSchema(), {
       ...page,
       subjects: [{ ...page.subjects[0], subject: { ...header, privatePins: [] } }],
     }),

@@ -194,7 +194,7 @@ export function registerAgentVerificationWork(context: WorkContext): void {
       name: 'agent_verification_reversal',
       types: ['com.rezics.access.agent-verification.reversing.v1'],
       async run(event) {
-        if (!Value.Check(ACCESS_EVENTS['com.rezics.access.agent-verification.reversing.v1'], event.data))
+        if (!Value.Check(ACCESS_EVENTS()['com.rezics.access.agent-verification.reversing.v1'], event.data))
           throw new TypeError('Invalid account agent verification reversal event');
         const decision = event.data as AgentVerificationReversal;
         await enqueueAgentIdentityReversal(context.pool, context.client, decision);

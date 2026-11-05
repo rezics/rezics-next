@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { createAccess } from '../access/index.ts';
 import { withConnection } from '../database/pool.ts';
@@ -25,7 +26,9 @@ import { markAccountErasureFound, noteAccountErasureFound } from './account-eras
 export type UploadErasureCursor = Readonly<{ phase: 'media' | 'fields'; after: string | null }>;
 const pageSize = 50;
 const first = '00000000-0000-0000-0000-000000000000';
-const access = createAccess({ actions: new Map([['subject:read', { anonymous: true }]]) });
+function access() {
+  return memoizedValue(access, () => createAccess({ actions: new Map([['subject:read', { anonymous: true }]]) }));
+}
 
 function route(id: string): number {
   const result = routeOf(id);
@@ -81,7 +84,7 @@ export async function eraseAccountUploadItem(
     return 'erased';
   }
 
-  const visible = await readDocument({ pool: deps.pool, access, routeKey: new Uint8Array() }, id, {
+  const visible = await readDocument({ pool: deps.pool, access: access(), routeKey: new Uint8Array() }, id, {
     actor: { kind: 'anonymous' },
     deadline: Date.now() + 30_000,
   });

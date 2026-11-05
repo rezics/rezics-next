@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { Pool } from 'pg';
 import type { Static, TSchema } from 'typebox';
@@ -63,26 +64,30 @@ const manifestV1 = t.Object(
   },
   closed,
 );
-const manifestSchema = t.Union([
-  manifestV1,
-  t.Object(
-    {
-      ...manifestV1.properties,
-      version: t.Literal(2),
-      coverage: t.Literal('private-library-owner-facts-v2'),
-      sectionTotals: t.Object(
-        Object.fromEntries(
-          exportSectionsV2.map((section) => [
-            section,
-            t.Object({ rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed),
-          ]),
-        ),
+function manifestSchema() {
+  return memoizedValue(manifestSchema, () =>
+    t.Union([
+      manifestV1,
+      t.Object(
+        {
+          ...manifestV1.properties,
+          version: t.Literal(2),
+          coverage: t.Literal('private-library-owner-facts-v2'),
+          sectionTotals: t.Object(
+            Object.fromEntries(
+              exportSectionsV2.map((section) => [
+                section,
+                t.Object({ rows: t.Integer({ minimum: 0 }), recordBytes: t.Integer({ minimum: 0 }) }, closed),
+              ]),
+            ),
+            closed,
+          ),
+        },
         closed,
       ),
-    },
-    closed,
-  ),
-]);
+    ]),
+  );
+}
 const presentationReview = t.Object(
   {
     kind: nullableText,
@@ -154,72 +159,98 @@ const confirmation = t.Union([
   t.Object({ reviewId: id, digest: t.String({ pattern: '^[0-9a-f]{64}$' }) }, closed),
   t.Null(),
 ]);
-const statusFields = {
-  uploadId: id,
-  state,
-  createdAt: nullableText,
-  expiresAt: text,
-  manifest: t.Union([manifestSchema, t.Null()]),
-  coverage: t.Array(coverage),
-  sourceRecordCount: t.Integer({ minimum: 0 }),
-  selectedCollectionId: t.Union([id, t.Null()]),
-  selectedOccurrences: t.Integer({ minimum: 0 }),
-  cancelRequested: t.Boolean(),
-  collectionId: t.Union([id, t.Null()]),
-  confirmation,
-  fullRestoration: t.Literal(false),
-  presentation: presentationStatus,
-  pin: pinStatus,
-  sectionReasons: t.Record(t.String(), t.String()),
-};
-const status = t.Object(statusFields, closed);
-const rootPageFields = { ...statusFields, next: nullableText };
+function statusFields() {
+  return memoizedValue(statusFields, () => ({
+    uploadId: id,
+    state,
+    createdAt: nullableText,
+    expiresAt: text,
+    manifest: t.Union([manifestSchema(), t.Null()]),
+    coverage: t.Array(coverage),
+    sourceRecordCount: t.Integer({ minimum: 0 }),
+    selectedCollectionId: t.Union([id, t.Null()]),
+    selectedOccurrences: t.Integer({ minimum: 0 }),
+    cancelRequested: t.Boolean(),
+    collectionId: t.Union([id, t.Null()]),
+    confirmation,
+    fullRestoration: t.Literal(false),
+    presentation: presentationStatus,
+    pin: pinStatus,
+    sectionReasons: t.Record(t.String(), t.String()),
+  }));
+}
+function status() {
+  return memoizedValue(status, () => t.Object(statusFields(), closed));
+}
+function rootPageFields() {
+  return memoizedValue(rootPageFields, () => ({ ...statusFields(), next: nullableText }));
+}
 const params = t.Object({ id }, closed);
 const collectionParams = t.Object({ id, collectionId: id }, closed);
-const pageQuery = t.Object(
-  {
-    limit: t.Optional(t.Numeric({ minimum: 1, maximum: LIBRARY_ARCHIVE_RECOVERY_LIMITS.previewPage, multipleOf: 1 })),
-    cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
-  },
-  closed,
-);
-const uploadBody = t.Object(
-  { archiveBase64: t.String({ maxLength: Math.ceil(LIBRARY_ARCHIVE_LIMITS.uploadBytes / 3) * 4 }) },
-  closed,
-);
-const reviewBody = t.Object(
-  {
-    collectionId: id,
-    presentationKind: t.Optional(t.Union([t.String({ minLength: 1, maxLength: 128 }), t.Null()])),
-    selectedOccurrenceIds: t.Array(id, {
-      maxItems: LIBRARY_ARCHIVE_RECOVERY_LIMITS.selectedOccurrences,
-      uniqueItems: true,
-    }),
-    mappings: t.Array(mapping, {
-      maxItems: LIBRARY_ARCHIVE_RECOVERY_LIMITS.selectedOccurrences,
-    }),
-  },
-  closed,
-);
-const reviewHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
+function pageQuery() {
+  return memoizedValue(pageQuery, () =>
+    t.Object(
+      {
+        limit: t.Optional(
+          t.Numeric({ minimum: 1, maximum: LIBRARY_ARCHIVE_RECOVERY_LIMITS.previewPage, multipleOf: 1 }),
+        ),
+        cursor: t.Optional(t.String({ minLength: 1, maxLength: 4096 })),
+      },
+      closed,
+    ),
+  );
+}
+function uploadBody() {
+  return memoizedValue(uploadBody, () =>
+    t.Object(
+      { archiveBase64: t.String({ maxLength: Math.ceil(LIBRARY_ARCHIVE_LIMITS().uploadBytes / 3) * 4 }) },
+      closed,
+    ),
+  );
+}
+function reviewBody() {
+  return memoizedValue(reviewBody, () =>
+    t.Object(
+      {
+        collectionId: id,
+        presentationKind: t.Optional(t.Union([t.String({ minLength: 1, maxLength: 128 }), t.Null()])),
+        selectedOccurrenceIds: t.Array(id, {
+          maxItems: LIBRARY_ARCHIVE_RECOVERY_LIMITS.selectedOccurrences,
+          uniqueItems: true,
+        }),
+        mappings: t.Array(mapping, {
+          maxItems: LIBRARY_ARCHIVE_RECOVERY_LIMITS.selectedOccurrences,
+        }),
+      },
+      closed,
+    ),
+  );
+}
+function reviewHeaders() {
+  return memoizedValue(reviewHeaders, () =>
+    t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+  );
+}
 const applyBody = t.Object({ reviewId: id, digest: t.String({ pattern: '^[0-9a-f]{64}$' }) }, closed);
-const failures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema(
-    'dependency_unavailable',
-    'semantic_not_ready',
-    'presentation_not_ready',
-    'overloaded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'deadline_exceeded',
-  ),
-};
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema(
+      'dependency_unavailable',
+      'semantic_not_ready',
+      'presentation_not_ready',
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+    ),
+  }));
+}
 const collectionSummary = t.Object(
   {
     id,
@@ -240,7 +271,11 @@ const collectionSummary = t.Object(
   },
   closed,
 );
-const collectionsPage = t.Object({ ...rootPageFields, collections: t.Array(collectionSummary) }, closed);
+function collectionsPage() {
+  return memoizedValue(collectionsPage, () =>
+    t.Object({ ...rootPageFields(), collections: t.Array(collectionSummary) }, closed),
+  );
+}
 const collectionPreview = t.Object(
   {
     ...collectionSummary.properties,
@@ -270,14 +305,18 @@ const occurrencePreview = t.Object(
   },
   closed,
 );
-const occurrencesPage = t.Object(
-  {
-    ...rootPageFields,
-    collection: t.Union([collectionPreview, t.Null()]),
-    occurrences: t.Array(occurrencePreview),
-  },
-  closed,
-);
+function occurrencesPage() {
+  return memoizedValue(occurrencesPage, () =>
+    t.Object(
+      {
+        ...rootPageFields(),
+        collection: t.Union([collectionPreview, t.Null()]),
+        occurrences: t.Array(occurrencePreview),
+      },
+      closed,
+    ),
+  );
+}
 const reviewSummary = t.Object(
   {
     reviewId: id,
@@ -291,17 +330,21 @@ const reviewSummary = t.Object(
   },
   closed,
 );
-const reviewed = t.Object(
-  {
-    ...statusFields,
-    review: t.Union([reviewSummary, t.Null()]),
-    mappings: t.Array(reviewedMapping),
-    completeOrder: t.Boolean(),
-    completeMembership: t.Boolean(),
-    pin: pinReview,
-  },
-  closed,
-);
+function reviewed() {
+  return memoizedValue(reviewed, () =>
+    t.Object(
+      {
+        ...statusFields(),
+        review: t.Union([reviewSummary, t.Null()]),
+        mappings: t.Array(reviewedMapping),
+        completeOrder: t.Boolean(),
+        completeMembership: t.Boolean(),
+        pin: pinReview,
+      },
+      closed,
+    ),
+  );
+}
 const outcome = t.Object(
   {
     sourceOccurrenceId: id,
@@ -341,14 +384,18 @@ const outcome = t.Object(
   },
   closed,
 );
-const outcomesPage = t.Object(
-  {
-    ...rootPageFields,
-    collection: t.Union([t.Object({ id, visibility: t.Literal('private') }, closed), t.Null()]),
-    outcomes: t.Array(outcome),
-  },
-  closed,
-);
+function outcomesPage() {
+  return memoizedValue(outcomesPage, () =>
+    t.Object(
+      {
+        ...rootPageFields(),
+        collection: t.Union([t.Object({ id, visibility: t.Literal('private') }, closed), t.Null()]),
+        outcomes: t.Array(outcome),
+      },
+      closed,
+    ),
+  );
+}
 /** Elysia checks each JSONB-derived result against the declared response schema before sending it. */
 function responseValue<S extends TSchema>(_schema: S, value: unknown): Static<S> {
   return value as Static<S>;
@@ -359,11 +406,11 @@ function detail(operationId: string, write = false) {
     'x-action': 'collection:read',
     'x-exposure': 'gate:collections',
     'x-authority-anchor': 'own-account',
-    'x-authority-resource-types': exportAuthorityTypes,
+    'x-authority-resource-types': exportAuthorityTypes(),
     // collection:read is shared with optionally anonymous collection reads; the owner gate rejects anonymous actors.
     security: [{ bearerAuth: [] }, {}],
     ...(operationId === 'create'
-      ? { 'x-body-limit': Math.ceil(LIBRARY_ARCHIVE_LIMITS.uploadBytes / 3) * 4 + 128 }
+      ? { 'x-body-limit': Math.ceil(LIBRARY_ARCHIVE_LIMITS().uploadBytes / 3) * 4 + 128 }
       : {}),
     ...(write ? { 'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }) } : {}),
   };
@@ -382,15 +429,15 @@ export function libraryArchiveCollectionRecoveryRoutes(
       '/v1/libraryArchiveCollectionRecoveries',
       {
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
-        body: uploadBody,
-        response: { 200: status, ...failures },
+        body: uploadBody(),
+        response: { 200: status(), ...failures() },
         detail: detail('create', true),
       },
       async ({ request, actor, headers, body, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, async () =>
           responseValue(
-            status,
+            status(),
             await service().create(
               actor,
               body.archiveBase64,
@@ -405,13 +452,13 @@ export function libraryArchiveCollectionRecoveryRoutes(
       '/v1/libraryArchiveCollectionRecoveries/:id',
       {
         params,
-        response: { 200: status, ...failures },
+        response: { 200: status(), ...failures() },
         detail: detail('status'),
       },
       async ({ request, actor, params: path, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, async () =>
-          responseValue(status, await service().status(actor, path.id, requestSignal(request, job.signal))),
+          responseValue(status(), await service().status(actor, path.id, requestSignal(request, job.signal))),
         );
       },
     )
@@ -419,15 +466,15 @@ export function libraryArchiveCollectionRecoveryRoutes(
       '/v1/libraryArchiveCollectionRecoveries/:id/collections',
       {
         params,
-        query: pageQuery,
-        response: { 200: collectionsPage, ...failures },
+        query: pageQuery(),
+        response: { 200: collectionsPage(), ...failures() },
         detail: detail('collections'),
       },
       async ({ request, actor, params: path, query, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, async () =>
           responseValue(
-            collectionsPage,
+            collectionsPage(),
             await service().listCollections(actor, path.id, query, requestSignal(request, job.signal)),
           ),
         );
@@ -437,15 +484,15 @@ export function libraryArchiveCollectionRecoveryRoutes(
       '/v1/libraryArchiveCollectionRecoveries/:id/collections/:collectionId/occurrences',
       {
         params: collectionParams,
-        query: pageQuery,
-        response: { 200: occurrencesPage, ...failures },
+        query: pageQuery(),
+        response: { 200: occurrencesPage(), ...failures() },
         detail: detail('occurrences'),
       },
       async ({ request, actor, params: path, query, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, async () =>
           responseValue(
-            occurrencesPage,
+            occurrencesPage(),
             await service().previewCollection(
               actor,
               path.id,
@@ -461,16 +508,16 @@ export function libraryArchiveCollectionRecoveryRoutes(
       '/v1/libraryArchiveCollectionRecoveries/:id/review',
       {
         params,
-        headers: reviewHeaders,
-        body: reviewBody,
-        response: { 200: reviewed, ...failures },
+        headers: reviewHeaders(),
+        body: reviewBody(),
+        response: { 200: reviewed(), ...failures() },
         detail: detail('review', true),
       },
       async ({ request, actor, params: path, headers, body, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, async () =>
           responseValue(
-            reviewed,
+            reviewed(),
             await service().review(
               actor,
               path.id,
@@ -487,13 +534,13 @@ export function libraryArchiveCollectionRecoveryRoutes(
       {
         params,
         body: applyBody,
-        response: { 200: status, ...failures },
+        response: { 200: status(), ...failures() },
         detail: detail('apply', true),
       },
       async ({ request, actor, params: path, body, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, async () =>
-          responseValue(status, await service().apply(actor, path.id, body, requestSignal(request, job.signal))),
+          responseValue(status(), await service().apply(actor, path.id, body, requestSignal(request, job.signal))),
         );
       },
     )
@@ -501,15 +548,15 @@ export function libraryArchiveCollectionRecoveryRoutes(
       '/v1/libraryArchiveCollectionRecoveries/:id/outcomes',
       {
         params,
-        query: pageQuery,
-        response: { 200: outcomesPage, ...failures },
+        query: pageQuery(),
+        response: { 200: outcomesPage(), ...failures() },
         detail: detail('outcomes'),
       },
       async ({ request, actor, params: path, query, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, async () =>
           responseValue(
-            outcomesPage,
+            outcomesPage(),
             await service().outcomes(actor, path.id, query, requestSignal(request, job.signal)),
           ),
         );
@@ -519,13 +566,13 @@ export function libraryArchiveCollectionRecoveryRoutes(
       '/v1/libraryArchiveCollectionRecoveries/:id',
       {
         params,
-        response: { 200: status, ...failures },
+        response: { 200: status(), ...failures() },
         detail: detail('cancel', true),
       },
       async ({ request, actor, params: path, admission, job, set }) => {
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, async () =>
-          responseValue(status, await service().cancel(actor, path.id, requestSignal(request, job.signal))),
+          responseValue(status(), await service().cancel(actor, path.id, requestSignal(request, job.signal))),
         );
       },
     );

@@ -54,7 +54,7 @@ test.serial(
     expect(board.response.status, board.text).toBe(200);
     expect(board.value!.board.realmId).toBe(target.realmId);
     const community = board.value!.board.community;
-    expect(Compile(CommunityPresentationSchema).Check(community)).toBe(true);
+    expect(Compile(CommunityPresentationSchema()).Check(community)).toBe(true);
     expect(community).toMatchObject({
       realmId: target.realmId,
       description: '',

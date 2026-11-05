@@ -93,7 +93,7 @@ import { initializeRevisionAuthorship, revisionResource } from './authorship.ts'
 import { creationDeclares } from '../access/index.ts';
 import { readSourceRecords } from './source-records.ts';
 import readSourceMembers from './source-records-members.sql';
-import { declareCommandHistory, registerCommandHistoryKind } from '../history/record.ts';
+import { declareCommandHistory } from '../history/record.ts';
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
@@ -103,7 +103,6 @@ const BATCH_LIMIT = 256;
 
 export const CREATE_SUBJECT = 'subject.create';
 // Permanent Semantic owner-assigned receipt codec ID.
-registerCommandHistoryKind(CREATE_SUBJECT, 3020);
 // Literal identity so this module can finish while definitions.ts is still evaluating.
 const CONTEXT = '00000000-0000-8000-8000-000000000000';
 
@@ -272,7 +271,7 @@ export async function writeSubject(
   // Historic trusted callbacks carry no creation capability and acquire no author rights.
   if (authored && creationDeclares(tx, revisionResource(subjectId, 1)))
     await initializeRevisionAuthorship(tx, { subject: subjectId, revision: 1 });
-  await identityEpochStore.initializeSubject(tx, subjectId);
+  await identityEpochStore().initializeSubject(tx, subjectId);
   const events: { type: string; subject: string; data: unknown }[] = [
     { type: 'com.rezics.subject.created.v1', subject: subjectId, data: { id: subjectId } },
   ];

@@ -1,54 +1,67 @@
+import { memoizedValue } from '../../memoized.ts';
 import { activeRelease } from '../../semantic/definitions.ts';
 import type { Resource, AccessCheck } from '../../request/access.ts';
 import { t } from 'elysia';
 import { createSearchService } from '../service.ts';
 import { searchHit, createCatalogueResponseAdapter } from './catalogue.ts';
 const object = { additionalProperties: false } as const;
-const releaseSearchGroup = t.Union([
-  t.Object(
-    {
-      kind: t.Literal('work'),
-      id: t.String({ format: 'uuid' }),
-      work: searchHit,
-      releases: t.Array(searchHit, { minItems: 1, maxItems: 3 }),
-      next: t.Union([t.String(), t.Null()]),
-    },
-    object,
-  ),
-  t.Object(
-    {
-      kind: t.Literal('release'),
-      id: t.String({ format: 'uuid' }),
-      release: searchHit,
-      workLink: t.Union([
-        t.Literal('missing'),
-        t.Literal('unknown'),
-        t.Literal('conflicting'),
-        t.Literal('unavailable'),
-        t.Literal('unproven'),
-      ]),
-    },
-    object,
-  ),
-]);
-export const releaseGroupsResponse = t.Object(
-  {
-    status: t.Union([t.Literal('ready'), t.Literal('preparing')]),
-    groups: t.Array(releaseSearchGroup, { maxItems: 20 }),
-    next: t.Union([t.String(), t.Null()]),
-    as_of: t.String({ format: 'date-time' }),
-  },
-  object,
-);
-export const releaseChildrenResponse = t.Object(
-  {
-    status: t.Union([t.Literal('ready'), t.Literal('preparing')]),
-    children: t.Array(searchHit, { maxItems: 20 }),
-    next: t.Union([t.String(), t.Null()]),
-    as_of: t.String({ format: 'date-time' }),
-  },
-  object,
-);
+function releaseSearchGroup() {
+  return memoizedValue(releaseSearchGroup, () =>
+    t.Union([
+      t.Object(
+        {
+          kind: t.Literal('work'),
+          id: t.String({ format: 'uuid' }),
+          work: searchHit(),
+          releases: t.Array(searchHit(), { minItems: 1, maxItems: 3 }),
+          next: t.Union([t.String(), t.Null()]),
+        },
+        object,
+      ),
+      t.Object(
+        {
+          kind: t.Literal('release'),
+          id: t.String({ format: 'uuid' }),
+          release: searchHit(),
+          workLink: t.Union([
+            t.Literal('missing'),
+            t.Literal('unknown'),
+            t.Literal('conflicting'),
+            t.Literal('unavailable'),
+            t.Literal('unproven'),
+          ]),
+        },
+        object,
+      ),
+    ]),
+  );
+}
+export function releaseGroupsResponse() {
+  return memoizedValue(releaseGroupsResponse, () =>
+    t.Object(
+      {
+        status: t.Union([t.Literal('ready'), t.Literal('preparing')]),
+        groups: t.Array(releaseSearchGroup(), { maxItems: 20 }),
+        next: t.Union([t.String(), t.Null()]),
+        as_of: t.String({ format: 'date-time' }),
+      },
+      object,
+    ),
+  );
+}
+export function releaseChildrenResponse() {
+  return memoizedValue(releaseChildrenResponse, () =>
+    t.Object(
+      {
+        status: t.Union([t.Literal('ready'), t.Literal('preparing')]),
+        children: t.Array(searchHit(), { maxItems: 20 }),
+        next: t.Union([t.String(), t.Null()]),
+        as_of: t.String({ format: 'date-time' }),
+      },
+      object,
+    ),
+  );
+}
 
 type ReleasePage = Awaited<ReturnType<ReturnType<typeof createSearchService>['releaseGroups']>>;
 export async function releaseResponse(

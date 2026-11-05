@@ -397,7 +397,7 @@ describe.skipIf(!process.env.DATABASE_URL)('existing native formula with Access 
         withConnection(pool, (client) =>
           handle.decide(client, { action, resourceType: 'test.work', ids: [resource().id] }, anotherTime),
         ),
-      ).rejects.toBeInstanceOf(AccessWorkUnavailableError);
+      ).rejects.toBeInstanceOf(AccessWorkUnavailableError());
       expect(admitted.filter((item) => item.operation === 'access.formula')).toHaveLength(2);
     } finally {
       releaseOperationalTime(time);

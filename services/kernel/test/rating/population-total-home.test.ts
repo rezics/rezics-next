@@ -167,7 +167,7 @@ test(outcome, async () => {
   expect(updates.every(({ checkout: destination }) => destination !== source.checkout)).toBe(true);
   const sourceEvents = await events(first.populationId);
   expect(sourceEvents).toHaveLength(1);
-  expect(Value.Check(RATING_EVENTS[POPULATION_TOTAL_DELIVERY], sourceEvents[0]!.data)).toBe(true);
+  expect(Value.Check(RATING_EVENTS()[POPULATION_TOTAL_DELIVERY], sourceEvents[0]!.data)).toBe(true);
   expect((sourceEvents[0]!.data as PopulationTotalDelivery).deltas).toEqual([
     { questionId, shard: 1, count: '1', sum: '18' },
   ]);

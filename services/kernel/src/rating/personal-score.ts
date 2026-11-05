@@ -14,7 +14,7 @@ export async function readPersonalScoreQuestion(client: Pick<PoolClient, 'query'
     [STANDARD_QUESTION_ID],
   );
   const question = rows[0];
-  if (!question) throw new ShelfReadUnavailableError('native standard rating question is unavailable');
+  if (!question) throw new (ShelfReadUnavailableError())('native standard rating question is unavailable');
   checkedRatingQuestionScale(question);
   return question;
 }

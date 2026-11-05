@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { readAvatarSummaries, type AvatarSummary } from '../content/avatar.ts';
 import { discardConnection, withConnection } from '../database/pool.ts';
 import { ProblemError } from '../http/problem.ts';
@@ -112,15 +113,29 @@ export function accountProfileEditing(
       };
 }
 
-const checkoutBound: AccessWork = { ...EMPTY_ACCESS_WORK, points: 1 };
-const beginBound = accessNativeDeclaration(
-  'transaction',
-  { statement: 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' },
-  {},
-).bound;
-const commitBound = accessNativeDeclaration('transaction', { statement: 'COMMIT' }, {}).bound;
-const rollbackBound = accessNativeDeclaration('transaction', { statement: 'ROLLBACK' }, {}).bound;
-const profileBound = accessNativeDeclaration('account-profile', {}, {}).bound;
+function checkoutBound(): AccessWork {
+  return memoizedValue(checkoutBound, () => ({ ...EMPTY_ACCESS_WORK, points: 1 }));
+}
+function beginBound() {
+  return memoizedValue(
+    beginBound,
+    () =>
+      accessNativeDeclaration('transaction', { statement: 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' }, {})
+        .bound,
+  );
+}
+function commitBound() {
+  return memoizedValue(commitBound, () => accessNativeDeclaration('transaction', { statement: 'COMMIT' }, {}).bound);
+}
+function rollbackBound() {
+  return memoizedValue(
+    rollbackBound,
+    () => accessNativeDeclaration('transaction', { statement: 'ROLLBACK' }, {}).bound,
+  );
+}
+function profileBound() {
+  return memoizedValue(profileBound, () => accessNativeDeclaration('account-profile', {}, {}).bound);
+}
 const avatarBound: AccessWork = {
   keys: 1,
   points: 1,
@@ -139,28 +154,34 @@ const avatarBound: AccessWork = {
   ),
   emptySeeks: 1,
 };
-const serializationBound: AccessWork = {
-  ...EMPTY_ACCESS_WORK,
-  bytes:
-    profileBound.bytes +
-    avatarBound.bytes +
-    Buffer.byteLength(
-      JSON.stringify(accountProfileEditing('x'.repeat(36), { id: 'x'.repeat(36), kind: 'organization' })),
+function serializationBound(): AccessWork {
+  return memoizedValue(serializationBound, () => ({
+    ...EMPTY_ACCESS_WORK,
+    bytes:
+      profileBound().bytes +
+      avatarBound.bytes +
+      Buffer.byteLength(
+        JSON.stringify(accountProfileEditing('x'.repeat(36), { id: 'x'.repeat(36), kind: 'organization' })),
+      ),
+  }));
+}
+function profileReadBound() {
+  return memoizedValue(profileReadBound, () =>
+    addAccessWork(
+      checkoutBound(),
+      beginBound(),
+      commitBound(),
+      rollbackBound(),
+      profileBound(),
+      avatarBound,
+      serializationBound(),
     ),
-};
-const profileReadBound = addAccessWork(
-  checkoutBound,
-  beginBound,
-  commitBound,
-  rollbackBound,
-  profileBound,
-  avatarBound,
-  serializationBound,
-);
+  );
+}
 
 /** Closed owner envelope for this private GET: checkout, controls, statement, avatar, serialization. */
 export function accountEditProfileReadWork(): AccessWork {
-  return profileReadBound;
+  return profileReadBound();
 }
 
 /** Private source fields, addressed by immutable account ID, under updateAccount's authority.
@@ -190,8 +211,8 @@ export async function readEditableAccountProfile(
       work,
       'access.account-edit-profile',
       {
-        bound: () => profileReadBound,
-        actual: () => profileReadBound,
+        bound: () => profileReadBound(),
+        actual: () => profileReadBound(),
       },
       undefined,
       () =>

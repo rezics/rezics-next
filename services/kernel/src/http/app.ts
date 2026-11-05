@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { Elysia, t, ValidationError } from 'elysia';
 import { throwAccessUnavailable } from '../access/unavailable.ts';
 import { DEFAULT_REQUEST_DEADLINE_MS } from '../command/command.ts';
@@ -47,11 +48,13 @@ import {
 } from './body.ts';
 import { ADMISSION_LIMITS } from './admission.ts';
 
-export const REQUEST_DEADLINE_MS = DEFAULT_REQUEST_DEADLINE_MS;
+export function REQUEST_DEADLINE_MS() {
+  return memoizedValue(REQUEST_DEADLINE_MS, () => DEFAULT_REQUEST_DEADLINE_MS);
+}
 
 export function createApp({
   pool,
-  requestDeadlineMs = REQUEST_DEADLINE_MS,
+  requestDeadlineMs = REQUEST_DEADLINE_MS(),
   admission = new Admission(),
   access = createAccess,
   tokens,
@@ -143,7 +146,7 @@ export function createApp({
           : limit;
       const largest = Math.max(
         DEFAULT_BODY_LIMIT,
-        MAX_BODY_LIMIT,
+        MAX_BODY_LIMIT(),
         ...catalogue.routes.map((candidate) =>
           bodyLimitOf(candidate.hooks?.detail as Record<string, unknown> | undefined),
         ),

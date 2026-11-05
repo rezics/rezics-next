@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { Elysia, DefaultMetadata, DefaultSingleton } from 'elysia';
 import type { Pool } from 'pg';
@@ -130,20 +131,22 @@ const diaryPageSchema = t.Unsafe<DiaryPage>(
   ),
 );
 const token = t.String({ minLength: 1, maxLength: 2048 });
-const failures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden', 'platform_closed'),
-  409: problemSchema('stale_cursor', 'conflict'),
-  503: problemSchema(
-    'semantic_not_ready',
-    'dependency_unavailable',
-    'overloaded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'deadline_exceeded',
-  ),
-};
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden', 'platform_closed'),
+    409: problemSchema('stale_cursor', 'conflict'),
+    503: problemSchema(
+      'semantic_not_ready',
+      'dependency_unavailable',
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+    ),
+  }));
+}
 const detail = (operationId: string) => ({
   operationId,
   'x-action': 'progress_session:list',
@@ -192,7 +195,7 @@ export function diaryRoutes(
             if (!['limit', 'cursor', 'year', 'month'].includes(name) || query.getAll(name).length !== 1)
               throw new ProblemError('invalid_request');
         },
-        response: { 200: diaryPageSchema, ...failures },
+        response: { 200: diaryPageSchema, ...failures() },
         detail: detail('library_diary.list'),
       },
       async ({ actor, query, admission, job, request }) =>
@@ -210,7 +213,7 @@ export function diaryRoutes(
         },
         response: {
           200: t.Object({ cancelled: t.Literal(true) }, closed),
-          ...failures,
+          ...failures(),
         },
         detail: detail('library_diary.cancel'),
       },

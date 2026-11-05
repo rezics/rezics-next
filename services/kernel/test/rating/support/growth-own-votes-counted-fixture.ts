@@ -70,7 +70,7 @@ export async function createCountedGrowthFixture() {
     expect(await readIdentityEpochCutover(db.pool)).toEqual({ state: 'ready' });
     for (const home of [partitionOf(0x6a20), partitionOf(0x6a30)]) {
       await stepIdentityEpochBootstrap(db.pool, home);
-      const epoch = await withReadTransaction(db.pool, (client) => identityEpochStore.readEpoch(client, home));
+      const epoch = await withReadTransaction(db.pool, (client) => identityEpochStore().readEpoch(client, home));
       expect(epoch.state, epoch.state === 'unavailable' ? epoch.reason : epoch.state).toBe('published');
     }
     await bootstrapRelease(db.pool, bundledRelease);
@@ -241,9 +241,9 @@ export async function createCountedGrowthFixture() {
     };
     const prepare = access.prepare!.bind(access);
     const authorize = access.authorize.bind(access);
-    const mappings = identityEpochStore.readMappings.bind(identityEpochStore);
+    const mappings = identityEpochStore().readMappings.bind(identityEpochStore());
     const commandPhase = commandTiming.commandPhase;
-    const epoch = identityEpochStore.readEpoch.bind(identityEpochStore);
+    const epoch = identityEpochStore().readEpoch.bind(identityEpochStore());
     const spies = [
       spyOn(JSON, 'stringify').mockImplementation(((...args: Parameters<typeof JSON.stringify>) => {
         const result = stringify(...args);
@@ -270,12 +270,12 @@ export async function createCountedGrowthFixture() {
         retain(result);
         return result;
       }),
-      spyOn(identityEpochStore, 'readEpoch').mockImplementation(async (...args) => {
+      spyOn(identityEpochStore(), 'readEpoch').mockImplementation(async (...args) => {
         const result = await epoch(...args);
         retain(result);
         return result;
       }),
-      spyOn(identityEpochStore, 'readMappings').mockImplementation(async (...args) => {
+      spyOn(identityEpochStore(), 'readMappings').mockImplementation(async (...args) => {
         const counters = measured.getStore();
         if (counters) counters.mappingCollections!++;
         const result = await mappings(...args);

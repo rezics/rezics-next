@@ -183,7 +183,7 @@ test('finite body work refuses excess statements atomically; ordinary empty even
   expect(await resolvePublisherActivation(db.pool, selected, deadline())).toEqual({ status: 'uncertain' });
   expect(() => publisherCommandWork({ ...bodyWork, statements: Infinity })).toThrow();
   expect(publisherCommandWork(bodyWork).statements).toBe(13);
-  expect(PUBLISHER_COMMAND_COST.association.bytes).toBeGreaterThan(131072);
+  expect(PUBLISHER_COMMAND_COST().association.bytes).toBeGreaterThan(131072);
   await expect(runCommand(db.pool, { partition: 0 }, async () => ({ value: null, events: [] }))).rejects.toThrow(
     'must emit at least one event',
   );

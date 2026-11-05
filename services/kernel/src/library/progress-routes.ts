@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import type { OperationCatalogue } from '@rezics/operations';
 import { createEpisodeProgressCommands, MAX_EPISODE_IDS } from './episode-progress.ts';
@@ -104,10 +105,19 @@ const journalAssessment = t.Object(
 );
 const journalAssessmentPatch = t.Union([t.Object({ units: assessmentUnits }, closed), t.Null()]);
 const mode = t.Union([t.Literal('scalar_amount'), t.Literal('cursor_position'), t.Literal('completed_units')]);
-const unitInput = libraryVocabularyIdSchema;
+function unitInput() {
+  return memoizedValue(unitInput, () => libraryVocabularyIdSchema);
+}
 const state = t.Union([t.Literal('active'), t.Literal('completed'), t.Literal('abandoned')]);
-const presentationFields = { ...sessionFields, presentation: t.Optional(progressPresentationSchema) };
-const progressSessionResponse = t.Object({ progressSession: sessionSchema }, closed);
+function presentationFields() {
+  return memoizedValue(presentationFields, () => ({
+    ...sessionFields(),
+    presentation: t.Optional(progressPresentationSchema),
+  }));
+}
+function progressSessionResponse() {
+  return memoizedValue(progressSessionResponse, () => t.Object({ progressSession: sessionSchema() }, closed));
+}
 const discoveryAction = t.Object(
   {
     allowed: t.Boolean(),
@@ -124,71 +134,101 @@ const discoveryActions = t.Object(
   },
   closed,
 );
-const progressDiscoverySession = embedded(sessionSchema, {
-  ...presentationFields,
-  allowedActions: discoveryActions,
-});
-const progressDiscoveryResponse = t.Object(
-  {
-    viewerState: t.Literal('signed_in'),
-    progressSessions: t.Array(progressDiscoverySession),
-    next: nullableString,
-  },
-  closed,
-);
-const sessionJournalSchema = t.Object(
-  {
-    sessionId: id,
-    revision: journalRevision,
-    startDate: nullableJournalDate,
-    finishDate: nullableJournalDate,
-    reflection: t.Union([t.String({ maxLength: MAX_JOURNAL_REFLECTION_CHARACTERS }), t.Null()]),
-    assessment: journalAssessment,
-  },
-  closed,
-);
-const sessionJournalResponse = t.Object({ journal: sessionJournalSchema }, closed);
+function progressDiscoverySession() {
+  return memoizedValue(progressDiscoverySession, () =>
+    embedded(sessionSchema(), {
+      ...presentationFields(),
+      allowedActions: discoveryActions,
+    }),
+  );
+}
+function progressDiscoveryResponse() {
+  return memoizedValue(progressDiscoveryResponse, () =>
+    t.Object(
+      {
+        viewerState: t.Literal('signed_in'),
+        progressSessions: t.Array(progressDiscoverySession()),
+        next: nullableString,
+      },
+      closed,
+    ),
+  );
+}
+function sessionJournalSchema() {
+  return memoizedValue(sessionJournalSchema, () =>
+    t.Object(
+      {
+        sessionId: id,
+        revision: journalRevision,
+        startDate: nullableJournalDate,
+        finishDate: nullableJournalDate,
+        reflection: t.Union([t.String({ maxLength: MAX_JOURNAL_REFLECTION_CHARACTERS }), t.Null()]),
+        assessment: journalAssessment,
+      },
+      closed,
+    ),
+  );
+}
+function sessionJournalResponse() {
+  return memoizedValue(sessionJournalResponse, () => t.Object({ journal: sessionJournalSchema() }, closed));
+}
 const sessionJournalWriteResponse = t.Object(
   { journal: t.Object({ sessionId: id, revision: journalRevision, changed: t.Boolean() }, closed) },
   closed,
 );
-const sessionJournalPatchBody = t.Object(
-  {
-    revision: journalRevision,
-    startDate: t.Optional(nullableJournalDate),
-    finishDate: t.Optional(nullableJournalDate),
-    reflection: t.Optional(t.Union([t.String({ maxLength: MAX_JOURNAL_REFLECTION_CHARACTERS }), t.Null()])),
-    assessment: t.Optional(journalAssessmentPatch),
-  },
-  closed,
-);
-const changeIntent = t.Union([
-  t.Object(
-    {
-      lifecycle: t.Union([t.Literal('reopen'), t.Literal('retire')]),
-      previousState: state,
-      previousCompletedAt: nullableString,
-    },
-    closed,
-  ),
-  t.Object({ clear: t.Literal(true) }, closed),
-  t.Object({ measureId: libraryStoredVocabularySchema, clear: t.Literal(true) }, closed),
-  t.Object({ amount: t.String() }, closed),
-  t.Object({ measureId: libraryStoredVocabularySchema, amount: t.String() }, closed),
-  t.Object({ locator: t.String(), position: t.String() }, closed),
-  t.Object({ add: t.Array(t.String()), remove: t.Optional(t.Array(t.String())) }, closed),
-  t.Object({ remove: t.Array(t.String()) }, closed),
-]);
-const changeSchema = t.Object(
-  {
-    id: t.String(),
-    revision,
-    intent: changeIntent,
-    createdAt: t.String(),
-  },
-  closed,
-);
-const changePageResponse = t.Object({ changes: t.Array(changeSchema), next: nullableString }, closed);
+function sessionJournalPatchBody() {
+  return memoizedValue(sessionJournalPatchBody, () =>
+    t.Object(
+      {
+        revision: journalRevision,
+        startDate: t.Optional(nullableJournalDate),
+        finishDate: t.Optional(nullableJournalDate),
+        reflection: t.Optional(t.Union([t.String({ maxLength: MAX_JOURNAL_REFLECTION_CHARACTERS }), t.Null()])),
+        assessment: t.Optional(journalAssessmentPatch),
+      },
+      closed,
+    ),
+  );
+}
+function changeIntent() {
+  return memoizedValue(changeIntent, () =>
+    t.Union([
+      t.Object(
+        {
+          lifecycle: t.Union([t.Literal('reopen'), t.Literal('retire')]),
+          previousState: state,
+          previousCompletedAt: nullableString,
+        },
+        closed,
+      ),
+      t.Object({ clear: t.Literal(true) }, closed),
+      t.Object({ measureId: libraryStoredVocabularySchema, clear: t.Literal(true) }, closed),
+      t.Object({ amount: t.String() }, closed),
+      t.Object({ measureId: libraryStoredVocabularySchema, amount: t.String() }, closed),
+      t.Object({ locator: t.String(), position: t.String() }, closed),
+      t.Object({ add: t.Array(t.String()), remove: t.Optional(t.Array(t.String())) }, closed),
+      t.Object({ remove: t.Array(t.String()) }, closed),
+    ]),
+  );
+}
+function changeSchema() {
+  return memoizedValue(changeSchema, () =>
+    t.Object(
+      {
+        id: t.String(),
+        revision,
+        intent: changeIntent(),
+        createdAt: t.String(),
+      },
+      closed,
+    ),
+  );
+}
+function changePageResponse() {
+  return memoizedValue(changePageResponse, () =>
+    t.Object({ changes: t.Array(changeSchema()), next: nullableString }, closed),
+  );
+}
 const unitPageResponse = t.Object({ completedUnits: t.Array(t.String()), next: nullableString }, closed);
 const publishedLogSchema = t.Object(
   {
@@ -204,51 +244,81 @@ const publishedLogSchema = t.Object(
   closed,
 );
 const tombstoneSchema = t.Object({ id, deleted: t.Literal(true) }, closed);
-const publishedLogConflicts = problemSchema(
-  'published_log_restore_stale',
-  'published_log_restore_occupied',
-  'published_log_restore_expired',
-);
+function publishedLogConflicts() {
+  return memoizedValue(publishedLogConflicts, () =>
+    problemSchema('published_log_restore_stale', 'published_log_restore_occupied', 'published_log_restore_expired'),
+  );
+}
 const revisionHeader = {
   'Library-Published-Log-Revision': { schema: { type: 'string', pattern: '^[1-9][0-9]*$' } },
 } as const;
 const publishedLogResponse = t.Object({ publishedLog: publishedLogSchema }, closed);
-const idempotencyHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const invalid = problemSchema('invalid_request', 'invalid_cursor');
-const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
-const conflict = problemSchema('conflict', 'stale_cursor');
-const idempotencyConflict = problemSchema('idempotency_conflict');
-const profileConflict = problemSchema('idempotency_conflict', 'unsupported_library_profile');
-const forbidden = problemSchema('forbidden');
-const notFound = problemSchema('not_found');
-const unavailable = problemSchema(
-  'semantic_not_ready',
-  'overloaded',
-  'partition_unavailable',
-  'transaction_retry_exhausted',
-  'deadline_exceeded',
-  'dependency_unavailable',
-);
+function idempotencyHeaders() {
+  return memoizedValue(idempotencyHeaders, () =>
+    t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
+  );
+}
+function invalid() {
+  return memoizedValue(invalid, () => problemSchema('invalid_request', 'invalid_cursor'));
+}
+function unauthorized() {
+  return memoizedValue(unauthorized, () => problemSchema('authentication_required', 'invalid_credentials'));
+}
+function conflict() {
+  return memoizedValue(conflict, () => problemSchema('conflict', 'stale_cursor'));
+}
+function idempotencyConflict() {
+  return memoizedValue(idempotencyConflict, () => problemSchema('idempotency_conflict'));
+}
+function profileConflict() {
+  return memoizedValue(profileConflict, () => problemSchema('idempotency_conflict', 'unsupported_library_profile'));
+}
+function forbidden() {
+  return memoizedValue(forbidden, () => problemSchema('forbidden'));
+}
+function notFound() {
+  return memoizedValue(notFound, () => problemSchema('not_found'));
+}
+function unavailable() {
+  return memoizedValue(unavailable, () =>
+    problemSchema(
+      'semantic_not_ready',
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+      'dependency_unavailable',
+    ),
+  );
+}
 const bearer = [{ bearerAuth: [] }];
-const writeRate = defineRateLimit({ family: 'write', units: 1 });
-const pageQuery = {
-  ...viewQuery,
-  limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
-  cursor: t.Optional(t.String({ maxLength: 4096 })),
-};
-const recordBody = t.Object(
-  {
-    revision,
-    measureId: t.Optional(unitInput),
-    clear: t.Optional(t.Literal(true)),
-    amount: t.Optional(t.String()),
-    locator: t.Optional(t.String()),
-    position: t.Optional(t.String()),
-    add: t.Optional(t.Array(t.String(), { maxItems: 100 })),
-    remove: t.Optional(t.Array(t.String(), { maxItems: 100 })),
-  },
-  closed,
-);
+function writeRate() {
+  return memoizedValue(writeRate, () => defineRateLimit({ family: 'write', units: 1 }));
+}
+function pageQuery() {
+  return memoizedValue(pageQuery, () => ({
+    ...viewQuery,
+    limit: t.Optional(t.Numeric({ minimum: 1, maximum: 100, multipleOf: 1, default: 20 })),
+    cursor: t.Optional(t.String({ maxLength: 4096 })),
+  }));
+}
+function recordBody() {
+  return memoizedValue(recordBody, () =>
+    t.Object(
+      {
+        revision,
+        measureId: t.Optional(unitInput()),
+        clear: t.Optional(t.Literal(true)),
+        amount: t.Optional(t.String()),
+        locator: t.Optional(t.String()),
+        position: t.Optional(t.String()),
+        add: t.Optional(t.Array(t.String(), { maxItems: 100 })),
+        remove: t.Optional(t.Array(t.String(), { maxItems: 100 })),
+      },
+      closed,
+    ),
+  );
+}
 const transitionBody = t.Object({ revision }, closed);
 
 function detail(operationId: string, action: string, anonymous = false) {
@@ -260,7 +330,7 @@ function detail(operationId: string, action: string, anonymous = false) {
     ...(['progress_session:list', 'progress_session:read'].includes(action)
       ? { 'x-authority-anchor': 'own-account', 'x-authority-resource-types': Object.keys(bundledRelease.types) }
       : {}),
-    ...(/:(?:create|update|delete)$/.test(action) ? { 'x-rate-limit': writeRate } : {}),
+    ...(/:(?:create|update|delete)$/.test(action) ? { 'x-rate-limit': writeRate() } : {}),
   };
 }
 
@@ -358,19 +428,19 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         reference: 'library.progress-session.record.params',
         schema: t.Object({ sessionId: t.String() }, closed),
       },
-      headers: { reference: 'library.idempotency.headers', schema: idempotencyHeaders },
-      body: { reference: 'library.progress-session.record.request', schema: recordBody },
+      headers: { reference: 'library.idempotency.headers', schema: idempotencyHeaders() },
+      body: { reference: 'library.progress-session.record.request', schema: recordBody() },
       response: {
         reference: 'library.progress-session.write.response',
         schema: {
-          200: progressSessionResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
+          200: progressSessionResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
           409: problemSchema('conflict'),
-          422: profileConflict,
-          503: unavailable,
+          422: profileConflict(),
+          503: unavailable(),
         },
       },
     },
@@ -410,10 +480,10 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         },
         response: {
           200: reportedYearResponse,
-          400: invalid,
-          401: unauthorized,
+          400: invalid(),
+          401: unauthorized(),
           403: problemSchema('forbidden', 'platform_closed'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: detail('library_consumption.reported_year', 'progress_session:list'),
       },
@@ -463,10 +533,10 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
               closed,
             ),
           ),
-          400: invalid,
-          401: unauthorized,
+          400: invalid(),
+          401: unauthorized(),
           403: problemSchema('forbidden', 'platform_closed'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: detail('library_consumption.summary', 'progress_session:list'),
       },
@@ -489,12 +559,12 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         ),
         response: {
           200: t.Object({ revision, episodes: t.Array(episodeRow), next: nullableString }, closed),
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
-          409: conflict,
-          503: unavailable,
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          409: conflict(),
+          503: unavailable(),
         },
         detail: detail('progress_session.episodes', 'progress_session:read'),
       },
@@ -518,7 +588,7 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       customMethod('/v1/progressSessions/:sessionId', 'recordEpisodes'),
       {
         params: t.Object({ sessionId: id }, closed),
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
         body: t.Object(
           {
             revision,
@@ -530,13 +600,13 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         ),
         response: {
           200: t.Object({ revision }, closed),
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
           409: problemSchema('conflict'),
-          422: profileConflict,
-          503: unavailable,
+          422: profileConflict(),
+          503: unavailable(),
         },
         detail: detail('progress_session.record_episodes', 'progress_session:update'),
       },
@@ -559,16 +629,16 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
     .post(
       '/v1/progressSessions',
       {
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
         body: t.Object(
           {
             subjectId: t.String(),
             versionSubjectId: t.Optional(t.Union([t.String(), t.Null()])),
             mode,
-            unit: unitInput,
+            unit: unitInput(),
             total: t.Optional(nullableString),
             additionalMeasures: t.Optional(
-              t.Array(t.Object({ unit: unitInput, total: t.Optional(nullableString) }, closed), {
+              t.Array(t.Object({ unit: unitInput(), total: t.Optional(nullableString) }, closed), {
                 minItems: 1,
                 maxItems: MAX_PROGRESS_MEASURES - 1,
               }),
@@ -577,13 +647,13 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
           closed,
         ),
         response: {
-          201: progressSessionResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
-          422: profileConflict,
-          503: unavailable,
+          201: progressSessionResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          422: profileConflict(),
+          503: unavailable(),
         },
         detail: detail('progress_session.create', 'progress_session:create'),
       },
@@ -601,18 +671,18 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
     .get(
       '/v1/progressSessions',
       {
-        query: t.Object({ subjectId: t.String(), ...pageQuery }, closed),
+        query: t.Object({ subjectId: t.String(), ...pageQuery() }, closed),
         response: {
           200: t.Object(
-            { progressSessions: t.Array(embedded(sessionSchema, sessionFields)), next: nullableString },
+            { progressSessions: t.Array(embedded(sessionSchema(), sessionFields())), next: nullableString },
             closed,
           ),
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          409: conflict,
-          404: notFound,
-          503: unavailable,
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          409: conflict(),
+          404: notFound(),
+          503: unavailable(),
         },
         detail: detail('progress_session.list', 'progress_session:list'),
       },
@@ -658,12 +728,12 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
             throw new ProblemError('invalid_request');
         },
         response: {
-          200: progressDiscoveryResponse,
-          400: invalid,
-          401: unauthorized,
+          200: progressDiscoveryResponse(),
+          400: invalid(),
+          401: unauthorized(),
           403: problemSchema('forbidden', 'account_suspended'),
-          409: conflict,
-          503: unavailable,
+          409: conflict(),
+          503: unavailable(),
         },
         detail: detail('progress_session.discovery', 'progress_session:list'),
       },
@@ -760,12 +830,12 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         query: t.Object({ ...viewQuery, presentation: t.Optional(t.Literal('FULL')) }, closed),
         params: t.Object({ sessionId: t.String() }, closed),
         response: {
-          200: t.Object({ progressSession: embedded(sessionSchema, presentationFields) }, closed),
-          400: invalid,
-          401: unauthorized,
-          404: notFound,
-          409: conflict,
-          503: unavailable,
+          200: t.Object({ progressSession: embedded(sessionSchema(), presentationFields()) }, closed),
+          400: invalid(),
+          401: unauthorized(),
+          404: notFound(),
+          409: conflict(),
+          503: unavailable(),
         },
         detail: detail('progress_session.read', 'progress_session:read'),
       },
@@ -813,11 +883,11 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       {
         params: t.Object({ sessionId: t.String() }, closed),
         response: {
-          200: sessionJournalResponse,
-          401: unauthorized,
-          404: notFound,
-          409: conflict,
-          503: unavailable,
+          200: sessionJournalResponse(),
+          401: unauthorized(),
+          404: notFound(),
+          409: conflict(),
+          503: unavailable(),
         },
         detail: detail('progress_session_journal.read', 'progress_session:read'),
       },
@@ -833,17 +903,17 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       '/v1/progressSessions/:sessionId/journal',
       {
         params: t.Object({ sessionId: t.String() }, closed),
-        headers: idempotencyHeaders,
-        body: sessionJournalPatchBody,
+        headers: idempotencyHeaders(),
+        body: sessionJournalPatchBody(),
         response: {
           200: sessionJournalWriteResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
           409: problemSchema('conflict'),
           413: problemSchema('content_too_large'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: {
           ...detail('progress_session_journal.update', 'progress_session:update'),
@@ -873,17 +943,17 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       customMethod('/v1/progressSessions/:sessionId', 'complete'),
       {
         params: t.Object({ sessionId: t.String() }, closed),
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
         body: transitionBody,
         response: {
-          200: progressSessionResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
+          200: progressSessionResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
           409: problemSchema('conflict'),
-          422: idempotencyConflict,
-          503: unavailable,
+          422: idempotencyConflict(),
+          503: unavailable(),
         },
         detail: detail('progress_session.complete', 'progress_session:update'),
       },
@@ -901,17 +971,17 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       customMethod('/v1/progressSessions/:sessionId', 'abandon'),
       {
         params: t.Object({ sessionId: t.String() }, closed),
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
         body: transitionBody,
         response: {
-          200: progressSessionResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
+          200: progressSessionResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
           409: problemSchema('conflict'),
-          422: idempotencyConflict,
-          503: unavailable,
+          422: idempotencyConflict(),
+          503: unavailable(),
         },
         detail: detail('progress_session.abandon', 'progress_session:update'),
       },
@@ -929,17 +999,17 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       customMethod('/v1/progressSessions/:sessionId', 'reopen'),
       {
         params: t.Object({ sessionId: t.String() }, closed),
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
         body: transitionBody,
         response: {
-          200: progressSessionResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
+          200: progressSessionResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
           409: problemSchema('conflict'),
-          422: idempotencyConflict,
-          503: unavailable,
+          422: idempotencyConflict(),
+          503: unavailable(),
         },
         detail: detail('progress_session.reopen', 'progress_session:update'),
       },
@@ -957,17 +1027,17 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       customMethod('/v1/progressSessions/:sessionId', 'retire'),
       {
         params: t.Object({ sessionId: t.String() }, closed),
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
         body: transitionBody,
         response: {
-          200: progressSessionResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
+          200: progressSessionResponse(),
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
           409: problemSchema('conflict'),
-          422: idempotencyConflict,
-          503: unavailable,
+          422: idempotencyConflict(),
+          503: unavailable(),
         },
         detail: detail('progress_session.retire', 'progress_session:update'),
       },
@@ -985,8 +1055,8 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       '/v1/progressSessions/:sessionId/completedUnits',
       {
         params: t.Object({ sessionId: t.String() }, closed),
-        query: t.Object(pageQuery, closed),
-        response: { 200: unitPageResponse, 400: invalid, 404: notFound, 409: conflict, 503: unavailable },
+        query: t.Object(pageQuery(), closed),
+        response: { 200: unitPageResponse, 400: invalid(), 404: notFound(), 409: conflict(), 503: unavailable() },
         detail: detail('progress_session.units', 'progress_session:read'),
       },
       async ({ params, query, actor, admission, job }) =>
@@ -1001,8 +1071,8 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       '/v1/progressSessions/:sessionId/changes',
       {
         params: t.Object({ sessionId: t.String() }, closed),
-        query: t.Object(pageQuery, closed),
-        response: { 200: changePageResponse, 400: invalid, 404: notFound, 409: conflict, 503: unavailable },
+        query: t.Object(pageQuery(), closed),
+        response: { 200: changePageResponse(), 400: invalid(), 404: notFound(), 409: conflict(), 503: unavailable() },
         detail: detail('progress_session.changes', 'progress_session:read'),
       },
       async ({ params, query, actor, admission, job }) =>
@@ -1016,19 +1086,19 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
     .post(
       '/v1/publishedLogs',
       {
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
         body: t.Object(
           { sessionId: t.String(), note: t.Optional(t.Union([t.String({ maxLength: 1000 }), t.Null()])) },
           closed,
         ),
         response: {
           201: publishedLogResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
-          422: idempotencyConflict,
-          503: unavailable,
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          422: idempotencyConflict(),
+          503: unavailable(),
         },
         detail: {
           ...detail('published_log.create', 'published_log:create'),
@@ -1054,10 +1124,13 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
         query: t.Object(viewQuery, closed),
         params: t.Object({ logId: t.String() }, closed),
         response: {
-          200: t.Object({ publishedLog: t.Union([embedded(publishedLogSchema, logFields), tombstoneSchema]) }, closed),
-          400: invalid,
-          404: notFound,
-          503: unavailable,
+          200: t.Object(
+            { publishedLog: t.Union([embedded(publishedLogSchema, logFields()), tombstoneSchema]) },
+            closed,
+          ),
+          400: invalid(),
+          404: notFound(),
+          503: unavailable(),
         },
         detail: {
           ...detail('published_log.read', 'published_log:read', true),
@@ -1079,16 +1152,16 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
     .get(
       '/v1/publishedLogs',
       {
-        query: t.Object({ accountId: t.String(), ...pageQuery }, closed),
+        query: t.Object({ accountId: t.String(), ...pageQuery() }, closed),
         response: {
           200: t.Object(
-            { publishedLogs: t.Array(embedded(publishedLogSchema, logFields)), next: nullableString },
+            { publishedLogs: t.Array(embedded(publishedLogSchema, logFields())), next: nullableString },
             closed,
           ),
-          400: invalid,
-          404: notFound,
-          409: conflict,
-          503: unavailable,
+          400: invalid(),
+          404: notFound(),
+          409: conflict(),
+          503: unavailable(),
         },
         detail: detail('published_log.list', 'published_log:read', true),
       },
@@ -1104,20 +1177,20 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       '/v1/publishedLogs/:logId',
       {
         params: t.Object({ logId: t.String() }, closed),
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
         query: t.Object(
           { revision: t.Optional(t.Numeric({ minimum: 1, maximum: 2147483646, multipleOf: 1 })) },
           closed,
         ),
         response: {
           200: publishedLogResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
-          409: publishedLogConflicts,
-          422: idempotencyConflict,
-          503: unavailable,
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          409: publishedLogConflicts(),
+          422: idempotencyConflict(),
+          503: unavailable(),
         },
         detail: {
           ...detail('published_log.delete', 'published_log:delete'),
@@ -1151,17 +1224,17 @@ export function progressRoutes(app: ReturnType<typeof definitionRoutes>, depende
       customMethod('/v1/publishedLogs/:logId', 'restore'),
       {
         params: t.Object({ logId: t.String() }, closed),
-        headers: idempotencyHeaders,
+        headers: idempotencyHeaders(),
         body: t.Object({ deletionId: id, revision }, closed),
         response: {
           200: publishedLogResponse,
-          400: invalid,
-          401: unauthorized,
-          403: forbidden,
-          404: notFound,
-          409: publishedLogConflicts,
-          422: idempotencyConflict,
-          503: unavailable,
+          400: invalid(),
+          401: unauthorized(),
+          403: forbidden(),
+          404: notFound(),
+          409: publishedLogConflicts(),
+          422: idempotencyConflict(),
+          503: unavailable(),
         },
         detail: {
           ...detail('published_log.restore', 'published_log:create'),

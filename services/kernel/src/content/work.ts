@@ -589,7 +589,7 @@ async function registerWork(
       name: 'content_post_erased',
       types: [erasedPostEvent],
       async run(event) {
-        if (event.type !== erasedPostEvent || !Value.Check(CONTENT_EVENTS[erasedPostEvent], event.data))
+        if (event.type !== erasedPostEvent || !Value.Check(CONTENT_EVENTS()[erasedPostEvent], event.data))
           throw new TypeError('Invalid erased post event');
         const data = event.data as { postId: string; accountErasure?: true };
         await context.client.enqueue(

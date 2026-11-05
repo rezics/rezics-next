@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 /** Static limits for the retained whole-query Collection publication adapter.
  * These values describe work only; native admission, transaction lifetime and dispatch remain in Library.
  */
@@ -22,16 +23,20 @@ const repeatPrivateBound = (value: PrivatePublicationBound, count: number): Priv
 };
 
 /** The existing one-attempt staging envelope, stated with every public bound axis. */
-export const COLLECTION_PUBLICATION_STEP_CEILING = privateBound({
-  candidateKeys: 100,
-  nativeRows: 262_144,
-  identityMetadataRows: 16_384,
-  emptySeeks: 4_096,
-  nativePoints: 4_096,
-  witnessKeys: 8_192,
-  statements: 8_192,
-  bytes: 64 * 1024 * 1024,
-});
+export function COLLECTION_PUBLICATION_STEP_CEILING() {
+  return memoizedValue(COLLECTION_PUBLICATION_STEP_CEILING, () =>
+    privateBound({
+      candidateKeys: 100,
+      nativeRows: 262_144,
+      identityMetadataRows: 16_384,
+      emptySeeks: 4_096,
+      nativePoints: 4_096,
+      witnessKeys: 8_192,
+      statements: 8_192,
+      bytes: 64 * 1024 * 1024,
+    }),
+  );
+}
 
 /** Convert only the statically private-only plan into the existing eight-axis execution receipt.
  * `engineRequests` is exactly zero because the admitted plan contains owner leaves only; a public catalogue
@@ -73,7 +78,7 @@ export function collectionPublicationFrontierLowerBound() {
   const required = sumPrivateBounds(initialDisclosurePass, finalDisclosurePass);
   return Object.freeze({
     required,
-    ceiling: COLLECTION_PUBLICATION_STEP_CEILING,
-    withinExistingCeiling: withinCeiling(required, COLLECTION_PUBLICATION_STEP_CEILING),
+    ceiling: COLLECTION_PUBLICATION_STEP_CEILING(),
+    withinExistingCeiling: withinCeiling(required, COLLECTION_PUBLICATION_STEP_CEILING()),
   });
 }

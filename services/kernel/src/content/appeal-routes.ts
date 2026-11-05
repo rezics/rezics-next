@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { withHeaders } from '@elysia/openapi';
 import { t } from 'elysia';
 import type { Static } from 'typebox';
@@ -13,14 +14,20 @@ import { ContentPageQuerySchema, strictContentSchema } from './schemas.ts';
 const params = t.Object({ id: t.String() }, { additionalProperties: false });
 const statement = t.String({ minLength: 1, maxLength: 2000 });
 const receipt = t.Object({ id: t.String() }, { additionalProperties: false });
-const privateHeaders = { [SESSION_HEADER]: t.String(), 'cache-control': t.String() };
-const listQuerySchema = t.Object(
-  {
-    ...ContentPageQuerySchema.properties,
-    inspect: t.Optional(t.String({ minLength: 1, maxLength: 128 })),
-  },
-  { additionalProperties: false },
-);
+function privateHeaders() {
+  return memoizedValue(privateHeaders, () => ({ [SESSION_HEADER]: t.String(), 'cache-control': t.String() }));
+}
+function listQuerySchema() {
+  return memoizedValue(listQuerySchema, () =>
+    t.Object(
+      {
+        ...ContentPageQuerySchema.properties,
+        inspect: t.Optional(t.String({ minLength: 1, maxLength: 128 })),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
 const sourceSchema = t.Object(
   { partition: t.Integer(), epoch: t.Integer(), position: t.String({ pattern: '^(0|[1-9][0-9]*)$' }) },
   { additionalProperties: false },
@@ -187,40 +194,48 @@ const appealListResponseBody = t.Object(
   },
   { additionalProperties: false, examples: reviewExamples },
 );
-const readFailures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  409: problemSchema('stale_cursor'),
-  500: problemSchema('internal_error'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-    'rate_limit_unavailable',
-  ),
-};
-const writeOptions = {
-  params,
-  transform: ({ body }: { body: unknown }) => {
-    if (typeof body !== 'object' || body === null || !('statement' in body) || typeof body.statement !== 'string')
-      return;
-    const length = Array.from(body.statement).length;
-    if (length < 1 || length > 2000 || !body.statement.isWellFormed())
-      throw new ProblemError('unsupported_query', { detail: 'Statements must contain 1 to 2,000 characters.' });
-  },
-  headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
-};
-const writeFailures = {
-  ...readFailures,
-  403: problemSchema('forbidden'),
-  409: problemSchema('conflict'),
-  422: problemSchema('idempotency_conflict', 'too_many_events', 'unsupported_query'),
-  429: problemSchema('rate_limited'),
-};
-const writeRate = defineRateLimit({ family: 'write', units: 1 });
+function readFailures() {
+  return memoizedValue(readFailures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    409: problemSchema('stale_cursor'),
+    500: problemSchema('internal_error'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+      'rate_limit_unavailable',
+    ),
+  }));
+}
+function writeOptions() {
+  return memoizedValue(writeOptions, () => ({
+    params,
+    transform: ({ body }: { body: unknown }) => {
+      if (typeof body !== 'object' || body === null || !('statement' in body) || typeof body.statement !== 'string')
+        return;
+      const length = Array.from(body.statement).length;
+      if (length < 1 || length > 2000 || !body.statement.isWellFormed())
+        throw new ProblemError('unsupported_query', { detail: 'Statements must contain 1 to 2,000 characters.' });
+    },
+    headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
+  }));
+}
+function writeFailures() {
+  return memoizedValue(writeFailures, () => ({
+    ...readFailures(),
+    403: problemSchema('forbidden'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict', 'too_many_events', 'unsupported_query'),
+    429: problemSchema('rate_limited'),
+  }));
+}
+function writeRate() {
+  return memoizedValue(writeRate, () => defineRateLimit({ family: 'write', units: 1 }));
+}
 const context = (request: Request, deadline: number) => ({
   deadline,
   idempotencyKey: idempotencyKeyOf(request.headers.get(IDEMPOTENCY_HEADER)),
@@ -240,14 +255,14 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
     .post(
       customMethod('/v1/moderation-decisions/:id', 'appeal'),
       {
-        ...writeOptions,
+        ...writeOptions(),
         body: strictContentSchema(t.Object({ statement }, { additionalProperties: false })),
-        response: { 201: withHeaders(receipt, privateHeaders), ...writeFailures },
+        response: { 201: withHeaders(receipt, privateHeaders()), ...writeFailures() },
         detail: {
           operationId: 'moderation_decision.appeal',
           'x-exposure': 'public',
           'x-action': 'account:read',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: [{ bearerAuth: [] }],
         },
       },
@@ -265,19 +280,19 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
     .post(
       customMethod('/v1/moderation-appeals/:id', 'resolve'),
       {
-        ...writeOptions,
+        ...writeOptions(),
         body: strictContentSchema(
           t.Object(
             { outcome: t.Union([t.Literal('uphold'), t.Literal('reverse')]), statement },
             { additionalProperties: false },
           ),
         ),
-        response: { 200: withHeaders(receipt, privateHeaders), ...writeFailures },
+        response: { 200: withHeaders(receipt, privateHeaders()), ...writeFailures() },
         detail: {
           operationId: 'moderation_appeal.resolve',
           'x-exposure': 'public',
           'x-action': 'moderation:takedown',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: [{ bearerAuth: [] }],
         },
       },
@@ -295,10 +310,10 @@ export function appealRoutes(app: ReturnType<typeof moderationRoutes>, deps: App
     );
   const listOptions = {
     params,
-    query: listQuerySchema,
+    query: listQuerySchema(),
     response: {
-      200: withHeaders(appealListResponseBody, privateHeaders),
-      ...readFailures,
+      200: withHeaders(appealListResponseBody, privateHeaders()),
+      ...readFailures(),
     },
   };
   const board = writes.get(

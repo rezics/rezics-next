@@ -1,3 +1,4 @@
+import { initializeEventTypes } from './events/catalogue.ts';
 import pg from 'pg';
 import type { KernelClock } from './clock.ts';
 import { ConfigError } from './commerce/config.ts';
@@ -68,6 +69,7 @@ export async function startWorker(
   env: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   const receiptKeys = readReceiptKeyRing(env, config.receiptKeys);
+  initializeEventTypes();
   const pool = config.kernelPool
     ? await config.kernelPool(config.databaseUrl)
     : new pg.Pool({ connectionString: config.databaseUrl, max: config.poolSize });
@@ -76,7 +78,7 @@ export async function startWorker(
   let client: Awaited<ReturnType<typeof createWorkClient>>;
   try {
     client = await createWorkClient(config.databaseUrl, pool);
-    bindExecutionContract(client, workExecutionPort, historyExecutionPort);
+    bindExecutionContract(client, workExecutionPort(), historyExecutionPort);
   } catch (error) {
     await pool.end();
     throw error;

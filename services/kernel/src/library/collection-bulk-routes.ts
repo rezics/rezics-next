@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { IdempotencyConflictError } from '../command/command.ts';
@@ -24,16 +25,20 @@ import { createCollectionBulkOperations, type CollectionBulkDependencies } from 
 
 type Dependencies = Omit<CollectionBulkDependencies, 'access'> & { access: () => Access };
 const params = t.Object({ operationId: t.String({ format: 'uuid' }) });
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const failures = {
-  400: problemSchema('invalid_request', 'invalid_cursor'),
-  403: problemSchema('forbidden', 'platform_closed'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  413: problemSchema('content_too_large'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema('dependency_unavailable'),
-};
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }));
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+    403: problemSchema('forbidden', 'platform_closed'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    413: problemSchema('content_too_large'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema('dependency_unavailable'),
+  }));
+}
 function detail(operationId: string, write = false) {
   return {
     operationId,
@@ -68,12 +73,12 @@ export function collectionBulkRoutes(app: ReturnType<typeof definitionRoutes>, d
     .post(
       '/v1/libraryOperations',
       {
-        headers,
+        headers: headers(),
         body: strict(bulkPreviewSchema),
         response: {
           201: strict(bulkOperationResultSchema),
           202: strict(t.Object({ preparing: t.Literal(true) }, { additionalProperties: false })),
-          ...failures,
+          ...failures(),
         },
         detail: detail('library_operation.preview', true),
       },
@@ -97,7 +102,7 @@ export function collectionBulkRoutes(app: ReturnType<typeof definitionRoutes>, d
       '/v1/libraryOperations/:operationId',
       {
         params,
-        response: { 200: strict(bulkOperationResultSchema), ...failures },
+        response: { 200: strict(bulkOperationResultSchema), ...failures() },
         detail: detail('library_operation.get'),
       },
       async ({ actor, params, admission, job, set }) => {
@@ -110,7 +115,7 @@ export function collectionBulkRoutes(app: ReturnType<typeof definitionRoutes>, d
       {
         params,
         query: bulkOutcomeQuerySchema,
-        response: { 200: strict(bulkOutcomePageSchema), ...failures },
+        response: { 200: strict(bulkOutcomePageSchema), ...failures() },
         detail: detail('library_operation.outcomes'),
       },
       async ({ actor, params, query, admission, job, set }) => {
@@ -124,9 +129,9 @@ export function collectionBulkRoutes(app: ReturnType<typeof definitionRoutes>, d
       customMethod('/v1/libraryOperations/:operationId', 'confirm'),
       {
         params,
-        headers,
+        headers: headers(),
         body: strict(bulkCancelSchema),
-        response: { 200: strict(bulkOperationResultSchema), ...failures },
+        response: { 200: strict(bulkOperationResultSchema), ...failures() },
         detail: detail('library_operation.confirm', true),
       },
       async ({ actor, params, headers, admission, job, session, set }) => {
@@ -142,9 +147,9 @@ export function collectionBulkRoutes(app: ReturnType<typeof definitionRoutes>, d
       customMethod('/v1/libraryOperations/:operationId', 'cancel'),
       {
         params,
-        headers,
+        headers: headers(),
         body: strict(bulkCancelSchema),
-        response: { 200: strict(bulkOperationResultSchema), ...failures },
+        response: { 200: strict(bulkOperationResultSchema), ...failures() },
         detail: detail('library_operation.cancel', true),
       },
       async ({ actor, params, headers, admission, job, session, set }) => {

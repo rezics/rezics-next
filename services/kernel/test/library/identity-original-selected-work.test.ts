@@ -19,7 +19,7 @@ import { libraryIdentityFootprint } from '../../src/library/identity-native-plan
 import { LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS } from '../../src/library/identity-native-bounds.ts';
 
 function expectedSelectedTotal(body: ReturnType<typeof assembleLibraryIdentitySelectedBodies>) {
-  const page = LIBRARY_IDENTITY_SELECTED_STATEMENTS.page;
+  const page = LIBRARY_IDENTITY_SELECTED_STATEMENTS().page;
   const pageStatement = declareLibraryIdentityStatement('planner', page.sql, page.values)!;
   const basePage = assembleLibraryIdentityOriginalComponents([
     { component: body.currentVerification, multiplicity: 1 },
@@ -41,14 +41,14 @@ function expectedSelectedTotal(body: ReturnType<typeof assembleLibraryIdentitySe
   });
   return assembleLibraryIdentityOriginalComponents([
     { component: baseTotal, multiplicity: 1 },
-    { component: LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP, multiplicity: 1 },
+    { component: LIBRARY_IDENTITY_CUSTODY_CAPTURE_STEP(), multiplicity: 1 },
   ]);
 }
 
 test('installed selected Library declaration is own frozen data, covers the enforced schedule and excludes Source controls', () => {
   const field = Object.getOwnPropertyDescriptor(installed, 'IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION');
   expect(field && 'value' in field).toBe(true);
-  const declaration = installed.IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION;
+  const declaration = installed.IDENTITY_HISTORY_ORIGINAL_LIBRARY_DECLARATION();
   expect(Reflect.ownKeys(declaration).sort()).toEqual(['engineRequests', 'work']);
   expect(Reflect.ownKeys(declaration.work).sort()).toEqual([
     'bytes',
@@ -70,7 +70,7 @@ test('installed selected Library declaration is own frozen data, covers the enfo
 });
 
 test('installed pricing and actual dispatch share every selected literal and bounded current native projection', () => {
-  for (const { sql, values } of Object.values(LIBRARY_IDENTITY_SELECTED_STATEMENTS)) {
+  for (const { sql, values } of Object.values(LIBRARY_IDENTITY_SELECTED_STATEMENTS())) {
     expect(libraryIdentitySelectedFootprint(sql, values)).toEqual(libraryIdentityFootprint(sql, values));
     expect(libraryIdentitySelectedFootprint(sql + '; SELECT 1', values)).toBeUndefined();
     expect(libraryIdentitySelectedFootprint(sql, [...values, 'extra'])).toBeUndefined();
@@ -83,7 +83,7 @@ test('installed pricing and actual dispatch share every selected literal and bou
     expect(nativeIdentitySourceBasisFootprint(item.sql + '; SELECT 1', [])).toBeUndefined();
     expect(nativeSourceCustodyFootprint(item.sql + '; SELECT 1', [])).toBeUndefined();
   }
-  const basis = LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS.sourceBasis;
+  const basis = LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS().sourceBasis;
   expect(basis).toHaveLength(statements.length);
   const axes = [
     'candidateKeys',
@@ -97,8 +97,8 @@ test('installed pricing and actual dispatch share every selected literal and bou
     'engineRequests',
   ];
   for (const declaration of [
-    ...Object.values(LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS.sql),
-    ...Object.values(LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS.selected),
+    ...Object.values(LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS().sql),
+    ...Object.values(LIBRARY_IDENTITY_NATIVE_OPERATION_DECLARATIONS().selected),
     ...basis,
   ]) {
     expect(Reflect.ownKeys(declaration.work).sort()).toEqual(axes.slice().sort());
@@ -140,7 +140,7 @@ test('a delegated body observer ends before executor controls without becoming p
       throw new Error('Unexpected checkout');
     },
   }) as unknown as Pool;
-  const { sql, values } = LIBRARY_IDENTITY_SELECTED_STATEMENTS.plan;
+  const { sql, values } = LIBRARY_IDENTITY_SELECTED_STATEMENTS().plan;
   const price = libraryIdentitySelectedFootprint(sql, values)!;
   const work = new installed.NativeCollectionWork({ reservationId: 'body-only', remaining: price }, Date.now() + 5000);
   const calls: string[] = [];

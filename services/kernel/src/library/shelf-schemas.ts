@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { FactSchema } from '../search/http/routes.ts';
 import { SHELF_DIRECTIONS, SHELF_ORDERS } from './shelf-contract.ts';
@@ -8,66 +9,82 @@ const closed = { additionalProperties: false } as const;
 const text = t.String();
 const nullable = t.Union([text, t.Null()]);
 const revision = t.Integer({ minimum: 1, maximum: 2_147_483_646 });
-const listFacts = t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 }));
+function listFacts() {
+  return memoizedValue(listFacts, () =>
+    t.Optional(t.Record(t.String(), t.Array(FactSchema, { maxItems: 3 }), { maxProperties: 4 })),
+  );
+}
 export const shelfPageQuery = {
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 100, default: 20 })),
   cursor: t.Optional(t.String({ maxLength: 4096 })),
 };
-export const shelfListQuerySchema = t.Object(
-  {
-    ...viewQuery,
-    ...shelfPageQuery,
-    state: t.Optional(text),
-    orderBy: t.Union(SHELF_ORDERS.map((value) => t.Literal(value))),
-    direction: t.Optional(t.Union(SHELF_DIRECTIONS.map((value) => t.Literal(value)))),
-    type: t.Optional(text),
-  },
-  closed,
-);
+export function shelfListQuerySchema() {
+  return memoizedValue(shelfListQuerySchema, () =>
+    t.Object(
+      {
+        ...viewQuery,
+        ...shelfPageQuery,
+        state: t.Optional(text),
+        orderBy: t.Union(SHELF_ORDERS.map((value) => t.Literal(value))),
+        direction: t.Optional(t.Union(SHELF_DIRECTIONS.map((value) => t.Literal(value)))),
+        type: t.Optional(text),
+      },
+      closed,
+    ),
+  );
+}
 export const shelfSummaryQuerySchema = t.Object({ type: t.Optional(text) }, closed);
 export const shelfTypesQuerySchema = t.Object(shelfPageQuery, closed);
 
 // Shelf owns its wire schema; progress routes keep their independent schema ownership.
 const uuid = t.String({ format: 'uuid' });
-export const shelfSessionSchema = t.Object(
-  {
-    id: uuid,
-    subjectId: uuid,
-    versionSubjectId: t.Union([uuid, t.Null()]),
-    mode: t.Union([t.Literal('scalar_amount'), t.Literal('cursor_position'), t.Literal('completed_units')]),
-    unit: libraryStoredVocabularySchema,
-    total: nullable,
-    amount: nullable,
-    locator: nullable,
-    position: nullable,
-    completedUnitCount: t.Integer({ minimum: 0, maximum: 20_000 }),
-    state: t.Union([t.Literal('active'), t.Literal('completed'), t.Literal('abandoned')]),
-    revision,
-    startedAt: text,
-    completedAt: nullable,
-  },
-  closed,
-);
-export const shelfEntrySchema = embedded(
-  t.Object(
-    {
-      subjectId: text,
-      incarnationId: t.Optional(t.Union([uuid, t.Null()])),
-      state: libraryStoredVocabularySchema,
-      revision,
-      createdAt: text,
-      updatedAt: text,
-      lastActivityAt: text,
-      finishedAt: nullable,
-      titleCoverage: t.Optional(t.Union([t.Literal('labelled'), t.Literal('missing')])),
-      personalScore: t.Optional(t.Union([t.Integer({ minimum: 0, maximum: 4096 }), t.Null()])),
-      priority: t.Optional(t.Union([t.Integer({ minimum: 1, maximum: 100 }), t.Null()])),
-      activeProgressSession: t.Union([shelfSessionSchema, t.Null()]),
-    },
-    closed,
-  ),
-  { ...subjectFields, facts: listFacts },
-);
+export function shelfSessionSchema() {
+  return memoizedValue(shelfSessionSchema, () =>
+    t.Object(
+      {
+        id: uuid,
+        subjectId: uuid,
+        versionSubjectId: t.Union([uuid, t.Null()]),
+        mode: t.Union([t.Literal('scalar_amount'), t.Literal('cursor_position'), t.Literal('completed_units')]),
+        unit: libraryStoredVocabularySchema,
+        total: nullable,
+        amount: nullable,
+        locator: nullable,
+        position: nullable,
+        completedUnitCount: t.Integer({ minimum: 0, maximum: 20_000 }),
+        state: t.Union([t.Literal('active'), t.Literal('completed'), t.Literal('abandoned')]),
+        revision,
+        startedAt: text,
+        completedAt: nullable,
+      },
+      closed,
+    ),
+  );
+}
+export function shelfEntrySchema() {
+  return memoizedValue(shelfEntrySchema, () =>
+    embedded(
+      t.Object(
+        {
+          subjectId: text,
+          incarnationId: t.Optional(t.Union([uuid, t.Null()])),
+          state: libraryStoredVocabularySchema,
+          revision,
+          createdAt: text,
+          updatedAt: text,
+          lastActivityAt: text,
+          finishedAt: nullable,
+          titleCoverage: t.Optional(t.Union([t.Literal('labelled'), t.Literal('missing')])),
+          personalScore: t.Optional(t.Union([t.Integer({ minimum: 0, maximum: 4096 }), t.Null()])),
+          priority: t.Optional(t.Union([t.Integer({ minimum: 1, maximum: 100 }), t.Null()])),
+          activeProgressSession: t.Union([shelfSessionSchema(), t.Null()]),
+        },
+        closed,
+      ),
+      { ...subjectFields(), facts: listFacts() },
+    ),
+  );
+}
 const count = t.Integer({ minimum: 0 });
 const tab = t.Object({ total: count, shown: count }, closed);
 export const shelfSummarySchema = t.Object(

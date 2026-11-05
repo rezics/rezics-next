@@ -35,7 +35,7 @@ const page = (ids: string[], actor = owner, question = STANDARD_QUESTION_ID) =>
   readViewerFactsPage(deps(), actor, inputs(ids), question, deadline());
 const actionClock = () => new Date();
 function personalDependencies(
-  resources: ViewerActionResources = subjectViewerActionResources,
+  resources: ViewerActionResources = subjectViewerActionResources(),
   bindings: ViewerActionBindings = compileViewerActionBindings(fixture.app.routes),
 ) {
   return {
@@ -334,7 +334,7 @@ bunTest.serial(
     const catalogueDenied = await personalPage(
       rows,
       writer,
-      personalDependencies(subjectViewerActionResources, bindings),
+      personalDependencies(subjectViewerActionResources(), bindings),
     );
     expect(catalogueDenied).toMatchObject({ state: 'current', rows: [{ actions: { state: 'current' } }] });
     if (catalogueDenied.state !== 'current' || catalogueDenied.rows[0]!.actions.state !== 'current')
@@ -371,8 +371,8 @@ bunTest.serial(
     const id = await fixture.createSubject();
     const writer = { ...owner, scopes: [...owner.scopes, 'library_entry:update'] };
     const rows = [{ rowKey: 'feed:1', subjectId: id, resourceType: 'schema:Book' }];
-    const baseSubject = subjectViewerActionResources.get('semantic.subject')!;
-    const failingResources = new Map(subjectViewerActionResources);
+    const baseSubject = subjectViewerActionResources().get('semantic.subject')!;
+    const failingResources = new Map(subjectViewerActionResources());
     failingResources.set('semantic.subject', {
       ...baseSubject,
       async read() {
@@ -397,7 +397,7 @@ bunTest.serial(
         runtimeReads++;
         return {
           access: fixture.access,
-          resources: subjectViewerActionResources,
+          resources: subjectViewerActionResources(),
           bindings: runtimeReads >= 3 ? changedBindings : originalBindings,
           clock: actionClock,
         };
@@ -418,9 +418,9 @@ bunTest.serial(
     const survivor = await fixture.createSubject();
     const writer = { ...owner, scopes: [...owner.scopes, 'library_entry:update'] };
     const rows = [{ rowKey: 'feed:2', subjectId: id, resourceType: 'schema:Book' }];
-    const book = subjectViewerActionResources.get('schema:Book')!;
+    const book = subjectViewerActionResources().get('schema:Book')!;
     const withPreparation = (prepare: NonNullable<typeof book.prepare>) => {
-      const resources = new Map(subjectViewerActionResources);
+      const resources = new Map(subjectViewerActionResources());
       resources.set('schema:Book', { ...book, prepare });
       return personalDependencies(resources);
     };
@@ -527,7 +527,7 @@ bunTest.serial(
       resourceType: 'schema:Book',
     }));
     expect(
-      await personalPage(rows, writer, personalDependencies(subjectViewerActionResources, bindings)),
+      await personalPage(rows, writer, personalDependencies(subjectViewerActionResources(), bindings)),
     ).toMatchObject({
       state: 'unavailable',
       reason: 'response_limit',

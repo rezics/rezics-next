@@ -153,9 +153,9 @@ test('native maintained summary and full-byte facets do not derive totals from t
   expect(result.tabs.planned).toEqual({ total: 11, shown: 3 });
   expect(result.tabs.collections).toEqual({ total: 4, shown: 4 });
   expect(result.tabs.completed).toEqual({ total: 0, shown: 0 });
-  expect(await lookupShelfType(db.admin, route, accountId, type)).toBe(typeId);
-  expect(await lookupShelfType(db.admin, route, other, type)).toBeNull();
-  expect(await lookupShelfType(db.admin, route, accountId, `${type}B`)).toBeNull();
+  expect(await lookupShelfType()(db.admin, route, accountId, type)).toBe(typeId);
+  expect(await lookupShelfType()(db.admin, route, other, type)).toBeNull();
+  expect(await lookupShelfType()(db.admin, route, accountId, `${type}B`)).toBeNull();
   expect(await readShelfFacets(db.admin, route, accountId, null, 20, 8 * 1024 * 1024)).toEqual({
     types: [{ type, count: 3 }],
     more: false,

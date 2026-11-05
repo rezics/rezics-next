@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../memoized.ts';
 import { parseSelectedSynopsis } from '../selected-synopsis.ts';
 import { readDocument } from '../../content/document-read.ts';
 import {
@@ -99,55 +100,77 @@ import {
   SubjectPagePublicationUnavailableError,
 } from '../contribution-lifecycle.ts';
 
-const DataTypeSchema = t.Unsafe<DataType>(t.Union(DATA_TYPES.map((dataType) => t.Literal(dataType))));
+function DataTypeSchema() {
+  return memoizedValue(DataTypeSchema, () =>
+    t.Unsafe<DataType>(t.Union(DATA_TYPES.map((dataType) => t.Literal(dataType)))),
+  );
+}
 const AgentSelfSourceSchema = t.Object(
   { kind: t.Literal('agent'), subject: t.String({ format: 'uuid' }) },
   { additionalProperties: false },
 );
-const SemanticSourceSchema = t.Union([SourceSchema, AgentSelfSourceSchema]);
+function SemanticSourceSchema() {
+  return memoizedValue(SemanticSourceSchema, () => t.Union([SourceSchema, AgentSelfSourceSchema]));
+}
 const ValueSchema = t.Union([
   t.Object({ type: t.Literal('value'), content: t.Any() }, { additionalProperties: false }),
   t.Object({ type: t.Literal('somevalue') }, { additionalProperties: false }),
   t.Object({ type: t.Literal('novalue') }, { additionalProperties: false }),
 ]);
-const SnakSchema = t.Object(
-  {
-    property: t.Object({ id: t.String(), data_type: DataTypeSchema }, { additionalProperties: false }),
-    value: ValueSchema,
-  },
-  { additionalProperties: false },
-);
-const ReferenceSchema = t.Object({ parts: t.Array(SnakSchema), hash: t.String() }, { additionalProperties: false });
-const StatementSchema = t.Object(
-  {
-    id: t.String({ format: 'uuid' }),
-    rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated')]),
-    property: t.Object({ id: t.String(), data_type: DataTypeSchema }, { additionalProperties: false }),
-    value: ValueSchema,
-    qualifiers: t.Array(SnakSchema),
-    references: t.Array(ReferenceSchema),
-    rezics: t.Object({ release: t.String(), revision: t.Integer({ minimum: 1 }) }, { additionalProperties: false }),
-  },
-  { additionalProperties: false },
-);
+function SnakSchema() {
+  return memoizedValue(SnakSchema, () =>
+    t.Object(
+      {
+        property: t.Object({ id: t.String(), data_type: DataTypeSchema() }, { additionalProperties: false }),
+        value: ValueSchema,
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
+function ReferenceSchema() {
+  return memoizedValue(ReferenceSchema, () =>
+    t.Object({ parts: t.Array(SnakSchema()), hash: t.String() }, { additionalProperties: false }),
+  );
+}
+function StatementSchema() {
+  return memoizedValue(StatementSchema, () =>
+    t.Object(
+      {
+        id: t.String({ format: 'uuid' }),
+        rank: t.Union([t.Literal('normal'), t.Literal('preferred'), t.Literal('deprecated')]),
+        property: t.Object({ id: t.String(), data_type: DataTypeSchema() }, { additionalProperties: false }),
+        value: ValueSchema,
+        qualifiers: t.Array(SnakSchema()),
+        references: t.Array(ReferenceSchema()),
+        rezics: t.Object({ release: t.String(), revision: t.Integer({ minimum: 1 }) }, { additionalProperties: false }),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
 
-export const ItemSchema = t.Object(
-  {
-    id: t.String({ format: 'uuid' }),
-    type: t.String(),
-    revision: t.Integer({ minimum: 1 }),
-    release: t.String(),
-    context: t.String({ format: 'uuid' }),
-    resolution: t.Record(t.String(), t.Any()),
-    relationCounts: t.Record(t.String(), t.Integer({ minimum: 0 })),
-    labels: t.Record(t.String(), t.String()),
-    descriptions: t.Record(t.String(), t.String()),
-    aliases: t.Record(t.String(), t.Array(t.String())),
-    statements: t.Record(t.String(), t.Array(StatementSchema)),
-    sourceRecords: t.Array(SourceRecordSchema),
-  },
-  { additionalProperties: false },
-);
+export function ItemSchema() {
+  return memoizedValue(ItemSchema, () =>
+    t.Object(
+      {
+        id: t.String({ format: 'uuid' }),
+        type: t.String(),
+        revision: t.Integer({ minimum: 1 }),
+        release: t.String(),
+        context: t.String({ format: 'uuid' }),
+        resolution: t.Record(t.String(), t.Any()),
+        relationCounts: t.Record(t.String(), t.Integer({ minimum: 0 })),
+        labels: t.Record(t.String(), t.String()),
+        descriptions: t.Record(t.String(), t.String()),
+        aliases: t.Record(t.String(), t.Array(t.String())),
+        statements: t.Record(t.String(), t.Array(StatementSchema())),
+        sourceRecords: t.Array(SourceRecordSchema),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
 
 export const ItemInputSchema = t.Object(
   {
@@ -288,22 +311,28 @@ function candidateError(error: unknown): never {
     });
   throw error;
 }
-const listingErrors = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  503: problemSchema('semantic_not_ready', 'overloaded', 'deadline_exceeded'),
-};
-const LabelsSchema = t.Object(
-  {
-    labels: t.Record(t.String(), t.String()),
-    redirect: t.Optional(t.String({ format: 'uuid' })),
-    type: t.Optional(t.String()),
-    types: t.Optional(t.Array(t.String())),
-    cover: t.Optional(CoverSummarySchema),
-  },
-  { additionalProperties: false },
-);
+function listingErrors() {
+  return memoizedValue(listingErrors, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    503: problemSchema('semantic_not_ready', 'overloaded', 'deadline_exceeded'),
+  }));
+}
+function LabelsSchema() {
+  return memoizedValue(LabelsSchema, () =>
+    t.Object(
+      {
+        labels: t.Record(t.String(), t.String()),
+        redirect: t.Optional(t.String({ format: 'uuid' })),
+        type: t.Optional(t.String()),
+        types: t.Optional(t.Array(t.String())),
+        cover: t.Optional(CoverSummarySchema),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
 const redirectResponse = t.Object(
   {
     redirect: t.Object(
@@ -313,7 +342,9 @@ const redirectResponse = t.Object(
   },
   { additionalProperties: false },
 );
-const itemResponse = t.Object({ subject: ItemSchema }, { additionalProperties: false });
+function itemResponse() {
+  return memoizedValue(itemResponse, () => t.Object({ subject: ItemSchema() }, { additionalProperties: false }));
+}
 const viewerActionEntry = t.Object(
   {
     action: t.String(),
@@ -321,91 +352,107 @@ const viewerActionEntry = t.Object(
   },
   { additionalProperties: false },
 );
-const readResponse = t.Object(
-  {
-    subject: ItemSchema,
-    selectedSynopsis: t.Optional(
-      t.Union([
-        t.Object(
-          {
-            kind: t.Literal('matched'),
-            fact: t.Omit(StatementSchema, ['rezics']),
-            context: t.String(),
-            release: t.String(),
-          },
-          { additionalProperties: false },
-        ),
-        t.Object({ kind: t.Literal('changed') }, { additionalProperties: false }),
-        t.Object({ kind: t.Literal('missing') }, { additionalProperties: false }),
-        t.Object({ kind: t.Literal('unsupported') }, { additionalProperties: false }),
-        t.Object({ kind: t.Literal('unavailable') }, { additionalProperties: false }),
-      ]),
-    ),
-    reviewedIdentity: t.Optional(t.Union([ReviewedPersonEndpointSchema, t.Null()])),
-    account: t.Union([t.Object({ id: t.String({ format: 'uuid' }) }, { additionalProperties: false }), t.Null()]),
-    summary: t.Union([SubjectSummarySchema, t.Null()]),
-    related: t.Record(t.String(), LabelsSchema),
-    documents: t.Optional(t.Record(t.String({ format: 'uuid' }), PublicDocumentViewSchema)),
-    viewerActions: t.Optional(
-      t.Union([
-        t.Object(
-          { state: t.Literal('available'), actions: t.Array(viewerActionEntry, { maxItems: 64 }) },
-          { additionalProperties: false },
-        ),
-        t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
-      ]),
-    ),
-  },
-  { additionalProperties: false },
-);
-const WorkReleaseCardFieldSchema = t.Union([
-  t.Object({ state: t.Literal('unsupported') }, { additionalProperties: false }),
-  t.Object({ state: t.Literal('withheld') }, { additionalProperties: false }),
-  t.Object({ state: t.Literal('missing') }, { additionalProperties: false }),
-  t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
-  t.Object(
-    {
-      state: t.Literal('available'),
-      statements: t.Array(StatementSchema, { maxItems: workReleaseCardFieldLimit }),
-      related: t.Record(t.String(), SubjectSummarySchema),
-    },
-    { additionalProperties: false },
-  ),
-]);
-const WorkReleaseCardSchema = t.Object(
-  {
-    subject: t.String({ format: 'uuid' }),
-    type: t.String(),
-    summary: SubjectSummarySchema,
-    membership: StatementSchema,
-    related: t.Record(t.String(), SubjectSummarySchema),
-    fields: t.Object(
+function readResponse() {
+  return memoizedValue(readResponse, () =>
+    t.Object(
       {
-        'schema:gamePlatform': WorkReleaseCardFieldSchema,
-        'schema:inLanguage': WorkReleaseCardFieldSchema,
-        'schema:datePublished': WorkReleaseCardFieldSchema,
-        'schema:creativeWorkStatus': WorkReleaseCardFieldSchema,
-        'wdt:P5804': WorkReleaseCardFieldSchema,
-        'rezics:releaseStatus': WorkReleaseCardFieldSchema,
-        'schema:contentRating': WorkReleaseCardFieldSchema,
-        'schema:publisher': WorkReleaseCardFieldSchema,
-        'schema:producer': WorkReleaseCardFieldSchema,
-        'wdt:P178': WorkReleaseCardFieldSchema,
-        'wdt:P162': WorkReleaseCardFieldSchema,
-        'wdt:P2899': WorkReleaseCardFieldSchema,
+        subject: ItemSchema(),
+        selectedSynopsis: t.Optional(
+          t.Union([
+            t.Object(
+              {
+                kind: t.Literal('matched'),
+                fact: t.Omit(StatementSchema(), ['rezics']),
+                context: t.String(),
+                release: t.String(),
+              },
+              { additionalProperties: false },
+            ),
+            t.Object({ kind: t.Literal('changed') }, { additionalProperties: false }),
+            t.Object({ kind: t.Literal('missing') }, { additionalProperties: false }),
+            t.Object({ kind: t.Literal('unsupported') }, { additionalProperties: false }),
+            t.Object({ kind: t.Literal('unavailable') }, { additionalProperties: false }),
+          ]),
+        ),
+        reviewedIdentity: t.Optional(t.Union([ReviewedPersonEndpointSchema, t.Null()])),
+        account: t.Union([t.Object({ id: t.String({ format: 'uuid' }) }, { additionalProperties: false }), t.Null()]),
+        summary: t.Union([SubjectSummarySchema, t.Null()]),
+        related: t.Record(t.String(), LabelsSchema()),
+        documents: t.Optional(t.Record(t.String({ format: 'uuid' }), PublicDocumentViewSchema())),
+        viewerActions: t.Optional(
+          t.Union([
+            t.Object(
+              { state: t.Literal('available'), actions: t.Array(viewerActionEntry, { maxItems: 64 }) },
+              { additionalProperties: false },
+            ),
+            t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
+          ]),
+        ),
       },
       { additionalProperties: false },
     ),
-  },
-  { additionalProperties: false },
-);
-const WorkReleaseCardsSchema = t.Union([
-  t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
-  t.Object(
-    { state: t.Literal('available'), cards: t.Array(WorkReleaseCardSchema, { maxItems: workReleaseCardLimit }) },
-    { additionalProperties: false },
-  ),
-]);
+  );
+}
+function WorkReleaseCardFieldSchema() {
+  return memoizedValue(WorkReleaseCardFieldSchema, () =>
+    t.Union([
+      t.Object({ state: t.Literal('unsupported') }, { additionalProperties: false }),
+      t.Object({ state: t.Literal('withheld') }, { additionalProperties: false }),
+      t.Object({ state: t.Literal('missing') }, { additionalProperties: false }),
+      t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
+      t.Object(
+        {
+          state: t.Literal('available'),
+          statements: t.Array(StatementSchema(), { maxItems: workReleaseCardFieldLimit }),
+          related: t.Record(t.String(), SubjectSummarySchema),
+        },
+        { additionalProperties: false },
+      ),
+    ]),
+  );
+}
+function WorkReleaseCardSchema() {
+  return memoizedValue(WorkReleaseCardSchema, () =>
+    t.Object(
+      {
+        subject: t.String({ format: 'uuid' }),
+        type: t.String(),
+        summary: SubjectSummarySchema,
+        membership: StatementSchema(),
+        related: t.Record(t.String(), SubjectSummarySchema),
+        fields: t.Object(
+          {
+            'schema:gamePlatform': WorkReleaseCardFieldSchema(),
+            'schema:inLanguage': WorkReleaseCardFieldSchema(),
+            'schema:datePublished': WorkReleaseCardFieldSchema(),
+            'schema:creativeWorkStatus': WorkReleaseCardFieldSchema(),
+            'wdt:P5804': WorkReleaseCardFieldSchema(),
+            'rezics:releaseStatus': WorkReleaseCardFieldSchema(),
+            'schema:contentRating': WorkReleaseCardFieldSchema(),
+            'schema:publisher': WorkReleaseCardFieldSchema(),
+            'schema:producer': WorkReleaseCardFieldSchema(),
+            'wdt:P178': WorkReleaseCardFieldSchema(),
+            'wdt:P162': WorkReleaseCardFieldSchema(),
+            'wdt:P2899': WorkReleaseCardFieldSchema(),
+          },
+          { additionalProperties: false },
+        ),
+      },
+      { additionalProperties: false },
+    ),
+  );
+}
+function WorkReleaseCardsSchema() {
+  return memoizedValue(WorkReleaseCardsSchema, () =>
+    t.Union([
+      t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
+      t.Object(
+        { state: t.Literal('available'), cards: t.Array(WorkReleaseCardSchema(), { maxItems: workReleaseCardLimit }) },
+        { additionalProperties: false },
+      ),
+    ]),
+  );
+}
 const SubjectCountsSchema = t.Unsafe<SubjectRelationCountResponse>(
   t.Object(
     {
@@ -444,41 +491,47 @@ const SubjectCountsSchema = t.Unsafe<SubjectRelationCountResponse>(
     { additionalProperties: false },
   ),
 );
-const graphResponse = t.Object(
-  {
-    nodes: t.Array(
-      t.Object(
-        { id: t.String({ format: 'uuid' }), type: t.String(), label: t.String(), summary: SubjectSummarySchema },
-        { additionalProperties: false },
-      ),
+function graphResponse() {
+  return memoizedValue(graphResponse, () =>
+    t.Object(
+      {
+        nodes: t.Array(
+          t.Object(
+            { id: t.String({ format: 'uuid' }), type: t.String(), label: t.String(), summary: SubjectSummarySchema },
+            { additionalProperties: false },
+          ),
+        ),
+        edges: t.Array(
+          t.Object(
+            {
+              from: t.String({ format: 'uuid' }),
+              property: t.String(),
+              to: t.String({ format: 'uuid' }),
+              statement: t.String({ format: 'uuid' }),
+            },
+            { additionalProperties: false },
+          ),
+        ),
+        truncated: t.Array(
+          t.Object(
+            {
+              node: t.String({ format: 'uuid' }),
+              property: t.String(),
+              direction: t.Union([t.Literal('out'), t.Literal('in')]),
+              count: t.Optional(t.Integer({ minimum: 0 })),
+              cursor: t.String(),
+            },
+            { additionalProperties: false },
+          ),
+        ),
+      },
+      { additionalProperties: false },
     ),
-    edges: t.Array(
-      t.Object(
-        {
-          from: t.String({ format: 'uuid' }),
-          property: t.String(),
-          to: t.String({ format: 'uuid' }),
-          statement: t.String({ format: 'uuid' }),
-        },
-        { additionalProperties: false },
-      ),
-    ),
-    truncated: t.Array(
-      t.Object(
-        {
-          node: t.String({ format: 'uuid' }),
-          property: t.String(),
-          direction: t.Union([t.Literal('out'), t.Literal('in')]),
-          count: t.Optional(t.Integer({ minimum: 0 })),
-          cursor: t.String(),
-        },
-        { additionalProperties: false },
-      ),
-    ),
-  },
-  { additionalProperties: false },
-);
-const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
+  );
+}
+function unauthorized() {
+  return memoizedValue(unauthorized, () => problemSchema('authentication_required', 'invalid_credentials'));
+}
 const EditorialBodyContext = t.String({ format: 'uuid' });
 const ExpectedHead = t.Union([t.Integer({ minimum: 1 }), t.Null()]);
 const DecisionBody = t.Object(
@@ -581,22 +634,30 @@ const statementVisibilityResponse = t.Object(
   { additionalProperties: false },
 );
 const cacheControl = { 'cache-control': t.Literal('no-cache') };
-const reactionKind = t.Unsafe<ReactionKind>(t.Union(REACTION_KINDS.map((kind) => t.Literal(kind))));
-const reactionCountResponse = t.Object(
-  {
-    counts: t.Array(
-      t.Object({ kind: reactionKind, count: t.Integer({ minimum: 1 }) }, { additionalProperties: false }),
+function reactionKind() {
+  return memoizedValue(reactionKind, () =>
+    t.Unsafe<ReactionKind>(t.Union(REACTION_KINDS.map((kind) => t.Literal(kind)))),
+  );
+}
+function reactionCountResponse() {
+  return memoizedValue(reactionCountResponse, () =>
+    t.Object(
+      {
+        counts: t.Array(
+          t.Object({ kind: reactionKind(), count: t.Integer({ minimum: 1 }) }, { additionalProperties: false }),
+        ),
+        watermark: t.Union([
+          t.Object(
+            { epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[1-9][0-9]*$' }) },
+            { additionalProperties: false },
+          ),
+          t.Null(),
+        ]),
+      },
+      { additionalProperties: false },
     ),
-    watermark: t.Union([
-      t.Object(
-        { epoch: t.Integer({ minimum: 1 }), position: t.String({ pattern: '^[1-9][0-9]*$' }) },
-        { additionalProperties: false },
-      ),
-      t.Null(),
-    ]),
-  },
-  { additionalProperties: false },
-);
+  );
+}
 type SubjectRouteDependencies = {
   pool: Pool;
   routeKey: Uint8Array;
@@ -791,9 +852,9 @@ function subjectRoutes(
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }),
         body: ItemInputSchema,
         response: {
-          201: withHeaders(itemResponse, { [SESSION_HEADER]: t.String(), location: t.String(), etag: t.String() }),
+          201: withHeaders(itemResponse(), { [SESSION_HEADER]: t.String(), location: t.String(), etag: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           422: problemSchema('idempotency_conflict'),
           503: problemSchema(
@@ -888,7 +949,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(TermsResultSchema, { [SESSION_HEADER]: t.String(), etag: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           412: problemSchema('precondition_failed'),
@@ -994,7 +1055,7 @@ function subjectRoutes(
             { [SESSION_HEADER]: t.String(), location: t.String() },
           ),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict', 'identity_group_overflow'),
@@ -1087,7 +1148,7 @@ function subjectRoutes(
             },
             { additionalProperties: false },
           ),
-          401: unauthorized,
+          401: unauthorized(),
           404: problemSchema('not_found'),
           503: problemSchema('overloaded', 'partition_unavailable', 'deadline_exceeded'),
         },
@@ -1166,10 +1227,10 @@ function subjectRoutes(
           reviewIdentityExternalId: t.Optional(t.String({ maxLength: 255 })),
         }),
         response: {
-          200: withHeaders(readResponse, { [SESSION_HEADER]: t.String(), etag: t.String(), ...cacheControl }),
+          200: withHeaders(readResponse(), { [SESSION_HEADER]: t.String(), etag: t.String(), ...cacheControl }),
           308: withHeaders(redirectResponse, { location: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -1430,7 +1491,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(visibilityResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -1496,7 +1557,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(visibilityResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -1562,7 +1623,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(visibilityResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -1629,7 +1690,7 @@ function subjectRoutes(
             [SESSION_HEADER]: t.String(),
           }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           422: problemSchema('idempotency_conflict'),
@@ -1745,7 +1806,7 @@ function subjectRoutes(
             }),
             cacheControl,
           ),
-          ...listingErrors,
+          ...listingErrors(),
         },
         detail: {
           operationId: 'statement.read_lifecycle',
@@ -1813,7 +1874,7 @@ function subjectRoutes(
               [SESSION_HEADER]: t.String(),
             },
           ),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -1891,7 +1952,7 @@ function subjectRoutes(
               [SESSION_HEADER]: t.String(),
             },
           ),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -1961,7 +2022,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(acceptanceResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict', 'stale_editorial_head'),
@@ -2038,7 +2099,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(acceptanceResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict', 'stale_editorial_head'),
@@ -2115,7 +2176,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(statementVisibilityResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -2190,7 +2251,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(statementVisibilityResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -2265,7 +2326,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(statementVisibilityResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -2340,7 +2401,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(adoptionResponse, { [SESSION_HEADER]: t.String() }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict', 'stale_editorial_head'),
@@ -2432,10 +2493,10 @@ function subjectRoutes(
                   t.Object(
                     {
                       id: t.String({ format: 'uuid' }),
-                      source: t.Union([SemanticSourceSchema, t.Null()]),
+                      source: t.Union([SemanticSourceSchema(), t.Null()]),
                       retracted: t.Union([t.Integer(), t.Null()]),
                       retraction: t.Union([
-                        t.Object({ source: SemanticSourceSchema, references: t.Array(BatchReferenceSchema) }),
+                        t.Object({ source: SemanticSourceSchema(), references: t.Array(BatchReferenceSchema) }),
                         t.Null(),
                       ]),
                       consentIdentity: t.Optional(
@@ -2454,7 +2515,7 @@ function subjectRoutes(
                           ]),
                         }),
                       ),
-                      statement: StatementSchema,
+                      statement: StatementSchema(),
                       release: t.String(),
                       revision: t.Integer(),
                       decision: t.Union([
@@ -2481,7 +2542,7 @@ function subjectRoutes(
             }),
             { 'cache-control': t.Union([t.Literal('no-cache'), t.Literal('private, no-store')]) },
           ),
-          ...listingErrors,
+          ...listingErrors(),
         },
         detail: {
           operationId: 'subject.list_candidates',
@@ -2534,7 +2595,7 @@ function subjectRoutes(
       '/v1/subjects/:id/revisions/:revision',
       {
         params: t.Object({ id: t.String(), revision: t.Numeric({ minimum: 1, maximum: 2147483647, multipleOf: 1 }) }),
-        response: { 200: withHeaders(RevisionDetailSchema, cacheControl), ...listingErrors },
+        response: { 200: withHeaders(RevisionDetailSchema, cacheControl), ...listingErrors() },
         detail: {
           operationId: 'subject.read_revision',
           'x-exposure': 'public',
@@ -2593,14 +2654,14 @@ function subjectRoutes(
                   revision: t.Integer(),
                   kind: t.String(),
                   release: t.String(),
-                  source: t.Union([SemanticSourceSchema, t.Null()]),
+                  source: t.Union([SemanticSourceSchema(), t.Null()]),
                 }),
               ),
               next: t.Union([t.String(), t.Null()]),
             }),
             cacheControl,
           ),
-          ...listingErrors,
+          ...listingErrors(),
         },
         detail: {
           operationId: 'subject.list_revisions',
@@ -2657,9 +2718,9 @@ function subjectRoutes(
           limit: t.Optional(t.Numeric({ minimum: 1, maximum: 25, multipleOf: 1, default: 12 })),
         }),
         response: {
-          200: withHeaders(graphResponse, cacheControl),
+          200: withHeaders(graphResponse(), cacheControl),
           308: withHeaders(redirectResponse, { location: t.String() }),
-          ...listingErrors,
+          ...listingErrors(),
         },
         detail: {
           operationId: 'subject.graph',
@@ -2727,7 +2788,7 @@ function subjectRoutes(
         response: {
           200: withHeaders(SubjectCountsSchema, cacheControl),
           308: withHeaders(redirectResponse, { location: t.String() }),
-          ...listingErrors,
+          ...listingErrors(),
         },
         detail: {
           operationId: 'subject.counts',
@@ -2786,7 +2847,7 @@ function subjectRoutes(
                       subject: t.String(),
                       property: t.String(),
                       statement: t.String(),
-                      assertion: t.Optional(StatementSchema),
+                      assertion: t.Optional(StatementSchema()),
                       creditSlot: t.Optional(
                         t.Object(
                           {
@@ -2805,7 +2866,7 @@ function subjectRoutes(
                     { additionalProperties: false },
                   ),
                 ),
-                workReleaseCards: t.Optional(WorkReleaseCardsSchema),
+                workReleaseCards: t.Optional(WorkReleaseCardsSchema()),
                 count: t.Optional(t.Object({ value: t.Integer({ minimum: 0 }), exact: t.Boolean() })),
                 freshness: t.Object(
                   {
@@ -2823,7 +2884,7 @@ function subjectRoutes(
             cacheControl,
           ),
           308: withHeaders(redirectResponse, { location: t.String() }),
-          ...listingErrors,
+          ...listingErrors(),
         },
         detail: {
           operationId: 'subject.links',
@@ -2928,7 +2989,7 @@ function subjectRoutes(
                 relations: t.Array(
                   t.Object(
                     {
-                      statement: StatementSchema,
+                      statement: StatementSchema(),
                       related: t.Optional(t.Record(t.String(), SubjectSummarySchema)),
                       target: t.Union([t.String({ format: 'uuid' }), t.Null()]),
                       external: t.Union([t.String(), t.Null()]),
@@ -2955,7 +3016,7 @@ function subjectRoutes(
             cacheControl,
           ),
           308: withHeaders(redirectResponse, { location: t.String() }),
-          ...listingErrors,
+          ...listingErrors(),
         },
         detail: {
           operationId: 'subject.relations',
@@ -3038,7 +3099,7 @@ function subjectRoutes(
             [SESSION_HEADER]: t.String(),
           }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -3098,7 +3159,7 @@ function subjectRoutes(
             [SESSION_HEADER]: t.String(),
           }),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           404: problemSchema('not_found'),
           409: problemSchema('conflict'),
@@ -3154,9 +3215,9 @@ function subjectRoutes(
       {
         params: t.Object({ id: t.String() }),
         response: {
-          200: withHeaders(reactionCountResponse, cacheControl),
+          200: withHeaders(reactionCountResponse(), cacheControl),
           308: withHeaders(redirectResponse, { location: t.String() }),
-          ...listingErrors,
+          ...listingErrors(),
         },
         detail: {
           operationId: 'subject.reactions',

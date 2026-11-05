@@ -1103,7 +1103,7 @@ export function createAccess(config: PermissionConfig): Access {
             realmInput,
             () => {
               if (kindOriginalInvocation.getStore())
-                throw new AccessWorkUnavailableError(
+                throw new (AccessWorkUnavailableError())(
                   'Content AccessRealmRoleReader.batch: original Kind Source-eight-axis callback declaration',
                 );
               return config.realmRoleReader?.batch?.(pool, realmInput) ?? Promise.resolve(null);

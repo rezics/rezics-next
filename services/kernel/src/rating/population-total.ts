@@ -43,7 +43,7 @@ function address(data: Address): [number, string, number, string] {
 }
 
 function parse(event: CloudEvent): PopulationTotalEvent {
-  if (event.type !== POPULATION_TOTAL_DELIVERY || !Value.Check(RATING_EVENTS[POPULATION_TOTAL_DELIVERY], event.data))
+  if (event.type !== POPULATION_TOTAL_DELIVERY || !Value.Check(RATING_EVENTS()[POPULATION_TOTAL_DELIVERY], event.data))
     throw new TypeError('Invalid rating population delivery');
   const data = event.data as PopulationTotalEvent;
   if (data.action === 'deliver') {

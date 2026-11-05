@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import canonicalize from 'canonicalize';
@@ -74,10 +75,18 @@ export type IdentityScopeCommittedVerification = Refusal | HeldIdentityScopeComm
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const unsigned = /^(0|[1-9][0-9]{0,18})$/;
 const maxBigint = 9223372036854775807n;
-const currentLocked = current.sql + '\nFOR UPDATE OF s FOR SHARE OF p,l,a,c,r,h,fc,fa';
-const associationLocked =
-  association.sql.replace('/* capture-lock */', 'FOR SHARE OF captured,cn') + '\nFOR SHARE OF s,a,n,p';
-const repairLocked = repair.sql + '\nFOR SHARE OF s,a,c,r,n,prepared';
+function currentLocked() {
+  return memoizedValue(currentLocked, () => current.sql + '\nFOR UPDATE OF s FOR SHARE OF p,l,a,c,r,h,fc,fa');
+}
+function associationLocked() {
+  return memoizedValue(
+    associationLocked,
+    () => association.sql.replace('/* capture-lock */', 'FOR SHARE OF captured,cn') + '\nFOR SHARE OF s,a,n,p',
+  );
+}
+function repairLocked() {
+  return memoizedValue(repairLocked, () => repair.sql + '\nFOR SHARE OF s,a,c,r,n,prepared');
+}
 const zero = (): WorkDimensions => ({
   candidateKeys: 0,
   identityMetadataRows: 0,
@@ -99,13 +108,13 @@ export function identityScopeCommittedReceiptFootprint(
 ): WorkDimensions | undefined {
   let rows: number;
   let output: number;
-  if (sql === current.sql || sql === currentLocked) {
+  if (sql === current.sql || sql === currentLocked()) {
     rows = 12; // nine keyed rows, consumer fence, unresolved forward, active attempt
     output = 512;
-  } else if (sql === association.sql || sql === associationLocked) {
+  } else if (sql === association.sql || sql === associationLocked()) {
     rows = 7; // association/component, summary/partition, capture association/component, attempt probe
     output = 512;
-  } else if (sql === repair.sql || sql === repairLocked) {
+  } else if (sql === repair.sql || sql === repairLocked()) {
     rows = 7; // six keyed native/completion rows and one partition existence point
     output = 5120; // schema-bounded 4096-byte seal plus scalar envelope
   } else if (
@@ -260,7 +269,7 @@ async function read(
   values: unknown[],
   lock: boolean,
 ): Promise<IdentityScopeCommittedEvidence | null> {
-  const row = (await tx.query<HeadRow>(lock ? currentLocked : current.sql, values)).rows[0];
+  const row = (await tx.query<HeadRow>(lock ? currentLocked() : current.sql, values)).rows[0];
   if (!row) return null;
   // Ready is its own real native command, including after a completed repair.
   // Read-only replay never mints or repairs a historical missing association.
@@ -268,7 +277,7 @@ async function read(
     row.state === 'ready'
       ? (
           await tx.query<Pick<CompletionRow, 'epoch' | 'position' | 'transaction_id' | 'completion_revision'>>(
-            lock ? associationLocked : association.sql,
+            lock ? associationLocked() : association.sql,
             [...values.slice(0, 7), locator.completion.kind === 'initial'],
           )
         ).rows[0]
@@ -292,7 +301,7 @@ async function read(
   }
   const { receiving, attempt } = locator.completion;
   const completed = (
-    await tx.query<CompletionRow>(lock ? repairLocked : repair.sql, [
+    await tx.query<CompletionRow>(lock ? repairLocked() : repair.sql, [
       ...values.slice(0, 7),
       receiving.job.jobId,
       receiving.job.epoch.toString(),

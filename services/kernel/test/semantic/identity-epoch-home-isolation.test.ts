@@ -290,7 +290,7 @@ async function bootstrap(partition: number) {
 test('released job input reaches actual receiving custody before distinct-home acquisition and finalization', async () => {
   const redirected = await create(0x7a10);
   const survivor = await create(0x7a20);
-  const job = await store.prepareAdmission(f.pool, await authority(), await input(survivor, redirected));
+  const job = await store().prepareAdmission(f.pool, await authority(), await input(survivor, redirected));
   expect(home(job.jobId)).toBe(home(redirected));
   expect(home(job.jobId)).not.toBe(home(survivor));
   await stepIdentityEpochAdmission(f.pool, job);
@@ -327,7 +327,7 @@ test('released job input reaches actual receiving custody before distinct-home a
   expect(receipts.map((r) => r.partition_no)).toEqual([home(redirected), home(survivor)]);
   await expect(cancelIdentityEpochAdmission(f.pool, job)).rejects.toMatchObject({ code: 'identity_effect_stale' });
   await expect(
-    runCommand(f.pool, { partition: home(job.jobId) }, (tx) => store.publish(tx, job)),
+    runCommand(f.pool, { partition: home(job.jobId) }, (tx) => store().publish(tx, job)),
   ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
 });
 
@@ -400,7 +400,7 @@ test('source ACK after a Library bootstrap redirect uses a committed receiving b
 test('first-absence close and delayed acquire serialize at every distinct planned home without another slot', async () => {
   const redirected = await create(0x7c10);
   const survivor = await create(0x7c20);
-  const job = await store.prepareAdmission(f.pool, await authority(), await input(survivor, redirected));
+  const job = await store().prepareAdmission(f.pool, await authority(), await input(survivor, redirected));
   await cancelIdentityEpochAdmission(f.pool, job);
   for (const partition of [home(redirected), home(survivor)]) {
     const progress = await isolated(receivingSQL, partition, () => stepIdentityEpochAdmission(f.pool, job));
@@ -423,7 +423,7 @@ test('first-absence close and delayed acquire serialize at every distinct planne
       ),
     ).rejects.toMatchObject({ message: 'identity_effect_stale' });
   }
-  expect(await store.readMapping(f.pool, redirected)).toMatchObject({ state: 'mapped', terminal: redirected });
+  expect(await store().readMapping(f.pool, redirected)).toMatchObject({ state: 'mapped', terminal: redirected });
 });
 
 test('the explicit native receipt bridge rejects changed intent at a different job home', async () => {
@@ -435,18 +435,18 @@ test('the explicit native receipt bridge rejects changed intent at a different j
   expect(bindingHome).not.toBe(home(first[0]!));
   expect(bindingHome).not.toBe(home(second[0]!));
   const binding = await isolated(/semantic.identity_epoch_receipt_(?:binding|claim)/, bindingHome, () =>
-    store.bindReceipt(f.pool, auth, original),
+    store().bindReceipt(f.pool, auth, original),
   );
   const admitted = await isolated(receivingSQL, home(first[0]!), () =>
-    runCommand(f.pool, { ...auth, partition: home(first[0]!) }, (tx) => store.admit(tx, { ...original, binding })),
+    runCommand(f.pool, { ...auth, partition: home(first[0]!) }, (tx) => store().admit(tx, { ...original, binding })),
   );
   const accepted = await isolated(/UPDATE semantic.identity_epoch_receipt_binding/, bindingHome, () =>
-    store.bindReceipt(f.pool, auth, original),
+    store().bindReceipt(f.pool, auth, original),
   );
   expect(
     (
       await runCommand(f.pool, { ...auth, partition: home(first[0]!) }, async (tx) =>
-        noEffect(await store.findJob(tx, original.receipt, accepted)),
+        noEffect(await store().findJob(tx, original.receipt, accepted)),
       )
     ).value?.ref,
   ).toEqual(admitted.value);
@@ -458,7 +458,7 @@ test('the explicit native receipt bridge rejects changed intent at a different j
     intent: { kind: 'merge' as const, survivor: second[0]!, redirected: second[1]!, release: release.digest },
   };
   await expect(
-    isolated(/semantic.identity_epoch_receipt_binding/, bindingHome, () => store.bindReceipt(f.pool, auth, changed)),
+    isolated(/semantic.identity_epoch_receipt_binding/, bindingHome, () => store().bindReceipt(f.pool, auth, changed)),
   ).rejects.toMatchObject({ name: 'IdempotencyConflictError' });
   expect(
     (await f.admin.query('SELECT job_id FROM semantic.identity_epoch_job WHERE partition_no=$1', [home(second[0]!)]))
@@ -490,10 +490,10 @@ test('source head h+1 survives ACK of a retained h and a native owner move canno
   ).rows[0];
   expect(BigInt(dirty.captured_revision)).toBe(BigInt(retained.source_revision));
   expect(BigInt(dirty.revision)).toBeGreaterThan(BigInt(dirty.captured_revision));
-  expect(await store.readMapping(f.pool, original)).toMatchObject({ state: 'unavailable' });
+  expect(await store().readMapping(f.pool, original)).toMatchObject({ state: 'unavailable' });
   await bootstrap(home(original));
   const peer = await create(0x7e30);
-  const job = await store.prepareAdmission(f.pool, await authority(), await input(peer, original));
+  const job = await store().prepareAdmission(f.pool, await authority(), await input(peer, original));
   expect(home(job.jobId)).toBe(home(terminal));
   expect(home(job.jobId)).not.toBe(home(original));
   await stepIdentityEpochAdmission(f.pool, job);
@@ -505,14 +505,14 @@ test('source head h+1 survives ACK of a retained h and a native owner move canno
   try {
     const progress = await isolated(finalizationSQL, home(job.jobId), () => stepIdentityEpochAdmission(f.pool, job));
     expect(progress.state).toBe('cancelling');
-    expect(await store.readMapping(f.pool, original)).toEqual({ state: 'unavailable', reason: 'moved-owner' });
+    expect(await store().readMapping(f.pool, original)).toEqual({ state: 'unavailable', reason: 'moved-owner' });
   } finally {
     await f.admin.query("UPDATE core.partition SET write_state='active',moved_to=NULL WHERE partition_no=$1", [
       home(original),
     ]);
   }
   for (let step = 0; step < 3; step++) await stepIdentityEpochAdmission(f.pool, job);
-  expect((await store.readJob(f.pool, job))?.state).toBe('cancelled');
+  expect((await store().readJob(f.pool, job))?.state).toBe('cancelled');
 });
 
 /** Lose only the response after PostgreSQL has committed the selected native command. */
@@ -580,9 +580,9 @@ for (const lost of ['pending', 'accepted'] as const)
       auth = await authority();
     if (lost === 'pending')
       await loseCommittedReply(/INSERT INTO semantic.identity_epoch_receipt_binding/, () =>
-        store.bindReceipt(f.pool, auth, request),
+        store().bindReceipt(f.pool, auth, request),
       );
-    let binding = await store.bindReceipt(f.pool, auth, request);
+    let binding = await store().bindReceipt(f.pool, auth, request);
     const claims = await bindingRows(request);
     expect(claims).toHaveLength(1);
     expect(claims[0].state).toBe('pending');
@@ -600,20 +600,22 @@ for (const lost of ['pending', 'accepted'] as const)
         release: release.digest,
       },
     };
-    await expect(store.bindReceipt(f.pool, auth, changed)).rejects.toMatchObject({ name: 'IdempotencyConflictError' });
+    await expect(store().bindReceipt(f.pool, auth, changed)).rejects.toMatchObject({
+      name: 'IdempotencyConflictError',
+    });
     const admitted = await isolated(receivingSQL, home(survivor), () =>
-      runCommand(f.pool, { ...auth, partition: home(survivor) }, (tx) => store.admit(tx, { ...request, binding })),
+      runCommand(f.pool, { ...auth, partition: home(survivor) }, (tx) => store().admit(tx, { ...request, binding })),
     );
     // First reservation/job is already durable while the binding still says pending.
     expect((await bindingRows(request))[0].state).toBe('pending');
     expect(admitted.value.jobId).toBe(claims[0].job_id);
     if (lost === 'accepted')
       await loseCommittedReply(/UPDATE semantic.identity_epoch_receipt_binding/, () =>
-        store.bindReceipt(f.pool, auth, request),
+        store().bindReceipt(f.pool, auth, request),
       );
-    binding = await store.bindReceipt(f.pool, auth, request);
+    binding = await store().bindReceipt(f.pool, auth, request);
     const replay = await runCommand(f.pool, { ...auth, partition: home(survivor) }, (tx) =>
-      store.admit(tx, { ...request, binding }),
+      store().admit(tx, { ...request, binding }),
     );
     expect(replay.value).toEqual(admitted.value);
     const retained = await bindingRows(request);
@@ -625,7 +627,9 @@ for (const lost of ['pending', 'accepted'] as const)
       (await f.admin.query('SELECT job_id FROM semantic.identity_epoch_job WHERE partition_no=$1', [home(survivor)]))
         .rows,
     ).toEqual([{ job_id: admitted.value.jobId }]);
-    await expect(store.bindReceipt(f.pool, auth, changed)).rejects.toMatchObject({ name: 'IdempotencyConflictError' });
+    await expect(store().bindReceipt(f.pool, auth, changed)).rejects.toMatchObject({
+      name: 'IdempotencyConflictError',
+    });
   });
 
 test('equal concurrent native claims and reservations choose one job and denied authority sees no replay or conflict', async () => {
@@ -634,16 +638,16 @@ test('equal concurrent native claims and reservations choose one job and denied 
     request = await input(survivor, redirected),
     auth = await authority();
   const claims = await Promise.all([
-    store.bindReceipt(f.pool, auth, request),
-    store.bindReceipt(f.pool, auth, request),
+    store().bindReceipt(f.pool, auth, request),
+    store().bindReceipt(f.pool, auth, request),
   ]);
   const results = await Promise.all(
     claims.map((binding) =>
-      runCommand(f.pool, { ...auth, partition: home(survivor) }, (tx) => store.admit(tx, { ...request, binding })),
+      runCommand(f.pool, { ...auth, partition: home(survivor) }, (tx) => store().admit(tx, { ...request, binding })),
     ),
   );
   expect(results[0]!.value).toEqual(results[1]!.value);
-  const accepted = await store.bindReceipt(f.pool, auth, request);
+  const accepted = await store().bindReceipt(f.pool, auth, request);
   expect(await bindingRows(request)).toHaveLength(1);
   const changed = {
     ...request,
@@ -651,11 +655,11 @@ test('equal concurrent native claims and reservations choose one job and denied 
   };
   await f.real.revoke({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'subject:merge');
   try {
-    await expect(store.bindReceipt(f.pool, await authority(), request)).rejects.toThrow('Denied subject:merge');
-    await expect(store.bindReceipt(f.pool, await authority(), changed)).rejects.toThrow('Denied subject:merge');
+    await expect(store().bindReceipt(f.pool, await authority(), request)).rejects.toThrow('Denied subject:merge');
+    await expect(store().bindReceipt(f.pool, await authority(), changed)).rejects.toThrow('Denied subject:merge');
     await expect(
       runCommand(f.pool, { ...(await authority()), partition: home(survivor) }, async (tx) =>
-        noEffect(await store.findJob(tx, request.receipt, accepted)),
+        noEffect(await store().findJob(tx, request.receipt, accepted)),
       ),
     ).rejects.toThrow('Denied subject:merge');
   } finally {
@@ -670,16 +674,16 @@ test('a failed provisional basis closes every planned home before a same-intent 
     terminal = await create(0x7f60);
   const request = await input(peer, original),
     auth = await authority();
-  const first = await store.bindReceipt(f.pool, auth, request),
+  const first = await store().bindReceipt(f.pool, auth, request),
     before = (await bindingRows(request))[0];
   await f.merge(original, terminal);
   await bootstrap(home(original));
   await expect(
     runCommand(f.pool, { ...auth, partition: before.job_home }, (tx) =>
-      store.admit(tx, { ...request, binding: first }),
+      store().admit(tx, { ...request, binding: first }),
     ),
   ).rejects.toMatchObject({ code: 'identity_effect_stale' });
-  const next = await store.bindReceipt(f.pool, auth, request),
+  const next = await store().bindReceipt(f.pool, auth, request),
     history = await bindingRows(request);
   expect(history).toHaveLength(2);
   expect(history.map((r) => r.generation)).toEqual(['1', '2']);
@@ -702,9 +706,9 @@ test('a failed provisional basis closes every planned home before a same-intent 
       ),
     ).rejects.toMatchObject({ message: 'identity_effect_stale' });
   const result = await runCommand(f.pool, { ...auth, partition: history[1].job_home }, (tx) =>
-    store.admit(tx, { ...request, binding: next }),
+    store().admit(tx, { ...request, binding: next }),
   );
-  await store.bindReceipt(f.pool, auth, request);
+  await store().bindReceipt(f.pool, auth, request);
   expect(result.value.jobId).toBe(history[1].job_id);
   expect((await bindingRows(request))[0].accepted_job).toBe(result.value.jobId);
   expect(

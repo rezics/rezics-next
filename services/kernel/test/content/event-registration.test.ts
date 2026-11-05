@@ -270,10 +270,10 @@ test('native registerEffects accepts every closed content event', () => {
 
 test('the ESM catalogue shares the module schema values', async () => {
   const again = await import('../../src/events/log.ts');
-  expect(again.EVENT_TYPES).toBe(EVENT_TYPES);
-  expect(Object.keys(CONTENT_EVENTS)).toEqual(Object.keys(fixtures));
-  for (const [type, schema] of Object.entries(CONTENT_EVENTS)) {
-    expect(Reflect.get(EVENT_TYPES, type)).toBe(schema);
+  expect(again.EVENT_TYPES()).toBe(EVENT_TYPES());
+  expect(Object.keys(CONTENT_EVENTS())).toEqual(Object.keys(fixtures));
+  for (const [type, schema] of Object.entries(CONTENT_EVENTS())) {
+    expect(Reflect.get(EVENT_TYPES(), type)).toBe(schema);
   }
 });
 

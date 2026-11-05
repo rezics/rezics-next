@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
@@ -97,7 +98,9 @@ const numeric = '9'.repeat(131_072 + 16_383 + 2);
 const text = (characters: number) => '\0'.repeat(characters);
 const size = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
 const pin = { provenance: 'profile', releaseDigest: `sha256:${'f'.repeat(64)}`, acceptingType: '', profileId: '' };
-const pinBytes = size(pin) + 2 * 6 * RELEASE_LIMITS.bytes;
+function pinBytes() {
+  return memoizedValue(pinBytes, () => size(pin) + 2 * 6 * RELEASE_LIMITS.bytes);
+}
 const measure = { unit: text(128), amount: numeric, total: numeric };
 const session = {
   route: 65535,
@@ -124,7 +127,9 @@ const session = {
 const sessionBytes = size(session) + 6 * 4096;
 // Public multi-measure serialization repeats the primary amount/total in measures.
 const responseSessionBytes = sessionBytes + size({ measures: [measure] });
-const factBytes = sessionBytes + size({ libraryProfilePin: null }) + pinBytes;
+function factBytes() {
+  return memoizedValue(factBytes, () => sessionBytes + size({ libraryProfilePin: null }) + pinBytes());
+}
 const journalBytes = size({
   sessionId: uuid,
   accountId: uuid,
@@ -198,39 +203,49 @@ const assessmentBytes = size({
   historicalUnknown: bigint,
   revision: uuid,
 });
-const projectedMeaningBytes =
-  pinBytes +
-  size({
-    profilePin: null,
-    unitId: text(128),
-    meaningRevision: 1,
-    mode: 'completed_units',
-    unit: text(128),
-    dimension: '',
-    precision: 6,
-    minimum: numeric,
-    maximum: numeric,
-    totalPolicy: 'forbidden',
-    identityKind: 'session_local',
-    structureKind: 'none',
-    locator: text(256),
-  }) +
-  6 * RELEASE_LIMITS.bytes;
-const currentProgressBytes =
-  projectedMeaningBytes +
-  size({
-    ...subjectKey,
-    sessionId: uuid,
-    scope: 'backlog',
-    state: 'abandoned',
-    covered: false,
-    occurrences: bigint,
-    currentKnown: bigint,
-    currentSum: numeric,
-    totalKnown: bigint,
-    totalSum: numeric,
-    revision: uuid,
-  });
+function projectedMeaningBytes() {
+  return memoizedValue(
+    projectedMeaningBytes,
+    () =>
+      pinBytes() +
+      size({
+        profilePin: null,
+        unitId: text(128),
+        meaningRevision: 1,
+        mode: 'completed_units',
+        unit: text(128),
+        dimension: '',
+        precision: 6,
+        minimum: numeric,
+        maximum: numeric,
+        totalPolicy: 'forbidden',
+        identityKind: 'session_local',
+        structureKind: 'none',
+        locator: text(256),
+      }) +
+      6 * RELEASE_LIMITS.bytes,
+  );
+}
+function currentProgressBytes() {
+  return memoizedValue(
+    currentProgressBytes,
+    () =>
+      projectedMeaningBytes() +
+      size({
+        ...subjectKey,
+        sessionId: uuid,
+        scope: 'backlog',
+        state: 'abandoned',
+        covered: false,
+        occurrences: bigint,
+        currentKnown: bigint,
+        currentSum: numeric,
+        totalKnown: bigint,
+        totalSum: numeric,
+        revision: uuid,
+      }),
+  );
+}
 
 export function sessionBytesWork(bytes: number): Bound {
   return declareBound({
@@ -267,58 +282,105 @@ function nativePoint(rows: number, points: number, statements: number, bytes: nu
 // Old/new index entries of progress_session: primary plus the 20 schema indexes
 // (including partial indexes, which can be entered/withdrawn on state change).
 // A failed CAS retains this maximum. No result rowCount refunds dispatched work.
-const sessionHeapAndIndexes = nativePoint(2 + 2 * 21, 1 + 2 * 21, 0, 2 * factBytes);
+function sessionHeapAndIndexes() {
+  return memoizedValue(sessionHeapAndIndexes, () => nativePoint(2 + 2 * 21, 1 + 2 * 21, 0, 2 * factBytes()));
+}
 // All scalar statistics are exact owner/subject/year/meaning points. These
 // counts include negative probes, ON CONFLICT old/new tuples and cleanup DELETEs.
-const sourceHeads = nativePoint(4 * 4, 4, 4, 4 * 4 * size({ ...ownerKey, generation: bigint }));
-const consumption = repeatBound(
-  nativePoint(4 + 1 + 3 + 3 + 2 + 2, 6, 6, (4 + 3 + 2) * consumptionOwnerBytes + (1 + 3 + 2) * consumptionSubjectBytes),
-  2,
-);
-const reportedYear = repeatBound(
-  nativePoint(4 + 3 + 2 + 4 + 3, 5, 5, (4 + 3) * reportedSubjectBytes + (2 + 4 + 3) * reportedBucketBytes),
-  2,
-);
-const insightsYear = repeatBound(
-  nativePoint(
-    4 + 3 + 1 + 4 + 1 + 3 + 3 + 1 + 3 + 3,
-    10,
-    10,
-    (4 + 3 + 1 + 4 + 1 + 3 + 3 + 1 + 3 + 3) * insightsProfileBytes,
-  ),
-  2,
-);
-const assessment = sumBounds(
-  nativePoint(4 + 1 + 3, 3, 3, (4 + 1 + 3) * assessmentBytes),
-  repeatBound(nativePoint(4 + 3 + 1 + 4 + 2, 5, 5, (4 + 3 + 1 + 4 + 2) * assessmentBytes), 2),
-);
+function sourceHeads() {
+  return memoizedValue(sourceHeads, () => nativePoint(4 * 4, 4, 4, 4 * 4 * size({ ...ownerKey, generation: bigint })));
+}
+function consumption() {
+  return memoizedValue(consumption, () =>
+    repeatBound(
+      nativePoint(
+        4 + 1 + 3 + 3 + 2 + 2,
+        6,
+        6,
+        (4 + 3 + 2) * consumptionOwnerBytes + (1 + 3 + 2) * consumptionSubjectBytes,
+      ),
+      2,
+    ),
+  );
+}
+function reportedYear() {
+  return memoizedValue(reportedYear, () =>
+    repeatBound(
+      nativePoint(4 + 3 + 2 + 4 + 3, 5, 5, (4 + 3) * reportedSubjectBytes + (2 + 4 + 3) * reportedBucketBytes),
+      2,
+    ),
+  );
+}
+function insightsYear() {
+  return memoizedValue(insightsYear, () =>
+    repeatBound(
+      nativePoint(
+        4 + 3 + 1 + 4 + 1 + 3 + 3 + 1 + 3 + 3,
+        10,
+        10,
+        (4 + 3 + 1 + 4 + 1 + 3 + 3 + 1 + 3 + 3) * insightsProfileBytes,
+      ),
+      2,
+    ),
+  );
+}
+function assessment() {
+  return memoizedValue(assessment, () =>
+    sumBounds(
+      nativePoint(4 + 1 + 3, 3, 3, (4 + 1 + 3) * assessmentBytes),
+      repeatBound(nativePoint(4 + 3 + 1 + 4 + 2, 5, 5, (4 + 3 + 1 + 4 + 2) * assessmentBytes), 2),
+    ),
+  );
+}
 
 // reading_insights_current_progress_refresh removes every OLD measure then
 // inserts every NEW one, even for a same-value update or a journal-only patch.
 // apply touches group, scope, owner and its empty-group cleanup independently.
-const progressApply = nativePoint(1 + 4 + 3 + 3 + 2, 5, 5, (1 + 4 + 3 + 3 + 2) * currentProgressBytes);
-const progressRefresh = sumBounds(
-  nativePoint(1 + 1 + 2 + 3 + 2 + 3 + 2 + 2 + 1 + 4 + 1 + 2 + 4 + 3 + 3 + 3, 16, 16, 2 * factBytes),
-  repeatBound(
-    sumBounds(nativePoint(3 + 1 + 3, 3, 3, (3 + 1 + 3) * currentProgressBytes), progressApply),
-    2 * SESSION_LIMITS.measures,
-  ),
-);
-const migration = nativePoint(4 + 1 + 4 + 3, 7, 7, pinBytes);
+function progressApply() {
+  return memoizedValue(progressApply, () =>
+    nativePoint(1 + 4 + 3 + 3 + 2, 5, 5, (1 + 4 + 3 + 3 + 2) * currentProgressBytes()),
+  );
+}
+function progressRefresh() {
+  return memoizedValue(progressRefresh, () =>
+    sumBounds(
+      nativePoint(1 + 1 + 2 + 3 + 2 + 3 + 2 + 2 + 1 + 4 + 1 + 2 + 4 + 3 + 3 + 3, 16, 16, 2 * factBytes()),
+      repeatBound(
+        sumBounds(nativePoint(3 + 1 + 3, 3, 3, (3 + 1 + 3) * currentProgressBytes()), progressApply()),
+        2 * SESSION_LIMITS.measures,
+      ),
+    ),
+  );
+}
+function migration() {
+  return memoizedValue(migration, () => nativePoint(4 + 1 + 4 + 3, 7, 7, pinBytes()));
+}
 // Scope refresh: exact head lock, live pin existence, support/index/pin
 // insertion or withdrawal, and at most 64 state metadata rows on pin removal.
-const memberScope = repeatBound(nativePoint(1 + 2 + 4 + 4 + 4 + 2 + 2 + 2 + 64, 9, 9, pinBytes), 2);
-const sessionTriggers = sumBounds(
-  sourceHeads,
-  consumption,
-  reportedYear,
-  insightsYear,
-  assessment,
-  progressRefresh,
-  migration,
-  memberScope,
-);
-const childFence = nativePoint(1 + 4, 2, 2, (1 + 4) * size({ route: 65535, sessionId: uuid, writeState: 'active' }));
+function memberScope() {
+  return memoizedValue(memberScope, () =>
+    repeatBound(nativePoint(1 + 2 + 4 + 4 + 4 + 2 + 2 + 2 + 64, 9, 9, pinBytes()), 2),
+  );
+}
+function sessionTriggers() {
+  return memoizedValue(sessionTriggers, () =>
+    sumBounds(
+      sourceHeads(),
+      consumption(),
+      reportedYear(),
+      insightsYear(),
+      assessment(),
+      progressRefresh(),
+      migration(),
+      memberScope(),
+    ),
+  );
+}
+function childFence() {
+  return memoizedValue(childFence, () =>
+    nativePoint(1 + 4, 2, 2, (1 + 4) * size({ route: 65535, sessionId: uuid, writeState: 'active' })),
+  );
+}
 
 export function retainSessionOperands<I>(input: I): I {
   const original = structuredClone(input);
@@ -393,11 +455,11 @@ function consumeNativeSessionWork<T>(kind: string, total: Bound, dispatch: () =>
 }
 
 export const sessionInsertPlan = (input: Input<typeof sessionInsert>) =>
-  statement('insert', sessionInsert, input, point(sessionBytes), sumBounds(sessionHeapAndIndexes, sessionTriggers));
+  statement('insert', sessionInsert, input, point(sessionBytes), sumBounds(sessionHeapAndIndexes(), sessionTriggers()));
 export const sessionReadPlan = (input: Input<typeof sessionRead>) =>
-  statement('read', sessionRead, input, point(factBytes));
+  statement('read', sessionRead, input, point(factBytes()));
 export const sessionUpdatePlan = (input: Input<typeof sessionUpdate>) =>
-  statement('update', sessionUpdate, input, point(sessionBytes), sumBounds(sessionHeapAndIndexes, sessionTriggers));
+  statement('update', sessionUpdate, input, point(sessionBytes), sumBounds(sessionHeapAndIndexes(), sessionTriggers()));
 export const sessionLockPlan = (input: Input<typeof sessionLock>) =>
   statement('lock', sessionLock, input, point(size({ sessionId: uuid })));
 export const sessionJournalReadPlan = (input: Input<typeof journalRead>) =>
@@ -410,7 +472,7 @@ export const sessionJournalUpdatePlan = (input: Input<typeof journalUpdate>) =>
     journalUpdate,
     input,
     point(journalBytes),
-    sumBounds(sessionHeapAndIndexes, sessionTriggers),
+    sumBounds(sessionHeapAndIndexes(), sessionTriggers()),
   );
 
 export function sessionUnitAddPlan(input: Input<typeof unitAdd>) {
@@ -427,7 +489,7 @@ export function sessionUnitAddPlan(input: Input<typeof unitAdd>) {
       output: 1,
       rowBytes: size({ added: 100 }),
     },
-    repeatBound(childFence, count),
+    repeatBound(childFence(), count),
   );
 }
 export function sessionUnitRemovePlan(input: Input<typeof unitRemove>) {
@@ -437,7 +499,7 @@ export function sessionUnitRemovePlan(input: Input<typeof unitRemove>) {
     unitRemove,
     input,
     { keys: count, rows: count * 3, points: count, seeks: count, output: 1, rowBytes: size({ removed: 100 }) },
-    repeatBound(childFence, count),
+    repeatBound(childFence(), count),
   );
 }
 export function sessionUnitClearPlan(input: Input<typeof unitClear>) {
@@ -446,11 +508,11 @@ export function sessionUnitClearPlan(input: Input<typeof unitClear>) {
     unitClear,
     input,
     { keys: SESSION_LIMITS.units, rows: 3 * SESSION_LIMITS.units, points: 1, seeks: 1, output: 0, rowBytes: 0 },
-    repeatBound(childFence, SESSION_LIMITS.units),
+    repeatBound(childFence(), SESSION_LIMITS.units),
   );
 }
 export const sessionChangeAppendPlan = (input: Input<typeof changeAppend>) =>
-  statement('change-append', changeAppend, input, { ...point(changeBytes), rows: 3, points: 2 }, childFence);
+  statement('change-append', changeAppend, input, { ...point(changeBytes), rows: 3, points: 2 }, childFence());
 
 export function sessionSubjectPagePlan(input: Input<typeof sessionPage>) {
   // First uses one branch. Next may visit both timestamp ranges, each with its
@@ -462,7 +524,7 @@ export function sessionSubjectPagePlan(input: Input<typeof sessionPage>) {
     points: ranges,
     seeks: ranges,
     output: input.limit,
-    rowBytes: factBytes,
+    rowBytes: factBytes(),
   });
 }
 export const sessionUnitPagePlan = (input: Input<typeof unitPage>) =>
@@ -494,7 +556,7 @@ export function sessionDiscoveryPagePlan(input: Input<typeof discoveryPage>) {
     points: 1 + input.limit,
     seeks: 1 + input.limit,
     output: input.limit,
-    rowBytes: factBytes,
+    rowBytes: factBytes(),
   });
 }
 export const sessionDiscoveryReleasesPlan = (input: Input<typeof discoveryReleases>) =>
@@ -537,7 +599,7 @@ export function sessionMeaningRefreshPlan(input: { route: number; sessionId: str
     },
     input,
     { keys: 0, rows: 0, points: 0, seeks: 0, output: 1, rowBytes: 4 },
-    progressRefresh,
+    progressRefresh(),
   );
 }
 
@@ -546,7 +608,7 @@ export function sessionPresentationWork(measures: number, sessions = 1): Bound {
   // Labels, forms and input rules are projections of one bounded immutable
   // release. Repeated measures serialize independently, even on the same pin.
   return repeatBound(
-    sessionBytesWork(responseSessionBytes + pinBytes + (1 + measures) * 6 * RELEASE_LIMITS.bytes),
+    sessionBytesWork(responseSessionBytes + pinBytes() + (1 + measures) * 6 * RELEASE_LIMITS.bytes),
     sessions,
   );
 }
@@ -828,8 +890,8 @@ export function sessionActivityWork(input: {
     sqlWork(entryRaise.sql, input, 3, 1, 0),
     // Exact Entry activity update reaches its source-fence, owner activity and
     // statistics hooks even when no logical state transition is appended.
-    sourceHeads,
-    memberScope,
+    sourceHeads(),
+    memberScope(),
     nativePoint(1 + 1 + 3, 3, 3, size(input)),
   );
 }
@@ -950,8 +1012,8 @@ function commandJourneyWork(
 ): Bound {
   const route = routeOf(original.accountId)!;
   const input = original.input as Record<string, unknown>;
-  const bindBytes = size(original.input) + 2 * factBytes + size({ time: timestamp, transactionId: uuid });
-  const read = statementWork(sessionRead.sql, size({ route, session_id: uuid }), point(factBytes));
+  const bindBytes = size(original.input) + 2 * factBytes() + size({ time: timestamp, transactionId: uuid });
+  const read = statementWork(sessionRead.sql, size({ route, session_id: uuid }), point(factBytes()));
   const lock = statementWork(sessionLock.sql, size({ route, session_id: uuid }), point(size({ session_id: uuid })));
   const head = sessionHeadWork({ route, account_id: original.accountId, subject_id: uuid });
   const activity = sessionActivityWork({
@@ -972,7 +1034,7 @@ function commandJourneyWork(
         journalUpdate.sql,
         bindBytes,
         point(journalBytes),
-        sumBounds(sessionHeapAndIndexes, sessionTriggers),
+        sumBounds(sessionHeapAndIndexes(), sessionTriggers()),
       ),
     );
   }
@@ -992,9 +1054,9 @@ function commandJourneyWork(
         sessionInsert.sql,
         bindBytes,
         point(sessionBytes),
-        sumBounds(sessionHeapAndIndexes, sessionTriggers),
+        sumBounds(sessionHeapAndIndexes(), sessionTriggers()),
       ),
-      statementWork(meaningSql, bindBytes + measures * (pinBytes + size(measure)), {
+      statementWork(meaningSql, bindBytes + measures * (pinBytes() + size(measure)), {
         keys: measures,
         rows: measures * 2,
         points: measures,
@@ -1006,7 +1068,7 @@ function commandJourneyWork(
         refreshSql,
         size({ route, sessionId: uuid }),
         { keys: 0, rows: 0, points: 0, seeks: 0, output: 1, rowBytes: 4 },
-        progressRefresh,
+        progressRefresh(),
       ),
     );
   }
@@ -1029,7 +1091,7 @@ function commandJourneyWork(
           unitClear.sql,
           size({ route, session_id: uuid }),
           { keys: SESSION_LIMITS.units, rows: 3 * SESSION_LIMITS.units, points: 1, seeks: 1, output: 0, rowBytes: 0 },
-          repeatBound(childFence, SESSION_LIMITS.units),
+          repeatBound(childFence(), SESSION_LIMITS.units),
         ),
       );
     } else {
@@ -1048,7 +1110,7 @@ function commandJourneyWork(
               output: 1,
               rowBytes: size({ added: 100 }),
             },
-            repeatBound(childFence, add),
+            repeatBound(childFence(), add),
           ),
         );
       if (remove)
@@ -1064,7 +1126,7 @@ function commandJourneyWork(
               output: 1,
               rowBytes: size({ removed: 100 }),
             },
-            repeatBound(childFence, remove),
+            repeatBound(childFence(), remove),
           ),
         );
     }
@@ -1077,8 +1139,13 @@ function commandJourneyWork(
     activity,
     repeatBound(read, 2),
     lock,
-    statementWork(sessionUpdate.sql, bindBytes, point(sessionBytes), sumBounds(sessionHeapAndIndexes, sessionTriggers)),
-    statementWork(changeAppend.sql, bindBytes, { ...point(changeBytes), rows: 3, points: 2 }, childFence),
+    statementWork(
+      sessionUpdate.sql,
+      bindBytes,
+      point(sessionBytes),
+      sumBounds(sessionHeapAndIndexes(), sessionTriggers()),
+    ),
+    statementWork(changeAppend.sql, bindBytes, { ...point(changeBytes), rows: 3, points: 2 }, childFence()),
     ...changes,
   );
 }
@@ -1108,7 +1175,7 @@ export function sessionReadOperationPlan(kind: SessionReadKind, accountId: strin
   const route = routeOf(accountId)!;
   const targetId = original.targetId ?? uuid;
   const pointInput = size({ route, session_id: targetId });
-  const read = statementWork(sessionRead.sql, pointInput, point(factBytes));
+  const read = statementWork(sessionRead.sql, pointInput, point(factBytes()));
   const legacy = sessionProfileMigrationWork(route, accountId);
   const snapshot = sessionSnapshotWork(accountId);
   const partition = sessionPartitionWork(partitionOf(route));
@@ -1128,7 +1195,7 @@ export function sessionReadOperationPlan(kind: SessionReadKind, accountId: strin
       parts.push(read, legacy, sessionBytesWork(responseSessionBytes));
       break;
     case 'inspect':
-      parts.push(read, sessionBytesWork(factBytes));
+      parts.push(read, sessionBytesWork(factBytes()));
       break;
     case 'journal-read':
       parts.push(
@@ -1196,10 +1263,10 @@ export function sessionReadOperationPlan(kind: SessionReadKind, accountId: strin
             points: limit + 2,
             seeks: limit + 2,
             output: limit + 1,
-            rowBytes: factBytes,
+            rowBytes: factBytes(),
           },
         ),
-        sessionBytesWork(2 + limit * (responseSessionBytes + pinBytes + 1)),
+        sessionBytesWork(2 + limit * (responseSessionBytes + pinBytes() + 1)),
       );
       break;
     }
@@ -1232,7 +1299,7 @@ export function sessionReadOperationPlan(kind: SessionReadKind, accountId: strin
             points: ranges,
             seeks: ranges,
             output: sent,
-            rowBytes: factBytes,
+            rowBytes: factBytes(),
           }),
         );
         if (limit === SESSION_LIMITS.page)
@@ -1243,7 +1310,7 @@ export function sessionReadOperationPlan(kind: SessionReadKind, accountId: strin
               points: 2,
               seeks: 2,
               output: 1,
-              rowBytes: factBytes,
+              rowBytes: factBytes(),
             }),
           );
         parts.push(sessionBytesWork(2 + limit * (responseSessionBytes + 1)));

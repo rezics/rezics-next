@@ -254,7 +254,7 @@ test('Bind actual discussion and review composition reads and continuation', asy
   await fixture.grant('editor', ['presentation:publish', 'presentation:activate'], PAGE_GLOBAL_CONTEXT);
   const active = await fixture.request('editor', 'GET', '/v1/presentation/active');
   expect(active.status).toBe(200);
-  const profile = structuredClone(platformProfile);
+  const profile = structuredClone(platformProfile());
   profile.types = [
     ...profile.types.filter((entry) => entry.type !== 'schema:Book'),
     { type: 'schema:Book', views: { overview: document, discussion: document, reviews: document } },

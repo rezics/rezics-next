@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import type { Pool } from 'pg';
 import { Compile } from 'typebox/compile';
 import { accessCheck, type Access, type AccountActor, type AccessContext } from '../request/access.ts';
@@ -18,7 +19,9 @@ export type ExplicitCollectionBulkAdd = Extract<BulkAdmission, { action: 'add_to
   selection: Extract<BulkAdmission['selection'], { kind: 'explicit' }>;
 };
 
-const validator = Compile(bulkAdmissionSchema);
+function validator() {
+  return memoizedValue(validator, () => Compile(bulkAdmissionSchema));
+}
 
 /** Validate and freeze the explicit add intent before any destination or Subject read. */
 export function explicitCollectionBulkAdd(
@@ -35,7 +38,7 @@ export function explicitCollectionBulkAdd(
   const validationInput: BulkAdmission = emptyQueryCapture
     ? { ...input, selection: { kind: 'explicit', targets: [{ subjectId: '00000000-0000-0000-0000-000000000000' }] } }
     : input;
-  if (!validator.Check(validationInput)) throw new TypeError('Invalid bulk selection');
+  if (!validator().Check(validationInput)) throw new TypeError('Invalid bulk selection');
   if (input.action !== 'add_to_collection' || input.selection.kind !== 'explicit')
     throw new ProblemError('dependency_unavailable');
   const collectionId = input.collectionId.toLowerCase();

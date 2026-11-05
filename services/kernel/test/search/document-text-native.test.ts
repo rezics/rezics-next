@@ -47,7 +47,7 @@ test('the native adapter forwards the pre-materialization byte cap and preserves
     },
   });
   const projected = await projectDocumentText(selection, source);
-  expect(limits).toEqual([DOCUMENT_TEXT_COST.sourceBytesPerDocument]);
+  expect(limits).toEqual([DOCUMENT_TEXT_COST().sourceBytesPerDocument]);
   expect(currentChecks).toBe(2);
   expect(projected).toMatchObject({
     coverage: 'complete',

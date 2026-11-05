@@ -239,7 +239,7 @@ test('the first takedown records its command time and a takedown id, and later t
       ])
     ).rows[0];
     expect(event.data).toEqual({ ...target, securityRevision: outcome.value.securityRevision, ...original });
-    expect(Value.Check(CONTENT_EVENTS[eventType], event.data)).toBe(true);
+    expect(Value.Check(CONTENT_EVENTS()[eventType], event.data)).toBe(true);
   }
 });
 
@@ -398,7 +398,7 @@ test('native takedown authorizes the sole independently anchored Global root at 
     event_count: 1,
     data: { ...target, securityRevision: outcome.value.securityRevision },
   });
-  const schema = CONTENT_EVENTS[eventType];
+  const schema = CONTENT_EVENTS()[eventType];
   expect(Value.Check(schema, events[0]!.data)).toBe(true);
   for (const key of ['reason', 'body', 'title', 'snippet', 'subjectId', 'actor', 'unexpected'])
     expect(Value.Check(schema, { ...events[0]!.data, [key]: 'authored or private bytes' })).toBe(false);

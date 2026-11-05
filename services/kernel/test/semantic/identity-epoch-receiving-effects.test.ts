@@ -19,21 +19,21 @@ test('real native receiving-home admission permits the fixed participant owned e
   expect(home(input.original)).not.toBe(home(input.library.collection.id));
   const before = await input.members();
   const progress = await completeReceivingParticipant(f, input.job);
-  const accepted = await store.reconcileStepReceipt(f.pool, progress.receipt);
+  const accepted = await store().reconcileStepReceipt(f.pool, progress.receipt);
   expect(accepted).toEqual(progress);
-  expect(await store.reconcileStepReceipt(f.pool, progress.receipt)).toEqual(accepted);
+  expect(await store().reconcileStepReceipt(f.pool, progress.receipt)).toEqual(accepted);
   expect(await input.members()).toEqual(before);
-  expect((await store.readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toEqual(accepted);
+  expect((await store().readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toEqual(accepted);
   // Library completion cannot fabricate the separate mapping and Search acknowledgements.
   await expect(
-    runCommand(f.pool, { partition: home(input.job.jobId) }, (tx) => store.publish(tx, input.job)),
+    runCommand(f.pool, { partition: home(input.job.jobId) }, (tx) => store().publish(tx, input.job)),
   ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
   for (const receipt of [
     { ...progress.receipt, job: { ...input.job, jobId: newId(0x8b10) } },
     { ...progress.receipt, native: { ...progress.receipt.native, transactionId: randomUUID() } },
     { ...progress.receipt, native: { ...progress.receipt.native, epoch: progress.receipt.native.epoch + 1 } },
   ])
-    await expect(store.reconcileStepReceipt(f.pool, receipt)).rejects.toMatchObject({
+    await expect(store().reconcileStepReceipt(f.pool, receipt)).rejects.toMatchObject({
       code: 'identity_step_receipt_invalid',
     });
 });
@@ -43,13 +43,13 @@ test('a real admitted job and a platform command alone do not admit an unregiste
   const before = await input.members();
   await expect(
     runCommand(f.pool, { partition: home(input.library.collection.id) }, async (tx) => {
-      await store.admitHomeEffect(tx, { kind: 'structural', original: input.original, job: input.job });
+      await store().admitHomeEffect(tx, { kind: 'structural', original: input.original, job: input.job });
       throw new Error('unregistered receiving effect was admitted');
     }),
   ).rejects.toMatchObject({ code: 'identity_effect_stale' });
   await expect(
     runCommand(f.pool, { partition: home(input.library.collection.id) }, async (tx) => {
-      await store.admitHomeEffect(tx, {
+      await store().admitHomeEffect(tx, {
         kind: 'follow-count',
         original: input.original,
         terminal: input.terminal,
@@ -88,16 +88,16 @@ test('an authentic native transaction cannot become receiving proof through the 
     ]) {
       await expect(
         runCommand(f.pool, { partition }, async (tx) => {
-          await store.admitHomeEffect(tx, effect);
+          await store().admitHomeEffect(tx, effect);
           return noEffect(null);
         }),
       ).rejects.toMatchObject({ code: 'identity_effect_stale' });
     }
   }
   expect(await input.members()).toEqual(before);
-  expect((await store.readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
+  expect((await store().readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
   await expect(
-    runCommand(f.pool, { partition: home(input.job.jobId) }, (tx) => store.publish(tx, input.job)),
+    runCommand(f.pool, { partition: home(input.job.jobId) }, (tx) => store().publish(tx, input.job)),
   ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
 });
 
@@ -122,7 +122,7 @@ test('a committed source-specific receiving record admits only its exact home jo
       const record = await lookupIdentityReceivingEffect(tx, effect);
       expect(record?.owner).toBe(input.library.collection.id);
       expect(record?.source.id).toBe(input.library.collection.id);
-      await store.admitHomeEffect(tx, effect);
+      await store().admitHomeEffect(tx, effect);
       throw rollback;
     }),
   ).rejects.toBe(rollback);
@@ -136,18 +136,18 @@ test('a committed source-specific receiving record admits only its exact home jo
   ])
     await expect(
       runCommand(f.pool, { partition: effect.receipt.partition }, async (tx) => {
-        await store.admitHomeEffect(tx, invalid);
+        await store().admitHomeEffect(tx, invalid);
         return noEffect(null);
       }),
     ).rejects.toMatchObject({ code: 'identity_effect_stale' });
   await expect(
     runCommand(f.pool, { partition: home(input.original) }, async (tx) => {
-      await store.admitHomeEffect(tx, effect);
+      await store().admitHomeEffect(tx, effect);
       return noEffect(null);
     }),
   ).rejects.toMatchObject({ code: 'identity_effect_stale' });
   expect(await input.members()).toEqual(before);
-  expect((await store.readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
+  expect((await store().readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
 });
 
 test('receiving source selection cannot be replaced with a different owner source or scope', async () => {
@@ -195,7 +195,7 @@ test('preparing and cancelled native jobs cannot create a receiving record or op
   for (let step = 0; step < 8; step++) {
     if ((await stepIdentityEpochAdmission(f.pool, input.job)).state === 'cancelled') break;
   }
-  expect((await store.readJob(f.pool, input.job))?.state).toBe('cancelled');
+  expect((await store().readJob(f.pool, input.job))?.state).toBe('cancelled');
   await expect(prepareIdentityReceivingEffect(f.pool, selection)).rejects.toMatchObject({
     code: 'identity_effect_stale',
   });
@@ -251,7 +251,7 @@ test('an uncommitted receiving record cannot be observed and an interrupted deli
         ).rows,
       ).toEqual([]);
       await expect(
-        runCommand(f.pool, { partition: home(input.job.jobId) }, (tx) => store.publish(tx, input.job)),
+        runCommand(f.pool, { partition: home(input.job.jobId) }, (tx) => store().publish(tx, input.job)),
       ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
     },
   );
@@ -274,7 +274,7 @@ test('a moved receiving owner and a different admitted job cannot reuse the same
   });
   await expect(
     runCommand(f.pool, { partition: effect.receipt.partition }, async (tx) => {
-      await store.admitHomeEffect(tx, { ...effect, job: other.job });
+      await store().admitHomeEffect(tx, { ...effect, job: other.job });
       return noEffect(null);
     }),
   ).rejects.toMatchObject({ code: 'identity_effect_stale' });
@@ -284,7 +284,7 @@ test('a moved receiving owner and a different admitted job cannot reuse the same
   try {
     await expect(
       runCommand(f.pool, { partition: effect.receipt.partition }, async (tx) => {
-        await store.admitHomeEffect(tx, effect);
+        await store().admitHomeEffect(tx, effect);
         return noEffect(null);
       }),
     ).rejects.toThrow();
@@ -293,7 +293,7 @@ test('a moved receiving owner and a different admitted job cannot reuse the same
       effect.receipt.partition,
     ]);
   }
-  expect((await store.readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
+  expect((await store().readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
 });
 
 test('a crash after the physical receiving effect and before control custody never publishes early', async () => {
@@ -312,20 +312,20 @@ test('a crash after the physical receiving effect and before control custody nev
       )
     ).rows,
   ).toHaveLength(1);
-  expect((await store.readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
+  expect((await store().readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
   await expect(
-    runCommand(f.pool, { partition: home(input.job.jobId) }, (tx) => store.publish(tx, input.job)),
+    runCommand(f.pool, { partition: home(input.job.jobId) }, (tx) => store().publish(tx, input.job)),
   ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
   const progress = await completeReceivingParticipant(f, input.job);
-  expect(await store.reconcileStepReceipt(f.pool, progress.receipt)).toEqual(progress);
-  expect(await store.reconcileStepReceipt(f.pool, progress.receipt)).toEqual(progress);
+  expect(await store().reconcileStepReceipt(f.pool, progress.receipt)).toEqual(progress);
+  expect(await store().reconcileStepReceipt(f.pool, progress.receipt)).toEqual(progress);
   expect(await input.members()).toEqual(before);
 });
 
 test('Independent Library owner effects bind the actual native Source capture and held receiving provenance without invented Source callbacks', async () => {
   const input = await admittedReceivingJob(f);
   const progress = await completeReceivingParticipant(f, input.job);
-  await store.reconcileStepReceipt(f.pool, progress.receipt);
+  await store().reconcileStepReceipt(f.pool, progress.receipt);
   const effects = (
     await f.admin.query(
       `SELECT r.binding,r.plan,r.source_hold,r.transaction_id AS accepted_transaction,
@@ -517,11 +517,11 @@ test('receiving admission revalidates a retained native hold after live Source g
   const rollback = new Error('retained receiving admission reached; roll back before any effect');
   await expect(
     runCommand(f.pool, { partition: effect.receipt.partition }, async (tx) => {
-      await store.admitHomeEffect(tx, effect);
+      await store().admitHomeEffect(tx, effect);
       throw rollback;
     }),
   ).rejects.toBe(rollback);
-  expect((await store.readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
+  expect((await store().readJob(f.pool, input.job))?.participants['library-private-follow-counts']).toBeNull();
   expect(
     (
       await f.admin.query(

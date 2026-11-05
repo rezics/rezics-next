@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { readLifecycleReview } from './lifecycle-review.ts';
 import { lifecycleReviewSchema } from './lifecycle-review-schema.ts';
 import { createManagementRead, managedAccountsSchema, accountManagementSchema } from './account-management.ts';
@@ -222,25 +223,37 @@ const preferenceValues = {
 };
 const literals = <const V extends readonly string[]>(values: V) =>
   t.Unsafe<V[number]>(t.Union(values.map((value) => t.Literal(value))));
-const shelfScope = t.String({ pattern: SHELF_SCOPE_PATTERN, maxLength: SHELF_SCOPE_MAX_LENGTH });
+function shelfScope() {
+  return memoizedValue(shelfScope, () => t.String({ pattern: SHELF_SCOPE_PATTERN, maxLength: SHELF_SCOPE_MAX_LENGTH }));
+}
 const shelfTabs = <S extends TSchema>(entry: S) =>
   t.Object(Object.fromEntries(SHELF_TABS.map((tab) => [tab, t.Optional(entry)])), closed);
-const shelfColumns = t.Array(literals(SHELF_TABLE_COLUMNS), {
-  minItems: 1,
-  maxItems: SHELF_TABLE_COLUMNS.length,
-  uniqueItems: true,
-});
-const shelf = t.Object(
-  {
-    layouts: t.Optional(t.Record(shelfScope, literals(SHELF_LAYOUTS), { maxProperties: SHELF_MAX_LAYOUTS })),
-    sorts: t.Optional(
-      shelfTabs(t.Object({ field: literals(SHELF_SORT_FIELDS), direction: literals(SHELF_SORT_DIRECTIONS) }, closed)),
+function shelfColumns() {
+  return memoizedValue(shelfColumns, () =>
+    t.Array(literals(SHELF_TABLE_COLUMNS), {
+      minItems: 1,
+      maxItems: SHELF_TABLE_COLUMNS.length,
+      uniqueItems: true,
+    }),
+  );
+}
+function shelf() {
+  return memoizedValue(shelf, () =>
+    t.Object(
+      {
+        layouts: t.Optional(t.Record(shelfScope(), literals(SHELF_LAYOUTS), { maxProperties: SHELF_MAX_LAYOUTS })),
+        sorts: t.Optional(
+          shelfTabs(
+            t.Object({ field: literals(SHELF_SORT_FIELDS), direction: literals(SHELF_SORT_DIRECTIONS) }, closed),
+          ),
+        ),
+        gridSize: t.Optional(literals(SHELF_GRID_SIZES)),
+        tableColumns: t.Optional(shelfColumns()),
+      },
+      closed,
     ),
-    gridSize: t.Optional(literals(SHELF_GRID_SIZES)),
-    tableColumns: t.Optional(shelfColumns),
-  },
-  closed,
-);
+  );
+}
 const nullable = <S extends TSchema>(schema: S) => t.Union([schema, t.Null()]);
 const editableProfileFields = {
   id,
@@ -257,17 +270,25 @@ const editableProfile = t.Unsafe<EditableAccountProfile>(
     t.Object({ ...editableProfileFields, kind: t.Literal('organization'), speakersListed: t.Boolean() }, closed),
   ]),
 );
-const textAdvice = t.Object({ applicable: t.Literal(true), maxLength: t.Literal(PROFILE_TEXT_MAX_LENGTH) }, closed);
+function textAdvice() {
+  return memoizedValue(textAdvice, () =>
+    t.Object({ applicable: t.Literal(true), maxLength: t.Literal(PROFILE_TEXT_MAX_LENGTH) }, closed),
+  );
+}
 const avatarAdvice = t.Object({ applicable: t.Literal(true) }, closed);
-const linksAdvice = t.Object(
-  {
-    applicable: t.Literal(true),
-    maxItems: t.Literal(PROFILE_LINK_MAX_ITEMS),
-    labelMaxLength: t.Literal(PROFILE_LINK_LABEL_MAX_LENGTH),
-    urlMaxLength: t.Literal(PROFILE_LINK_URL_MAX_LENGTH),
-  },
-  closed,
-);
+function linksAdvice() {
+  return memoizedValue(linksAdvice, () =>
+    t.Object(
+      {
+        applicable: t.Literal(true),
+        maxItems: t.Literal(PROFILE_LINK_MAX_ITEMS),
+        labelMaxLength: t.Literal(PROFILE_LINK_LABEL_MAX_LENGTH),
+        urlMaxLength: t.Literal(PROFILE_LINK_URL_MAX_LENGTH),
+      },
+      closed,
+    ),
+  );
+}
 const publicViewsAdvice = t.Object(
   {
     applicable: t.Literal(true),
@@ -275,36 +296,42 @@ const publicViewsAdvice = t.Object(
   },
   closed,
 );
-const identityAdviceFields = {
-  displayName: textAdvice,
-  biography: textAdvice,
-  avatar: avatarAdvice,
-  links: linksAdvice,
-  publicViews: publicViewsAdvice,
-};
-const profileEditing = t.Unsafe<AccountProfileEditing>(
-  t.Union([
-    t.Object(
-      {
-        viewer: t.Object({ accountId: id }, closed),
-        target: t.Object({ accountId: id, kind: t.Literal('actor') }, closed),
-        fields: t.Object(identityAdviceFields, closed),
-      },
-      closed,
-    ),
-    t.Object(
-      {
-        viewer: t.Object({ accountId: id }, closed),
-        target: t.Object({ accountId: id, kind: t.Literal('organization') }, closed),
-        fields: t.Object(
-          { ...identityAdviceFields, speakersListed: t.Object({ applicable: t.Literal(true) }, closed) },
+function identityAdviceFields() {
+  return memoizedValue(identityAdviceFields, () => ({
+    displayName: textAdvice(),
+    biography: textAdvice(),
+    avatar: avatarAdvice,
+    links: linksAdvice(),
+    publicViews: publicViewsAdvice,
+  }));
+}
+function profileEditing() {
+  return memoizedValue(profileEditing, () =>
+    t.Unsafe<AccountProfileEditing>(
+      t.Union([
+        t.Object(
+          {
+            viewer: t.Object({ accountId: id }, closed),
+            target: t.Object({ accountId: id, kind: t.Literal('actor') }, closed),
+            fields: t.Object(identityAdviceFields(), closed),
+          },
           closed,
         ),
-      },
-      closed,
+        t.Object(
+          {
+            viewer: t.Object({ accountId: id }, closed),
+            target: t.Object({ accountId: id, kind: t.Literal('organization') }, closed),
+            fields: t.Object(
+              { ...identityAdviceFields(), speakersListed: t.Object({ applicable: t.Literal(true) }, closed) },
+              closed,
+            ),
+          },
+          closed,
+        ),
+      ]),
     ),
-  ]),
-);
+  );
+}
 const profilePatch = t.Object(
   {
     displayName: t.Optional(nullable(t.String({ maxLength: 4096 }))),
@@ -357,37 +384,45 @@ function validProfilePatch(patch: Static<typeof profilePatch>): boolean {
   });
 }
 // A JSON Merge Patch over the shelf: null removes a part or an entry, an array replaces.
-const shelfPatch = t.Object(
-  {
-    layouts: t.Optional(nullable(t.Record(shelfScope, nullable(literals(SHELF_LAYOUTS))))),
-    sorts: t.Optional(
-      nullable(
-        shelfTabs(
+function shelfPatch() {
+  return memoizedValue(shelfPatch, () =>
+    t.Object(
+      {
+        layouts: t.Optional(nullable(t.Record(shelfScope(), nullable(literals(SHELF_LAYOUTS))))),
+        sorts: t.Optional(
           nullable(
-            t.Object(
-              {
-                field: t.Optional(nullable(literals(SHELF_SORT_FIELDS))),
-                direction: t.Optional(nullable(literals(SHELF_SORT_DIRECTIONS))),
-              },
-              closed,
+            shelfTabs(
+              nullable(
+                t.Object(
+                  {
+                    field: t.Optional(nullable(literals(SHELF_SORT_FIELDS))),
+                    direction: t.Optional(nullable(literals(SHELF_SORT_DIRECTIONS))),
+                  },
+                  closed,
+                ),
+              ),
             ),
           ),
         ),
-      ),
+        gridSize: t.Optional(nullable(literals(SHELF_GRID_SIZES))),
+        tableColumns: t.Optional(nullable(shelfColumns())),
+      },
+      closed,
     ),
-    gridSize: t.Optional(nullable(literals(SHELF_GRID_SIZES))),
-    tableColumns: t.Optional(nullable(shelfColumns)),
-  },
-  closed,
-);
+  );
+}
 const notificationFields = <S extends TSchema>(entry: S, optional = false) =>
   Object.fromEntries(
     NOTIFICATION_KINDS.filter((kind) => kind.optional).map(({ kind }) => [kind, optional ? t.Optional(entry) : entry]),
   );
-const notifications = t.Unsafe<Notifications>(t.Object(notificationFields(t.Boolean()), closed));
-const notificationsPatch = t.Unsafe<NotificationsPatch>(
-  t.Object(notificationFields(nullable(t.Boolean()), true), closed),
-);
+function notifications() {
+  return memoizedValue(notifications, () => t.Unsafe<Notifications>(t.Object(notificationFields(t.Boolean()), closed)));
+}
+function notificationsPatch() {
+  return memoizedValue(notificationsPatch, () =>
+    t.Unsafe<NotificationsPatch>(t.Object(notificationFields(nullable(t.Boolean()), true), closed)),
+  );
+}
 const preferencePageKind = t.Object(
   {
     kind: t.String({ pattern: '^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$', minLength: 1, maxLength: 64 }),
@@ -416,78 +451,82 @@ const preferenceAction = t.Union([
   t.Object({ allowed: t.Literal(true) }, closed),
   t.Object({ allowed: t.Literal(false), reason: t.Literal('not_authorized') }, closed),
 ]);
-const preferences = t.Object(
-  {
-    ...preferenceValues,
-    shelf,
-    notifications,
-    version: t.Integer({ minimum: 0 }),
-    page: preferencePage,
-    viewerState: t.Literal('current'),
-    allowedActions: t.Object({ read: preferenceAction, update: preferenceAction }, closed),
-    reading: t.Object(
+function preferences() {
+  return memoizedValue(preferences, () =>
+    t.Object(
       {
-        supported: t.Object(
+        ...preferenceValues,
+        shelf: shelf(),
+        notifications: notifications(),
+        version: t.Integer({ minimum: 0 }),
+        page: preferencePage,
+        viewerState: t.Literal('current'),
+        allowedActions: t.Object({ read: preferenceAction, update: preferenceAction }, closed),
+        reading: t.Object(
           {
-            spoilerLevels: t.Array(preferenceValues.spoilerLevel, { minItems: 1, maxItems: 3, uniqueItems: true }),
-            suitability: t.Array(preferenceValues.suitability, { minItems: 1, maxItems: 2, uniqueItems: true }),
+            supported: t.Object(
+              {
+                spoilerLevels: t.Array(preferenceValues.spoilerLevel, { minItems: 1, maxItems: 3, uniqueItems: true }),
+                suitability: t.Array(preferenceValues.suitability, { minItems: 1, maxItems: 2, uniqueItems: true }),
+              },
+              closed,
+            ),
+            effective: t.Object({ ...preferenceValues }, closed),
+            defaults: t.Object({ spoilerLevel: t.Literal(0), suitability: t.Literal('blur') }, closed),
           },
           closed,
         ),
-        effective: t.Object({ ...preferenceValues }, closed),
-        defaults: t.Object({ spoilerLevel: t.Literal(0), suitability: t.Literal('blur') }, closed),
+        shelfAdvice: t.Object(
+          {
+            supported: t.Object(
+              {
+                layouts: t.Array(literals(SHELF_LAYOUTS), {
+                  minItems: 1,
+                  maxItems: SHELF_LAYOUTS.length,
+                  uniqueItems: true,
+                }),
+                tabs: t.Array(literals(SHELF_TABS), { minItems: 1, maxItems: SHELF_TABS.length, uniqueItems: true }),
+                sortFields: t.Array(literals(SHELF_SORT_FIELDS), {
+                  minItems: 1,
+                  maxItems: SHELF_SORT_FIELDS.length,
+                  uniqueItems: true,
+                }),
+                sortDirections: t.Array(literals(SHELF_SORT_DIRECTIONS), {
+                  minItems: 1,
+                  maxItems: SHELF_SORT_DIRECTIONS.length,
+                  uniqueItems: true,
+                }),
+                gridSizes: t.Array(literals(SHELF_GRID_SIZES), {
+                  minItems: 1,
+                  maxItems: SHELF_GRID_SIZES.length,
+                  uniqueItems: true,
+                }),
+                tableColumns: t.Array(literals(SHELF_TABLE_COLUMNS), {
+                  minItems: 1,
+                  maxItems: SHELF_TABLE_COLUMNS.length,
+                  uniqueItems: true,
+                }),
+              },
+              closed,
+            ),
+            limits: t.Object(
+              {
+                maxLayouts: t.Literal(SHELF_MAX_LAYOUTS),
+                scopeMaxLength: t.Literal(SHELF_SCOPE_MAX_LENGTH),
+                scopePattern: t.Literal(SHELF_SCOPE_PATTERN),
+              },
+              closed,
+            ),
+            effective: shelf(),
+            defaults: t.Object({}, closed),
+          },
+          closed,
+        ),
       },
       closed,
     ),
-    shelfAdvice: t.Object(
-      {
-        supported: t.Object(
-          {
-            layouts: t.Array(literals(SHELF_LAYOUTS), {
-              minItems: 1,
-              maxItems: SHELF_LAYOUTS.length,
-              uniqueItems: true,
-            }),
-            tabs: t.Array(literals(SHELF_TABS), { minItems: 1, maxItems: SHELF_TABS.length, uniqueItems: true }),
-            sortFields: t.Array(literals(SHELF_SORT_FIELDS), {
-              minItems: 1,
-              maxItems: SHELF_SORT_FIELDS.length,
-              uniqueItems: true,
-            }),
-            sortDirections: t.Array(literals(SHELF_SORT_DIRECTIONS), {
-              minItems: 1,
-              maxItems: SHELF_SORT_DIRECTIONS.length,
-              uniqueItems: true,
-            }),
-            gridSizes: t.Array(literals(SHELF_GRID_SIZES), {
-              minItems: 1,
-              maxItems: SHELF_GRID_SIZES.length,
-              uniqueItems: true,
-            }),
-            tableColumns: t.Array(literals(SHELF_TABLE_COLUMNS), {
-              minItems: 1,
-              maxItems: SHELF_TABLE_COLUMNS.length,
-              uniqueItems: true,
-            }),
-          },
-          closed,
-        ),
-        limits: t.Object(
-          {
-            maxLayouts: t.Literal(SHELF_MAX_LAYOUTS),
-            scopeMaxLength: t.Literal(SHELF_SCOPE_MAX_LENGTH),
-            scopePattern: t.Literal(SHELF_SCOPE_PATTERN),
-          },
-          closed,
-        ),
-        effective: shelf,
-        defaults: t.Object({}, closed),
-      },
-      closed,
-    ),
-  },
-  closed,
-);
+  );
+}
 const resource = t.Object({ route: t.Integer({ minimum: 0, maximum: 65535 }), id }, closed);
 const subject = t.Union([
   t.Object({ kind: t.Literal('active_accounts') }, closed),
@@ -585,46 +624,56 @@ function strict<S extends TSchema>(schema: S, valid: (value: Static<S>) => boole
     },
   };
 }
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String() });
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  422: problemSchema('idempotency_conflict'),
-  429: problemSchema('rate_limited'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'rate_limit_unavailable',
-  ),
-};
-const publicReadFailures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  500: problemSchema('internal_error'),
-  503: problemSchema('overloaded', 'deadline_exceeded', 'partition_unavailable', 'transaction_retry_exhausted'),
-};
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String() }));
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    422: problemSchema('idempotency_conflict'),
+    429: problemSchema('rate_limited'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'rate_limit_unavailable',
+    ),
+  }));
+}
+function publicReadFailures() {
+  return memoizedValue(publicReadFailures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    500: problemSchema('internal_error'),
+    503: problemSchema('overloaded', 'deadline_exceeded', 'partition_unavailable', 'transaction_retry_exhausted'),
+  }));
+}
 const accountUuidPattern = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const accountIdPattern = new RegExp(`^${accountUuidPattern}$`);
-const publicIdentityQuery = t.Unsafe<{ ids: string } | { handle: string } | { agent: string }>(
-  t.Union([
-    t.Object(
-      {
-        ids: t.String({
-          minLength: 36,
-          maxLength: 3699,
-          pattern: `^${accountUuidPattern}(?:,${accountUuidPattern}){0,99}$`,
-        }),
-      },
-      closed,
+function publicIdentityQuery() {
+  return memoizedValue(publicIdentityQuery, () =>
+    t.Unsafe<{ ids: string } | { handle: string } | { agent: string }>(
+      t.Union([
+        t.Object(
+          {
+            ids: t.String({
+              minLength: 36,
+              maxLength: 3699,
+              pattern: `^${accountUuidPattern}(?:,${accountUuidPattern}){0,99}$`,
+            }),
+          },
+          closed,
+        ),
+        t.Object({ handle: t.String({ minLength: 1, maxLength: 64, pattern: HANDLE_LOOKUP_PATTERN.source }) }, closed),
+        t.Object({ agent: t.String({ minLength: 36, maxLength: 36, pattern: accountUuidPattern }) }, closed),
+      ]),
     ),
-    t.Object({ handle: t.String({ minLength: 1, maxLength: 64, pattern: HANDLE_LOOKUP_PATTERN.source }) }, closed),
-    t.Object({ agent: t.String({ minLength: 36, maxLength: 36, pattern: accountUuidPattern }) }, closed),
-  ]),
-);
+  );
+}
 const response = <S extends TSchema>(schema: S) =>
   withHeaders(t.Object({ grant: schema }, closed), { [SESSION_HEADER]: t.String() });
 const detail = (operationId: string) => ({
@@ -716,7 +765,7 @@ export function accessRoutes(
         query: strict(t.Object({ resourceId: id, cursor: t.Optional(t.String({ maxLength: 4096 })) }, closed)),
         response: {
           200: grantReadPage,
-          ...publicReadFailures,
+          ...publicReadFailures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           503: problemSchema('dependency_unavailable', 'overloaded', 'deadline_exceeded'),
         },
@@ -747,11 +796,11 @@ export function accessRoutes(
       {
         params: strict(t.Object({ accountId: id }, closed)),
         response: {
-          200: t.Object({ profile: editableProfile, editing: profileEditing }, closed),
+          200: t.Object({ profile: editableProfile, editing: profileEditing() }, closed),
           400: problemSchema('invalid_request'),
           401: problemSchema('authentication_required', 'invalid_credentials'),
           403: problemSchema('forbidden', 'platform_closed'),
-          503: publicReadFailures[503],
+          503: publicReadFailures()[503],
         },
         detail: {
           operationId: 'account.read_editable_profile',
@@ -777,12 +826,12 @@ export function accessRoutes(
     .patch(
       '/v1/accounts/:accountId',
       {
-        headers,
+        headers: headers(),
         params: strict(t.Object({ accountId: id }, closed)),
         body: strict(profilePatch, validProfilePatch),
         response: {
           200: withHeaders(t.Object({ accountId: id }, closed), { [SESSION_HEADER]: t.String() }),
-          ...failures,
+          ...failures(),
         },
         detail: {
           ...detail('account.update'),
@@ -812,7 +861,7 @@ export function accessRoutes(
     .post(
       customMethod('/v1/accounts/:accountId', 'requestVerification'),
       {
-        headers,
+        headers: headers(),
         params: strict(t.Object({ accountId: id }, closed)),
         body: strict(
           t.Object(
@@ -828,7 +877,7 @@ export function accessRoutes(
           201: withHeaders(t.Object({ verificationRequest: agentVerificationRequest }, closed), {
             [SESSION_HEADER]: t.String(),
           }),
-          ...failures,
+          ...failures(),
           409: problemSchema('conflict'),
         },
         detail: {
@@ -859,7 +908,7 @@ export function accessRoutes(
       '/v1/accounts/:accountId/verification',
       {
         params: strict(t.Object({ accountId: id }, closed)),
-        response: { 200: agentVerificationRequestEnvelope, ...publicReadFailures, 403: problemSchema('forbidden') },
+        response: { 200: agentVerificationRequestEnvelope, ...publicReadFailures(), 403: problemSchema('forbidden') },
         detail: {
           operationId: 'account.read_verification_request',
           'x-authority-resource-types': ['access.account'],
@@ -890,14 +939,14 @@ export function accessRoutes(
     .post(
       customMethod('/v1/accounts/:accountId', 'withdrawVerification'),
       {
-        headers,
+        headers: headers(),
         params: strict(t.Object({ accountId: id }, closed)),
         body: strict(t.Object({}, closed)),
         response: {
           200: withHeaders(t.Object({ verificationRequest: agentVerificationRequest }, closed), {
             [SESSION_HEADER]: t.String(),
           }),
-          ...failures,
+          ...failures(),
           409: problemSchema('conflict'),
         },
         detail: {
@@ -939,7 +988,7 @@ export function accessRoutes(
         ),
         response: {
           200: pendingVerificationEnvelope,
-          ...publicReadFailures,
+          ...publicReadFailures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           403: problemSchema('forbidden'),
         },
@@ -976,14 +1025,14 @@ export function accessRoutes(
     .post(
       customMethod('/v1/verification-requests/:requestId', 'approve'),
       {
-        headers,
+        headers: headers(),
         params: strict(t.Object({ requestId: id }, closed)),
         body: strict(t.Object({ reason: t.Optional(t.String({ maxLength: 500 })) }, closed)),
         response: {
           200: withHeaders(t.Object({ verificationRequest: agentVerificationRequest }, closed), {
             [SESSION_HEADER]: t.String(),
           }),
-          ...failures,
+          ...failures(),
           409: problemSchema('conflict'),
         },
         detail: {
@@ -1011,14 +1060,14 @@ export function accessRoutes(
     .post(
       customMethod('/v1/verification-requests/:requestId', 'reject'),
       {
-        headers,
+        headers: headers(),
         params: strict(t.Object({ requestId: id }, closed)),
         body: strict(t.Object({ reason: t.Optional(t.String({ maxLength: 500 })) }, closed)),
         response: {
           200: withHeaders(t.Object({ verificationRequest: agentVerificationRequest }, closed), {
             [SESSION_HEADER]: t.String(),
           }),
-          ...failures,
+          ...failures(),
           409: problemSchema('conflict'),
         },
         detail: {
@@ -1046,12 +1095,12 @@ export function accessRoutes(
     .post(
       customMethod('/v1/accounts/:accountId', 'revokeVerification'),
       {
-        headers,
+        headers: headers(),
         params: strict(t.Object({ accountId: id }, closed)),
         body: strict(t.Object({ reason: t.Optional(t.String({ maxLength: 500 })) }, closed)),
         response: {
           200: withHeaders(t.Object({ reversal: agentVerificationReversal }, closed), { [SESSION_HEADER]: t.String() }),
-          ...failures,
+          ...failures(),
           409: problemSchema('conflict'),
         },
         detail: {
@@ -1079,11 +1128,11 @@ export function accessRoutes(
     .post(
       customMethod('/v1/accounts/:accountId', 'releaseVerification'),
       {
-        headers,
+        headers: headers(),
         params: strict(t.Object({ accountId: id }, closed)),
         response: {
           200: withHeaders(t.Object({ reversal: agentVerificationReversal }, closed), { [SESSION_HEADER]: t.String() }),
-          ...failures,
+          ...failures(),
           409: problemSchema('conflict'),
         },
         detail: {
@@ -1112,7 +1161,7 @@ export function accessRoutes(
       '/v1/accounts/:accountId/preferences',
       {
         params: strict(t.Object({ accountId: id }, closed)),
-        response: { 200: preferences, ...failures },
+        response: { 200: preferences(), ...failures() },
         detail: {
           operationId: 'account.read_preferences',
           'x-authority-resource-types': ['access.account'],
@@ -1158,7 +1207,7 @@ export function accessRoutes(
     .patch(
       '/v1/accounts/:accountId/preferences',
       {
-        headers,
+        headers: headers(),
         params: strict(t.Object({ accountId: id }, closed)),
         body: strict(
           t.Object(
@@ -1166,15 +1215,15 @@ export function accessRoutes(
               expectedVersion: t.Integer({ minimum: 0, maximum: 2147483646 }),
               spoilerLevel: t.Optional(preferenceValues.spoilerLevel),
               suitability: t.Optional(preferenceValues.suitability),
-              shelf: t.Optional(nullable(shelfPatch)),
-              notifications: t.Optional(nullable(notificationsPatch)),
+              shelf: t.Optional(nullable(shelfPatch())),
+              notifications: t.Optional(nullable(notificationsPatch())),
             },
             closed,
           ),
         ),
         response: {
-          200: withHeaders(preferences, { [SESSION_HEADER]: t.String() }),
-          ...failures,
+          200: withHeaders(preferences(), { [SESSION_HEADER]: t.String() }),
+          ...failures(),
           409: problemSchema('conflict', { page: preferencePage }),
           410: problemSchema('command_result_erased'),
         },
@@ -1243,7 +1292,7 @@ export function accessRoutes(
             },
             closed,
           ),
-          ...publicReadFailures,
+          ...publicReadFailures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
         },
         detail: {
@@ -1270,13 +1319,13 @@ export function accessRoutes(
     .get(
       '/v1/accounts',
       {
-        query: strict(publicIdentityQuery),
+        query: strict(publicIdentityQuery()),
         response: {
           200: withHeaders(publicAccountList, {
             etag: t.String(),
             'cache-control': t.String(),
           }),
-          ...publicReadFailures,
+          ...publicReadFailures(),
         },
         detail: {
           operationId: 'account.read_public_identity',
@@ -1330,7 +1379,11 @@ export function accessRoutes(
             closed,
           ),
         ),
-        response: { 200: managedAccountsSchema, ...failures, 400: problemSchema('invalid_request', 'invalid_cursor') },
+        response: {
+          200: managedAccountsSchema,
+          ...failures(),
+          400: problemSchema('invalid_request', 'invalid_cursor'),
+        },
         detail: {
           operationId: 'account.list_managed',
           'x-exposure': 'public',
@@ -1360,7 +1413,7 @@ export function accessRoutes(
         ),
         response: {
           200: accountManagementSchema,
-          ...failures,
+          ...failures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
         },
         detail: {
@@ -1400,7 +1453,7 @@ export function accessRoutes(
               closed,
             ),
           ),
-          ...publicReadFailures,
+          ...publicReadFailures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           403: problemSchema('forbidden'),
         },
@@ -1461,7 +1514,7 @@ export function accessRoutes(
               closed,
             ),
           ),
-          ...publicReadFailures,
+          ...publicReadFailures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
         },
         detail: {
@@ -1511,7 +1564,7 @@ export function accessRoutes(
         ),
         response: {
           200: lifecycleReviewSchema,
-          ...failures,
+          ...failures(),
           404: problemSchema('not_found'),
           503: problemSchema('dependency_unavailable', 'deadline_exceeded', 'partition_unavailable', 'overloaded'),
         },
@@ -1539,7 +1592,7 @@ export function accessRoutes(
     .post(
       customMethod('/v1/accounts/:accountId', 'suspend'),
       {
-        headers,
+        headers: headers(),
         params: strict(t.Object({ accountId: id }, closed)),
         body: strict(t.Object({ reason: t.Optional(t.String({ minLength: 1, maxLength: 2000 })) }, closed)),
         response: {
@@ -1560,7 +1613,7 @@ export function accessRoutes(
             ),
             { [SESSION_HEADER]: t.String() },
           ),
-          ...failures,
+          ...failures(),
         },
         detail: { ...detail(suspensionDeclaration.operationId), 'x-action': suspensionDeclaration.action },
       },
@@ -1585,7 +1638,7 @@ export function accessRoutes(
     .post(
       customMethod('/v1/accounts/:accountId', 'reinstate'),
       {
-        headers,
+        headers: headers(),
         params: strict(t.Object({ accountId: id }, closed)),
         body: strict(t.Object({ reason: t.Optional(t.String({ minLength: 1, maxLength: 2000 })) }, closed)),
         response: {
@@ -1606,7 +1659,7 @@ export function accessRoutes(
             ),
             { [SESSION_HEADER]: t.String() },
           ),
-          ...failures,
+          ...failures(),
           409: problemSchema('conflict'),
         },
         detail: { ...detail(reinstatementDeclaration.operationId), 'x-action': reinstatementDeclaration.action },
@@ -1633,7 +1686,7 @@ export function accessRoutes(
     .post(
       customMethod('/v1/accounts/:accountId', 'setRateTier'),
       {
-        headers,
+        headers: headers(),
         params: strict(t.Object({ accountId: id }, closed)),
         body: strict(
           t.Object(
@@ -1661,7 +1714,7 @@ export function accessRoutes(
             ),
             { [SESSION_HEADER]: t.String() },
           ),
-          ...failures,
+          ...failures(),
           409: problemSchema('conflict'),
         },
         detail: { ...detail('account.set_rate_tier'), 'x-action': 'account:set_rate_tier' },
@@ -1688,7 +1741,12 @@ export function accessRoutes(
     )
     .post(
       '/v1/grants',
-      { headers, body: strict(grant), response: { 201: response(grant), ...failures }, detail: detail('grant.create') },
+      {
+        headers: headers(),
+        body: strict(grant),
+        response: { 201: response(grant), ...failures() },
+        detail: detail('grant.create'),
+      },
       async ({ body, headers, actor, admission, job, session, status }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
@@ -1706,9 +1764,9 @@ export function accessRoutes(
     .post(
       customMethod('/v1/grants', 'change'),
       {
-        headers,
+        headers: headers(),
         body: strict(grantChange),
-        response: { 200: response(grant), ...failures },
+        response: { 200: response(grant), ...failures() },
         detail: detail('grant.change'),
       },
       async ({ body, headers, actor, admission, job, session }) => {
@@ -1727,7 +1785,12 @@ export function accessRoutes(
     )
     .post(
       customMethod('/v1/grants', 'revoke'),
-      { headers, body: strict(grant), response: { 200: response(grant), ...failures }, detail: detail('grant.revoke') },
+      {
+        headers: headers(),
+        body: strict(grant),
+        response: { 200: response(grant), ...failures() },
+        detail: detail('grant.revoke'),
+      },
       async ({ body, headers, actor, admission, job, session }) => {
         if (actor.kind !== 'account') throw new AuthenticationError(401, 'Bearer');
         const key = idempotencyKeyOf(headers[IDEMPOTENCY_HEADER]);
@@ -1745,9 +1808,9 @@ export function accessRoutes(
     .post(
       '/v1/roleGrants',
       {
-        headers,
+        headers: headers(),
         body: strict(roleGrant),
-        response: { 201: response(roleGrant), ...failures },
+        response: { 201: response(roleGrant), ...failures() },
         detail: detail('role_grant.create'),
       },
       async ({ body, headers, actor, admission, job, session, status }) => {
@@ -1767,11 +1830,11 @@ export function accessRoutes(
     .post(
       customMethod('/v1/roleGrants', 'transferRealmOwner'),
       {
-        headers,
+        headers: headers(),
         body: strict(t.Object({ resource, fromAccountId: id, toAccountId: id, previousValid: valid }, closed)),
         response: {
           200: withHeaders(t.Object({ roleGrant }, closed), { [SESSION_HEADER]: t.String() }),
-          ...failures,
+          ...failures(),
         },
         detail: detail('role_grant.transfer_realm_owner'),
       },
@@ -1792,9 +1855,9 @@ export function accessRoutes(
     .post(
       customMethod('/v1/roleGrants', 'change'),
       {
-        headers,
+        headers: headers(),
         body: strict(roleChange),
-        response: { 200: response(roleGrant), ...failures, 409: problemSchema('realm_last_owner') },
+        response: { 200: response(roleGrant), ...failures(), 409: problemSchema('realm_last_owner') },
         detail: detail('role_grant.change'),
       },
       async ({ body, headers, actor, admission, job, session }) => {
@@ -1814,9 +1877,9 @@ export function accessRoutes(
     .post(
       customMethod('/v1/roleGrants', 'revoke'),
       {
-        headers,
+        headers: headers(),
         body: strict(roleGrant),
-        response: { 200: response(roleGrant), ...failures, 409: problemSchema('realm_last_owner') },
+        response: { 200: response(roleGrant), ...failures(), 409: problemSchema('realm_last_owner') },
         detail: detail('role_grant.revoke'),
       },
       async ({ body, headers, actor, admission, job, session }) => {

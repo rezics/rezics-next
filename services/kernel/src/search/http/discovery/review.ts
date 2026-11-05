@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../../memoized.ts';
 import {
   ReviewContextSourceSchema,
   SearchReviewContextSchema,
@@ -9,41 +10,59 @@ import { t } from 'elysia';
 import { Compile } from 'typebox/compile';
 import { MatchEvidenceSchema } from '../../http/match-evidence-schema.ts';
 import { closed, id, nullableText, key, unavailable, evidenceOrDefault, admitIdentity } from './primitives.ts';
-const reviewKey = t.Object(
-  { owner: t.Literal('content'), kind: t.Literal('review'), route: t.Integer({ minimum: 0, maximum: 65535 }), id },
-  closed,
-);
-const reviewAuthor = t.Object({ displayName: nullableText, handle: nullableText }, closed);
-const reviewSubject = t.Object({ id, title: nullableText }, closed);
-const reviewSummary = t.Object(
-  {
-    id,
-    kind: t.Literal('review'),
-    title: nullableText,
-    author: t.Optional(reviewAuthor),
-    excerpt: t.Optional(t.String({ maxLength: 640 })),
-    subject: t.Optional(t.Union([reviewSubject, t.Null()])),
-    source: t.Optional(ReviewContextSourceSchema),
-    searchContext: t.Optional(SearchReviewContextSchema),
-  },
-  closed,
-);
-export const ReviewHitSchema = t.Object(
-  {
-    key: reviewKey,
-    summary: t.Object({ kind: t.Literal('review'), value: reviewSummary }, closed),
-    matchEvidence: MatchEvidenceSchema,
-  },
-  closed,
-);
+function reviewKey() {
+  return memoizedValue(reviewKey, () =>
+    t.Object(
+      { owner: t.Literal('content'), kind: t.Literal('review'), route: t.Integer({ minimum: 0, maximum: 65535 }), id },
+      closed,
+    ),
+  );
+}
+function reviewAuthor() {
+  return memoizedValue(reviewAuthor, () => t.Object({ displayName: nullableText, handle: nullableText }, closed));
+}
+function reviewSubject() {
+  return memoizedValue(reviewSubject, () => t.Object({ id, title: nullableText }, closed));
+}
+function reviewSummary() {
+  return memoizedValue(reviewSummary, () =>
+    t.Object(
+      {
+        id,
+        kind: t.Literal('review'),
+        title: nullableText,
+        author: t.Optional(reviewAuthor()),
+        excerpt: t.Optional(t.String({ maxLength: 640 })),
+        subject: t.Optional(t.Union([reviewSubject(), t.Null()])),
+        source: t.Optional(ReviewContextSourceSchema),
+        searchContext: t.Optional(SearchReviewContextSchema()),
+      },
+      closed,
+    ),
+  );
+}
+export function ReviewHitSchema() {
+  return memoizedValue(ReviewHitSchema, () =>
+    t.Object(
+      {
+        key: reviewKey(),
+        summary: t.Object({ kind: t.Literal('review'), value: reviewSummary() }, closed),
+        matchEvidence: MatchEvidenceSchema,
+      },
+      closed,
+    ),
+  );
+}
 
-export type ReviewHttpHit = Static<typeof ReviewHitSchema>;
+export type ReviewHttpHit = Static<ReturnType<typeof ReviewHitSchema>>;
 type ReviewHit = Extract<DiscoveryUnionHit, { summary: { kind: 'review' } }>;
-const check = Compile(ReviewHitSchema);
+function check() {
+  return memoizedValue(check, () => Compile(ReviewHitSchema()));
+}
 
 export function admitReviewHit(value: unknown): asserts value is ReviewHit {
   const admitted = evidenceOrDefault(value);
-  if (!check.Check(admitted)) unavailable();
+  if (!check().Check(admitted)) unavailable();
   const hit = admitted as ReviewHttpHit;
   admitIdentity(hit);
   const { key, summary, matchEvidence } = hit;

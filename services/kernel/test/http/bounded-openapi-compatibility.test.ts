@@ -170,7 +170,7 @@ test('native typed400, strict JSON and wire caps survive generation', async () =
     expect(await response.json()).toMatchObject({ code: 'invalid_request', status: 400 });
   }
   expect(DEFAULT_BODY_LIMIT).toBe(1_048_576);
-  expect(MAX_BODY_LIMIT).toBe(4_259_840);
+  expect(MAX_BODY_LIMIT()).toBe(4_259_840);
   const oversized = await app.handle(
     new Request('http://kernel.test/bounded-openapi', {
       method: 'POST',
@@ -184,11 +184,11 @@ test('native typed400, strict JSON and wire caps survive generation', async () =
 test('the mounted Definitions route enforces its larger wire cap before decoding or effects', async () => {
   const kernel = createKernel({ pool, routeKey: new Uint8Array(32) });
   const document = openApiDocument(kernel);
-  expect(document.paths['/v1/definitions/releases']!.post!['x-body-limit']).toBe(MAX_BODY_LIMIT);
+  expect(document.paths['/v1/definitions/releases']!.post!['x-body-limit']).toBe(MAX_BODY_LIMIT());
   for (const [bytes, status] of [
     [DEFAULT_BODY_LIMIT + 1, 400],
-    [MAX_BODY_LIMIT, 400],
-    [MAX_BODY_LIMIT + 1, 413],
+    [MAX_BODY_LIMIT(), 400],
+    [MAX_BODY_LIMIT() + 1, 413],
   ]) {
     // Malformed JSON cannot reach authentication, publication, or the invalid database pool.
     const response = await kernel.handle(
@@ -271,7 +271,7 @@ test('a maximum canonical release in its compact envelope reaches native release
 });
 
 test('native ingress reservations refuse excess requests before reading and release after responses', async () => {
-  const budget = (ADMISSION_LIMITS.permits + ADMISSION_LIMITS.queue) * DEFAULT_BODY_LIMIT + 2 * MAX_BODY_LIMIT;
+  const budget = (ADMISSION_LIMITS.permits + ADMISSION_LIMITS.queue) * DEFAULT_BODY_LIMIT + 2 * MAX_BODY_LIMIT();
   const capacity = Math.floor(budget / DEFAULT_BODY_LIMIT);
   const app = probe();
   const controllers: ReadableStreamDefaultController<Uint8Array>[] = [];
@@ -401,7 +401,7 @@ test('all mounted body routes use the shared cap or an explicitly listed bounded
   expect(shared).toBeGreaterThan(0);
   const catalogueMaximum = Math.max(
     DEFAULT_BODY_LIMIT,
-    MAX_BODY_LIMIT,
+    MAX_BODY_LIMIT(),
     ...kernel.routes.map((route) => bodyLimitOf(route.hooks?.detail as Record<string, unknown> | undefined)),
   );
   expect(largest).toBe(catalogueMaximum);
@@ -409,11 +409,11 @@ test('all mounted body routes use the shared cap or an explicitly listed bounded
   const collection = kernel.routes.find(
     (route) => route.method === 'POST' && route.path === '/v1/libraryArchiveCollectionRecoveries',
   )!;
-  expect(bodyLimitOf(archive.hooks?.detail as Record<string, unknown>)).toBe(LIBRARY_ARCHIVE_LIMITS.uploadBytes);
-  const archiveWireBytes = Math.ceil(LIBRARY_ARCHIVE_LIMITS.uploadBytes / 3) * 4 + 128;
+  expect(bodyLimitOf(archive.hooks?.detail as Record<string, unknown>)).toBe(LIBRARY_ARCHIVE_LIMITS().uploadBytes);
+  const archiveWireBytes = Math.ceil(LIBRARY_ARCHIVE_LIMITS().uploadBytes / 3) * 4 + 128;
   expect(bodyLimitOf(collection.hooks?.detail as Record<string, unknown>)).toBe(archiveWireBytes);
   expect(catalogueMaximum).toBeGreaterThanOrEqual(archiveWireBytes);
-  expect(MAX_HTTP_BODY_LIMIT).toBeGreaterThanOrEqual(catalogueMaximum);
+  expect(MAX_HTTP_BODY_LIMIT()).toBeGreaterThanOrEqual(catalogueMaximum);
   const server = await Bun.file(new URL('../../src/server.ts', import.meta.url)).text();
   expect(server).toContain('maxRequestBodySize: MAX_HTTP_BODY_LIMIT');
 });

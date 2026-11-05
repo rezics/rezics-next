@@ -42,7 +42,7 @@ export function createClassificationAssociationReader(config: { pool: Pool; acce
     if (!associations.length) return result;
     const context = { pool: config.pool, deadline };
     const ids = [...new Set(associations.flatMap((a) => [a.subjectId, a.targetId]))];
-    const mappings = await identityEpochStore.readMappings(config.pool, ids);
+    const mappings = await identityEpochStore().readMappings(config.pool, ids);
     const subjects = new Map<string, string>();
     const unavailableSubjects = new Set<string>();
     for (const [index, id] of ids.entries()) {

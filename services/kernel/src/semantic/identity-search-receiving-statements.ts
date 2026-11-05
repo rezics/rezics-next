@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { receivingSqlKey } from './identity-search-receiving-work.ts';
 import receivingJob from './identity-epoch-store-receiving-job.sql';
 import receivingPlan from './identity-epoch-store-receiving-plan.sql';
@@ -103,57 +104,65 @@ export const receivingStatements = Object.freeze({
 /** Additional exact literals dispatched by the canonical command/read and role executors.
  * statement_timeout is the sole numeric template; all other statements compare exact normalized text.
  */
-export const commonSearchReceivingStatements: readonly string[] = Object.freeze([
-  ...new Map(
-    [
-      ...Object.entries(receivingStatements)
-        .filter(([name]) => name !== 'libraryReplay')
-        .map(([, sql]) => sql),
-      ...Object.values(searchReceivingCaptureStatements),
-      receivingJob.sql,
-      receivingPlan.sql,
-      receivingLookup.sql,
-      receivingSelection.sql,
-      searchProgressRead.sql,
-      searchProgressInsert.sql,
-      searchProgressAdvance.sql,
-      searchProgressRelease.sql,
-      searchUnreleased.sql,
-      nativeCommit.sql,
-      partitionRead.sql,
-      commandTime.sql,
-      commandFence.sql,
-      commandNoEffect.sql,
-      participantNext.sql,
-      participantStep.sql,
-      participantAdvance.sql,
-      participantReplay.sql,
-      participantJob.sql,
-      participantAck.sql,
-      nativeDefinition.sql,
-      'BEGIN ISOLATION LEVEL SERIALIZABLE',
-      'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
-      'BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY',
-      'ROLLBACK',
-      'COMMIT',
-      "SET LOCAL lock_timeout = '200ms'",
-      "SET LOCAL statement_timeout = '<remaining>ms'",
-      "SELECT set_config('semantic.erasure_native_transaction',$1,true)",
-      `INSERT INTO semantic.erasure_source_role(partition_no,transaction_id,account_id,role)
+export function commonSearchReceivingStatements(): readonly string[] {
+  return memoizedValue(commonSearchReceivingStatements, () =>
+    Object.freeze([
+      ...new Map(
+        [
+          ...Object.entries(receivingStatements)
+            .filter(([name]) => name !== 'libraryReplay')
+            .map(([, sql]) => sql),
+          ...Object.values(searchReceivingCaptureStatements),
+          receivingJob.sql,
+          receivingPlan.sql,
+          receivingLookup.sql,
+          receivingSelection.sql,
+          searchProgressRead.sql,
+          searchProgressInsert.sql,
+          searchProgressAdvance.sql,
+          searchProgressRelease.sql,
+          searchUnreleased.sql,
+          nativeCommit.sql,
+          partitionRead.sql,
+          commandTime.sql,
+          commandFence.sql,
+          commandNoEffect.sql,
+          participantNext.sql,
+          participantStep.sql,
+          participantAdvance.sql,
+          participantReplay.sql,
+          participantJob.sql,
+          participantAck.sql,
+          nativeDefinition.sql,
+          'BEGIN ISOLATION LEVEL SERIALIZABLE',
+          'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
+          'BEGIN ISOLATION LEVEL READ COMMITTED READ ONLY',
+          'ROLLBACK',
+          'COMMIT',
+          "SET LOCAL lock_timeout = '200ms'",
+          "SET LOCAL statement_timeout = '<remaining>ms'",
+          "SELECT set_config('semantic.erasure_native_transaction',$1,true)",
+          `INSERT INTO semantic.erasure_source_role(partition_no,transaction_id,account_id,role)
       SELECT $1,$2,account_id,role FROM unnest($3::uuid[],$4::text[]) AS input(account_id,role) ON CONFLICT DO NOTHING`,
-      `SELECT l.account_id::text,l.role FROM semantic.identity_epoch_job j
+          `SELECT l.account_id::text,l.role FROM semantic.identity_epoch_job j
      JOIN semantic.erasure_locator l ON l.partition_no=j.partition_no AND l.store='identity_epoch_job' AND l.record_key=j.erasure_key
      WHERE j.partition_no=$1 AND j.job_id=$2 ORDER BY l.account_id,l.role LIMIT 9`,
-    ].map((sql) => [receivingSqlKey(sql), sql] as const),
-  ).values(),
-]);
+        ].map((sql) => [receivingSqlKey(sql), sql] as const),
+      ).values(),
+    ]),
+  );
+}
 
 type Cost = readonly [rows: number, points: number, statements: number, bytes: number, emptySeeks: number];
 /** Both statements have an explicit bounded raw size, independent of observed result rows. */
-export const searchReceivingOwnedPageStatements = Object.freeze([
-  Object.freeze({ sql: searchNativeReceivingStatements.copies.sql, kind: 'copies' as const }),
-  Object.freeze({ sql: searchNativeReceivingStatements.insertCopies.sql, kind: 'insertCopies' as const }),
-]);
+export function searchReceivingOwnedPageStatements() {
+  return memoizedValue(searchReceivingOwnedPageStatements, () =>
+    Object.freeze([
+      Object.freeze({ sql: searchNativeReceivingStatements().copies.sql, kind: 'copies' as const }),
+      Object.freeze({ sql: searchNativeReceivingStatements().insertCopies.sql, kind: 'insertCopies' as const }),
+    ]),
+  );
+}
 const work = ([nativeRows, nativePoints, statements, bytes, emptySeeks]: Cost): WorkDimensions =>
   Object.freeze({
     candidateKeys: 0,
@@ -169,15 +178,19 @@ const work = ([nativeRows, nativePoints, statements, bytes, emptySeeks]: Cost): 
  * original-role deferred capture is additionally traversed and reserved on the same client before
  * COMMIT by identity-search-receiving-capture.ts. It cannot be replaced by the maintenance roles.
  */
-export const searchReceivingDeferredCaptureStatements = Object.freeze([
-  receivingStatements.expectEffect,
-  receivingStatements.insertPlan,
-  receivingStatements.insertAccepted,
-  receivingStatements.insertApplied,
-  receivingStatements.acknowledgeApplied,
-  receivingStatements.insertCustody,
-  participantStep.sql,
-]);
+export function searchReceivingDeferredCaptureStatements() {
+  return memoizedValue(searchReceivingDeferredCaptureStatements, () =>
+    Object.freeze([
+      receivingStatements.expectEffect,
+      receivingStatements.insertPlan,
+      receivingStatements.insertAccepted,
+      receivingStatements.insertApplied,
+      receivingStatements.acknowledgeApplied,
+      receivingStatements.insertCustody,
+      participantStep.sql,
+    ]),
+  );
+}
 const receivingCost: Partial<Record<keyof typeof receivingStatements, Cost>> = {
   inputBasis: [2, 1, 1, 512, 1],
   originalMembership: [1, 1, 1, 256, 1],
@@ -259,7 +272,7 @@ export function searchReceivingCapturedStatementCosts(): SearchReceivingWorkDecl
      WHERE j.partition_no=$1 AND j.job_id=$2 ORDER BY l.account_id,l.role LIMIT 9`,
     [10, 2, 1, 2048, 1],
   );
-  for (const [name, statement] of Object.entries(searchNativeReceivingStatements)) {
+  for (const [name, statement] of Object.entries(searchNativeReceivingStatements())) {
     const [rows, points, bytes] = searchNativeReceivingSqlCost[name as keyof typeof searchNativeReceivingSqlCost];
     add(statement.sql, [rows, points, 1, bytes, 0]);
   }
@@ -271,7 +284,7 @@ export function searchReceivingCapturedStatementCosts(): SearchReceivingWorkDecl
  * Keeping this distinction prevents a legacy subtotal from silently treating deferred work as zero.
  */
 export function searchReceivingOwnedStatementCosts(): SearchReceivingWorkDeclaration['statements'] {
-  const deferred = new Set(searchReceivingDeferredCaptureStatements.map(receivingSqlKey));
+  const deferred = new Set(searchReceivingDeferredCaptureStatements().map(receivingSqlKey));
   return Object.freeze(
     searchReceivingCapturedStatementCosts().filter(({ sql }) => !deferred.has(receivingSqlKey(sql))),
   );

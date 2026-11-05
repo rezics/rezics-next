@@ -475,7 +475,7 @@ export async function readScopeLeafEvidence(
     ),
   );
   if (result.state === 'complete') return { ...result.value, usage: result.usage };
-  if (result.state === 'unavailable') throw new AccessWorkUnavailableError(result.dependency);
+  if (result.state === 'unavailable') throw new (AccessWorkUnavailableError())(result.dependency);
   if (result.error instanceof LeafBasisChanged) return { state: 'basis_changed', usage: result.usage };
   if (result.error instanceof LeafNotReady || result.error instanceof LeafReservationUnavailable)
     return { state: 'not_ready', usage: result.usage };

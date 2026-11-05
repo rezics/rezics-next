@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { cleanupShelfTitleKeys } from './shelf-title-maintenance-store.ts';
 import { createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -111,47 +112,129 @@ import reservationBindQuery from './shelf-maintenance-reservation-bind.sql';
 import reservationCheckQuery from './shelf-maintenance-reservation-check.sql';
 import bulkPending from './shelf-maintenance-bulk-pending.sql';
 
-const gateEnsure = shelfMaintenanceQuery(gateEnsureQuery);
-const gateRead = shelfMaintenanceQuery(gateReadQuery);
-const gateLock = shelfMaintenanceQuery(gateLockQuery);
-const gateShare = shelfMaintenanceQuery(gateShareQuery);
-const gateSave = shelfMaintenanceQuery(gateSaveQuery);
-const inputs = shelfMaintenanceQuery(inputsQuery);
-const runRead = shelfMaintenanceQuery(runReadQuery);
-const runLock = shelfMaintenanceQuery(runLockQuery);
-const runCreate = shelfMaintenanceQuery(runCreateQuery);
-const stepRead = shelfMaintenanceQuery(stepReadQuery);
-const stepSave = shelfMaintenanceQuery(stepSaveQuery);
-const stepBind = shelfMaintenanceQuery(stepBindQuery);
-const advance = shelfMaintenanceQuery(advanceQuery);
-const cancel = shelfMaintenanceQuery(cancelQuery);
-const runnable = shelfMaintenanceQuery(runnableQuery);
-const ack = shelfMaintenanceQuery(ackQuery);
-const authorizedCollection = shelfMaintenanceQuery(authorizedCollectionQuery);
-const entries = shelfMaintenanceQuery(entriesQuery);
-const entryBackfill = shelfMaintenanceQuery(entryBackfillQuery);
-const stampIncarnation = shelfMaintenanceQuery(stampIncarnationQuery);
-const sessionScratch = shelfMaintenanceQuery(sessionScratchQuery);
-const sessions = shelfMaintenanceQuery(sessionsQuery);
-const headInputs = shelfMaintenanceQuery(headInputsQuery);
-const heads = shelfMaintenanceQuery(headsQuery);
-const countEntries = shelfMaintenanceQuery(countEntriesQuery);
-const countCollections = shelfMaintenanceQuery(countCollectionsQuery);
-const validate = shelfMaintenanceQuery(validateQuery);
-const retireCounts = shelfMaintenanceQuery(retireCountsQuery);
-const retireReservations = shelfMaintenanceQuery(retireReservationsQuery);
-const scratchSessions = shelfMaintenanceQuery(scratchSessionsQuery);
-const scratchHeads = shelfMaintenanceQuery(scratchHeadsQuery);
-const scratchSources = shelfMaintenanceQuery(scratchSourcesQuery);
-const scratchSteps = shelfMaintenanceQuery(scratchStepsQuery);
-const sourceRead = shelfMaintenanceQuery(sourceReadQuery);
-const sourceSave = shelfMaintenanceQuery(sourceSaveQuery);
-const sourceProgress = shelfMaintenanceQuery(sourceProgressQuery);
-const sourceAttach = shelfMaintenanceQuery(sourceAttachQuery);
-const sourceReset = shelfMaintenanceQuery(sourceResetQuery);
-const reservationBind = shelfMaintenanceQuery(reservationBindQuery);
-const reservationCheck = shelfMaintenanceQuery(reservationCheckQuery);
-const accountShare = shelfMaintenanceQuery(accountShareQuery);
+function gateEnsure() {
+  return memoizedValue(gateEnsure, () => shelfMaintenanceQuery(gateEnsureQuery));
+}
+function gateRead() {
+  return memoizedValue(gateRead, () => shelfMaintenanceQuery(gateReadQuery));
+}
+function gateLock() {
+  return memoizedValue(gateLock, () => shelfMaintenanceQuery(gateLockQuery));
+}
+function gateShare() {
+  return memoizedValue(gateShare, () => shelfMaintenanceQuery(gateShareQuery));
+}
+function gateSave() {
+  return memoizedValue(gateSave, () => shelfMaintenanceQuery(gateSaveQuery));
+}
+function inputs() {
+  return memoizedValue(inputs, () => shelfMaintenanceQuery(inputsQuery));
+}
+function runRead() {
+  return memoizedValue(runRead, () => shelfMaintenanceQuery(runReadQuery));
+}
+function runLock() {
+  return memoizedValue(runLock, () => shelfMaintenanceQuery(runLockQuery));
+}
+function runCreate() {
+  return memoizedValue(runCreate, () => shelfMaintenanceQuery(runCreateQuery));
+}
+function stepRead() {
+  return memoizedValue(stepRead, () => shelfMaintenanceQuery(stepReadQuery));
+}
+function stepSave() {
+  return memoizedValue(stepSave, () => shelfMaintenanceQuery(stepSaveQuery));
+}
+function stepBind() {
+  return memoizedValue(stepBind, () => shelfMaintenanceQuery(stepBindQuery));
+}
+function advance() {
+  return memoizedValue(advance, () => shelfMaintenanceQuery(advanceQuery));
+}
+function cancel() {
+  return memoizedValue(cancel, () => shelfMaintenanceQuery(cancelQuery));
+}
+function runnable() {
+  return memoizedValue(runnable, () => shelfMaintenanceQuery(runnableQuery));
+}
+function ack() {
+  return memoizedValue(ack, () => shelfMaintenanceQuery(ackQuery));
+}
+function authorizedCollection() {
+  return memoizedValue(authorizedCollection, () => shelfMaintenanceQuery(authorizedCollectionQuery));
+}
+function entries() {
+  return memoizedValue(entries, () => shelfMaintenanceQuery(entriesQuery));
+}
+function entryBackfill() {
+  return memoizedValue(entryBackfill, () => shelfMaintenanceQuery(entryBackfillQuery));
+}
+function stampIncarnation() {
+  return memoizedValue(stampIncarnation, () => shelfMaintenanceQuery(stampIncarnationQuery));
+}
+function sessionScratch() {
+  return memoizedValue(sessionScratch, () => shelfMaintenanceQuery(sessionScratchQuery));
+}
+function sessions() {
+  return memoizedValue(sessions, () => shelfMaintenanceQuery(sessionsQuery));
+}
+function headInputs() {
+  return memoizedValue(headInputs, () => shelfMaintenanceQuery(headInputsQuery));
+}
+function heads() {
+  return memoizedValue(heads, () => shelfMaintenanceQuery(headsQuery));
+}
+function countEntries() {
+  return memoizedValue(countEntries, () => shelfMaintenanceQuery(countEntriesQuery));
+}
+function countCollections() {
+  return memoizedValue(countCollections, () => shelfMaintenanceQuery(countCollectionsQuery));
+}
+function validate() {
+  return memoizedValue(validate, () => shelfMaintenanceQuery(validateQuery));
+}
+function retireCounts() {
+  return memoizedValue(retireCounts, () => shelfMaintenanceQuery(retireCountsQuery));
+}
+function retireReservations() {
+  return memoizedValue(retireReservations, () => shelfMaintenanceQuery(retireReservationsQuery));
+}
+function scratchSessions() {
+  return memoizedValue(scratchSessions, () => shelfMaintenanceQuery(scratchSessionsQuery));
+}
+function scratchHeads() {
+  return memoizedValue(scratchHeads, () => shelfMaintenanceQuery(scratchHeadsQuery));
+}
+function scratchSources() {
+  return memoizedValue(scratchSources, () => shelfMaintenanceQuery(scratchSourcesQuery));
+}
+function scratchSteps() {
+  return memoizedValue(scratchSteps, () => shelfMaintenanceQuery(scratchStepsQuery));
+}
+function sourceRead() {
+  return memoizedValue(sourceRead, () => shelfMaintenanceQuery(sourceReadQuery));
+}
+function sourceSave() {
+  return memoizedValue(sourceSave, () => shelfMaintenanceQuery(sourceSaveQuery));
+}
+function sourceProgress() {
+  return memoizedValue(sourceProgress, () => shelfMaintenanceQuery(sourceProgressQuery));
+}
+function sourceAttach() {
+  return memoizedValue(sourceAttach, () => shelfMaintenanceQuery(sourceAttachQuery));
+}
+function sourceReset() {
+  return memoizedValue(sourceReset, () => shelfMaintenanceQuery(sourceResetQuery));
+}
+function reservationBind() {
+  return memoizedValue(reservationBind, () => shelfMaintenanceQuery(reservationBindQuery));
+}
+function reservationCheck() {
+  return memoizedValue(reservationCheck, () => shelfMaintenanceQuery(reservationCheckQuery));
+}
+function accountShare() {
+  return memoizedValue(accountShare, () => shelfMaintenanceQuery(accountShareQuery));
+}
 
 const pageDeadlines = new AsyncLocalStorage<number>();
 
@@ -159,10 +242,10 @@ export const SHELF_MAINTENANCE_WORKFLOW = 'library.shelfMaintenance';
 export const SHELF_MAINTENANCE_EVENT = 'com.rezics.library.shelf-maintenance.advanced.v1';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const decimal = /^(0|[1-9][0-9]*)$/;
-type Run = NonNullable<Awaited<ReturnType<typeof runRead.run>>>;
-type Gate = NonNullable<Awaited<ReturnType<typeof gateRead.run>>>;
-type Step = NonNullable<Awaited<ReturnType<typeof stepRead.run>>>;
-type SourceRow = NonNullable<Awaited<ReturnType<typeof sourceRead.run>>>;
+type Run = NonNullable<Awaited<ReturnType<ReturnType<typeof runRead>['run']>>>;
+type Gate = NonNullable<Awaited<ReturnType<ReturnType<typeof gateRead>['run']>>>;
+type Step = NonNullable<Awaited<ReturnType<ReturnType<typeof stepRead>['run']>>>;
+type SourceRow = NonNullable<Awaited<ReturnType<ReturnType<typeof sourceRead>['run']>>>;
 const ownerArgs = (owner: ShelfOwner) => ({ route: owner.route, account_id: owner.accountId });
 const runArgs = (owner: ShelfOwner, runId: string) => ({ ...ownerArgs(owner), run_id: runId });
 function unavailable(owner: ShelfOwner): never {
@@ -264,12 +347,12 @@ async function ownerAuthority(tx: CommandTransaction, owner: ShelfOwner) {
   // A Collection writer has already admitted its actual resource. Resolve its immutable curator natively.
   if (
     command.authorization!.resource.route !== owner.route ||
-    !(await authorizedCollection.run(tx, { ...ownerArgs(owner), collection_id: command.authorization!.resource.id }))
+    !(await authorizedCollection().run(tx, { ...ownerArgs(owner), collection_id: command.authorization!.resource.id }))
   )
     throw new GrantDeniedError();
 }
 async function saveGate(tx: CommandTransaction, owner: ShelfOwner, gate: Gate) {
-  await gateSave.run(tx, {
+  await gateSave().run(tx, {
     ...ownerArgs(owner),
     mode: gate.mode,
     ready: gate.ready,
@@ -280,7 +363,7 @@ async function saveGate(tx: CommandTransaction, owner: ShelfOwner, gate: Gate) {
 }
 async function createRun(tx: CommandTransaction, owner: ShelfOwner, gate: Gate, kind: ShelfMaintenanceKind) {
   const runId = newId(owner.route);
-  await runCreate.run(tx, {
+  await runCreate().run(tx, {
     ...runArgs(owner, runId),
     epoch: BigInt(gate.epoch),
     kind,
@@ -289,8 +372,8 @@ async function createRun(tx: CommandTransaction, owner: ShelfOwner, gate: Gate, 
   });
   gate.runId = runId;
   await saveGate(tx, owner, gate);
-  await stepSave.run(tx, runArgs(owner, runId));
-  const run = await runRead.run(tx, runArgs(owner, runId));
+  await stepSave().run(tx, runArgs(owner, runId));
+  const run = await runRead().run(tx, runArgs(owner, runId));
   if (!run) throw new Error('Missing newly committed shelf run');
   return bindingFor(owner, run);
 }
@@ -298,15 +381,15 @@ async function createRun(tx: CommandTransaction, owner: ShelfOwner, gate: Gate, 
 async function initialize(tx: CommandTransaction, owner: ShelfOwner) {
   await ownerAuthority(tx, owner);
   await shareShelfAccount(tx, owner.accountId);
-  let gate = await gateRead.run(tx, ownerArgs(owner));
+  let gate = await gateRead().run(tx, ownerArgs(owner));
   if (!gate) {
-    await gateEnsure.run(tx, ownerArgs(owner));
-    gate = await gateLock.run(tx, ownerArgs(owner));
-  } else if (!gate.initialized) gate = await gateLock.run(tx, ownerArgs(owner));
+    await gateEnsure().run(tx, ownerArgs(owner));
+    gate = await gateLock().run(tx, ownerArgs(owner));
+  } else if (!gate.initialized) gate = await gateLock().run(tx, ownerArgs(owner));
   if (!gate) throw new Error('Shelf gate disappeared');
   const initializedNow = !gate.initialized;
   if (!gate.initialized) {
-    const facts = await inputs.run(tx, ownerArgs(owner));
+    const facts = await inputs().run(tx, ownerArgs(owner));
     const readiness = initialShelfReadiness({
       hasEntries: facts.entries,
       hasCollections: facts.collections,
@@ -319,9 +402,9 @@ async function initialize(tx: CommandTransaction, owner: ShelfOwner) {
       await createRun(tx, owner, gate, 'backfill');
     } else await saveGate(tx, owner, gate);
   }
-  gate = await gateShare.run(tx, ownerArgs(owner));
+  gate = await gateShare().run(tx, ownerArgs(owner));
   if (!gate) throw new Error('Shelf gate disappeared');
-  const run = gate.runId ? await runRead.run(tx, runArgs(owner, gate.runId)) : null;
+  const run = gate.runId ? await runRead().run(tx, runArgs(owner, gate.runId)) : null;
   return {
     initializedNow,
     readiness: gate.ready ? ('ready' as const) : ('backfill' as const),
@@ -332,7 +415,7 @@ async function initialize(tx: CommandTransaction, owner: ShelfOwner) {
 /** Every ordinary input writer holds this lock through its own commit, including all late writers. */
 export async function enterShelfWrite(tx: CommandTransaction, owner: ShelfOwner) {
   await initialize(tx, owner);
-  const gate = await gateShare.run(tx, ownerArgs(owner));
+  const gate = await gateShare().run(tx, ownerArgs(owner));
   if (!gate || gate.mode !== 'open') unavailable(owner);
   return { ready: gate.ready, epoch: BigInt(gate.epoch), generationId: gate.activeGeneration };
 }
@@ -343,8 +426,8 @@ export async function fenceShelfTechnicalWrite(tx: OperationalTransaction, owner
   ownerCheck(owner);
   if (!hasLiveOperationalTransaction(tx)) throw new TypeError('No live shelf technical transaction');
   await fenceOperationalAccount(tx, owner.accountId);
-  await gateEnsure.run(tx, ownerArgs(owner));
-  const gate = await gateShare.run(tx, ownerArgs(owner));
+  await gateEnsure().run(tx, ownerArgs(owner));
+  const gate = await gateShare().run(tx, ownerArgs(owner));
   if (!gate || gate.mode !== 'open') unavailable(owner);
 }
 
@@ -362,8 +445,8 @@ async function derivedAuthority(tx: CommandTransaction, page: ShelfDerivedPage) 
   const proof = derivedPages.get(page);
   if (!proof || proof.tx !== tx || !proof.fresh) throw new TypeError('No live native shelf derived page');
   live(tx, proof.owner);
-  const gate = await gateLock.run(tx, ownerArgs(proof.owner));
-  const run = await runLock.run(tx, runArgs(proof.owner, proof.run.runId));
+  const gate = await gateLock().run(tx, ownerArgs(proof.owner));
+  const run = await runLock().run(tx, runArgs(proof.owner, proof.run.runId));
   if (
     !gate ||
     !run ||
@@ -403,7 +486,7 @@ export function createShelfMaintenanceDerivedPorts(): ShelfMaintenanceDerivedPor
         ),
       );
       if (!result.done) {
-        const rows = await reservationBind.run(tx, {
+        const rows = await reservationBind().run(tx, {
           ...runArgs(proof.owner, page.runId),
           reservation_id: result.reservation.reservationId,
           generation: page.generationId,
@@ -415,12 +498,12 @@ export function createShelfMaintenanceDerivedPorts(): ShelfMaintenanceDerivedPor
     async continue(tx, page, reservationId) {
       const proof = await derivedAuthority(tx, page);
       const saved = proof.source
-        ? await sourceRead.run(tx, { ...runArgs(proof.owner, page.runId), subject_id: proof.source.subjectId })
+        ? await sourceRead().run(tx, { ...runArgs(proof.owner, page.runId), subject_id: proof.source.subjectId })
         : null;
       if (
         !saved ||
         saved.reservationId !== reservationId ||
-        !(await reservationCheck.run(tx, {
+        !(await reservationCheck().run(tx, {
           ...runArgs(proof.owner, page.runId),
           reservation_id: reservationId,
           generation: page.generationId,
@@ -461,12 +544,12 @@ function sourceObservation(row: SourceRow): ShelfMaintenanceTypeObservation {
 async function prepareType(deps: ShelfMaintenanceDependencies, owner: ShelfOwner, step: Step, runId: string) {
   const after = cursorOf(step)[0];
   const candidate = await withConnection(deps.pool, async (client) => {
-    const entry = await entries.run(client, {
+    const entry = await entries().run(client, {
       ...ownerArgs(owner),
       after: typeof after === 'string' ? after : EMPTY_SHELF_GENERATION,
     });
     const saved = entry
-      ? await sourceRead.run(client, { ...runArgs(owner, runId), subject_id: entry.subjectId })
+      ? await sourceRead().run(client, { ...runArgs(owner, runId), subject_id: entry.subjectId })
       : null;
     return { entry, saved };
   });
@@ -563,8 +646,8 @@ async function purgePage(
     const sub = typeof cursor[0] === 'number' ? cursor[0] : 0;
     const removed =
       sub < 3
-        ? await [scratchSessions, scratchHeads, scratchSources][sub]!.run(tx, ownerArgs(owner))
-        : await scratchSteps.run(tx, { ...runArgs(owner, run.runId), before: sub === 3 });
+        ? await [scratchSessions(), scratchHeads(), scratchSources()][sub]!.run(tx, ownerArgs(owner))
+        : await scratchSteps().run(tx, { ...runArgs(owner, run.runId), before: sub === 3 });
     return { complete: sub === 4 && removed.length < 100, cursor: [sub + (removed.length < 100 ? 1 : 0)] };
   }
   const stores: Partial<Record<ShelfMaintenancePhase, readonly string[]>> = {
@@ -661,7 +744,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
         resource,
         async validate(tx) {
           // Access preparation supplies its released native client, before Core owns a transaction.
-          const account = await accountShare.run(tx, ownerArgs(owner));
+          const account = await accountShare().run(tx, ownerArgs(owner));
           return account?.state === 'active' && !account.fenced;
         },
       },
@@ -678,10 +761,10 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
       },
       async (tx) => {
         await initialize(tx, owner);
-        const gate = await gateLock.run(tx, ownerArgs(owner));
+        const gate = await gateLock().run(tx, ownerArgs(owner));
         if (!gate || (gate.mode !== 'open' && gate.mode !== 'rebuilding')) unavailable(owner);
         if (gate.runId) {
-          const current = await runLock.run(tx, runArgs(owner, gate.runId));
+          const current = await runLock().run(tx, runArgs(owner, gate.runId));
           if (current && current.phase !== 'complete' && !current.cancelled) {
             if (current.phase === 'retire-counts' || current.phase === 'retire-reservations') unavailable(owner);
             if (current.kind !== request.kind) unavailable(owner);
@@ -747,15 +830,15 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
       },
       async (tx) => {
         live(tx, owner);
-        await gateEnsure.run(tx, ownerArgs(owner));
-        const gate = await gateLock.run(tx, ownerArgs(owner));
+        await gateEnsure().run(tx, ownerArgs(owner));
+        const gate = await gateLock().run(tx, ownerArgs(owner));
         if (!gate) throw new Error('Missing terminal shelf gate');
         if (gate.runId && (gate.mode === 'purging' || gate.mode === 'purged')) {
-          const current = await runRead.run(tx, runArgs(owner, gate.runId));
+          const current = await runRead().run(tx, runArgs(owner, gate.runId));
           if (!current) throw new Error('Missing terminal shelf run');
           return noEffect(bindingFor(owner, current));
         }
-        if (gate.runId) await cancel.run(tx, runArgs(owner, gate.runId));
+        if (gate.runId) await cancel().run(tx, runArgs(owner, gate.runId));
         gate.mode = 'purging';
         gate.ready = false;
         gate.activeGeneration = null;
@@ -775,8 +858,8 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
     const owner = { route: binding.route, accountId: binding.accountId };
     const args = { ...runArgs(owner, binding.runId), epoch: BigInt(binding.epoch), sequence: BigInt(binding.sequence) };
     const { header, scheduledRun } = await withConnection(pool, async (client) => {
-      const header = await stepRead.run(client, args);
-      return { header, scheduledRun: header ? await runRead.run(client, runArgs(owner, binding.runId)) : null };
+      const header = await stepRead().run(client, args);
+      return { header, scheduledRun: header ? await runRead().run(client, runArgs(owner, binding.runId)) : null };
     });
     if (!header) throw new TypeError('Unknown native shelf maintenance step');
     const cursor = cursorOf(header);
@@ -818,7 +901,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
             denied: () => new GrantDeniedError(),
             async prepare() {
               // An already advanced step must reach Core replay without a fresh source dependency.
-              const current = await withConnection(pool, (c) => runRead.run(c, runArgs(owner, binding.runId)));
+              const current = await withConnection(pool, (c) => runRead().run(c, runArgs(owner, binding.runId)));
               if (
                 current &&
                 !current.cancelled &&
@@ -830,13 +913,13 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
                 unavailable(owner);
             },
             async authorize(tx) {
-              const current = await runRead.run(tx, runArgs(owner, binding.runId));
+              const current = await runRead().run(tx, runArgs(owner, binding.runId));
               if (!current) throw new GrantDeniedError();
               if (current.kind === 'purge') {
                 if (!(await scope.run(tx, ownerArgs(owner)))) throw new GrantDeniedError();
               } else await shareShelfAccount(tx, owner.accountId);
-              const gate = await gateLock.run(tx, ownerArgs(owner));
-              const run = await runLock.run(tx, runArgs(owner, binding.runId));
+              const gate = await gateLock().run(tx, ownerArgs(owner));
+              const run = await runLock().run(tx, runArgs(owner, binding.runId));
               if (
                 !gate ||
                 !run ||
@@ -865,7 +948,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
             run.buildGeneration !== header.buildGeneration
           )
             unavailable(owner);
-          if (header.inputIdentity === null && !(await stepBind.run(tx, { ...args, identity: commitment as never })))
+          if (header.inputIdentity === null && !(await stepBind().run(tx, { ...args, identity: commitment as never })))
             unavailable(owner);
           let phase = run.phase as ShelfMaintenancePhase;
           let nextCursor: ShelfMaintenanceCursor = cursor;
@@ -909,7 +992,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
               } else {
                 const history = await readMaintenanceHistoryPage(tx, { ...owner, sessionId: parent, after: ordinal });
                 if (!history) throw new Error('Fenced shelf history parent disappeared');
-                await sessionScratch.run(tx, {
+                await sessionScratch().run(tx, {
                   ...runArgs(owner, binding.runId),
                   session_id: parent,
                   time: history.lastChangedAt,
@@ -917,7 +1000,10 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
                 nextCursor = history.complete ? [parent, null, 0] : [cursor[0] ?? null, parent, history.after];
               }
             } else if (phase === 'sessions' || phase === 'head-inputs' || phase === 'heads') {
-              const rows = await { sessions, 'head-inputs': headInputs, heads }[phase].run(tx, query);
+              const rows = await { sessions: sessions(), 'head-inputs': headInputs(), heads: heads() }[phase].run(
+                tx,
+                query,
+              );
               const last = rows
                 .map((r) => r.id)
                 .sort()
@@ -925,10 +1011,10 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
               complete = rows.length < 100;
               nextCursor = last ? [last] : cursor;
             } else if (phase === 'entries') {
-              const rows = await entryBackfill.run(tx, { ...ownerArgs(owner), after });
+              const rows = await entryBackfill().run(tx, { ...ownerArgs(owner), after });
               for (const row of rows)
                 if (row.incarnationId === null) {
-                  const stamped = await stampIncarnation.run(tx, {
+                  const stamped = await stampIncarnation().run(tx, {
                     ...ownerArgs(owner),
                     subject_id: row.subjectId,
                     revision: row.revision,
@@ -948,7 +1034,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
               if (typeInput === null) complete = true;
               else {
                 const source = typeInput.source;
-                const current = await entries.run(tx, { ...ownerArgs(owner), after });
+                const current = await entries().run(tx, { ...ownerArgs(owner), after });
                 if (
                   !current ||
                   current.subjectId !== source.subjectId ||
@@ -957,7 +1043,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
                 )
                   unavailable(owner);
                 if (typeInput.refresh) {
-                  await sourceReset.run(tx, { ...runArgs(owner, run.runId), subject_id: source.subjectId });
+                  await sourceReset().run(tx, { ...runArgs(owner, run.runId), subject_id: source.subjectId });
                 } else {
                   const capability = Object.freeze({
                     owner,
@@ -978,9 +1064,9 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
                       reservation_id: result.done ? null : result.reservation.reservationId,
                       type_id: result.done ? result.typeId : null,
                     };
-                    if (typeInput.saved) await sourceProgress.run(tx, saved);
+                    if (typeInput.saved) await sourceProgress().run(tx, saved);
                     else
-                      await sourceSave.run(tx, {
+                      await sourceSave().run(tx, {
                         ...saved,
                         incarnation_id: source.incarnationId,
                         transaction_id: source.transactionId,
@@ -992,7 +1078,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
                         origin_identity: source.originIdentity as never,
                       });
                     if (result.done) {
-                      const attached = await sourceAttach.run(tx, {
+                      const attached = await sourceAttach().run(tx, {
                         ...ownerArgs(owner),
                         subject_id: source.subjectId,
                         incarnation_id: source.incarnationId,
@@ -1012,7 +1098,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
                 }
               }
             } else if (phase === 'count-entries' || phase === 'count-collections') {
-              const rows = await (phase === 'count-entries' ? countEntries : countCollections).run(tx, {
+              const rows = await (phase === 'count-entries' ? countEntries() : countCollections()).run(tx, {
                 ...ownerArgs(owner),
                 after,
                 generation: build,
@@ -1020,7 +1106,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
               complete = rows.length < 100;
               nextCursor = rows.at(-1) ? [rows.at(-1)!.id] : cursor;
             } else if (phase === 'validate') {
-              const row = await validate.run(tx, { ...ownerArgs(owner), after });
+              const row = await validate().run(tx, { ...ownerArgs(owner), after });
               if (run.kind === 'backfill') {
                 if (typeInput === undefined) unavailable(owner);
                 if (typeInput === null) {
@@ -1029,7 +1115,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
                 } else {
                   if (!row || row.id !== typeInput.source.subjectId) unavailable(owner);
                   if (typeInput.refresh) {
-                    await sourceReset.run(tx, { ...runArgs(owner, run.runId), subject_id: row.id });
+                    await sourceReset().run(tx, { ...runArgs(owner, run.runId), subject_id: row.id });
                     // Discard this private count build. The changed item is refreshed,
                     // then counts and validation restart into a new empty generation.
                     run.buildGeneration = newId(owner.route);
@@ -1054,7 +1140,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
             } else if (phase === 'retire-counts') {
               if (gate.activeGeneration !== build) unavailable(owner);
               const sub = typeof cursor[0] === 'number' ? cursor[0] : 0;
-              const rows = await retireCounts.run(tx, { ...ownerArgs(owner), generation: build, before: sub === 0 });
+              const rows = await retireCounts().run(tx, { ...ownerArgs(owner), generation: build, before: sub === 0 });
               complete = sub === 1 && rows.length < 100;
               nextCursor = [sub + (rows.length < 100 ? 1 : 0)];
             } else if (phase === 'retire-reservations') {
@@ -1062,8 +1148,8 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
               const sub = typeof cursor[0] === 'number' ? cursor[0] : 0;
               const rows =
                 sub < 2
-                  ? await retireReservations.run(tx, { ...ownerArgs(owner), generation: build, before: sub === 0 })
-                  : await [scratchSessions, scratchHeads, scratchSources][sub - 2]!.run(tx, ownerArgs(owner));
+                  ? await retireReservations().run(tx, { ...ownerArgs(owner), generation: build, before: sub === 0 })
+                  : await [scratchSessions(), scratchHeads(), scratchSources()][sub - 2]!.run(tx, ownerArgs(owner));
               complete = sub === 4 && rows.length < 100;
               nextCursor = [sub + (rows.length < 100 ? 1 : 0)];
             } else throw new Error(`Invalid native shelf phase: ${phase}`);
@@ -1092,7 +1178,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
           validateShelfMaintenanceCursor(nextCursor);
           const nextSequence = BigInt(binding.sequence) + 1n;
           const segment = Number(nextSequence / 100n);
-          const updated = await advance.run(tx, {
+          const updated = await advance().run(tx, {
             ...args,
             next_epoch: BigInt(run.epoch),
             segment,
@@ -1101,7 +1187,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
             build_generation: run.buildGeneration,
           });
           if (!updated) unavailable(owner);
-          await stepSave.run(tx, runArgs(owner, binding.runId));
+          await stepSave().run(tx, runArgs(owner, binding.runId));
           const next = terminal
             ? null
             : { ...binding, epoch: BigInt(run.epoch).toString(), sequence: nextSequence.toString(), segment };
@@ -1123,7 +1209,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
       // A concurrent winner may have captured another current observation. Its
       // immutable native header, never that losing observation, defines replay.
       if (
-        retry < SHELF_MAINTENANCE_OPERATIONS.page.conflictReconciliations &&
+        retry < SHELF_MAINTENANCE_OPERATIONS().page.conflictReconciliations &&
         error instanceof IdempotencyConflictError
       )
         return executePage(binding, retry + 1, deadline);
@@ -1153,7 +1239,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
     const after = input.after ? Object.freeze([...input.after] as const) : null;
     const limit = input.limit;
     const rows = await withConnection(pool, (c) =>
-      runnable.run(c, {
+      runnable().run(c, {
         after_route: after?.[0] ?? -1,
         after_account: after?.[1] ?? EMPTY_SHELF_GENERATION,
         after_run: after?.[2] ?? EMPTY_SHELF_GENERATION,
@@ -1186,7 +1272,7 @@ export function createShelfMaintenanceOps(dependencies: ShelfMaintenanceDependen
       await command(
         { partition: partitionOf(owner.route), deadline: workStepDeadline(), clock },
         async (tx) => {
-          await ack.run(tx, {
+          await ack().run(tx, {
             ...runArgs(owner, row.runId),
             epoch: BigInt(row.epoch),
             sequence: BigInt(row.sequence),
@@ -1255,15 +1341,15 @@ export async function registerShelfMaintenanceWork(
       let binding: ShelfMaintenanceBinding | null = original;
       for (
         let n = 0;
-        n < SHELF_MAINTENANCE_OPERATIONS.segment.pages && binding && binding.segment === original.segment;
+        n < SHELF_MAINTENANCE_OPERATIONS().segment.pages && binding && binding.segment === original.segment;
         n++
       ) {
         const locator: ShelfMaintenanceBinding = binding;
-        binding = (await SHELF_MAINTENANCE_OPERATIONS.segment.step(locator, () => page(locator))).next;
+        binding = (await SHELF_MAINTENANCE_OPERATIONS().segment.step(locator, () => page(locator))).next;
       }
       if (binding) {
         const successor = binding;
-        await SHELF_MAINTENANCE_OPERATIONS.segment.step(successor, () => continuation(successor));
+        await SHELF_MAINTENANCE_OPERATIONS().segment.step(successor, () => continuation(successor));
       }
     },
     { name: SHELF_MAINTENANCE_WORKFLOW },
@@ -1297,13 +1383,13 @@ export async function registerShelfMaintenanceWork(
   const sweep = async (input: Recovery) => {
     const original = Object.freeze({ ...input, after: input.after ? Object.freeze([...input.after] as const) : null });
     let after = original.after;
-    for (let n = 0; n < SHELF_MAINTENANCE_OPERATIONS.segment.pages; n++) {
+    for (let n = 0; n < SHELF_MAINTENANCE_OPERATIONS().segment.pages; n++) {
       const cursor = after;
-      after = (await SHELF_MAINTENANCE_OPERATIONS.segment.step(cursor, () => recover(cursor))).next;
+      after = (await SHELF_MAINTENANCE_OPERATIONS().segment.step(cursor, () => recover(cursor))).next;
       if (!after) return;
     }
     const successor = Object.freeze({ ...original, segment: original.segment + 1, after });
-    await SHELF_MAINTENANCE_OPERATIONS.segment.step(successor, () => next(successor));
+    await SHELF_MAINTENANCE_OPERATIONS().segment.step(successor, () => next(successor));
   };
   DBOS.registerWorkflow(sweep, { name: 'library.shelfMaintenanceRecoverySegment' });
   DBOS.registerWorkflow(() => sweep({ root: DBOS.workflowID!, segment: 0, after: null }), {

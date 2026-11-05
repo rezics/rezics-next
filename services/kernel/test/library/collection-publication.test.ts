@@ -337,9 +337,9 @@ test('closed explicit intent rejects omission, duplicates and manufactured proof
 }, 120_000);
 
 test('selected-publication command bounds stay distinct from the activated public output original command', () => {
-  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING.engineRequests).toBe(0);
-  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING.nativeRows).not.toBe(COLLECTION_PUBLICATION_STEP_CEILING.nativeRows);
-  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING.bytes).toBeLessThan(COLLECTION_PUBLICATION_STEP_CEILING.bytes);
+  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING().engineRequests).toBe(0);
+  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING().nativeRows).not.toBe(COLLECTION_PUBLICATION_STEP_CEILING().nativeRows);
+  expect(NATIVE_PUBLIC_OUTPUT_COMMAND_CEILING().bytes).toBeLessThan(COLLECTION_PUBLICATION_STEP_CEILING().bytes);
 });
 
 test('a saved selection retains its accepted release through fresh publication and exact receipt replay after activation changes', async () => {

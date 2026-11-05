@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { bodyBytes } from '../http/body.ts';
 import { customMethod } from '../http/custom-method.ts';
@@ -16,42 +17,48 @@ const id = t.String({ format: 'uuid' });
 const params = t.Object({ id }, closed);
 const reviewParams = t.Object({ id, reviewId: id }, closed);
 const unitParams = t.Object({ id, sessionId: id }, closed);
-const reviewBody = t.Object(
-  {
-    sessionId: id,
-    subjectId: id,
-    mode: t.Union([t.Literal('scalar_amount'), t.Literal('cursor_position'), t.Literal('completed_units')]),
-    unit: t.String({ minLength: 1, maxLength: 128 }),
-    additionalMeasures: t.Array(
-      t.Object(
-        {
-          sourceUnit: t.String({ minLength: 1, maxLength: 128 }),
-          unit: t.String({ minLength: 1, maxLength: 128 }),
-        },
-        closed,
-      ),
-      { maxItems: MAX_PROGRESS_MEASURES - 1 },
+function reviewBody() {
+  return memoizedValue(reviewBody, () =>
+    t.Object(
+      {
+        sessionId: id,
+        subjectId: id,
+        mode: t.Union([t.Literal('scalar_amount'), t.Literal('cursor_position'), t.Literal('completed_units')]),
+        unit: t.String({ minLength: 1, maxLength: 128 }),
+        additionalMeasures: t.Array(
+          t.Object(
+            {
+              sourceUnit: t.String({ minLength: 1, maxLength: 128 }),
+              unit: t.String({ minLength: 1, maxLength: 128 }),
+            },
+            closed,
+          ),
+          { maxItems: MAX_PROGRESS_MEASURES - 1 },
+        ),
+        unitIds: t.Array(t.String({ minLength: 1, maxLength: 128 }), { maxItems: MAX_EPISODE_IDS }),
+      },
+      closed,
     ),
-    unitIds: t.Array(t.String({ minLength: 1, maxLength: 128 }), { maxItems: MAX_EPISODE_IDS }),
-  },
-  closed,
-);
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  413: problemSchema('content_too_large'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema(
-    'dependency_unavailable',
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-  ),
-};
+  );
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    413: problemSchema('content_too_large'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema(
+      'dependency_unavailable',
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+    ),
+  }));
+}
 function detail(name: string, write = false, progressAction?: 'progress_session:read' | 'progress_session:create') {
   return {
     operationId: `library_copy_archive.${name}`,
@@ -66,7 +73,7 @@ function detail(name: string, write = false, progressAction?: 'progress_session:
     'x-exposure': progressAction ? 'gate:reading_progress' : 'gate:personal_library',
     ...(progressAction ? { 'x-required-exposures': ['gate:personal_library', 'gate:reading_progress'] } : {}),
     'x-authority-anchor': 'own-account',
-    'x-authority-resource-types': copyArchiveAuthorityTypes,
+    'x-authority-resource-types': copyArchiveAuthorityTypes(),
     security: [{ bearerAuth: [] }],
     ...(write ? { 'x-rate-limit': defineRateLimit({ family: 'write', units: 1 }) } : {}),
   };
@@ -92,7 +99,7 @@ export function copyArchiveRoutes(
             { uploadId: id, holdings: t.Integer(), progressRecords: t.Integer(), expiresAt: t.String() },
             closed,
           ),
-          ...failures,
+          ...failures(),
         },
         detail: {
           ...detail('upload', true),
@@ -132,7 +139,7 @@ export function copyArchiveRoutes(
           { after: t.Optional(t.Integer({ minimum: -1, maximum: COPY_ARCHIVE_LIMITS.records - 1 })) },
           closed,
         ),
-        response: { 200: t.Unsafe<Page>(t.Any()), ...failures },
+        response: { 200: t.Unsafe<Page>(t.Any()), ...failures() },
         detail: detail('page'),
       },
       async ({ actor, params, query, admission, job, set }) => {
@@ -148,7 +155,7 @@ export function copyArchiveRoutes(
           { after: t.Optional(t.Integer({ minimum: -1, maximum: COPY_ARCHIVE_LIMITS.records - 1 })) },
           closed,
         ),
-        response: { 200: t.Unsafe<ProgressPage>(t.Any()), ...failures },
+        response: { 200: t.Unsafe<ProgressPage>(t.Any()), ...failures() },
         detail: detail('progress_page', false, 'progress_session:read'),
       },
       async ({ actor, params, query, admission, job, set }) => {
@@ -166,7 +173,7 @@ export function copyArchiveRoutes(
           { after: t.Optional(t.Integer({ minimum: -1, maximum: COPY_ARCHIVE_LIMITS.records - 1 })) },
           closed,
         ),
-        response: { 200: t.Unsafe<ProgressUnitPage>(t.Any()), ...failures },
+        response: { 200: t.Unsafe<ProgressUnitPage>(t.Any()), ...failures() },
         detail: detail('progress_units', false, 'progress_session:read'),
       },
       async ({ actor, params, query, admission, job, set }) => {
@@ -181,8 +188,8 @@ export function copyArchiveRoutes(
       {
         params,
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }),
-        body: reviewBody,
-        response: { 200: t.Unsafe<Review>(t.Any()), ...failures },
+        body: reviewBody(),
+        response: { 200: t.Unsafe<Review>(t.Any()), ...failures() },
         detail: detail('progress_review', true, 'progress_session:read'),
       },
       async ({ actor, params, body, headers, admission, job, set }) => {
@@ -197,7 +204,7 @@ export function copyArchiveRoutes(
       {
         params: reviewParams,
         headers: t.Object({ [IDEMPOTENCY_HEADER]: t.String() }),
-        response: { 200: t.Unsafe<Application>(t.Any()), ...failures },
+        response: { 200: t.Unsafe<Application>(t.Any()), ...failures() },
         detail: detail('progress_apply', true, 'progress_session:create'),
       },
       async ({ actor, params, headers, admission, job, session, set }) => {
@@ -218,7 +225,7 @@ export function copyArchiveRoutes(
       '/v1/libraryCopyArchives/:id/progressReviews/:reviewId',
       {
         params: reviewParams,
-        response: { 200: t.Unsafe<Result>(t.Any()), ...failures },
+        response: { 200: t.Unsafe<Result>(t.Any()), ...failures() },
         detail: detail('progress_result', false, 'progress_session:read'),
       },
       async ({ actor, params, admission, job, set }) => {
@@ -232,7 +239,7 @@ export function copyArchiveRoutes(
       customMethod('/v1/libraryCopyArchives/:id', 'cancel'),
       {
         params,
-        response: { 200: t.Object({ uploadId: id, cancelled: t.Literal(true) }, closed), ...failures },
+        response: { 200: t.Object({ uploadId: id, cancelled: t.Literal(true) }, closed), ...failures() },
         detail: detail('cancel', true),
       },
       async ({ actor, params, admission, job, set }) => {
@@ -244,7 +251,10 @@ export function copyArchiveRoutes(
       '/v1/libraryCopyArchives/:id',
       {
         params,
-        response: { 200: t.Object({ uploadId: id, removed: t.Integer(), complete: t.Boolean() }, closed), ...failures },
+        response: {
+          200: t.Object({ uploadId: id, removed: t.Integer(), complete: t.Boolean() }, closed),
+          ...failures(),
+        },
         detail: detail('remove', true),
       },
       async ({ actor, params, admission, job, set }) => {

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import {
   publishedSpace as published,
   publishedRealm,
@@ -234,9 +235,17 @@ const claimReviewQuery = t.Object(
   closed,
 );
 
-const spaceResponse = t.Object({ space }, closed);
-const spaceHomeResponse = t.Object({ space, community: t.Union([CommunityPresentationSchema, t.Null()]) }, closed);
-const realmResponse = t.Object({ realm }, closed);
+function spaceResponse() {
+  return memoizedValue(spaceResponse, () => t.Object({ space }, closed));
+}
+function spaceHomeResponse() {
+  return memoizedValue(spaceHomeResponse, () =>
+    t.Object({ space, community: t.Union([CommunityPresentationSchema(), t.Null()]) }, closed),
+  );
+}
+function realmResponse() {
+  return memoizedValue(realmResponse, () => t.Object({ realm: realm() }, closed));
+}
 const realmClaimStatus = t.Object(
   {
     realmId: id,
@@ -361,28 +370,36 @@ const restoreContainerInput = t.Object({ expectedVersion: lifecycleVersion }, cl
 const createInput = t.Object({ title, summary: t.Optional(summary) }, closed);
 const updateInput = t.Object({ title: t.Optional(title), summary: t.Optional(summary) }, closed);
 const addressInput = t.Object({ address: t.String({ minLength: 1, maxLength: 64 }) }, closed);
-const createRealmInput = t.Object(
-  {
-    spaceId: id,
-    title,
-    summary: t.Optional(summary),
-    visibility: t.Union([t.Literal('public'), t.Literal('protected')]),
-    contextId: id,
-    votes: t.Optional(votes),
-  },
-  closed,
-);
-const updateRealmInput = t.Object(
-  {
-    presentation: t.Optional(RealmPresentationSchema),
-    title: t.Optional(title),
-    summary: t.Optional(summary),
-    visibility: t.Optional(t.Union([t.Literal('public'), t.Literal('protected')])),
-    contextId: t.Optional(id),
-    votes: t.Optional(votes),
-  },
-  closed,
-);
+function createRealmInput() {
+  return memoizedValue(createRealmInput, () =>
+    t.Object(
+      {
+        spaceId: id,
+        title,
+        summary: t.Optional(summary),
+        visibility: t.Union([t.Literal('public'), t.Literal('protected')]),
+        contextId: id,
+        votes: t.Optional(votes),
+      },
+      closed,
+    ),
+  );
+}
+function updateRealmInput() {
+  return memoizedValue(updateRealmInput, () =>
+    t.Object(
+      {
+        presentation: t.Optional(RealmPresentationSchema),
+        title: t.Optional(title),
+        summary: t.Optional(summary),
+        visibility: t.Optional(t.Union([t.Literal('public'), t.Literal('protected')])),
+        contextId: t.Optional(id),
+        votes: t.Optional(votes),
+      },
+      closed,
+    ),
+  );
+}
 
 /** Standard-schema validation keeps unknown fields instead of removing them. */
 function strict<S extends TSchema>(schema: S) {
@@ -411,7 +428,9 @@ const banResponse = t.Object(
   { ban: t.Object({ ...banRecord.properties, realmId: id, workflowId: t.Union([t.String(), t.Null()]) }, closed) },
   closed,
 );
-const banPage = banReviewPageSchema;
+function banPage() {
+  return memoizedValue(banPage, () => banReviewPageSchema);
+}
 const memberIdentity = t.Union([
   t.Object(
     {
@@ -514,200 +533,247 @@ const memberPageViewer = t.Union([
   t.Object({ accountId: id, authority: t.String({ maxLength: 64 }) }, closed),
   t.Null(),
 ]);
-const memberPageResponse = t.Object(
-  {
-    realmId: id,
-    realmLabel: t.String({ maxLength: 4096 }),
-    pageBound: t.Literal(REALM_MEMBER_PAGE_SIZE),
-    state: t.Union([t.Literal('ready'), t.Literal('preparing')]),
-    viewer: memberPageViewer,
-    items: t.Array(memberRow, { maxItems: 20 }),
-    next: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
-    selected: t.Union([selectedMember, t.Null()]),
-  },
-  {
-    ...closed,
-    examples: [
+function memberPageResponse() {
+  return memoizedValue(memberPageResponse, () =>
+    t.Object(
       {
-        realmId: '00000000-0000-0000-0000-000000000010',
-        realmLabel: 'Members Realm',
-        pageBound: REALM_MEMBER_PAGE_SIZE,
-        state: 'ready',
-        viewer: {
-          accountId: '00000000-0000-0000-0000-000000000010',
-          authority: 'mra1.0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-        },
-        items: [
+        realmId: id,
+        realmLabel: t.String({ maxLength: 4096 }),
+        pageBound: t.Literal(REALM_MEMBER_PAGE_SIZE),
+        state: t.Union([t.Literal('ready'), t.Literal('preparing')]),
+        viewer: memberPageViewer,
+        items: t.Array(memberRow, { maxItems: 20 }),
+        next: t.Union([t.String({ maxLength: 4096 }), t.Null()]),
+        selected: t.Union([selectedMember, t.Null()]),
+      },
+      {
+        ...closed,
+        examples: [
           {
-            accountId: '00000000-0000-0000-0000-000000000020',
-            episode: 'mep1.0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-            membership: 'member',
-            identity: {
-              id: '00000000-0000-0000-0000-000000000020',
-              kind: 'actor',
-              state: 'active',
-              handle: 'member',
-              displayName: null,
+            realmId: '00000000-0000-0000-0000-000000000010',
+            realmLabel: 'Members Realm',
+            pageBound: REALM_MEMBER_PAGE_SIZE,
+            state: 'ready',
+            viewer: {
+              accountId: '00000000-0000-0000-0000-000000000010',
+              authority: 'mra1.0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
             },
-            displayName: 'Member',
-            banState: 'clear',
-            actions: {
-              addMember: { state: 'prohibited', reason: 'already_member' },
-              ban: {
-                state: 'available',
-                method: 'PUT',
-                path: '/v1/realms/00000000-0000-0000-0000-000000000010/bans/00000000-0000-0000-0000-000000000020',
-                body: { reason: '' },
-                expectedStatus: 200,
-                outcome: 'Ban commits; membership removal may still be pending.',
+            items: [
+              {
+                accountId: '00000000-0000-0000-0000-000000000020',
+                episode: 'mep1.0.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+                membership: 'member',
+                identity: {
+                  id: '00000000-0000-0000-0000-000000000020',
+                  kind: 'actor',
+                  state: 'active',
+                  handle: 'member',
+                  displayName: null,
+                },
+                displayName: 'Member',
+                banState: 'clear',
+                actions: {
+                  addMember: { state: 'prohibited', reason: 'already_member' },
+                  ban: {
+                    state: 'available',
+                    method: 'PUT',
+                    path: '/v1/realms/00000000-0000-0000-0000-000000000010/bans/00000000-0000-0000-0000-000000000020',
+                    body: { reason: '' },
+                    expectedStatus: 200,
+                    outcome: 'Ban commits; membership removal may still be pending.',
+                  },
+                  unban: { state: 'prohibited', reason: 'not_banned' },
+                  removeMember: { state: 'unavailable', reason: 'no_mounted_method' },
+                  reviseRole: { state: 'unavailable', reason: 'no_mounted_method' },
+                },
               },
-              unban: { state: 'prohibited', reason: 'not_banned' },
-              removeMember: { state: 'unavailable', reason: 'no_mounted_method' },
-              reviseRole: { state: 'unavailable', reason: 'no_mounted_method' },
-            },
+            ],
+            next: null,
+            selected: null,
+          },
+          {
+            realmId: '00000000-0000-0000-0000-000000000010',
+            realmLabel: 'Members Realm',
+            pageBound: REALM_MEMBER_PAGE_SIZE,
+            state: 'preparing',
+            viewer: null,
+            items: [],
+            next: null,
+            selected: null,
           },
         ],
-        next: null,
-        selected: null,
+      },
+    ),
+  );
+}
+function memberPageNotFound() {
+  return memoizedValue(memberPageNotFound, () =>
+    t.Object(
+      { ...problemSchema('not_found').properties },
+      {
+        additionalProperties: false,
+        examples: [
+          {
+            type: 'https://rezics.com/problems/not_found',
+            title: 'Not Found',
+            status: 404,
+            code: 'not_found',
+            retryable: false,
+            effect_status: 'not_applicable',
+            request_id: '00000000-0000-0000-0000-000000000001',
+          },
+          {
+            type: 'https://rezics.com/problems/not_found',
+            title: 'Not Found',
+            status: 404,
+            code: 'not_found',
+            retryable: false,
+            effect_status: 'not_applicable',
+            request_id: '00000000-0000-0000-0000-000000000002',
+          },
+        ],
+      },
+    ),
+  );
+}
+function memberPageForbidden() {
+  return memoizedValue(memberPageForbidden, () =>
+    t.Object(
+      { ...problemSchema('forbidden').properties },
+      {
+        additionalProperties: false,
+        examples: [
+          {
+            type: 'https://rezics.com/problems/forbidden',
+            title: 'Forbidden',
+            status: 403,
+            code: 'forbidden',
+            retryable: false,
+            effect_status: 'not_applicable',
+            request_id: '00000000-0000-0000-0000-000000000003',
+          },
+        ],
+      },
+    ),
+  );
+}
+function memberPageUnavailable() {
+  return memoizedValue(memberPageUnavailable, () =>
+    t.Object(
+      {
+        ...problemSchema(
+          'overloaded',
+          'deadline_exceeded',
+          'partition_unavailable',
+          'transaction_retry_exhausted',
+          'dependency_unavailable',
+        ).properties,
       },
       {
-        realmId: '00000000-0000-0000-0000-000000000010',
-        realmLabel: 'Members Realm',
-        pageBound: REALM_MEMBER_PAGE_SIZE,
-        state: 'preparing',
-        viewer: null,
-        items: [],
-        next: null,
-        selected: null,
+        additionalProperties: false,
+        examples: [
+          {
+            type: 'https://rezics.com/problems/dependency_unavailable',
+            title: 'Dependency Unavailable',
+            status: 503,
+            code: 'dependency_unavailable',
+            retryable: true,
+            effect_status: 'not_applicable',
+            request_id: '00000000-0000-0000-0000-000000000004',
+          },
+        ],
       },
-    ],
-  },
-);
-const memberPageNotFound = t.Object(
-  { ...problemSchema('not_found').properties },
-  {
-    additionalProperties: false,
-    examples: [
-      {
-        type: 'https://rezics.com/problems/not_found',
-        title: 'Not Found',
-        status: 404,
-        code: 'not_found',
-        retryable: false,
-        effect_status: 'not_applicable',
-        request_id: '00000000-0000-0000-0000-000000000001',
-      },
-      {
-        type: 'https://rezics.com/problems/not_found',
-        title: 'Not Found',
-        status: 404,
-        code: 'not_found',
-        retryable: false,
-        effect_status: 'not_applicable',
-        request_id: '00000000-0000-0000-0000-000000000002',
-      },
-    ],
-  },
-);
-const memberPageForbidden = t.Object(
-  { ...problemSchema('forbidden').properties },
-  {
-    additionalProperties: false,
-    examples: [
-      {
-        type: 'https://rezics.com/problems/forbidden',
-        title: 'Forbidden',
-        status: 403,
-        code: 'forbidden',
-        retryable: false,
-        effect_status: 'not_applicable',
-        request_id: '00000000-0000-0000-0000-000000000003',
-      },
-    ],
-  },
-);
-const memberPageUnavailable = t.Object(
-  {
-    ...problemSchema(
+    ),
+  );
+}
+function sitemapQuery() {
+  return memoizedValue(sitemapQuery, () => strict(SitemapQuerySchema));
+}
+function sitemapRealmPage() {
+  return memoizedValue(sitemapRealmPage, () => strict(SitemapRealmPageSchema()));
+}
+function sitemapSpacePage() {
+  return memoizedValue(sitemapSpacePage, () => strict(SitemapSpacePageSchema()));
+}
+function banQuery() {
+  return memoizedValue(banQuery, () => banReviewPageQuerySchema);
+}
+
+function readFailures() {
+  return memoizedValue(readFailures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    404: problemSchema('not_found'),
+    500: problemSchema('internal_error'),
+    503: problemSchema(
       'overloaded',
       'deadline_exceeded',
       'partition_unavailable',
       'transaction_retry_exhausted',
       'dependency_unavailable',
-    ).properties,
-  },
-  {
-    additionalProperties: false,
-    examples: [
-      {
-        type: 'https://rezics.com/problems/dependency_unavailable',
-        title: 'Dependency Unavailable',
-        status: 503,
-        code: 'dependency_unavailable',
-        retryable: true,
-        effect_status: 'not_applicable',
-        request_id: '00000000-0000-0000-0000-000000000004',
-      },
-    ],
-  },
-);
-const sitemapQuery = strict(SitemapQuerySchema);
-const sitemapRealmPage = strict(SitemapRealmPageSchema);
-const sitemapSpacePage = strict(SitemapSpacePageSchema);
-const banQuery = banReviewPageQuerySchema;
-
-const readFailures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  404: problemSchema('not_found'),
-  500: problemSchema('internal_error'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-  ),
-};
-const writeFailures = {
-  ...readFailures,
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  422: problemSchema('idempotency_conflict', 'too_many_events'),
-  429: problemSchema('rate_limited'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'dependency_unavailable',
-    'rate_limit_unavailable',
-  ),
-};
+    ),
+  }));
+}
+function writeFailures() {
+  return memoizedValue(writeFailures, () => ({
+    ...readFailures(),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    422: problemSchema('idempotency_conflict', 'too_many_events'),
+    429: problemSchema('rate_limited'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'dependency_unavailable',
+      'rate_limit_unavailable',
+    ),
+  }));
+}
 // Bind only the original problem catalogue. Until Access delivers its discriminator,
 // its native refusal stays generic; Community never manufactures the specific error.
-const realmLeaveConflict = problemSchema(
-  'conflict',
-  ...Object.keys(PROBLEMS).filter((code): code is ProblemCode => code === 'realm_last_owner'),
-);
-const sessionHeader = { [SESSION_HEADER]: t.String() };
-const commandHeaders = t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true });
-const publicationHeaders = t.Object(
-  { [IDEMPOTENCY_HEADER]: t.String(), 'if-match': t.Optional(t.String()) },
-  { additionalProperties: true },
-);
-const updateHeaders = t.Object(
-  { [IDEMPOTENCY_HEADER]: t.String(), 'if-match': t.String() },
-  { additionalProperties: true },
-);
+function realmLeaveConflict() {
+  return memoizedValue(realmLeaveConflict, () =>
+    problemSchema(
+      'conflict',
+      ...Object.keys(PROBLEMS).filter((code): code is ProblemCode => code === 'realm_last_owner'),
+    ),
+  );
+}
+function sessionHeader() {
+  return memoizedValue(sessionHeader, () => ({ [SESSION_HEADER]: t.String() }));
+}
+function commandHeaders() {
+  return memoizedValue(commandHeaders, () =>
+    t.Object({ [IDEMPOTENCY_HEADER]: t.String() }, { additionalProperties: true }),
+  );
+}
+function publicationHeaders() {
+  return memoizedValue(publicationHeaders, () =>
+    t.Object({ [IDEMPOTENCY_HEADER]: t.String(), 'if-match': t.Optional(t.String()) }, { additionalProperties: true }),
+  );
+}
+function updateHeaders() {
+  return memoizedValue(updateHeaders, () =>
+    t.Object({ [IDEMPOTENCY_HEADER]: t.String(), 'if-match': t.String() }, { additionalProperties: true }),
+  );
+}
 const readSecurity = [{ bearerAuth: [] }, {}];
 const writeSecurity = [{ bearerAuth: [] }];
-const writeRate = defineRateLimit({ family: 'write', units: 1 });
+function writeRate() {
+  return memoizedValue(writeRate, () => defineRateLimit({ family: 'write', units: 1 }));
+}
 const params = t.Object({ spaceId: t.String() }, closed);
 const addressParams = t.Object({ address: t.String() }, closed);
 const realmParams = t.Object({ realmId: t.String() }, closed);
-const sitemapFailures = { ...readFailures, 400: problemSchema('invalid_request', 'invalid_cursor') };
+function sitemapFailures() {
+  return memoizedValue(sitemapFailures, () => ({
+    ...readFailures(),
+    400: problemSchema('invalid_request', 'invalid_cursor'),
+  }));
+}
 const SITEMAP_DESCRIPTION = (kind: 'Realms' | 'Spaces') =>
   `Keyset feed of the public ${kind} for server-to-server sitemaps, evaluated as an anonymous reader. Each page ` +
   `examines at most 4 × limit candidates and may return fewer than limit items. Follow next until it is null.`;
@@ -932,7 +998,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/spaces/:spaceId/lifecycle',
       {
         params: t.Object({ spaceId: id }, closed),
-        response: { 200: strict(lifecycleResponse), ...readFailures, 403: problemSchema('forbidden') },
+        response: { 200: strict(lifecycleResponse), ...readFailures(), 403: problemSchema('forbidden') },
         detail: {
           operationId: 'space.lifecycle',
           'x-exposure': 'public',
@@ -958,11 +1024,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/spaces/:spaceId/removal',
       {
         params: t.Object({ spaceId: id }, closed),
-        headers: updateHeaders,
+        headers: updateHeaders(),
         body: strict(removeContainerInput),
         response: {
-          200: withHeaders(strict(lifecycleResult), sessionHeader),
-          ...writeFailures,
+          200: withHeaders(strict(lifecycleResult), sessionHeader()),
+          ...writeFailures(),
           412: problemSchema('precondition_failed'),
         },
         detail: {
@@ -970,7 +1036,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'space:manage',
           'x-resource-types': ['community.space'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1005,11 +1071,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/spaces/:spaceId/restoration',
       {
         params: t.Object({ spaceId: id }, closed),
-        headers: updateHeaders,
+        headers: updateHeaders(),
         body: strict(restoreContainerInput),
         response: {
-          200: withHeaders(strict(lifecycleResult), sessionHeader),
-          ...writeFailures,
+          200: withHeaders(strict(lifecycleResult), sessionHeader()),
+          ...writeFailures(),
           412: problemSchema('precondition_failed'),
         },
         detail: {
@@ -1017,7 +1083,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'space:restore',
           'x-resource-types': ['community.space'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1051,7 +1117,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/lifecycle',
       {
         params: t.Object({ realmId: id }, closed),
-        response: { 200: strict(lifecycleResponse), ...readFailures, 403: problemSchema('forbidden') },
+        response: { 200: strict(lifecycleResponse), ...readFailures(), 403: problemSchema('forbidden') },
         detail: {
           operationId: 'realm.lifecycle',
           'x-exposure': 'public',
@@ -1077,11 +1143,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/removal',
       {
         params: t.Object({ realmId: id }, closed),
-        headers: updateHeaders,
+        headers: updateHeaders(),
         body: strict(removeContainerInput),
         response: {
-          200: withHeaders(strict(lifecycleResult), sessionHeader),
-          ...writeFailures,
+          200: withHeaders(strict(lifecycleResult), sessionHeader()),
+          ...writeFailures(),
           412: problemSchema('precondition_failed'),
         },
         detail: {
@@ -1089,7 +1155,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'moderation:takedown',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1124,11 +1190,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/restoration',
       {
         params: t.Object({ realmId: id }, closed),
-        headers: updateHeaders,
+        headers: updateHeaders(),
         body: strict(restoreContainerInput),
         response: {
-          200: withHeaders(strict(lifecycleResult), sessionHeader),
-          ...writeFailures,
+          200: withHeaders(strict(lifecycleResult), sessionHeader()),
+          ...writeFailures(),
           412: problemSchema('precondition_failed'),
         },
         detail: {
@@ -1136,7 +1202,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'realm:restore',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1170,8 +1236,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       {
         query: discoveryQuerySchema,
         response: {
-          200: discoveryResponseSchema,
-          ...readFailures,
+          200: discoveryResponseSchema(),
+          ...readFailures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           409: problemSchema('stale_cursor'),
         },
@@ -1210,9 +1276,9 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       {
         query: SitemapQuerySchema,
         transform: ({ query }) => {
-          if ('issues' in sitemapQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
+          if ('issues' in sitemapQuery()['~standard'].validate(query)) throw new ProblemError('invalid_request');
         },
-        response: { 200: sitemapRealmPage, ...sitemapFailures },
+        response: { 200: sitemapRealmPage(), ...sitemapFailures() },
         detail: {
           operationId: 'sitemap_realms.list',
           description: SITEMAP_DESCRIPTION('Realms'),
@@ -1237,9 +1303,9 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       {
         query: SitemapQuerySchema,
         transform: ({ query }) => {
-          if ('issues' in sitemapQuery['~standard'].validate(query)) throw new ProblemError('invalid_request');
+          if ('issues' in sitemapQuery()['~standard'].validate(query)) throw new ProblemError('invalid_request');
         },
-        response: { 200: sitemapSpacePage, ...sitemapFailures },
+        response: { 200: sitemapSpacePage(), ...sitemapFailures() },
         detail: {
           operationId: 'sitemap_spaces.list',
           description: SITEMAP_DESCRIPTION('Spaces'),
@@ -1264,7 +1330,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       {
         query: strict(ownRealmsQuerySchema),
         response: {
-          200: strict(ownRealmsResponseSchema),
+          200: strict(ownRealmsResponseSchema()),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           409: problemSchema('stale_cursor'),
           401: problemSchema('authentication_required', 'invalid_credentials'),
@@ -1301,18 +1367,18 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
     .post(
       '/v1/spaces',
       {
-        headers: commandHeaders,
+        headers: commandHeaders(),
         body: strict(createInput),
         response: {
-          201: withHeaders(strict(spaceResponse), { ...sessionHeader, location: t.String(), etag: t.String() }),
-          ...writeFailures,
+          201: withHeaders(strict(spaceResponse()), { ...sessionHeader(), location: t.String(), etag: t.String() }),
+          ...writeFailures(),
         },
         detail: {
           operationId: 'space.create',
           'x-exposure': 'public',
           'x-action': 'space:create',
           'x-resource-types': ['community.space'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1352,8 +1418,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       {
         params,
         response: {
-          200: withHeaders(strict(spaceHomeResponse), { etag: t.String() }),
-          ...readFailures,
+          200: withHeaders(strict(spaceHomeResponse()), { etag: t.String() }),
+          ...readFailures(),
         },
         detail: {
           operationId: 'space.get',
@@ -1406,11 +1472,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/spaces/:spaceId/address',
       {
         params,
-        headers: updateHeaders,
+        headers: updateHeaders(),
         body: strict(addressInput),
         response: {
-          200: withHeaders(strict(spaceResponse), { ...sessionHeader, etag: t.String() }),
-          ...writeFailures,
+          200: withHeaders(strict(spaceResponse()), { ...sessionHeader(), etag: t.String() }),
+          ...writeFailures(),
           412: problemSchema('precondition_failed'),
           409: problemSchema('conflict'),
         },
@@ -1419,7 +1485,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'space:manage',
           'x-resource-types': ['community.space'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1455,7 +1521,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         params: addressParams,
         response: {
           200: strict(t.Object({ spaceId: id }, closed)),
-          ...readFailures,
+          ...readFailures(),
         },
         detail: {
           operationId: 'space_address.resolve',
@@ -1494,11 +1560,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/spaces/:spaceId',
       {
         params,
-        headers: updateHeaders,
+        headers: updateHeaders(),
         body: strict(updateInput),
         response: {
-          200: withHeaders(strict(spaceResponse), { ...sessionHeader, etag: t.String() }),
-          ...writeFailures,
+          200: withHeaders(strict(spaceResponse()), { ...sessionHeader(), etag: t.String() }),
+          ...writeFailures(),
           412: problemSchema('precondition_failed'),
         },
         detail: {
@@ -1506,7 +1572,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'space:manage',
           'x-resource-types': ['community.space'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1544,18 +1610,18 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
     .post(
       '/v1/realms',
       {
-        headers: commandHeaders,
-        body: strict(createRealmInput),
+        headers: commandHeaders(),
+        body: strict(createRealmInput()),
         response: {
-          201: withHeaders(strict(realmResponse), { ...sessionHeader, location: t.String(), etag: t.String() }),
-          ...writeFailures,
+          201: withHeaders(strict(realmResponse()), { ...sessionHeader(), location: t.String(), etag: t.String() }),
+          ...writeFailures(),
         },
         detail: {
           operationId: 'realm.create',
           'x-exposure': 'public',
           'x-action': 'realm:create',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1598,8 +1664,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       {
         params: realmParams,
         response: {
-          200: withHeaders(strict(realmResponse), { etag: t.String() }),
-          ...readFailures,
+          200: withHeaders(strict(realmResponse()), { etag: t.String() }),
+          ...readFailures(),
         },
         detail: {
           operationId: 'realm.get',
@@ -1623,8 +1689,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/home',
       {
         params: realmParams,
-        query: strict(RealmHomeQuerySchema),
-        response: { 200: strict(RealmHomePageSchema), ...readFailures },
+        query: strict(RealmHomeQuerySchema()),
+        response: { 200: strict(RealmHomePageSchema()), ...readFailures() },
         detail: {
           operationId: 'realm.home',
           'x-exposure': 'public',
@@ -1656,8 +1722,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         params: realmParams,
         query: strict(RealmHomeBoardQuerySchema),
         response: {
-          200: strict(RealmHomeBoardPageSchema),
-          ...readFailures,
+          200: strict(RealmHomeBoardPageSchema()),
+          ...readFailures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
         },
         detail: {
@@ -1690,10 +1756,10 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       {
         params: realmParams,
         response: {
-          200: withHeaders(strict(RealmSettingsPageSchema), {
+          200: withHeaders(strict(RealmSettingsPageSchema()), {
             etag: t.String(),
           }),
-          ...readFailures,
+          ...readFailures(),
         },
         detail: {
           operationId: 'realm.settings',
@@ -1720,8 +1786,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         params: realmParams,
         query: strict(RulesAuthoringQuerySchema),
         response: {
-          200: strict(RulesAuthoringPageSchema),
-          ...readFailures,
+          200: strict(RulesAuthoringPageSchema()),
+          ...readFailures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
         },
         detail: {
@@ -1753,7 +1819,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/presentation',
       {
         params: realmParams,
-        response: { 200: strict(t.Object({ community: CommunityPresentationSchema }, closed)), ...readFailures },
+        response: { 200: strict(t.Object({ community: CommunityPresentationSchema() }, closed)), ...readFailures() },
         detail: {
           operationId: 'realm.presentation',
           'x-exposure': 'public',
@@ -1776,7 +1842,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         params: realmParams,
         response: {
           204: t.Void(),
-          ...readFailures,
+          ...readFailures(),
           403: problemSchema('forbidden'),
           429: problemSchema('rate_limited'),
           503: problemSchema(
@@ -1793,7 +1859,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'realm:participate',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1821,7 +1887,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         query: claimReviewQuery,
         response: {
           200: strict(claimReviewResponse),
-          ...readFailures,
+          ...readFailures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           409: problemSchema('stale_cursor'),
         },
@@ -1849,17 +1915,17 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/claimRequests',
       {
         params: realmParams,
-        headers: commandHeaders,
+        headers: commandHeaders(),
         body: strict(RealmClaimRequestInputSchema),
         response: {
-          202: withHeaders(strict(RealmClaimRequestSchema), sessionHeader),
-          ...writeFailures,
+          202: withHeaders(strict(RealmClaimRequestSchema), sessionHeader()),
+          ...writeFailures(),
         },
         detail: {
           operationId: 'realm.claim_request',
           'x-exposure': 'public',
           'x-action': 'realm:participate',
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1892,7 +1958,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         params: realmParams,
         response: {
           200: strict(realmClaimOwnPageResponse),
-          ...readFailures,
+          ...readFailures(),
         },
         detail: {
           operationId: 'realm.own_claim_request',
@@ -1912,7 +1978,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/claimRequests/:requestId',
       {
         params: t.Object({ realmId: t.String(), requestId: t.String() }, closed),
-        response: { 200: strict(realmClaimExactResponse), ...readFailures },
+        response: { 200: strict(realmClaimExactResponse), ...readFailures() },
         detail: {
           operationId: 'realm.claim_request_status',
           'x-exposure': 'public',
@@ -1933,17 +1999,17 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       customMethod('/v1/realms/:realmId/claimRequests/:requestId', 'approve'),
       {
         params: t.Object({ realmId: t.String(), requestId: t.String() }, closed),
-        headers: commandHeaders,
+        headers: commandHeaders(),
         response: {
-          200: withHeaders(strict(realmClaimApprovalResponseSchema), sessionHeader),
-          ...writeFailures,
+          200: withHeaders(strict(realmClaimApprovalResponseSchema), sessionHeader()),
+          ...writeFailures(),
         },
         detail: {
           operationId: 'realm.approve_claim',
           'x-exposure': 'public',
           'x-action': 'realm:approve_claim',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -1973,11 +2039,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId',
       {
         params: realmParams,
-        headers: updateHeaders,
-        body: strict(updateRealmInput),
+        headers: updateHeaders(),
+        body: strict(updateRealmInput()),
         response: {
-          200: withHeaders(strict(realmResponse), { ...sessionHeader, etag: t.String() }),
-          ...writeFailures,
+          200: withHeaders(strict(realmResponse()), { ...sessionHeader(), etag: t.String() }),
+          ...writeFailures(),
           409: problemSchema('conflict', 'media_unavailable'),
           412: problemSchema('precondition_failed'),
         },
@@ -1986,7 +2052,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'realm:manage',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -2029,11 +2095,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/boardScheme',
       {
         params: realmParams,
-        headers: updateHeaders,
+        headers: updateHeaders(),
         body: strict(t.Object({ schemeId: id }, closed)),
         response: {
-          200: withHeaders(strict(realmResponse), { ...sessionHeader, etag: t.String() }),
-          ...writeFailures,
+          200: withHeaders(strict(realmResponse()), { ...sessionHeader(), etag: t.String() }),
+          ...writeFailures(),
           412: problemSchema('precondition_failed'),
         },
         detail: {
@@ -2041,7 +2107,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'realm:manage',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -2079,11 +2145,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/publications',
       {
         params: realmParams,
-        headers: publicationHeaders,
+        headers: publicationHeaders(),
         body: strict(t.Object({ subjectId: id }, closed)),
         response: {
-          201: withHeaders(strict(publicationResponse), { ...sessionHeader, location: t.String(), etag: t.String() }),
-          ...writeFailures,
+          201: withHeaders(strict(publicationResponse), { ...sessionHeader(), location: t.String(), etag: t.String() }),
+          ...writeFailures(),
           409: problemSchema('conflict'),
           412: problemSchema('precondition_failed'),
         },
@@ -2092,7 +2158,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'realm:publish',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -2134,7 +2200,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         ),
         response: {
           200: strict(publicationPage),
-          ...readFailures,
+          ...readFailures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           409: problemSchema('stale_cursor'),
         },
@@ -2172,8 +2238,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         params: realmParams,
         query: strict(RealmHomePublicationQuerySchema),
         response: {
-          200: strict(RealmHomePublicationPageSchema),
-          ...readFailures,
+          200: strict(RealmHomePublicationPageSchema()),
+          ...readFailures(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           409: problemSchema('stale_cursor'),
         },
@@ -2203,8 +2269,8 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       {
         params: publicationParams,
         response: {
-          200: withHeaders(strict(PublicationPreparationResponseSchema), sessionHeader),
-          ...readFailures,
+          200: withHeaders(strict(PublicationPreparationResponseSchema), sessionHeader()),
+          ...readFailures(),
         },
         detail: {
           operationId: 'publication.prepare',
@@ -2234,7 +2300,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         params: publicationParams,
         response: {
           200: withHeaders(strict(publicationResponse), { etag: t.String() }),
-          ...readFailures,
+          ...readFailures(),
         },
         detail: {
           operationId: 'publication.get',
@@ -2257,10 +2323,10 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       customMethod('/v1/realms/:realmId/publications/:subjectId', 'withdraw'),
       {
         params: publicationParams,
-        headers: updateHeaders,
+        headers: updateHeaders(),
         response: {
-          200: withHeaders(strict(decisionResponse), { ...sessionHeader, etag: t.String() }),
-          ...writeFailures,
+          200: withHeaders(strict(decisionResponse), { ...sessionHeader(), etag: t.String() }),
+          ...writeFailures(),
           412: problemSchema('precondition_failed'),
         },
         detail: {
@@ -2268,7 +2334,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'realm:publish',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -2304,10 +2370,10 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       customMethod('/v1/realms/:realmId/publications/:subjectId', 'reject'),
       {
         params: publicationParams,
-        headers: updateHeaders,
+        headers: updateHeaders(),
         response: {
-          200: withHeaders(strict(decisionResponse), { ...sessionHeader, etag: t.String() }),
-          ...writeFailures,
+          200: withHeaders(strict(decisionResponse), { ...sessionHeader(), etag: t.String() }),
+          ...writeFailures(),
           412: problemSchema('precondition_failed'),
         },
         detail: {
@@ -2315,7 +2381,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'realm:publish',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -2351,14 +2417,14 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/membership',
       {
         params: realmParams,
-        headers: commandHeaders,
-        response: { 202: strict(accepted), ...writeFailures },
+        headers: commandHeaders(),
+        response: { 202: strict(accepted), ...writeFailures() },
         detail: {
           operationId: 'realm.join',
           'x-exposure': 'public',
           'x-action': 'realm:join',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -2395,13 +2461,13 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/membership',
       {
         params: realmParams,
-        response: { 202: strict(accepted), ...writeFailures, 409: realmLeaveConflict },
+        response: { 202: strict(accepted), ...writeFailures(), 409: realmLeaveConflict() },
         detail: {
           operationId: 'realm.leave',
           'x-exposure': 'public',
           'x-action': 'realm:join',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -2438,15 +2504,15 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/members',
       {
         params: realmParams,
-        headers: commandHeaders,
+        headers: commandHeaders(),
         body: strict(addMemberInput),
-        response: { 202: strict(accepted), ...writeFailures },
+        response: { 202: strict(accepted), ...writeFailures() },
         detail: {
           operationId: 'realm.add_member',
           'x-exposure': 'public',
           'x-action': 'realm:manage',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -2486,7 +2552,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/members/me',
       {
         params: realmParams,
-        response: { 200: strict(membershipState), ...readFailures, 403: problemSchema('forbidden') },
+        response: { 200: strict(membershipState), ...readFailures(), 403: problemSchema('forbidden') },
         detail: {
           operationId: 'realm.membership',
           'x-exposure': 'public',
@@ -2511,11 +2577,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
         params: realmParams,
         query: memberPageQuery,
         response: {
-          200: strict(memberPageResponse),
-          ...readFailures,
-          404: memberPageNotFound,
-          403: memberPageForbidden,
-          503: memberPageUnavailable,
+          200: strict(memberPageResponse()),
+          ...readFailures(),
+          404: memberPageNotFound(),
+          403: memberPageForbidden(),
+          503: memberPageUnavailable(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           409: problemSchema('stale_cursor'),
         },
@@ -2761,11 +2827,11 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/bans/:accountId',
       {
         params: banParams,
-        headers: commandHeaders,
+        headers: commandHeaders(),
         body: strict(t.Object({ reason: t.String({ maxLength: 1024 }) }, closed)),
         response: {
-          200: withHeaders(strict(banResponse), sessionHeader),
-          ...writeFailures,
+          200: withHeaders(strict(banResponse), sessionHeader()),
+          ...writeFailures(),
           409: problemSchema('conflict'),
         },
         detail: {
@@ -2773,7 +2839,7 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
           'x-exposure': 'public',
           'x-action': 'realm:ban',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -2800,14 +2866,14 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/bans/:accountId',
       {
         params: banParams,
-        headers: commandHeaders,
-        response: { 204: t.Void(), ...writeFailures },
+        headers: commandHeaders(),
+        response: { 204: t.Void(), ...writeFailures() },
         detail: {
           operationId: 'realm.unban',
           'x-exposure': 'public',
           'x-action': 'realm:ban',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },
@@ -2832,20 +2898,20 @@ export function communityRoutes(app: ReturnType<typeof definitionRoutes>, depend
       '/v1/realms/:realmId/bans',
       {
         params: realmParams,
-        query: banQuery,
+        query: banQuery(),
         response: {
-          200: strict(banPage),
-          ...readFailures,
+          200: strict(banPage()),
+          ...readFailures(),
           403: problemSchema('forbidden'),
           429: problemSchema('rate_limited'),
-          503: writeFailures[503],
+          503: writeFailures()[503],
         },
         detail: {
           operationId: 'realm.bans',
           'x-exposure': 'public',
           'x-action': 'realm:ban',
           'x-resource-types': ['community.realm'],
-          'x-rate-limit': writeRate,
+          'x-rate-limit': writeRate(),
           security: writeSecurity,
         },
       },

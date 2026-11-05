@@ -1,3 +1,4 @@
+import { memoizedValue } from '../../../memoized.ts';
 import { WorkContextSchema, validWorkContext, workContextKind } from '../../work-context.ts';
 import type { Static } from 'typebox';
 import type { DiscoveryUnionHit } from '../../discovery.ts';
@@ -9,90 +10,108 @@ import { STANDARD_QUESTION_ID } from '../../../rating/votes.ts';
 import { GLOBAL_CONTEXT } from '../../../access/gates/catalogue.ts';
 import { MatchEvidenceSchema } from '../../http/match-evidence-schema.ts';
 import { closed, id, key, unavailable, evidenceOrDefault, admitIdentity } from './primitives.ts';
-const characterPersonContexts = t.Object(
-  {
-    credits: t.Object(
+function characterPersonContexts() {
+  return memoizedValue(characterPersonContexts, () =>
+    t.Object(
       {
-        items: t.Array(
-          t.Object(
-            {
-              id,
-              labels: t.Record(t.String(), t.String()),
-              aliases: t.Optional(t.Record(t.String(), t.Array(t.String()))),
-            },
-            closed,
-          ),
-          { maxItems: 3 },
+        credits: t.Object(
+          {
+            items: t.Array(
+              t.Object(
+                {
+                  id,
+                  labels: t.Record(t.String(), t.String()),
+                  aliases: t.Optional(t.Record(t.String(), t.Array(t.String()))),
+                },
+                closed,
+              ),
+              { maxItems: 3 },
+            ),
+            next: t.Boolean(),
+          },
+          closed,
         ),
-        next: t.Boolean(),
+        appearances: t.Object(
+          {
+            items: t.Array(
+              t.Object(
+                {
+                  id,
+                  labels: t.Record(t.String(), t.String()),
+                  aliases: t.Optional(t.Record(t.String(), t.Array(t.String()))),
+                },
+                closed,
+              ),
+              { maxItems: 3 },
+            ),
+            next: t.Boolean(),
+          },
+          closed,
+        ),
       },
       closed,
     ),
-    appearances: t.Object(
+  );
+}
+function discoveryFact() {
+  return memoizedValue(discoveryFact, () =>
+    t.Union([
+      t.Object({ kind: t.Literal('item'), id, labels: t.Record(t.String(), t.String()) }, closed),
+      t.Object(
+        {
+          kind: t.Literal('time'),
+          year: t.Integer(),
+          month: t.Optional(t.Integer()),
+          day: t.Optional(t.Integer()),
+        },
+        closed,
+      ),
+      t.Object({ kind: t.Literal('quantity'), amount: t.Number(), unit: t.String() }, closed),
+      t.Object({ kind: t.Literal('code'), value: t.String() }, closed),
+    ]),
+  );
+}
+function listPresentation() {
+  return memoizedValue(listPresentation, () =>
+    t.Object(
       {
-        items: t.Array(
-          t.Object(
-            {
-              id,
-              labels: t.Record(t.String(), t.String()),
-              aliases: t.Optional(t.Record(t.String(), t.Array(t.String()))),
-            },
-            closed,
-          ),
-          { maxItems: 3 },
-        ),
-        next: t.Boolean(),
+        imageAspect: t.Union([t.Literal('portrait'), t.Literal('landscape'), t.Literal('square')]),
+        keyFacts: t.Array(t.String(), { maxItems: 4 }),
       },
       closed,
     ),
-  },
-  closed,
-);
-const discoveryFact = t.Union([
-  t.Object({ kind: t.Literal('item'), id, labels: t.Record(t.String(), t.String()) }, closed),
-  t.Object(
-    {
-      kind: t.Literal('time'),
-      year: t.Integer(),
-      month: t.Optional(t.Integer()),
-      day: t.Optional(t.Integer()),
-    },
-    closed,
-  ),
-  t.Object({ kind: t.Literal('quantity'), amount: t.Number(), unit: t.String() }, closed),
-  t.Object({ kind: t.Literal('code'), value: t.String() }, closed),
-]);
-const listPresentation = t.Object(
-  {
-    imageAspect: t.Union([t.Literal('portrait'), t.Literal('landscape'), t.Literal('square')]),
-    keyFacts: t.Array(t.String(), { maxItems: 4 }),
-  },
-  closed,
-);
-export const SubjectHitSchema = t.Object(
-  {
-    key: key('semantic'),
-    summary: t.Object({ kind: t.Literal('subject'), value: SubjectSummarySchema }, closed),
-    matchEvidence: MatchEvidenceSchema,
-    labels: t.Optional(t.Record(t.String(), t.String())),
-    aliases: t.Optional(t.Record(t.String(), t.Array(t.String()))),
-    descriptions: t.Optional(t.Record(t.String(), t.String())),
-    facts: t.Optional(t.Record(t.String(), t.Array(discoveryFact, { maxItems: 3 }), { maxProperties: 4 })),
-    figure: t.Optional(PublicFigureSchema),
-    listPresentation: t.Optional(listPresentation),
-    contexts: t.Optional(characterPersonContexts),
-    workContext: t.Optional(WorkContextSchema),
-  },
-  closed,
-);
+  );
+}
+export function SubjectHitSchema() {
+  return memoizedValue(SubjectHitSchema, () =>
+    t.Object(
+      {
+        key: key('semantic'),
+        summary: t.Object({ kind: t.Literal('subject'), value: SubjectSummarySchema }, closed),
+        matchEvidence: MatchEvidenceSchema,
+        labels: t.Optional(t.Record(t.String(), t.String())),
+        aliases: t.Optional(t.Record(t.String(), t.Array(t.String()))),
+        descriptions: t.Optional(t.Record(t.String(), t.String())),
+        facts: t.Optional(t.Record(t.String(), t.Array(discoveryFact(), { maxItems: 3 }), { maxProperties: 4 })),
+        figure: t.Optional(PublicFigureSchema),
+        listPresentation: t.Optional(listPresentation()),
+        contexts: t.Optional(characterPersonContexts()),
+        workContext: t.Optional(WorkContextSchema),
+      },
+      closed,
+    ),
+  );
+}
 
-export type SubjectHttpHit = Static<typeof SubjectHitSchema>;
+export type SubjectHttpHit = Static<ReturnType<typeof SubjectHitSchema>>;
 type SubjectHit = Extract<DiscoveryUnionHit, { summary: { kind: 'subject' } }>;
-const check = Compile(SubjectHitSchema);
+function check() {
+  return memoizedValue(check, () => Compile(SubjectHitSchema()));
+}
 
 export function admitSubjectHit(value: unknown): asserts value is SubjectHit {
   const admitted = evidenceOrDefault(value);
-  if (!check.Check(admitted)) unavailable();
+  if (!check().Check(admitted)) unavailable();
   const hit = admitted as SubjectHttpHit;
   admitIdentity(hit);
   const { key, summary, matchEvidence } = hit;

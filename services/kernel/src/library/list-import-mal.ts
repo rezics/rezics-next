@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool } from 'pg';
@@ -174,12 +175,18 @@ export type MalDateOutcome = {
   receipt: { sessionId: string; revision: number; changed: boolean } | null;
   reason: string | null;
 };
-export const MAL_DATE_LIMITS = {
-  rows: MAL_LIMITS.page,
-  fields: 2,
-  requestBytes: 16_384,
-  resultBytes: MAL_LABEL_LIMITS.outputBytes,
-} as const;
+export function MAL_DATE_LIMITS() {
+  return memoizedValue(
+    MAL_DATE_LIMITS,
+    () =>
+      ({
+        rows: MAL_LIMITS.page,
+        fields: 2,
+        requestBytes: 16_384,
+        resultBytes: MAL_LABEL_LIMITS.outputBytes,
+      }) as const,
+  );
+}
 export type MalApplyInput = { confirm: true; rows: { row: number; version: string; fields: string[] }[] };
 export type MalOutcome = {
   row: number;
@@ -411,7 +418,7 @@ export function malMetadataProposals(row: MalRow): EntryImportMetadataProposals 
               sourceValue: noteRaw,
               reason: 'The retained note is not valid text.',
             }
-          : Buffer.byteLength(noteRaw) > ENTRY_IMPORT_METADATA_LIMITS.noteBytes
+          : Buffer.byteLength(noteRaw) > ENTRY_IMPORT_METADATA_LIMITS().noteBytes
             ? {
                 state: 'unsupported' as const,
                 sourceField: 'my_comments',
@@ -457,7 +464,7 @@ export function malMetadataProposals(row: MalRow): EntryImportMetadataProposals 
               sourceValue: privacyRaw,
               value: { status: 'known' as const, meaning: privacyMeaning },
             }
-          : Buffer.byteLength(privacyRaw) <= ENTRY_IMPORT_METADATA_LIMITS.privacyValueBytes &&
+          : Buffer.byteLength(privacyRaw) <= ENTRY_IMPORT_METADATA_LIMITS().privacyValueBytes &&
               !/[\u0000-\u001f\u007f]/.test(privacyRaw)
             ? {
                 state: 'unknown' as const,
@@ -492,7 +499,7 @@ export function malMetadataProposals(row: MalRow): EntryImportMetadataProposals 
                 value: parseSourceTimestamp(raw),
               };
             } catch {
-              return Buffer.byteLength(raw) <= ENTRY_IMPORT_METADATA_LIMITS.timestampBytes &&
+              return Buffer.byteLength(raw) <= ENTRY_IMPORT_METADATA_LIMITS().timestampBytes &&
                 !/[\u0000-\u001f\u007f]/.test(raw)
                 ? {
                     state: 'unknown' as const,
@@ -1580,7 +1587,7 @@ export function createMalImport(deps: Dependencies) {
       if (outcome.remainingLabels?.length) break;
     }
     await authority(actor, deadline);
-    if (Buffer.byteLength(canonicalize(outcomes)!) > MAL_DATE_LIMITS.resultBytes)
+    if (Buffer.byteLength(canonicalize(outcomes)!) > MAL_DATE_LIMITS().resultBytes)
       throw new ProblemError('invalid_request', { detail: 'MAL: apply outcomes exceed encoded byte limit' });
     return {
       id,
@@ -1600,13 +1607,13 @@ export function createMalImport(deps: Dependencies) {
     signal: AbortSignal,
     record: (value: CommandOutcome<unknown>) => void,
   ) {
-    if (input.rows.length > MAL_DATE_LIMITS.rows) throw new ProblemError('invalid_request');
+    if (input.rows.length > MAL_DATE_LIMITS().rows) throw new ProblemError('invalid_request');
     const outcomes: MalDateOutcome[] = [];
     for (const selected of input.rows) {
       if (signal.aborted || Date.now() + 100 >= deadline) break;
       if (
         selected.fields.length < 1 ||
-        selected.fields.length > MAL_DATE_LIMITS.fields ||
+        selected.fields.length > MAL_DATE_LIMITS().fields ||
         new Set(selected.fields).size !== selected.fields.length ||
         selected.fields.some((field) => field !== 'startDate' && field !== 'finishDate')
       )
@@ -1780,7 +1787,7 @@ export function createMalImport(deps: Dependencies) {
       outcomes.push(outcome);
     }
     await authority(actor, deadline);
-    if (Buffer.byteLength(canonicalize(outcomes)!) > MAL_DATE_LIMITS.resultBytes)
+    if (Buffer.byteLength(canonicalize(outcomes)!) > MAL_DATE_LIMITS().resultBytes)
       throw new ProblemError('invalid_request', { detail: 'MAL date outcomes exceed the encoded byte limit' });
     return {
       id,

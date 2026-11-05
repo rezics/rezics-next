@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { createHash } from 'node:crypto';
 import canonicalize from 'canonicalize';
 import type { Pool, PoolClient } from 'pg';
@@ -27,10 +28,18 @@ import { resolveSubject, SubjectIdentityUnavailableError } from './subject-ancho
 import { isOrdinalKey } from './ordinal.ts';
 
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
-const cleanupLimit = LIBRARY_ARCHIVE_RECOVERY_LIMITS.cleanupRows;
-const applyLimit = LIBRARY_ARCHIVE_RECOVERY_LIMITS.applyCommands;
-const pageLimit = LIBRARY_ARCHIVE_RECOVERY_LIMITS.previewPage;
-const lifetime = LIBRARY_ARCHIVE_RECOVERY_LIMITS.lifetimeMs;
+function cleanupLimit() {
+  return memoizedValue(cleanupLimit, () => LIBRARY_ARCHIVE_RECOVERY_LIMITS.cleanupRows);
+}
+function applyLimit() {
+  return memoizedValue(applyLimit, () => LIBRARY_ARCHIVE_RECOVERY_LIMITS.applyCommands);
+}
+function pageLimit() {
+  return memoizedValue(pageLimit, () => LIBRARY_ARCHIVE_RECOVERY_LIMITS.previewPage);
+}
+function lifetime() {
+  return memoizedValue(lifetime, () => LIBRARY_ARCHIVE_RECOVERY_LIMITS.lifetimeMs);
+}
 const sectionReasons: Record<string, string> = {
   entries: 'Entry state is not restored by Collection recovery.',
   labels: 'Labels are not restored by Collection recovery.',
@@ -349,7 +358,7 @@ async function purgeRecoveryRows(pool: Pool, route: number, accountId: string, u
      DELETE FROM library.collection_archive_recovery_record r USING keys k
      WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=$3 AND r.record_kind=k.record_kind
        AND r.collection_id=k.collection_id AND r.source_id=k.source_id`,
-    [route, accountId, uploadId, cleanupLimit],
+    [route, accountId, uploadId, cleanupLimit()],
   );
 }
 
@@ -444,7 +453,7 @@ async function expireOwnerEvidence(
      DELETE FROM library.collection_archive_recovery_record x USING keys k
      WHERE x.route=$1 AND x.account_id=$2 AND x.upload_id=k.upload_id
        AND x.record_kind=k.record_kind AND x.collection_id=k.collection_id AND x.source_id=k.source_id`,
-    [route, accountId, cleanupLimit],
+    [route, accountId, cleanupLimit()],
   );
   await connection.query(
     `WITH keys AS MATERIALIZED (
@@ -457,7 +466,7 @@ async function expireOwnerEvidence(
      )
      DELETE FROM library.collection_archive_recovery r USING keys k
      WHERE r.route=$1 AND r.account_id=$2 AND r.upload_id=k.upload_id`,
-    [route, accountId, Math.max(0, cleanupLimit - (removedRecords.rowCount ?? 0))],
+    [route, accountId, Math.max(0, cleanupLimit() - (removedRecords.rowCount ?? 0))],
   );
 }
 
@@ -626,7 +635,7 @@ function projectArchive(records: readonly ArchiveRecord[]) {
     row.orderedCount = count.ordered;
   }
   const values = [...collectionRows.values(), ...occurrenceRows];
-  if (values.length > LIBRARY_ARCHIVE_LIMITS.records) throw new ArchiveValidationError('bounds');
+  if (values.length > LIBRARY_ARCHIVE_LIMITS().records) throw new ArchiveValidationError('bounds');
   return { values, membershipComplete };
 }
 
@@ -739,7 +748,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
   async function create(actor: Actor, uploadBase64: string, requestKey: string, signal?: AbortSignal) {
     const owner = await admit(actor);
     abortIfRequested(signal);
-    const maxBase64Bytes = Math.ceil(LIBRARY_ARCHIVE_LIMITS.uploadBytes / 3) * 4;
+    const maxBase64Bytes = Math.ceil(LIBRARY_ARCHIVE_LIMITS().uploadBytes / 3) * 4;
     if (
       typeof uploadBase64 !== 'string' ||
       uploadBase64.length > maxBase64Bytes ||
@@ -747,7 +756,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     )
       throw new ProblemError('invalid_request');
     const bytes = Buffer.from(uploadBase64, 'base64');
-    if (bytes.byteLength > LIBRARY_ARCHIVE_LIMITS.uploadBytes || bytes.toString('base64') !== uploadBase64)
+    if (bytes.byteLength > LIBRARY_ARCHIVE_LIMITS().uploadBytes || bytes.toString('base64') !== uploadBase64)
       throw new ProblemError('invalid_request');
     const uploadDigest = hash(bytes);
     const route = routeOf(owner.accountId)!;
@@ -769,9 +778,9 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     }
     const projected = projectArchive(archive.records);
     const rows = storedRecords(projected.values);
-    if (rows.length > LIBRARY_ARCHIVE_LIMITS.records) throw new ProblemError('invalid_request');
+    if (rows.length > LIBRARY_ARCHIVE_LIMITS().records) throw new ProblemError('invalid_request');
     const createdAt = deps.clock().toISOString();
-    const expiresAt = new Date(Date.parse(createdAt) + lifetime).toISOString();
+    const expiresAt = new Date(Date.parse(createdAt) + lifetime()).toISOString();
     const uploadId = newId(route);
     const manifest = archive.manifest;
     const coverage = archive.coverage.map((item) => ({
@@ -895,7 +904,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
       return { ...recoveryStatus(current), collections: [], next: null };
     }
     const limit = options.limit ?? 20;
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > pageLimit) throw new ProblemError('invalid_request');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > pageLimit()) throw new ProblemError('invalid_request');
     let after = '00000000-0000-0000-0000-000000000000';
     if (options.cursor) {
       const decoded = decodeCursor(
@@ -967,7 +976,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
     }
     if (!UUID.test(collectionId)) throw notFound();
     const limit = options.limit ?? 20;
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > pageLimit) throw new ProblemError('invalid_request');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > pageLimit()) throw new ProblemError('invalid_request');
     const collection = await deps.pool.query<{
       id: string;
       title: string | null;
@@ -2065,7 +2074,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
       return leaseId !== null;
     };
     try {
-      while (commandCount < applyLimit) {
+      while (commandCount < applyLimit()) {
         abortIfRequested(signal);
         if (!leaseId) break;
         root = await load(owner, uploadId);
@@ -2357,7 +2366,7 @@ export function createLibraryArchiveCollectionRecovery(deps: RecoveryDependencie
       return { ...recoveryStatus(current), collection: null, outcomes: [], next: null };
     }
     const limit = options.limit ?? 20;
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > pageLimit) throw new ProblemError('invalid_request');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > pageLimit()) throw new ProblemError('invalid_request');
     if (!root.reviewId || !root.selectedCollectionId) {
       const current = await currentRoot(owner, uploadId, signal);
       return { ...recoveryStatus(current), collection: null, outcomes: [], next: null };

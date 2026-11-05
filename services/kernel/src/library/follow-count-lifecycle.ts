@@ -23,7 +23,7 @@ export async function admitFollowCountAccount(client: PoolClient, event: CloudEv
   const type = FOLLOW_COUNT_ACCOUNT_EVENTS.find((type) => type === event.type);
   if (
     !type ||
-    !Value.Check(ACCESS_EVENTS[type], event.data) ||
+    !Value.Check(ACCESS_EVENTS()[type], event.data) ||
     typeof event.data !== 'object' ||
     event.data === null ||
     !('accountId' in event.data) ||

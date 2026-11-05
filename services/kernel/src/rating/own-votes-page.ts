@@ -226,7 +226,7 @@ export function createOwnVotesReader(deps: Dependencies) {
         };
       const sources = [...new Set(page.votes.map((row) => row.targetId))];
       const questionIds = [...new Set(page.votes.map((row) => row.questionId))];
-      const mappings = await identityEpochStore.readMappings(deps.pool, sources);
+      const mappings = await identityEpochStore().readMappings(deps.pool, sources);
       const initial = new Map(sources.map((id, i) => [id, mappings[i]!]));
       // Force typed identity failures to fail the whole page, including withheld-only batches.
       for (const mapping of mappings) mappingKey(mapping);
@@ -264,7 +264,7 @@ export function createOwnVotesReader(deps: Dependencies) {
       const summaryObservation = await readSubjectSummaryObservation({ ...deps, actor: owner, deadline }, terminals);
       const finalQuestions = await questions(deps, owner, questionIds, deadline);
       const finalVisible = await visibleSources(deps, owner, sources);
-      const finalMappings = await identityEpochStore.readMappings(deps.pool, sources);
+      const finalMappings = await identityEpochStore().readMappings(deps.pool, sources);
       const final = new Map(sources.map((id, i) => [id, finalMappings[i]!]));
       for (const mapping of finalMappings) mappingKey(mapping);
       const commandReady = new Set<string>();

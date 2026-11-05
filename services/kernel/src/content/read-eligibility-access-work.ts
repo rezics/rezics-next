@@ -145,7 +145,9 @@ export function createReadEligibilityWork<E extends object>(row: Point, route: n
       bound(context) {
         receipts.delete(context);
         if (!pointBound)
-          throw new AccessWorkUnavailableError(`Content read eligibility ${row.kind} projection native work producer`);
+          throw new (AccessWorkUnavailableError())(
+            `Content read eligibility ${row.kind} projection native work producer`,
+          );
         if (
           context.evidence !== evidence ||
           context.resource.route !== route ||

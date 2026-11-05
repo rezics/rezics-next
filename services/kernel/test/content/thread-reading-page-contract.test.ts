@@ -95,7 +95,7 @@ function response(replyCount: number) {
 
 test('reading-page cursor, reply and withheld-entry bounds are closed', () => {
   const query = Compile(ReadingPageQuerySchema);
-  const page = Compile(ReadingPageResponseSchema);
+  const page = Compile(ReadingPageResponseSchema());
   expect(readingPageRawLimit()).toBe(21);
   expect(readingPageRawLimit('next')).toBe(20);
   expect(query.Check({ cursor: 'x'.repeat(4096) })).toBe(true);

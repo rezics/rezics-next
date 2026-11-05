@@ -1033,7 +1033,7 @@ export async function installSearchIdentityReceivingNative(
   }
   const costs = receivingWorkDeclaration(
     { ...declaration, statements: [...own.values()] },
-    searchReceivingOwnedPageStatements,
+    searchReceivingOwnedPageStatements(),
   );
   // The owner tuple remains inferred. Require its actual constructor Pool, either direct or in
   // root dependencies, to be this scope's Pool before the factory can perform any work.
@@ -1048,7 +1048,7 @@ export async function installSearchIdentityReceivingNative(
   return Object.freeze({
     run: async <T>(context: SearchReceivingWorkContext, body: () => Promise<T>) => {
       if (searchContexts.getStore()) throw unavailable('Nested Search receiving composition is unavailable');
-      return withSearchReceivingWork(pool, context, costs, commonSearchReceivingStatements, async (work) => {
+      return withSearchReceivingWork(pool, context, costs, commonSearchReceivingStatements(), async (work) => {
         const scope = { pool, native, work, active: true, clock: configuration[0].clock };
         return searchContexts.run(scope, async () => {
           try {

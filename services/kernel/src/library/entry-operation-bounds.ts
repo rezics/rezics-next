@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { declareBound, repeatBound, sumBounds, type Bound } from '@rezics/bounds';
 import { RELEASE_LIMITS } from '@rezics/definitions';
 import { currentCommandWorkAssociation } from '../command/work.ts';
@@ -73,38 +74,50 @@ function jsonBytes(value: unknown): number {
 
 // The accepting Type is carried from the bounded canonical release artifact. JSON escaping can
 // expand one UTF-8 source byte to at most six JSON bytes; profile IDs themselves are at most 64.
-const profilePinBytes =
-  Buffer.byteLength(
-    JSON.stringify({
-      provenance: 'profile',
-      releaseDigest: `sha256:${'f'.repeat(64)}`,
-      acceptingType: '',
-      profileId: '',
-    }),
-  ) +
-  RELEASE_LIMITS.bytes * 6 +
-  64 * 6;
+function profilePinBytes() {
+  return memoizedValue(
+    profilePinBytes,
+    () =>
+      Buffer.byteLength(
+        JSON.stringify({
+          provenance: 'profile',
+          releaseDigest: `sha256:${'f'.repeat(64)}`,
+          acceptingType: '',
+          profileId: '',
+        }),
+      ) +
+      RELEASE_LIMITS.bytes * 6 +
+      64 * 6,
+  );
+}
 
-const entryProjectionBytes =
-  Buffer.byteLength(
-    JSON.stringify({
-      route: 2147483647,
-      accountId: 'f'.repeat(36),
-      subjectId: 'f'.repeat(36),
-      requestedSubjectId: 'f'.repeat(36),
-      incarnationId: 'f'.repeat(36),
-      state: '\u0000'.repeat(64),
-      revision: -2147483648,
-      createdAt: '\u0000'.repeat(64),
-      updatedAt: '\u0000'.repeat(64),
-      transactionId: 'f'.repeat(36),
-      libraryProfilePin: null,
-    }),
-  ) + profilePinBytes;
+function entryProjectionBytes() {
+  return memoizedValue(
+    entryProjectionBytes,
+    () =>
+      Buffer.byteLength(
+        JSON.stringify({
+          route: 2147483647,
+          accountId: 'f'.repeat(36),
+          subjectId: 'f'.repeat(36),
+          requestedSubjectId: 'f'.repeat(36),
+          incarnationId: 'f'.repeat(36),
+          state: '\u0000'.repeat(64),
+          revision: -2147483648,
+          createdAt: '\u0000'.repeat(64),
+          updatedAt: '\u0000'.repeat(64),
+          transactionId: 'f'.repeat(36),
+          libraryProfilePin: null,
+        }),
+      ) + profilePinBytes(),
+  );
+}
 
 const partitionProjectionBytes = jsonBytes({ epoch: 2147483647 });
 const migrationProjectionBytes = jsonBytes({ phase: 'legacy' });
-const stateChangeProjectionBytes = rowBytes + profilePinBytes * 2;
+function stateChangeProjectionBytes() {
+  return memoizedValue(stateChangeProjectionBytes, () => rowBytes + profilePinBytes() * 2);
+}
 
 function statement(inputBytes: number, item: Statement): Bound {
   return declareBound({
@@ -159,7 +172,7 @@ function operationStatements(kind: EntryOperationKind, input: unknown, limit: nu
           candidates: 1,
           points: 1,
           bindBytes: pointBindBytes,
-          outputBytes: entryProjectionBytes,
+          outputBytes: entryProjectionBytes(),
         },
         {
           sql: entryRead.sql,
@@ -167,7 +180,7 @@ function operationStatements(kind: EntryOperationKind, input: unknown, limit: nu
           candidates: 1,
           points: 1,
           bindBytes: pointBindBytes,
-          outputBytes: entryProjectionBytes,
+          outputBytes: entryProjectionBytes(),
         },
         {
           sql: migrationPhaseRead.sql,
@@ -195,7 +208,7 @@ function operationStatements(kind: EntryOperationKind, input: unknown, limit: nu
           points: 1,
           emptySeeks: 2,
           bindBytes: listBindBytes,
-          outputBytes: entryProjectionBytes * listLimit,
+          outputBytes: entryProjectionBytes() * listLimit,
         },
         {
           sql: partitionEpochRead.sql,
@@ -222,7 +235,7 @@ function operationStatements(kind: EntryOperationKind, input: unknown, limit: nu
           candidates: 1,
           points: 1,
           bindBytes: pointBindBytes,
-          outputBytes: entryProjectionBytes,
+          outputBytes: entryProjectionBytes(),
         },
         {
           sql: migrationPhaseRead.sql,
@@ -257,7 +270,7 @@ function operationStatements(kind: EntryOperationKind, input: unknown, limit: nu
           candidates: 1,
           points: 1,
           bindBytes: pointBindBytes,
-          outputBytes: entryProjectionBytes,
+          outputBytes: entryProjectionBytes(),
         },
         {
           sql: migrationPhaseRead.sql,
@@ -273,7 +286,7 @@ function operationStatements(kind: EntryOperationKind, input: unknown, limit: nu
           candidates: 1,
           points: 1,
           bindBytes: historyBindBytes,
-          outputBytes: stateChangeProjectionBytes,
+          outputBytes: stateChangeProjectionBytes(),
         },
       ];
   }

@@ -40,9 +40,9 @@ const cases = [
   })),
 ];
 function schema(type: string) {
-  const value = (ACCESS_EVENTS as Record<string, TSchema>)[type];
+  const value = (ACCESS_EVENTS() as Record<string, TSchema>)[type];
   expect(value).toBeDefined();
-  expect((EVENT_TYPES as Record<string, TSchema>)[type]).toBe(value);
+  expect((EVENT_TYPES() as Record<string, TSchema>)[type]).toBe(value);
   return value!;
 }
 
@@ -52,7 +52,7 @@ test('all eight concrete helper events have registered schemas for every return 
     const definition = schema(type);
     for (const value of values) expect(Value.Check(definition, value)).toBe(true);
   }
-  expect(Object.keys(ACCESS_EVENTS).sort()).toEqual(
+  expect(Object.keys(ACCESS_EVENTS()).sort()).toEqual(
     [
       'com.rezics.access.exposure.closed.v1',
       'com.rezics.access.exposure.opened.v1',
@@ -192,5 +192,5 @@ test('assignments require only the exact native request URN with routable UUIDs'
     ])
       expect(Value.Check(definition, { requestedBy })).toBe(false);
   }
-  expect(Object.hasOwn(EVENT_TYPES, 'com.rezics.access.grant.unknown.v1')).toBe(false);
+  expect(Object.hasOwn(EVENT_TYPES(), 'com.rezics.access.grant.unknown.v1')).toBe(false);
 });

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import canonicalize from 'canonicalize';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
@@ -81,7 +82,9 @@ export type CollectionBulkDependencies = {
 };
 export type CollectionBulkInput = { route: number; operationId: string };
 export const bulkHash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
-const validator = Compile(bulkAdmissionSchema);
+function validator() {
+  return memoizedValue(validator, () => Compile(bulkAdmissionSchema));
+}
 
 /** Validate the entire command before canonicalization or any source read. */
 export function explicitBulkStatus(
@@ -100,7 +103,7 @@ export function explicitBulkStatus(
   const validationInput: BulkAdmission = emptyQueryCapture
     ? { ...input, selection: { kind: 'explicit', targets: [{ subjectId: '00000000-0000-0000-0000-000000000000' }] } }
     : input;
-  if (!validator.Check(validationInput)) throw new TypeError('Invalid bulk selection');
+  if (!validator().Check(validationInput)) throw new TypeError('Invalid bulk selection');
   if (input.action !== 'set_status' || input.selection.kind !== 'explicit')
     throw new ProblemError('dependency_unavailable');
   const targets = [...new Set(input.selection.targets.map((target) => target.subjectId.toLowerCase()))];
@@ -357,7 +360,7 @@ export function createCollectionBulkOperations(deps: CollectionBulkDependencies)
       if (querySelection) {
         if (Buffer.byteLength(JSON.stringify(input)) > BULK_ADMISSION_BODY_BYTES)
           throw new RangeError('Bulk command exceeds 64 KiB');
-        if (!validator.Check(input)) throw new TypeError('Invalid bulk selection');
+        if (!validator().Check(input)) throw new TypeError('Invalid bulk selection');
       }
       const parsed: BulkAdmission = querySelection
         ? {

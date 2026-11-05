@@ -85,7 +85,7 @@ async function observe(f: EpochFixture, original: string): Promise<IdentityScope
 }
 async function prepare(f: EpochFixture, original: string, terminal: string, key = randomUUID()) {
   const actor = await f.actor();
-  return identityEpochStore.prepareAdmission(
+  return identityEpochStore().prepareAdmission(
     f.pool,
     {
       basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
@@ -120,7 +120,7 @@ test('Real pending identity claims commit only after complete native scope pre-a
     const claims = async () =>
       (await f.pool.query('SELECT terminal FROM semantic.identity_epoch_group WHERE pending_job=$1', [job.jobId])).rows;
     expect(await claims()).toHaveLength(0);
-    expect((await identityEpochStore.readJob(f.pool, job))?.state).toBe('preparing');
+    expect((await identityEpochStore().readJob(f.pool, job))?.state).toBe('preparing');
     let claimed = false;
     for (let step = 0; step < 100; step++) {
       await stepIdentityEpochAdmission(f.pool, job);
@@ -129,7 +129,7 @@ test('Real pending identity claims commit only after complete native scope pre-a
         break;
       }
       // Every intermediate preparation commit is genuinely claim-free.
-      expect((await identityEpochStore.readJob(f.pool, job))?.state).toBe('preparing');
+      expect((await identityEpochStore().readJob(f.pool, job))?.state).toBe('preparing');
     }
     expect(claimed, 'finite real pre-arm must eventually permit an actual native pending claim').toBe(true);
     const root = partitionOf(routeOf(job.jobId)!);
@@ -171,7 +171,7 @@ test('Real pending identity claims commit only after complete native scope pre-a
     for (let step = 0; step < 100; step++) {
       if ((await stepIdentityEpochAdmission(f.pool, job)).state === 'pending') break;
     }
-    expect((await identityEpochStore.readJob(f.pool, job))?.state).toBe('pending');
+    expect((await identityEpochStore().readJob(f.pool, job))?.state).toBe('pending');
   } finally {
     await f.close();
   }
@@ -200,7 +200,7 @@ test('Claim-free native preparation cancels every planned attempt before releasi
       expect(claims.rows).toHaveLength(0);
       if ((await stepIdentityEpochAdmission(f.pool, job)).state === 'cancelled') break;
     }
-    expect((await identityEpochStore.readJob(f.pool, job))?.state).toBe('cancelled');
+    expect((await identityEpochStore().readJob(f.pool, job))?.state).toBe('cancelled');
     const retained = await f.pool.query(
       'SELECT partition_no FROM semantic.identity_epoch_control WHERE prepare_job=$1',
       [job.jobId],
@@ -222,11 +222,11 @@ test('Claim-free native preparation cancels every planned attempt before releasi
     const resumed = await prepare(f, original, terminal, key);
     expect(resumed.jobId).not.toBe(job.jobId);
     expect(resumed.epoch).toBeGreaterThan(job.epoch);
-    expect((await identityEpochStore.readJob(f.pool, resumed))?.state).toBe('preparing');
+    expect((await identityEpochStore().readJob(f.pool, resumed))?.state).toBe('preparing');
     for (let step = 0; step < 100; step++) {
       if ((await stepIdentityEpochAdmission(f.pool, resumed)).state === 'pending') break;
     }
-    expect((await identityEpochStore.readJob(f.pool, resumed))?.state).toBe('pending');
+    expect((await identityEpochStore().readJob(f.pool, resumed))?.state).toBe('pending');
     const receipts = (
       await f.pool.query(
         `SELECT receipt_key,receipt,intent FROM semantic.identity_epoch_job

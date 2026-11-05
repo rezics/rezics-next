@@ -56,10 +56,10 @@ test('Search rejects an unknown native job locator before any engine effect or c
   };
   const step = await participant(observed);
   const job = { jobId: newId(0x7b10), epoch: 1n };
-  expect(await store.readJob(fixture.pool, job)).toBeNull();
+  expect(await store().readJob(fixture.pool, job)).toBeNull();
   await expect(step(fixture.pool, job)).rejects.toThrow();
   expect(engineCalls).toBe(0);
-  expect(await store.readJob(fixture.pool, job)).toBeNull();
+  expect(await store().readJob(fixture.pool, job)).toBeNull();
   const receipts = await fixture.admin.query(
     `SELECT transaction_id FROM semantic.identity_epoch_step
      WHERE partition_no=$1 AND job_id=$2 AND job_epoch=$3 AND step='search-canonical-index'`,
@@ -81,7 +81,7 @@ test('an admitted native job without authoritative mapping cannot complete Searc
       command: { actorAccountId: actor.accountId, kind: 'subject.merge', key, digest: digest(key) },
     },
   };
-  const job = await store.prepareAdmission(
+  const job = await store().prepareAdmission(
     fixture.pool,
     {
       basis: { actorAccountId: actor.accountId, clientId: actor.clientId, requestedBy: actor.requestedBy },
@@ -94,7 +94,7 @@ test('an admitted native job without authoritative mapping cannot complete Searc
     expect(progress.work.rows).toBeLessThanOrEqual(100);
     if (progress.state === 'pending') break;
   }
-  const before = await store.readJob(fixture.pool, job);
+  const before = await store().readJob(fixture.pool, job);
   expect(before?.state).toBe('pending');
   expect(before?.mapping).toBeNull();
   expect(before?.participants['search-canonical-index']).toBeNull();
@@ -107,18 +107,18 @@ test('an admitted native job without authoritative mapping cannot complete Searc
     expect(progress.job).toEqual(job);
     expect(progress.state).toBe('more');
     expect(progress.work.rows).toBeLessThanOrEqual(100);
-    await expect(store.reconcileStepReceipt(fixture.pool, progress.receipt)).rejects.toMatchObject({
+    await expect(store().reconcileStepReceipt(fixture.pool, progress.receipt)).rejects.toMatchObject({
       code: 'identity_step_receipt_invalid',
     });
   } catch (error) {
     if (!(error instanceof Error) || !('code' in error) || error.code !== 'identity_epoch_unavailable') throw error;
   }
-  const after = await store.readJob(fixture.pool, job);
+  const after = await store().readJob(fixture.pool, job);
   expect(after?.state).toBe('pending');
   expect(after?.mapping).toBeNull();
   expect(after?.participants['search-canonical-index']).toBeNull();
   expect(after?.participants['library-private-follow-counts']).toBeNull();
   await expect(
-    runCommand(fixture.pool, { partition: identityJobPartition(job) }, (tx) => store.publish(tx, job)),
+    runCommand(fixture.pool, { partition: identityJobPartition(job) }, (tx) => store().publish(tx, job)),
   ).rejects.toMatchObject({ code: 'identity_participants_incomplete' });
 });

@@ -154,7 +154,7 @@ test('reinstatement lifts 205 operated accounts across signed pages, preserves f
   );
   expect(receipts.rows).toHaveLength(205);
   for (const { response } of receipts.rows)
-    expect(Value.Check(ACCESS_EVENTS['com.rezics.access.operator.subject-unfenced.v1'], response)).toBe(true);
+    expect(Value.Check(ACCESS_EVENTS()['com.rezics.access.operator.subject-unfenced.v1'], response)).toBe(true);
 }, 60_000);
 
 test('other fences, own suspensions, transfers, deleted accounts and changed reservations stay unchanged', async () => {

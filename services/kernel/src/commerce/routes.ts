@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { BenefitAcquisitionError } from './acquisition.ts';
 import { listSubjectOffers } from './subject-offers.ts';
 import { readCommerceMoneyPolicy, type CommerceMoneyPolicy } from './money.ts';
@@ -106,35 +107,43 @@ const moneySchema = t.Object(
   },
   object,
 );
-const offerSchema = t.Object(
-  {
-    ...capturedMoneySchemas,
-    contentEdition: contentEditionSchema,
-    id,
-    targetSubjectId: id,
-    summary: t.Union([SubjectSummarySchema, t.Null()]),
-    title: t.String(),
-    currency: t.String(),
-    unitAmountMinor: t.Integer(),
-    state: t.Union([t.Literal('active'), t.Literal('delisted')]),
-  },
-  object,
-);
-const offerReadSchema = t.Object(
-  {
-    ...capturedMoneySchemas,
-    contentEdition: contentEditionSchema,
-    id,
-    revision: t.Integer({ minimum: 1 }),
-    targetSubjectId: id,
-    subject: t.Union([SubjectSummarySchema, t.Null()]),
-    title: t.String(),
-    currency: t.String(),
-    unitAmountMinor: t.Integer(),
-    state: t.Union([t.Literal('active'), t.Literal('delisted')]),
-  },
-  object,
-);
+function offerSchema() {
+  return memoizedValue(offerSchema, () =>
+    t.Object(
+      {
+        ...capturedMoneySchemas,
+        contentEdition: contentEditionSchema,
+        id,
+        targetSubjectId: id,
+        summary: t.Union([SubjectSummarySchema, t.Null()]),
+        title: t.String(),
+        currency: t.String(),
+        unitAmountMinor: t.Integer(),
+        state: t.Union([t.Literal('active'), t.Literal('delisted')]),
+      },
+      object,
+    ),
+  );
+}
+function offerReadSchema() {
+  return memoizedValue(offerReadSchema, () =>
+    t.Object(
+      {
+        ...capturedMoneySchemas,
+        contentEdition: contentEditionSchema,
+        id,
+        revision: t.Integer({ minimum: 1 }),
+        targetSubjectId: id,
+        subject: t.Union([SubjectSummarySchema, t.Null()]),
+        title: t.String(),
+        currency: t.String(),
+        unitAmountMinor: t.Integer(),
+        state: t.Union([t.Literal('active'), t.Literal('delisted')]),
+      },
+      object,
+    ),
+  );
+}
 const sellerOfferSchema = t.Object(
   {
     ...capturedMoneySchemas,
@@ -179,43 +188,47 @@ const creatorSaleSchema = t.Object(
   },
   object,
 );
-const orderReadSchema = t.Object(
-  {
-    ...capturedMoneySchemas,
-    contentEdition: contentEditionSchema,
-    id,
-    offerId: id,
-    title: t.String(),
-    currency: t.String(),
-    unitAmountMinor: t.Integer(),
-    taxCode: t.String(),
-    amountTaxMinor: t.Union([t.Integer(), t.Null()]),
-    recordedCharge: t.Union([
-      t.Null(),
-      t.Object(
-        {
-          currency: t.String(),
-          moneyUnit: moneyUnitSchema,
-          amountTotalMinor: t.Integer(),
-          amountTaxMinor: t.Union([t.Integer(), t.Null()]),
-        },
-        object,
-      ),
-    ]),
-    recordedPresentment: t.Union([
-      t.Null(),
-      t.Object({ currency: t.String(), moneyUnit: moneyUnitSchema, amountTotalMinor: t.Integer() }, object),
-    ]),
-    targetSubjectId: id,
-    subject: t.Union([SubjectSummarySchema, t.Null()]),
-    settlement: t.Union([t.Literal('pending'), t.Literal('paid'), t.Literal('failed'), t.Literal('unknown')]),
-    checkoutUrl: nullableId,
-    checkoutExpiresAt: nullableId,
-    entitlementId: nullableId,
-    createdAt: t.String(),
-  },
-  object,
-);
+function orderReadSchema() {
+  return memoizedValue(orderReadSchema, () =>
+    t.Object(
+      {
+        ...capturedMoneySchemas,
+        contentEdition: contentEditionSchema,
+        id,
+        offerId: id,
+        title: t.String(),
+        currency: t.String(),
+        unitAmountMinor: t.Integer(),
+        taxCode: t.String(),
+        amountTaxMinor: t.Union([t.Integer(), t.Null()]),
+        recordedCharge: t.Union([
+          t.Null(),
+          t.Object(
+            {
+              currency: t.String(),
+              moneyUnit: moneyUnitSchema,
+              amountTotalMinor: t.Integer(),
+              amountTaxMinor: t.Union([t.Integer(), t.Null()]),
+            },
+            object,
+          ),
+        ]),
+        recordedPresentment: t.Union([
+          t.Null(),
+          t.Object({ currency: t.String(), moneyUnit: moneyUnitSchema, amountTotalMinor: t.Integer() }, object),
+        ]),
+        targetSubjectId: id,
+        subject: t.Union([SubjectSummarySchema, t.Null()]),
+        settlement: t.Union([t.Literal('pending'), t.Literal('paid'), t.Literal('failed'), t.Literal('unknown')]),
+        checkoutUrl: nullableId,
+        checkoutExpiresAt: nullableId,
+        entitlementId: nullableId,
+        createdAt: t.String(),
+      },
+      object,
+    ),
+  );
+}
 // History contains captured purchase terms; live catalogue/subject reads are unnecessary.
 const orderHistorySchema = t.Object(
   {
@@ -230,68 +243,104 @@ const orderHistorySchema = t.Object(
   },
   object,
 );
-const entitlementSchema = t.Object(
-  {
-    contentEdition: contentEditionSchema,
-    id,
-    offerId: id,
-    orderId: id,
-    targetSubjectId: id,
-    summary: t.Union([SubjectSummarySchema, t.Null()]),
-    grantedAt: t.String(),
-    revokedAt: nullableId,
-    revokeReason: t.Union([t.Literal('refund'), t.Literal('dispute'), t.Null()]),
-    active: t.Boolean(),
-  },
-  object,
-);
-const offerResponse = t.Object({ offer: offerSchema }, object);
-const offerReadResponse = t.Object({ offer: offerReadSchema }, object);
+function entitlementSchema() {
+  return memoizedValue(entitlementSchema, () =>
+    t.Object(
+      {
+        contentEdition: contentEditionSchema,
+        id,
+        offerId: id,
+        orderId: id,
+        targetSubjectId: id,
+        summary: t.Union([SubjectSummarySchema, t.Null()]),
+        grantedAt: t.String(),
+        revokedAt: nullableId,
+        revokeReason: t.Union([t.Literal('refund'), t.Literal('dispute'), t.Null()]),
+        active: t.Boolean(),
+      },
+      object,
+    ),
+  );
+}
+function offerResponse() {
+  return memoizedValue(offerResponse, () => t.Object({ offer: offerSchema() }, object));
+}
+function offerReadResponse() {
+  return memoizedValue(offerReadResponse, () => t.Object({ offer: offerReadSchema() }, object));
+}
 const orderResponse = t.Object({ order: orderSchema }, object);
-const orderReadResponse = t.Object({ order: orderReadSchema }, object);
-const entitlementResponse = t.Object({ entitlement: entitlementSchema }, object);
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const reconcileHeaders = t.Object({
-  authorization: t.Optional(t.String()),
-  [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }),
-});
+function orderReadResponse() {
+  return memoizedValue(orderReadResponse, () => t.Object({ order: orderReadSchema() }, object));
+}
+function entitlementResponse() {
+  return memoizedValue(entitlementResponse, () => t.Object({ entitlement: entitlementSchema() }, object));
+}
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }));
+}
+function reconcileHeaders() {
+  return memoizedValue(reconcileHeaders, () =>
+    t.Object({
+      authorization: t.Optional(t.String()),
+      [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }),
+    }),
+  );
+}
 const languageQuery = t.Object({ languages: t.Optional(t.String()) }, object);
 const languageTag = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
-const unauthorized = problemSchema('authentication_required', 'invalid_credentials');
-const unavailable = problemSchema(
-  'dependency_unavailable',
-  'overloaded',
-  'partition_unavailable',
-  'transaction_retry_exhausted',
-  'deadline_exceeded',
-);
+function unauthorized() {
+  return memoizedValue(unauthorized, () => problemSchema('authentication_required', 'invalid_credentials'));
+}
+function unavailable() {
+  return memoizedValue(unavailable, () =>
+    problemSchema(
+      'dependency_unavailable',
+      'overloaded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'deadline_exceeded',
+    ),
+  );
+}
 // Literal discriminants and private locator fields are published for the purchase UI.
-const acquisitionPendingProblem = t.Object(
-  {
-    ...problemSchema('acquisition_pending').properties,
-    code: t.Literal('acquisition_pending'),
-    effect_status: t.Literal('not_applied'),
-    orderId: t.Optional(id),
-  },
-  object,
-);
-const benefitAlreadyOwnedProblem = t.Object(
-  {
-    ...problemSchema('benefit_already_owned').properties,
-    code: t.Literal('benefit_already_owned'),
-    effect_status: t.Literal('not_applied'),
-    orderId: t.Optional(id),
-    entitlementId: t.Optional(id),
-  },
-  object,
-);
-const offerConflictProblem = t.Object(
-  {
-    ...problemSchema('offer_unavailable', 'offer_revision_conflict').properties,
-    code: t.Union([t.Literal('offer_unavailable'), t.Literal('offer_revision_conflict')]),
-  },
-  object,
-);
+function acquisitionPendingProblem() {
+  return memoizedValue(acquisitionPendingProblem, () =>
+    t.Object(
+      {
+        ...problemSchema('acquisition_pending').properties,
+        code: t.Literal('acquisition_pending'),
+        effect_status: t.Literal('not_applied'),
+        orderId: t.Optional(id),
+      },
+      object,
+    ),
+  );
+}
+function benefitAlreadyOwnedProblem() {
+  return memoizedValue(benefitAlreadyOwnedProblem, () =>
+    t.Object(
+      {
+        ...problemSchema('benefit_already_owned').properties,
+        code: t.Literal('benefit_already_owned'),
+        effect_status: t.Literal('not_applied'),
+        orderId: t.Optional(id),
+        entitlementId: t.Optional(id),
+      },
+      object,
+    ),
+  );
+}
+function offerConflictProblem() {
+  return memoizedValue(offerConflictProblem, () =>
+    t.Object(
+      {
+        ...problemSchema('offer_unavailable', 'offer_revision_conflict').properties,
+        code: t.Union([t.Literal('offer_unavailable'), t.Literal('offer_revision_conflict')]),
+      },
+      object,
+    ),
+  );
+}
 const bearer = [{ bearerAuth: [] }];
 function detail(operationId: string, action: string, exposure: 'gate:purchases' | 'gate:selling', anonymous = false) {
   return { operationId, 'x-exposure': exposure, 'x-action': action, security: anonymous ? [...bearer, {}] : bearer };
@@ -390,7 +439,7 @@ async function command<T>(run: () => Promise<T>, denied: 'forbidden' | 'not_foun
     if (error instanceof RangeError && error.message === 'Invalid configured sale amount')
       throw new ProblemError('invalid_request');
     if (error instanceof OfferUnavailableError) throw new ProblemError('offer_unavailable');
-    if (error instanceof ContentEditionUnavailableError) throw new ProblemError('dependency_unavailable');
+    if (error instanceof ContentEditionUnavailableError()) throw new ProblemError('dependency_unavailable');
     if (error instanceof OfferRevisionConflictError) throw new ProblemError('offer_revision_conflict');
     if (error instanceof StripeUnavailableError) throw new ProblemError('dependency_unavailable');
     throw error;
@@ -447,10 +496,10 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
             object,
           ),
           400: problemSchema('invalid_request', 'invalid_cursor'),
-          401: unauthorized,
+          401: unauthorized(),
           404: problemSchema('not_found'),
           409: problemSchema('stale_cursor'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: detail('subject_offers.list', 'subject:read', 'gate:purchases', true),
       },
@@ -474,7 +523,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
     .get(
       '/v1/commerceMoney',
       {
-        response: { 200: moneySchema, 401: unauthorized, 503: unavailable },
+        response: { 200: moneySchema, 401: unauthorized(), 503: unavailable() },
         // Reuse the existing anonymous offer-read label; static configuration is no grant or selling permission.
         detail: detail('commerce.money_schema', 'offer:read', 'gate:selling', true),
       },
@@ -504,10 +553,10 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
             object,
           ),
           400: problemSchema('invalid_request', 'invalid_cursor'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           409: problemSchema('stale_cursor'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: {
           ...detail('commerce_sale.list', 'commerce_sale:list', 'gate:selling'),
@@ -542,10 +591,10 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         response: {
           200: t.Object({ offers: t.Array(sellerOfferSchema), next: nullableId }, object),
           400: problemSchema('invalid_request', 'invalid_cursor'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           409: problemSchema('stale_cursor'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: {
           ...detail('offer.list', 'offer:list', 'gate:selling'),
@@ -572,11 +621,11 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         params: t.Object({ offerId: id }),
         query: languageQuery,
         response: {
-          200: offerReadResponse,
+          200: offerReadResponse(),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           404: problemSchema('not_found'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: detail('offer.get', 'offer:read', 'gate:purchases', true),
       },
@@ -605,7 +654,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
     .post(
       '/v1/offers',
       {
-        headers,
+        headers: headers(),
         body: t.Union([
           t.Object(
             {
@@ -631,12 +680,12 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           ),
         ]),
         response: {
-          201: offerResponse,
+          201: offerResponse(),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           422: problemSchema('idempotency_conflict'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: { ...detail('offer.create', 'offer:create', 'gate:selling'), 'x-resource-types': ['commerce.offer'] },
       },
@@ -670,7 +719,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       '/v1/offers/:offerId',
       {
         params: t.Object({ offerId: id }),
-        headers,
+        headers: headers(),
         body: t.Object(
           {
             unitAmountMinor: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
@@ -679,14 +728,14 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           object,
         ),
         response: {
-          200: offerResponse,
+          200: offerResponse(),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden', 'platform_closed'),
           404: problemSchema('not_found'),
           409: problemSchema('offer_unavailable', 'offer_revision_conflict'),
           422: problemSchema('idempotency_conflict'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: detail('offer.revise', 'offer:manage', 'gate:selling'),
       },
@@ -725,16 +774,16 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       customMethod('/v1/offers/:offerId', 'delist'),
       {
         params: t.Object({ offerId: id }),
-        headers,
+        headers: headers(),
         body: t.Object({ expectedRevision: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }) }, object),
         response: {
-          200: offerResponse,
+          200: offerResponse(),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           404: problemSchema('not_found'),
           409: problemSchema('offer_revision_conflict'),
           422: problemSchema('idempotency_conflict'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: detail('offer.delist', 'offer:manage', 'gate:selling'),
       },
@@ -771,7 +820,7 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
     .post(
       '/v1/orders',
       {
-        headers,
+        headers: headers(),
         body: t.Object(
           { offerId: id, expectedOfferRevision: t.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }) },
           object,
@@ -779,11 +828,11 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         response: {
           201: orderResponse,
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           404: problemSchema('not_found'),
-          409: t.Union([offerConflictProblem, acquisitionPendingProblem, benefitAlreadyOwnedProblem]),
+          409: t.Union([offerConflictProblem(), acquisitionPendingProblem(), benefitAlreadyOwnedProblem()]),
           422: problemSchema('idempotency_conflict'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: {
           ...detail('order.create', 'order:create', 'gate:purchases'),
@@ -832,10 +881,10 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         response: {
           200: t.Object({ orders: t.Array(orderHistorySchema), next: nullableId }, object),
           400: problemSchema('invalid_request', 'invalid_cursor'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           409: problemSchema('stale_cursor'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: detail('order.list', 'order:read', 'gate:purchases'),
       },
@@ -900,11 +949,11 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
         params: t.Object({ orderId: id }),
         query: languageQuery,
         response: {
-          200: orderReadResponse,
+          200: orderReadResponse(),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           404: problemSchema('not_found'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: detail('order.get', 'order:read', 'gate:purchases'),
       },
@@ -954,16 +1003,16 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       customMethod('/v1/orders/:orderId', 'reconcile'),
       {
         params: t.Object({ orderId: id }),
-        headers: reconcileHeaders,
+        headers: reconcileHeaders(),
         body: t.Object({}, object),
         response: {
           202: t.Object({ orderId: id, reconciliation: t.Literal('queued') }, object),
           400: problemSchema('invalid_request'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden', 'platform_closed'),
           404: problemSchema('not_found'),
           422: problemSchema('idempotency_conflict'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: {
           ...detail('order.reconcile', 'order:reconcile', 'gate:purchases'),
@@ -1005,12 +1054,12 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
           object,
         ),
         response: {
-          200: t.Object({ entitlements: t.Array(entitlementSchema), next: nullableId }, object),
+          200: t.Object({ entitlements: t.Array(entitlementSchema()), next: nullableId }, object),
           400: problemSchema('invalid_request', 'invalid_cursor'),
-          401: unauthorized,
+          401: unauthorized(),
           403: problemSchema('forbidden'),
           409: problemSchema('stale_cursor'),
-          503: unavailable,
+          503: unavailable(),
         },
         detail: detail('entitlement.list', 'entitlement:list', 'gate:purchases'),
       },
@@ -1087,7 +1136,12 @@ export function commerceRoutes(app: ReturnType<typeof definitionRoutes>, deps: D
       '/v1/entitlements/:entitlementId',
       {
         params: t.Object({ entitlementId: id }),
-        response: { 200: entitlementResponse, 401: unauthorized, 404: problemSchema('not_found'), 503: unavailable },
+        response: {
+          200: entitlementResponse(),
+          401: unauthorized(),
+          404: problemSchema('not_found'),
+          503: unavailable(),
+        },
         detail: detail('entitlement.get', 'entitlement:read', 'gate:purchases'),
       },
       async ({ params, actor, admission, job }) => {

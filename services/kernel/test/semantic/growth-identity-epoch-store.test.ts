@@ -86,7 +86,7 @@ test('native current mapping remains bounded as unrelated subject history grows'
       );
     },
     async operation(database) {
-      const mapping = await identityEpochStore.readMapping(database.pool, anchor);
+      const mapping = await identityEpochStore().readMapping(database.pool, anchor);
       expect(mapping).toMatchObject({ state: 'mapped', original: anchor, terminal: anchor });
       return mapping;
     },
@@ -143,7 +143,7 @@ async function seedNativeHistory() {
   for (let offset = 0; offset < originals.length; offset += 2) {
     const { actor, authorization } = await authorize('subject:merge');
     const key = randomUUID();
-    const job = await identityEpochStore.prepareAdmission(
+    const job = await identityEpochStore().prepareAdmission(
       db.pool,
       {
         authorization,
@@ -228,7 +228,7 @@ test('a native mapping page shares five data statements as unrelated history gro
     bounds: { rows: 'constant', blocks: 'logarithmic', statements: 'constant' },
     grow: growHistory,
     async operation(database) {
-      const mappings = await identityEpochStore.readMappings(database.pool, originals);
+      const mappings = await identityEpochStore().readMappings(database.pool, originals);
       expect(mappings).toHaveLength(100);
       expect(mappings.every((mapping, i) => mapping.state === 'mapped' && mapping.terminal === originals[i])).toBe(
         true,
@@ -293,12 +293,12 @@ test('native capped admission includes current authorization, immutable inputs a
         command: { actorAccountId: actor.accountId, kind: 'subject.merge', key, digest: digest(key) },
       },
     };
-    const binding = await identityEpochStore.bindReceipt(database.pool, authority, input);
+    const binding = await identityEpochStore().bindReceipt(database.pool, authority, input);
     const admitted = await runCommand(database.pool, { ...authority, partition: home(survivor) }, (tx) =>
-      identityEpochStore.admit(tx, { ...input, binding }),
+      identityEpochStore().admit(tx, { ...input, binding }),
     );
-    await identityEpochStore.bindReceipt(database.pool, authority, input);
-    expect(await identityEpochStore.readMapping(database.pool, redirected)).toEqual({
+    await identityEpochStore().bindReceipt(database.pool, authority, input);
+    expect(await identityEpochStore().readMapping(database.pool, redirected)).toEqual({
       state: 'pending',
       original: redirected,
       job: admitted.value,
@@ -333,7 +333,7 @@ test('coherent admission and ordered cancellation stay indexed', async () => {
   };
   const operation = async (database: GrowthDatabase) => {
     const { actor, authorization } = await authorize('subject:merge');
-    const job = await identityEpochStore.prepareAdmission(
+    const job = await identityEpochStore().prepareAdmission(
       database.pool,
       {
         authorization,
@@ -363,7 +363,7 @@ test('coherent admission and ordered cancellation stay indexed', async () => {
       expect(progress.work.bytes).toBeGreaterThan(0);
       if (i === 2) expect(progress.state).toBe('cancelled');
     }
-    expect(await identityEpochStore.readMapping(database.pool, redirected)).toMatchObject({
+    expect(await identityEpochStore().readMapping(database.pool, redirected)).toMatchObject({
       state: 'mapped',
       terminal: redirected,
     });

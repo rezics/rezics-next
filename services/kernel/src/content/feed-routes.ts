@@ -41,7 +41,7 @@ export function feedRoutes(
       response: {
         reference: 'content.feed.page',
         schema: {
-          200: FeedPageSchema,
+          200: FeedPageSchema(),
           400: problemSchema('invalid_request', 'invalid_cursor'),
           401: problemSchema('authentication_required', 'invalid_credentials'),
           403: problemSchema('forbidden', 'platform_closed'),

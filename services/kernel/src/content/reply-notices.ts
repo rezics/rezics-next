@@ -21,7 +21,7 @@ export function createReplyNoticeEffect(pool: Pool, access: Access): Effect {
     name: 'content_reply_notice',
     types: [postPublished],
     async run(event) {
-      if (event.type !== postPublished || !Value.Check(CONTENT_EVENTS[postPublished], event.data))
+      if (event.type !== postPublished || !Value.Check(CONTENT_EVENTS()[postPublished], event.data))
         throw new TypeError('Invalid reply notice source event');
       const data = event.data as ContentEventData<typeof postPublished>;
       const route = routeOf(data.threadId);

@@ -1,3 +1,4 @@
+import { memoizedValue } from '../memoized.ts';
 import { t } from 'elysia';
 import { bundledRelease } from '@rezics/definitions/bundled';
 import { GrantDeniedError } from '../access/grant-commands.ts';
@@ -25,11 +26,17 @@ import {
 type Service = ReturnType<typeof createVndbImport>;
 type Output<K extends keyof Service> = Awaited<ReturnType<Service[K]>>;
 const closed = { additionalProperties: false } as const;
-const uuid = t.String({ format: 'uuid' }),
-  ordinal = t.Integer({ minimum: 0, maximum: VNDB_LIMITS.rows - 1 });
-const dateRows = Math.min(IMPORT_CONSUMPTION_LIMITS.rows, VNDB_LIMITS.page);
+const uuid = t.String({ format: 'uuid' });
+function ordinal() {
+  return memoizedValue(ordinal, () => t.Integer({ minimum: 0, maximum: VNDB_LIMITS.rows - 1 }));
+}
+function dateRows() {
+  return memoizedValue(dateRows, () => Math.min(IMPORT_CONSUMPTION_LIMITS.rows, VNDB_LIMITS.page));
+}
 const params = t.Object({ uploadId: uuid }, closed);
-const metadataParams = t.Object({ uploadId: uuid, ordinal }, closed);
+function metadataParams() {
+  return memoizedValue(metadataParams, () => t.Object({ uploadId: uuid, ordinal: ordinal() }, closed));
+}
 const metadataSelection = t.Object(
   {
     field: t.Union([
@@ -68,54 +75,74 @@ const progressSelection = t.Object(
   },
   closed,
 );
-const reviewChoice = t.Union([
-  t.Object({ ordinal, action: t.Union([t.Literal('skip'), t.Literal('retain')]), targetId: t.Optional(uuid) }, closed),
-  t.Object(
-    {
-      ordinal,
-      action: t.Literal('state'),
-      targetId: t.Optional(uuid),
-      state: t.String({ pattern: '^[a-z][a-z0-9_.-]{0,63}$' }),
-      replace: t.Optional(t.Boolean()),
-      progress: t.Optional(progressSelection),
-    },
-    closed,
-  ),
-  t.Object({ ordinal, action: t.Literal('progress'), targetId: t.Optional(uuid), progress: progressSelection }, closed),
-  t.Object(
-    {
-      ordinal,
-      action: t.Literal('score'),
-      targetId: t.Optional(uuid),
-      questionId: uuid,
-      questionRevision: t.Integer({ minimum: 1 }),
-      selection: scoreSelection,
-      consent: t.Union([t.Literal('adopt-native-vote'), t.Literal('clear-native-vote')]),
-    },
-    closed,
-  ),
-]);
-const headers = t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) });
-const failures = {
-  400: problemSchema('invalid_request'),
-  401: problemSchema('authentication_required', 'invalid_credentials'),
-  403: problemSchema('forbidden'),
-  404: problemSchema('not_found'),
-  409: problemSchema('conflict'),
-  413: problemSchema('content_too_large'),
-  422: problemSchema('idempotency_conflict'),
-  503: problemSchema(
-    'overloaded',
-    'deadline_exceeded',
-    'partition_unavailable',
-    'transaction_retry_exhausted',
-    'semantic_not_ready',
-  ),
-};
-const schemas = { page: vndbPageSchema, apply: vndbApplySchema, source: vndbSourceSchema };
-const response = <K extends keyof typeof schemas>(kind: K) => ({
-  200: t.Unsafe<Output<K>>(schemas[kind]),
-  ...failures,
+function reviewChoice() {
+  return memoizedValue(reviewChoice, () =>
+    t.Union([
+      t.Object(
+        { ordinal: ordinal(), action: t.Union([t.Literal('skip'), t.Literal('retain')]), targetId: t.Optional(uuid) },
+        closed,
+      ),
+      t.Object(
+        {
+          ordinal: ordinal(),
+          action: t.Literal('state'),
+          targetId: t.Optional(uuid),
+          state: t.String({ pattern: '^[a-z][a-z0-9_.-]{0,63}$' }),
+          replace: t.Optional(t.Boolean()),
+          progress: t.Optional(progressSelection),
+        },
+        closed,
+      ),
+      t.Object(
+        { ordinal: ordinal(), action: t.Literal('progress'), targetId: t.Optional(uuid), progress: progressSelection },
+        closed,
+      ),
+      t.Object(
+        {
+          ordinal: ordinal(),
+          action: t.Literal('score'),
+          targetId: t.Optional(uuid),
+          questionId: uuid,
+          questionRevision: t.Integer({ minimum: 1 }),
+          selection: scoreSelection,
+          consent: t.Union([t.Literal('adopt-native-vote'), t.Literal('clear-native-vote')]),
+        },
+        closed,
+      ),
+    ]),
+  );
+}
+function headers() {
+  return memoizedValue(headers, () => t.Object({ [IDEMPOTENCY_HEADER]: t.String({ minLength: 3, maxLength: 1024 }) }));
+}
+function failures() {
+  return memoizedValue(failures, () => ({
+    400: problemSchema('invalid_request'),
+    401: problemSchema('authentication_required', 'invalid_credentials'),
+    403: problemSchema('forbidden'),
+    404: problemSchema('not_found'),
+    409: problemSchema('conflict'),
+    413: problemSchema('content_too_large'),
+    422: problemSchema('idempotency_conflict'),
+    503: problemSchema(
+      'overloaded',
+      'deadline_exceeded',
+      'partition_unavailable',
+      'transaction_retry_exhausted',
+      'semantic_not_ready',
+    ),
+  }));
+}
+function schemas() {
+  return memoizedValue(schemas, () => ({
+    page: vndbPageSchema(),
+    apply: vndbApplySchema(),
+    source: vndbSourceSchema(),
+  }));
+}
+const response = <K extends keyof ReturnType<typeof schemas>>(kind: K) => ({
+  200: t.Unsafe<Output<K>>(schemas()[kind]),
+  ...failures(),
 });
 const detail = (operation: string, write = true) => ({
   operationId: `library_vndb.${operation}`,
@@ -146,9 +173,9 @@ export function vndbImportRoutes(
     .post(
       customMethod('/v1/libraryImports/vndb', 'preview'),
       {
-        headers,
+        headers: headers(),
         body: t.Object({ xml: t.String({ minLength: 1, maxLength: VNDB_LIMITS.bytes }) }, closed),
-        response: { 200: t.Unsafe<Output<'preview'>['value']>(vndbPreviewSchema), ...failures },
+        response: { 200: t.Unsafe<Output<'preview'>['value']>(vndbPreviewSchema()), ...failures() },
         detail: { ...detail('preview'), 'x-body-limit': VNDB_LIMITS.wireBytes },
       },
       async ({ actor, body, headers, admission, job, session, set }) =>
@@ -184,9 +211,9 @@ export function vndbImportRoutes(
       customMethod('/v1/libraryImports/vndb/:uploadId', 'review'),
       {
         params,
-        headers,
-        body: reviewChoice,
-        response: { 200: t.Unsafe<Output<'review'>['value']>(vndbReviewSchema), ...failures },
+        headers: headers(),
+        body: reviewChoice(),
+        response: { 200: t.Unsafe<Output<'review'>['value']>(vndbReviewSchema), ...failures() },
         detail: detail('review'),
       },
       ({ actor, params, body, headers, admission, job, session, set }) =>
@@ -202,10 +229,10 @@ export function vndbImportRoutes(
       '/v1/libraryImports/vndb/:uploadId/dates/review',
       {
         params,
-        headers,
+        headers: headers(),
         body: t.Object(
           {
-            ordinal,
+            ordinal: ordinal(),
             sourceReviewToken: uuid,
             occurrenceId: uuid,
             startAction: t.Optional(t.Union([t.Literal('adopt'), t.Literal('clear')])),
@@ -215,7 +242,7 @@ export function vndbImportRoutes(
         ),
         response: {
           200: t.Unsafe<Output<'reviewConsumptionDates'>['value']>(t.Any()),
-          ...failures,
+          ...failures(),
         },
         detail: { ...detail('dates_review'), 'x-body-limit': IMPORT_CONSUMPTION_LIMITS.requestBytes },
       },
@@ -243,7 +270,7 @@ export function vndbImportRoutes(
             rows: t.Array(
               t.Object(
                 {
-                  ordinal,
+                  ordinal: ordinal(),
                   version: uuid,
                   fields: t.Array(t.Union([t.Literal('startDate'), t.Literal('finishDate')]), {
                     minItems: 1,
@@ -253,12 +280,12 @@ export function vndbImportRoutes(
                 },
                 closed,
               ),
-              { minItems: 1, maxItems: dateRows, uniqueItems: true },
+              { minItems: 1, maxItems: dateRows(), uniqueItems: true },
             ),
           },
           closed,
         ),
-        response: { 200: t.Unsafe<Output<'applyConsumptionDates'>>(t.Any()), ...failures },
+        response: { 200: t.Unsafe<Output<'applyConsumptionDates'>>(t.Any()), ...failures() },
         detail: { ...detail('dates_apply'), 'x-body-limit': IMPORT_CONSUMPTION_LIMITS.requestBytes },
       },
       ({ actor, params, body, request, admission, job, session, set }) =>
@@ -278,10 +305,10 @@ export function vndbImportRoutes(
       customMethod('/v1/libraryImports/vndb/:uploadId', 'reviewMetadata'),
       {
         params,
-        headers,
-        body: t.Object({ ordinal, sourceReviewToken: uuid }, closed),
-        response: { 200: t.Unsafe<Output<'reviewMetadata'>['value']>(t.Any()), ...failures },
-        detail: { ...detail('review_metadata'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
+        headers: headers(),
+        body: t.Object({ ordinal: ordinal(), sourceReviewToken: uuid }, closed),
+        response: { 200: t.Unsafe<Output<'reviewMetadata'>['value']>(t.Any()), ...failures() },
+        detail: { ...detail('review_metadata'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS().requestBytes },
       },
       ({ actor, params, body, headers, admission, job, session, set }) =>
         run(set, async () => {
@@ -301,9 +328,9 @@ export function vndbImportRoutes(
     .get(
       '/v1/libraryImports/vndb/:uploadId/metadata/:ordinal',
       {
-        params: metadataParams,
+        params: metadataParams(),
         query: t.Object({ reviewToken: uuid }, closed),
-        response: { 200: t.Unsafe<Output<'metadata'>>(t.Any()), ...failures },
+        response: { 200: t.Unsafe<Output<'metadata'>>(t.Any()), ...failures() },
         detail: detail('read_metadata', false),
       },
       ({ actor, params, query, admission, job, set }) =>
@@ -319,18 +346,18 @@ export function vndbImportRoutes(
         params,
         body: t.Object(
           {
-            ordinal,
+            ordinal: ordinal(),
             reviewToken: uuid,
             fields: t.Array(metadataSelection, {
               minItems: 1,
-              maxItems: ENTRY_IMPORT_METADATA_LIMITS.fields,
+              maxItems: ENTRY_IMPORT_METADATA_LIMITS().fields,
               uniqueItems: true,
             }),
           },
           closed,
         ),
-        response: { 200: t.Unsafe<Output<'applyMetadata'>>(t.Any()), ...failures },
-        detail: { ...detail('apply_metadata'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS.requestBytes },
+        response: { 200: t.Unsafe<Output<'applyMetadata'>>(t.Any()), ...failures() },
+        detail: { ...detail('apply_metadata'), 'x-body-limit': ENTRY_IMPORT_METADATA_LIMITS().requestBytes },
       },
       ({ actor, params, body, request, admission, job, session, set }) =>
         run(set, () =>
@@ -353,10 +380,13 @@ export function vndbImportRoutes(
         params,
         body: t.Object(
           {
-            rows: t.Array(t.Object({ ordinal, reviewId: t.Optional(uuid), scoreReviewId: t.Optional(uuid) }, closed), {
-              minItems: 1,
-              maxItems: VNDB_LIMITS.page,
-            }),
+            rows: t.Array(
+              t.Object({ ordinal: ordinal(), reviewId: t.Optional(uuid), scoreReviewId: t.Optional(uuid) }, closed),
+              {
+                minItems: 1,
+                maxItems: VNDB_LIMITS.page,
+              },
+            ),
           },
           closed,
         ),
@@ -374,8 +404,8 @@ export function vndbImportRoutes(
       customMethod('/v1/libraryImports/vndb/:uploadId', 'cancel'),
       {
         params,
-        headers,
-        response: { 200: t.Unsafe<Output<'remove'>['value']>(vndbRemovalSchema), ...failures },
+        headers: headers(),
+        response: { 200: t.Unsafe<Output<'remove'>['value']>(vndbRemovalSchema), ...failures() },
         detail: detail('cancel'),
       },
       ({ actor, params, headers, admission, job, session, set }) =>
@@ -391,8 +421,8 @@ export function vndbImportRoutes(
       '/v1/libraryImports/vndb/:uploadId',
       {
         params,
-        headers,
-        response: { 200: t.Unsafe<Output<'remove'>['value']>(vndbRemovalSchema), ...failures },
+        headers: headers(),
+        response: { 200: t.Unsafe<Output<'remove'>['value']>(vndbRemovalSchema), ...failures() },
         detail: detail('delete'),
       },
       ({ actor, params, headers, admission, job, session, set }) =>
