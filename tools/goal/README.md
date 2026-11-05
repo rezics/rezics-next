@@ -1390,6 +1390,8 @@ independent verifier and main promotion retain their existing policies. The targ
 landing; the observed disposable-fixture command cost is recorded with the `dev-landing-transpile` guard below.
 The measured fixture was 7ms for 7 changed paths, 4 executable TypeScript entries and 180 source bytes; this is one
 sample against the target, not a claim that all landings meet it.
+Decision: A dev candidate that changes a Kernel migration regenerates its schema dumps with `bun run --cwd services/kernel derived schema` before the compiler check and publication, and commits each changed `db/**/schema.sql` onto the candidate as its own commit.
+The step runs for direct, batch and control-plane dev landings and only when a migration changed. A failed regeneration returns its first error through the same worker session as a compiler diagnostic, recorded under the `dev-landing-schema` guard, without a failed attempt outcome.
 Promotion gates on correctness only: the root gate and the promoted tasks' own acceptance. Capability completion
 (`docs/goals/<goal>.capabilities.md`) is reported by the completion checker on `main` and never blocks a promotion,
 so `main` receives finished work while other In rows are still open.
