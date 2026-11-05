@@ -65,6 +65,8 @@ function transportFor(
       transport.clearSourceStatistic(input, signal),
     writeSourceStatistic: (input: Parameters<typeof transport.writeSourceStatistic>[0], signal?: AbortSignal) =>
       transport.writeSourceStatistic(input, signal),
+    readSourceStatistics: transport.readSourceStatistics,
+    readPublicFigure: transport.readPublicFigure,
   };
 }
 
@@ -359,8 +361,8 @@ export async function* archive(
   lateDuplicate = false,
   statistics: Readonly<Record<string, { count: number; average: number | null }>> = {},
 ): AsyncGenerator<Uint8Array> {
-  for (const name of [...names, ...(lateDuplicate ? ['entry_meta'] : [])]) {
-    let content = text(name);
+  for (const name of ['TIMESTAMP', ...names, ...(lateDuplicate ? ['entry_meta'] : [])]) {
+    let content = name === 'TIMESTAMP' ? '2026-10-25 00:00:00+00\n' : text(name);
     if (name === 'vn') {
       const columns = text('vn.header').trimEnd().split('\t');
       content = content
@@ -379,7 +381,7 @@ export async function* archive(
     const body = new TextEncoder().encode(content);
     const header = new Uint8Array(512);
     const put = (offset: number, value: string) => header.set(new TextEncoder().encode(value), offset);
-    put(0, `db/${name}`);
+    put(0, name === 'TIMESTAMP' ? name : `db/${name}`);
     put(100, '0000644\0');
     put(108, '0000000\0');
     put(116, '0000000\0');

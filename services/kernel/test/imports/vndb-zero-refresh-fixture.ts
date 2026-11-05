@@ -125,6 +125,8 @@ export async function runJourney() {
             }),
           writeSourceStatistic: ordinaryTransport.writeSourceStatistic,
           clearSourceStatistic: ordinaryTransport.clearSourceStatistic,
+          readSourceStatistics: ordinaryTransport.readSourceStatistics,
+          readPublicFigure: ordinaryTransport.readPublicFigure,
         },
       });
     const baseline = async () => {
