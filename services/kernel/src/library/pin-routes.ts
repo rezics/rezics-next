@@ -102,7 +102,6 @@ export function pinRoutes(
         set.headers['cache-control'] = 'private, no-store';
         return admission.run('normal', job, async () => {
           const page = await pins().list(actor, query);
-<<<<<<< HEAD
           return runPinBoundedStep(
             'library.pin.wire-response',
             pinWireResponseBound({ pins: page.pins.length, revision: page.revision, next: page.next }),
