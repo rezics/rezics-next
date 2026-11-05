@@ -6,7 +6,8 @@ import { createPool } from '../../src/database/pool.ts';
 import { startRelays } from '../../src/events/relays.ts';
 import { createKernel } from '../../src/http/kernel.ts';
 import { newId, partitionOf, routeOf } from '../../src/route/route.ts';
-import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { createWriteRateLimiter } from '../../src/access/write-rate.ts';
+import { bootstrapRelease, GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { linkProjection } from '../../src/semantic/links.ts';
 import { observeSql } from '../content/support/sql-observer.ts';
 import { suspendAccount } from '../support/native-suspension-driver.ts';
@@ -41,10 +42,18 @@ const real = await createRealAccess(admin, accounts, actions);
 const kernel = createKernel({
   pool,
   access: real.access,
-  writeRate: real.writeRate,
+  writeRate: createWriteRateLimiter({
+    secret: 'semantic-real-access-test-secret',
+    overrides: JSON.stringify({
+      'new-account': { write: { maximum: 100000, seconds: 60 } },
+      member: { write: { maximum: 100000, seconds: 60 } },
+      trusted: { write: { maximum: 100000, seconds: 60 } },
+    }),
+  }),
   tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(113)]]) },
   routeKey: new Uint8Array(32).fill(114),
   receiptKeys: testReceiptKeys(),
+  requestDeadlineMs: 30_000,
 });
 const projection = linkProjection(pool);
 const relays = startRelays(pool, [projection], { intervalMs: 20 });
@@ -240,26 +249,21 @@ beforeAll(async () => {
       account,
     ]);
   }
-  const grants: Record<Exclude<Persona, undefined>, readonly string[]> = {
-    editor: [
-      'definitions:publish',
-      'definitions:activate',
-      'gate:definition_publication',
-      'subject:create',
-      'subject:read',
-      'statement:propose',
-    ],
+  for (const action of actions) await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', action);
+  await real.grant({ route: 0, id: GLOBAL_CONTEXT }, 'editor', 'gate:definition_publication');
+  const grants: Record<Exclude<keyof typeof accounts, 'editor'>, readonly string[]> = {
     acceptor: ['subject:read', 'context:create', 'context:read', 'context:accept', 'context:adopt'],
     steward: ['subject:read', 'moderation:hide'],
     outsider: ['subject:read'],
     suspended: ['subject:read'],
   };
-  for (const [persona, granted] of Object.entries(grants) as [Exclude<Persona, undefined>, readonly string[]][]) {
+  for (const [persona, granted] of Object.entries(grants) as [
+    Exclude<keyof typeof accounts, 'editor'>,
+    readonly string[],
+  ][]) {
     for (const action of granted) await real.grant({ route: 0, id: GLOBAL_CONTEXT }, persona, action);
   }
-  const published = await call('POST', '/v1/definitions/releases', 'editor', { release });
-  expect(published.digest).toBe(digest);
-  await call('POST', `/v1/definitions/releases/${digest}:activate`, 'editor', { expected_head: null });
+  expect(await bootstrapRelease(pool, release)).toBe(digest);
   role = (await call('POST', '/v1/subjects', 'editor', { type: 'ex:Role', labels: { en: 'Lead', ja: '主役' } })).subject
     .id;
   partitions.add(partitionOf(routeOf(role)!));

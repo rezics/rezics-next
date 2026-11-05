@@ -5,6 +5,8 @@ import type { OverviewValue, Section } from '../src/features/pages/overview';
 import type { RelationGroupRequest } from '../src/features/pages/relation-stream-query';
 import type { RelationHistorySelection } from '../src/features/pages/subject-history';
 
+mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
+
 test('relation readers and history keep exact selection across continuation keyboard retry and return', async () => {
   const { Window } = await import(
     Bun.resolveSync('happy-dom', dirname(Bun.resolveSync('@puckeditor/core', import.meta.dir)))
@@ -26,7 +28,6 @@ test('relation readers and history keep exact selection across continuation keyb
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const held: { request: RelationGroupRequest; resolve(value: Section): void; reject(error: Error): void }[] = [];
   const start = await import('../.storybook/react-start');
-  mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://rezics.test' } }));
   mock.module('@tanstack/react-start', () => start);
   mock.module('@tanstack/react-start/server', () => start);
   const { relationGroupKey } = await import('../src/features/pages/relation-stream-query');
