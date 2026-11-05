@@ -858,7 +858,7 @@ function RangeControl({
   const { lower, upper, unit, invalid } = draft;
   const time = definition.datatype === 'time';
   const [pendingUnitChange, setPendingUnitChange] = useState<
-    { from?: string; to?: string; identity: string; magnitudes: readonly string[] } | undefined
+    { from: string | undefined; to: string | undefined; identity: string; magnitudes: readonly string[] } | undefined
   >();
   const unitChangeDialog = useRef<HTMLDialogElement>(null);
   const unitChangeId = useId();

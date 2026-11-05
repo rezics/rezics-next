@@ -65,7 +65,12 @@ type MessageOptions = { locale: (typeof locales)[number] };
 type PendingPropertyChange =
   | { kind: 'statement'; property: string; identity: string }
   | { kind: 'qualifier'; index: number; property: string; identity: string };
-type PendingUnitChange = { from?: string; to?: string; identity: string; magnitudes: readonly string[] };
+type PendingUnitChange = {
+  from: string | undefined;
+  to: string | undefined;
+  identity: string;
+  magnitudes: readonly string[];
+};
 type EditorContext = {
   metadata: ConditionMetadata;
   identity: string;
