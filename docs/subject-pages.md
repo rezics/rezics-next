@@ -743,6 +743,14 @@ The private, noindex composer prepares the current session before its CSRF-prote
 labels follow the existing locale fallback; the authored text's BCP 47 language is a separate explicit input.
 An unavailable or concealed read never supplies a cached document or a privileged public fallback.
 
+Decision: Generic authored entries and the collected contribution menu carry one closed public observation in
+`origin`, independent of synopsis `via`. It contains only the Subject, actual Context, optional Realm, locale and one
+compatible immediate public return. An observed Global visit without Realm uses the existing authored chooser, field
+and advice reads. Other observations stop before Global canonical or editor reads and offer a compatible public
+return plus a deliberate fresh Global authored visit that keeps only that validated return. Generic returns restore
+the current public heading without assertion focus. Invalid or conflicting observations remain explicit; legacy
+bare entries remain valid. Public intent carries no assertion, body, draft, credential or command authority.
+
 The shared rich-text editor starts with an empty Text-profile document for a **new replacement candidate**. It
 never preloads, flattens or edits the current document. Existing candidates and all their formatting remain intact.
 The contributor declares authorship, enters an SPDX licence or LicenseRef and supplies the supporting citation URL
@@ -2884,15 +2892,16 @@ unsupported Contexts explain the Global-only destination before canonical Global
 return remains a real link to the originating reading. Malformed, duplicate and mismatched visit locators cannot
 start an editor. A separate current Global field link retires the selection and starts an ordinary visit.
 
-The authored address and its refresh/review transport retain one validated `via`. The current native Subject,
-best-rank synopsis admission, active Definition release and exact candidate/document/digest/language binding must
-match before inspection. Failed body binding leaves a changed/unavailable view with a deliberate current-field link.
-Inspection does not initialize an editable draft or grant an action; the original authoring controller still owns
-independent drafts, current native advice, proposals, confirmation and uncertain-result recovery. Subject, locale,
-selection and observed reader changes retire the visit, including A/B/A revisits. The producer charges UTF-8 bytes
-and encoding expansion for the whole authored address against its existing 2,048-byte outer budget. The 512-entry,
-262,144-byte metadata admission and 2,048-character summary fragment bounds remain unchanged. No native request is
-added: inspection replaces selection inside the existing authored Subject/release/document/advice reads.
+Synopsis correction retains its exact validated `via` through the authored address and its refresh/review transport;
+generic public intent never becomes that operand. The current native Subject, best-rank synopsis admission, active
+Definition release and exact candidate/document/digest/language binding must match before inspection. Failed body
+binding leaves a changed/unavailable view with a deliberate current-field link. Inspection does not initialize an
+editable draft or grant an action; the original authoring controller still owns independent drafts, current native
+advice, proposals, confirmation and uncertain-result recovery. Subject, locale, selection and observed reader changes
+retire the synopsis visit, including A/B/A revisits. The complete retained authored search is charged after encoding
+against both the 2,048-character and 2,048-byte ceilings, while any tighter existing bound remains in force. The
+512-entry, 262,144-byte metadata admission and 2,048-character summary fragment bounds remain unchanged. Generic
+admission adds no native request; a deliberate fresh Global visit runs only the original current authored reads.
 
 The return reading announces a changed or unavailable selection and focuses the current synopsis when the saved
 binding no longer matches. Correction and sign-in hrefs are enclosed by the selected assertion's spoiler gate.
