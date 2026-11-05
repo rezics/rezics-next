@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { fromPlainText, serializeDocument } from '@rezics/document';
-import { GLOBAL_CONTEXT } from '../../../services/kernel/src/semantic/definitions.ts';
 import { subjectHref } from '../src/subject/subject-href.ts';
 import { startNativeWebStack, type NativeWebStack } from './native/stack';
 
+// Global Context (services/kernel/src/semantic/definitions.ts). Not imported: that module loads Kernel SQL before the
+// native stack registers its loader.
+const GLOBAL_CONTEXT = '00000000-0000-8000-8000-000000000000';
 const minute = 'http://www.wikidata.org/entity/Q7727';
 const marker = `journeyrecipe${crypto.randomUUID().replaceAll('-', '').replace(/[0-9]/g, 'a')}`;
 const steps = ['Rinse the rice.', 'Add water.', 'Simmer for 25 minutes.'];
