@@ -307,6 +307,43 @@ export function composeLabelOperation(
   });
 }
 
+/** Command-owned SQL fence, receipt/history/outbox and transaction-control work. */
+export function labelCommandComponent(kind: string, input: unknown, response: object): LabelOperationComponent {
+  const receipt = {
+    principal: { kind: 'account', id: uuid },
+    kind,
+    key: 'x'.repeat(1024),
+    digest: 'f'.repeat(64),
+    response,
+  };
+  return component(
+    'command.receipt-history-outbox-controls',
+    work({
+      candidateKeys: 8,
+      nativeRows: 8,
+      emptySeeks: 5,
+      nativePoints: 7,
+      statements: 10,
+      bytes: encoded(input) + encoded(receipt) + Buffer.byteLength(JSON.stringify({ type: 'label.changed', data: input })),
+    }),
+  );
+}
+
+/** Read-snapshot owner work around a page's native storage leaves. */
+export function labelSnapshotComponent(kind: string, input: unknown, responseBytes: number): LabelOperationComponent {
+  return component(
+    kind,
+    work({
+      candidateKeys: 2,
+      nativeRows: 2,
+      emptySeeks: 2,
+      nativePoints: 2,
+      statements: 5,
+      bytes: encoded(input) + responseBytes,
+    }),
+  );
+}
+
 /** Reserve one closed operation once, then execute its leaves on the caller's existing native resources. */
 export async function executeLabelOperation<T>(plan: LabelOperationPlan, body: () => Promise<T>): Promise<T> {
   if (activeLabelOperation.getStore()) return body();
