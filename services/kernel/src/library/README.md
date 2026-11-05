@@ -2049,7 +2049,7 @@ attribution; its execution remains with the controller's protected native growth
 
 ### Durable Collection order repair and cleanup
 
-Decision: the Library owns complete nine-axis actor-command declarations for add/move and repair begin, and fixed page/outbox declarations, at their existing call sites; the declarations describe bounded work and do not create dispatch or reservation authority.
+Decision: the Library owns complete nine-axis actor-command declarations for add/move and repair begin, and fixed page/outbox declarations, at their existing call sites; the declarations describe bounded work and do not create dispatch or reservation authority. Pin with one static nine-axis independence test at 64/512/4096 plus existing unsafe-declaration coverage; no new Search stories.
 
 - Touches: One immutable repair capture/progress row, one exact parent/account fence and at most 128 examined original
   raw occurrences per transaction. Output updates are point CAS operations. Parent order/source fences, invalidation
