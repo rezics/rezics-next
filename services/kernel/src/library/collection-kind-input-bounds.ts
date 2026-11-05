@@ -83,14 +83,7 @@ const custodySql = [
   custodyHold,
 ] as const;
 
-const admissionEpisode = statement(
-  admitEpisode.sql,
-  8,
-  8,
-  9,
-  0,
-  { escaped: 2 * (ESCAPED_BODY + 2048) },
-);
+const admissionEpisode = statement(admitEpisode.sql, 8, 8, 9, 0, { escaped: 2 * (ESCAPED_BODY + 2048) });
 const admissionSource = statement(readSource.sql, 3, 3, 3, 10240, { escaped: 0 });
 const custody = sumBounds(
   work(0, 208, 10, 0, 7),
@@ -166,21 +159,10 @@ export const COLLECTION_KIND_PREPARATION_TERMS = Object.freeze({
 });
 
 /** Complete one-attempt sequence: admission, state, two reads, source observations, insert fence, retirement. */
-export const COLLECTION_KIND_INPUT_COST = sumBounds(
-  admission,
-  state,
-  collisionReads,
-  source,
-  insert,
-  retire,
-);
+export const COLLECTION_KIND_INPUT_COST = sumBounds(admission, state, collisionReads, source, insert, retire);
 
 export const COLLECTION_KIND_PREPARATION_OBSERVATION = sumBounds(preparationScope, custody);
-export const COLLECTION_KIND_PREPARATION_RETIREMENT = sumBounds(
-  preparationRetired,
-  preparationScope,
-  custody,
-);
+export const COLLECTION_KIND_PREPARATION_RETIREMENT = sumBounds(preparationRetired, preparationScope, custody);
 
 export const COLLECTION_KIND_INPUT_PATHS = Object.freeze({
   quantum: COLLECTION_KIND_INPUT_QUANTUM,

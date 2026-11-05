@@ -151,9 +151,7 @@ test('Kind raw-original input is one nine-axis plan shared by admission, composi
     sumBounds(COLLECTION_KIND_PREPARATION_TERMS.scope, COLLECTION_KIND_PREPARATION_TERMS.custody),
   );
   expect(COLLECTION_KIND_INPUT_DECLARATION.cost.engineRequests).toBe(0);
-  expect(collectionKindInputWork()).toEqual(
-    collectionKindInputWorkDimensions(COLLECTION_KIND_INPUT_DECLARATION.cost),
-  );
+  expect(collectionKindInputWork()).toEqual(collectionKindInputWorkDimensions(COLLECTION_KIND_INPUT_DECLARATION.cost));
   expect(COLLECTION_KIND_INPUT_PATHS).toMatchObject({
     quantum: 1,
     rawCeiling: 100,
@@ -232,7 +230,11 @@ test('a complete encoded envelope over 4096 bytes is refused before dispatch and
   expect(collectionKindInputAdmitted(short)).toBe(false);
   await expect(
     resolveCollectionKindRawInput(
-      { query() { throw new Error('Unadmitted raw input reached SQL'); } } as never,
+      {
+        query() {
+          throw new Error('Unadmitted raw input reached SQL');
+        },
+      } as never,
       {
         route: 0xc100,
         ownerAccountId: newId(0xc100),
