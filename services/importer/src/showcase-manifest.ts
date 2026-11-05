@@ -5,10 +5,7 @@ import type { SourceRecord } from '@rezics/conversion';
 import { bangumiRecordUrl, crossMediaCoverDigest, vndbRecordUrl } from '@rezics/conversion/cross-media-entities';
 import { bangumiVocabularyRevision } from '@rezics/conversion/bangumi-vocabulary';
 import { vndbTagsRatingMetric, vndbVocabularyRevision } from '@rezics/conversion/vndb-vocabulary';
-import {
-  sourceDigest,
-  type VndbPublicTagCategory,
-} from '../../../packages/conversion/src/support.ts';
+import { sourceDigest, type VndbPublicTagCategory } from '../../../packages/conversion/src/support.ts';
 import { createSelectedFamilySourceRegistration, crossMediaBangumiRevision } from './source-registry.ts';
 import type { CrossMediaPlan, CrossMediaReading } from './cross-media-seed.ts';
 import { bangumiAppearanceSource, graphEdgeCommandKey, graphEdgeSource } from './cross-media-bindings.ts';
@@ -171,8 +168,8 @@ export type ShowcaseManifest = Readonly<{
   records: readonly ShowcaseRecord[];
   vocabulary: readonly ShowcaseVocabularyRecord[];
   media: readonly ShowcaseMediaRecord[];
-  tagAssociations: readonly ShowcaseTagAssociation[];
-  tagAssociationRefreshes: readonly string[];
+  tagAssociations?: readonly ShowcaseTagAssociation[];
+  tagAssociationRefreshes?: readonly string[];
   tagWeightObservations: readonly VndbTagRatingObservation[];
   tagWeightRefreshes: readonly string[];
   omissions: readonly ShowcaseOmission[];

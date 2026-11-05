@@ -16,6 +16,7 @@ import {
   type ShowcaseAssertion,
   type ShowcaseManifest,
   type ShowcaseRecord,
+  type ShowcaseTagAssociation,
   type ShowcaseVocabularyRecord,
   type ShowcaseVocabularyRequirement,
   showcaseMediaContext,
@@ -327,8 +328,8 @@ export class ShowcaseJournal implements BangumiCoverSourceJournal, BangumiPerson
       })),
       tagWeightObservations: manifest.tagWeightObservations,
       tagWeightRefreshes: manifest.tagWeightRefreshes,
-      tagAssociations: manifest.tagAssociations,
-      tagAssociationRefreshes: manifest.tagAssociationRefreshes,
+      tagAssociations: manifest.tagAssociations ?? [],
+      tagAssociationRefreshes: manifest.tagAssociationRefreshes ?? [],
     };
     const body = json(intent);
     const prior = this.#db
@@ -810,7 +811,7 @@ function sourceTagId(statement: BatchStatement): string | undefined {
   return undefined;
 }
 
-function tagAssociationKey(association: ShowcaseManifest['tagAssociations'][number]): string {
+function tagAssociationKey(association: ShowcaseTagAssociation): string {
   return [
     association.workId,
     association.sourceKey,
@@ -833,8 +834,8 @@ function vndbTagMembership(record: ShowcaseRecord, assertion: ShowcaseAssertion)
 function tagAssociationFor(
   record: ShowcaseRecord,
   assertion: ShowcaseAssertion,
-  associations: ShowcaseManifest['tagAssociations'],
-): ShowcaseManifest['tagAssociations'][number] | undefined {
+  associations: readonly ShowcaseTagAssociation[],
+): ShowcaseTagAssociation | undefined {
   const identity = tagAssociationPath(record, assertion.source, assertion.statement);
   if (!identity) return;
   return associations.find(
@@ -870,16 +871,13 @@ function tagAssociationPath(
       if (!sourceCitationMatchesRecord(record, citation)) continue;
       const match = /^#\/tags_vn\/(v[1-9][0-9]*)\/(g[1-9][0-9]{0,9})\/tag$/u.exec(new URL(citation).hash);
       if (!match || match[1] !== record.sourceKey) continue;
-      return { sourceKey: `/tags_vn/${match[1]}/${match[2]}/tag`, tagId: match[2] };
+      return { sourceKey: `/tags_vn/${match[1]}/${match[2]}/tag`, tagId: match[2]! };
     }
   }
   return;
 }
 
-function tagAssociationStatementMatches(
-  association: ShowcaseManifest['tagAssociations'][number],
-  statement: BatchStatement,
-): boolean {
+function tagAssociationStatementMatches(association: ShowcaseTagAssociation, statement: BatchStatement): boolean {
   if (statement.value.type !== 'value' || statement.value.content !== association.conceptId) return false;
   const spoiler = statement.qualifiers?.find((term) => term.property.id === 'rezics:spoilerLevel');
   if (!spoiler || spoiler.value.type !== 'value' || !spoiler.value.content || typeof spoiler.value.content !== 'object')
@@ -1269,7 +1267,7 @@ export async function publishShowcase(input: {
     bindingReadIds.add(binding.conceptId);
     bindingReadIds.add(binding.schemeId);
   }
-  for (const association of manifest.tagAssociations) {
+  for (const association of manifest.tagAssociations ?? []) {
     if (!association.conceptId || !association.schemeId) continue;
     bindingReadIds.add(association.conceptId);
     bindingReadIds.add(association.schemeId);
@@ -1289,11 +1287,12 @@ export async function publishShowcase(input: {
   for (let offset = 0; offset < bindingReadIdsList.length; offset += 16)
     await Promise.all(bindingReadIdsList.slice(offset, offset + 16).map(readCurrentSubject));
   const currentBindingMatches = (
-    binding: Pick<
-      VndbTagRatingBinding,
-      'category' | 'tagId' | 'conceptId' | 'schemeId' | 'conceptUri' | 'schemeUri'
-    >,
+    binding: Pick<VndbTagRatingBinding, 'category' | 'tagId' | 'conceptUri' | 'schemeUri'> & {
+      conceptId: string | null;
+      schemeId: string | null;
+    },
   ) => {
+    if (!binding.conceptId || !binding.schemeId) return false;
     const conceptRead = currentSubjectCache.get(binding.conceptId) ?? null;
     const schemeRead = currentSubjectCache.get(binding.schemeId) ?? null;
     return !!(
@@ -1313,7 +1312,7 @@ export async function publishShowcase(input: {
   for (const [key, binding] of observedTagBindings) {
     if (currentBindingMatches(binding)) currentTagBindings.add(key);
   }
-  for (const association of manifest.tagAssociations) {
+  for (const association of manifest.tagAssociations ?? []) {
     if (
       association.conceptId &&
       association.schemeId &&
@@ -1400,7 +1399,7 @@ export async function publishShowcase(input: {
       }
     }
     if (vndbTagMembership(record, assertion)) {
-      const association = tagAssociationFor(record, assertion, manifest.tagAssociations);
+      const association = tagAssociationFor(record, assertion, manifest.tagAssociations ?? []);
       const content = assertion.statement.value.type === 'value' ? assertion.statement.value.content : null;
       if (
         !association ||
@@ -1631,7 +1630,7 @@ export async function publishShowcase(input: {
     const key = groupKey(record.subjectId, 'schema:genre');
     if (!grouped.has(key)) grouped.set(key, { record, property: 'schema:genre', ids: new Set<string>() });
   }
-  for (const workId of manifest.tagAssociationRefreshes) {
+  for (const workId of manifest.tagAssociationRefreshes ?? []) {
     const record = manifest.records.find(
       (item) => item.provider === 'vndb' && item.sourceAlias === input.aliases.vndb && item.sourceKey === workId,
     );
@@ -1708,7 +1707,7 @@ export async function publishShowcase(input: {
     }
     const selections = new Map<string, 'normal' | 'preferred'>();
     const refreshMemberships =
-      group.record.provider === 'vndb' && manifest.tagAssociationRefreshes.includes(group.record.sourceKey);
+      group.record.provider === 'vndb' && (manifest.tagAssociationRefreshes ?? []).includes(group.record.sourceKey);
     for (const item of priorSelection) {
       if (!item?.candidate) continue;
       const selectedCandidate = page.candidates.find((candidate) => candidate.id === item.candidate);

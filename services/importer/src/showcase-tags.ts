@@ -480,10 +480,7 @@ function associationBindings(
     .sort((left, right) => left.sourceKey.localeCompare(right.sourceKey));
 }
 
-function associationRefreshes(
-  planned: ShowcaseTagPlan,
-  selectedVids: readonly string[],
-): string[] {
+function associationRefreshes(planned: ShowcaseTagPlan, selectedVids: readonly string[]): string[] {
   return planned.truncated || planned.gaps.length ? [] : [...new Set(selectedVids)];
 }
 

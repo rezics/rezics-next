@@ -242,15 +242,15 @@ test('selected dump candidates publish only by exact intent and resume a refused
           vocabularyAdmissions: [preparedTags.vocabularyAdmission],
         },
       });
-    await expect(seed()).rejects.toThrow('simulated lost VNDB tag proposal acknowledgement');
+    await expect(seed()).rejects.toThrow('Cross-media vndb import failed');
     expect(lostTagProposal).toBeDefined();
     expect(journal.preparedCommands().map((entry) => entry.command.key)).toContain(lostTagProposal!.command.key);
     journal.close();
     journal = new ShowcaseJournal(journalPath);
     let result = await seed();
-    const replayedProposal = journal.acknowledgedCommands().find(
-      (entry) => entry.command.key === lostTagProposal!.command.key,
-    );
+    const replayedProposal = journal
+      .acknowledgedCommands()
+      .find((entry) => entry.command.key === lostTagProposal!.command.key);
     expect(replayedProposal?.command).toEqual(lostTagProposal!.command);
     expect(replayedProposal?.candidateId).toBe(lostTagProposal!.candidateId);
     expect(result.gaps).toEqual([]);
@@ -353,15 +353,17 @@ test('selected dump candidates publish only by exact intent and resume a refused
     const acknowledged = journal.acknowledgedCommands().filter((entry) => entry.candidateId);
     expect(acknowledged.length).toBeGreaterThan(0);
     expect(accepted.size).toBe(0);
-    const membership = acknowledged.find((entry) =>
-      entry.command.op === 'propose' &&
-      entry.command.statement.property.id === 'schema:genre' &&
-      !entry.command.statement.qualifiers?.some((term) => term.property.id === 'rezics:sourceTagWeightMetric'),
+    const membership = acknowledged.find(
+      (entry) =>
+        entry.command.op === 'propose' &&
+        entry.command.statement.property.id === 'schema:genre' &&
+        !entry.command.statement.qualifiers?.some((term) => term.property.id === 'rezics:sourceTagWeightMetric'),
     );
     expect(membership?.command.op).toBe('propose');
     if (!membership || membership.command.op !== 'propose') throw new Error('Missing selected tag membership');
-    expect(membership.command.statement.references?.flatMap((reference) => reference.parts).map((part) => part.value))
-      .toContainEqual({ type: 'value', content: 'https://vndb.org/v2.1#/tags_vn/v2/g105/tag' });
+    expect(
+      membership.command.statement.references?.flatMap((reference) => reference.parts).map((part) => part.value),
+    ).toContainEqual({ type: 'value', content: 'https://vndb.org/v2.1#/tags_vn/v2/g105/tag' });
     const membershipCandidateId = membership.candidateId!;
     expect(preparedTags.associationBindings).toEqual([
       expect.objectContaining({
@@ -408,22 +410,29 @@ test('selected dump candidates publish only by exact intent and resume a refused
       ...tagOptions,
     });
     expect(withdrawn.status).toBe('incomplete');
-    expect(withdrawn.published.find((record) => record.provider === 'vndb' && record.sourceKey === 'v2')?.assertions)
-      .not.toContainEqual(expect.objectContaining({ property: 'schema:genre' }));
-    expect(subjects.get(result.readings.find((reading) => reading.source === 'vndb' && reading.externalId === 'v2')!
-      .subject.subject!.id!)!.statements['schema:genre']).toEqual([]);
+    expect(
+      withdrawn.published.find((record) => record.provider === 'vndb' && record.sourceKey === 'v2')?.assertions,
+    ).not.toContainEqual(expect.objectContaining({ property: 'schema:genre' }));
+    expect(
+      subjects.get(
+        result.readings.find((reading) => reading.source === 'vndb' && reading.externalId === 'v2')!.subject.subject!
+          .id!,
+      )!.statements['schema:genre'],
+    ).toEqual([]);
 
     journal.close();
     journal = new ShowcaseJournal(journalPath);
     unavailableReviewSubjects.delete(vndbTargetId);
-    subjects.get(tagConceptId)!.statements['skos:inScheme'] = [
-      { value: { type: 'value', content: tagSchemeId } },
-    ];
+    subjects.get(tagConceptId)!.statements['skos:inScheme'] = [{ value: { type: 'value', content: tagSchemeId } }];
     publicReadIds.clear();
-    const withheldSource = withdrawn.published.find((record) => record.provider === 'vndb' && record.sourceKey === 'r1');
+    const withheldSource = withdrawn.published.find(
+      (record) => record.provider === 'vndb' && record.sourceKey === 'r1',
+    );
     expect(withheldSource?.assertions.some((assertion) => assertion.property === 'schema:name')).toBe(true);
     expect(withheldSource?.assertions.some((assertion) => assertion.property === 'schema:exampleOfWork')).toBe(false);
-    const withheldTagWork = withdrawn.published.find((record) => record.provider === 'vndb' && record.sourceKey === 'v2');
+    const withheldTagWork = withdrawn.published.find(
+      (record) => record.provider === 'vndb' && record.sourceKey === 'v2',
+    );
     expect(withheldTagWork?.assertions.some((assertion) => assertion.property === 'schema:genre')).toBe(false);
     expect(withdrawn.omissions).toContainEqual({
       provider: 'vndb',
@@ -469,7 +478,12 @@ test('selected dump candidates publish only by exact intent and resume a refused
     expect(resumed.status).toBe('incomplete');
     expect(resumed.published.map((record) => record.subjectId).sort()).toEqual([...workIds].sort());
     expect(accepted).toEqual(
-      new Set(journal.acknowledgedCommands().filter((entry) => entry.candidateId).map((entry) => entry.candidateId!)),
+      new Set(
+        journal
+          .acknowledgedCommands()
+          .filter((entry) => entry.candidateId)
+          .map((entry) => entry.candidateId!),
+      ),
     );
     const relation = resumed.published
       .find((record) => record.provider === 'vndb' && record.sourceKey === 'r1')
@@ -506,7 +520,10 @@ test('selected dump candidates publish only by exact intent and resume a refused
       );
     expect(refreshedMembership?.candidateId).toBeTruthy();
     expect(refreshedMembership?.candidateId).not.toBe(membershipCandidateId);
-    expect(subjects.get(tagWorkId)!.statements['schema:genre']).toContainEqual(refreshedMembership!.command.statement);
+    const refreshedCommand = refreshedMembership?.command;
+    expect(refreshedCommand?.op).toBe('propose');
+    if (!refreshedCommand || refreshedCommand.op !== 'propose') throw new Error('Missing refreshed tag proposal');
+    expect(subjects.get(tagWorkId)!.statements['schema:genre']).toContainEqual(refreshedCommand.statement);
     expect(subjects.get(tagWorkId)!.statements['schema:genre']).not.toContainEqual(membership.command.statement);
     const manifestRelation = resumed.manifest.records
       .find((record) => record.provider === 'vndb' && record.sourceKey === 'r1')
