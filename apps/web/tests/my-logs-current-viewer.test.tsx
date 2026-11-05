@@ -462,11 +462,13 @@ test("My Logs immediately retires an old owner's history on observed viewer repl
 
     const pendingB = await refetch();
     const article = host.querySelector('article');
-    const count = reads.length;
     await show(viewer('B', 'csrf-rotated-nonempty'));
-    expect(reads).toHaveLength(count);
-    expect(host.querySelector('article')).toBe(article);
-    await settle(pendingB, history('B', null, 'B refreshed history'));
+    const rotatedCredential = reads.at(-1)!;
+    expect(rotatedCredential).not.toBe(pendingB);
+    retired();
+    await settle(pendingB, history('B', null, 'Late old credential read'));
+    retired();
+    await settle(rotatedCredential, history('B', null, 'B refreshed history'));
     expect(host.textContent).toContain('B refreshed history');
     initial = structuredClone(initial); // A loader object's identity is not an observed new owner.
     await act(async () => {
