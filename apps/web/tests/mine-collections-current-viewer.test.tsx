@@ -12,7 +12,6 @@ import type { PinMutation } from '../src/library/pins-actions';
 let preparation: 'active' | 'absent' | 'unavailable' = 'active';
 let actualSubject: string | undefined = 'A';
 let preparations = 0;
-let useServerIsomorphicFunctions = true;
 const headers = new Headers();
 const env = {
   KERNEL_ORIGIN: 'https://kernel.test',
@@ -45,13 +44,15 @@ const startWithServerFunctions = {
   ...start,
   createIsomorphicFn: () => {
     let server: (...args: never[]) => unknown = () => undefined;
+    let client: (...args: never[]) => unknown = () => undefined;
     const chain = {
       server(handler: typeof server) {
         server = handler;
         return chain;
       },
-      client(handler: (...args: never[]) => unknown) {
-        return (...args: never[]) => (useServerIsomorphicFunctions ? server : handler)(...args);
+      client(handler: typeof client) {
+        client = handler;
+        return (...args: never[]) => (typeof window === 'undefined' ? server : client)(...args);
       },
     };
     return chain;
@@ -95,9 +96,7 @@ function response(
           visibility: 'private',
           preview: {
             state: 'loaded',
-            members: [
-              { id: `subject-${subject}`, type: 'Book', types: ['Book'], label: `Preview ${subject}`, cover: null },
-            ],
+            members: [{ id: `subject-${subject}`, type: 'Book', label: `Preview ${subject}`, cover: null }],
           },
         },
       ],
@@ -208,7 +207,7 @@ test('The default My Collections route immediately retires private collections a
     });
     preparation = 'unavailable';
     await expect(load({ deps: { layout: 'previews' } })).rejects.toMatchObject({
-      problem: { code: 'session_unavailable' },
+      problem: { code: 'dependency_unavailable' },
     });
     preparation = 'active';
     actualSubject = undefined;
@@ -266,13 +265,6 @@ test('The default My Collections route immediately retires private collections a
   const loader = spyOn(Route, 'useLoaderData').mockImplementation(() => initial);
   const Page = Route.options.component!;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const { sessionQuery, exposureQuery } = await import('../src/session/query');
-  const exposure = await import('../src/kernel/viewer-exposure');
-  const exposureLifetime = exposure.viewerExposureLifetime(client);
-  spyOn(exposure, 'readViewerExposure').mockImplementation(async ({ data }) => ({
-    subject: data,
-    admitted: client.getQueryData<string[]>(exposureQuery.queryKey) ?? [],
-  }));
   const router = createRouter({
     routeTree: createRootRoute(),
     history: createMemoryHistory({ initialEntries: ['/library/collections?layout=previews'] }),
@@ -299,7 +291,7 @@ test('The default My Collections route immediately retires private collections a
     else if (search.cursor !== undefined) query.set('cursor', search.cursor);
     await act(async () => {
       await router.navigate({ href: `/library/collections?${query}` });
-      client.setQueryData(sessionQuery.queryKey, viewer);
+      client.setQueryData(['session'], viewer);
       client.setQueryData(['exposure', 'viewer'], admitted ? ['collections', 'personal_library'] : []);
       client.setQueryData(['exposure', 'anonymous'], []);
       if (!root) {
@@ -307,17 +299,8 @@ test('The default My Collections route immediately retires private collections a
         expect(html).toContain('Private A');
         expect(html).toContain('Pinned A');
         host.innerHTML = html;
-        useServerIsomorphicFunctions = false;
         root = hydrateRoot(host, tree(), { onRecoverableError: (error) => hydrationErrors.push(error) });
       } else root.render(tree());
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      const current = exposureLifetime.getSnapshot();
-      if (current.state === 'signed-in')
-        client.setQueryData(exposure.viewerExposureQuery(current.observation).queryKey, {
-          subject: current.observation.subject,
-          admitted: admitted ? ['collections', 'personal_library'] : [],
-        });
-      await new Promise((resolve) => setTimeout(resolve, 10));
     });
   };
   const pin = () => {
