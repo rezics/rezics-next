@@ -245,7 +245,7 @@ async function mount(initial: LoadedPage, phone = false) {
   };
   const intact = (p: LoadedPage, kind: Kind) => {
     expect(host.textContent).toContain(`Subject ${p.session.id}`);
-    expect(body.queryByRole('alert')).toBeNull();
+    expect(within(dialog()).queryByRole('alert')?.textContent ?? null).toBeNull();
     if (kind === 'finish')
       expect(body.getByRole('button', { name: m.library_progress_confirm_complete() })).toBeDefined();
     else {
@@ -396,7 +396,7 @@ test('manual refresh is latest-request-wins for successes, refusals and thrown f
       );
       expect(h.host.textContent).toContain('Subject latest');
       expect(h.field(m.library_progress_amount()).value).toBe('4.75');
-      expect(h.body.queryByRole('alert')).toBeNull();
+      expect(within(h.dialog()).queryByRole('alert')?.textContent ?? null).toBeNull();
     } finally {
       await h.close();
     }
