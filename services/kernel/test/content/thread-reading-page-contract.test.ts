@@ -65,6 +65,7 @@ function response(replyCount: number) {
       createdAt: timestamp,
       firstPost,
     },
+    documentMedia: { state: 'available', documents: [] },
     replies: {
       items: Array.from({ length: replyCount }, (_, index) => item(id(String(index + 10)), openingId)),
       next: null,

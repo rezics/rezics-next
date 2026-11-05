@@ -31,6 +31,7 @@ import { routeOf } from '../route/route.ts';
 import { createConversationActivityBatch } from './conversation-activity.ts';
 import { ReadingPageActivitySchema, selectReadingPageActivity } from './reading-page-activity.ts';
 import { prepareReadingPageReviewContext, ReadingPageReviewContextSchema } from './reading-page-context.ts';
+import { readReadingPageDocumentMedia, ReadingPageDocumentMediaSchema } from './reading-page-documents.ts';
 
 const closed = { additionalProperties: false } as const;
 export const READING_PAGE_REPLY_LIMIT = 20;
@@ -41,6 +42,7 @@ const READING_PAGE_REFERENCE_LIMIT = READING_PAGE_REPLY_LIMIT + 2;
 const MAX_AUTHOR_DISPLAY_BYTES = 32 * 1024;
 const MAX_REACTION_BYTES = 16 * 1024;
 const MAX_OTHER_ENVELOPE_BYTES = 256 * 1024;
+const MAX_DOCUMENT_MEDIA_ENVELOPE_BYTES = 256 * 1024;
 export const READING_CARD_REFERENCE_LIMIT = READING_PAGE_REPLY_LIMIT;
 const READING_CARD_IDENTITY_LIMIT = READING_CARD_REFERENCE_LIMIT * 3;
 const READING_CARD_ACTION_REFERENCE_LIMIT = READING_CARD_REFERENCE_LIMIT * 3;
@@ -49,7 +51,8 @@ const READING_CARD_ENVELOPE_BYTES = 8 * 1024 * 1024;
 export const READING_PAGE_RESPONSE_BYTES =
   READING_PAGE_IDENTITY_LIMIT * MAX_DOCUMENT_BYTES * 6 +
   READING_PAGE_IDENTITY_LIMIT * MAX_AUTHOR_DISPLAY_BYTES +
-  MAX_OTHER_ENVELOPE_BYTES;
+  MAX_OTHER_ENVELOPE_BYTES +
+  MAX_DOCUMENT_MEDIA_ENVELOPE_BYTES;
 
 const ReactionFreshnessSchema = t.Union([
   t.Object({ epoch: t.Integer({ minimum: 0 }), position: t.String({ pattern: '^(0|[1-9][0-9]*)$' }) }, closed),
@@ -148,6 +151,7 @@ export const ReadingPageResponseSchema = t.Object(
     query: t.Object({ cursor: t.Union([t.String(), t.Null()]), limit: t.Literal(READING_PAGE_REPLY_LIMIT) }, closed),
     thread: ThreadViewSchema,
     conversationActivity: ReadingPageActivitySchema,
+    documentMedia: ReadingPageDocumentMediaSchema,
     replies: t.Object(
       {
         items: t.Array(ReadingEntrySchema, { maxItems: READING_PAGE_REPLY_LIMIT }),
@@ -1530,6 +1534,13 @@ export async function readContentReadingPage(
   }
   const reviewContext = await reviewContextPreparation.finish();
   const confirmedActivity = await activity.confirm();
+  const documentMedia = await readReadingPageDocumentMedia(
+    dependencies,
+    actor,
+    threadId,
+    [thread.firstPost, ...replies],
+    deadline,
+  );
   const finalThread = await (actor.kind === 'account'
     ? withThreadReadAdmission(
         async () => {
@@ -1600,6 +1611,7 @@ export async function readContentReadingPage(
     query: { cursor: cursor ?? null, limit: READING_PAGE_REPLY_LIMIT as typeof READING_PAGE_REPLY_LIMIT },
     thread: displayThread,
     conversationActivity: confirmedActivity.value,
+    documentMedia,
     replies: { items: countedReplies.map(safeEntry), next: selected.page.nextCursor },
     authors: { state: authorState, retryable: authorState === 'unavailable', items: authors },
     actions: {
