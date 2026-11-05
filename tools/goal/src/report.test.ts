@@ -45,8 +45,31 @@ function record(taskId: string, attempt: number, fields: Partial<AttemptRecord>)
 const records: AttemptRecord[] = [
   // a: passes first time, 10 minutes, critical path.
   record('a', 1, { criticalPath: true }),
-  // b: fails, a consultation follows, the second attempt passes 40 minutes after the first one started.
-  record('b', 1, { outcome: 'gate-failed', escalation: 'repeated-assertion', endedAt: '2026-10-25T00:20:00.000Z' }),
+  // b: out-of-order history; attempt 3 is the landing while attempt 2 is the first pass.
+  record('b', 3, {
+    pool: 'pool-b',
+    startedAt: '2026-10-25T00:45:00.000Z',
+    endedAt: '2026-10-25T00:50:00.000Z',
+    criticalPath: true,
+    tokens: { input: 1000, cached: 800, output: 100 },
+    usage: {
+      model: 'latest-model',
+      effort: 'high',
+      serviceTier: 'priority',
+      input: 1000,
+      cachedInput: 800,
+      output: 100,
+      reasoning: 40,
+      compactions: 1,
+      source: 'codex-session',
+    },
+  }),
+  record('b', 1, {
+    outcome: 'gate-failed',
+    escalation: 'repeated-assertion',
+    consulted: true,
+    endedAt: '2026-10-25T00:20:00.000Z',
+  }),
   record('b', 2, {
     consulted: true,
     pool: 'pool-b',
@@ -67,25 +90,83 @@ const records: AttemptRecord[] = [
     consulted: true,
     tokens: { input: 700, cached: 0, output: 70 },
   }),
+  record('urgent', 1, { urgent: true, tokens: { input: 40, cached: 10, output: 5 } }),
+  record('proof', 1, {
+    taskKind: 'verification',
+    outcome: 'verified',
+    consulted: true,
+    pool: 'pool-b',
+    tokens: { input: 50, cached: 40, output: 5 },
+  }),
   // d: still waiting for its gate; ignored by every metric except the attempt count.
   record('d', 1, { outcome: 'pending-gate' }),
 ];
 
 test('report computes the measurement metrics over attempt records', () => {
+  const partial = report(records.slice(0, 2));
+  expect(partial.tokensPerLandedTask[1]).toEqual({
+    taskClass: 'implementation',
+    model: 'latest-model',
+    landedTasks: 1,
+    attempts: 1,
+    inputPerTask: 1000,
+    cachedInputPerTask: 800,
+    outputPerTask: 100,
+    reasoningPerTask: 40,
+    rawPerTask: 1100,
+    compactionsPerTask: 1,
+  });
+
   const result = report(records);
-  expect(result.attempts).toBe(6);
-  expect(result.tasks).toBe(3);
-  expect(result.passedTasks).toBe(2);
-  expect(result.attemptsPerPassedTask).toBe(1.5);
-  expect(result.firstAttemptPassRate).toBeCloseTo(1 / 3);
-  expect(result.wallClockToPassMs.criticalPath).toEqual({ count: 1, p50: 600_000, p90: 600_000 });
-  expect(result.wallClockToPassMs.other).toEqual({ count: 1, p50: 2_400_000, p90: 2_400_000 });
-  expect(result.pools['pool-a']).toEqual({ attempts: 4, passedTasks: 1, input: 3200, cached: 1600, output: 320 });
-  expect(result.pools['pool-b']).toEqual({ attempts: 1, passedTasks: 1, input: 3000, cached: 2000, output: 300 });
-  expect(result.consultHitRate).toBe(0.5);
-  expect(result.earlyStopRate).toBeCloseTo(1 / 5);
-  expect(result.reworkInputTokens).toEqual({ 'repeated-assertion': 1000, 'early-stop': 500, stalled: 700 });
-  expect(result.stepShare).toEqual({ decision: 0.1, read: 0.3, edit: 0.2, wait: 0.1, check: 0.2, commit: 0.1 });
+  expect(result).toEqual({
+    urgent: { tasks: ['urgent'], attempts: 1, passedTasks: 1 },
+    verifiedProofs: 1,
+    proofAttempts: 1,
+    attempts: 9,
+    tasks: 3,
+    passedTasks: 2,
+    attemptsPerPassedTask: 2,
+    firstAttemptPassRate: 1 / 3,
+    wallClockToPassMs: {
+      criticalPath: { count: 1, p50: 600_000, p90: 600_000 },
+      other: { count: 1, p50: 2_400_000, p90: 2_400_000 },
+    },
+    pools: {
+      'pool-a': { attempts: 5, passedTasks: 1, input: 3240, cached: 1610, output: 325 },
+      'pool-b': { attempts: 3, passedTasks: 2, input: 4050, cached: 2840, output: 405 },
+    },
+    consultHitRate: 0.5,
+    earlyStopRate: 1 / 8,
+    reworkInputTokens: { 'repeated-assertion': 1000, 'early-stop': 500, stalled: 700, verified: 50 },
+    stepShare: { decision: 0.1, read: 0.3, edit: 0.2, wait: 0.1, check: 0.2, commit: 0.1 },
+    tokensPerLandedTask: [
+      {
+        taskClass: 'implementation',
+        model: 'gpt-6-luna',
+        landedTasks: 1,
+        attempts: 1,
+        inputPerTask: 1000,
+        cachedInputPerTask: 800,
+        outputPerTask: 100,
+        reasoningPerTask: 0,
+        rawPerTask: 1100,
+        compactionsPerTask: 0,
+      },
+      {
+        taskClass: 'implementation',
+        model: 'latest-model',
+        landedTasks: 1,
+        attempts: 3,
+        inputPerTask: 5000,
+        cachedInputPerTask: 3600,
+        outputPerTask: 500,
+        reasoningPerTask: 40,
+        rawPerTask: 5500,
+        compactionsPerTask: 1,
+      },
+    ],
+    nonLandingSpend: { rawTokens: 2475, totalRawTokens: 8020, share: 2475 / 8020 },
+  });
 });
 
 test('report on no records has no rates', () => {

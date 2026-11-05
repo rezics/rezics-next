@@ -939,6 +939,8 @@ events stay unknown; reports do not backfill old tasks. Check-slot request,
 acquisition and release events are distinct, so slot waiting is excluded from worker working time. The stage with the
 most waiting is named as the bottleneck.
 
+Decision: `report(records)` derives completed-attempt metrics from one in-memory projection, retaining latest-attempt landing attribution, first-pass duration, pending-gate, pool and consult semantics.
+
 The lifecycle JSON and hourly snapshots include conflict telemetry. The current producer records unresolved rebase
 outcomes and conflict retry setup, but does not identify every conflict, the original conflict occurrence time, or
 owner/rerere/replay resolution. Owner-landing capability is therefore `unavailable`; total conflicts, actual
