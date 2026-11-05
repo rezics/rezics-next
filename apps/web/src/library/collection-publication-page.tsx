@@ -7,6 +7,8 @@ import { getLocale } from '../paraglide/runtime.js';
 import { useCollectionOwnerCurrent } from './collection-owner-current';
 import { PageHeading } from '../shell/page-heading';
 import { subjectHref } from '../subject/subject-href';
+import { QueryPublicationView } from './saved-query-publication/query-view';
+import { publishQueryCollection, readQueryPublication } from './saved-query-publication/query';
 import { CollectionMemberDetails } from './collection-member-row';
 import { SubjectCover, rowRatio } from './subject-row';
 import { displayLibraryTitle } from './title';
@@ -553,6 +555,7 @@ function CurrentPublicationPage({
   owner: ReturnType<typeof useCollectionOwnerCurrent>;
 }) {
   const client = useQueryClient();
+  const [wholeQuery, setWholeQuery] = useState(false);
   const viewer = { subject, csrfToken };
   const started = useRef(new Set<string>());
   const readIdentity = JSON.stringify([subject, csrfToken, address.id, address.cursor, owner.lifetime]);
@@ -619,6 +622,36 @@ function CurrentPublicationPage({
           {m.library_publication_loading()}
         </div>
       ) : null}
+      {page.source.state === 'ready' ? (
+        <div className="flex flex-wrap gap-3 p-4">
+          <Button variant="outline" aria-pressed={wholeQuery} onClick={() => setWholeQuery(true)}>
+            {m.library_query_publication_heading()}
+          </Button>
+          <Button variant="outline" aria-pressed={!wholeQuery} onClick={() => setWholeQuery(false)}>
+            {m.library_publication_heading()}
+          </Button>
+        </div>
+      ) : null}
+      {wholeQuery && page.source.state === 'ready' ? (
+        <QueryPublicationView
+          key={JSON.stringify([subject, address.id, owner.lifetime])}
+          subject={subject}
+          collectionId={address.id}
+          revision={page.source.revision}
+          visibility={page.source.page.visibility}
+          isCurrent={owner.isOwnerCurrent}
+          canBegin={canPublish}
+          capture={() => {
+            const csrf = owner.credential();
+            if (!csrf || !owner.isCurrent()) return null;
+            return {
+              begin: (input) => publishQueryCollection({ data: input, headers: { 'X-CSRF-Token': csrf } }),
+              read: (input) => readQueryPublication({ data: input, headers: { 'X-CSRF-Token': csrf } }),
+            };
+          }}
+        />
+      ) : null}
+      <div hidden={wholeQuery && page.source.state === 'ready'}>
       <CollectionPublicationPageView
         page={page}
         isCurrent={owner.isCurrent}
@@ -648,6 +681,7 @@ function CurrentPublicationPage({
               },
             })}
       />
+      </div>
     </>
   );
 }

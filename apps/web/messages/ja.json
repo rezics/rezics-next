@@ -11233,5 +11233,15 @@
   "library_mal_retry_source_evidence": "ソース証拠の登録を再試行",
   "library_mal_score_zero_source": "{value}（0 は未評価を意味）",
   "library_mal_score_source_details": "値: {value}。MAL の尺度: {scale}",
-  "library_mal_score_source_scale": "MAL の尺度: {min}〜{max}、刻み幅 {step}"
+  "library_mal_score_source_scale": "MAL の尺度: {min}〜{max}、刻み幅 {step}",
+  "library_query_publication_heading": "保存したクエリ全体を公開",
+  "library_query_publication_description": "保存したルールに一致する対応済みの項目を、このページ以外の結果も含めて公開します。公開が完了するまで、前回の公開済みバージョンが表示されます。",
+  "library_query_publication_visibility": "公開範囲",
+  "library_query_publication_confirm": "保存時に確定した条件に従って、クエリ全体を公開することを確認しました。",
+  "library_query_publication_publish": "クエリ全体を公開",
+  "library_query_publication_recovery": "このブラウザータブに元の公開リクエストが保存されています。このページに戻ると実際の結果を確認できます。",
+  "library_query_publication_complete": "クエリ全体が公開されました。コレクションを開くと、完了したバージョンを確認できます。",
+  "library_query_publication_status": "公開状況を確認",
+  "library_query_publication_loading": "公開状況を確認中…",
+  "library_query_publication_unknown": "結果を確認できていません。元のリクエストを再試行するか、状況を確認してください。リクエストキーと保存時のリビジョンは保持されています。"
 }

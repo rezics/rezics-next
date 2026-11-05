@@ -11238,5 +11238,15 @@
   "library_mal_retry_source_evidence": "重試來源證據接納",
   "library_mal_score_zero_source": "{value}（0 表示未評分）",
   "library_mal_score_source_details": "數值：{value}；MAL 評分範圍：{scale}",
-  "library_mal_score_source_scale": "MAL 範圍 {min} 至 {max}，間距 {step}"
+  "library_mal_score_source_scale": "MAL 範圍 {min} 至 {max}，間距 {step}",
+  "library_query_publication_heading": "發佈完整的已儲存查詢",
+  "library_query_publication_description": "依照已儲存的規則發佈所有支援的符合項目，包含此頁以外的結果。新發佈完成前，原本已完成的版本會繼續顯示。",
+  "library_query_publication_visibility": "發佈可見性",
+  "library_query_publication_confirm": "我確認依照已接受的查詢語意，發佈完整的已儲存查詢。",
+  "library_query_publication_publish": "發佈完整查詢",
+  "library_query_publication_recovery": "此瀏覽器分頁已保留原始發佈請求。返回此頁後，可以查詢實際結果。",
+  "library_query_publication_complete": "完整查詢已發佈。開啟收藏集即可查看已完成的版本。",
+  "library_query_publication_status": "查詢發佈狀態",
+  "library_query_publication_loading": "正在查詢發佈狀態…",
+  "library_query_publication_unknown": "尚未確認結果。請重試原始請求或查詢狀態；原始請求識別碼與已儲存的修訂版本仍會保留。"
 }
