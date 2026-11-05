@@ -66,7 +66,6 @@ function reading() {
 test('a selected Context and exact dated Organization assertion survive target, correction and return', async () => {
   const require = createRequire(import.meta.url);
   const { Window } = await import(createRequire(require.resolve('@puckeditor/core')).resolve('happy-dom'));
-  const { createRoot } = await import('react-dom/client');
   const window = new Window({ url: 'https://site.test/en' });
   const globals = {
     window,
@@ -85,6 +84,7 @@ test('a selected Context and exact dated Organization assertion survive target, 
   const saved = new Map(Object.keys(globals).map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   for (const [key, value] of Object.entries(globals))
     Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
+  const { createRoot } = await import('react-dom/client');
   const host = window.document.createElement('main');
   window.document.body.append(host);
   const root = createRoot(host);
