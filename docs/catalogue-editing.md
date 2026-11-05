@@ -1478,8 +1478,3 @@ The destination rereads current admission and selection. Proposing or accepting 
 - Bound: existing evidence/reference budgets, one deduplicated native Global action resource, no per-citation permission reads or remote body fetches.
 - Growth: unrelated sources, candidate history and authority history do not grow selected evidence bytes or the fixed comparison handoff. Native action preparation includes current authority and disclosure work.
 
-## Inspect selected evidence and current correction entry
-
-- Touches: one bounded selected Subject read, its reviewed metadata and native correction action preparation; comparison uses its existing page cap.
-- Bound: existing evidence/reference budgets, one deduplicated native Global action resource, no per-citation permission reads or remote body fetches.
-- Growth check: unrelated sources, candidate history and authority history must not grow selected evidence bytes or the fixed comparison handoff. Native action preparation includes current authority and disclosure work.

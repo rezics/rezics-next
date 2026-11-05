@@ -281,8 +281,7 @@ An item property may compile a `relation` with a group, exactly one of an invers
 CURIE, `inverse: "none"`, or `symmetric: true`, optional acyclicity, an order key
 (default `name`), a filter naming one or a list of at most two distinct item qualifiers, and an optional `slotKey`.
 The `slotKey` names an admitted item qualifier whose value distinguishes repeated
-relations to the same target. The bundled voice-actor property (`wdt:P725`) uses
-the character voiced (`wdt:P453`), distinguishing actor–character pairs. A standard inverse is export and
+relations to the same target. For a voice credit, `wdt:P725` has a Person or Organization as its main value; `wdt:P453` is its Character qualifier and slot key. An appearance is instead a `schema:character` statement whose main value is the Character; its appearance role is a separate qualifier. A standard inverse is export and
 mapping metadata; it cannot also be a property in the release. Directed inverses
 also carry `relation.inverseLabels`, supplied under `inverseProperties` in the
 presentation group for the schema file that defines the property. Types may carry
@@ -297,8 +296,7 @@ the [mapping report](../../docs/research/catalogue-schema-org-mapping.md).
 
 Bundled values are presentation correspondences for JSON-LD. They do not replace
 native type IRIs, bases or mappings; they do not assert ontology equivalence or
-guarantee Schema.org rich-result eligibility. In particular, book works and
-editions retain separate native identities even though both serialize as `Book`.
+guarantee Schema.org rich-result eligibility. In particular, book works and editions retain separate native identities even though both serialize as `Book`. Album work, MusicRelease, MusicMedium and MusicRecording are separate grains; a recording or release does not imply a medium or the reverse.
 
 The relation groups are `order`, `derivation`, `world`, `membership`, and
 `association` for the Relations view; `credit` for staff and cast in Credits and
@@ -312,8 +310,7 @@ Bundled facts are stored on the later work (`wdt:P155`), derived work
 (`wdt:P144`, `rezics:spinOffOf`, `wdt:P8646`), edition
 (`schema:exampleOfWork`), member (`wdt:P179`), contained work
 (`wdt:P361`, `schema:isPartOf`, `wdt:P1433`), or credited work
-(credits and `schema:character`). Their reverse terms are metadata, never
-additional properties. `wdt:P1889` is symmetric. Credits admit credited-as,
+(credits and `schema:character`). Their reverse terms and inverse labels are metadata, never additional properties or admitted property aliases. `wdt:P1889` is symmetric. Credits admit credited-as,
 position and detailed role, sort by position, and filter by `[wdt:P3831, wdt:P518]`;
 appearances filter by either that role or a story arc and sort by name. `schema:character` admits
 the appearance-age qualifier `wdt:P3629` (years, `wd:Q577`) on that exact work statement; a source-wide
