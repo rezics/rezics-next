@@ -97,6 +97,16 @@ export class SavedQueryManagementController {
   constructor(private readonly ports: ControllerPorts) {
     this.update = ports.update ?? captureCollectionUpdate;
     this.remove = ports.remove ?? captureCollectionDelete;
+    this.open = this.open.bind(this);
+    this.setTitle = this.setTitle.bind(this);
+    this.setDescription = this.setDescription.bind(this);
+    this.requestDelete = this.requestDelete.bind(this);
+    this.confirmDelete = this.confirmDelete.bind(this);
+    this.retryOriginal = this.retryOriginal.bind(this);
+    this.requestClose = this.requestClose.bind(this);
+    this.confirmDeparture = this.confirmDeparture.bind(this);
+    this.requestReconcile = this.requestReconcile.bind(this);
+    this.confirmReconcile = this.confirmReconcile.bind(this);
   }
 
   readonly getSnapshot = () => this.state;

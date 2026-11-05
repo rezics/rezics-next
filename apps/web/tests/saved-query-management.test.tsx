@@ -1,4 +1,7 @@
-import { expect, test } from 'bun:test';
+import { expect, mock, test } from 'bun:test';
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { Window } from 'happy-dom';
 import type { CollectionWriteResult } from '../src/library/collection-edit';
 import {
   captureCollectionCommand,
@@ -9,7 +12,34 @@ import {
   SavedQueryManagementController,
   type ManagedSavedQuery,
 } from '../src/library/saved-query-management/controller';
+import type { DynamicCollectionPage } from '../src/library/dynamic-collection';
+import { m } from '../src/paraglide/messages.js';
 import { savedQueryReturnTo } from '../src/library/saved-query-management/return-to';
+
+let admissionOperations: string[] = [];
+let csrfOperations: string[] = [];
+let csrfReply: (operation: string) => string | null = () => null;
+
+mock.module('../src/session/query', () => ({
+  useSession: () => ({ state: 'signed-in', subject: 'alice', csrfToken: 'csrf-original' }),
+}));
+mock.module('../src/library/collection-current-admission', () => ({
+  useCollectionCurrentAdmission: () => ({
+    owner: 1,
+    observed: () => true,
+    current: (operation: string) => {
+      admissionOperations.push(operation);
+      return true;
+    },
+    csrf: (operation: string) => {
+      csrfOperations.push(operation);
+      return csrfReply(operation);
+    },
+  }),
+}));
+mock.module('../src/library/saved-query-publication', () => ({ SavedQueryPublicationAction: () => null }));
+
+const { SavedQueryManagement } = await import('../src/library/saved-query-management');
 
 function ownerPage(changes: Partial<ManagedSavedQuery> = {}): ManagedSavedQuery {
   return {
@@ -28,6 +58,88 @@ function ownerPage(changes: Partial<ManagedSavedQuery> = {}): ManagedSavedQuery 
     },
     ...changes,
   };
+}
+
+function dynamicPage(changes: Partial<ManagedSavedQuery> = {}): DynamicCollectionPage {
+  return {
+    ...ownerPage(changes),
+    curator: null,
+    members: [],
+    next: null,
+    preparing: false,
+    retryAfterMs: 0,
+    unavailable: false,
+  };
+}
+
+function installBrowser() {
+  const browser = new Window({ url: 'https://site.test/en/collections/saved-query-1' });
+  const keys = [
+    'window',
+    'document',
+    'navigator',
+    'HTMLElement',
+    'HTMLButtonElement',
+    'HTMLInputElement',
+    'HTMLTextAreaElement',
+    'Node',
+    'Event',
+    'IS_REACT_ACT_ENVIRONMENT',
+  ];
+  const globals = new Map<string, PropertyDescriptor | undefined>();
+  const values = [
+    browser,
+    browser.document,
+    browser.navigator,
+    browser.HTMLElement,
+    browser.HTMLButtonElement,
+    browser.HTMLInputElement,
+    browser.HTMLTextAreaElement,
+    browser.Node,
+    browser.Event,
+    true,
+  ];
+  keys.forEach((key, index) => {
+    globals.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    Object.defineProperty(globalThis, key, { configurable: true, writable: true, value: values[index] });
+  });
+  return {
+    browser,
+    restore() {
+      for (const [key, descriptor] of globals) {
+        if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+        else Reflect.deleteProperty(globalThis, key);
+      }
+    },
+  };
+}
+
+async function settle() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+async function clickButton(document: Document, label: string, scope: ParentNode = document) {
+  const button = [...scope.querySelectorAll('button')].find((candidate) => candidate.textContent?.trim() === label);
+  if (!button) throw new Error(`Missing button: ${label}`);
+  await act(async () => button.click());
+  await settle();
+}
+
+function dialogContent(document: Document): HTMLElement {
+  const content = document.querySelector<HTMLElement>('[data-slot="alert-dialog-content"]');
+  if (!content) throw new Error('Expected an open management dialog');
+  return content;
+}
+
+function setField(field: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  act(() => {
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), 'value')?.set;
+    if (!setter) throw new Error('Expected a native text field');
+    setter.call(field, value);
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 }
 
 function makeController({
@@ -159,4 +271,146 @@ test('delete return addresses stay on the same bounded locale page', () => {
   expect(savedQueryReturnTo('https://outside.test/en/library/collections', 'en')).toBe('/en/library/collections');
   expect(savedQueryReturnTo('/fr/library/collections?layout=rows', 'en')).toBe('/en/library/collections');
   expect(savedQueryReturnTo('/en/library/collections?layout=rows&extra=1', 'en')).toBe('/en/library/collections');
+});
+
+test('mounted manager callbacks keep their originating controller state and ports', async () => {
+  admissionOperations = [];
+  csrfOperations = [];
+  csrfReply = () => null;
+  const harness = installBrowser();
+  const host = harness.browser.document.createElement('div');
+  harness.browser.document.body.append(host);
+  const root: Root = createRoot(host);
+  const pages = [dynamicPage(), dynamicPage(), dynamicPage({ title: 'Reconciled server title' })];
+  const metadata: ManagedSavedQuery[] = [];
+  let reads = 0;
+  const readCurrent = async () => pages[reads++] ?? pages[pages.length - 1]!;
+
+  try {
+    await act(async () =>
+      root.render(
+        <SavedQueryManagement
+          page={dynamicPage()}
+          viewerId="alice"
+          readCurrent={readCurrent}
+          onMetadata={(page) => metadata.push(page)}
+        />,
+      ),
+    );
+    await clickButton(harness.browser.document, m.library_saved_query_manage(), host);
+    expect(reads).toBe(1);
+    expect(metadata[0]).toMatchObject({ id: 'saved-query-1', revision: 7, title: 'Current title' });
+
+    const title = host.querySelector<HTMLInputElement>('#collection-edit-title');
+    const description = host.querySelector<HTMLTextAreaElement>('#collection-edit-description');
+    if (!title || !description) throw new Error('Expected the mounted metadata editor');
+    setField(title, 'Draft title');
+    setField(description, 'Draft description');
+    await settle();
+    expect(title.value).toBe('Draft title');
+    expect(description.value).toBe('Draft description');
+    expect(metadata).toHaveLength(1);
+
+    await clickButton(harness.browser.document, m.library_collection_cancel(), host);
+    expect(dialogContent(harness.browser.document).textContent).toContain(
+      m.library_saved_query_management_leave_title(),
+    );
+    await clickButton(
+      harness.browser.document,
+      m.library_saved_query_management_leave_confirm(),
+      dialogContent(harness.browser.document),
+    );
+    expect(host.querySelector('#collection-edit-form')).toBeNull();
+
+    await clickButton(harness.browser.document, m.library_saved_query_manage(), host);
+    expect(reads).toBe(2);
+    const reopenedTitle = host.querySelector<HTMLInputElement>('#collection-edit-title');
+    if (!reopenedTitle) throw new Error('Expected the reopened metadata editor');
+    setField(reopenedTitle, 'Unsaved title');
+    await settle();
+    await clickButton(harness.browser.document, m.library_collection_save(), host);
+    expect(host.textContent).toContain(m.library_saved_query_management_refused());
+
+    await clickButton(harness.browser.document, m.library_saved_query_management_read_current(), host);
+    expect(dialogContent(harness.browser.document).textContent).toContain(
+      m.library_saved_query_management_reconcile_title(),
+    );
+    await clickButton(
+      harness.browser.document,
+      m.library_saved_query_management_reconcile_confirm(),
+      dialogContent(harness.browser.document),
+    );
+    expect(reads).toBe(3);
+    expect(metadata.at(-1)?.title).toBe('Reconciled server title');
+
+    await clickButton(harness.browser.document, m.library_collection_delete(), host);
+    expect(dialogContent(harness.browser.document).textContent).toContain('saved-query-1');
+    await clickButton(
+      harness.browser.document,
+      m.library_collection_cancel(),
+      dialogContent(harness.browser.document),
+    );
+    expect(host.textContent).toContain(m.library_saved_query_management_heading());
+
+    await clickButton(harness.browser.document, m.library_collection_delete(), host);
+    await clickButton(
+      harness.browser.document,
+      m.library_collection_delete_confirm(),
+      dialogContent(harness.browser.document),
+    );
+    expect(csrfOperations).toContain('collection.update');
+    expect(csrfOperations).toContain('collection.delete');
+    expect(admissionOperations).toContain('collection.get');
+    expect(admissionOperations).toContain('collection.update');
+    expect(admissionOperations).toContain('collection.delete');
+    expect(host.textContent).toContain(m.library_saved_query_management_refused());
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
+    harness.restore();
+    await harness.browser.happyDOM.close();
+  }
+});
+
+test('recovery admits one command, retries its exact request, and keeps detached callbacks retired', async () => {
+  let resolveFirst!: (result: CollectionWriteResult) => void;
+  const firstResult = new Promise<CollectionWriteResult>((resolve) => {
+    resolveFirst = resolve;
+  });
+  const requests: unknown[] = [];
+  let attempts = 0;
+  const controller = makeController({
+    update: (data, csrf) =>
+      captureCollectionCommand(data, csrf, async (request) => {
+        requests.push(request);
+        attempts++;
+        return attempts === 1
+          ? firstResult
+          : ({ ok: true, id: 'saved-query-1', revision: 8 } satisfies CollectionWriteResult);
+      }),
+  });
+  await controller.open();
+  const detachedSetTitle = controller.setTitle;
+  controller.setTitle('Draft title');
+
+  const pending = controller.save();
+  await controller.save();
+  expect(controller.getSnapshot().busy).toBe(true);
+  expect(requests).toHaveLength(1);
+  const original = controller.getSnapshot().intent;
+  if (original?.operation !== 'collection.update') throw new Error('Expected a retained metadata command');
+
+  resolveFirst({ ok: false, reason: 'unavailable' });
+  await pending;
+  expect(controller.getSnapshot().outcome).toBe('unknown');
+  await controller.retryOriginal();
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toBe(original.command.request);
+
+  controller.retire();
+  const nextVisit = makeController();
+  await nextVisit.open();
+  detachedSetTitle('Must stay with retired visit');
+  expect(controller.getSnapshot().phase).toBe('closed');
+  expect(nextVisit.getSnapshot().title).toBe('Current title');
 });
