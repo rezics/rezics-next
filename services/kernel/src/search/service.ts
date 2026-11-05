@@ -1566,7 +1566,11 @@ export function createSearchService({
         if (runtime) {
           if (retained) {
             operations = await indexRequest(() =>
-              runtime.resumeRequest(retained.queried, context, readContext?.savedCollection ? native!.digest : undefined),
+              runtime.resumeRequest(
+                retained.queried,
+                context,
+                readContext?.savedCollection ? native!.digest : undefined,
+              ),
             );
           } else {
             // Poll the retained preparation instead of reserving a fresh direct

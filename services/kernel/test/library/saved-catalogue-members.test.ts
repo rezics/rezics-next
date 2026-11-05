@@ -6,24 +6,36 @@ import { readSavedCatalogueMembers } from '../../src/search/service-saved-collec
 import type { SearchService } from '../../src/search/service-scope.ts';
 
 const actor: AccountActor = {
-  kind: 'account', accountId: '019a1b2c-3d4e-7f00-8a00-5ab1ec700001',
-  clientId: 'curator', scopes: ['collection:read', 'subject:read'],
-  requestedBy: '019a1b2c-3d4e-7f00-8a00-5ab1ec700002', authnEpoch: 1,
+  kind: 'account',
+  accountId: '019a1b2c-3d4e-7f00-8a00-5ab1ec700001',
+  clientId: 'curator',
+  scopes: ['collection:read', 'subject:read'],
+  requestedBy: '019a1b2c-3d4e-7f00-8a00-5ab1ec700002',
+  authnEpoch: 1,
 };
 const input: Parameters<typeof readSavedCatalogueMembers>[1] = {
   actor,
   collection: {
-    id: '019a1b2c-3d4e-7f00-8a00-5ab1ec700003', revision: 3, ruleRevision: 2,
-    sourceGeneration: '4', reader: { minimumAuthnEpoch: '1', operator: '' },
+    id: '019a1b2c-3d4e-7f00-8a00-5ab1ec700003',
+    revision: 3,
+    ruleRevision: 2,
+    sourceGeneration: '4',
+    reader: { minimumAuthnEpoch: '1', operator: '' },
   },
-  filter: { and: [
-    { type: { in: ['schema:Book'] } },
-    { statement: { property: 'schema:datePublished', range: { gte: 1990, lte: 1999 } } },
-  ] },
+  filter: {
+    and: [
+      { type: { in: ['schema:Book'] } },
+      { statement: { property: 'schema:datePublished', range: { gte: 1990, lte: 1999 } } },
+    ],
+  },
   release: { digest: 'accepted-immutable-release', release: bundledRelease },
   limit: 2,
-  scope: { actor, access: { authenticate: async () => actor, authorize: async () => true },
-    routeKey: new Uint8Array(32), deadline: Date.now() + 60_000 },
+  scope: {
+    actor,
+    access: { authenticate: async () => actor, authorize: async () => true },
+    routeKey: new Uint8Array(32),
+    deadline: Date.now() + 60_000,
+  },
   revalidate: async () => {},
 };
 
@@ -41,18 +53,34 @@ test('saved catalogue delegates the exact property query, accepted meaning and n
       return page;
     },
   };
-  expect(await readSavedCatalogueMembers(search, {
-    ...input, cursor: 'native-continuation', revalidate: async () => { finalized++; },
-  })).toEqual({ members: [], next: 'next-native-continuation' });
+  expect(
+    await readSavedCatalogueMembers(search, {
+      ...input,
+      cursor: 'native-continuation',
+      revalidate: async () => {
+        finalized++;
+      },
+    }),
+  ).toEqual({ members: [], next: 'next-native-continuation' });
   expect(finalized).toBe(1);
 });
 
 test('native catalogue restart becomes a stale members cursor while preparation and unexpected errors keep their meaning', async () => {
-  for (const failure of [new ProblemError('search_restart_required'), new ProblemError('index_not_ready'), new Error('native fault')]) {
-    const search: Pick<SearchService, 'search'> = { async search() { throw failure; } };
-    await expect(readSavedCatalogueMembers(search, { ...input, cursor: 'native-continuation' }))
-      .rejects.toMatchObject(failure instanceof ProblemError && failure.code === 'search_restart_required'
-        ? { code: 'stale_cursor' } : failure);
+  for (const failure of [
+    new ProblemError('search_restart_required'),
+    new ProblemError('index_not_ready'),
+    new Error('native fault'),
+  ]) {
+    const search: Pick<SearchService, 'search'> = {
+      async search() {
+        throw failure;
+      },
+    };
+    await expect(readSavedCatalogueMembers(search, { ...input, cursor: 'native-continuation' })).rejects.toMatchObject(
+      failure instanceof ProblemError && failure.code === 'search_restart_required'
+        ? { code: 'stale_cursor' }
+        : failure,
+    );
     await expect(readSavedCatalogueMembers(search, input)).rejects.toBe(failure);
   }
 });
