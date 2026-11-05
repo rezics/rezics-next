@@ -1,3 +1,4 @@
+import { consumeMemberRetention, memberRetentionRemovalPlan, memberRetentionReadPlan, memberRetentionRestorePlan } from './member-retention-bounds.ts';
 import type { PoolClient } from 'pg';
 import { newId } from '../route/route.ts';
 import type {
@@ -352,11 +353,9 @@ export async function deleteMembers(
     ...write(context),
   };
   // Bind the JSON document once, as in native ordinal respacing; never JSON-encode an already encoded string.
-  const values = memberDelete.params.map((name) => {
-    const value = input[name as keyof typeof input];
-    return name === 'items' ? JSON.stringify(value) : value;
-  });
-  const { rows } = await client.query<(typeof memberDelete)['~reylo']['element']>(memberDelete.sql, values);
+  const plan = memberRetentionRemovalPlan(input);
+  const { rows } = await consumeMemberRetention('remove', plan.total, () =>
+    client.query<(typeof memberDelete)['~reylo']['element']>(memberDelete.sql, [...plan.values]));
   return rows.map((row) => {
     if (row.deletionId === null || row.revision === null || row.ordinalKey === null || row.addedAt === null)
       throw new Error('A removed Collection member must return its deletion episode revision');
@@ -374,7 +373,9 @@ export async function deleteMembers(
 }
 
 export async function readMemberDeletion(client: Client, route: number, collectionId: string, memberId: string) {
-  return memberRetentionRead.run(queryClient(client), { route, collection_id: collectionId, member_id: memberId });
+  const input = { route, collection_id: collectionId, member_id: memberId };
+  return consumeMemberRetention('read-episode', memberRetentionReadPlan(input).total,
+    () => memberRetentionRead.run(queryClient(client), input));
 }
 
 export async function restoreMember(
@@ -386,14 +387,12 @@ export async function restoreMember(
   expectedRevision: number,
   context: WriteContext,
 ): Promise<CollectionMember | null> {
-  const [row] = await memberRestore.run(queryClient(client), {
-    route,
-    collection_id: collectionId,
-    member_id: memberId,
-    deletion_id: deletionId,
-    expected_revision: expectedRevision,
-    ...write(context),
-  });
+  const input = {
+    route, collection_id: collectionId, member_id: memberId, deletion_id: deletionId,
+    expected_revision: expectedRevision, ...write(context),
+  };
+  const [row] = await consumeMemberRetention('restore', memberRetentionRestorePlan(input).total,
+    () => memberRestore.run(queryClient(client), input));
   return row ? asMember(row) : null;
 }
 
