@@ -3,9 +3,8 @@
 This contract owns the native Semantic Source, retained projection and privacy log, captured-window
 repair verification and registration-home ACK binding. The adjacent TypeScript file defines the shared
 protocol; `public-filter-source.ts`, `public-filter-source-binding.ts` and their native storage implement it.
-Complete maintained population observations, a single response-page root and default serving readiness
-remain unavailable until their sequential implementation. Source delivery and typing do not establish
-native acceptance, physical growth bounds or whole-journey readiness.
+The installed maintained population and default-root implementation remains Search-owned. Source delivery
+and typing do not establish native acceptance, physical growth bounds or whole-journey readiness.
 
 The shared authority is [Filtered lists](../../../../docs/filtered-lists.md). This boundary follows complete
 indexed observations, immutable accepted meaning, public disclosure now, same-statement qualifiers and the existing
@@ -40,8 +39,7 @@ The following are actual code, not proposed ports:
 `semantic/public-filter-source.ts:publicFilterSource(config)` installs the native
 `readPublicFilterProjectionPage`, home `readPrivacyReductionHeads` and `readPrivacyReductionPage` readers.
 `recordPrivacyReduction(tx, reduction)` appends the original privacy log and keyed pending barriers in the
-actual authorized writer transaction. Complete population `readPrivacyReductionHeads` still returns
-unready; native repair/ACK cannot substitute for that missing maintained serving observation.
+actual authorized writer transaction. Its installed population reader uses maintained native coverage; repair/ACK alone cannot substitute for it.
 All methods return actual counted work even on changed/unready/unavailable outcomes. Invalid shape or impossible
 route/digest/limit rejects before enumeration. Missing metadata is an explicit unready/unavailable result.
 
@@ -93,16 +91,6 @@ examined originals and native projection inputs; one-key steps can retain an ori
 on its projection. Missing native implementations remain unavailable. This bridge exports no engine writer registration,
 drain, ACK, participant completion, publication or account-erasure operation. The few native outcomes in
 `test/semantic/identity-source-support-outcomes.test.ts` remain later integration proof, without a stub pass.
-The adopted Source-owned binding is `public-filter-source-binding.ts:PublicFilterSourceBinding` with synchronous
-`createPublicFilterSourceBinding(pool: Pool, routing: Uint8Array, access: Access)`. Routing is the existing routeKey.
-`resolve({source,meaning,capture},context)` returns the native source identity/configuration, immutable read definition,
-complete meaning/capture/dependency keys and counted cost, or closed unready/unavailable failure. `join({queried,
-execution?},context)` independently validates that same native definition, canonical queried observation, covered cut
-and optional retained execution with original/terminal own rows. It imports Search's canonical queried type; it is
-not a fourth PublicFilterSource reader. It registers native Source-owned metadata and validates the actual
-Search-owned immutable custody. Neither operation authorizes Search publication. The selected additive shared consumer factory input is `binding: PublicFilterSourceBinding`;
-its canonical factory declaration and lifecycle implementation remain Search's shared consumer owner's work.
-
 `facet-population-contract.ts` owns the adopted `FacetPopulationRequest` and `FacetPopulationPage` declarations.
 The sole `createFacetPopulationSource(config)` factory uses exactly the PublicFilterSourceFactory configuration.
 `readFacetPopulationPage({population,frontier,inputLimit,capture})` retains native finite creation/change coverage,
@@ -577,8 +565,7 @@ repair implementation are described below; the complete serving and growth oblig
 ### Required integration schedule not yet frozen
 
 The native binding now resolves the registered Source identity and immutable read definition through the
-installed Source and Search custody modules. Complete maintained population observations and a single default
-page root remain unimplemented, so that binding cannot authorize ordinary serving yet. The following full
+installed Source and Search custody modules. Maintained population and the default page root have separate Search-owned acceptance. The following full
 integration schedules remain required native acceptance obligations:
 
 - A relevant local, tuple, foreign target/qualifier, consent or Collection reduction during actual PIT/prepared
@@ -676,15 +663,6 @@ Native producer adoption and the unchanged later acceptance remain required; typ
 
 ### Selected native binding and key-page declarations
 
-`public-filter-source-binding.ts` publishes the selected `NativePublicSource`, `PublicFilterSourceDefinition`,
-`PublicFilterBindingFailure` and `PublicFilterSourceBinding` declarations. The synchronous constructor is
-`createPublicFilterSourceBinding(pool, routing: Uint8Array, access)`; native I/O belongs to `resolve` and `join`.
-`resolve({source, meaning, capture}, context)` returns `resolved` with the native definition or the closed binding
-failure. `join({queried, execution?}, context)` returns `joined` with that definition, the exact canonical queried
-observation, covered start and nullable retained execution/own rows, or the same failure. The queried type is
-imported/re-exported from Search's canonical consumer contract. Routing is the existing route key; these are
-Source-owned declarations, not a second Search reader or Source service.
-
 `subject-source-key-pages.ts` publishes `SubjectSourceKeyCursor`, `SubjectSourceKeyPage` and
 `SubjectSourceKeyPages`, with synchronous `createSubjectSourceKeyPages(pool, routing: Uint8Array, access)`.
 `read({partition, after, inputLimit}, context)` returns explicit `eligible` completeness/continuation with native
@@ -716,19 +694,40 @@ external replacement version. `settle` validates the original bootstrap, same ol
 all configured owner domains and real Search dispatch/visible-winner/retained-copy custody. Neither a generic
 caller receipt nor a successful engine callback certifies completion. Account proof stays with Accounts.
 
+Generation completion is `public-filter-source-binding.ts:readNativePublicFilterPublicationCompletion(
+binding: PublicFilterSourceBinding, request: NativePublicFilterPublicationRequest,
+context: PublicFilterConsumerContext): Promise<NativePublicFilterPublicationCompletion>`, also exported by
+`semantic/index.ts`. Decision: pin the generation job to the original bootstrap/observation/execution;
+compose original terminal verification, independent Search settlement and the installed all-home Source reader.
+
+The first request is `NativePublicFilterPublication = Readonly<{job: string; bootstrap: string;
+queried: PublicFilterQueriedObservation; execution: string}>`, after actual Search retention and before dispatch
+or adoption uncertainty. Resume with `{job: string}`. Source checks the actual `search.generation_publication`
+job, binding and physical consumer/incarnation and retains only locators on its existing bootstrap. Restart
+explicitly resolves that same observation and adopts it, without a latest-observation lookup or a new cut.
+The callable advances only the existing bounded per-home settlement/ACK frontier. Search independently reads
+original dispatch/winner/copy/refresh/writer and physical incarnation evidence; Source verifies its original
+terminal chain, immutable enrollment, owner epochs and contiguous creation obligations. No transaction spans
+foreign I/O. A clean population, count, complete bit, callback, caller token or Account erasure barrier cannot
+replace these proofs. Current changes and late writers require native owner repair.
+
+The result is `PublicFilterBindingFailure` until complete. Its complete branch is
+`{status: 'complete'; publication: NativePublicFilterPublication; definition: PublicFilterSourceDefinition;
+covered: PrivacyReductionStart; execution: NonNullable<Extract<Awaited<ReturnType<PublicFilterSourceBinding['join']>>,
+{status: 'joined'}>['execution']>; observation: Extract<PrivacyReductionObservation, {status: 'observed'}>;
+terminal: Readonly<{step: string; root: string}>; settlement: NativePublicFilterRepairSettlement;
+cost: PublicFilterCost}`. The settlement type is Search's exact native type. The all-native-homes observation
+uses that original execution/start; it must have complete routing and no blocking or unacknowledged homes.
+Changed-since-start information remains intact and never authorizes disclosure of an old execution. Search
+composes the callable through its existing writer fence and owns activation and reader-safe retirement.
+Native receiving, restart and growth acceptance remain required; typing is not that proof.
+
 ### Native Source metadata ownership
 
 `public-filter-source-binding.ts` exports the synchronous
 `createPublicFilterSourceBinding(pool, routing: Uint8Array, access): PublicFilterSourceBootstrapBinding`.
-Its closed declarations are `NativePublicSource`, `PublicFilterSourceDefinition`,
-`PublicFilterBindingFailure`, `PublicFilterSourceBinding`, `PublicSourceCaptureInput`,
-`PublicSourceBootstrap`, `PublicSourceBootstrapResult`, `PublicSourceBootstrapRecovery`,
-`NativeSourceRepairLocator`, `NativeSourceRepairReceipt`, `NativeSourceRepairRead`,
-`NativeSourceRepairStepRead`, `NativeSourceRepairStepVerification`,
-`NativeSourceRepairVerification`, `PublicSourceRepair`, `PublicSourceRepairPage` and
-`PublicFilterSourceBootstrapBinding`. `PublicFilterSourceCaptureInput` remains a compatibility alias;
-`PublicFilterNativeSource` and `JoinedPopulationRequest` remain exported. The capture is the canonical
-Search Subject/mixed/prefix union; queried observations are imported from Search.
+Its declarations retain the canonical Search Subject/mixed/prefix capture union and Search-owned queried
+observation. The bootstrap and original receipt types remain in the adjacent implementation.
 
 Migration `20261030222921_public_filter_binding.sql` owns Source tables in `semantic`:
 `public_filter_source` has `(partition_no,source_id)` identity and an independently stored configuration,
@@ -739,6 +738,9 @@ foreign pool/Access/route key, unpublished meaning or substituted retained input
 `resolve` registers these Source-owned rows and rereads their native identity before returning.
 This is metadata, not a current disclosure or permission result. Source's three privacy/projection
 readers retain their independent contracts and budgets.
+
+Migration `20261105090000_public_source_repair_custody.sql` adds the immutable publication job/observation/execution
+locators and a unique job lookup to that original bootstrap. It stores no Search engine receipts.
 
 `public_filter_bootstrap`, keyed by `(partition_no,bootstrap)`, owns pre-PIT native cuts and atomic
 adoption intent. `public_filter_bootstrap_account` retains original Account/claim owner heads under
@@ -829,10 +831,8 @@ revisions and the native revision/claimRevision stay distinct. A later position 
 ACK never retires a Source pending key. Existing reverse-enrollment apply receipt adoption and Source
 home/key revision CAS retain responsibility for pending retirement across every captured registration.
 
-Current population reads remain unavailable, and request-time Account-head sweeps are still present.
-The sequential maintained-population/page-root work must replace those together, carry one current root
-through all refills and final projection, and finish lifecycle/drain before ordinary serving is ready.
-This captured-prefix repair/ACK implementation does not authorize old observations or default delivery.
+The installed maintained-population/page-root path owns current coverage through refills and final projection.
+Captured-prefix repair/ACK never independently authorizes old observations or default delivery.
 
 New original repair traversals include Account rows, Account intents and claim
 intents in each native home. Each arm seeks at most one raw key; all returned

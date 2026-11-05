@@ -77,9 +77,15 @@ export type {
   IdentitySourceSupportReader,
   IdentitySourceSupportReaderFactory,
 } from './identity-source-support-contract.ts';
-export { createPublicFilterSourceBinding } from './public-filter-source-binding.ts';
+export {
+  createPublicFilterSourceBinding,
+  readNativePublicFilterPublicationCompletion,
+} from './public-filter-source-binding.ts';
 export type {
   NativePublicSource,
+  NativePublicFilterPublication,
+  NativePublicFilterPublicationRequest,
+  NativePublicFilterPublicationCompletion,
   PublicSourceCaptureInput,
   PublicFilterNativeSource,
   JoinedPopulationRequest,
