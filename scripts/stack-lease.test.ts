@@ -342,6 +342,7 @@ test('remote commands run with the lease off', async () => {
     if (script.includes('REMOTE_CHECK_CONTROL_PROBE')) console.log('REMOTE_CHECK_CONTROL_OK');
     else if (script.includes('systemd-run')) await Bun.write(${JSON.stringify(scriptFile)}, script);
     else if (script.includes('MemAvailable')) {
+      console.log('MEMORY_RECLAIMABLE 0\\nDISK_FREE 1099511627776');
       console.log('MEMORY_CURRENT -\\nMEMORY_MAX -\\nMEMORY_HEADROOM 17179869184\\nAVAILABLE 17179869184\\nMEMORY_RESERVED 0\\nPROCESSORS 8\\nSLICE_PROCESSORS 8\\nLOAD 0\\nORDINARY_SLOTS_USED 0\\nEXPRESS_SLOT_USED 0\\nGATE_WAITING 0\\nMULTI_SLOT_WAITING_SLOTS 0\\nMULTI_SLOT_WAITING_ID -\\nLANDING_WAITING_SLOTS 0\\nLANDING_WAITING_ID -\\nLANDING_WAITING_STARTED -\\nLANDING_WAITING_ESTIMATE_MS -1\\nLANDING_WAITING_MEMORY_BYTES 2684354560\\nTMP_BYTES 17179869184\\nTMP_INODES 1000000');
     }
     else if (script.includes('REMOTE_CHECK_RESERVATION')) { console.log('RESERVATION'); await Bun.stdin.text(); }
