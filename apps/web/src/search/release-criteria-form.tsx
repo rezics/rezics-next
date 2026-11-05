@@ -330,6 +330,9 @@ export function ReleaseSearchFormView({
     ...(selections?.publisher ? { publisher: selections.publisher } : parsed.form.publisher ? { publisher: { id: parsed.form.publisher } } : {}),
   }));
   const [pendingSubjects, setPendingSubjects] = useState<Set<SubjectField>>(() => new Set());
+  const [serverErrors, setServerErrors] = useState<Set<keyof ReleaseSearchForm>>(
+    () => new Set(parsed.invalid.filter((field): field is keyof ReleaseSearchForm => field !== 'cursor')),
+  );
   const [corrections, setCorrections] = useState<Set<SemanticField>>(() => new Set());
   const [meaningBaseline, setMeaningBaseline] = useState<Record<SemanticField, string>>(() =>
     Object.fromEntries(
@@ -358,6 +361,7 @@ export function ReleaseSearchFormView({
   const errors = [
     ...new Set<keyof ReleaseSearchForm>([
       ...current.invalid.filter((field): field is keyof ReleaseSearchForm => field !== 'cursor'),
+      ...serverErrors,
       ...blocked,
       ...corrections,
       ...pendingSubjects,
@@ -388,8 +392,20 @@ export function ReleaseSearchFormView({
     corrections.has(field)
       ? m.release_search_correction_required({ field: fieldLabel(field) }, options)
       : issueText(field, draft, controls, locale);
+  const clearServerError = (field: keyof ReleaseSearchForm) =>
+    setServerErrors((currentErrors) => {
+      if (!currentErrors.has(field)) return currentErrors;
+      const next = new Set(currentErrors);
+      next.delete(field);
+      return next;
+    });
+  const setLanguageTags = (languageTags: string[]) => {
+    setDraft((currentDraft) => ({ ...currentDraft, languageTags }));
+    clearServerError('language');
+  };
   const setField = <K extends keyof ReleaseSearchForm>(field: K, value: ReleaseSearchForm[K]) => {
     setDraft((currentDraft) => ({ ...currentDraft, form: { ...currentDraft.form, [field]: value } }));
+    clearServerError(field);
     if ((semanticFields as readonly string[]).includes(field)) {
       const semanticField = field as SemanticField;
       setMeaningBaseline((currentBaseline) => ({
@@ -448,7 +464,7 @@ export function ReleaseSearchFormView({
     if (field === 'platform' || field === 'developer' || field === 'publisher') {
       setSubject(field, undefined);
       setSubjectPending(field, false);
-    } else if (field === 'language') setDraft((currentDraft) => ({ ...currentDraft, languageTags: [] }));
+    } else if (field === 'language') setLanguageTags([]);
     else if (field !== 'subtype') setField(field, '');
   };
   const fieldInput = (
@@ -626,7 +642,7 @@ export function ReleaseSearchFormView({
           locale={locale}
           invalid={errors.includes('language')}
           {...(errors.includes('language') ? { errorId: issueId('language') } : {})}
-          onChange={(languageTags) => setDraft((currentDraft) => ({ ...currentDraft, languageTags }))}
+          onChange={setLanguageTags}
         />
         {draft.languageTags.map((tag, index) => (
           <input key={`${index}:${tag}`} type="hidden" name="language" value={tag} />

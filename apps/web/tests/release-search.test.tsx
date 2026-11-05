@@ -128,20 +128,23 @@ const releaseId = '018f0000-0000-7000-8000-000000000001';
 const releaseType = 'wd:Q20631656';
 const platformId = '018f0000-0000-7000-8000-000000000002';
 const developerId = '018f0000-0000-7000-8000-000000000003';
-const releaseTypes: ReleaseSearchType[] = admittedReleaseSearchTypes(bundledRelease).map((id) => {
-  const controls = admittedReleaseSearchControls(bundledRelease, id)!;
-  return {
-    id,
-    label: id,
-    controls: {
-      platform: controls.platform,
-      language: controls.language,
-      date: controls.date,
-      ageRating: controls.ageRating,
-      producers: controls.producers,
-    },
-  };
-});
+function releaseSearchTypes(release: FilterRelease): ReleaseSearchType[] {
+  return admittedReleaseSearchTypes(release).map((id) => {
+    const controls = admittedReleaseSearchControls(release, id)!;
+    return {
+      id,
+      label: id,
+      controls: {
+        platform: controls.platform,
+        language: controls.language,
+        date: controls.date,
+        ageRating: controls.ageRating,
+        producers: controls.producers,
+      },
+    };
+  });
+}
+const releaseTypes = releaseSearchTypes(bundledRelease);
 
 async function mountReleaseCriteria(locale = 'en') {
   const { Window } = await import(
@@ -393,7 +396,7 @@ test('withdrawn controls and malformed URL operands remain repairable without br
       createElement(ReleaseSearchPage, {
         locale: 'en',
         parsed,
-        types: releaseTypes,
+        types: releaseSearchTypes(release),
         state: { status: 'invalid' },
       }),
     );
@@ -427,7 +430,12 @@ test('the release page localizes controls and distinguishes loading, unavailable
     expect(loading).toContain(m.release_search_heading({}, { locale }));
     expect(loading).toContain('aria-busy="true"');
     expect(loading).toContain('value="2024-02-29"');
-    expect(loading).toContain('value="ja, en"');
+    expect(loading).toContain(m.condition_languages_label({}, { locale }));
+    expect(loading).toContain('name="language" value="ja"');
+    expect(loading).toContain('name="language" value="en"');
+    expect(loading).toContain(m.release_search_age_help({}, { locale }));
+    expect(loading).toContain(m.condition_calendar_day({}, { locale }));
+    expect(loading).toContain(m.condition_calendar_help({}, { locale }));
     expect(loading).toContain('<label');
     expect(render({ status: 'unavailable' })).toContain('role="alert"');
     const preparing = render({
@@ -532,10 +540,14 @@ test('release criteria update on subtype change, retain repairs, and apply an or
     'en',
   );
   const input = (id: string) => mounted.host.querySelector<HTMLInputElement>(`#release-search-${id}`)!;
+  const changeValue = (id: string, value: string) => {
+    const field = mounted.host.querySelector<HTMLInputElement | HTMLSelectElement>(`#release-search-${id}`)!;
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(field), 'value')?.set?.call(field, value);
+    field.dispatchEvent(new mounted.window.Event(field.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
+  };
   const choose = async (id: string, query: string) => {
     await act(async () => {
-      input(id).value = query;
-      input(id).dispatchEvent(new mounted.window.Event('input', { bubbles: true }));
+      changeValue(id, query);
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     await act(async () => {
@@ -551,20 +563,18 @@ test('release criteria update on subtype change, retain repairs, and apply an or
     expect(mounted.host.textContent).toContain('schema:GamePlatform');
     expect(mounted.host.textContent).toContain('schema:Organization');
     expect(mounted.host.textContent).toContain(m.release_search_subject_help({}, { locale: 'en' }));
+    expect(mounted.host.textContent).toContain(m.release_search_draft_notice({}, { locale: 'en' }));
 
     await act(async () => {
-      input('releaseLanguage').value = 'ja, en';
-      input('releaseLanguage').dispatchEvent(new mounted.window.Event('input', { bubbles: true }));
+      changeValue('releaseLanguage', 'ja, en');
     });
     const moveJapaneseUp = [...mounted.host.querySelectorAll<HTMLButtonElement>('button')].find(
       (button) => button.getAttribute('aria-label') === m.condition_languages_move_up({ language: 'ja' }, { locale: 'en' }),
     )!;
     await act(async () => moveJapaneseUp.click());
 
-    const subtype = mounted.host.querySelector<HTMLSelectElement>('#release-search-subtype')!;
     await act(async () => {
-      subtype.value = 'rezics:AnimeRelease';
-      subtype.dispatchEvent(new mounted.window.Event('change', { bubbles: true }));
+      changeValue('subtype', 'rezics:AnimeRelease');
     });
     expect(mounted.host.querySelector('[data-criteria-field="platform"]')).not.toBeNull();
     expect(input('platform').getAttribute('aria-invalid')).toBe('true');
@@ -574,14 +584,14 @@ test('release criteria update on subtype change, retain repairs, and apply an or
     expect(input('releaseLanguage').getAttribute('aria-invalid')).toBe('true');
     expect(mounted.host.querySelector('#release-search-errors a[href="#release-search-platform"]')).not.toBeNull();
     const form = mounted.host.querySelector('form')!;
-    expect(form.dispatchEvent(new mounted.window.Event('submit', { bubbles: true, cancelable: true }))).toBe(false);
+    await act(async () => {
+      expect(form.dispatchEvent(new mounted.window.Event('submit', { bubbles: true, cancelable: true }))).toBe(false);
+    });
     expect(mounted.window.document.activeElement?.id).toBe('release-search-errors');
 
     await act(async () => {
-      subtype.value = releaseType;
-      subtype.dispatchEvent(new mounted.window.Event('change', { bubbles: true }));
-      input('releaseLanguage').value = 'ja, en';
-      input('releaseLanguage').dispatchEvent(new mounted.window.Event('input', { bubbles: true }));
+      changeValue('subtype', releaseType);
+      changeValue('releaseLanguage', 'ja, en');
     });
     expect(mounted.host.querySelector('[role="alert"]')).toBeNull();
     const params = new URLSearchParams();
@@ -638,10 +648,13 @@ test('withdrawn subtype and invalid URL language stay visible until focused corr
     expect(mounted.host.textContent).toContain('??');
 
     const form = mounted.host.querySelector('form')!;
-    expect(form.dispatchEvent(new mounted.window.Event('submit', { bubbles: true, cancelable: true }))).toBe(false);
+    await act(async () => {
+      expect(form.dispatchEvent(new mounted.window.Event('submit', { bubbles: true, cancelable: true }))).toBe(false);
+    });
     expect(mounted.window.document.activeElement?.id).toBe('release-search-errors');
     await act(async () => {
-      subtype.value = releaseType;
+      const changeValue = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(subtype), 'value')?.set;
+      changeValue?.call(subtype, releaseType);
       subtype.dispatchEvent(new mounted.window.Event('change', { bubbles: true }));
     });
     const removeInvalidTag = [...mounted.host.querySelectorAll<HTMLButtonElement>('button')].find(
