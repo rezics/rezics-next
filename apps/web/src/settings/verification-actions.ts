@@ -10,8 +10,14 @@ import { withVerificationDeadline } from './verification-request-deadline';
 import type { SessionEnv } from '../session/client';
 import { prepareSession, sessionSubject, viewerCredential } from '../session/request';
 import { requestLanguages } from '../kernel/languages';
-import { readVerificationEligibility, readVerificationTitle } from './verification-core';
-import type { VerificationInput, VerificationSearchFailure } from './verification-core';
+import {
+  readVerificationEligibility,
+  readVerificationTitle,
+  verificationSafeFailure,
+  type VerificationFailure,
+  type VerificationInput,
+  type VerificationSearchFailure,
+} from './verification-core';
 import { validateVerificationDraft } from './verification-validation';
 
 function uuid(value: unknown): value is string {
@@ -61,11 +67,19 @@ function expectedAccount(input: unknown): string {
 
 async function viewer() {
   const request = getRequest();
-  await prepareSession(request, env as Partial<SessionEnv>);
+  await withVerificationDeadline(() => prepareSession(request, env as Partial<SessionEnv>), request.signal);
   const authorization = viewerCredential(request);
   const accountId = sessionSubject(request);
   if (!authorization || !accountId) throw new Error('Sign in is required');
   return { request, authorization, accountId };
+}
+
+function currentReadFailure(error: unknown): VerificationFailure {
+  return verificationSafeFailure(error, m.settings_verification_load_failed());
+}
+
+function commandFailure(error: unknown) {
+  return { ok: false as const, ...verificationSafeFailure(error) };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -120,18 +134,16 @@ export const readVerificationState = createServerFn({ method: 'GET' })
   .validator(expectedAccount)
   .handler(async ({ data: expectedAccountId }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const { request, authorization, accountId } = await viewer();
-    if (accountId !== expectedAccountId) throw new Error(m.settings_verification_identity_changed());
-    const client = kernelClient();
-    const { readVerification, VerificationReadError } = await import('./verification-core');
-    let status;
     try {
-      status = await readVerification(client, accountId, authorization, request.signal);
+      const { request, authorization, accountId } = await viewer();
+      if (accountId !== expectedAccountId)
+        return { ok: false as const, failure: { status: 409, message: m.settings_verification_identity_changed() } };
+      const { readVerification } = await import('./verification-core');
+      const status = await readVerification(kernelClient(), accountId, authorization, request.signal);
+      return { ok: true as const, value: { accountId, ...status, subjectTitle: null } };
     } catch (error) {
-      if (error instanceof VerificationReadError) return { ok: false as const, failure: error.failure };
-      throw error;
+      return { ok: false as const, failure: currentReadFailure(error) };
     }
-    return { ok: true as const, value: { accountId, ...status, subjectTitle: null } };
   });
 
 export const readVerificationSubjectTitle = createServerFn({ method: 'GET' })
@@ -144,15 +156,19 @@ export const readVerificationSubjectTitle = createServerFn({ method: 'GET' })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const { request, authorization, accountId } = await viewer();
-    if (accountId !== data.accountId) throw new Error(m.settings_verification_identity_changed());
-    return readVerificationTitle(
-      kernelClient(),
-      data.subjectId,
-      authorization,
-      requestLanguages(requestLocale(request) ?? 'en'),
-      request.signal,
-    );
+    try {
+      const { request, authorization, accountId } = await viewer();
+      if (accountId !== data.accountId) return null;
+      return readVerificationTitle(
+        kernelClient(),
+        data.subjectId,
+        authorization,
+        requestLanguages(requestLocale(request) ?? 'en'),
+        request.signal,
+      );
+    } catch {
+      return null;
+    }
   });
 
 export const searchVerificationSubjects = createServerFn({ method: 'GET' })
@@ -231,11 +247,15 @@ export const requestVerificationAction = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const { request, authorization, accountId } = await viewer();
-    if (accountId !== data.accountId)
-      return { ok: false as const, status: 409, message: m.settings_verification_identity_changed() };
-    const { requestVerification } = await import('./verification-core');
-    return requestVerification(kernelClient(), accountId, authorization, data, request.signal);
+    try {
+      const { request, authorization, accountId } = await viewer();
+      if (accountId !== data.accountId)
+        return { ok: false as const, status: 409, message: m.settings_verification_identity_changed() };
+      const { requestVerification } = await import('./verification-core');
+      return requestVerification(kernelClient(), accountId, authorization, data, request.signal);
+    } catch (error) {
+      return commandFailure(error);
+    }
   });
 
 export const withdrawVerificationAction = createServerFn({ method: 'POST' })
@@ -246,9 +266,13 @@ export const withdrawVerificationAction = createServerFn({ method: 'POST' })
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    const { request, authorization, accountId } = await viewer();
-    if (accountId !== data.accountId)
-      return { ok: false as const, status: 409, message: m.settings_verification_identity_changed() };
-    const { withdrawVerification } = await import('./verification-core');
-    return withdrawVerification(kernelClient(), accountId, authorization, data.idempotencyKey, request.signal);
+    try {
+      const { request, authorization, accountId } = await viewer();
+      if (accountId !== data.accountId)
+        return { ok: false as const, status: 409, message: m.settings_verification_identity_changed() };
+      const { withdrawVerification } = await import('./verification-core');
+      return withdrawVerification(kernelClient(), accountId, authorization, data.idempotencyKey, request.signal);
+    } catch (error) {
+      return commandFailure(error);
+    }
   });

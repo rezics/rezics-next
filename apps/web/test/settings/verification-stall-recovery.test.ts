@@ -6,6 +6,7 @@ import {
   withdrawVerification,
   readVerificationTitle,
   readVerificationEligibility,
+  VerificationReadError,
   type AgentVerificationRequest,
   type VerificationInput,
 } from '../../src/settings/verification-core';
@@ -60,11 +61,14 @@ test('native review, commands, eligibility and optional titles bound stalled hea
               });
         }) as typeof fetch,
       });
-      await expect(readVerification(client, 'alice', 'Bearer current')).rejects.toThrow('timed out');
-      await expect(requestVerification(client, 'alice', 'Bearer current', input)).rejects.toThrow('timed out');
-      await expect(withdrawVerification(client, 'alice', 'Bearer current', input.idempotencyKey)).rejects.toThrow(
-        'timed out',
-      );
+      await expect(readVerification(client, 'alice', 'Bearer current')).rejects.toBeInstanceOf(VerificationReadError);
+      await expect(requestVerification(client, 'alice', 'Bearer current', input)).resolves.toMatchObject({
+        ok: false,
+        status: 0,
+      });
+      await expect(
+        withdrawVerification(client, 'alice', 'Bearer current', input.idempotencyKey),
+      ).resolves.toMatchObject({ ok: false, status: 0 });
       await expect(readVerificationEligibility(client, 'Bearer current')).rejects.toThrow('timed out');
       expect(await readVerificationTitle(client, input.subject, 'Bearer current', ['en'])).toBeNull();
       expect(calls).toHaveLength(5);

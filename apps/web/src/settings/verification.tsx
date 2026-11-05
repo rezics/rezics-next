@@ -577,12 +577,16 @@ export function VerificationCard({
                       subject: action?.subject ?? m.settings_verification_generic_subject(),
                     })}
               </p>
-              {!state.attempt.receipt ? <p>{m.settings_verification_check_guidance()}</p> : null}
-              <p>
-                {state.attempt.kind === 'request'
-                  ? m.settings_verification_retry_request_guidance()
-                  : m.settings_verification_retry_withdraw_guidance()}
-              </p>
+              {!state.attempt.receipt ? (
+                <>
+                  <p>{m.settings_verification_check_guidance()}</p>
+                  <p>
+                    {state.attempt.kind === 'request'
+                      ? m.settings_verification_retry_request_guidance()
+                      : m.settings_verification_retry_withdraw_guidance()}
+                  </p>
+                </>
+              ) : null}
               {state.attempt.kind === 'request' ? (
                 <details>
                   <summary className={verificationSummaryClassName}>{m.settings_verification_original()}</summary>

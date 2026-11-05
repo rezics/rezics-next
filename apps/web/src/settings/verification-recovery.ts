@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { withVerificationDeadline } from './verification-request-deadline';
 import {
-  VerificationReadError,
+  verificationFailureFromException,
   type AgentVerificationRequest,
   type AgentVerificationViewerAction,
   type VerificationCommandResult,
@@ -249,8 +249,13 @@ export class VerificationRecovery {
             : this.io.withdraw(this.accountId, attempt.input, signal),
         this.lifetime.signal,
       );
-    } catch {
-      if (this.live(epoch)) this.update({ phase: 'uncertain' });
+    } catch (error) {
+      const failure = verificationFailureFromException(error);
+      if (this.live(epoch))
+        this.update({
+          phase: 'uncertain',
+          ...(failure === undefined ? {} : { failure, commandRetryAt: preferenceRetryDeadline(failure.retryAfter) }),
+        });
       return;
     }
     if (!this.live(epoch) || !this.canWrite()) return;
@@ -316,12 +321,7 @@ export class VerificationRecovery {
       if (current.verificationRequest && this.older(current.verificationRequest))
         throw new Error('Verification status predates the current request');
     } catch (error) {
-      const failure: VerificationFailure | undefined =
-        error instanceof VerificationReadError
-          ? error.failure
-          : error instanceof Error && error.message === 'rezics-platform-closed'
-            ? { status: 403, message: error.message }
-            : undefined;
+      const failure = verificationFailureFromException(error);
       if (this.live(epoch))
         this.update({
           phase: this.state.attempt ? 'uncertain' : 'unavailable',
