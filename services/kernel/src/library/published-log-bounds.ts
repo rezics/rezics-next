@@ -315,7 +315,7 @@ const sqlOnly = (sql: string, input: object = {}) => leaf(sql, input, 0, 0, 0, {
 function alternative(...branches: readonly Bound[]): Bound {
   const values = branches.length ? branches : [zero];
   return declareBound(
-    Object.fromEntries(BOUND_AXES.map((axis) => [axis, Math.max(...values.map((value) => value[axis])]))),
+    Object.fromEntries(BOUND_AXES.map((axis) => [axis, Math.max(...values.map((value) => value[axis]))])),
   );
 }
 function operationPlan(
