@@ -6,14 +6,20 @@ import { SQL_COMMENT_BYTE_BOUND, statementBytes } from '../src/sql/statement-byt
 test('SQL work bounds include the comment Reylo adds only at dispatch', async () => {
   for (const source of ["src/é'--query.sql", 'src/plain.sql']) {
     const query = defineQuery<{}, { answer: number }, 'one'>({
-      dialect: 'postgres', sql: 'SELECT 7 AS answer; -- trailing comment', params: [],
-      cardinality: 'one', source, sqlcommenter: true,
+      dialect: 'postgres',
+      sql: 'SELECT 7 AS answer; -- trailing comment',
+      params: [],
+      cardinality: 'one',
+      source,
+      sqlcommenter: true,
     });
     let sent = '';
-    const client = { async query(text: string) {
-      sent = text;
-      return { rows: [{ answer: 7 }], fields: [] };
-    } };
+    const client = {
+      async query(text: string) {
+        sent = text;
+        return { rows: [{ answer: 7 }], fields: [] };
+      },
+    };
     expect(await query.run(client, {})).toEqual({ answer: 7 });
     expect(query.sql).not.toContain('/*file=');
     expect(sent).toContain('/*file=');
