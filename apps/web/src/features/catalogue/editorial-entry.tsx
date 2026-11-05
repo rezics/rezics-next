@@ -6,7 +6,7 @@ import { useSession } from '../../session/query';
 import { subjectHref } from '../../subject/subject-href';
 import { AuthoredFieldEntry } from './authored-field-entry';
 import { CreateSubjectEntry } from './create-subject-entry';
-import { GameProfileEntry } from './game-profile-entry';
+import { GameProfileEntry, gameProfileEntry } from './game-profile-entry';
 import { PublicationEditorEntry } from './publication-editor-entry';
 import { MangaProfileEntry } from './manga-profile-entry';
 import { PeopleProfileEntry } from './people-profile-entry';
@@ -51,7 +51,7 @@ export function collectEditorialEntries(children: ReactNode): { entries: Catalog
       return;
     }
     if (isValidElement<Parameters<typeof GameProfileEntry>[0]>(node) && node.type === GameProfileEntry) {
-      const entry = catalogueEntries.gameProfile(node.props);
+      const entry = gameProfileEntry(node.props);
       if (entry) entries.push(entry);
       return;
     }

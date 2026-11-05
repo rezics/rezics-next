@@ -1,3 +1,6 @@
+import { candidateContext } from '../../subject/candidates';
+import { gameVisitSearch, type GameCurrentVisit } from './game-current-visit';
+import { GameVisitNotice } from './game-current-visit-view';
 import { CatalogueCurrentReading, catalogueEditor, useEditorLifetime } from './editor-lifetime';
 import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -54,7 +57,10 @@ export type GameProfileTransport = {
   review: (property: string, session?: string) => CandidateTransport;
   classificationReview: (property: string, session?: string) => CandidateTransport;
 };
-export const GameProfile = catalogueEditor(GameProfileLive);
+const GameProfileEditor = catalogueEditor(GameProfileLive);
+export function GameProfile(props: Parameters<typeof GameProfileLive>[0]) {
+  return <GameProfileEditor {...props} address={JSON.stringify([props.address, props.visit])} />;
+}
 type ReadyGame = Extract<GameRead, { ok: true }> & {
   public: NonNullable<Extract<GameRead, { ok: true }>['public']>;
 };
@@ -66,8 +72,12 @@ function GameProfileLive({
   transport,
   search,
   onNavigate,
+  visit,
+  address,
 }: {
   id?: string;
+  visit?: GameCurrentVisit | undefined;
+  address?: string | undefined;
   locale: string;
   session: 'unknown' | 'signed-in' | 'signed-out' | 'unavailable';
   transport: GameProfileTransport;
@@ -76,7 +86,7 @@ function GameProfileLive({
 }) {
   const lifetime = useEditorLifetime();
   const query = useQuery({
-    queryKey: [...['game-profile', id ?? 'new', locale], lifetime.generation],
+    queryKey: ['game-profile', id ?? 'new', locale, address, visit ? gameVisitSearch(visit) : '', lifetime.generation],
     queryFn: transport.load,
     retry: false,
   });
@@ -214,11 +224,19 @@ function GameProfileLive({
   };
   const o = { locale: locale as never };
   const admitted =
-    !query.isError && !query.isFetching && query.data?.ok && query.data.public && query.data.public.subject.id === id
+    !query.isError && !query.isFetching && query.data?.ok && query.data.public && query.data.public.subject.id === id &&
+    query.data.public.subject.context === (visit?.context ?? candidateContext) &&
+    (!visit?.type || query.data.public.subject.type === visit.type)
       ? { ...query.data, public: query.data.public }
       : undefined;
   const privateReading = useRef<ReadyGame>(undefined);
-  if (admitted) privateReading.current = admitted;
+  const supported = (visit?.context ?? candidateContext) === candidateContext;
+  if (admitted && supported) privateReading.current = admitted;
+  if (id && admitted && !supported) {
+    const title = pickText(admitted.public.subject.labels, locale).text;
+    return <GameVisitNotice locale={locale} visit={visit}
+      globalHref={`${subjectHref({ id, label: title }, locale).href}/game`} />;
+  }
   // Existing-subject recovery retains private holders, never display authority.
   if (id)
     return (
@@ -252,6 +270,9 @@ function GameProfileLive({
                 >
                   {m.game_profile_refresh({}, o)}
                 </Button>
+                {visit?.source && <a className="inline-flex min-h-11 items-center underline" href={visit.source}>
+                  {m.game_visit_return({}, o)}
+                </a>}
               </>
             )}
           </article>
@@ -260,6 +281,7 @@ function GameProfileLive({
           <AuthoringDepartureBoundary>
             <GameCorrection
               read={privateReading.current}
+              visit={visit}
               visible={!!admitted}
               locale={locale}
               session={session}
@@ -394,6 +416,7 @@ function GameProfileLive({
 }
 function GameCorrection({
   read,
+  visit,
   locale,
   session,
   transport,
@@ -410,6 +433,7 @@ function GameCorrection({
   refreshing: boolean;
   visible: boolean;
   read: ReadyGame;
+  visit?: GameCurrentVisit | undefined;
   locale: string;
   session: string;
   transport: GameProfileTransport;
@@ -421,7 +445,7 @@ function GameCorrection({
   const subject = read.public.subject;
   const title = pickText(subject.labels, locale);
   const type = pickText(read.release.types[subject.type]!.labels, locale);
-  const href = subjectHref({ id: subject.id, label: title.text }, locale).href;
+  const href = visit?.source ?? subjectHref({ id: subject.id, label: title.text }, locale).href;
   const groups = gameGroups(read.release, subject.type);
   const fields = useMemo(
     () => relationFields(read.release, subject.type, locale),
@@ -458,6 +482,11 @@ function GameCorrection({
             {type.text || m.guide_missing({}, o)}
           </p>
           <p className="text-sm font-medium">{m.specialist_identity_scope({}, o)}</p>
+          {visit && <p className="text-sm">
+            {m.game_visit_context({ context: visit.context }, o)}
+            {visit.realm ? ` · ${m.game_visit_realm({ realm: visit.realm }, o)}` : ''}
+          </p>}
+          <a className="inline-flex min-h-11 items-center underline" href={href}>{m.game_visit_return({}, o)}</a>
           <p className="text-sm text-muted-foreground">{m.game_profile_grain({}, o)}</p>
           <nav
             className="flex min-w-0 max-w-full flex-wrap gap-2 [overflow-wrap:anywhere]"

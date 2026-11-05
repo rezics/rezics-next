@@ -1,4 +1,10 @@
 {
+  "game_visit_invalid": "Esta dirección de corrección no es válida. Abre la corrección desde la lectura actual del juego.",
+  "game_visit_unsupported": "Esta lectura usa un Contexto que el editor de correcciones de juegos no admite. Vuelve a la lectura de origen o inicia una corrección Global por separado.",
+  "game_visit_context": "Contexto: {context}",
+  "game_visit_realm": "Realm: {realm}",
+  "game_visit_return": "Volver a la lectura actual del juego",
+  "game_visit_global": "Iniciar una corrección Global por separado",
   "credit_return_unavailable": "Este crédito o su ventana actual ha cambiado o no está disponible. Selecciona un crédito actual para examinarlo.",
   "credit_technical": "Detalles técnicos",
   "credit_label_unavailable": "Etiqueta del campo no disponible",

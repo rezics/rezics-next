@@ -1,4 +1,7 @@
-import type { KernelClient, SubjectRead } from '@rezics/client';
+import type { KernelClient, SubjectRead, SubjectReadQuery } from '@rezics/client';
+import { candidateContext } from '../../subject/candidates';
+import type { GameCurrentVisit } from './game-current-visit';
+import { encodedBytes } from './release-fidelity/model';
 import { pickText } from '@rezics/composition';
 import type { Release } from '@rezics/definitions';
 import { checkSubjectInput, type Violation } from '@rezics/definitions/validate';
@@ -58,19 +61,30 @@ export function gameTarget(release: Pick<Release, 'properties' | 'types'>, prope
     ) === true
   );
 }
-export async function readGameProfile(client: KernelClient, id?: string): Promise<GameRead> {
+export async function readGameProfile(client: KernelClient, id?: string, visit?: GameCurrentVisit): Promise<GameRead> {
   if (id !== undefined && !gameUuid.test(id)) return { ok: false, reason: 'denied' };
   try {
     const [subject, active] = await Promise.all([
-      id ? client.subjects({ id }).get() : undefined,
+      id ? client.subjects({ id }).get({
+        query: { context: visit?.context ?? candidateContext } as SubjectReadQuery,
+      }) : undefined,
       client.definitions.active.get(),
     ]);
     if (subject && [403, 404, 308].includes(subject.status)) return { ok: false, reason: 'denied' };
     if ((id && (subject?.status !== 200 || !subject.data)) || active.status !== 200 || !active.data)
       return { ok: false, reason: 'unavailable' };
-    if (subject?.data && subject.data.subject.id !== id) return { ok: false, reason: 'stale' };
+    if (subject?.data && (
+      subject.data.subject.id !== id ||
+      subject.data.subject.context !== (visit?.context ?? candidateContext) ||
+      (visit?.type !== undefined && subject.data.subject.type !== visit.type) ||
+      (visit?.release !== undefined && active.data.digest !== visit.release)
+    )) return { ok: false, reason: 'stale' };
+    if (subject?.data && encodedBytes(subject.data) > 2 * 1024 * 1024)
+      return { ok: false, reason: 'unavailable' };
     const bundle = await client.definitions.releases({ digest: active.data.digest }).get();
     if (bundle.status !== 200 || !bundle.data || bundle.data.digest !== active.data.digest)
+      return { ok: false, reason: 'unavailable' };
+    if (encodedBytes(bundle.data) > 4 * 1024 * 1024 || Object.keys(bundle.data.release.types).length > 1024)
       return { ok: false, reason: 'unavailable' };
     const release = bundle.data.release as Release;
     if (!release.types || !release.properties) return { ok: false, reason: 'unavailable' };

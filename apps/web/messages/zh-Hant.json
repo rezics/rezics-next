@@ -1,4 +1,10 @@
 {
+  "game_visit_invalid": "此修正位址無效。請從目前的遊戲閱讀頁面重新開啟修正。",
+  "game_visit_unsupported": "遊戲修正編輯器尚未支援此閱讀使用的 Context。請返回來源閱讀，或另行開始 Global 修正。",
+  "game_visit_context": "Context：{context}",
+  "game_visit_realm": "Realm：{realm}",
+  "game_visit_return": "返回目前的遊戲閱讀",
+  "game_visit_global": "另行開始 Global 修正",
   "credit_return_unavailable": "此演職員資料或目前視窗已變更，或無法讀取。請選取目前的資料以檢視。",
   "credit_technical": "技術詳細資料",
   "credit_label_unavailable": "欄位名稱無法讀取",

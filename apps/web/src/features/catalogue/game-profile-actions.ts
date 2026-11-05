@@ -1,3 +1,4 @@
+import { parseGameVisit, type GameCurrentVisit } from './game-current-visit';
 import { originalReaderInput } from './editor-reader-input';
 import { candidateAuthorization, expectedCandidateReader } from '../../subject/candidate-admission';
 import { createServerFn } from '@tanstack/react-start';
@@ -13,14 +14,24 @@ import { factCommandInput, proposeFact, type FactResult } from './subject-facts'
 import { createGameProfile, gameFields, gameUuid, readGameProfile, type GameCommand } from './game-profile';
 import type { CreateResult } from './create-subject';
 
+/** Creation and direct Global entry keep their original input. Source visits validate at the HTTP boundary. */
 export const loadGameProfile = createServerFn({ method: 'GET', strict: false })
-  .validator((id: string | undefined) => {
-    if (id !== undefined && (typeof id !== 'string' || !gameUuid.test(id))) throw new Error('Invalid game identity');
-    return id;
+  .validator((input: string | undefined | { id: string; locale: string; search: string }) => {
+    if (input === undefined) return { id: undefined, visit: undefined };
+    if (typeof input === 'string') {
+      if (!gameUuid.test(input)) throw new Error('Invalid game identity');
+      return { id: input, visit: undefined };
+    }
+    if (!input || typeof input.id !== 'string' || !gameUuid.test(input.id) ||
+      typeof input.locale !== 'string' || typeof input.search !== 'string')
+      throw new Error('Invalid game visit');
+    const parsed = parseGameVisit(input.search, input.id, input.locale);
+    if (!parsed.valid) throw new Error('Invalid game visit');
+    return { id: input.id, visit: parsed.visit as GameCurrentVisit | undefined };
   })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
-    return readGameProfile(kernelClient(), data);
+    return readGameProfile(kernelClient(), data.id, data.visit);
   });
 export const createCatalogueGame = createServerFn({ method: 'POST', strict: false })
   .validator(

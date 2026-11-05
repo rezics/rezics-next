@@ -1,4 +1,10 @@
 {
+  "game_visit_invalid": "Diese Korrekturadresse ist ungültig. Öffne die Korrektur erneut aus der aktuellen Spielansicht.",
+  "game_visit_unsupported": "Diese Ansicht verwendet einen Kontext, den der Spielkorrektur-Editor nicht unterstützt. Kehre zur Ausgangsansicht zurück oder beginne eine separate globale Korrektur.",
+  "game_visit_context": "Kontext: {context}",
+  "game_visit_realm": "Realm: {realm}",
+  "game_visit_return": "Zur aktuellen Spielansicht zurückkehren",
+  "game_visit_global": "Separate globale Korrektur beginnen",
   "credit_return_unavailable": "Dieser Credit oder sein aktueller Ausschnitt hat sich geändert oder ist nicht verfügbar. Wähle einen aktuellen Credit zur Prüfung aus.",
   "credit_technical": "Technische Details",
   "credit_label_unavailable": "Feldbezeichnung nicht verfügbar",
