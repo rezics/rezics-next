@@ -50,7 +50,9 @@ test('selected VNDB relation handoff keeps mapped direction, cited source and ex
     record: { id: 'v4', vid: 'v7983', relation: 'preq', official: 't' },
   });
   expect(edge.fields).toContain('vn_relations.official');
-  expect(plan.gaps.some((gap) => gap.table === 'vn_relations' && gap.record.relation === 'ser')).toBe(true);
+  expect(
+    plan.gaps.some((gap) => gap.record.relation === 'ser' && gap.fields.includes('vn_relations.relation')),
+  ).toBe(true);
   expect(edges.some((candidate) => candidate.target === 'v2002')).toBe(false);
 
   const holderId = uuid('7983');
