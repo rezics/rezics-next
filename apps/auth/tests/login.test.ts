@@ -208,7 +208,7 @@ async function submit(page: Page) {
   await controls.address.fill(email);
   await controls.secret.fill(password);
   await Promise.all([
-    page.waitForResponse((response) => new URL(response.url()).pathname === '/signin').catch((cause) => {
+    page.waitForResponse((response) => new URL(response.url()).pathname === '/signin').catch(async (cause) => {
       throw new Error(
         `Sign-in response missing: ${JSON.stringify({
           url: page.url(),
