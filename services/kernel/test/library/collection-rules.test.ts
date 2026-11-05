@@ -5,6 +5,7 @@ import { createPool } from '../../src/database/pool.ts';
 import { createCollectionRulesFixture, type CollectionRulesFixture } from './support/collection-rules-fixture.ts';
 import { createReleasedLibraryPopulation } from './support/released-library-population.ts';
 import { discoveryKey, discoveryStatement } from '../support/released-discovery.ts';
+import { routeOf } from '../../src/route/route.ts';
 
 let f: CollectionRulesFixture;
 beforeAll(async () => {
