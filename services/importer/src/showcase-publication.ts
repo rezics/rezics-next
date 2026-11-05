@@ -1802,7 +1802,7 @@ export async function publishShowcase(input: {
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([candidate, rank]) => ({ candidate, rank })),
     };
-    const action = actionKey('adopt', `${id}:${group.property}`, manifest.digest);
+    const action = actionKey('adopt', `${id}:${group.property}`, showcaseDigest({ intent: manifest.digest, body }));
     const idempotencyKey = actionIdempotencyKey(body);
     const priorAction = input.journal.action(action);
     if (priorAction?.state === 'acknowledged') continue;
