@@ -1,4 +1,4 @@
-import type { SessionProof } from '@rezics/auth-contract';
+import { RENAME_PAGE_MAX_ACTIONS, RENAME_PAGE_MAX_ID_LENGTH, type SessionProof } from '@rezics/auth-contract';
 import type { AuthService } from './index.ts';
 import { closedProfile, isExactRenameProfile } from './account-profile-read-transport.ts';
 import { readJsonObject, TransportDenied } from './account-operations-transport.ts';
@@ -61,6 +61,8 @@ const record = (value: unknown): value is Record<string, unknown> =>
 function closePage(value: unknown, accountId: string, human: SessionProof): RenamePageBody {
   if (!record(value) || !record(value.viewer) || !record(value.profile) || !record(value.authActions))
     throw new TransportDenied(503);
+  // An oversized imported identity must not create an unbounded private response.
+  if (!accountId || accountId.length > RENAME_PAGE_MAX_ID_LENGTH) throw new TransportDenied(503);
   const viewer = value.viewer;
   if (viewer.accountId !== accountId || viewer.kind !== 'actor') throw new TransportDenied(503);
   const profile = closedProfile({ profile: value.profile }, accountId).profile;
@@ -72,7 +74,7 @@ function closePage(value: unknown, accountId: string, human: SessionProof): Rena
     sourceActions.state === 'ready' &&
     Object.keys(sourceActions).sort().join(',') === 'operations,state' &&
     Array.isArray(sourceActions.operations) &&
-    sourceActions.operations.length <= 8
+    sourceActions.operations.length <= RENAME_PAGE_MAX_ACTIONS
   ) {
     const operations = sourceActions.operations.map((item) => {
       if (

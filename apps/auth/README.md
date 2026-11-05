@@ -895,6 +895,20 @@ It does not cancel a dispatched native effect. Stay retains current review and f
 and its admitted descriptor, without implying cancellation or starting background reconciliation. Known unsent drafts
 can be discarded. Focus, language changes and history restoration never retry a command.
 
+Decision: rename-page receiving uses `RENAME_PAGE_MAX_RESPONSE_BYTES` exported by
+`@rezics/auth-contract`, independent of mounted scope catalogues. Identity copies follow SessionProof's
+native `securityId` contract: nonempty opaque strings of at most 1,024 UTF-16 units, including historical
+escaped/Unicode identifiers; oversized projected identities return unavailable, without normalization or truncation.
+The finite allowance counts all closed keys/punctuation, two worst-case escaped identities, nullable ASCII
+handle64, exact management client/scope, safe-integer epoch/time, one pwd/pop method and up to eight retained
+rename/account:update descriptors with case-insensitive UUID36 resource IDs and signed safe-integer routes.
+Retained descriptors force both account copies to the same UUID36; the bound takes the larger compatible case.
+The browser counts bytes before fatal UTF-8 decoding and JSON parsing, within its existing five-second whole-call
+signal. Overflow, malformed bytes/JSON, stalls and retirement are unavailable and authorize no command.
+This costs one existing rename-page POST and no additional native read; the preceding `/session` receiving
+remains separately required and is not bounded by this rename-page allowance. Native proof revalidation and
+the three-second native deadline remain required.
+
 `nativeRenameSource` uses one `GET /session` and one cookie-authenticated `POST /account-management/rename-page`
 per current review, with the existing finite native projection and `account:update` management profile. Each browser
 read has the existing five-second bound, including its body. Entry, cached-document return and explicit read Retry
