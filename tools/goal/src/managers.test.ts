@@ -2,11 +2,12 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, renameSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { StdioAppServer, type Notification } from './app-server.ts';
+import { StdioAppServer, type CodexPool, type Notification } from './app-server.ts';
 import { openDb } from './db.ts';
 import { SqliteManagerInbox } from './inbox.ts';
 import { ManagerSessions, type ManagerSpec } from './managers.ts';
 import { defaultPolicy, type ControlPolicy } from './policy.ts';
+import type { ProcessIdentity } from './process.ts';
 import { temporaryDirectory } from './test-support.ts';
 
 async function setup(policy?: ControlPolicy) {
@@ -29,10 +30,11 @@ async function setup(policy?: ControlPolicy) {
   let now = Date.now();
   const services = {
     ...(policy ? { policy } : {}),
-    connect: async () => {
+    connect: async (_pool?: CodexPool, _onStart?: (identity: ProcessIdentity) => void) => {
       connections++;
       return client;
     },
+    onAppServerStart(_identity: ProcessIdentity) {},
     windows: {
       register(manager: string, argv: string[]) {
         windows.push({ manager, argv });
@@ -873,9 +875,9 @@ test('one ownership callback fires per process identity', async () => {
   const s = await setup();
   try {
     const seen: { pid: number; start: string; boot: string }[] = [];
-    s.services.onAppServerStart = (identity) => seen.push(identity);
+    s.services.onAppServerStart = (identity: ProcessIdentity) => seen.push(identity);
     const connect = s.services.connect!;
-    s.services.connect = async (_pool, onStart) => {
+    s.services.connect = async (_pool?: CodexPool, onStart?: (identity: ProcessIdentity) => void) => {
       const server = await connect();
       if (server.identity) onStart?.(server.identity);
       return server;
