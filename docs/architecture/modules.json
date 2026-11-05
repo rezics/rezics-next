@@ -182,7 +182,10 @@
       "kind": "adapter",
       "owner": "accounts",
       "paths": ["services/kernel/src/access/**", "services/kernel/db/access/**"],
-      "publicEntries": ["services/kernel/src/access/index.ts"],
+      "publicEntries": [
+        "services/kernel/src/access/index.ts",
+        "services/kernel/src/access/handle-policy.ts"
+      ],
       "allowedDependencies": [
         "auth-contract",
         "auth-service",
@@ -406,7 +409,13 @@
         "services/kernel/db/migrations/**",
         "services/kernel/db/schema.sql"
       ],
-      "publicEntries": [],
+      "publicEntries": [
+        "services/kernel/src/clock.ts",
+        "services/kernel/src/request/access.ts",
+        "services/kernel/src/route/route.ts",
+        "services/kernel/src/tokens/seal.ts",
+        "services/kernel/src/work/runtime-defaults.ts"
+      ],
       "allowedDependencies": [
         "auth-contract",
         "definitions",

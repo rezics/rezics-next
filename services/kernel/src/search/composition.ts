@@ -2,11 +2,11 @@ import { isDeepStrictEqual } from 'node:util';
 import type { Pool } from 'pg';
 import type { Access } from '../request/access.ts';
 import type { KernelClock } from '../clock.ts';
-import { PARTITIONS, partitionOf, routeOf } from '../route/route.ts';
+import { partitionOf, routeOf } from '../route/route.ts';
 import { CollectionDiscoveryReadinessError, createNativeCollectionDiscoveryAdapter } from './collection-discovery.ts';
 import { createReviewDiscoveryAdapter } from './review-discovery.ts';
 import type { SpaceDiscoveryAdapter } from './space-discovery.ts';
-import type { SpaceDiscoverySummary } from '../community/index.ts';
+import type { IndexedSpace, SpaceDiscoverySummary } from '../community/index.ts';
 import type { IndexedReview, ReviewDiscoverySource } from '../content/review-discovery.ts';
 import type { CollectionDiscoveryItem, CollectionDiscoverySource } from '../library/collection-discovery-source.ts';
 import type {
@@ -94,7 +94,7 @@ function reviewRecords(
   return records;
 }
 
-function spaceRecords(partition: number, spaces: readonly import('../community/space-discovery.ts').IndexedSpace[]) {
+function spaceRecords(partition: number, spaces: readonly IndexedSpace[]) {
   return spaces.map((space): SecondScopeDiscoveryRecord => {
     const key = metadataKey('content', 'space', space.id);
     if (partitionOf(key.route) !== partition) throw new TypeError('Space source returned a foreign partition key');
