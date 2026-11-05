@@ -1,16 +1,31 @@
 import { expect, mock, test } from 'bun:test';
 import { createKernelClient } from '@rezics/client';
+import type { KernelClient } from '@rezics/client';
+import * as storyStart from '../.storybook/react-start';
+import { withPlatformClosedRecognition } from '../src/kernel/platform-closed';
 
-mock.module('cloudflare:workers', () => ({ env: {} }));
+const workerEnv: Partial<SessionEnv> = {};
+let activeRequest = new Request('https://site.test/en/inbox');
+let requestFailure: unknown;
+let configuredKernel: KernelClient;
+const responseHeaders = new Headers();
+
+mock.module('@tanstack/react-start', () => storyStart);
+mock.module('cloudflare:workers', () => ({ env: workerEnv }));
 mock.module('@tanstack/react-start/server', () => ({
-  getRequest: () => new Request('https://site.test/en/inbox'),
-  setResponseHeader: () => {},
+  getRequest: () => {
+    if (requestFailure !== undefined) throw requestFailure;
+    return activeRequest;
+  },
+  setResponseHeader: (name: string, value: string) => responseHeaders.set(name, value),
 }));
+mock.module('../src/kernel/client', () => ({ kernelClient: () => configuredKernel }));
 import {
   decodeInboxPage,
   inboxPageActions,
   loadUnreadCount,
   nativeInboxEnvelope,
+  readUnreadCount,
   readyInboxPage,
   type InboxNotice,
 } from '../src/inbox/inbox-read';
@@ -215,6 +230,14 @@ test('unread count keeps native zero, lower-bound, bounded Retry-After and signe
     state: 'ready',
     ...capped,
   });
+  for (const count of [0, 17]) {
+    const lowerBound = { ...capped, count };
+    expect(await loadUnreadCount(countClient(() => Response.json(lowerBound)), owner.request(), owner.env)).toEqual({
+      signedIn: true,
+      state: 'ready',
+      ...lowerBound,
+    });
+  }
   const now = Date.parse('2026-10-31T00:00:00.000Z');
   for (const retryAfter of [
     '30',
@@ -266,4 +289,41 @@ test('unread count keeps native zero, lower-bound, bounded Retry-After and signe
     ),
   ).toEqual({ signedIn: false });
   expect(nativeReads).toBe(0);
+});
+
+test('readUnreadCount keeps setup failures private and the configured Eden client on its native route', async () => {
+  const owner = countSession();
+  Object.assign(workerEnv, owner.env);
+  activeRequest = owner.request();
+  requestFailure = undefined;
+  responseHeaders.delete('cache-control');
+  const requests: string[] = [];
+  const summary = {
+    count: 3,
+    capped: false,
+    basis: 'current-visible-unread' as const,
+    witness: currentDisclosure,
+  };
+  configuredKernel = withPlatformClosedRecognition(
+    createKernelClient('http://kernel.local', {
+      fetch: (async (input, init) => {
+        requests.push(new Request(input, init).url);
+        return Response.json(summary);
+      }) as typeof fetch,
+    }),
+  );
+
+  const result = await readUnreadCount();
+  expect(result).toEqual({ signedIn: true, state: 'ready', ...summary });
+  expect(requests.map((url) => new URL(url).pathname)).toEqual(['/v1/accounts/alice/notifications/count']);
+  expect(responseHeaders.get('cache-control')).toBe('private, no-store');
+
+  requestFailure = new Error('Bearer private-credential must not cross the server boundary');
+  responseHeaders.delete('cache-control');
+  const unavailable = await readUnreadCount();
+  expect(unavailable).toEqual({ signedIn: true, state: 'unavailable', failure: { status: null } });
+  expect(JSON.stringify(unavailable)).not.toContain('private-credential');
+  expect(JSON.stringify(unavailable)).not.toContain('stack');
+  expect(responseHeaders.get('cache-control')).toBe('private, no-store');
+  requestFailure = undefined;
 });
