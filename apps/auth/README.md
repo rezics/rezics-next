@@ -690,8 +690,15 @@ at most 20 rows from a bounded candidate seek. Each row shows a disclosed public
 explicit identity fallback, and keeps the account ID behind an explicit disclosure. The viewer's current role and the
 page's native per-action advice control which choices are shown. Members never see the owner editor; self-leave appears only when its native advice
 allows it, otherwise its absence is explained. A last-owner observation disables the affected owner action with an
-explanation. Roster unavailability is displayed separately from a ready empty page. Reload starts a new read and
-retires the old controls; the next-page cursor is opaque and viewer/organization-bound.
+explanation. Roster unavailability is displayed separately from a ready empty page, including an empty page with
+another page offered. The page reports only its local holder count, never a total. Previous, Next, Reload current
+and deliberate First page each use one bounded read after preparation. Opaque cursor spelling and server order
+are preserved. Only successful reads move navigation: Next pushes the former target, Previous pops once, Reload
+keeps history, and First page clears history only on acceptance. Failed reads retain the exact requested target
+for Retry and offer explicit First page. History retains at most 32 targets, never row DTOs; at its oldest retained
+target Previous is unavailable and First page remains deliberate. No cursors or rows enter storage, URLs or generic
+return history. Private retirement clears rows, disclosure and cursor history synchronously; navigation uses the
+existing lifetime to reject delayed replies. Disclosure is local and adds zero reads.
 
 The browser sends only the organization and cursor to Auth. Auth binds the fresh human management proof to the
 dedicated Kernel page source. The roster and its action advice are observations only. Before a selected change, the
@@ -705,7 +712,7 @@ another request. An already dispatched change continues independently; its store
 original key remain available for explicit confirmation and native reconciliation. Failed identity confirmation
 keeps the current review usable.
 
-membership departure, paging and reload offer Stay/Leave for changed input or unresolved work; Stay preserves the exact review and focus, Leave discards unsent input while retaining dispatched command identity, and authority loss retires private details while keeping the generic unknown and its guard. Restore exact details only after the initiating account explicitly rereads current page advice and the selected reservation. One read-only recovery review is capped at four native requests (session, page session, page, selected member); exact retry rechecks session and selected member before one execute. Reauthentication remains in-page and secrets remain ephemeral.
+Membership departure, all page navigation and reload offer Stay/Leave for changed input or unresolved work; Stay preserves the exact review and focus, Leave discards unsent input while retaining dispatched command identity, and authority loss retires private details while keeping the generic unknown and its guard. Restore exact details only after the initiating account explicitly rereads current page advice and the selected reservation. One read-only recovery review is capped at four native requests (session, page session, page, selected member); exact retry rechecks session and selected member before one execute. Reauthentication remains in-page and secrets remain ephemeral.
 
 Mounted membership return keeps the first generic unknown and the latest local interruption or native result,
 at most two classifications, independently of current membership. A native acknowledgement is recorded before
@@ -719,7 +726,7 @@ uses only the installed exact continuation. Return and visible read Retry create
 older reads cannot repopulate private content. Current membership has its own heading and read-only refresh.
 Stay preserves a current review; Leave discards an unsent review and retains a dispatched marker.
 
-One ordinary entry, restored ordinary page or explicit refresh uses at most three native requests: route session,
+One ordinary entry, restored ordinary page, page transition or explicit refresh uses at most three native requests: route session,
 page preparation session and one bounded page (up to 20 holders). An unresolved restored document reads only the
 route session until explicit review. A mounted known acknowledgement adds at most one selected-member read to
 ordinary refresh (four calls total), retaining the original submitted marker until its existing observed-close rule

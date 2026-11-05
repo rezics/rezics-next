@@ -1,6 +1,8 @@
 import { createFileRoute, Link, useBlocker, useRouter } from '@tanstack/react-router';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
+import { MembershipRosterNavigation, type RosterRequest, type RosterDirection } from '../organization-membership-roster';
+import { OrganizationMembershipRoster, RosterPageControls, rosterDirectionLabel } from '../organization-membership-roster-view';
 import { OrganizationMembershipReturnView } from '../organization-membership-return-view';
 import {
   retainMembershipHistory,
@@ -97,151 +99,7 @@ function recoveryStatusMessage(kind: string) {
 export function OrganizationMembersPage({ organizationId }: { organizationId: string }) {
   return <MembershipReview key={organizationId} organizationId={organizationId} />;
 }
-type ReadyMembershipPage = Extract<MembershipPage, { kind: 'ready' }>;
-export function OrganizationMembershipRoster({
-  page,
-  busy,
-  pending,
-  onSelect,
-  onReload,
-}: {
-  page: ReadyMembershipPage;
-  busy: boolean;
-  pending: boolean;
-  onSelect: (accountId: string, role: 'owner' | 'member' | null) => void;
-  onReload: (cursor?: string) => void;
-}) {
-  const members = page.members;
-  return (
-    <section aria-labelledby="organization-members-heading" className="space-y-5">
-      <div>
-        <h2 id="organization-members-heading" className="text-lg font-semibold">
-          {m.auth_members_holders()}
-        </h2>
-        <p>{page.viewer.role === 'owner' ? m.auth_members_owner() : m.auth_members_member()}</p>
-      </div>
-      {page.viewer.role === 'member' ? (
-        page.viewer.leave === 'allowed' ? (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy || pending}
-            onClick={() => onSelect(page.viewer.accountId, null)}
-          >
-            {m.auth_members_leave_organization()}
-          </Button>
-        ) : (
-          <p role="status">{m.auth_members_leave_unavailable()}</p>
-        )
-      ) : null}
-      {members.state === 'unavailable' ? (
-        <div className="space-y-3">
-          <p role="status">{m.auth_members_inventory_unavailable()}</p>
-          <Button type="button" variant="outline" disabled={busy} onClick={() => onReload()}>
-            {m.auth_inventory_reload()}
-          </Button>
-        </div>
-      ) : (
-        <>
-          <ul className="divide-y" aria-label={m.auth_members_holders()}>
-            {members.holders.map((holder) => {
-              const displayName = holder.account?.displayName?.trim();
-              const handle = holder.account?.handle?.trim();
-              const change = holder.actions.changeRole;
-              const remove = holder.actions.remove;
-              return (
-                <li key={holder.accountId} className="space-y-2 py-4">
-                  <div>
-                    <p className="font-medium">
-                      {displayName || (handle ? `@${handle}` : m.auth_members_identity_unavailable())}
-                    </p>
-                    {displayName && handle ? <p className="text-sm text-muted-foreground">@{handle}</p> : null}
-                    <p>{holder.role === 'owner' ? m.auth_members_owner() : m.auth_members_member()}</p>
-                    <details className="mt-1 text-sm">
-                      <summary className="cursor-pointer">{m.auth_members_account_address()}</summary>
-                      <code className="break-all">{holder.accountId}</code>
-                    </details>
-                  </div>
-                  {page.viewer.role === 'owner' ? (
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap gap-2">
-                        {change === 'allowed' ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={busy || pending}
-                            onClick={() => onSelect(holder.accountId, holder.role === 'owner' ? 'member' : 'owner')}
-                          >
-                            {m.auth_members_change_role()}
-                          </Button>
-                        ) : change === 'last-owner' ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled
-                            aria-describedby={`member-last-owner-${holder.accountId}`}
-                          >
-                            {m.auth_members_change_role()}
-                          </Button>
-                        ) : (
-                          <Button type="button" variant="outline" disabled title={m.auth_members_actions_unavailable()}>
-                            {m.auth_members_change_role()}
-                          </Button>
-                        )}
-                        {remove === 'allowed' ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={busy || pending}
-                            onClick={() => onSelect(holder.accountId, null)}
-                          >
-                            {m.auth_members_remove()}
-                          </Button>
-                        ) : remove === 'last-owner' ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled
-                            aria-describedby={`member-last-owner-${holder.accountId}`}
-                          >
-                            {m.auth_members_remove()}
-                          </Button>
-                        ) : (
-                          <Button type="button" variant="outline" disabled title={m.auth_members_actions_unavailable()}>
-                            {m.auth_members_remove()}
-                          </Button>
-                        )}
-                      </div>
-                      {change === 'last-owner' || remove === 'last-owner' ? (
-                        <p id={`member-last-owner-${holder.accountId}`} role="status">
-                          {m.auth_members_last_owner()}
-                        </p>
-                      ) : null}
-                      {change === 'unavailable' || remove === 'unavailable' ? (
-                        <p role="status">{m.auth_members_actions_unavailable()}</p>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-          {!members.holders.length ? <p>{m.auth_members_empty_page()}</p> : null}
-          <nav className="flex flex-wrap gap-2" aria-label={m.auth_members_holders()}>
-            <Button type="button" variant="outline" disabled={busy} onClick={() => onReload()}>
-              {m.auth_inventory_reload()}
-            </Button>
-            {members.next ? (
-              <Button type="button" variant="outline" disabled={busy} onClick={() => onReload(members.next!)}>
-                {m.auth_inventory_next()}
-              </Button>
-            ) : null}
-          </nav>
-        </>
-      )}
-    </section>
-  );
-}
+export { OrganizationMembershipRoster } from '../organization-membership-roster-view';
 // Keep the router adapter local; the review can also be mounted without a router.
 function MembershipNavigation({ choose }: { choose: () => Promise<boolean> }) {
   useBlocker({ shouldBlockFn: async () => !(await choose()), enableBeforeUnload: false });
@@ -306,6 +164,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
   const [reviewCurrent, setReviewCurrent] = useState(false);
   const [recoveryBlocked, setRecoveryBlocked] = useState(false);
   const [recoveryStatus, setRecoveryStatus] = useState('review');
+  const roster = useRef(new MembershipRosterNavigation());
   const lifetime = useRef(0);
   const pendingDeparture = useRef<{ promise: Promise<boolean>; resolve: (leave: boolean) => void } | null>(null);
   const work = useRef(false);
@@ -322,6 +181,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     renewActivity();
     return () => {
       lifetime.current++;
+      roster.current.clear();
       lock.current = false;
       pendingDeparture.current?.resolve(false);
     };
@@ -361,7 +221,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     activity.current = () => version === lifetime.current;
     lock.current = false;
   }
-  function retirePrivateAuthority(kind = 'review') {
+  function retirePrivateAuthority(kind = 'review', keepNavigation = false) {
     const acknowledged = phase.current === 'acknowledged';
     const wasUnresolved = isUnresolvedMembership(command, observed);
     const classification = acknowledged
@@ -375,6 +235,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
             : phase.current;
     // Close every old continuation before synchronously removing private DOM.
     lifetime.current++;
+    if (!keepNavigation) roster.current.clear();
     activity.current = () => false;
     lock.current = false;
     let blocked = recoveryBlocked;
@@ -432,7 +293,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     return promise;
   }, []);
   function answer(leave: boolean) {
-    if (leave) retirePrivateAuthority();
+    if (leave) retirePrivateAuthority('review', true);
     pendingDeparture.current?.resolve(leave);
     pendingDeparture.current = null;
     setDeparting(false);
@@ -460,24 +321,41 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       window.removeEventListener('pageshow', show);
     };
   });
-  async function browse(cursor?: string) {
+  async function browse(direction: RosterDirection = 'reload', cursor?: string) {
     if (lock.current) return;
-    if (await choose()) {
-      // A clean page also needs a fresh lifetime for its replacement read.
-      renewActivity();
-      if (isUnresolvedMembership(command, observed) && phase.current !== 'acknowledged') await reviewRecovery(cursor);
-      else await reload(cursor);
+    // Lock before the departure promise yields, including a clean-page choice.
+    lock.current = true;
+    const version = lifetime.current;
+    const leavingReview = work.current;
+    const allowed = await choose();
+    // Leave retires the review once. A separate private retirement cancels navigation.
+    if (!allowed || lifetime.current !== version + (leavingReview ? 1 : 0)) {
+      if (lifetime.current === version) lock.current = false;
+      return;
     }
+    const request = roster.current.request(direction, cursor);
+    renewActivity();
+    if (isUnresolvedMembership(command, observed) && phase.current !== 'acknowledged') await reviewRecovery(request);
+    else await reload(request);
   }
   function refreshCurrent() {
-    if (lock.current) return;
-    renewActivity();
-    void reload();
+    void browse('retry');
+  }
+  function acceptRead(result: MembershipPage, request: RosterRequest) {
+    if (result.kind === 'ready') {
+      roster.current.accept(request);
+      installPage(result);
+    } else if (result.kind === 'unavailable' || result.kind === 'preparing' || result.kind === 'conflict') {
+      // The requested target remains exact; only an accepted page moves history.
+      setPage(result);
+      setConfirmed(false);
+      setReviewCurrent(false);
+    } else installPage(result);
   }
   function refreshRecovery() {
     if (lock.current) return;
     renewActivity();
-    void reviewRecovery();
+    void reviewRecovery(roster.current.request('retry'));
   }
   function retainUnknown(command: MembershipCommand, kind: string, result?: MembershipPage) {
     remember('unresolved');
@@ -499,7 +377,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
     setPage(result ?? null);
     work.current = true;
   }
-  async function reload(cursor?: string) {
+  async function reload(request = roster.current.request('retry')) {
     const isActive = activity.current;
     if (!isActive() || lock.current) return;
     lock.current = true;
@@ -548,7 +426,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
           retainUnknown(saved, session.kind, { kind: session.kind === 'signed-out' ? 'signed-out' : 'unavailable' });
           return;
         }
-        installPage({ kind: session.kind === 'signed-out' ? 'signed-out' : 'unavailable' });
+        acceptRead({ kind: session.kind === 'signed-out' ? 'signed-out' : 'unavailable' }, request);
         return;
       }
       const initiatingAccount = saved?.accountId ?? (accountId || session.accountId);
@@ -572,7 +450,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         setReviewCurrent(true);
         setNotice('step-up');
       }
-      const result = await loadMembershipPage(organizationId, initiatingAccount, cursor);
+      const result = await loadMembershipPage(organizationId, initiatingAccount, request.cursor);
       if (!isActive()) return;
       if (knownAcknowledgement && saved && result.kind === 'ready') {
         // A known native acknowledgement permits a separate current observation,
@@ -592,7 +470,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         setObserved(matches);
         setReviewCurrent(matches);
       }
-      installPage(result);
+      acceptRead(result, request);
     } finally {
       if (isActive()) {
         lock.current = false;
@@ -600,7 +478,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       }
     }
   }
-  async function reviewRecovery(cursor?: string) {
+  async function reviewRecovery(request = roster.current.request('retry')) {
     const isActive = activity.current;
     const expected = command;
     if (!isActive() || lock.current || !expected || !isUnresolvedMembership(expected, observed)) return;
@@ -636,10 +514,10 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         installPage({ kind });
         return;
       }
-      const currentPage = await loadMembershipPage(organizationId, expected.accountId, cursor);
+      const currentPage = await loadMembershipPage(organizationId, expected.accountId, request.cursor);
       if (!isActive()) return;
       if (currentPage.kind !== 'ready') {
-        installPage(currentPage);
+        acceptRead(currentPage, request);
         return;
       }
       if (!membershipPageAllowsCommand(currentPage, expected)) {
@@ -663,6 +541,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         setRecoveryStatus('unavailable');
         return;
       }
+      roster.current.accept(request);
       setPage(currentPage);
       setRevoked(false);
       setRecoveryBlocked(false);
@@ -722,7 +601,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       }
       if (!current.membership || current.membership.role === desired) {
         setNotice('conflict');
-        const resultPage = await loadMembershipPage(organizationId, accountId);
+        const resultPage = await loadMembershipPage(organizationId, accountId, roster.current.state.cursor);
         if (isActive()) installPage(resultPage);
         return;
       }
@@ -812,7 +691,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
         setPage({ kind: 'conflict' });
         return;
       }
-      const resultPage = await loadMembershipPage(organizationId, accountId);
+      const resultPage = await loadMembershipPage(organizationId, accountId, roster.current.state.cursor);
       if (isActive()) {
         if (!observedResult && command.unresolved && !membershipPageAllowsCommand(resultPage, command)) {
           retirePrivateAuthority('denied');
@@ -861,7 +740,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       } else {
         setNotice('step-up');
         setPage(null);
-        const result = await loadMembershipPage(organizationId, accountId);
+        const result = await loadMembershipPage(organizationId, accountId, roster.current.state.cursor);
         if (isActive()) installPage(result);
       }
     } finally {
@@ -896,6 +775,7 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
       : command?.operation.role === 'owner'
         ? m.auth_members_owner_effect()
         : m.auth_members_member_effect();
+  const rosterActivity = activity.current;
   return (
     <AuthPage heading={m.auth_members_heading()}>
       {router ? (
@@ -918,15 +798,17 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
           document.getElementById('membership-current-heading')?.focus();
         }}
       />
-      {!recoveryVisible && page?.kind === 'ready' ? <p className="break-all">{organizationId}</p> : null}
       <div aria-busy={busy} className="space-y-5">
         <h2 id="membership-current-heading" tabIndex={-1}>
           {m.auth_members_current_heading()}
         </h2>
-        {!recoveryVisible && revoked && !busy ? (
+        {!recoveryVisible && revoked && !busy && (!page || page.kind === 'signed-out' || page.kind === 'denied' || page.kind === 'missing') ? (
           <Button type="button" variant="outline" onClick={refreshCurrent}>
             {m.auth_members_recovery_retry()}
           </Button>
+        ) : null}
+        {busy && roster.current.state.requested ? (
+          <p role="status">{m.auth_members_navigation_pending({ action: rosterDirectionLabel(roster.current.state.requested.direction) })}</p>
         ) : null}
         {notice && !recoveryVisible ? (
           <div ref={feedback} tabIndex={-1} role="status">
@@ -952,18 +834,21 @@ function MembershipReview({ organizationId }: { organizationId: string }) {
           <div className="space-y-3" role="status">
             <p>{statusMessage(page?.kind ?? (revoked && !busy ? 'unavailable' : 'loading'))}</p>
             {page && page.kind !== 'signed-out' && page.kind !== 'denied' && page.kind !== 'missing' ? (
-              <Button type="button" variant="outline" disabled={busy} onClick={() => void browse()}>
-                {m.auth_inventory_reload()}
-              </Button>
+              <RosterPageControls navigation={roster.current.state} busy={busy}
+                failed onNavigate={(direction) => { if (rosterActivity()) void browse(direction); }} />
             ) : null}
           </div>
         ) : (
           <OrganizationMembershipRoster
+            key={roster.current.state.observation}
             page={page}
+            navigation={roster.current.state}
+            onNavigate={(direction, cursor) => { if (rosterActivity()) void browse(direction, cursor); }}
+            focusHeading={roster.current.state.observation > 1}
             busy={busy}
             pending={!!command}
-            onSelect={(target, role) => void select(target, role)}
-            onReload={(cursor) => void browse(cursor)}
+            onSelect={(target, role) => { if (rosterActivity()) void select(target, role); }}
+            onReload={(cursor) => { if (rosterActivity()) void browse(cursor === undefined ? 'reload' : 'next', cursor); }}
           />
         )}
 
