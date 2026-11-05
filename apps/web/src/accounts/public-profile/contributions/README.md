@@ -72,27 +72,25 @@ evidence. Native and browser acceptance remains with integration execution.
 
 ## Private selected reader
 
-Decision: the local `AuthorContributionActionsWire` defaults to unavailable until the complete-input publisher
-installs the native method and DTO; the initial receiver retains only an immutable native selection per episode.
+Decision: derive the selected request, references and closed response from the installed public callable; mount one
+adapter in each surviving original row. Current denial disables new commands while the original operation lease
+keeps uncertain native owners available for deliberate exact retry or discard. Advice refresh is never a receipt.
 
-Decision: resume installed row adaptation only when the public client includes both the callable and anonymous
-`actionSelection`; retain the prepared native compositions and existing focused host assertions until then.
+`contribution-actions/receiver.ts` consumes the anonymous page's actual `actionSelection`, caps its cohort at twenty,
+retains the original author/view/cursor/proof, and coalesces refreshes. The request and reference types derive from
+`KernelClient`'s installed `accounts({id})['contribution-actions'].post`. `transport.ts` uses the existing session
+boundary and that callable with private, no-store semantics. `response.ts` checks the closed HTTP response and exact
+selected cohort in the callable-derived response type, without private producer imports or unknown-value adaptation.
+Failure keeps the exact input for retry; retirement aborts the read and clears private state.
 
-`contribution-actions/receiver.ts` validates the anonymous page's actual `actionSelection`, caps its cohort at twenty,
-retains the original author/view/cursor/proof, and coalesces refreshes. Failure keeps that exact input for retry.
-Retirement aborts the read, clears retained private state and guards late completion. It does not normalize missing
-own slots or acknowledge writes. The page host now supplies only the anonymous source's actual selection and retires
-on page, read, record, publication, credential, locale, QueryClient and navigation replacement. It never derives
-native references from rendered rows. When the source selection or installed method is absent, the host stays
-unavailable and exposes no inferred controls.
-
-Installed `@rezics/client` resolves to `packages/client` version `0.1.0`. Its mounted Content declarations must
-include `author_contributions.actions` and the anonymous page's `actionSelection` before adaptation can begin.
-The production wire remains unavailable until the complete-input publisher supplies that public method and DTO.
-The closed response adapter and exact native command-owner connections require the admitted native mounted
-contract and official installed callable closure. Recorded adapters do not constitute that delivery. Existing
-native destinations and their reaction/watch/report/reply writers remain the way to review current native advice.
-This reader does not add private fields to anonymous documents.
+`mounted.tsx` is the single row adapter. Only an exact surviving public occurrence can select native advice. A current
+matching viewer, selected source, operation revision and operation advice are required for new commands. Native watch
+and reaction slots supply their own baselines; missing own selections are never normalized to empty. Reply uses both
+the selected reply state and current post-create advice. Unavailable refreshes lend no earlier advice to new commands.
+An admitted command owner stays attached to its original operation lease through pending, denied or failed advice;
+readback cannot acknowledge its immutable uncertain intent. Watch/reaction discard is deliberate, and report/reply
+keep their existing private composition and recovery owners. Replacement page readers reacquire the original native
+selection without adopting previous intent. Public destinations and exact occurrence return remain independent.
 
 ## Current page custody
 
@@ -167,6 +165,3 @@ The mounted contribution response adapter and production controls still require 
 and DTO. Existing public links and the shared host retirement and recovery notice continue to own the production
 journey meanwhile.
 
-Decision: derive the selected request, references and closed response from the installed public callable; mount one
-adapter in each surviving original row. Current denial disables new commands while the original operation lease
-keeps uncertain native owners available for deliberate exact retry or discard. Advice refresh is never a receipt.

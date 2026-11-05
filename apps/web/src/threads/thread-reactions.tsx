@@ -104,6 +104,8 @@ export type ThreadReactionsProps = {
   onMutation?: (kind: ReactionKind | null) => Promise<void>;
   personalReady?: boolean;
   canStart?: boolean;
+  /** Stable native operation lease: aggregate readback cannot replace an uncertain owner. */
+  readAuthority?: object;
   allowedKinds?: readonly ReactionKind[];
   /** Home can deliberately forget an uncertain command, then refresh its source. */
   allowDiscard?: boolean;
@@ -223,7 +225,7 @@ export function ThreadReactions(props: ThreadReactionsProps) {
     props.personalReady ?? true,
     props.signInAllowed ?? true,
     props.reactionOrigin?.key ?? null,
-    props.reactionOrigin ? null : props.sourceWatermark,
+    props.readAuthority ? null : props.sourceWatermark,
     props.optimistic ?? true,
     props.allowedKinds,
     hydrated,

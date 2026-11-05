@@ -40,7 +40,7 @@ export function validateContributionActionsResponse(input: ContributionActionsIn
     list(value.reactions.items, 60, (item) => closed(item, ['type', 'id', 'state'], ['counts', 'viewerSelection']) &&
       targets.has(targetKey(item)) && (status(item.state) || item.state === 'not_applicable') &&
       (item.counts === undefined || (closed(item.counts, [], ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad']) && Object.values(item.counts).every((count) => Number.isSafeInteger(count) && count >= 0))) &&
-      (!Object.hasOwn(item, 'viewerSelection') || item.viewerSelection === null || (typeof item.viewerSelection === 'string' && ['upvote', 'downvote', 'like', 'love', 'laugh', 'insightful', 'sad'].includes(item.viewerSelection)))) &&
+      (!Object.hasOwn(item, 'viewerSelection') || item.viewerSelection === null || (typeof item.viewerSelection === 'string' && item.viewerSelection.length <= 32))) &&
     unique(value.reactions.items, targetKey) &&
     (value.reactions.reactionsAsOf === null || (closed(value.reactions.reactionsAsOf, ['epoch', 'position']) && Number.isSafeInteger(value.reactions.reactionsAsOf.epoch) && value.reactions.reactionsAsOf.epoch >= 1 && typeof value.reactions.reactionsAsOf.position === 'string' && /^\d+$/.test(value.reactions.reactionsAsOf.position))) &&
     closed(value.actions, ['state', 'retryable', 'references']) && status(value.actions.state) && typeof value.actions.retryable === 'boolean' &&
