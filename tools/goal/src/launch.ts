@@ -7,7 +7,8 @@ import {
 } from './verification.ts';
 import { type ChildProcess, type SpawnSyncOptions } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
+import { retainPoolReadings } from './pacing.ts';
 import { NO_COMPILE_CACHE, remoteCheckEnvironment } from './merge.ts';
 import { temporaryEnvironment } from '../../../scripts/tmp-janitor.ts';
 import {
@@ -263,6 +264,14 @@ export async function launch(
 ): Promise<RunningWorker> {
   if (!agentAdapter(attempt.profile.cli).canResume) resumeSession = undefined;
   store.assertCurrent(attempt);
+  if (attempt.before && basename(dirname(dirname(attempt.logPath))) === 'runs') {
+    retainPoolReadings(
+      dirname(dirname(dirname(attempt.logPath))),
+      [attempt.before],
+      Date.now(),
+      policy.pacing.burnSpanMs,
+    );
+  }
   if (
     task.brief.kind === 'verification' &&
     (!registeredProof(task.brief, task.proofAuthorization) ||

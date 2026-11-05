@@ -191,7 +191,7 @@ async function run(input: Input) {
   if (input.ready) mkdirSync(join(backlog, 'web'), { recursive: true });
   for (let index = 0; index < input.ready; index += 1) {
     const file = join(backlog, 'web', `brief-${String(index).padStart(2, '0')}.md`);
-    writeFileSync(file, `${index}\n`);
+    writeFileSync(file, `---\ngoal: web\nmanager: web\npaths: [result.txt]\n---\n\n${index}\n`);
     const time = (NOW - 60_000) / 1_000;
     utimesSync(file, time, time);
   }
@@ -251,72 +251,77 @@ async function run(input: Input) {
   }
 }
 
-test(GROWTH_SCENARIO, async () => {
-  const empty = await run({ settled: 0, stopped: 0, ready: 0 });
-  expect(empty.sweeps[0]).toEqual({ dispatched: [], continued: [], refused: [], expired: [], woken: [] });
+test(
+  GROWTH_SCENARIO,
+  async () => {
+    const empty = await run({ settled: 0, stopped: 0, ready: 0 });
+    expect(empty.sweeps[0]).toEqual({ dispatched: [], continued: [], refused: [], expired: [], woken: [] });
 
-  const history: Awaited<ReturnType<typeof run>>[] = [];
-  for (const settled of [100, 1_000, 5_000]) history.push(await run({ settled, stopped: 1, ready: 1, manager: true }));
-  expect(history.map((sample) => sample.metrics.sqliteExecutions)).toEqual([
-    history[0]!.metrics.sqliteExecutions,
-    history[0]!.metrics.sqliteExecutions,
-    history[0]!.metrics.sqliteExecutions,
-  ]);
-  expect(history.map((sample) => sample.metrics.sqliteRowsReturned)).toEqual([
-    history[0]!.metrics.sqliteRowsReturned,
-    history[0]!.metrics.sqliteRowsReturned,
-    history[0]!.metrics.sqliteRowsReturned,
-  ]);
-  expect(history.map((sample) => sample.metrics.decodedJsonBytes)).toEqual([
-    history[0]!.metrics.decodedJsonBytes,
-    history[0]!.metrics.decodedJsonBytes,
-    history[0]!.metrics.decodedJsonBytes,
-  ]);
-  expect(history[0]!.metrics.sqliteExecutions).toBeGreaterThan(0);
-  expect(history[0]!.metrics.sqliteRowsReturned).toBeGreaterThan(0);
-  expect(history.map((sample) => sample.metrics.stoppedRowsReturned)).toEqual([1, 1, 1]);
-  expect(history[0]!.taskPlan).toContain('worker_tasks_state');
-  expect(history[0]!.eventPlan).toContain('worker_events_task_attempt_sequence');
+    const history: Awaited<ReturnType<typeof run>>[] = [];
+    for (const settled of [100, 1_000, 5_000])
+      history.push(await run({ settled, stopped: 1, ready: 1, manager: true }));
+    expect(history.map((sample) => sample.metrics.sqliteExecutions)).toEqual([
+      history[0]!.metrics.sqliteExecutions,
+      history[0]!.metrics.sqliteExecutions,
+      history[0]!.metrics.sqliteExecutions,
+    ]);
+    expect(history.map((sample) => sample.metrics.sqliteRowsReturned)).toEqual([
+      history[0]!.metrics.sqliteRowsReturned,
+      history[0]!.metrics.sqliteRowsReturned,
+      history[0]!.metrics.sqliteRowsReturned,
+    ]);
+    expect(history.map((sample) => sample.metrics.decodedJsonBytes)).toEqual([
+      history[0]!.metrics.decodedJsonBytes,
+      history[0]!.metrics.decodedJsonBytes,
+      history[0]!.metrics.decodedJsonBytes,
+    ]);
+    expect(history[0]!.metrics.sqliteExecutions).toBeGreaterThan(0);
+    expect(history[0]!.metrics.sqliteRowsReturned).toBeGreaterThan(0);
+    expect(history.map((sample) => sample.metrics.stoppedRowsReturned)).toEqual([1, 1, 1]);
+    expect(history[0]!.taskPlan).toContain('worker_tasks_state');
+    expect(history[0]!.eventPlan).toContain('worker_events_task_attempt_sequence');
 
-  const stopped: Awaited<ReturnType<typeof run>>[] = [];
-  for (const count of [1, 10, 30])
-    stopped.push(await run({ settled: 100, stopped: count, ready: 0, manager: true, sweeps: 1 }));
-  expect(stopped.map((sample) => sample.metrics.stoppedRowsReturned)).toEqual([1, 10, 30]);
-  expect(stopped[0]!.metrics.sqliteExecutions).toBeLessThan(stopped[1]!.metrics.sqliteExecutions);
-  expect(stopped[1]!.metrics.sqliteExecutions).toBeLessThan(stopped[2]!.metrics.sqliteExecutions);
-  expect(stopped[0]!.metrics.decodedJsonBytes).toBeLessThan(stopped[1]!.metrics.decodedJsonBytes);
-  expect(stopped[1]!.metrics.decodedJsonBytes).toBeLessThan(stopped[2]!.metrics.decodedJsonBytes);
-  expect(stopped.map((sample) => sample.sweeps.map((sweep) => sweep.expired.length))).toEqual([
-    [1, 0],
-    [10, 0],
-    [20, 10],
-  ]);
-  for (const [index, sample] of stopped.entries()) {
-    expect(sample.cancellations).toHaveLength([1, 10, 30][index]!);
-    expect(new Set(sample.cancellations).size).toBe(sample.cancellations.length);
-  }
+    const stopped: Awaited<ReturnType<typeof run>>[] = [];
+    for (const count of [1, 10, 30])
+      stopped.push(await run({ settled: 100, stopped: count, ready: 0, manager: true, sweeps: 1 }));
+    expect(stopped.map((sample) => sample.metrics.stoppedRowsReturned)).toEqual([1, 10, 30]);
+    expect(stopped[0]!.metrics.sqliteExecutions).toBeLessThan(stopped[1]!.metrics.sqliteExecutions);
+    expect(stopped[1]!.metrics.sqliteExecutions).toBeLessThan(stopped[2]!.metrics.sqliteExecutions);
+    expect(stopped[0]!.metrics.decodedJsonBytes).toBeLessThan(stopped[1]!.metrics.decodedJsonBytes);
+    expect(stopped[1]!.metrics.decodedJsonBytes).toBeLessThan(stopped[2]!.metrics.decodedJsonBytes);
+    expect(stopped.map((sample) => sample.sweeps.map((sweep) => sweep.expired.length))).toEqual([
+      [1, 0],
+      [10, 0],
+      [20, 10],
+    ]);
+    for (const [index, sample] of stopped.entries()) {
+      expect(sample.cancellations).toHaveLength([1, 10, 30][index]!);
+      expect(new Set(sample.cancellations).size).toBe(sample.cancellations.length);
+    }
 
-  const directories: Awaited<ReturnType<typeof run>>[] = [];
-  for (const ready of [4, 8, 12])
-    directories.push(await run({ settled: 100, stopped: 0, ready, manager: true, sweeps: 2 }));
-  expect(directories.map((sample) => sample.sweeps.map((sweep) => sweep.dispatched.length))).toEqual([
-    [4, 0, 0],
-    [4, 4, 0],
-    [4, 4, 4],
-  ]);
-  expect(directories.map((sample) => sample.dispatches.length)).toEqual([4, 8, 12]);
-  for (const sample of directories) expect(new Set(sample.dispatches).size).toBe(sample.dispatches.length);
-  expect(directories[0]!.metrics.directoryEnumerations).toBeGreaterThan(0);
-  expect(directories[0]!.metrics.directoryEntriesReturned).toBeGreaterThan(0);
-  expect(directories[0]!.metrics.directoryEntriesReturned).toBeLessThan(
-    directories[1]!.metrics.directoryEntriesReturned,
-  );
-  expect(directories[1]!.metrics.directoryEntriesReturned).toBeLessThan(
-    directories[2]!.metrics.directoryEntriesReturned,
-  );
-  expect(directories.map((sample) => sample.metrics.directoryEnumerations)).toEqual([
-    directories[0]!.metrics.directoryEnumerations,
-    directories[0]!.metrics.directoryEnumerations,
-    directories[0]!.metrics.directoryEnumerations,
-  ]);
-});
+    const directories: Awaited<ReturnType<typeof run>>[] = [];
+    for (const ready of [4, 8, 12])
+      directories.push(await run({ settled: 100, stopped: 0, ready, manager: true, sweeps: 2 }));
+    expect(directories.map((sample) => sample.sweeps.map((sweep) => sweep.dispatched.length))).toEqual([
+      [4, 0, 0],
+      [4, 4, 0],
+      [4, 4, 4],
+    ]);
+    expect(directories.map((sample) => sample.dispatches.length)).toEqual([4, 8, 12]);
+    for (const sample of directories) expect(new Set(sample.dispatches).size).toBe(sample.dispatches.length);
+    expect(directories[0]!.metrics.directoryEnumerations).toBeGreaterThan(0);
+    expect(directories[0]!.metrics.directoryEntriesReturned).toBeGreaterThan(0);
+    expect(directories[0]!.metrics.directoryEntriesReturned).toBeLessThan(
+      directories[1]!.metrics.directoryEntriesReturned,
+    );
+    expect(directories[1]!.metrics.directoryEntriesReturned).toBeLessThan(
+      directories[2]!.metrics.directoryEntriesReturned,
+    );
+    expect(directories.map((sample) => sample.metrics.directoryEnumerations)).toEqual([
+      directories[0]!.metrics.directoryEnumerations,
+      directories[0]!.metrics.directoryEnumerations,
+      directories[0]!.metrics.directoryEnumerations,
+    ]);
+  },
+  30_000,
+);

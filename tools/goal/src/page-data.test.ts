@@ -218,8 +218,9 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
       current.state = 'integrated';
     });
     const repairKey = 'a'.repeat(64);
+    const taskIds = h.store.tasks().map(({ id }) => id);
     expect(
-      await job.resumePageDataRepair({
+      await routePageDataRepair(h.tasks, h.store, job, { deliver() {} }, h.settings, {
         repairKey,
         head: 'integrated-head',
         previousClass: 'DATA',
@@ -235,8 +236,10 @@ console.log(JSON.stringify({type:'turn.completed',usage:{input_tokens:10,output_
         },
         owner: h.store.task(task.id),
       }),
-    ).toBe(true);
+    ).toBe('resumed');
     await job.drain();
+    expect(h.store.tasks().map(({ id }) => id)).toEqual(taskIds);
+    expect(h.store.task(task.id).currentAttempt).toBe(ref.attempt + 1);
     const launch = JSON.parse(readFileSync(join(task.worktree, '.temp/page-data-launch.json'), 'utf8')) as string[];
     expect(launch.slice(launch.indexOf('resume'), launch.indexOf('resume') + 2)).toEqual([
       'resume',
@@ -285,7 +288,15 @@ test('a non-resumable author task gets one Goal repair task for the cause', asyn
       .filter((task) => task.brief.markdown.includes(`page-data-repair-key: ${repair.repairKey}`));
     expect(repairs).toHaveLength(1);
     expect(repairs[0]?.brief.goal).toBe(owner.brief.goal);
+    expect(repairs[0]?.brief.manager).toBe(owner.brief.manager);
     expect(repairs[0]?.brief.markdown).toContain('in class `API` (previously `UNAVAILABLE`)');
+    expect(inbox.read(owner.brief.manager).map(({ event }) => event)).toContainEqual({
+      managerId: owner.brief.manager,
+      taskId: repairs[0]!.id,
+      goalId: owner.brief.goal,
+      kind: 'instruction',
+      summary: 'Seeded page-data repair for home/feed: API; first error line: home anonymous feed API.',
+    });
   } finally {
     await h.disposeAsync();
   }

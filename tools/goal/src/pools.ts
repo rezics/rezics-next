@@ -1,5 +1,7 @@
 import { isAgentCli } from './agents.ts';
-import { choosePool, choosePoolWithFallback as chooseByAllowance } from './allowance.ts';
+import { choosePool, choosePoolWithFallback as chooseByAllowance, type PoolSelectionOptions } from './allowance.ts';
+import { defaultPolicy } from './policy.ts';
+import { retainPoolReadings } from './pacing.ts';
 import { readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { Pool, PoolReading, Profile } from './types.ts';
@@ -113,17 +115,34 @@ export class PoolPolicyReloader {
   }
 }
 
+/** Fold already-taken readings into the bounded span history used by every selection path. */
+export function withRetainedHistory(
+  stateDirectory: string,
+  readings: readonly PoolReading[],
+  options: PoolSelectionOptions = {},
+  spanMs = defaultPolicy.pacing.burnSpanMs,
+): PoolSelectionOptions {
+  const now = options.now ?? Date.now();
+  const window = options.spanMs ?? spanMs;
+  return {
+    ...options,
+    now,
+    spanMs: window,
+    history: retainPoolReadings(stateDirectory, [...(options.history ?? []), ...readings], now, window),
+  };
+}
+
 /** Select a routed profile and pool using one clock reading and one pacing urgency per pool. */
 export function choosePoolWithFallback(
   profile: Profile,
   fallbacks: readonly Profile[],
   pools: readonly Pool[],
   readings: readonly PoolReading[],
-  options: Parameters<typeof choosePool>[3] = {},
+  options: PoolSelectionOptions = {},
   urgency?: (pool: Pool, now: number) => number | undefined,
 ): { profile: Profile; pool: Pool } {
   const now = options.now ?? Date.now();
-  const selection = { ...options, now };
+  const selection = { ...options, now, spanMs: options.spanMs ?? defaultPolicy.pacing.burnSpanMs };
   if (!urgency) return chooseByAllowance(profile, fallbacks, pools, readings, selection);
 
   const urgencyByPool = new Map<string, number | undefined>();
