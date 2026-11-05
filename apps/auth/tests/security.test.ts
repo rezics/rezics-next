@@ -50,7 +50,12 @@ let refuseNextApply = false;
 let approvalLifetimeMs = 60_000;
 const acceptedApplyKeys = new Set<string>();
 let beforeSessions: (() => Promise<void>) | undefined;
-let removalReply: { path: '/sessions/revoke' | '/passkeys/remove'; status: number; body: string; clearCookie: boolean } | null = null;
+let removalReply: {
+  path: '/sessions/revoke' | '/passkeys/remove';
+  status: number;
+  body: string;
+  clearCookie: boolean;
+} | null = null;
 
 // Copied from apps/auth/tests/recovery.test.ts's fake Auth HTTP server.
 const fake = Bun.serve({
@@ -156,8 +161,7 @@ const fake = Bun.serve({
       if (removalReply?.path === url.pathname) {
         const reply = removalReply;
         removalReply = null;
-        if (reply.clearCookie)
-          headers.append('set-cookie', 'auth_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
+        if (reply.clearCookie) headers.append('set-cookie', 'auth_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax');
         return new Response(reply.body, { status: reply.status, headers });
       }
       if (body.session_id === 'current-session')

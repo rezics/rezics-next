@@ -20,9 +20,9 @@ test('only exact endpoint acknowledgements and admitted refusal envelopes settle
   expect(await receiveSecurityActionResponse('session', new Response('{}'), active().signal)).toEqual({
     kind: 'accepted',
   });
-  expect(
-    await receiveSecurityActionResponse('passkey', new Response('{"success":true}'), active().signal),
-  ).toEqual({ kind: 'accepted' });
+  expect(await receiveSecurityActionResponse('passkey', new Response('{"success":true}'), active().signal)).toEqual({
+    kind: 'accepted',
+  });
   expect(
     await receiveSecurityActionResponse(
       'passkey',
@@ -45,17 +45,23 @@ test('only exact endpoint acknowledgements and admitted refusal envelopes settle
     ),
   ).toEqual({ kind: 'denied' });
   expect(
-    await receiveSecurityActionResponse('passkey', new Response('{"error":"step_up_required"}', { status: 401 }), active().signal),
+    await receiveSecurityActionResponse(
+      'passkey',
+      new Response('{"error":"step_up_required"}', { status: 401 }),
+      active().signal,
+    ),
   ).toEqual({ kind: 'unknown' });
-  expect(
-    await receiveSecurityActionResponse('session', new Response('{"success":true}'), active().signal),
-  ).toEqual({ kind: 'unknown' });
+  expect(await receiveSecurityActionResponse('session', new Response('{"success":true}'), active().signal)).toEqual({
+    kind: 'unknown',
+  });
 });
 
 test('bounded receiving counts actual bytes, decodes split UTF-8 and rejects malformed or excess output', async () => {
   const passkeyAck = new TextEncoder().encode('{"success":true}');
   for (const headers of [new Headers(), new Headers({ 'content-length': '1' })])
-    expect(await receiveSecurityActionResponse('passkey', new Response(passkeyAck, { headers }), active().signal)).toEqual({
+    expect(
+      await receiveSecurityActionResponse('passkey', new Response(passkeyAck, { headers }), active().signal),
+    ).toEqual({
       kind: 'accepted',
     });
 
@@ -68,7 +74,9 @@ test('bounded receiving counts actual bytes, decodes split UTF-8 and rejects mal
   expect(
     await receiveSecurityActionResponse(
       'passkey',
-      streamed([new TextEncoder().encode(`{"success":true,"extra":"${'x'.repeat(securityActionResponseByteBudgets.passkey)}"}`)]),
+      streamed([
+        new TextEncoder().encode(`{"success":true,"extra":"${'x'.repeat(securityActionResponseByteBudgets.passkey)}"}`),
+      ]),
       active().signal,
     ),
   ).toEqual({ kind: 'unknown' });

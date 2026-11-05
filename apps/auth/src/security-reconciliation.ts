@@ -4,11 +4,7 @@ import { createServerFn } from '@tanstack/react-start';
 import { securityActionResponseByteBudgets, securityResponseLimits } from '@rezics/auth-contract';
 import { readJsonBounded } from './private-auth-json';
 import { readNativeAccountSession } from './account-session';
-import {
-  parseSecurityPage,
-  readNativeSecurityPage,
-  type SecurityPageEnvelope,
-} from './security-inventory';
+import { parseSecurityPage, readNativeSecurityPage, type SecurityPageEnvelope } from './security-inventory';
 import { readSecurityIssuerResponse } from './security-response-config';
 import type { SecurityLoadResult, SecurityPasskey, SecuritySession } from './security';
 
@@ -126,18 +122,14 @@ export function targetPresence(rows: { id: string }[], id: string, limit: number
 
 function exactFields(value: unknown, fields: string[]): value is Record<string, unknown> {
   return (
-    record(value) &&
-    Object.keys(value).length === fields.length &&
-    fields.every((field) => Object.hasOwn(value, field))
+    record(value) && Object.keys(value).length === fields.length && fields.every((field) => Object.hasOwn(value, field))
   );
 }
 
 function sessionRemovalError(value: unknown): value is { error: 'authentication_denied'; code?: 'stale_review' } {
   return (
     (exactFields(value, ['error']) && value.error === 'authentication_denied') ||
-    (exactFields(value, ['error', 'code']) &&
-      value.error === 'authentication_denied' &&
-      value.code === 'stale_review')
+    (exactFields(value, ['error', 'code']) && value.error === 'authentication_denied' && value.code === 'stale_review')
   );
 }
 
@@ -164,18 +156,13 @@ function classifySecurityActionResponse(
 ): SecurityActionResult {
   if (status === 200) {
     if (kind === 'session' && exactFields(body, [])) return { kind: 'accepted' };
-    if (kind === 'passkey' && exactFields(body, ['success']) && body.success === true)
-      return { kind: 'accepted' };
+    if (kind === 'passkey' && exactFields(body, ['success']) && body.success === true) return { kind: 'accepted' };
     return { kind: 'unknown' };
   }
   if (status >= 500) return { kind: 'unknown' };
   if (kind === 'session' && sessionRemovalError(body)) {
     if (status === 401 && !('code' in body)) return { kind: 'signed-out' };
-    if (
-      [400, 403, 404].includes(status) ||
-      (status === 409 && body.code === 'stale_review')
-    )
-      return { kind: 'denied' };
+    if ([400, 403, 404].includes(status) || (status === 409 && body.code === 'stale_review')) return { kind: 'denied' };
     return { kind: 'unknown' };
   }
   if (kind === 'passkey') {
