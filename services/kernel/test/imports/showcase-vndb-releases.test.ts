@@ -1,9 +1,11 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bundledDigest } from '@rezics/definitions/bundled';
+import { VNDB_IMPORTER_SCOPES } from '../../../importer/src/credentials.ts';
+import { BULK_ACTION } from '../../../../specs/imports-identity-driver.ts';
 import {
   developmentStatusConceptUri,
   developmentStatusSchemeUri,
@@ -12,12 +14,12 @@ import {
 import {
   crossMediaAliases,
   planCrossMediaSeed,
+  runCrossMediaSeedCli,
   type CrossMediaTables,
 } from '../../../importer/src/cross-media-seed.ts';
 import { seedShowcaseVndbReleases } from '../../../importer/src/showcase-vndb-releases.ts';
 import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { identitySupport } from './identity-fixture.ts';
-import { openApiObserver } from './api-observer.ts';
 import { openApiRuntime } from './api-runtime.ts';
 
 const globalContext = GLOBAL_CONTEXT;
@@ -66,6 +68,93 @@ function family(released = '20200229'): CrossMediaTables {
       yield* rows[`${provider}/${table}`] ?? [];
     },
   };
+}
+
+async function writeCrossMediaDump(directory: string, platform: string): Promise<{ bangumi: string; vndb: string }> {
+  const bangumi = join(directory, 'bangumi');
+  const vndb = join(directory, 'vndb');
+  await mkdir(join(vndb, 'db'), { recursive: true });
+  for (const table of [
+    'subject-relations',
+    'subject-characters',
+    'subject-persons',
+    'person-characters',
+    'person-relations',
+    'character',
+    'person',
+  ]) {
+    await writeFile(join(bangumi, `${table}.jsonlines`), '');
+  }
+  await writeFile(
+    join(bangumi, 'subject.jsonlines'),
+    `${JSON.stringify({ id: 1, type: 2, name: 'Selected Work' })}\n`,
+  );
+
+  const tables: Record<string, { columns: string[]; rows?: Record<string, string | number | null>[] }> = {
+    vn_titles: {
+      columns: ['id', 'lang', 'official', 'title', 'latin'],
+      rows: [{ id: 'v1', lang: 'ja', official: 't', title: 'Selected Work', latin: null }],
+    },
+    vn: {
+      columns: ['id', 'olang', 'alias', 'devstatus'],
+      rows: [{ id: 'v1', olang: 'ja', alias: null, devstatus: 1 }],
+    },
+    entry_meta: {
+      columns: ['id', 'revision', 'lastmod'],
+      rows: [{ id: 'v1', revision: '1', lastmod: '2026-10-25 00:00:00+00' }],
+    },
+    releases: {
+      columns: ['id', 'released', 'olang', 'minage', 'gtin'],
+      rows: [{ id: 'r1', released: '20200229', olang: 'ja', minage: 0, gtin: null }],
+    },
+    releases_titles: {
+      columns: ['id', 'lang', 'mtl', 'title', 'latin'],
+      rows: [{ id: 'r1', lang: 'ja', mtl: 't', title: 'Selected Release', latin: null }],
+    },
+    releases_vn: { columns: ['id', 'vid', 'rtype'], rows: [{ id: 'r1', vid: 'v1', rtype: 'complete' }] },
+    releases_supersedes: { columns: ['id', 'rid'] },
+    releases_platforms: { columns: ['id', 'platform'], rows: [{ id: 'r1', platform }] },
+    releases_media: { columns: ['id', 'medium', 'qty'], rows: [{ id: 'r1', medium: 'cd', qty: null }] },
+    chars: {
+      columns: [
+        'id', 'image', 'bloodt', 'cup_size', 'sex', 'spoil_sex', 'gender', 'spoil_gender', 'main', 'main_spoil',
+        's_bust', 's_waist', 's_hip', 'birthday', 'height', 'weight', 'age', 'description',
+      ],
+    },
+    producers_relations: { columns: ['id', 'pid', 'relation'] },
+    tags: { columns: ['id', 'cat', 'defaultspoil', 'searchable', 'applicable', 'name', 'alias', 'description'] },
+    tags_parents: { columns: ['id', 'parent', 'main'] },
+    tags_vn: { columns: ['date', 'tag', 'vid', 'uid', 'vote', 'spoiler', 'ignore', 'lie', 'notes'] },
+    vn_extlinks: { columns: ['id', 'link'] },
+    extlinks: { columns: ['id', 'site', 'value'] },
+  };
+  for (const table of [
+    'vn_relations',
+    'vn_staff',
+    'vn_seiyuu',
+    'staff_alias',
+    'staff',
+    'chars_traits',
+    'chars_vns',
+    'vn_anime',
+    'releases_producers',
+    'producers',
+    'anime',
+  ])
+    tables[table] ??= { columns: ['id'] };
+  for (const [table, specification] of Object.entries(tables)) {
+    await writeFile(join(vndb, 'db', `${table}.header`), `${specification.columns.join('\t')}\n`);
+    const rows = specification.rows ?? [];
+    await writeFile(
+      join(vndb, 'db', table),
+      rows
+        .map((row) =>
+          specification.columns.map((column) => (row[column] == null ? '\\N' : String(row[column]))).join('\t'),
+        )
+        .join('\n') + (rows.length ? '\n' : ''),
+    );
+  }
+  return { bangumi, vndb };
 }
 
 type Candidate = {
@@ -331,6 +420,146 @@ test('ordinary selected-family seed publishes current VNDB release dates and sta
     );
     expect(times).not.toContain('+2020-04-01T00:00:00Z');
   } finally {
+    await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 300_000);
+
+test('cross-media CLI retains selected release classifications through later vocabulary reseeding', async () => {
+  const previous = process.env.TMPDIR;
+  const runtime = await (async () => {
+    process.env.TMPDIR = tmpdir();
+    try {
+      return await openApiRuntime({ batchRecords: 8, maxFields: 64, maxRecordBytes: 65536 });
+    } finally {
+      if (previous === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = previous;
+    }
+  })();
+  const directory = await mkdtemp(join(tmpdir(), 'cross-media-release-cli-native-'));
+  const authOrigin = 'https://auth.cross-media.test';
+  const originalFetch = globalThis.fetch;
+  try {
+    const support = identitySupport(runtime.identity);
+    const scopes = [...VNDB_IMPORTER_SCOPES, 'subject:read', 'context:accept', 'context:adopt', 'access:grant'];
+    const clientId = `cross-media-${randomUUID()}`;
+    await runtime.identity.auth.internal.registerClient({ clientId, firstParty: true, scopes });
+    const signIn = await support.request('/signin', {
+      email: 'governance@identity.test',
+      password: 'private native identity fixture password',
+      client_id: clientId,
+      scope: scopes,
+    });
+    expect(signIn.status).toBe(200);
+    const tokenResponse = await support.request(
+      '/token',
+      {},
+      new Headers({ cookie: signIn.headers.getSetCookie().map((cookie) => cookie.split(';')[0]).join('; ') }),
+    );
+    expect(tokenResponse.status).toBe(200);
+    const bearer = ((await tokenResponse.json()) as { access_token: string }).access_token;
+    const grant = await runtime.request(
+      '/v1/grants',
+      {
+        resource: { route: 0, id: globalContext },
+        subject: { kind: 'account', id: runtime.identity.governance.accountId },
+        actions: [
+          'subject:create',
+          BULK_ACTION,
+          'subject:read',
+          'statement:propose',
+          'source_fence:read',
+          'media:import_from_url',
+          'context:accept',
+          'context:adopt',
+        ],
+        valid: '(,)',
+      },
+      bearer,
+    );
+    expect(grant.status).toBe(201);
+
+    const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+    const keyPath = join(directory, 'account.jwk');
+    await writeFile(
+      keyPath,
+      JSON.stringify({ ...(await crypto.subtle.exportKey('jwk', pair.privateKey)), alg: 'ES256', kid: randomUUID() }),
+      { mode: 0o600 },
+    );
+    await writeFile(join(directory, 'release-bindings.json'), '[]');
+    const dump = await writeCrossMediaDump(directory, 'win');
+    const state = join(directory, 'imports.sqlite');
+    const showcase = join(directory, 'showcase.sqlite');
+    const resultPath = join(directory, 'result.json');
+    globalThis.fetch = (async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const url = new URL(request.url);
+      if (url.origin === authOrigin && url.pathname === '/signin/key')
+        return new Response(null, { headers: { 'set-cookie': 'fixture=session; Secure; HttpOnly' } });
+      if (url.origin === authOrigin && url.pathname === '/token')
+        return Response.json({ access_token: bearer, token_type: 'Bearer', expires_in: 3600 });
+      return runtime.replay(request);
+    }) as typeof fetch;
+
+    await runCrossMediaSeedCli(
+      [
+        '--bangumi', dump.bangumi,
+        '--vndb', dump.vndb,
+        '--state', state,
+        '--result', resultPath,
+        '--api', runtime.origin,
+        '--auth', authOrigin,
+        '--account-key', keyPath,
+        '--account', runtime.identity.governance.accountId,
+        '--client', clientId,
+        '--showcase-state', showcase,
+        '--vndb-release-state-bindings', join(directory, 'release-bindings.json'),
+      ],
+      { selection: { bangumi: [1], vndb: ['v1'], peoplePerProvider: 1 } },
+    );
+
+    const result = JSON.parse(await readFile(resultPath, 'utf8')) as {
+      identities: { key: string; kind: string; subjectId: string }[];
+      showcase: { manifest: { records: { sourceKey: string; subjectId: string | null }[] } };
+    };
+    const workId = result.identities.find((row) => row.key === 'v1' && row.kind === 'work')?.subjectId;
+    const releaseId = result.identities.find((row) => row.key === 'r1' && row.kind === 'release')?.subjectId;
+    expect(workId && releaseId && workId !== releaseId).toBeTruthy();
+    expect(result.showcase.manifest.records.find((record) => record.sourceKey === 'r1')?.subjectId).toBe(releaseId);
+    const readCurrent = async (subjectId: string) => {
+      const response = await runtime.replay(
+        new Request(`${runtime.origin}/v1/subjects/${subjectId}?context=${globalContext}`),
+      );
+      expect(response.status).toBe(200);
+      return (
+        (await response.json()) as {
+          subject: { type: string; statements: Record<string, { value: { content: unknown } }[]> };
+        }
+      ).subject;
+    };
+    const release = await readCurrent(releaseId!);
+    const work = await readCurrent(workId!);
+    const values = (subject: typeof release, property: string) =>
+      (subject.statements[property] ?? []).map((statement) => statement.value.content);
+    expect(release.type).toBe('wd:Q20631656');
+    expect(work.type).toBe('wd:Q689445');
+    expect(values(release, 'schema:exampleOfWork')).toEqual([workId]);
+    expect(values(release, 'schema:inLanguage')).toEqual(['ja']);
+    expect(values(release, 'schema:gamePlatform')).toHaveLength(1);
+    expect(values(release, 'wdt:P437')).toHaveLength(1);
+    expect(values(release, 'schema:datePublished')[0]).toEqual(
+      expect.objectContaining({ time: '+2020-02-29T00:00:00Z', precision: 11 }),
+    );
+    const platformId = values(release, 'schema:gamePlatform')[0] as string;
+    const mediumId = values(release, 'wdt:P437')[0] as string;
+    expect(values((await readCurrent(platformId)) as typeof release, 'schema:url')).toEqual([
+      'https://vndb.org/releases/platforms/win',
+    ]);
+    expect(values((await readCurrent(mediumId)) as typeof release, 'schema:url')).toEqual([
+      'https://vndb.org/releases/media/cd',
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
     await runtime.close();
     await rm(directory, { recursive: true, force: true });
   }
