@@ -87,8 +87,8 @@ test('mounted caller uses paired native observations; stale, denied and synchron
   expect(await mergePersonComparison(client, 'Bearer reviewer', command)).toEqual({ ok: false, reason: 'denied' });
   expect(await mergePersonComparison(client, 'Bearer reviewer', command)).toMatchObject({ ok: false });
   expect(sent[2]!.url).toBe('https://kernel.test/v1/subjects:merge');
-  expect(await sent[2]!.text()).toBe(await sent[3]!.text());
-  expect(await sent[2]!.text()).toBe(await sent[4]!.text());
+  expect(await sent[2]!.clone().text()).toBe(await sent[3]!.clone().text());
+  expect(await sent[2]!.clone().text()).toBe(await sent[4]!.clone().text());
   expect(sent[3]!.headers.get('idempotency-key')).toBe(JSON.stringify(command.key));
   expect(sent[4]!.headers.get('idempotency-key')).toBe(JSON.stringify(command.key));
 });
