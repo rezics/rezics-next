@@ -74,11 +74,15 @@ export function ConditionLanguages({
   languages,
   locale,
   disabled = false,
+  invalid = false,
+  errorId,
   onChange,
 }: {
   languages: readonly string[];
   locale: string;
   disabled?: boolean;
+  invalid?: boolean;
+  errorId?: string;
   onChange(languages: string[]): void;
 }) {
   const selectId = useId();
@@ -143,6 +147,8 @@ export function ConditionLanguages({
           id={selectId}
           value={selected}
           disabled={disabled || atLimit || available.length === 0}
+          aria-invalid={invalid || undefined}
+          aria-describedby={errorId}
           onChange={(event) => setSelected(event.currentTarget.value)}
         >
           <NativeSelectOption value="">{m.condition_languages_choose({}, options)}</NativeSelectOption>
@@ -224,7 +230,8 @@ export function ConditionLanguages({
             autoComplete="off"
             spellCheck={false}
             placeholder={m.condition_languages_custom_placeholder({}, options)}
-            aria-invalid={customTagInvalid || undefined}
+            aria-invalid={customTagInvalid || invalid || undefined}
+            aria-describedby={errorId}
             disabled={disabled || atLimit}
             onChange={(event) => {
               setCustomTag(event.currentTarget.value);

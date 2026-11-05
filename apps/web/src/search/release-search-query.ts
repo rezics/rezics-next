@@ -1,7 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { createServerFn } from '@tanstack/react-start';
 import { getRequest } from '@tanstack/react-start/server';
-import { admittedReleaseSearchTypes } from '@rezics/filter';
+import { admittedReleaseSearchControls, admittedReleaseSearchTypes } from '@rezics/filter';
 import * as v from 'valibot';
 import { kernelClient } from '../kernel/client';
 import { refreshRelease } from '../subject/definitions';
@@ -13,8 +13,8 @@ import {
   type ParsedReleaseSearch,
   type ReleaseSearchRequest,
   type ReleaseSearchSelections,
+  type ReleaseSearchType,
 } from './release-search';
-import type { ReleaseSearchType } from './release-search-page';
 
 export type ReleaseSearchResult = {
   parsed?: ParsedReleaseSearch;
@@ -248,10 +248,20 @@ const readReleaseSearch = createServerFn({ method: 'GET' })
     const release = await refreshRelease();
     const raw = v.parse(v.record(v.string(), v.unknown()), JSON.parse(data.rawJson));
     const parsed = parseReleaseSearch(raw, release, data.locale);
-    const types = admittedReleaseSearchTypes(release).map((id) => ({
-      id,
-      label: localizedLabel(release.types[id]?.labels ?? {}, data.locale).text || id,
-    }));
+    const types = admittedReleaseSearchTypes(release).map((id) => {
+      const controls = admittedReleaseSearchControls(release, id)!;
+      return {
+        id,
+        label: localizedLabel(release.types[id]?.labels ?? {}, data.locale).text || id,
+        controls: {
+          platform: controls.platform,
+          language: controls.language,
+          date: controls.date,
+          ageRating: controls.ageRating,
+          producers: controls.producers,
+        },
+      };
+    });
     const selections = await readSelections(parsed, data.locale);
     if (parsed.invalid.length) return { parsed, types, selections, state: { status: 'invalid' } };
     const request = releaseSearchRequest(parsed.search, release);

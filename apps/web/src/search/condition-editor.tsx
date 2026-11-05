@@ -21,7 +21,7 @@ import { ConditionPresetName } from './condition-preset';
 import { ConditionRangeInput } from './condition-range-input';
 import { ConditionCalendarRangeEditor } from './condition-calendar-range';
 import { ConditionRangeMode } from './condition-range-mode';
-import { ConditionLanguages } from './condition-languages';
+import { ConditionLanguages } from './language-preferences';
 import { ConditionSavedFilter, editSavedFilterTree, type SavedFilterEditMode } from './condition-saved-filter';
 import {
   CONDITION_POINTER,

@@ -496,7 +496,7 @@
       "kind": "UI/transport library",
       "owner": "search",
       "paths": ["apps/web/src/search/**", "apps/web/src/features/pages/**"],
-      "publicEntries": ["apps/web/src/search/search.tsx"],
+      "publicEntries": ["apps/web/src/search/search.tsx", "apps/web/src/search/language-preferences.tsx"],
       "allowedDependencies": [
         "client",
         "composition",
@@ -661,7 +661,8 @@
       "publicEntries": [
         "apps/web/src/session/index.ts",
         "apps/web/src/session/reader.ts",
-        "apps/web/src/subject/definitions.ts"
+        "apps/web/src/subject/definitions.ts",
+        "apps/web/src/subject/quantity-presentation.ts"
       ],
       "allowedDependencies": [
         "client",

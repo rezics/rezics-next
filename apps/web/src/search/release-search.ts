@@ -49,6 +49,16 @@ export type ReleaseSearchSelections = Partial<
   Record<'platform' | 'developer' | 'publisher', ReleaseSearchSubjectSelection>
 >;
 
+export type ReleaseSearchCriteriaControls = Pick<
+  ReleaseSearchControls,
+  'platform' | 'language' | 'date' | 'ageRating' | 'producers'
+>;
+export type ReleaseSearchType = {
+  id: string;
+  label: string;
+  controls: ReleaseSearchCriteriaControls;
+};
+
 export type ReleaseSearch = {
   subtype: string;
   text: string;
@@ -63,7 +73,7 @@ export type ReleaseSearch = {
 export type ParsedReleaseSearch = {
   form: ReleaseSearchForm;
   search: ReleaseSearch;
-  controls: ReleaseSearchControls | null;
+  controls: ReleaseSearchCriteriaControls | null;
   /** Invalid input stays in the form and never reaches Search. */
   invalid: (keyof ReleaseSearchForm | 'cursor')[];
 };
@@ -89,10 +99,7 @@ const keys = [
 ] as const;
 
 function tags(value: string): string[] {
-  return value
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter(Boolean);
+  return value.split(',').map((tag) => tag.trim());
 }
 
 function validTags(values: string[]): boolean {
@@ -109,6 +116,32 @@ export function parseReleaseSearch(
   raw: Record<string, unknown>,
   release: FilterRelease,
   locale: string,
+): ParsedReleaseSearch {
+  return parseReleaseSearchInputs(
+    raw,
+    locale,
+    (type) => admittedReleaseSearchControls(release, type),
+    admittedReleaseSearchTypes(release)[0] ?? '',
+    release,
+  );
+}
+
+/** Re-evaluate an in-page criteria draft against the controls admitted by the current release read. */
+export function parseReleaseSearchDraft(
+  raw: Record<string, unknown>,
+  types: readonly { id: string; controls: ReleaseSearchCriteriaControls }[],
+  locale: string,
+): ParsedReleaseSearch {
+  const controls = new Map(types.map(({ id, controls: admitted }) => [id, admitted]));
+  return parseReleaseSearchInputs(raw, locale, (type) => controls.get(type) ?? null, types[0]?.id ?? '');
+}
+
+function parseReleaseSearchInputs(
+  raw: Record<string, unknown>,
+  locale: string,
+  controlsFor: (type: string) => ReleaseSearchCriteriaControls | null,
+  firstType: string,
+  release?: FilterRelease,
 ): ParsedReleaseSearch {
   const invalid: ParsedReleaseSearch['invalid'] = [];
   const fail = (key: ParsedReleaseSearch['invalid'][number]) => {
@@ -136,11 +169,11 @@ export function parseReleaseSearch(
       return [key, typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value))];
     }),
   ) as ReleaseSearchForm;
-  if (raw.subtype === undefined) form.subtype = admittedReleaseSearchTypes(release)[0] ?? '';
+  if (raw.subtype === undefined) form.subtype = firstType;
   if (raw.language === undefined) form.language = [...new Set([locale, 'en'])].join(', ');
   if (raw.sort === undefined) form.sort = 'name';
   if (raw.threshold === undefined) form.threshold = '0';
-  const controls = admittedReleaseSearchControls(release, form.subtype);
+  const controls = controlsFor(form.subtype);
   if (!controls) fail('subtype');
   if (new TextEncoder().encode(form.q).length > 512) fail('q');
   const languages = tags(form.language);
@@ -210,7 +243,7 @@ export function parseReleaseSearch(
     ...(condition ? { condition } : {}),
     ...(typeof cursor === 'string' ? { cursor } : {}),
   };
-  if (!invalid.length) {
+  if (!invalid.length && release) {
     try {
       releaseSearchRequest(search, release);
     } catch {
