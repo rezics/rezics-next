@@ -175,6 +175,11 @@ export function WorkFranchiseReading(props: WorkFranchiseReadingProps) {
               ) : group.state === 'empty' ? (
                 <p role="status">{m.subject_relation_empty_page({}, options)}</p>
               ) : null}
+              {page && (group.state === 'unavailable' || group.state === 'absent') && (
+                <a href={streamReturn} className={workLink}>
+                  {m.subject_section_retry({}, options)}
+                </a>
+              )}
               {value &&
                 group.preview.map((relation) => {
                   const item = items?.items.find(
