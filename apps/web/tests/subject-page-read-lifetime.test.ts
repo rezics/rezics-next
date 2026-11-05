@@ -5,7 +5,7 @@ import recording from '../src/kernel/recorded/subject-page.json';
 import realmRecording from '../src/kernel/recorded/realm.json';
 
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void };
-const deferred = <T,>(): Deferred<T> => {
+const deferred = <T>(): Deferred<T> => {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((yes) => (resolve = yes));
   return { promise, resolve };
@@ -43,7 +43,13 @@ function createServerFn() {
       return (options: { data?: unknown; signal?: AbortSignal }) => {
         currentRequest = new Request('https://site.test/_server', { signal: options.signal });
         const work = Promise.resolve(handler({ data: validate(options.data) }));
-        const call = { signal: currentRequest.signal, settled: work.then(() => {}, () => {}) };
+        const call = {
+          signal: currentRequest.signal,
+          settled: work.then(
+            () => {},
+            () => {},
+          ),
+        };
         serverCalls.push(call);
         serverWaiters.shift()?.resolve(call);
         return work;
@@ -87,7 +93,9 @@ const { readTermsPageAuthority } = await import('../src/features/catalogue/subje
 const subjectId = recording.subject;
 const viewDocument = {
   root: { props: {} },
-  content: [{ type: 'SubjectList', props: { id: 'editions', property: 'schema:exampleOfWork', limit: 12, paged: true } }],
+  content: [
+    { type: 'SubjectList', props: { id: 'editions', property: 'schema:exampleOfWork', limit: 12, paged: true } },
+  ],
 };
 const pageData = (document = { root: { props: {} }, content: [] }) => ({
   ...recording,
