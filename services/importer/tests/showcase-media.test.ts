@@ -123,7 +123,8 @@ test(
     const directory = await mkdtemp(join(tmpdir(), 'showcase-media-'));
     const sourcePlan = selectedPlan();
     const statePath = join(directory, 'import.sqlite');
-    const journal = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
+    const journalPath = join(directory, 'showcase.sqlite');
+    const journal = new ShowcaseJournal(journalPath);
     const subjectId = randomUUID();
     const mediaId = randomUUID();
     let sourceReads = 0;
