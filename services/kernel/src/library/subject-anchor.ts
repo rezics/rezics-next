@@ -9,6 +9,7 @@ import { SubjectRedirectError } from '../semantic/merges.ts';
 import { readSubjectReference } from '../semantic/references.ts';
 import type { IdentityMapping } from '../semantic/identity-epoch-contract.ts';
 import { identityEpochStore } from '../semantic/identity-adapters/index.ts';
+import { readIdentityMappings } from '../semantic/identity-adapters/identity-epoch-read.ts';
 import { WORK_STEP_DEADLINE_MS } from './command-support.ts';
 
 const MAX_SUBJECT_IDS = 100;
@@ -37,7 +38,7 @@ export async function resolveSubject(
   context?: AccessContext,
 ): Promise<ResolvedSubject | null> {
   if (routeOf(subjectId) === null) return null;
-  const mapping = await identityEpochStore.readMapping(deps.pool, subjectId);
+  const mapping = (await readIdentityMappings(deps.pool, [subjectId], context?.deadline))[0]!;
   return resolveMappedSubject(deps, actor, subjectId, mapping, at, context);
 }
 
@@ -75,13 +76,18 @@ async function resolveMappedSubject(
   if (!terminalAuthorization) return null;
 
   try {
-    const original = await readSubjectReference(deps.pool, subjectId, originalAuthorization);
+    const original = await readSubjectReference(deps.pool, subjectId, originalAuthorization, context?.deadline);
     if (!original || mapping.terminal !== subjectId) return null;
   } catch (error) {
     if (!(error instanceof SubjectRedirectError)) throw error;
     if (error.from !== subjectId || error.to !== mapping.terminal) return null;
   }
-  const terminal = await readSubjectReference(deps.pool, mapping.terminal, terminalAuthorization);
+  const terminal = await readSubjectReference(
+    deps.pool,
+    mapping.terminal,
+    terminalAuthorization,
+    context?.deadline,
+  );
   return terminal
     ? {
         subjectId: mapping.terminal,

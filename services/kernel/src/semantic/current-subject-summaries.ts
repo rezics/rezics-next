@@ -4,7 +4,6 @@ import { partitionReadClient } from '../database/read-snapshot.ts';
 import { ProblemError } from '../http/problem.ts';
 import { accessCheck } from '../request/access.ts';
 import { partitionOf, routeOf } from '../route/route.ts';
-import { activeRelease } from './definitions.ts';
 import { relatedReadEligibility } from './eligibility.ts';
 import { withReadTransaction } from './read.ts';
 import { readSubjectSummaries, type SubjectSummary, type SummaryReaderDependencies } from './summaries.ts';
@@ -121,8 +120,8 @@ export async function readCurrentSubjectSummaries(
     if (target && allowed.has(terminal)) resolved.set(id, terminal);
   }
   const terminals = [...new Set(resolved.values())];
-  if (terminals.length && !(await activeRelease(deps.pool))) throw new ProblemError('dependency_unavailable');
-  // One shared display batch, bounded by the original raw-key allowance.
+  // The summary reader resolves its active release on the deadline-bound snapshot.
+  // Avoid a duplicate pool read that would escape the request's absolute deadline.
   const projected = await readSubjectSummaries(deps, terminals);
   const summaries = new Map<string, SubjectSummary | null>();
   for (const id of ids) {

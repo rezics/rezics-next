@@ -9,6 +9,8 @@ import { resolveLibraryProfilePin } from './profile.ts';
 import { ProblemError } from '../http/problem.ts';
 
 type Client = Pick<PoolClient, 'query'>;
+export const OWNER_INDEX_NEXT_PIN_SQL = `SELECT pin FROM library.owner_index_pin
+    WHERE route=$1 AND account_id=$2 AND NOT meaning_ready ORDER BY pin LIMIT 1`;
 export type OwnerPinMeaning = Readonly<{
   pin: unknown;
   states: readonly {
@@ -21,11 +23,7 @@ export type OwnerPinMeaning = Readonly<{
 }>;
 /** Release this owner's connection BEFORE loading its immutable Definitions release. No current-head inference. */
 export async function nextOwnerPin(client: Client, accountId: string): Promise<unknown | undefined> {
-  const { rows } = await client.query<{ pin: unknown }>(
-    `SELECT pin FROM library.owner_index_pin
-    WHERE route=$1 AND account_id=$2 AND NOT meaning_ready ORDER BY pin LIMIT 1`,
-    [routeOf(accountId), accountId],
-  );
+  const { rows } = await client.query<{ pin: unknown }>(OWNER_INDEX_NEXT_PIN_SQL, [routeOf(accountId), accountId]);
   return rows[0]?.pin;
 }
 export async function loadOwnerPinMeaning(pool: Pool, accountId: string, value: unknown): Promise<OwnerPinMeaning> {

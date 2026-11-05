@@ -295,12 +295,16 @@ enclosing work. Count and pair observations stay independent; no atomic snapshot
 
 ## Collection directory and preview SQL
 
+Decision: compose Directory and Subject reads as request-frozen nine-axis operations, carry the declaration through the existing presentation callback, and consume reached terms at the current Library/native owners.
+
 Decision: keep mounted FULL hydration inside reader currentness; require partition evidence even on a short first
 directory or Subject page. The original deadline reaches hydration and terminal native reads. A disappeared parent
 retains current 404; a withdrawn positive Subject pair remains dependency unavailable. Curator/public-view changes,
 source incarnation changes and changed partition assignment cannot publish a previously assembled page.
 
-`collection-directory-bounds.ts` dispatches frozen operands at the existing native readers. Directory branches count
+`collection-directory-bounds.ts` dispatches frozen operands at the existing native readers; the built-in SQL
+literals live in `builtin-read-statements.ts`, shared by the runtime and declaration without loading runtime
+dependencies into the planner. Directory branches count
 both indexed candidate arms, their limits, append/order/final limit and scalar limit producers. The original
 remaining-slot limit includes the sentinel independently of returned/disclosed rows. Collection projections derive
 from 200/2000-character schema fields, UUID/int4/int8 widths and escaped timestamps; a presentation Type is bounded
@@ -312,12 +316,53 @@ outer rows, parent/fence points, member scan/limit/join/order and final generati
 There is no retained preview preparation, refill, partial pending success, Search request, receipt or event in these
 SQL closures. Native generation comparison remains after display verification, followed by parent authorization.
 
-The enclosing immutable nine-axis operation still needs account/action/group/public-view admission, builtin
-discovery/presentation, both Subject resolution passes, Semantic/Content nested producers, response serialization,
-connection/transaction controls and terminal cleanup composed through existing execution owners. SQL-only zero
-engine requests does not establish that axis for the enclosing operation. Existing native ceilings and money
-guards remain authoritative; declarations supply no new allowance. The explicit eight/nine-axis owner translation
-must cover that enclosing composition rather than borrowing the unrelated ordinary Members page plan.
+`CollectionReadOperationPlan` closes the Directory and Subject branches before the first useful read; the callback
+receives the same route-owned operation through mounted FULL hydration. Its receipt records each reached named term
+before dispatch and releases once in `finally`. It is accounting only: it installs no allowance or authorization,
+and the original Access, Semantic, Content and native owners keep their own current checks, deadlines, retries,
+rollback and receipts. The eight-axis adapter copies the eight existing `WorkDimensions` and retains
+`engineRequests` in the ninth-axis receipt; all SQL/HTTP branches declare that axis as zero.
+
+For a Directory request, let `s` be the validated page size (1..100), `P=min(s,20)` for preview, and let
+`R=max(n*floor(100/n))` over `1<=n<=P`, or zero when previews are off. `n` is the selected curated-parent count,
+so `R<=100` covers the legal case where fewer than `P` listed rows are curated. Admission covers the first and final public-view
+point and, when the hidden-view curator path is reached, its two current account points. Builtin discovery includes
+one account admission, one four-probe native-presence statement, optional owner-index frontier/pin points, the bounded
+successor page, and per-selected stored Collection and state-label points. The Directory page term is the
+component-wise maximum of both existing two-arm statements at the full `s+1` sentinel, plus its initial and terminal
+partition points and the page transaction's BEGIN/COMMIT/ROLLBACK controls. Each stored result reserves one terminal
+Collection point, current viewer and curator Account reads, and the reload transaction controls. One possible
+presentation-currentness reload reserves the same Collection, Account and control costs; preview adds two parent
+currentness observations with the same costs, for `2s` or `4s` Collection reloads total. Owner management's
+`collection:update` formula remains Access-owned; its Collection reload is already in presentation currentness.
+Mounted FULL reserves one public Account point for the Directory's curator.
+Cover presentation includes Content's two reference points, three media points, two source-fence points, one Subject
+existence point and four partition-anchored media snapshots, with SQL/bind/projection bytes from those owners. Each
+cover projection uses Content's 12-variant ceiling, 44-character thumbhash and named credit/provenance JSON limits
+(`COVER_CREDIT_JSON_MAX_BYTES` and `COVER_PROVENANCE_JSON_MAX_BYTES`); no object bytes are fetched. Preview reserves
+the component-wise maximum member/fence declaration over every legal selected-parent count through `P`, up to `R`
+raw member originals including tombstones/duplicates, three displayed members per parent, the current-subject
+summary's six snapshots and separate member/fence transactions. Serialization measures the exact top-level fields
+and maximum signed cursor token, then adds the larger curated/builtin row projection, FULL curator, management fields
+and three maximum Subject summaries when preview is enabled. Stored string fields use the ingress body limit;
+release-backed identifiers use the immutable Definitions release byte limit. Unreached branches do not change a
+term's price.
+
+For Subject discovery, let `s` be the HTTP size (1..100). Two `resolveSubject` passes each reserve one complete
+identity mapping read (10 data statements and four repeatable-read controls at one same-home input) and at most two
+original/terminal references (two data statements and one four-command snapshot each). The maintained-count point
+and subject-leading pair page remain separate leaves; the pair declaration uses `s+1`, including the sentinel.
+Each considered pair reserves one Collection point and one individual public-view point in both the page and terminal
+pass, even when curators repeat; no visible-row count, curator deduplication or page refill reprices it. Both
+observation transactions include BEGIN/COMMIT/ROLLBACK controls. FULL reserves one public Account projection per
+possible distinct curator. Response bytes include the exact page/count/cursor envelope, 200-character Collection
+title, int4 multiplicity and, for FULL, the public Account handle/display-name limits. `identityMetadataRows` remains zero: resolution uses keyed mapping/reference
+reads, not a full identity-home sweep. Neither journey dispatches Search, so `engineRequests=0` is explicit rather
+than inferred from its SQL leaves.
+
+The one focused declaration test checks immutability, all nine axes, reached-term receipt, eight/nine-axis
+translation, Directory branch terms and Subject terminal terms. Existing native/currentness, HTTP and three-scale
+growth suites remain controller acceptance; this declaration is not a native physical-work measurement.
 
 ## Private physical-copy loans
 
