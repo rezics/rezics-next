@@ -414,9 +414,9 @@ and direct manager-add model. There is no implicit invitation, recipient approva
 
 Ban and membership publication retain current authorization. Protected bans override independent grants,
 own-list candidates and pending inverse cleanup; public reads retain anonymous disclosure. Unban restores
-neither membership nor follow. Native tests hold ordinary-member cleanup for protected reads and both admission
-denials, separate from independent-grant and public controls. The transition producer owns settled hold retirement
-and account deletion entry, establishing the committed/cancelled generation. Inverse release, synthetic settlement
+neither membership nor follow. Tests hold ordinary-member cleanup for read and admission denials, apart from
+independent-grant and public controls. The transition producer owns settled hold retirement
+and account deletion entry, proving the committed/cancelled generation. Inverse release, synthetic settlement
 or leave to bypass a settled hold cannot replace that transition.
 
 Web can settle pending join/leave using existing member and participation reads. Accepted 202 is not settled
