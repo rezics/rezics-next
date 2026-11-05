@@ -4,6 +4,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { expect as ui } from 'playwright/test';
 import type { Page } from 'playwright';
 import { bundledRelease } from '@rezics/definitions/bundled';
+import { buildSearchImage, cgroupArgs, waitForSearch } from '../../../../services/kernel/scripts/search.ts';
 import { catalogueEntries } from '../../src/features/catalogue/catalogue-entry.ts';
 import { subjectHref } from '../../src/subject/subject-href.ts';
 import {
@@ -15,12 +16,55 @@ import { nativeSiteLocales } from './native-site-foundation-fixture.ts';
 setDefaultTimeout(900_000);
 
 let fixture: NativeClassificationFixture;
+let ownedSearch: string | undefined;
+let priorSearchUrl: string | undefined;
+
+function docker(args: string[]): string {
+  const result = Bun.spawnSync(['docker', ...args]);
+  if (result.exitCode !== 0) throw new Error(`Owned search setup failed: ${result.stderr.toString()}`);
+  return result.stdout.toString().trim();
+}
 
 beforeAll(async () => {
+  priorSearchUrl = process.env.OPENSEARCH_URL;
+  if (!priorSearchUrl) {
+    ownedSearch = `concept-works-search-${crypto.randomUUID().slice(0, 12)}`;
+    docker([
+      'run',
+      '-d',
+      ...cgroupArgs(),
+      '--name',
+      ownedSearch,
+      '-p',
+      '127.0.0.1::9200',
+      '--tmpfs',
+      '/usr/share/opensearch/data:rw,size=1g,uid=1000,gid=1000,mode=0755',
+      '-e',
+      'discovery.type=single-node',
+      '-e',
+      'DISABLE_SECURITY_PLUGIN=true',
+      '-e',
+      'DISABLE_INSTALL_DEMO_CONFIG=true',
+      '-e',
+      'OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m',
+      buildSearchImage(),
+    ]);
+    const address = docker(['port', ownedSearch, '9200/tcp']).split('\n')[0]!;
+    process.env.OPENSEARCH_URL = `http://${address}`;
+    await waitForSearch(process.env.OPENSEARCH_URL, ownedSearch);
+  }
   fixture = await startCatalogueClassificationFixture();
 }, 600_000);
 
-afterAll(async () => fixture?.close(), 180_000);
+afterAll(async () => {
+  try {
+    await fixture?.close();
+  } finally {
+    if (ownedSearch) docker(['rm', '-fv', ownedSearch]);
+    if (priorSearchUrl === undefined) delete process.env.OPENSEARCH_URL;
+    else process.env.OPENSEARCH_URL = priorSearchUrl;
+  }
+}, 180_000);
 
 function statement(property: string, dataType: string, content: string) {
   return {

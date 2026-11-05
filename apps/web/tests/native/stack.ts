@@ -623,6 +623,17 @@ async function startStack(): Promise<
     const { sharedAuth, closeOwnedSemanticAuth, advanceNativeAuthClock } =
       await import('../../../../services/kernel/test/semantic/outcome-auth.ts');
     closeAuth = closeOwnedSemanticAuth;
+    // Kernel SQL analysis and Auth setup both need the analysis/runtime URLs.
+    // Load them together so neither sits idle for the whole of the other.
+    reportStackProgress('Native web stack startup: loading kernel modules');
+    const kernelModules = Promise.all([
+      import('../../../../services/kernel/test/semantic/outcome-driver.ts'),
+      import('../../../../services/kernel/src/http/kernel.ts'),
+      import('../../../../services/kernel/src/search/work.ts'),
+      import('../../../../services/kernel/src/search/opensearch.ts'),
+      import('../../../../services/kernel/src/search/service.ts'),
+      import('../../../../services/kernel/src/semantic/search-source.ts'),
+    ]);
     const auth = await sharedAuth(new URL(process.env.DATABASE_URL!), undefined, true);
     reportStackProgress('Native web stack startup: semantic Auth initialized');
     // Observe the harness's actual issuance, retaining its Auth cookie for the
@@ -705,15 +716,18 @@ async function startStack(): Promise<
       }
       return response;
     };
-    // The semantic harness reads DATABASE_URL during module evaluation.
-    const { createSemanticDriver } = await import('../../../../services/kernel/test/semantic/outcome-driver.ts');
-    const { createKernel } = await import('../../../../services/kernel/src/http/kernel.ts');
+    reportStackProgress('Native web stack startup: awaiting kernel modules');
+    const [
+      { createSemanticDriver },
+      { createKernel },
+      { readSearchConfig },
+      { createOpenSearch },
+      { createSearchService },
+      { subjectSource },
+    ] = await kernelModules;
+    reportStackProgress('Native web stack startup: kernel modules loaded');
     const commerce = process.env.NATIVE_WEB_COMMERCE === '1' ? readCommerceConfig(process.env) : null;
-    const { readSearchConfig } = await import('../../../../services/kernel/src/search/work.ts');
     const searchConfig = readSearchConfig({ ...process.env, KERNEL_SEARCH_PREFIX: searchPrefix });
-    const { createOpenSearch } = await import('../../../../services/kernel/src/search/opensearch.ts');
-    const { createSearchService } = await import('../../../../services/kernel/src/search/service.ts');
-    const { subjectSource } = await import('../../../../services/kernel/src/semantic/search-source.ts');
     if (searchConfig) search = createOpenSearch(searchConfig.url);
     const accessRequest = new AsyncLocalStorage<NativeKernelRequest>();
     const observeAccess = (base: Access): Access => {
