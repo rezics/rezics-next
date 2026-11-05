@@ -4,15 +4,18 @@ import { ContentItem } from '@rezics/ui/content-item';
 import { m } from '../paraglide/messages.js';
 import { PageHeading } from '../shell/page-heading';
 import type { MyRealmsPage } from './space';
+import type { MyRealmsMovement, MyRealmsNavigation } from './my-realms-caller';
 
 /** One admitted inventory window; membership alone supplies no current entry authority. */
 export function MyRealmsPageView({
   page,
-  onKeyboardNext,
+  navigation,
+  onMove,
   focusContinuation,
 }: {
   page: MyRealmsPage;
-  onKeyboardNext?: (cursor: string) => void;
+  navigation?: MyRealmsNavigation;
+  onMove?: (kind: MyRealmsMovement, cursor: string | null, trigger?: HTMLElement) => boolean;
   focusContinuation?: (() => boolean) | undefined;
 }) {
   const headingId = useId();
@@ -56,19 +59,31 @@ export function MyRealmsPageView({
             {page.next ? m.realm_list_details_sparse_page_empty() : m.realms_empty()}
           </p>
         )}
-        {next ? (
-          <nav aria-label={m.realms_heading()}>
-            <Link
-              to="/realms"
-              search={{ cursor: next }}
-              onClick={(event) => {
-                if (event.detail === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey)
-                  onKeyboardNext?.(next);
-              }}
-              className="inline-flex min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal rounded-lg border border-border px-4 py-2 text-start text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-            >
-              {m.realms_more()}
-            </Link>
+        {next || navigation?.previous !== undefined || navigation?.first ? (
+          <nav aria-label={m.realms_heading()} className="flex flex-wrap gap-3">
+            {[
+              ...(navigation?.previous !== undefined
+                ? [{ kind: 'previous' as const, cursor: navigation.previous, label: m.prq_previous() }]
+                : []),
+              ...(navigation?.first ? [{ kind: 'first' as const, cursor: null, label: m.realms_first_page() }] : []),
+              ...(next ? [{ kind: 'next' as const, cursor: next, label: m.realms_more() }] : []),
+            ].map(({ kind, cursor, label }) => (
+              <Link
+                key={kind}
+                to="/realms"
+                search={cursor === null ? {} : { cursor }}
+                preload={false}
+                onClick={(event) => {
+                  if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+                    return;
+                  if (onMove && !onMove(kind, cursor, event.detail === 0 ? event.currentTarget : undefined))
+                    event.preventDefault();
+                }}
+                className="inline-flex min-h-11 min-w-11 max-w-full items-center justify-center whitespace-normal rounded-lg border border-border px-4 py-2 text-start text-primary underline-offset-4 hover:bg-muted hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+              >
+                {label}
+              </Link>
+            ))}
           </nav>
         ) : null}
       </section>

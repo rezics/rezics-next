@@ -358,6 +358,7 @@ test('a retired keyboard continuation cannot focus or reveal its late private re
     expect(surface.host.textContent ?? '').not.toContain('Late original realm');
     expect(surface.host.textContent ?? '').not.toContain('Current first-page realm');
     expect(surface.host.querySelector('section[aria-labelledby] h1')).toBeNull();
+    expect(surface.host.textContent).not.toContain(m.prq_previous());
   } finally {
     response.resolve(page('Settled response'));
     await surface.dispose();
@@ -403,6 +404,8 @@ test('keyboard continuation focuses the admitted heading on an empty terminal pa
     expect(heading.tabIndex).toBe(-1);
     expect(surface.host.querySelector('section')?.getAttribute('aria-labelledby')).toBe(heading.id);
     expect(surface.host.textContent).toContain(m.realms_empty());
+    expect(surface.host.textContent).toContain(m.prq_previous());
+    expect(surface.host.textContent).toContain(m.realms_first_page());
     expect(surface.host.querySelector('a[href*="cursor="]')).toBeNull();
     expect(window.document.activeElement).toBe(heading);
   } finally {
@@ -412,7 +415,9 @@ test('keyboard continuation focuses the admitted heading on an empty terminal pa
 
 test('cursor and locale changes form a new route visit, keep native cursor order and perform one read per visit', async () => {
   const cursor = 'opaque/next?private=%25';
-  resetReader(async (input) => page(input.cursor ? 'Second cursor realm' : 'First cursor realm', 'native-next-cursor'));
+  resetReader(async (input) =>
+    page(input.cursor ? 'Second cursor realm' : 'First cursor realm', input.cursor ? 'native-next-cursor' : cursor),
+  );
   const surface = await createSurface();
   try {
     await surface.load();
@@ -506,5 +511,175 @@ test('unmount retires saved loader callbacks; a later explicit visit can load a 
     expect(visiblePrivateNames(surface)).toContain('Mounted visit 2');
   } finally {
     await surface.dispose();
+  }
+});
+
+function inventoryLink(surface: Surface, label: string) {
+  return [...surface.host.querySelectorAll<HTMLAnchorElement>('nav a')].find((link) => link.textContent === label)!;
+}
+
+async function moveInventory(surface: Surface, label: string, keyboard = false) {
+  const count = readCalls.length;
+  await activateLink(inventoryLink(surface, label), keyboard ? 0 : 1);
+  await until(() => readCalls.length > count && surface.router.state.status === 'idle', label);
+}
+
+test('three guarded native windows return through sparse and terminal pages, retrying exact Previous and First targets', async () => {
+  const second = 'opaque/second?keep=%2F';
+  const third = 'x'.repeat(4096);
+  let failure: string | null | undefined;
+  resetReader(async ({ cursor }) => {
+    if ((cursor ?? null) === failure) throw new Error('Temporary reading failure');
+    return cursor === third
+      ? { ...page('Terminal'), realms: [] }
+      : cursor === second
+        ? { ...page('Sparse', third), realms: [] }
+        : page('First', second);
+  });
+  const surface = await createSurface();
+  try {
+    await surface.load();
+    await surface.mount();
+    await moveInventory(surface, m.realms_more());
+    expect(surface.host.textContent).toContain(m.realm_list_details_sparse_page_empty());
+    await moveInventory(surface, m.realms_more(), true);
+    expect(surface.host.textContent).toContain(m.realms_empty());
+    expect(window.document.activeElement).toBe(surface.host.querySelector('section h1'));
+    failure = second;
+    await moveInventory(surface, m.prq_previous(), true);
+    expect(surface.router.state.location.search).toEqual({ cursor: second });
+    expect(surface.host.querySelector('section h1')).toBeNull();
+    failure = undefined;
+    await act(async () => surface.host.querySelector('button')!.click());
+    await until(() => readCalls.length === 5 && surface.router.state.status === 'idle', 'exact Previous Retry');
+    expect(inventoryLink(surface, m.prq_previous()).getAttribute('href')).toBe('/en/realms');
+    failure = null;
+    await moveInventory(surface, m.realms_first_page());
+    expect(surface.router.state.location.search).toEqual({});
+    failure = undefined;
+    await act(async () => surface.host.querySelector('button')!.click());
+    await until(() => readCalls.length === 7 && surface.router.state.status === 'idle', 'exact First Retry');
+    expect(surface.host.textContent).toContain('First');
+    expect(inventoryLink(surface, m.prq_previous())).toBeUndefined();
+    expect(readCalls).toEqual([
+      {},
+      { cursor: second },
+      { cursor: third },
+      { cursor: second },
+      { cursor: second },
+      {},
+      {},
+    ]);
+    expect(surface.client.getQueryCache().findAll({ queryKey: ['my-realms'] })).toHaveLength(1);
+  } finally {
+    await surface.dispose();
+  }
+});
+
+test('eight retained predecessors bound branching; direct cursor visits invent no predecessor', async () => {
+  // Coordinates are supplied by this reader, never computed by the consumer.
+  const coordinates = Array.from({ length: 12 }, (_, i) => `native-coordinate-${i}`);
+  let branch = false;
+  resetReader(async ({ cursor }) => {
+    const index = cursor ? coordinates.indexOf(cursor) + 1 : 0;
+    return page(`Window ${index}`, branch ? 'native-branch' : (coordinates[index] ?? null));
+  });
+  const surface = await createSurface();
+  try {
+    await surface.load();
+    await surface.mount();
+    for (let i = 0; i < 10; i++) await moveInventory(surface, m.realms_more());
+    await moveInventory(surface, m.prq_previous());
+    branch = true;
+    await moveInventory(surface, m.realms_more());
+    await moveInventory(surface, m.realms_more());
+    for (let i = 0; i < 8; i++) await moveInventory(surface, m.prq_previous());
+    expect(inventoryLink(surface, m.prq_previous())).toBeUndefined();
+    expect(surface.host.textContent).toContain('Window 3');
+    await moveInventory(surface, m.realms_first_page(), true);
+    expect(surface.router.state.location.search).toEqual({});
+    expect(window.document.activeElement).toBe(surface.host.querySelector('section h1'));
+    expect(inventoryLink(surface, m.prq_previous())).toBeUndefined();
+    expect(surface.client.getQueryCache().findAll({ queryKey: ['my-realms'] })).toHaveLength(1);
+  } finally {
+    await surface.dispose();
+  }
+  const direct = await createSurface({ cursor: coordinates[5] });
+  try {
+    await direct.load();
+    await direct.mount();
+    expect(inventoryLink(direct, m.prq_previous())).toBeUndefined();
+    expect(inventoryLink(direct, m.realms_first_page())).toBeDefined();
+    await moveInventory(direct, m.realms_first_page());
+    expect(direct.router.state.location.search).toEqual({});
+  } finally {
+    await direct.dispose();
+  }
+});
+
+test('rapid navigation is serialized and focus follows Previous only while the reader stays with its trigger', async () => {
+  const response = deferred<MyRealmsPage>();
+  let returning = false;
+  resetReader(async ({ cursor }) => (cursor ? page('Second') : returning ? response.promise : page('First', 'second')));
+  const surface = await createSurface();
+  try {
+    await surface.load();
+    await surface.mount();
+    await moveInventory(surface, m.realms_more());
+    returning = true;
+    const previous = inventoryLink(surface, m.prq_previous());
+    previous.focus();
+    await act(async () => {
+      previous.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
+      previous.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
+    });
+    await until(() => readCalls.length === 3, 'one Previous read');
+    const elsewhere = window.document.createElement('button');
+    window.document.body.append(elsewhere);
+    elsewhere.focus();
+    response.resolve(page('First reread', 'second'));
+    await until(() => surface.router.state.status === 'idle', 'Previous admission');
+    expect(readCalls).toEqual([{}, { cursor: 'second' }, {}]);
+    expect(window.document.activeElement).toBe(elsewhere);
+    elsewhere.remove();
+    await moveInventory(surface, m.realms_more());
+    await moveInventory(surface, m.prq_previous(), true);
+    expect(window.document.activeElement).toBe(surface.host.querySelector('section h1'));
+  } finally {
+    response.resolve(page('Settled'));
+    await surface.dispose();
+  }
+});
+
+test('equal source replacement and A/B/A retire staged return coordinates despite ignored cancellation', async () => {
+  for (const replace of ['equal', 'aba'] as const) {
+    const response = deferred<MyRealmsPage>();
+    let returning = false;
+    resetReader(async ({ cursor }) =>
+      cursor ? page('Second') : returning ? response.promise : page('First', 'second'),
+    );
+    const surface = await createSurface();
+    try {
+      await surface.load();
+      await surface.mount();
+      await moveInventory(surface, m.realms_more());
+      returning = true;
+      await activateLink(inventoryLink(surface, m.prq_previous()), 0);
+      await until(() => readCalls.length === 3, 'pending return');
+      if (replace === 'aba') await surface.setSession(signedIn('other-account'));
+      await surface.setSession(signedIn());
+      response.resolve(page('Retired return'));
+      await until(() => surface.router.state.status === 'idle', 'retired return');
+      expect(surface.host.textContent).not.toContain('Retired return');
+      expect(inventoryLink(surface, m.prq_previous())).toBeUndefined();
+      expect(surface.client.getQueryData(['my-realms', ''])).toBeUndefined();
+      await surface.router.invalidate();
+      await until(() => surface.host.textContent?.includes('Retired return') ?? false, 'fresh return');
+      expect(inventoryLink(surface, m.prq_previous())).toBeUndefined();
+      expect(window.document.activeElement).not.toBe(surface.host.querySelector('section h1'));
+    } finally {
+      response.resolve(page('Settled'));
+      await surface.dispose();
+    }
   }
 });
