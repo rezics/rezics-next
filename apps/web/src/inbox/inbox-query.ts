@@ -17,10 +17,7 @@ import {
   type InboxSelection,
   type UnreadCount,
 } from './inbox-read';
-import {
-  inboxObservationRecovery,
-  type InboxObservationRecovery,
-} from './inbox-acknowledgement-recovery';
+import { inboxObservationRecovery, type InboxObservationRecovery } from './inbox-acknowledgement-recovery';
 import { forInboxViewer, inboxViewerCsrfToken, type InboxViewer } from './inbox-viewer';
 
 const inboxKey = readQueryKey(['notifications', 'inbox'], 'session');

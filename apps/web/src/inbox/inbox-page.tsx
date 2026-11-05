@@ -389,10 +389,7 @@ export function ViewerInboxPage({
   const readable = readableInboxPage(received);
   const visibleItems = readable?.items ?? [];
   const page =
-    !observationRecoveryView?.page &&
-    !pageQuery.isError &&
-    pageQuery.data?.signedIn &&
-    pageQuery.data.state === 'ready'
+    !observationRecoveryView?.page && !pageQuery.isError && pageQuery.data?.signedIn && pageQuery.data.state === 'ready'
       ? pageQuery.data
       : null;
   const admittedMarkSeen = page?.actions?.markSeen ?? null;
@@ -608,7 +605,16 @@ export function ViewerInboxPage({
         }
       }
     },
-    [acknowledgeNotice, episode, episodeOwnerCurrent, finishAcknowledged, pageIntent, pageQueryFetching, queryClient, viewer],
+    [
+      acknowledgeNotice,
+      episode,
+      episodeOwnerCurrent,
+      finishAcknowledged,
+      pageIntent,
+      pageQueryFetching,
+      queryClient,
+      viewer,
+    ],
   );
 
   const markLoadedThroughLatest = () => {
@@ -814,9 +820,7 @@ export function ViewerInboxPage({
         result.data.state !== 'ready'
       )
         return;
-      const next = observationRecovery.current.count
-        ? { ...observationRecovery.current, page: false }
-        : null;
+      const next = observationRecovery.current.count ? { ...observationRecovery.current, page: false } : null;
       observationRecovery.current = next;
       setObservationRecoveryView(next);
     });
@@ -923,12 +927,7 @@ export function ViewerInboxPage({
             <Button
               variant="outline"
               className="h-auto min-h-11 max-w-full whitespace-normal py-2"
-              disabled={
-                observationWaiting ||
-                pageQueryFetching(pageIntent) ||
-                checkingAccess ||
-                !episodeOwnerCurrent()
-              }
+              disabled={observationWaiting || pageQueryFetching(pageIntent) || checkingAccess || !episodeOwnerCurrent()}
               onClick={retryPage}
             >
               {m.inbox_retry()}

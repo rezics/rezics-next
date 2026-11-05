@@ -46,9 +46,6 @@ export function inboxObservationRecovery(
   });
 }
 
-export function inboxObservationRetryAllowed(
-  recovery: InboxObservationRecovery | null,
-  now = Date.now(),
-): boolean {
+export function inboxObservationRetryAllowed(recovery: InboxObservationRecovery | null, now = Date.now()): boolean {
   return recovery !== null && recovery.retryAt <= now;
 }
