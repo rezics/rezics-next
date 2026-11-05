@@ -1,5 +1,5 @@
 import type { KernelClient } from '@rezics/client';
-import { isPlatformClosedError, isPlatformClosedProblem } from '../kernel/platform-closed';
+import { isPlatformClosedError, isPlatformClosedProblem } from '@rezics/client';
 
 type NativeFollow = NonNullable<Awaited<ReturnType<KernelClient['follows']['get']>>['data']>['follows'][number];
 export type FollowTargetType = NativeFollow['targetType'];
