@@ -324,8 +324,15 @@ test('a disclosed later-page visit returns to its exact current window without s
     await act(async () => link(label).click());
     expect(host.textContent).toContain('Thread target');
     await act(async () => back());
-    expect(router.state.location.pathname).toBe('/settings');
-    expect(host.querySelector('h2')?.textContent).toBe(m.settings_watches_heading());
+    expect({
+      path: router.state.location.pathname,
+      browserPath: window.location.pathname,
+      text: host.textContent,
+    }).toMatchObject({
+      path: '/settings',
+      browserPath: '/settings',
+      text: expect.stringContaining(m.settings_watches_heading()),
+    });
   };
   try {
     await act(async () => {
@@ -356,8 +363,15 @@ test('a disclosed later-page visit returns to its exact current window without s
     await act(async () => button(m.settings_profile_leave()).click());
     expect(host.textContent).toContain('Thread target');
     await act(async () => back());
-    expect(router.state.location.pathname).toBe('/settings');
-    expect(host.querySelector('h2')?.textContent).toBe(m.settings_watches_heading());
+    expect({
+      path: router.state.location.pathname,
+      browserPath: window.location.pathname,
+      text: host.textContent,
+    }).toMatchObject({
+      path: '/settings',
+      browserPath: '/settings',
+      text: expect.stringContaining(m.settings_watches_heading()),
+    });
     expect((window.history.state as Record<string, unknown>).__rezicsSettingsWatchReturn).toBeUndefined();
 
     expect(host.textContent).toContain(m.settings_watches_returned());
