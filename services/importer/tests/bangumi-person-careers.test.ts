@@ -9,7 +9,7 @@ import { createSourceRegistration } from '../src/source-registry.ts';
 import { createBangumiPersonCareerAdmission, parseBangumiPersonCareerBindings } from '../src/bangumi-person-careers.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
 
-test('ordinary Person refresh follows current career bindings without replacing names or source identity', async () => {
+test('ordinary Person refresh follows current career bindings and retains names and source identity', async () => {
   const directory = await mkdtemp(join(import.meta.dir, '../../../.temp/bangumi-person-careers-'));
   const schemeId = randomUUID(),
     conceptId = randomUUID(),
@@ -117,9 +117,21 @@ test('ordinary Person refresh follows current career bindings without replacing 
     expect((await run(undefined)).counts.changed).toBe(1);
     expect((await run(['writer'])).counts.changed).toBe(1);
     expect(effects.filter((command) => command.op === 'create')).toHaveLength(1);
+    const currentNames = importer.session.bindings
+      .candidates({ source: 'bangumi', external_id: 'person:641' }, 'facts', { limit: 100 })
+      .flatMap((candidate) => (JSON.parse(candidate.bytes) as { commands: BatchCommand[] }).commands)
+      .filter(
+        (command): command is Extract<BatchCommand, { op: 'propose' }> =>
+          command.op === 'propose' && command.statement.property.id === 'schema:name',
+      );
+    expect(currentNames.map((command) => command.statement)).toEqual(
+      names.map((command) => command.op === 'propose' && command.statement),
+    );
     expect(
-      effects.filter((command) => command.op === 'propose' && command.statement.property.id === 'schema:name'),
-    ).toEqual(names);
+      currentNames.every(
+        (command) => command.source.digest === importer.session.store.key('bangumi', 'person:641').baseline!.digest,
+      ),
+    ).toBe(true);
     expect(importer.session.bindings.claim({ source: 'bangumi', external_id: 'person:641' })).toMatchObject({
       state: 'bound',
       subject: subjectId,

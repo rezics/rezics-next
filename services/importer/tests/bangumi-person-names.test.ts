@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BatchCommand, BatchWriteRequest, BatchWriteResult } from '@rezics/definitions/bulk';
 import { readDump } from '../src/dumps.ts';
@@ -29,7 +28,7 @@ function valueContent(command: Extract<BatchCommand, { op: 'propose' }>) {
 test.each(['bangumi', 'bangumi_cross_media'])(
   'actual runImportCli admits pinned PersonDetail rows for %s as proposals',
   async (alias) => {
-    const directory = await mkdtemp(join(tmpdir(), 'bangumi-person-names-cli-'));
+    const directory = await mkdtemp(join(import.meta.dir, '../../../.temp/bangumi-person-names-cli-'));
     try {
       const keyPath = join(directory, 'account.jwk');
       const state = join(directory, 'state.sqlite');
