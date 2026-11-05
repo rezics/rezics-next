@@ -28,11 +28,18 @@ import { rateLimitBudgets } from '../../kernel/src/access/write-rate-budgets.ts'
 import { readPoolAcquireTimeoutMillis } from '../../kernel/src/database/pool.ts';
 
 test('isolated Kernel bindings verify the selected Auth issuer and bind the selected API port', () => {
-  expect(developmentKernelBindings({
-    issuer: 'http://127.0.0.1:20021', audience: 'https://api.rezics.test', kernel: 'http://127.0.0.1:20023',
-  })).toEqual({
-    AUTH_ISSUER: 'http://127.0.0.1:20021', AUTH_AUDIENCE: 'https://api.rezics.test',
-    AUTH_JWKS_URL: 'http://127.0.0.1:20021/.well-known/jwks.json', KERNEL_HOSTNAME: '127.0.0.1', KERNEL_PORT: '20023',
+  expect(
+    developmentKernelBindings({
+      issuer: 'http://127.0.0.1:20021',
+      audience: 'https://api.rezics.test',
+      kernel: 'http://127.0.0.1:20023',
+    }),
+  ).toEqual({
+    AUTH_ISSUER: 'http://127.0.0.1:20021',
+    AUTH_AUDIENCE: 'https://api.rezics.test',
+    AUTH_JWKS_URL: 'http://127.0.0.1:20021/.well-known/jwks.json',
+    KERNEL_HOSTNAME: '127.0.0.1',
+    KERNEL_PORT: '20023',
   });
 });
 
