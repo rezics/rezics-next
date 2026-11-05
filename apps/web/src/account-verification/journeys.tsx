@@ -204,27 +204,6 @@ function ReviewerJourney({
     },
     [beginFocusHandoff, clearFocusHandoff, isCurrentOwner],
   );
-  const scheduleRead = useCallback(
-    (cursor: ReviewCoordinate, direction?: ReviewDirection, origin?: HTMLElement | null) => {
-      if (!isCurrentOwner()) return;
-      const id = ++requestId.current;
-      const requested = { id, cursor };
-      const nextMovement = direction ? { direction, source: request.current?.cursor } : undefined;
-      request.current = requested;
-      if (nextMovement) {
-        movementRef.current = nextMovement;
-        setMovement(nextMovement);
-        window.scrollTo(0, 0);
-      }
-      if (movementRef.current) setMovementLoading(true);
-      if (origin) beginFocusHandoff(id, origin);
-      else clearFocusHandoff();
-      setFocusAfterRead(null);
-      completeRead(requested);
-    },
-    [beginFocusHandoff, clearFocusHandoff, completeRead, isCurrentOwner],
-  );
-
   useEffect(() => {
     if (focusAfterRead === null) return;
     const handoff = focusHandoff.current;
