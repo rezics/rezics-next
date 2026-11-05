@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ensureMessagesReady } from './messages-ready.ts';
 import { hasWebCheckCustody, routeWebCheck } from './check-placement.ts';
+import { planTestCommandLanes } from './isolated.ts';
 
 const app = resolve(import.meta.dir, '..');
 const signals = [
@@ -21,6 +22,21 @@ export function admitExplicitHostTestCommand(command: string[]): string[] {
     return command;
   if (!command.slice(2).some((argument) => hostTestFile.test(argument))) return command;
   return ['bun', 'test', '--path-ignore-patterns=node_modules/**', ...command.slice(2)];
+}
+
+function privateNetworkInvocation(command: string[]): string[] {
+  return ['unshare', '--user', '--map-root-user', '--net', 'sh', '-c', 'ip link set lo up && exec "$@"', 'sh', ...command];
+}
+
+/** Isolate UI tests; keep Docker-backed `*.host.test.ts` files on the host network. */
+export function focusedLaneInvocations(
+  command: string[],
+  privateNetwork: boolean,
+  appDirectory?: string,
+): string[][] {
+  return planTestCommandLanes(admitExplicitHostTestCommand(command), appDirectory).map((lane) =>
+    privateNetwork && lane.isolate ? privateNetworkInvocation(lane.args) : lane.args,
+  );
 }
 
 export type FocusedRunnerOptions = {
@@ -121,7 +137,7 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     { ...process.env, ...options.env },
   );
   if (routed !== null) return routed;
-  const admitted = admitExplicitHostTestCommand(command);
+  const invocations = focusedLaneInvocations(command, !!options.privateNetwork, appDirectory);
   const stateDirectory = mkdtempSync(join(tmpdir(), 'rezics-web-focused-'));
   const childEnvironment: NodeJS.ProcessEnv = {
     ...process.env,
@@ -129,9 +145,6 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     REZICS_TEST_RUNTIME: '1',
     WEB_TEST_STATE_DIR: stateDirectory,
   };
-  const invocation = options.privateNetwork
-    ? ['unshare', '--user', '--map-root-user', '--net', 'sh', '-c', 'ip link set lo up && exec "$@"', 'sh', ...admitted]
-    : admitted;
   let child: Bun.Subprocess<'inherit', 'pipe', 'pipe'> | undefined;
   let runtimeStopped = false;
   let receivedSignal: NodeJS.Signals | undefined;
@@ -160,17 +173,6 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
     if (receivedSignal) return 128 + signals.find(([signal]) => signal === receivedSignal)![1];
     if (prepared !== 0) return prepared;
 
-    child = Bun.spawn(invocation, {
-      cwd: appDirectory,
-      env: childEnvironment,
-      detached: true,
-      stdin: 'inherit',
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const pid = child.pid;
-    options.onStart?.({ pid, stateDirectory });
-
     const relay = async (stream: ReadableStream<Uint8Array>, kind: 'stdout' | 'stderr') => {
       try {
         for await (const chunk of stream) {
@@ -181,12 +183,31 @@ export async function runFocusedCommand(command: string[], options: FocusedRunne
         outputError ??= error;
       }
     };
-    const output = Promise.all([relay(child.stdout, 'stdout'), relay(child.stderr, 'stderr')]);
-    const status = await child.exited;
-    await stopProcessGroup(child);
+    let status = 0;
+    let started = false;
+    for (const invocation of invocations) {
+      if (receivedSignal) break;
+      child = Bun.spawn(invocation, {
+        cwd: appDirectory,
+        env: childEnvironment,
+        detached: true,
+        stdin: 'inherit',
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      if (!started) {
+        options.onStart?.({ pid: child.pid, stateDirectory });
+        started = true;
+      }
+      const output = Promise.all([relay(child.stdout, 'stdout'), relay(child.stderr, 'stderr')]);
+      const code = await child.exited;
+      await stopProcessGroup(child);
+      child = undefined;
+      await output;
+      if (outputError) throw outputError;
+      if (status === 0) status = code;
+    }
     runtimeStopped = true;
-    await output;
-    if (outputError) throw outputError;
     return receivedSignal ? 128 + signals.find(([signal]) => signal === receivedSignal)![1] : status;
   } finally {
     if (forceTimer) clearTimeout(forceTimer);

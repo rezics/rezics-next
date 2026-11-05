@@ -2,11 +2,31 @@ import { afterAll, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runFocusedCommand } from './focused.ts';
+import { focusedLaneInvocations, runFocusedCommand } from './focused.ts';
 
 const leftoverRoot = mkdtempSync(join(tmpdir(), 'rezics-web-check-leftover-'));
 
 afterAll(() => rmSync(leftoverRoot, { recursive: true, force: true }));
+
+test('private-network focused checks keep Docker-backed host tests on the host network', () => {
+  const lanes = focusedLaneInvocations(
+    [
+      'bun',
+      'test',
+      'tests/concept-visit-hierarchy-return.test.tsx',
+      'tests/native/source-concept-explorer.host.test.ts',
+    ],
+    true,
+  );
+  expect(lanes).toHaveLength(2);
+  expect(lanes[0]![0]).toBe('unshare');
+  expect(lanes[0]).toContain('tests/concept-visit-hierarchy-return.test.tsx');
+  expect(lanes[0]).not.toContain('tests/native/source-concept-explorer.host.test.ts');
+  expect(lanes[1]![0]).toBe('bun');
+  expect(lanes[1]).toContain('--path-ignore-patterns=node_modules/**');
+  expect(lanes[1]).toContain('tests/native/source-concept-explorer.host.test.ts');
+  expect(lanes[1]!.includes('unshare')).toBe(false);
+});
 
 test('an earlier occupied or unknown invocation does not stop a new focused check from starting', async () => {
   mkdirSync(join(leftoverRoot, 'earlier'), { recursive: true });

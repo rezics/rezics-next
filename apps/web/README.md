@@ -105,7 +105,8 @@ Session BFF caller identity is asserted by `tests/session-bff-identity.test.ts`.
 The focused runner prepares generated messages and routes, gives the command an owned temporary Worker state root, and
 removes that root after its process tree stops. It runs directly on the worker and does not request stack placement,
 database leases, Docker, a database or remote dispatch. Add `--private-network` before `--` when a focused browser test
-needs the normal loopback-only browser namespace. An explicit `bun test tests/*.host.test.ts` through this runner uses
+needs the normal loopback-only browser namespace. Mixed selections still put `*.host.test.ts` on the host network so
+Docker-published OpenSearch stays on `127.0.0.1`. An explicit `bun test tests/*.host.test.ts` through this runner uses
 the same `--path-ignore-patterns=node_modules/**` override as `bun run test:host`, so bunfig's host-file exclusion does
 not hide a named file.
 
