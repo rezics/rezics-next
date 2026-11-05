@@ -5,10 +5,7 @@ import type { BatchCommand } from '@rezics/definitions/bulk';
 import { bangumiVoiceDraft, deliverBangumiCreatorCredits } from '../src/bangumi-creator-credits.ts';
 import { CrossMediaGraph, type GraphEdgeDraft } from '../src/cross-media-bindings.ts';
 import { bundledDigest } from '@rezics/definitions/bundled';
-import {
-  observePersonIdentity,
-  personIdentityForSource,
-} from '../src/showcase-person-identity.ts';
+import { observePersonIdentity, personIdentityForSource } from '../src/showcase-person-identity.ts';
 
 const currentPersonId = '4a7a8b35-32b5-45a1-9b5f-c0d69fc23108';
 
@@ -43,24 +40,38 @@ test('a reviewed native merge resolves both exact provider bindings to the curre
 
 test('missing, conflicting and non-Person identity evidence stays unresolved', () => {
   const identity = personIdentityForSource('vndb', 's7', 'schema:Person')!;
-  expect(observePersonIdentity(identity, read({
-    id: currentPersonId,
-    type: 'schema:Person',
-    statements: {},
-  })).state).toBe('missing');
-  expect(observePersonIdentity(identity, read({
-    id: currentPersonId,
-    type: 'schema:Person',
-    statements: { 'wdt:P3180': [
-      { value: { type: 'value', content: 's7' } },
-      { value: { type: 'value', content: 's9' } },
-    ] },
-  })).state).toBe('conflicting');
-  expect(observePersonIdentity(identity, read({
-    id: currentPersonId,
-    type: 'schema:Organization',
-    statements: { 'wdt:P3180': [{ value: { type: 'value', content: 's7' } }] },
-  })).state).toBe('wrong_type');
+  expect(
+    observePersonIdentity(
+      identity,
+      read({
+        id: currentPersonId,
+        type: 'schema:Person',
+        statements: {},
+      }),
+    ).state,
+  ).toBe('missing');
+  expect(
+    observePersonIdentity(
+      identity,
+      read({
+        id: currentPersonId,
+        type: 'schema:Person',
+        statements: {
+          'wdt:P3180': [{ value: { type: 'value', content: 's7' } }, { value: { type: 'value', content: 's9' } }],
+        },
+      }),
+    ).state,
+  ).toBe('conflicting');
+  expect(
+    observePersonIdentity(
+      identity,
+      read({
+        id: currentPersonId,
+        type: 'schema:Organization',
+        statements: { 'wdt:P3180': [{ value: { type: 'value', content: 's7' } }] },
+      }),
+    ).state,
+  ).toBe('wrong_type');
 });
 
 test('only exact source key forms on Person records participate in reviewed identity reads', () => {
@@ -85,21 +96,36 @@ test('Bangumi credit replay keeps the durable source endpoint after its reviewed
   };
   const canonicalPerson = '00000000-0000-4000-8000-000000000018';
   const current = new Map<string, unknown>([
-    [bound['1']!, { subject: {
-      id: bound['1'],
-      type: 'schema:TVSeries',
-      statements: { 'wdt:P5732': [{ value: { type: 'value', content: '1' } }] },
-    } }],
-    [bound['person:8']!, { subject: {
-      id: canonicalPerson,
-      type: 'schema:Person',
-      statements: { 'wdt:P6298': [{ value: { type: 'value', content: '8' } }] },
-    } }],
-    [bound['character:3']!, { subject: {
-      id: bound['character:3'],
-      type: 'wd:Q95074',
-      statements: { 'wdt:P6296': [{ value: { type: 'value', content: '3' } }] },
-    } }],
+    [
+      bound['1']!,
+      {
+        subject: {
+          id: bound['1'],
+          type: 'schema:TVSeries',
+          statements: { 'wdt:P5732': [{ value: { type: 'value', content: '1' } }] },
+        },
+      },
+    ],
+    [
+      bound['person:8']!,
+      {
+        subject: {
+          id: canonicalPerson,
+          type: 'schema:Person',
+          statements: { 'wdt:P6298': [{ value: { type: 'value', content: '8' } }] },
+        },
+      },
+    ],
+    [
+      bound['character:3']!,
+      {
+        subject: {
+          id: bound['character:3'],
+          type: 'wd:Q95074',
+          statements: { 'wdt:P6296': [{ value: { type: 'value', content: '3' } }] },
+        },
+      },
+    ],
   ]);
   const commands: Extract<BatchCommand, { op: 'propose' }>[] = [];
   const result = await deliverBangumiCreatorCredits({
@@ -109,14 +135,26 @@ test('Bangumi credit replay keeps the durable source endpoint after its reviewed
     claim: ({ external_id }) => ({ state: 'bound', subject: bound[external_id as keyof typeof bound]! }),
     async batch(request) {
       for (const command of request.commands) if (command.op === 'propose') commands.push(command);
-      return { results: request.commands.map((command) => ({ key: command.key, status: 201 as const, value: { candidate: currentPersonId, revision: 1 } })) };
+      return {
+        results: request.commands.map((command) => ({
+          key: command.key,
+          status: 201 as const,
+          value: { candidate: currentPersonId, revision: 1 },
+        })),
+      };
     },
-    async fence() { return { fenced: false }; },
-    async read(id) { return current.get(id) as ReviewedSubjectRead; },
+    async fence() {
+      return { fenced: false };
+    },
+    async read(id) {
+      return current.get(id) as ReviewedSubjectRead;
+    },
     expectedNativeType(externalId) {
       return externalId === '1' ? 'schema:TVSeries' : externalId.startsWith('person:') ? 'schema:Person' : 'wd:Q95074';
     },
-    metadataFor() { return { digest: 'a'.repeat(64), recordRevision: 'authored', recordUrl: 'https://bgm.tv/subject/1' }; },
+    metadataFor() {
+      return { digest: 'a'.repeat(64), recordRevision: 'authored', recordUrl: 'https://bgm.tv/subject/1' };
+    },
   });
 
   expect(result.gaps).toEqual([]);
@@ -144,14 +182,19 @@ test('VNDB Person credits stay unresolved when the current exact provider identi
   let batches = 0;
   try {
     const result = await graph.deliver({
-      claim: ({ external_id }) => ({ state: 'bound', subject: external_id === 'v1' ? currentPersonId : '00000000-0000-4000-8000-000000000007' }),
-      nativeType: (externalId) => externalId === 's7' ? 'schema:Person' : 'wd:Q20631656',
-    async currentPersonIdentity() {
-      const identity = personIdentityForSource('vndb', 's7', 'schema:Person')!;
-      const withdrawn = read({ id: currentPersonId, type: 'schema:Person', statements: {} });
-      return observePersonIdentity(identity, withdrawn).state === 'current';
-    },
-      async fence() { return { fenced: false, securityRevision: null }; },
+      claim: ({ external_id }) => ({
+        state: 'bound',
+        subject: external_id === 'v1' ? currentPersonId : '00000000-0000-4000-8000-000000000007',
+      }),
+      nativeType: (externalId) => (externalId === 's7' ? 'schema:Person' : 'wd:Q20631656'),
+      async currentPersonIdentity() {
+        const identity = personIdentityForSource('vndb', 's7', 'schema:Person')!;
+        const withdrawn = read({ id: currentPersonId, type: 'schema:Person', statements: {} });
+        return observePersonIdentity(identity, withdrawn).state === 'current';
+      },
+      async fence() {
+        return { fenced: false, securityRevision: null };
+      },
       async batch() {
         batches++;
         return { results: [] };

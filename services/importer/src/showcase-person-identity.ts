@@ -16,10 +16,12 @@ export type CurrentPersonIdentity = Readonly<{
   identity: PersonIdentity;
 }>;
 
-export type PersonIdentityObservation = CurrentPersonIdentity | Readonly<{
-  state: Exclude<PersonIdentityCurrentness, 'current'>;
-  identity: PersonIdentity;
-}>;
+export type PersonIdentityObservation =
+  | CurrentPersonIdentity
+  | Readonly<{
+      state: Exclude<PersonIdentityCurrentness, 'current'>;
+      identity: PersonIdentity;
+    }>;
 
 /** Only exact source-key identities qualify; names and credit evidence never create a binding. */
 export function personIdentityForSource(
@@ -39,16 +41,11 @@ export function personIdentityForSource(
  * A native merge may redirect the original source binding to a canonical Person.
  * Accept that current endpoint only while its type and single exact provider key remain present.
  */
-export function observePersonIdentity(
-  identity: PersonIdentity,
-  read: ReviewedSubjectRead,
-): PersonIdentityObservation {
+export function observePersonIdentity(identity: PersonIdentity, read: ReviewedSubjectRead): PersonIdentityObservation {
   const subject = read.subject;
   if (subject.type !== 'schema:Person') return { state: 'wrong_type', identity };
   const values = (subject.statements[identity.property] ?? []).flatMap((statement) =>
-    statement.value.type === 'value' && typeof statement.value.content === 'string'
-      ? [statement.value.content]
-      : [],
+    statement.value.type === 'value' && typeof statement.value.content === 'string' ? [statement.value.content] : [],
   );
   if (!values.length) return { state: 'missing', identity };
   const unique = new Set(values);

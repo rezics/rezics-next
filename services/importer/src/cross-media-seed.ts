@@ -2607,11 +2607,7 @@ export async function seedCrossMedia(
       },
       async currentPersonIdentity(alias, externalId, nativeSubjectId) {
         const provider: Provider = alias === crossMediaAliases.bangumi ? 'bangumi' : 'vndb';
-        const identity = personIdentityForSource(
-          provider,
-          externalId,
-          nativeTypes.get(`${alias}\u0000${externalId}`),
-        );
+        const identity = personIdentityForSource(provider, externalId, nativeTypes.get(`${alias}\u0000${externalId}`));
         if (!identity) return false;
         const read = await readCurrent(nativeSubjectId);
         return read !== null && observePersonIdentity(identity, read).state === 'current';
