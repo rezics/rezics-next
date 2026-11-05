@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
 import { fixture, nativeProducer, readContext } from './support/public-filter-source.ts';
-import { createPublicFilterSourceBinding, readNativePublicFilterPublicationCompletion } from '../../src/semantic/public-filter-source-binding.ts';
+import {
+  createPublicFilterSourceBinding,
+  readNativePublicFilterPublicationCompletion,
+} from '../../src/semantic/public-filter-source-binding.ts';
 import { createSubjectSourceKeyPages } from '../../src/semantic/subject-source-key-pages.ts';
 import { createSearchGenerationPublication } from '../../src/search/generation-publication.ts';
 import { createPublicFilterCustody } from '../../src/search/public-filter-custody.ts';
@@ -20,18 +23,26 @@ test('generation restart keeps the original Source proof through lost observatio
   const prefix = `source-publish-${crypto.randomUUID().slice(0, 8)}-`;
   const target = subjectIndexName(prefix, 2);
   const custody = createPublicFilterCustody(f.db.pool);
-  let observationLost = false, dispatchLost = false, drainLost = false;
-  let original: Extract<Awaited<ReturnType<typeof readNativePublicFilterPublicationCompletion>>, { status: 'pending' | 'complete' }>['publication'] | undefined;
+  let observationLost = false,
+    dispatchLost = false,
+    drainLost = false;
+  let original:
+    | Extract<
+        Awaited<ReturnType<typeof readNativePublicFilterPublicationCompletion>>,
+        { status: 'pending' | 'complete' }
+      >['publication']
+    | undefined;
   const bindingPool = new Proxy(f.db.pool, {
     get(pool, key) {
-      if (key === 'query') return async (sql: string, values?: unknown[]) => {
-        const result = await pool.query(sql, values);
-        if (!observationLost && sql.includes('SET publication_job=')) {
-          observationLost = true;
-          throw new Error('Lost generation Source association reply');
-        }
-        return result;
-      };
+      if (key === 'query')
+        return async (sql: string, values?: unknown[]) => {
+          const result = await pool.query(sql, values);
+          if (!observationLost && sql.includes('SET publication_job=')) {
+            observationLost = true;
+            throw new Error('Lost generation Source association reply');
+          }
+          return result;
+        };
       const value = Reflect.get(pool, key, pool);
       return typeof value === 'function' ? value.bind(pool) : value;
     },
@@ -48,34 +59,59 @@ test('generation restart keeps the original Source proof through lost observatio
     },
   };
   const open = () => {
-    const writer = createSearchWriterGuard({ pool: f.db.pool, search: transport, index: target,
-      consumer: subjectConsumer(prefix, 2), source: createRatedSubjectSource(f.db.pool, f.config.routeKey).source,
-      listing: subjectListingSource(f.db.pool) });
+    const writer = createSearchWriterGuard({
+      pool: f.db.pool,
+      search: transport,
+      index: target,
+      consumer: subjectConsumer(prefix, 2),
+      source: createRatedSubjectSource(f.db.pool, f.config.routeKey).source,
+      listing: subjectListingSource(f.db.pool),
+    });
     const drain = writer.drainPublication.bind(writer);
-    Object.assign(writer, { async drainPublication(...args: Parameters<typeof drain>) {
-      const result = await drain(...args);
-      if (result.status === 'drained' && !drainLost) {
-        drainLost = true;
-        throw new SearchUnavailableError('Lost completed native drain reply');
-      }
-      return result;
-    } });
-    return createSearchGenerationPublication({ pool: f.db.pool, search: transport, source,
+    Object.assign(writer, {
+      async drainPublication(...args: Parameters<typeof drain>) {
+        const result = await drain(...args);
+        if (result.status === 'drained' && !drainLost) {
+          drainLost = true;
+          throw new SearchUnavailableError('Lost completed native drain reply');
+        }
+        return result;
+      },
+    });
+    return createSearchGenerationPublication({
+      pool: f.db.pool,
+      search: transport,
+      source,
       sourceKeys: createSubjectSourceKeyPages(f.db.pool, f.config.routeKey, f.config.access),
       binding: createPublicFilterSourceBinding(bindingPool, f.config.routeKey, f.config.access),
-      clock: f.config.clock, meaning: f.meaning, writerGuard: writer });
+      clock: f.config.clock,
+      meaning: f.meaning,
+      writerGuard: writer,
+    });
   };
   try {
     const book = await f.create('schema:Book');
     await createSubjectIndex(search, prefix, 1);
     await createSubjectIndex(search, prefix, 2);
-    await search.request('POST', '/_aliases', { actions: [{ add: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } }] });
+    await search.request('POST', '/_aliases', {
+      actions: [{ add: { index: subjectIndexName(prefix, 1), alias: subjectAlias(prefix) } }],
+    });
     const binding = createPublicFilterSourceBinding(f.db.pool, f.config.routeKey, f.config.access);
-    const resolved = await binding.resolve({ source, meaning: f.meaning,
-      capture: { sort: 'id', size: 10, filterDocument: undefined, text: undefined } }, readContext());
+    const resolved = await binding.resolve(
+      { source, meaning: f.meaning, capture: { sort: 'id', size: 10, filterDocument: undefined, text: undefined } },
+      readContext(),
+    );
     if (resolved.status !== 'resolved') throw new Error(resolved.reason);
-    const registered = await custody.register({ definition: resolved.definition, physicalTarget: target,
-      consumerGeneration: '2', projectionGeneration: resolved.definition.readDefinition }, search, readContext());
+    const registered = await custody.register(
+      {
+        definition: resolved.definition,
+        physicalTarget: target,
+        consumerGeneration: '2',
+        projectionGeneration: resolved.definition.readDefinition,
+      },
+      search,
+      readContext(),
+    );
     if (registered.status !== 'registered') throw new Error(registered.reason);
     let publication = open();
     const prepared = await publication.prepare(registered.consumer, readContext());
@@ -86,7 +122,10 @@ test('generation restart keeps the original Source proof through lost observatio
       const progress = await publication.step(job, readContext());
       if (progress.status === 'reconciled') {
         const result = await publication.activate(job, readContext());
-        if (result.status === 'activated') { activated = true; break; }
+        if (result.status === 'activated') {
+          activated = true;
+          break;
+        }
       }
       if (observationLost && !original) {
         const completion = await readNativePublicFilterPublicationCompletion(binding, { job: job.job }, readContext());
@@ -102,7 +141,12 @@ test('generation restart keeps the original Source proof through lost observatio
       expect((await subjectGenerations(search, prefix)).active).toBe(1);
     }
     await publication.close();
-    expect({ activated, observationLost, dispatchLost, drainLost }).toEqual({ activated: true, observationLost: true, dispatchLost: true, drainLost: true });
+    expect({ activated, observationLost, dispatchLost, drainLost }).toEqual({
+      activated: true,
+      observationLost: true,
+      dispatchLost: true,
+      drainLost: true,
+    });
     const completed = await readNativePublicFilterPublicationCompletion(binding, { job: job.job }, readContext());
     expect(completed.status).toBe('complete');
     if (completed.status !== 'complete') throw new Error(completed.reason);
