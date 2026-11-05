@@ -22,6 +22,7 @@ import {
   type Population,
 } from '../support/growth.ts';
 import { VERTICAL_LOCALES, verticalManifests, verticalProfile } from '../support/manifests.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -132,6 +133,7 @@ async function grantEditor(admin: pg.Pool, accountId: string) {
 function kernelFor(pool: pg.Pool, jwk: Record<string, unknown>): Kernel {
   return createKernel({
     pool,
+    receiptKeys: testReceiptKeys(),
     access: (config: AccessConfig) =>
       createAccess({ ...config, auth: { ...auth, fetch: async () => Response.json({ keys: [jwk] }) } }),
     tokens,
