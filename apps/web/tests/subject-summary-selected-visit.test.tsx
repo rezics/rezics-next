@@ -269,13 +269,13 @@ test('selected second synopsis traverses authored inspection and fresh return; u
     expect(host.textContent).toContain(m.subject_synopsis_global_only());
     expect(host.textContent).not.toContain('The exact second synopsis.');
 
-    expect(
-      synopsisVisitHref(
-        `${href}/authored`,
-        `${href}${summaryReadingFragment({ ...selection, documentId: '字'.repeat(140), context: candidateContext })}`,
-        'en',
-      ),
-    ).toBeUndefined();
+    const encodedFragment = summaryReadingFragment({
+      ...selection,
+      documentId: '字'.repeat(128),
+      context: candidateContext,
+    });
+    expect(encodedFragment).toBeDefined();
+    expect(synopsisVisitHref(`${href}/authored`, `${href}${encodedFragment}`, 'en')).toBeUndefined();
   } finally {
     await act(async () => root.unmount());
     client.clear();
