@@ -372,7 +372,7 @@ export function bangumiPersonCareerAdmission(
         source?.sourceStatus === 'available'
           ? {
               externalId: owner.external_id,
-              revision: source.etag ?? null,
+              revision: null,
               digest: source.responseDigest!,
               url: source.endpoint,
               converterRevision: conversion.converter_revision!,

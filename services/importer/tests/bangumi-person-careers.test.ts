@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { BatchCommand, BatchWriteResult } from '@rezics/definitions/bulk';
 import { Importer } from '../src/importer.ts';
-import type { ReviewedSubjectRead } from '../src/import-client.ts';
+import { ImportTransportError, type ReviewedSubjectRead } from '../src/import-client.ts';
 import { createSourceRegistration } from '../src/source-registry.ts';
 import { createBangumiPersonCareerAdmission, parseBangumiPersonCareerBindings } from '../src/bangumi-person-careers.ts';
 import { sourceRecordMetadataFixture } from './transport-driver.ts';
@@ -29,11 +29,13 @@ test('ordinary Person refresh follows current career bindings without replacing 
     expect(() => parseBangumiPersonCareerBindings({ ...profile, concepts })).toThrow();
   const effects: BatchCommand[] = [];
   let visible = false;
+  let unavailable = false;
   const importer = new Importer({
     path: join(directory, 'state.sqlite'),
     destination: { origin: 'https://imports.example.test' },
     vocabularyAdmission: createBangumiPersonCareerAdmission(admission, {
       async readReviewedSubject(id) {
+        if (unavailable) throw new ImportTransportError(503);
         const code = id === conceptId ? 'writer' : 'actor';
         return {
           subject: {
@@ -94,7 +96,7 @@ test('ordinary Person refresh follows current career bindings without replacing 
       (command) => command.op === 'propose' && command.statement.property.id === 'schema:name',
     );
     visible = true;
-    expect((await run(['writer'])).counts.changed).toBe(1);
+    expect(await run(['writer'])).toMatchObject({ status: 'committed', counts: { unchanged: 1 } });
     expect(careers()).toHaveLength(1);
     expect(careers()[0]).toMatchObject({
       subject: subjectId,
@@ -102,6 +104,12 @@ test('ordinary Person refresh follows current career bindings without replacing 
       statement: { value: { type: 'value', content: conceptId } },
     });
     const before = effects.length;
+    const generation = importer.session.store.source('bangumi').generation;
+    unavailable = true;
+    expect((await run(['writer'])).status).toBe('bulk-failed');
+    expect(importer.session.store.source('bangumi').generation).toBe(generation);
+    expect(effects).toHaveLength(before);
+    unavailable = false;
     expect((await run(['writer'])).counts.unchanged).toBe(1);
     expect(effects).toHaveLength(before);
     expect((await run(['actor'])).counts.changed).toBe(1);

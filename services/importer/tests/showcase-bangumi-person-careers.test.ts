@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'bun:test';
 import { emptyCrossMediaPlan } from '../src/cross-media-seed.ts';
-import { acquireBangumiPersonCareerSources } from '../src/showcase-bangumi-careers.ts';
+import { acquireBangumiPersonCareerSources, bangumiPersonCareerAdmission } from '../src/showcase-bangumi-careers.ts';
 import { ShowcaseJournal } from '../src/showcase-publication.ts';
 
 test('selected PersonDetail requests preserve archive careers, fill missing fields and replay exact receipts', async () => {
@@ -103,6 +103,26 @@ test('selected PersonDetail requests preserve archive careers, fill missing fiel
       etag: '"person-8101-v1"',
       responseDigest: createHash('sha256').update(bodies.get(8101)!).digest('hex'),
     });
+    const request = bangumiPersonCareerAdmission(
+      'bangumi_cross_media',
+      {
+        releaseDigest: '',
+        schemes: [],
+        concepts: [],
+      },
+      selected.personCareerSources,
+    ).request({
+      owner: { source: 'bangumi_cross_media', external_id: 'person:8101' },
+      subject: '00000000-0000-4000-8000-000000000001',
+      conversion: { normalized: person.payload, converter_revision: 'cross-media-entities@15+bangumi@16' },
+    });
+    expect(request?.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          origin: expect.objectContaining({ revision: null, digest: source!.responseDigest, url: source!.endpoint }),
+        }),
+      ]),
+    );
 
     journal.close();
     const reopened = new ShowcaseJournal(join(directory, 'showcase.sqlite'));
