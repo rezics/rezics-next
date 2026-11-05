@@ -227,6 +227,10 @@ A start or completion submit makes one existing Auth command request, with no re
 scan or speculative retry. Resend confirmation rereads one start advice response; its eventual explicit send makes
 one command. Language changes and displaying history make no requests. Read advice is never an execution receipt.
 
+Decision: recovery advice uses the installed `readJsonBounded` reader with the existing `privateAuthRead` signal; the
+native 4 KiB response ceiling, browser five-second whole-call deadline and one-read request cost stay unchanged.
+Reader cleanup releases ownership without awaiting stream cancellation.
+
 ## Sign-up
 
 The sign-up page keeps the query it was opened with. Its sign-in link keeps that same query. The form has a handle,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { privateAuthRead } from './private-auth-read';
+import { readJsonBounded } from './private-auth-json';
 import { parseSignInPage, type SignInPageViewer } from './signin-page';
 
 export type RecoveryPageStage = 'start' | 'complete' | 'step-up';
@@ -80,29 +81,8 @@ export async function loadRecoveryPage(stage: RecoveryPageStage, caller?: AbortS
         body: JSON.stringify({ stage }),
         signal,
       });
-      if (response.status !== 200 || Number(response.headers.get('content-length')) > maxResponseBytes) return null;
-      const reader = response.body?.getReader();
-      if (!reader) return null;
-      let size = 0;
-      const chunks: Uint8Array[] = [];
-      try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          size += value.byteLength;
-          if (size > maxResponseBytes) return null;
-          chunks.push(value);
-        }
-      } finally {
-        await reader.cancel().catch(() => {});
-      }
-      const bytes = new Uint8Array(size);
-      let offset = 0;
-      for (const chunk of chunks) {
-        bytes.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      return parseRecoveryPage(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), stage);
+      if (response.status !== 200) return null;
+      return parseRecoveryPage(await readJsonBounded(response, maxResponseBytes, signal), stage);
     }, caller);
     return page ? { kind: 'ready', page } : { kind: 'unavailable' };
   } catch {

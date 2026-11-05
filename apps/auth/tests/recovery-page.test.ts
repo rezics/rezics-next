@@ -2,6 +2,9 @@ import { expect, spyOn, test } from 'bun:test';
 import { recoveryPage } from '../../../services/auth/src/recovery-page';
 import { loadRecoveryPage, parseRecoveryPage } from '../src/recovery-page';
 const limits = { minPasswordLength: 8, maxPasswordLength: 128 };
+const encode = (value: string) => new TextEncoder().encode(value);
+const responseWithReader = (reader: object) =>
+  ({ status: 200, headers: new Headers(), body: { getReader: () => reader } }) as unknown as Response;
 
 test('page reads send only a stage, bound responses and keep outages explicitly unavailable', async () => {
   const request = spyOn(globalThis, 'fetch').mockResolvedValue(Response.json(recoveryPage('complete', limits)));
@@ -15,13 +18,85 @@ test('page reads send only a stage, bound responses and keep outages explicitly 
     });
     request.mockResolvedValueOnce(new Response('', { status: 503 }));
     expect(await loadRecoveryPage('step-up')).toEqual({ kind: 'unavailable' });
-    request.mockResolvedValueOnce(new Response(' '.repeat(4097)));
-    expect(await loadRecoveryPage('start')).toEqual({ kind: 'unavailable' });
+    const json = JSON.stringify(
+      recoveryPage('step-up', limits, { kind: 'signed-in', account_id: 'account-"id', email: 'readeré@example.test' }),
+    );
+    const atLimit = json + ' '.repeat(4096 - encode(json).byteLength);
+    expect(encode(atLimit)).toHaveLength(4096);
+    request.mockResolvedValueOnce(new Response(atLimit));
+    expect((await loadRecoveryPage('step-up')).kind).toBe('ready');
+    for (const response of [new Response(`${atLimit} `), new Response(`${atLimit} `, { headers: { 'content-length': '1' } })]) {
+      request.mockResolvedValueOnce(response);
+      expect(await loadRecoveryPage('step-up')).toEqual({ kind: 'unavailable' });
+    }
+    for (const body of [Uint8Array.of(34, 255, 34), '{']) {
+      request.mockResolvedValueOnce(new Response(body));
+      expect(await loadRecoveryPage('complete')).toEqual({ kind: 'unavailable' });
+    }
     const caller = new AbortController();
-    request.mockImplementationOnce(() => new Promise(() => {}));
+    let resolveLate!: (response: Response) => void;
+    request.mockImplementationOnce(() => new Promise((resolve) => (resolveLate = resolve)));
     const pending = loadRecoveryPage('step-up', caller.signal);
+    await Promise.resolve();
     caller.abort();
     expect(await pending).toEqual({ kind: 'unavailable' });
+    resolveLate(Response.json(recoveryPage('step-up', limits, { kind: 'signed-in', account_id: 'obsolete', email: null })));
+    expect(await pending).toEqual({ kind: 'unavailable' });
+  } finally {
+    request.mockRestore();
+  }
+});
+
+test('completed bodies do not await cancellation; an aborted stalled read releases its reader', async () => {
+  let completeRead = false;
+  let completedReleased = false;
+  const never = () => new Promise<void>(() => {});
+  const request = spyOn(globalThis, 'fetch');
+  try {
+    request.mockResolvedValueOnce(
+      responseWithReader({
+        read: async () => {
+          if (completeRead) return { done: true, value: undefined };
+          completeRead = true;
+          return { done: false, value: encode(JSON.stringify(recoveryPage('complete', limits))) };
+        },
+        cancel: never,
+        releaseLock: () => (completedReleased = true),
+      }),
+    );
+    expect((await loadRecoveryPage('complete')).kind).toBe('ready');
+    expect(completedReleased).toBe(true);
+
+    let beginRead!: () => void;
+    let releaseRead!: () => void;
+    const reading = new Promise<void>((resolve) => (beginRead = resolve));
+    const released = new Promise<void>((resolve) => (releaseRead = resolve));
+    let cancelled = false;
+    let readReleased = false;
+    request.mockResolvedValueOnce(
+      responseWithReader({
+        read: () => {
+          beginRead();
+          return new Promise(() => {});
+        },
+        cancel: () => {
+          cancelled = true;
+          return never();
+        },
+        releaseLock: () => {
+          readReleased = true;
+          releaseRead();
+        },
+      }),
+    );
+    const caller = new AbortController();
+    const pending = loadRecoveryPage('step-up', caller.signal);
+    await reading;
+    caller.abort();
+    expect(await pending).toEqual({ kind: 'unavailable' });
+    await Promise.race([released, new Promise((resolve) => setTimeout(resolve, 0))]);
+    expect(cancelled).toBe(true);
+    expect(readReleased).toBe(true);
   } finally {
     request.mockRestore();
   }
