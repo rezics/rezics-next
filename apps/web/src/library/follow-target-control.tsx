@@ -189,11 +189,23 @@ export function FollowTargetControl({
             }
           : {})}
         write={(input) => {
-          if (!isCurrent(input.following)) return Promise.resolve({ ok: false, reason: 'unavailable' });
+          const current = isCurrent(input.following);
+          if (!current) {
+            console.log('following dispatch retired', {
+              parent: parent?.isCurrent(),
+              address: address.isCurrent(),
+              direction: origin.current(input.following ? 1 : 2),
+            });
+            return Promise.resolve({ ok: false, reason: 'unavailable' });
+          }
           return (
             intentOwner.dispatch(
               input,
-              () => origin.credential(input.following ? 1 : 2),
+              () => {
+                const credential = origin.credential(input.following ? 1 : 2);
+                console.log('following credential available', !!credential);
+                return credential;
+              },
               (command, credential) => setFollow({ data: command, headers: { 'X-CSRF-Token': credential } }),
             ) ?? Promise.resolve({ ok: false, reason: 'unavailable' })
           );
