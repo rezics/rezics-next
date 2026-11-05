@@ -7,6 +7,7 @@ import * as start from '../.storybook/react-start';
 import * as sync from '../src/search/recent-sync';
 import type { RecentHistory } from '../src/search/recent-history';
 import type { RecentItem } from '../src/search/recent';
+import { recentReplayDestination } from '../src/search/recent-replay';
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => start);
@@ -43,7 +44,7 @@ mock.module('../src/search/recent-sync', () => ({
           const { change } = pending;
           const id = crypto.randomUUID(),
             lastUsed = new Date().toISOString();
-          if (change.kind === 'use') rows.push({ id, lastUsed, revision, entry: change.entry });
+          if (change.kind === 'use') rows.push({ id, lastUsed, revision, entry: change.entry, display: null });
           else rows = change.kind === 'clear' ? [] : rows.filter((row) => row.id !== change.id);
           return { ok: true, value: { id, revision, lastUsed } };
         },
@@ -175,6 +176,11 @@ test('installed readers alone manage Recent and History through native settlemen
         h.window.dispatchEvent(new h.window.StorageEvent('storage', { key: null }));
         expect(h.io()).toEqual(before);
         if (finishRead) {
+          const entry = {
+            kind: 'query' as const,
+            text: 'Retired private query',
+            scope: { kind: 'realm' as const, id: account },
+          };
           finishRead({
             accountId: account,
             page: {
@@ -185,14 +191,10 @@ test('installed readers alone manage Recent and History through native settlemen
                   id: crypto.randomUUID(),
                   revision: 0,
                   lastUsed: new Date().toISOString(),
-                  entry: {
-                    kind: 'query',
-                    text: 'Retired private query',
-                    scope: { kind: 'realm', id: account },
-                  },
+                  entry,
                   display: {
                     name: 'Retired private label',
-                    href: '/search',
+                    href: recentReplayDestination(entry)!,
                     avatar: null,
                   },
                 },
