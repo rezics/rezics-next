@@ -1,4 +1,4 @@
-import { accountDiscoverySource } from '../access/index.ts';
+import { accountDiscoverySource } from '../access/account-discovery-source.ts';
 import { createReviewDiscoverySource, type ReviewDiscoverySource } from '../content/review-discovery.ts';
 import { publicCollectionDiscoverySource } from '../library/collection-discovery-source.ts';
 import { readSpaceDiscoverySummaries, spaceDiscoverySource } from '../community/index.ts';

@@ -184,6 +184,7 @@
       "paths": ["services/kernel/src/access/**", "services/kernel/db/access/**"],
       "publicEntries": [
         "services/kernel/src/access/index.ts",
+        "services/kernel/src/access/account-discovery-source.ts",
         "services/kernel/src/access/handle-policy.ts",
         "services/kernel/src/access/authenticate.ts",
         "services/kernel/src/access/write-rate.ts",
