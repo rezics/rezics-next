@@ -30,6 +30,7 @@ mock.module('@tanstack/react-start/server', () => start);
 mock.module('cloudflare:workers', () => ({ env: { PUBLIC_ORIGIN: 'https://site.test' } }));
 mock.module('../src/kernel/client', () => ({
   acceptLanguage: () => 'en',
+  requestLocale: () => 'en',
   kernelClient: () => ({
     subjects: {
       $search: {
