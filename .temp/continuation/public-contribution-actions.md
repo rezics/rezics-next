@@ -10,6 +10,7 @@ The installed public entry packages/client/src/index.ts and its generated kernel
 This attempt fixes one prepared watch defect: cloning otherwise-current advice used to replace ThreadWatch's readAuthority and retire its unresolved command. Authority now uses the original operation lease. The existing focused host test checks exact command object retry after that echo. It does not establish the full journey.
 
 Continue from the original contract and owner documents:
+
 - apps/web/src/accounts/public-profile/contributions/README.md
 - services/kernel/src/content/README.md#public-author-contribution-context
 
