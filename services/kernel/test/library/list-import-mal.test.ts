@@ -3,7 +3,12 @@ import { createProfileEntryFixture, type NativeProfileFixture } from './support/
 import { accountToken } from '../support/admitted-access.ts';
 import { randomUUID } from 'node:crypto';
 import { parseMal, malDate, MAL_LIMITS } from '../../src/library/list-import-mal-parser.ts';
-import { STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
+import { createMalImport } from '../../src/library/list-import-mal.ts';
+import { createSessionCommands } from '../../src/library/sessions.ts';
+import { createGrantCommands } from '../../src/access/grant-commands.ts';
+import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
+import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
 const anime = (id: string, extra = '', status = 'Completed') =>
   `<anime><series_animedb_id>${id}</series_animedb_id><series_title><![CDATA[Private title & text]]></series_title><my_status>${status}</my_status>${extra}</anime>`;
 const xml = (rows: string) => `<myanimelist><myinfo><user_name>private</user_name></myinfo>${rows}</myanimelist>`;
@@ -309,7 +314,7 @@ test('native conflict defaults preserve facts; replacement has revision and rele
   await json('POST', `${base}:preview`, { xml: xml(anime('1')) }, randomUUID(), denied.bearer, 401);
 });
 
-test('MAL score review records explicit native units, preserves corrections and uses complete native guarded admission and preserves genuine producer unavailability', async () => {
+test('MAL score review records explicit native units, preserves corrections and commits selected native votes through the guarded producer', async () => {
   const actor = await native.identity([
       ...native.owner.actor.scopes,
       'rating:vote',
@@ -480,26 +485,27 @@ test('MAL score review records explicit native units, preserves corrections and 
       },
     },
   });
-  const unavailable = await json(
+  const committed = await json(
     'POST',
     `${base}/${id}/apply`,
     { confirm: true, rows: [{ row: 3, version: refreshed, fields: ['score'] }] },
     randomUUID(),
     actor.bearer,
   );
-  expect(unavailable.outcomes[0]).toMatchObject({
-    status: 'unavailable',
-    score: { action: 'adopt', status: 'unavailable', reason: 'atomic_guard_unavailable', vote: null },
+  expect(committed.outcomes[0]).toMatchObject({
+    status: 'applied',
+    applied: ['score'],
+    score: { action: 'adopt', status: 'applied', vote: { units: 15 } },
   });
-  await json(
-    'GET',
-    `/v1/subjects/${targets[3]}/ratings/${STANDARD_QUESTION_ID}/vote`,
-    undefined,
-    randomUUID(),
-    actor.bearer,
-    404,
-  );
-  // The installed producer's definitive refusal is retained; it is not a successful native vote.
+  expect(
+    await json(
+      'GET',
+      `/v1/subjects/${targets[3]}/ratings/${STANDARD_QUESTION_ID}/vote`,
+      undefined,
+      randomUUID(),
+      actor.bearer,
+    ),
+  ).toMatchObject({ units: 15 });
   const retained = await native.pool.query<{ document: any }>(
     'SELECT document FROM library.list_import_mal WHERE account_id=$1 AND id=$2',
     [actor.actor.accountId, id],
@@ -507,18 +513,23 @@ test('MAL score review records explicit native units, preserves corrections and 
   const checkpoint = retained.rows[0]!.document.intents['3'];
   expect(checkpoint.score.started).toBe(true);
   expect(checkpoint.review.score.guard).toEqual(unsupportedPage.rows[3].review.score.guard);
-  expect(checkpoint.score.outcome.reason).toBe('atomic_guard_unavailable');
-  expect(
-    (
-      await json(
-        'POST',
-        `${base}/${id}/apply`,
-        { confirm: true, rows: [{ row: 3, version: refreshed, fields: ['score'] }] },
-        randomUUID(),
-        actor.bearer,
-      )
-    ).outcomes[0],
-  ).toEqual(unavailable.outcomes[0]);
+  expect(checkpoint.score.command.input.guard).toEqual(unsupportedPage.rows[3].review.score.guard);
+  expect(checkpoint.score.command.input.observation.subjectId).toBe(
+    unsupportedPage.rows[3].review.score.guard.subject.canonicalId,
+  );
+  expect(checkpoint.score.outcome).toMatchObject({ action: 'adopt', status: 'applied', vote: { units: 15 } });
+  const replayed = await json(
+    'POST',
+    `${base}/${id}/apply`,
+    { confirm: true, rows: [{ row: 3, version: refreshed, fields: ['score'] }] },
+    randomUUID(),
+    actor.bearer,
+  );
+  expect(replayed.outcomes[0].score).toMatchObject({ action: 'adopt', status: 'applied', vote: { units: 15 } });
+  expect(replayed.outcomes[0].score.vote.revision).toBe(committed.outcomes[0].score.vote.revision);
+  const currentPage = await json('GET', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
+  expect(currentPage.rows[3].currentScoreVote).toMatchObject({ units: 15 });
+  expect(JSON.stringify(currentPage.rows[3])).not.toContain('commandActor');
   await json('GET', `${base}/${id}`, undefined, randomUUID(), 'other', 404);
   await json('DELETE', `${base}/${id}`, undefined, randomUUID(), actor.bearer);
 });
@@ -710,3 +721,127 @@ test('MAL adopts reviewed partial dates to selected repeats, preserves unknowns,
   expect((await dateApply(4, retiredVersion, ['startDate'])).outcomes[0]).toMatchObject({ status: 'stale' });
   await json('DELETE', `${base}/${id}`);
 });
+test('native redirect requires a deliberate review of the canonical MAL target', async () => {
+  const actor = await native.identity([
+    ...native.owner.actor.scopes,
+    'rating:vote',
+    'definitions:read',
+    'subject:read',
+  ]);
+  await native.grantLibraryGate(actor.actor.accountId);
+  const subjects = [await native.createSubject('game'), await native.createSubject('game')].sort();
+  const canonical = subjects[0]!;
+  const selected = subjects[1]!;
+  const merger = await native.identity(['subject:merge']);
+  await createGrantCommands({ pool: native.pool, access: native.access, managementAction: 'access:grant' }).create(
+    { pool: native.pool, actor: native.steward.actor, deadline: Date.now() + 30000 },
+    {
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      subject: { kind: 'account', id: merger.actor.accountId },
+      actions: ['subject:merge'],
+      valid: '(,)',
+      key: randomUUID(),
+    },
+  );
+  const votes = createVoteCommands({ pool: native.pool, access: native.access });
+  let redirected = false;
+  const service = createMalImport({
+    pool: native.pool,
+    access: native.access,
+    tokens: native.tokens,
+    routeKey: testRouteKey(),
+    journal: createSessionCommands({ pool: native.pool, access: native.access, tokens: native.tokens }),
+    votes: {
+      ...votes,
+      async readVoteReview(reviewActor, questionId, targetId) {
+        if (!redirected) {
+          const response = await native.sendWithHeaders(
+            merger.bearer,
+            'POST',
+            '/v1/subjects:merge',
+            { subjects: [canonical, selected] },
+            { 'idempotency-key': JSON.stringify(randomUUID()) },
+          );
+          expect(response.status).toBe(202);
+          redirected = true;
+        }
+        return votes.readVoteReview(reviewActor, questionId, targetId);
+      },
+    },
+  });
+  const deadline = Date.now() + 120000;
+  const preview = await service.preview(
+    actor.actor,
+    xml(anime('900007', '<my_score>8</my_score>')),
+    randomUUID(),
+    deadline,
+  );
+  const uploadId = preview.value.id;
+  const firstVersion = randomUUID();
+  await service.review(
+    actor.actor,
+    uploadId,
+    {
+      row: 0,
+      target: selected,
+      skip: false,
+      replace: false,
+      score: { action: 'adopt', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 13 },
+    },
+    firstVersion,
+    deadline,
+  );
+  const firstPage = await service.page(actor.actor, uploadId, 0, deadline);
+  expect(firstPage.rows[0]!.review!.score).toMatchObject({
+    admission: { status: 'unavailable', reason: 'conditional-vote-admission-unavailable' },
+  });
+  expect(firstPage.rows[0]!.review!.score!.guard).toBeUndefined();
+  const unavailable = await service.apply(
+    actor.actor,
+    uploadId,
+    { confirm: true, rows: [{ row: 0, version: firstVersion, fields: ['score'] }] },
+    deadline,
+    new AbortController().signal,
+    () => {},
+  );
+  expect(unavailable.outcomes[0]!.score).toMatchObject({
+    action: 'adopt',
+    status: 'unavailable',
+    reason: 'conditional-vote-admission-unavailable',
+  });
+  const canonicalVersion = randomUUID();
+  await service.review(
+    actor.actor,
+    uploadId,
+    {
+      row: 0,
+      target: canonical,
+      skip: false,
+      replace: true,
+      score: {
+        action: 'adopt',
+        questionId: STANDARD_QUESTION_ID,
+        questionRevision: 1,
+        units: 13,
+        replaceCurrent: true,
+      },
+    },
+    canonicalVersion,
+    deadline,
+  );
+  const reviewed = await service.page(actor.actor, uploadId, 0, deadline);
+  expect(reviewed.rows[0]!.review!.score!.guard!.subject.canonicalId).toBe(canonical);
+  const applied = await service.apply(
+    actor.actor,
+    uploadId,
+    { confirm: true, rows: [{ row: 0, version: canonicalVersion, fields: ['score'] }] },
+    deadline,
+    new AbortController().signal,
+    () => {},
+  );
+  expect(applied.outcomes[0]).toMatchObject({
+    status: 'applied',
+    score: { action: 'adopt', status: 'applied', vote: { units: 13 } },
+  });
+  expect(await votes.readOwnVote(actor.actor, STANDARD_QUESTION_ID, canonical)).toMatchObject({ units: 13 });
+}, 120000);

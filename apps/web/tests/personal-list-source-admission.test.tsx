@@ -12,7 +12,7 @@ import { createBangumiJourney } from '../src/library/personal-bangumi-import/con
 import { bangumiCallTotal, expectedBangumiCalls } from '../src/library/personal-bangumi-import/cost';
 import { bangumiSourcePreview } from '../src/library/personal-bangumi-import/source';
 import type { BangumiVisit } from '../src/library/personal-bangumi-import/visit';
-import type { MalImportPort, MalPage, MalPreviewRow } from '../src/library/personal-mal-import/contract';
+import type { MalCommand, MalImportPort, MalPage, MalPreviewRow } from '../src/library/personal-mal-import/contract';
 import { malSourcePreview } from '../src/library/personal-mal-import/source';
 import type { MalVisit } from '../src/library/personal-mal-import/visit';
 import { sourceAdmissionBody } from '../src/library/rich-private-entry/admission';
@@ -79,7 +79,7 @@ type Root = ReturnType<typeof createRoot>;
 const { m } = await import('../src/paraglide/messages.js');
 const { useAniListImportPort } = await import('../src/library/personal-anilist-import/port');
 const { useBangumiImportPort } = await import('../src/library/personal-bangumi-import/port');
-const { MalImportPortContext } = await import('../src/library/personal-mal-import/port');
+const { MalImportPortContext, useMalImportPort } = await import('../src/library/personal-mal-import/port');
 const { PersonalMalImportPage } = await import('../src/library/personal-mal-import/page');
 
 const id = '0192f3a0-6c1e-7b2a-9d4e-00000000aaaa';
@@ -90,10 +90,12 @@ const token = '0192f3a0-6c1e-7b2a-9d4e-00000000dddd';
 
 let capturedAniListPort: AniListImportPort | null = null;
 let capturedBangumiPort: BangumiImportPort | null = null;
+let capturedMalPort: MalImportPort | null = null;
 
 function CaptureProductionImportPorts() {
   capturedAniListPort = useAniListImportPort();
   capturedBangumiPort = useBangumiImportPort();
+  capturedMalPort = useMalImportPort();
   return null;
 }
 
@@ -535,6 +537,89 @@ test('AniList and Bangumi retry captured production source admissions and advanc
   bangumiVisit.retire();
   await bangumi.retryUnknown();
   expect(bangumiAdmits).toHaveLength(4);
+});
+
+test('MAL retries captured production source admissions with the original key and body', async () => {
+  await act(async () => root.render(<CaptureProductionImportPorts />));
+  const actualMalPort = capturedMalPort!;
+  resetSourceAdmissionHarness('uncertain', 'uncertain', 'admitted');
+  const preview = malSourcePreview({
+    index: 0,
+    kind: 'anime',
+    title: 'Private anime',
+    identifier: { namespace: 'https://myanimelist.net/anime', source: 'mal_anime', value: '9' },
+    status: { kind: 'value', value: 'Watching' },
+    role: 'active',
+    score: { kind: 'zero', value: 0 },
+    progress: {},
+    dates: {},
+    notes: { kind: 'missing' },
+    tags: { kind: 'missing' },
+    repeats: { kind: 'missing' },
+    privacy: { kind: 'value', value: '1' },
+    timestamps: { my_last_updated: { kind: 'value', value: '2024-03-04' } },
+    fields: { my_privacy: '1' },
+    retained: [],
+    target: subject,
+    candidates: [],
+    match: 'matched',
+    state: 'active',
+    current: null,
+    binding: null,
+    source: null,
+    review: null,
+    outcome: null,
+  });
+  const body = sourceAdmissionBody(preview)!;
+  const command: Extract<MalCommand, { kind: 'admit-source' }> = {
+    kind: 'admit-source',
+    key: 'mal-admit-1',
+    subjectId: subject,
+    ordinal: 0,
+    body,
+  };
+  const first = await actualMalPort.admitSource(command);
+  expect(first).toMatchObject({ kind: 'unknown' });
+  const retry = (first as { kind: 'unknown'; command: Extract<MalCommand, { kind: 'admit-source' }> }).command;
+  expect(retry.custody).toEqual({
+    viewer: 'captured-viewer-1',
+    csrfToken: 'captured-csrf-1',
+    credential: 'captured-credential-1',
+  });
+  expect(retry.key).toBe(command.key);
+  expect(retry.body).toEqual(command.body);
+  expect(retry.subjectId).toBe(subject);
+  const second = await actualMalPort.admitSource(retry);
+  expect(second).toMatchObject({ kind: 'unknown' });
+  expect((second as { kind: 'unknown'; command: MalCommand }).command).toEqual(retry);
+  expect(await actualMalPort.admitSource(retry)).toEqual({ kind: 'admitted' });
+  expect(sourceAdmissionHarness.reads).toEqual([subject]);
+  expect(sourceAdmissionHarness.calls.map(({ data }) => data)).toEqual([
+    {
+      subjectId: subject,
+      key: command.key,
+      ...body,
+      viewer: 'captured-viewer-1',
+      csrfToken: 'captured-csrf-1',
+      credential: 'captured-credential-1',
+    },
+    {
+      subjectId: subject,
+      key: command.key,
+      ...body,
+      viewer: 'captured-viewer-1',
+      csrfToken: 'captured-csrf-1',
+      credential: 'captured-credential-1',
+    },
+    {
+      subjectId: subject,
+      key: command.key,
+      ...body,
+      viewer: 'captured-viewer-1',
+      csrfToken: 'captured-csrf-1',
+      credential: 'captured-credential-1',
+    },
+  ]);
 });
 
 let host: HTMLDivElement;

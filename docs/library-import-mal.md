@@ -84,19 +84,21 @@ and require a fresh review; they are never upgraded by sampling new operands dur
 
 Decision: compose Content's existing conditional writer and complete native review operands with Library checkpoints;
 retain original guards and keys across uncertain delivery, and require native readback before reporting score success.
-`putVoteOutcome(actor, {questionId,targetId,units,guard}, key)` is called after persisting `score.started` in the
-existing intent. Native stale/unavailable errors are definitive typed outcomes. Unexpected delivery/readback errors
-throw and retain that checkpoint for exact command retry; current reads cannot settle uncertain delivery. A review
-refresh cannot replace a started unresolved score, including when labels are refreshed. Missing score consent remains
-resumable. Independent effects cannot turn a selected unsuccessful vote into overall success.
+Confirmation calls `preparePutVote(actor, input, key, admission?)` once with the captured actor, frozen observation and
+source-document admission, persists `score.started` with that command, then `putVoteOutcome` with those operands; an
+uncertain retry first uses `reconcilePutVote(actor, receipt)`. A Rating redirect of the Library-selected Subject stores
+no vote guard and requires an explicit new target review. Native stale/unavailable errors are definitive typed
+outcomes. Unexpected delivery/readback errors throw and retain that checkpoint for exact command retry; current reads
+cannot settle uncertain delivery. A review refresh cannot replace a started unresolved score, including when labels are
+refreshed. Missing score consent remains resumable. Independent effects cannot turn a selected unsuccessful vote into
+overall success.
 
 The consumer adapts the native flat question scale fields into the existing nested review scale.
 Definitive score outcomes persist independently before remaining labels or Progress; retries retain that original
 result and read current native state. A label refresh cannot erase an unresolved started vote.
-The consumer now calls the actual installed producer. On this source base the producer still throws
-`atomic_guard_unavailable` for guarded effects; this remains genuine unavailability, not positive acceptance.
-Content owns its original serial atomic-producer repair. No local vote writer, resolver or permission mechanism is
-introduced. Successful producer admission is followed by `readOwnVote`; receipts are never displayed as current votes.
+Same-home guarded effects complete through Content's writer; foreign homes remain `atomic_guard_unavailable` through
+Semantic's same-home fence. No local vote writer, resolver or permission mechanism is introduced. Successful producer
+admission is followed by `readOwnVote`; receipts are never displayed as current votes.
 The page's `currentScoreVote` comes from a fresh native Rating reader on each visit, independently of retained
 review baselines and effect outcomes. The owner Entry reader remains the page's current Library state source. Whole-list positive/changed-reimport,
 effect-before-ack retry, all native fences and mounted caller acceptance remain required after producer integration.

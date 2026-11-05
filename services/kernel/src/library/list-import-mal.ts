@@ -27,10 +27,13 @@ import {
   STANDARD_QUESTION_ID,
   VoteReviewStaleError,
   VoteReviewUnavailableError,
+  type PreparedPutVote,
   type RatingQuestion,
+  type VoteCommandAdmission,
   type VoteReview,
   type VoteReviewGuard,
 } from '../rating/votes.ts';
+import type { VoteObservation } from '../rating/vote-observation.ts';
 import { createPersonalLabelCommands } from './label-commands.ts';
 import { createLabelAssignmentCommands } from './label-assignment-commands.ts';
 import { reviewMalLabels } from './list-import-mal-labels.ts';
@@ -223,6 +226,8 @@ type Intent = {
     attribution: { provider: 'mal'; uploadId: string; sourceRow: number; reviewVersion: string };
     started?: boolean;
     outcome?: MalScoreOutcome;
+    commandActor?: AccountActor;
+    command?: PreparedPutVote;
   };
   progress?: ProgressAdoptionCheckpoint;
   outcome?: MalOutcome;
@@ -279,6 +284,10 @@ type DateIntent = {
   patch: ProgressSessionJournalPatch | null;
   outcome?: MalDateOutcome;
 };
+type NativeVotes = Pick<
+  ReturnType<typeof createVoteCommands>,
+  'readVoteReview' | 'readRatingQuestion' | 'putVoteOutcome' | 'preparePutVote' | 'reconcilePutVote' | 'readOwnVote'
+>;
 type Dependencies = {
   pool: Pool;
   access: Access;
@@ -286,6 +295,7 @@ type Dependencies = {
   routeKey: Uint8Array;
   journal: ReturnType<typeof createSessionCommands>;
   clock?: KernelClock;
+  votes?: NativeVotes;
 };
 const hash = (value: unknown) => createHash('sha256').update(canonicalize(value)!).digest('hex');
 const missing = () => new ProblemError('not_found');
@@ -526,7 +536,7 @@ export function createMalImport(deps: Dependencies) {
     runner = createLibraryCommandRunner(deps),
     entries = createEntryCommands(deps),
     sessions = journal,
-    votes = createVoteCommands(deps);
+    votes = deps.votes ?? createVoteCommands(deps);
   const labels = createPersonalLabelCommands(deps),
     assignments = createLabelAssignmentCommands(deps),
     personalEntries = createEntryPersonalCommands(deps);
@@ -790,6 +800,65 @@ export function createMalImport(deps: Dependencies) {
       lifecycleState: question.lifecycleState,
     };
   }
+  function malVoteObservation(review: MalScoreReview): VoteObservation | null {
+    if (!review.guard) return null;
+    return {
+      subjectId: review.guard.subject.canonicalId,
+      question: {
+        id: review.question.id,
+        revision: review.question.revision,
+        grain: review.question.grain,
+        meaning: review.question.meaning ?? '',
+        scale: {
+          min: review.question.scale.minimumUnits,
+          max: review.question.scale.maximumUnits,
+          displayStep: review.question.scale.stepUnits,
+        },
+      },
+    };
+  }
+  function scoreAdmission(
+    actor: AccountActor,
+    id: string,
+    row: number,
+    version: string,
+    commandKey: string,
+  ): VoteCommandAdmission {
+    const input = { provider: 'mal', uploadId: id, row, version, commandKey };
+    return {
+      input,
+      async prepare() {
+        let sourceChanged = false;
+        try {
+          const { doc } = await load(actor, id, Date.now() + 5_000);
+          const intent = doc.intents[row];
+          sourceChanged =
+            doc.reviews[row]?.version !== version ||
+            intent?.score?.started !== true ||
+            intent.score.command?.receipt.requestKey !== commandKey;
+        } catch (error) {
+          if (!(error instanceof ProblemError) || error.code !== 'not_found') throw error;
+          sourceChanged = true;
+        }
+        return async (tx) => {
+          if (sourceChanged) throw new LibraryConflictError();
+          const route = routeOf(actor.accountId);
+          if (route === null) throw new LibraryConflictError();
+          const found = await tx.query<{ document: Document }>(
+            `SELECT document FROM library.list_import_mal WHERE route=$1 AND account_id=$2 AND id=$3 AND expires_at>clock_timestamp() FOR UPDATE`,
+            [route, actor.accountId, id],
+          );
+          const intent = found.rows[0]?.document.intents[row];
+          if (
+            found.rows[0]?.document.reviews[row]?.version !== version ||
+            intent?.score?.started !== true ||
+            intent.score.command?.receipt.requestKey !== commandKey
+          )
+            throw new LibraryConflictError();
+        };
+      },
+    };
+  }
   function scoreBaseline(vote: VoteReview['currentVote']): MalScoreReview['baseline'] {
     return {
       state: vote.state === 'absent' ? 'absent' : vote.state === 'clear' ? 'cleared' : 'present',
@@ -850,6 +919,7 @@ export function createMalImport(deps: Dependencies) {
         view.scale.minimumUnits === 0 &&
         view.scale.maximumUnits === 20 &&
         view.scale.stepUnits === 1;
+    const redirected = native.guard.subject.canonicalId !== target;
     return {
       action: input.action,
       source: row.score,
@@ -870,8 +940,15 @@ export function createMalImport(deps: Dependencies) {
         status: scaleSupported ? 'supported' : 'unsupported',
         reason: scaleSupported ? null : 'standard-question-revision-or-scale-unsupported',
       },
-      guard: native.guard,
-      admission: { status: 'conditional', reason: null },
+      ...(redirected
+        ? {
+            admission: {
+              status: 'unavailable' as const,
+              reason: 'conditional-vote-admission-unavailable' as const,
+              missingGuard: 'question-revision-and-target-identity-and-current-vote-revision' as const,
+            },
+          }
+        : { guard: native.guard, admission: { status: 'conditional' as const, reason: null } }),
     };
   }
   async function review(actor: Actor, id: string, input: MalReviewInput, key: string, deadline: number) {
@@ -1428,47 +1505,81 @@ export function createMalImport(deps: Dependencies) {
             outcome.reason = 'preserve-current-vote';
           } else {
             const checkpoint = intent.score!;
-            await mutate(actor, id, `${checkpoint.key}:started`, 'score-started', selected, (doc) => {
-              doc.intents[selected.row]!.score!.started = true;
-            });
-            checkpoint.started = true;
-            try {
-              const result = await votes.putVoteOutcome(
-                actor,
+            const observation = malVoteObservation(scoreReview);
+            const retry = checkpoint.started === true && !!checkpoint.command && !!checkpoint.commandActor;
+            if (!observation || !scoreReview.guard) {
+              outcome.score = {
+                action: scoreReview.action,
+                status: 'unavailable',
+                reason: 'conditional-vote-admission-unavailable',
+                vote: null,
+              };
+              outcome.status = 'unavailable';
+              outcome.reason = 'conditional-vote-admission-unavailable';
+            } else if (!checkpoint.command || !checkpoint.commandActor) {
+              const commandActor = structuredClone(owner(actor));
+              const command = votes.preparePutVote(
+                commandActor,
                 {
                   questionId: scoreReview.question.id,
                   targetId: r.target!,
                   units: scoreReview.units,
-                  guard: scoreReview.guard!,
+                  guard: scoreReview.guard,
+                  observation,
                 },
                 checkpoint.key,
+                scoreAdmission(commandActor, id, selected.row, r.version, checkpoint.key),
               );
-              if (result.component) record(result.component);
-              // A receipt proves admission; only the native reader supplies current state.
-              const current = await votes.readOwnVote(actor, scoreReview.question.id, r.target!);
-              outcome.score = {
-                action: scoreReview.action,
-                status: 'applied',
-                reason: null,
-                vote: current ? { units: current.units, revision: current.revision, at: current.changedAt } : null,
-              };
-              outcome.applied.push('score');
-              outcome.retained = outcome.retained.filter((field) => field !== 'my_score');
-              outcome.status = 'applied';
-              outcome.reason = null;
-            } catch (error) {
-              if (error instanceof VoteReviewStaleError || error instanceof VoteReviewUnavailableError) {
+              checkpoint.commandActor = commandActor;
+              checkpoint.command = command;
+            }
+            if (observation && scoreReview.guard && checkpoint.command && checkpoint.commandActor) {
+              const commandActor = checkpoint.commandActor;
+              const command = checkpoint.command;
+              await mutate(actor, id, `${checkpoint.key}:started`, 'score-started', selected, (doc) => {
+                const stored = doc.intents[selected.row]!.score!;
+                stored.started = true;
+                stored.commandActor = commandActor;
+                stored.command = command;
+              });
+              checkpoint.started = true;
+              try {
+                const reconciled = retry ? await votes.reconcilePutVote(actor, command.receipt) : null;
+                const result =
+                  reconciled ??
+                  (await votes.putVoteOutcome(
+                    commandActor,
+                    command.input,
+                    command.receipt.requestKey,
+                    scoreAdmission(commandActor, id, selected.row, r.version, checkpoint.key),
+                  ));
+                if (result.component) record(result.component);
+                // A receipt proves admission; only the native reader supplies current state.
+                const current = await votes.readOwnVote(actor, scoreReview.question.id, r.target!);
                 outcome.score = {
                   action: scoreReview.action,
-                  status: error instanceof VoteReviewStaleError ? 'stale' : 'unavailable',
-                  reason: error.reason,
-                  vote: null,
+                  status: 'applied',
+                  reason: null,
+                  vote: current ? { units: current.units, revision: current.revision, at: current.changedAt } : null,
                 };
-                outcome.status = outcome.score.status;
-                outcome.reason = error.reason;
-              } else {
-                // Keep the started checkpoint when delivery or readback throws; never resample it.
-                throw error;
+                outcome.applied.push('score');
+                outcome.retained = outcome.retained.filter((field) => field !== 'my_score');
+                outcome.status = 'applied';
+                outcome.reason = null;
+              } catch (error) {
+                if (error instanceof VoteReviewStaleError || error instanceof VoteReviewUnavailableError) {
+                  outcome.score = {
+                    action: scoreReview.action,
+                    status: error instanceof VoteReviewStaleError ? 'stale' : 'unavailable',
+                    reason: error.reason,
+                    vote: null,
+                  };
+                  outcome.status = outcome.score.status;
+                  outcome.reason = error.reason;
+                } else {
+                  // Keep the started checkpoint when delivery or readback throws; never resample it.
+                  throw error;
+                }
               }
             }
           }

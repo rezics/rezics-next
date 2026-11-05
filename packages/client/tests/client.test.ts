@@ -211,6 +211,9 @@ test('the derived subjects group keeps native counts and routes contributed by o
     const path: string = client['~path'];
     await subjects({ id: ID }).reaction.get();
     await subjects({ id: ID }).ratings({ questionId: ID }).vote.get();
+    await client.libraryImports.anilist({ importId: ID }).get();
+    await client.libraryImports.mal({ id: ID }).get();
+    await client.libraryImports.bangumi({ uploadId: ID }).get();
     // @ts-expect-error a subject parameter is required
     subjects({});
     // @ts-expect-error omitted public aggregates are optional

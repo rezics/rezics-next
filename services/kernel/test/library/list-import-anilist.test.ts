@@ -6,7 +6,9 @@ import { GLOBAL_CONTEXT } from '../../src/semantic/definitions.ts';
 import { deadlineFor } from '../../src/request/deadline.ts';
 import { authenticateAccount } from '../support/admitted-access.ts';
 import { createVoteCommands, STANDARD_QUESTION_ID } from '../../src/rating/votes.ts';
+import { createAniListImport } from '../../src/library/list-import-anilist.ts';
 import { createSessionCommands } from '../../src/library/sessions.ts';
+import { testRouteKey } from '../support/test-kernel.ts';
 let f: NativeProfileFixture;
 beforeAll(async () => {
   f = await createProfileEntryFixture();
@@ -331,6 +333,8 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect(changedRow.source.evidence.score).toBe(8);
   expect(changedRow.currentScore.vote).toMatchObject({ units: 16 });
   expect(changedRow.review.score.native.commandKey).toBe(changedChoice.score.native.commandKey);
+  expect(changedRow.scoreCommand).toBeUndefined();
+  expect(changedRow.scoreCommandActor).toBeUndefined();
   expect(await apply([changedConfirmation], changedPath)).toMatchObject({ complete: true });
   const refreshedScore = await f.send(importer.bearer, 'POST', path2 + ':review', {
     ordinal: 1,
@@ -449,4 +453,95 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
     rows: [{ ordinal: 0, version: first.reviewId, fields: ['startDate'] }],
   });
   expect(datesDenied.status).toBeGreaterThanOrEqual(401);
+}, 120000);
+test('native redirect requires a deliberate review of the canonical AniList target', async () => {
+  const importer = await f.identity(['subject:read', 'library_entry:update', 'library_entry:read', 'rating:vote']);
+  await f.grantLibraryGate(importer.actor.accountId);
+  const subjects = [await f.createSubject('game'), await f.createSubject('game')].sort();
+  const canonical = subjects[0]!;
+  const selected = subjects[1]!;
+  const merger = await f.identity(['subject:merge']);
+  await createGrantCommands({ pool: f.pool, access: f.access, managementAction: 'access:grant' }).create(
+    { pool: f.pool, actor: f.steward.actor, deadline: Date.now() + 30000 },
+    {
+      resource: { route: 0, id: GLOBAL_CONTEXT },
+      subject: { kind: 'account', id: merger.actor.accountId },
+      actions: ['subject:merge'],
+      valid: '(,)',
+      key: crypto.randomUUID(),
+    },
+  );
+  const votes = createVoteCommands({ pool: f.pool, access: f.access });
+  let redirected = false;
+  const service = createAniListImport({
+    pool: f.pool,
+    access: f.access,
+    tokens: f.tokens,
+    routeKey: testRouteKey(),
+    votes: {
+      ...votes,
+      async readVoteReview(actor, questionId, targetId) {
+        if (!redirected) {
+          const response = await f.sendWithHeaders(
+            merger.bearer,
+            'POST',
+            '/v1/subjects:merge',
+            { subjects: [canonical, selected] },
+            { 'idempotency-key': JSON.stringify(crypto.randomUUID()) },
+          );
+          expect(response.status).toBe(202);
+          redirected = true;
+        }
+        return votes.readVoteReview(actor, questionId, targetId);
+      },
+    },
+  });
+  const { id } = await service.preview(
+    importer.actor,
+    JSON.stringify([{ mediaId: 900007, score: 8 }]),
+    'POINT_10',
+    crypto.randomUUID(),
+  );
+  const first = await service.review(
+    importer.actor,
+    id,
+    0,
+    {
+      subjectId: selected,
+      fields: [],
+      score: { action: 'vote', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 13 },
+    },
+    crypto.randomUUID(),
+  );
+  expect(first.review!.score!.native).toMatchObject({
+    availability: 'unavailable',
+    reason: 'identity_observation_unavailable',
+  });
+  expect(first.review!.score!.native.guard).toBeUndefined();
+  const unavailable = await service.apply(importer.actor, id, [
+    { ordinal: 0, reviewId: first.review!.id, confirmNativeVoteEffects: true },
+  ]);
+  expect(unavailable.outcomes[0]!.score).toMatchObject({
+    status: 'unavailable',
+    reason: 'identity_observation_unavailable',
+  });
+  const reviewed = await service.review(
+    importer.actor,
+    id,
+    0,
+    {
+      subjectId: canonical,
+      fields: [],
+      replace: true,
+      score: { action: 'vote', questionId: STANDARD_QUESTION_ID, questionRevision: 1, units: 13 },
+    },
+    crypto.randomUUID(),
+  );
+  expect(reviewed.review!.score!.native.availability).toBe('available');
+  expect(reviewed.review!.score!.native.guard!.subject.canonicalId).toBe(canonical);
+  const applied = await service.apply(importer.actor, id, [
+    { ordinal: 0, reviewId: reviewed.review!.id, confirmNativeVoteEffects: true },
+  ]);
+  expect(applied.outcomes[0]).toMatchObject({ status: 'applied', score: { status: 'applied' } });
+  expect(await votes.readOwnVote(importer.actor, STANDARD_QUESTION_ID, canonical)).toMatchObject({ units: 13 });
 }, 120000);

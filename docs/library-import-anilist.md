@@ -44,21 +44,24 @@ an explicit native clear separately. Apply needs a separate `confirmNativeVoteEf
 upload confirmation, state import and the score value do not provide that consent.
 
 Decision: compose Rating's complete native review observation and exact guarded command for the selected
-same-logical-home target in the existing AniList row; foreign-home support remains deferred. Effect confirmation
-is separate from review, and retries preserve the original guard, operands and command key. Owner reads take
-`currentScore` from Rating after guarded effects.
+same-logical-home target in the existing AniList row; foreign-home support remains deferred. Confirmation
+calls `preparePutVote(actor, input, key, admission?)` once with the captured actor, frozen observation and
+source-row admission, then `putVoteOutcome` with those operands; an uncertain retry first uses
+`reconcilePutVote(actor, receipt)`. A Rating redirect of the Library-selected Subject stores no vote guard
+and requires an explicit new target review. Effect confirmation is separate from review, and retries preserve
+the original guard, operands and command key. Owner reads take `currentScore` from Rating after guarded effects.
 
 `createVoteCommands.readVoteReview` supplies the current question, canonical identity and required identity epochs,
 raw original/canonical slots and counted own-vote witness. The importer stores its complete version 1 guard with
-immutable source evidence and selected native operands. Review reports observation availability independently of
-write availability. `putVoteOutcome(actor, {questionId,targetId,units,guard}, key)` owns validation, receipt digest
-and effects. `replace:true` explicitly permits replacing a current vote as well as state; clear remains an explicit
-score action. Missing effect consent is resumable. Consent checkpoints retain the original key and guard across
-uncertain delivery; retries call that exact command without replacing its observations. Native stale and unavailable
-results remain typed. Unexpected delivery errors propagate with the started checkpoint retained. Owner page reads
-include `currentScore` from Rating alongside the current Entry proposal; receipts and retained evidence are not
-current readback. A supported guarded effect is complete only after Rating accepts it and the importer records its
-outcome; a later owner read reports Rating's current vote.
+immutable source evidence and selected native operands, and retains the prepared command privately. Review reports
+observation availability independently of write availability. `replace:true` explicitly permits replacing a current
+vote as well as state; clear remains an explicit score action. Missing effect consent is resumable. Consent
+checkpoints retain the original key, prepared input and guard across uncertain delivery; retries call that exact
+command without replacing its observations. Native stale and unavailable results remain typed. Unexpected delivery
+errors propagate with the started checkpoint retained. Owner page reads include `currentScore` from Rating alongside
+the current Entry proposal; receipts and retained evidence are not current readback. A supported guarded effect is
+complete only after Rating accepts it and the importer records its outcome; a later owner read reports Rating's
+current vote.
 
 Progress keeps episodes (ANIME), chapters (MANGA), unknown measures and
 volumes separate. Repeat, priority, notes, privacy, precise/partial dates, updatedAt and all unrecognized fields are
