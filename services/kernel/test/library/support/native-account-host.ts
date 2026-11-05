@@ -6,6 +6,27 @@ import { cookies, nativeFixture, password } from '../../access/native-account-bi
 import { deletePersona } from '../../support/account-deletion.ts';
 import { partitionOf, routeOf } from '../../../src/route/route.ts';
 
+/** A registration that does not settle within a minute fails with the durable workflow rows it left behind. */
+async function boundedRegistration<T>(work: Promise<T>, pool: Pool): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stalled = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      void pool
+        .query('SELECT workflow_uuid, name, status, error FROM dbos.workflow_status ORDER BY created_at DESC LIMIT 8')
+        .then(
+          (result) => JSON.stringify(result.rows),
+          (error: unknown) => `status query failed: ${String(error)}`,
+        )
+        .then((detail) => reject(new Error(`Library native registration did not settle; workflows: ${detail}`)));
+    }, 60_000);
+  });
+  try {
+    return await Promise.race([work, stalled]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Library borrows Accounts' host, approvals and exact receipt verifiers. */
 export async function createLibraryAccountHost(input: {
   pool: Pool;
@@ -62,12 +83,15 @@ export async function createLibraryAccountHost(input: {
         key = '';
       }
       if (!key) throw new Error('Library native registration could not place the requested partition');
-      const registered = await fixture.host.workflows.register({
-        key,
-        handle: `library_${key.replaceAll('-', '')}`,
-        email: `${key}@example.test`,
-        password,
-      });
+      const registered = await boundedRegistration(
+        fixture.host.workflows.register({
+          key,
+          handle: `library_${key.replaceAll('-', '')}`,
+          email: `${key}@example.test`,
+          password,
+        }),
+        input.pool,
+      );
       const route = routeOf(registered.accountId)!;
       if (partitionOf(route) !== partition) throw new Error('Auth changed the native registration placement');
       const signed = await signIn(registered.accountId);
