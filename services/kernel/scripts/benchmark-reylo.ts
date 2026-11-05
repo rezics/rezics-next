@@ -16,10 +16,7 @@ async function command(argv: string[], cwd: string, env = process.env) {
   return { status, seconds: (performance.now() - started) / 1000, stdout, stderr };
 }
 
-async function main() {
-  const placed = await stackRun({ label: 'Reylo version comparison', root, cwd: workspace,
-    command: ['bun', 'scripts/benchmark-reylo.ts'], keepsFiles: true, returns: [output] });
-  if (placed !== null) return placed;
+async function benchmark() {
   mkdirSync(join(workspace, '.temp'), { recursive: true });
   const directory = mkdtempSync(join(workspace, '.temp/reylo-benchmark-'));
   const dependencies = join(directory, 'dependencies');
@@ -55,8 +52,11 @@ async function main() {
       console.log(JSON.stringify({ ...result, diagnostics: undefined }));
     }
     return 0;
-  }, process.env);
+  });
   writeFileSync(join(root, output), JSON.stringify({ results }, null, 2));
   return 0;
 }
-if (import.meta.main) process.exitCode = await main();
+if (import.meta.main) process.exitCode = await stackRun({
+  label: 'Reylo version comparison', root, cwd: workspace,
+  command: ['bun', 'scripts/benchmark-reylo.ts'], keepsFiles: true, returns: [output],
+}, benchmark);
