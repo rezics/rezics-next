@@ -290,7 +290,7 @@ test('mounted own upload, admitted identifier match, explicit resolution, confli
   expect(await exactRetry.json()).toMatchObject({ complete: false, outcomes: [{ score: {
     status: 'unavailable', reason: 'atomic_guard_unavailable',
   } }] });
-  await votes.putVoteOutcome(importer.actor, { questionId: STANDARD_QUESTION_ID, targetId: subjectId, units: 13 }, randomUUID());
+  await votes.putVoteOutcome(importer.actor, { questionId: STANDARD_QUESTION_ID, targetId: subjectId, units: 13 }, crypto.randomUUID());
   const staleVote = await f.send(importer.bearer, 'POST', path2 + ':apply', {
     confirmations: [{ ...scoreConfirmation, confirmNativeVoteEffects: true }],
   });

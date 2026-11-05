@@ -124,8 +124,8 @@ the explicit UUID submitted to `review.subjectId` is identity. Apply defaults to
 (`replace:false`). Only admitted `status` is selectable in state review. The independent `reviewLabels`/`applyLabels` methods
 adopt explicitly selected retained custom membership without changing state/progress choices. Missing `scoreFormat` stays unknown scale and is never
 converted into native units. Native score review offers only the standard question, records its current Content
-revision/meaning and requires a second effect confirmation; the absent counted-vote/currentness producer keeps score
-effects unavailable. Native review owns `commandKey`, `clientId` and `requestedBy`. The generated client snapshot may
+revision/meaning and requires a second effect confirmation; the native atomic admission refusal currently keeps
+score effects unavailable. Native review owns `commandKey`, `clientId` and `requestedBy`. The generated client snapshot may
 omit this surface; missing methods render unavailable rather than a local parser.
 
 Own-upload attestation does not verify an AniList account. Preview does not mutate Library facts. Apply revalidates
