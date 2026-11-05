@@ -105,16 +105,16 @@ function drainSignal(observation: string) {
 }
 // A tagged canonical tree preserves bigint/undefined without collisions with user JSON objects.
 type Tree = [string, unknown?];
-function tree(value: unknown): Tree {
+function tree(value: unknown, scalarTag: 'scalar' | 'value' = 'scalar'): Tree {
   if (value === undefined) return ['undefined'];
   if (typeof value === 'bigint') return ['bigint', value.toString()];
-  if (Array.isArray(value)) return ['array', value.map(tree)];
+  if (Array.isArray(value)) return ['array', value.map((child) => tree(child, scalarTag))];
   if (value !== null && typeof value === 'object')
     return [
       'object',
       Object.keys(value)
         .sort()
-        .map((key) => [key, tree((value as Record<string, unknown>)[key])]),
+        .map((key) => [key, tree((value as Record<string, unknown>)[key], scalarTag)]),
     ];
   requireValue(
     value === null ||
@@ -122,7 +122,7 @@ function tree(value: unknown): Tree {
       typeof value === 'boolean' ||
       (typeof value === 'number' && Number.isFinite(value)),
   );
-  return ['scalar', value];
+  return [scalarTag, value];
 }
 function untree(value: Tree): unknown {
   switch (value[0]) {
@@ -1884,7 +1884,7 @@ export async function drainGenerationPublicationProofCopy(
   if (!retained.rowCount) return false;
   const row = retained.rows[0]!;
   const work = decode<Record<string, unknown>>(row.consumer_work);
-  const proofWork = encode({ ...work, prepared: [], preparedRows: [], after: undefined });
+  const proofWork = JSON.stringify(tree({ ...work, prepared: [], preparedRows: [], after: undefined }, 'value'));
   const prepared = await tx.query(
     `UPDATE search.public_filter_prepared SET rows=$3,state='erasing'
      WHERE partition_no=0 AND registration=$1 AND build=$2 AND (state<>'erasing' OR rows<>$3)`,
