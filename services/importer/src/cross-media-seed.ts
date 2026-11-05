@@ -3242,7 +3242,10 @@ export type CrossMediaSeedCliOptions = {
   composePersona?: (context: DevelopmentShowcaseContext) => Promise<DevelopmentShowcaseResult>;
 };
 
-export type CrossMediaSeedReport = CrossMediaSeedResult & { persona?: DevelopmentShowcaseResult };
+export type CrossMediaSeedReport = CrossMediaSeedResult & {
+  persona?: DevelopmentShowcaseResult;
+  showcase?: ShowcasePublicationResult;
+};
 
 export async function runCrossMediaSeedCli(
   argv: readonly string[],

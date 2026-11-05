@@ -14,7 +14,7 @@ import {
 import { seedReviewedCatalogue } from '../../services/importer/src/reviewed-catalogue.ts';
 import { createSeedDenialDiagnostics } from '../../services/importer/src/showcase-denial-diagnostics.ts';
 import { fetchCrossMediaDumps, type CrossMediaDumpPaths } from './fetch-dumps.ts';
-import { ShowcaseJournal } from '../../services/importer/src/showcase-publication.ts';
+import { ShowcaseJournal, type ShowcasePublicationResult } from '../../services/importer/src/showcase-publication.ts';
 import {
   createDevelopmentShowcaseClient,
   DEVELOPMENT_SHOWCASE_SCOPES,
@@ -56,7 +56,27 @@ export type DevelopmentShowcaseReport = DevelopmentPublicationReport & {
   collections: DevelopmentShowcaseResult;
   personalList: ShowcasePersonalListUpload;
   sourceSnapshots: CrossMediaDumpPaths['sourceSnapshots'];
+  sourcePublication: {
+    state: 'published' | 'incomplete' | 'unavailable';
+    assertions: number;
+    omissions: number;
+    code?: string;
+  };
 };
+
+function sourcePublicationFailure(showcase?: ShowcasePublicationResult): DevelopmentSeedFailure {
+  const refusal = showcase?.omissions.find(
+    ({ code }) =>
+      code.includes('fenced') ||
+      ['review-http-401', 'review-http-403', 'review-http-409', 'review-http-412', 'review-http-423'].includes(code),
+  );
+  const code = refusal?.code ?? showcase?.omissions[0]?.code ?? (showcase ? 'publication-incomplete' : 'publication-result-missing');
+  return {
+    state: refusal ? 'refused' : 'unavailable',
+    operation: 'source.publication',
+    code,
+  };
+}
 
 /** Exact development roots: Steins;Gate/CLANNAD VNDB VNs; Steins;Gate anime/book and CLANNAD anime in Bangumi. */
 export const developmentShowcaseSelection = {
@@ -265,11 +285,32 @@ export async function runDevelopmentSeed(
       },
     };
   }
+  const sourceShowcase = importedResult.showcase;
+  const sourcePublication: DevelopmentShowcaseReport['sourcePublication'] = sourceShowcase
+    ? {
+        state: sourceShowcase.status,
+        assertions: sourceShowcase.published.reduce((count, record) => count + record.assertions.length, 0),
+        omissions: sourceShowcase.omissions.length,
+      }
+    : {
+        state: 'unavailable',
+        assertions: 0,
+        omissions: 0,
+        code: 'publication-result-missing',
+      };
+  if (report.state === 'complete' && sourcePublication.state !== 'published') {
+    report = {
+      ...report,
+      state: 'incomplete',
+      failure: sourcePublicationFailure(sourceShowcase),
+    };
+  }
   const composedReport: DevelopmentShowcaseReport = {
     ...report,
     collections,
     personalList,
     sourceSnapshots: dumps.sourceSnapshots,
+    sourcePublication,
   };
   await attachDevelopmentShowcase(result, composedReport);
   if (report.state === 'complete') {

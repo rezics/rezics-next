@@ -454,6 +454,8 @@ Reviewed vocabulary lookup is finite and exact. Current subject, source identifi
 
 `task seed:dev` publishes sealed current source/candidate digests; ordinary imports only propose.
 
+Decision: each published assertion returns its current Global adoption head and selected candidate with the exact public statement readback; `task seed:dev` is complete only when the shared source publication is published.
+
 The development wrapper mounts the existing [private VNDB list preview](../../docs/development/local-stack.md#upload-the-development-personas-private-vndb-list)
 through the authenticated generated Kernel client and common showcase journal. Missing private input is unavailable;
 the report carries only the actual upload UUID and row count, never inferred personal activity or export contents.

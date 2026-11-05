@@ -140,6 +140,12 @@ for (const configured of [true, false])
       expect(fetches).toBe(1);
       expect(result.collections).toBe(report.persona);
       expect(result.sourceSnapshots).toBe(sourceSnapshots);
+      expect(result.sourcePublication).toEqual({
+        state: 'unavailable',
+        assertions: 0,
+        omissions: 0,
+        code: 'publication-result-missing',
+      });
       expect(result).toMatchObject({ state: 'incomplete', community: { state: 'missing_source' } });
       expect(result.personalList).toEqual(
         configured ? { state: 'uploaded', uploadId, rows: 1 } : { state: 'unavailable', code: 'export-not-configured' },
