@@ -1111,23 +1111,22 @@ Decision: rename and organization share `account-operation-response-bounds.ts`. 
 4,096 units. Canonical ISO expiry has at most 27 ASCII units; producer JSON costs `31 + 4096 + 27 = 4154` bytes.
 Browser execution requires usable expiry. Native workflow/replay returns exactly `{ accountId }`, a nonempty opaque
 ID of at most 4,096 UTF-16 units: `16 + 6 × 4096 = 24592` bytes including worst-case escaping. Incompatible/incomplete
-output (or mismatched rename ID) answers `{ error: "unavailable" }`/503, never invented not-applied. Organization
-has no result-binding fields; original browser custody binds acknowledgement. Other kinds/workflows stay unchanged.
+output (or mismatched rename ID) answers `{ error: "unavailable" }`/503, never invented not-applied. Original browser custody binds organization acknowledgement; other kinds/workflows stay unchanged.
 
 Closed `{ error, effect_status: "not_applied" }` pairs: `account_operation_denied`/400,401,403,409,413,415,503;
 `step_up_required`/401; organization `platform_closed`/403. The additional envelope is `{ error: "unavailable" }`/503.
 Maximum error JSON is 69 bytes. Actual byte admission precedes fatal UTF-8/parsing regardless of Content-Length.
 Malformed output cannot acknowledge work; later refusal/session equality cannot settle unknown execution.
 
-Each POST keeps five seconds through headers/body, releasing abort-ignoring waits. Retirement before dispatch sends
-nothing; later abort cannot undo effects. Fresh-human proof, scopes, organization gate, Access approval resolution,
-preparations, uniqueness, idempotency/CAS and workflow authority remain. Organization retries supported unavailable
+Each POST keeps five seconds through headers/body, releasing abort-ignoring waits. Retirement sends no later
+command; abort cannot undo effects. Native freshness, scope, gate, approval, preparation, uniqueness and CAS/replay
+remain authoritative. Organization retries supported unavailable
 approval once; execution never automatically retries/renews approval. Entry/session/approval/execution/final-session
 cost five calls, six with approval retry; deliberate same-command retry costs four or five. Read Retry/restoration
-cost one session read, zero commands. Current original acknowledgement precedes final read and survives its failure;
-private handle/ID needs unchanged original caller/descriptor custody. Exact cleanup preserves replacement storage.
-Rename keeps live reference/expiry, expectedHandle and its existing recovery below. Injected fixtures grant no
-native/browser acceptance; native workflow/replay and growth evidence remain separate.
+cost one session read, zero commands. Original acknowledgement survives final-read failure; private results need current original caller/descriptor.
+Cleanup preserves replacements.
+Rename keeps live reference/expiry, expectedHandle and recovery below. Fixtures grant no native/browser pass;
+native workflow/replay and growth remain separate.
 Review costs session GET + rename-page POST: entry/return/read Retry cost two and send zero commands.
 Fresh acknowledged submit costs six; unknown four. Exact live-reference retry costs three while unknown or five
 with acknowledgement; expiry renewal adds one. Supported 409 uses the second pair as advice instead of readback.

@@ -866,7 +866,7 @@ execution. A refused persistence write sends no execution. Step-up returns for s
 
 Decision: reuse the installed shared Access approval contract, close organization execution to the actual native
 `{ accountId }` result, and retain deliberate execution recovery with generic acknowledgement separate from private
-current-read custody. Approval is exactly `{ reference, expiresAt }`: the opaque reference is sealed ASCII
+current-read custody. Approval is `{ reference, expiresAt }`: reference is opaque sealed ASCII
 base64url body, dot and 43-character MAC, at most 4,096 units; expiry is canonical ISO, at most 27 ASCII units,
 and must still be usable before execution. Its producer JSON byte formula is `31 + 4096 + 27 = 4154`.
 Execution is exactly one nonempty accountId (at most 4,096 UTF-16 units); worst-case escaping gives
@@ -875,8 +875,7 @@ Each body is byte-counted by installed `readJsonBounded` before fatal UTF-8 deco
 of absent or dishonest Content-Length. The closed native errors are `{ error, effect_status: "not_applied" }`:
 `step_up_required`/401, `platform_closed`/403, and `account_operation_denied`/400,401,403,409,413,415,503.
 The only other supported error is `{ error: "unavailable" }`/503; their maximum closed skeleton is 69 bytes.
-Unknown fields, malformed success/errors, overflow, invalid UTF-8 and lost/stalled replies cannot acknowledge a
-command. After possible execution they preserve unknown history; later refusals cannot erase it.
+Unknown fields, malformed replies, overflow, invalid UTF-8 and lost/stalled replies cannot acknowledge work. After possible execution they preserve unknown history; later refusals cannot erase it.
 
 Each POST keeps its own five-second headers-and-body lifetime, including cancellation-ignoring transports, with
 same-origin credentials, no-store and redirect refusal. Page lifetime cancellation reaches existing session reads

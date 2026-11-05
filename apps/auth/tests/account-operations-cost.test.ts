@@ -139,7 +139,7 @@ test(
           ),
           page.getByRole('button', { name: 'Delete account', exact: true }).click(),
         ]);
-        await page.getByRole('status').waitFor();
+        await page.getByRole('status').filter({ hasText: 'Your account has been deleted.' }).waitFor();
         await assertThreeRequests();
       } finally {
         await context.close();

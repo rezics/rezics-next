@@ -59,7 +59,7 @@ for (const [code, status] of [
       } else expect(assign).toHaveBeenCalledTimes(1);
       if (status === 409 || status === 403) {
         expect(page.host.textContent).toContain(status === 409 ? 'Creation was refused' : 'not open yet');
-        expect(page.host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
+        expect(page.host.querySelector('button[type="submit"]')).toBeNull();
         await flush(() => send(page.host));
         expect(page.calls).toHaveLength(3);
       }
