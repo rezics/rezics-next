@@ -134,7 +134,7 @@ test('selected second synopsis traverses authored inspection and fresh return; u
   const queries = await import('../src/features/pages/subject-queries');
   mock.module('../src/features/pages/subject-queries', () => ({
     ...queries,
-    subjectRequestReader: async () => fixture.transport.reader,
+    subjectRequestReader: async () => null,
   }));
   const { createRoot } = await import('react-dom/client');
   const { PageData, dataComponents } = await import('../src/features/pages/data');

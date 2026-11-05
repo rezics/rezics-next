@@ -2,6 +2,7 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterContextProvid
 import { expect, mock, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToString } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createKernelClient } from '@rezics/client';
 import { summaryReadingFragment } from '../src/features/pages/subject-visit-navigation';
 import type { SourcesResult } from '../src/features/catalogue/subject-sources';
@@ -18,9 +19,12 @@ const render = (result: SourcesResult) => {
     history: createMemoryHistory({ initialEntries: ['/en'] }),
   });
   return renderToString(
-    createElement(RouterContextProvider, {
-      router,
-      children: createElement(SubjectSourcesPage, { result, locale: 'en' }),
+    createElement(QueryClientProvider, {
+      client: new QueryClient(),
+      children: createElement(RouterContextProvider, {
+        router,
+        children: createElement(SubjectSourcesPage, { result, locale: 'en' }),
+      }),
     }),
   );
 };

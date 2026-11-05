@@ -12,6 +12,7 @@ import { revisionResource } from '../../src/semantic/authorship.ts';
 import { newId, routeOf } from '../../src/route/route.ts';
 import { createRealAccess } from './real-access.ts';
 import { observeSql } from '../content/support/sql-observer.ts';
+import { testReceiptKeys } from '../support/receipt-keys.ts';
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL must name the migrated test database');
@@ -81,6 +82,7 @@ function failOneSerializableCommit(target: Pool) {
 
 const commitFailure = failOneSerializableCommit(pool);
 const kernel = createKernel({
+  receiptKeys: testReceiptKeys(),
   pool: commitFailure.pool,
   access: realAccess.access,
   tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) },
@@ -286,6 +288,7 @@ test('native exact Sources admits the second same-language document and loses it
     try {
       // A separate admin pool changes Content while the reader's real SQL is held.
       const writer = createKernel({
+        receiptKeys: testReceiptKeys(),
         pool: admin,
         access: realAccess.access,
         tokens: { current: 1, keys: new Map([[1, new Uint8Array(32).fill(3)]]) },
