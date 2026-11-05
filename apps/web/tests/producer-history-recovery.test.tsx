@@ -359,3 +359,47 @@ test('uncertain retry retains the original command; failed reader retirement nev
     await ui.close();
   }
 });
+
+test('empty continuations keep native freshness, eight predecessors, branch replacement and private retirement', async () => {
+  const ui = await mounted();
+  const example = producerRecoveryExample();
+  const reads: [string | undefined, string | undefined, string | undefined][] = [];
+  const transport: ProducerHistoryTransport = {
+    ...example.transport,
+    read: async (...address) => {
+      reads.push(address);
+      const page = Number(address[1] ?? 0);
+      return { ...example.first, rows: [], next: String(page + 1), caughtUp: false, session: `session-${page}` };
+    },
+  };
+  const previous = () =>
+    [...ui.host.querySelectorAll('button')].some((b) => b.textContent === ui.m.producer_history_previous());
+  try {
+    await ui.show(transport, { ...example.first, next: '1', session: 'session-0' });
+    for (let page = 0; page < 10; page++) await ui.click(ui.m.producer_history_more());
+    expect(ui.host.textContent).toContain(ui.m.producer_history_empty());
+    expect(ui.host.textContent).toContain(ui.m.producer_history_incomplete());
+    for (let page = 0; page < 8; page++) await ui.click(ui.m.producer_history_previous());
+    expect(previous()).toBe(false);
+    expect(reads.at(-1)?.slice(1)).toEqual(['2', 'session-1']);
+    await ui.click(ui.m.producer_history_more());
+    expect(previous()).toBe(true);
+    await ui.click(ui.m.producer_history_first());
+    expect(reads.at(-1)?.slice(1)).toEqual([undefined, undefined]);
+    expect(previous()).toBe(false);
+    await ui.click(ui.m.producer_history_more());
+    await ui.change(example.first.streams[1]!.key);
+    expect(previous()).toBe(false);
+    await ui.click(ui.m.producer_history_more());
+    await ui.show(transport, { ...example.first, next: '1', session: 'session-0' }, 'en', 'replacement-reader');
+    expect(previous()).toBe(false);
+    await ui.show(transport, { ...example.first, next: '1', session: 'session-0' });
+    expect(previous()).toBe(false);
+    await ui.click(ui.m.producer_history_more());
+    await ui.clear();
+    await ui.show(transport, { ...example.first, next: '1', session: 'session-0' });
+    expect(previous()).toBe(false);
+  } finally {
+    await ui.close();
+  }
+});

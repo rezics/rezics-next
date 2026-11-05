@@ -6955,6 +6955,8 @@
   "producer_history_sources": "來源",
   "producer_history_correct": "提出歷史更正",
   "producer_history_return": "返回原本的歷史",
+  "producer_history_previous": "上一頁",
+  "producer_history_first": "第一頁",
   "producer_history_more": "下一頁",
   "producer_history_follow": "選擇組織",
   "producer_history_draft": "開啟關係草稿",

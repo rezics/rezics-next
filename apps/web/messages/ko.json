@@ -6947,6 +6947,8 @@
   "producer_history_sources": "출처",
   "producer_history_correct": "이력 정정 제안",
   "producer_history_return": "원래 이력으로 돌아가기",
+  "producer_history_previous": "이전",
+  "producer_history_first": "첫 페이지",
   "producer_history_more": "다음 페이지",
   "producer_history_follow": "조직 선택",
   "producer_history_draft": "관계 초안 열기",

@@ -6947,6 +6947,8 @@
   "producer_history_sources": "Fuentes",
   "producer_history_correct": "Proponer una corrección de historial",
   "producer_history_return": "Volver al historial original",
+  "producer_history_previous": "Anterior",
+  "producer_history_first": "Primera página",
   "producer_history_more": "Página siguiente",
   "producer_history_follow": "Elegir una organización",
   "producer_history_draft": "Abrir un borrador de relación",

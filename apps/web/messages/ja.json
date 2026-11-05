@@ -6950,6 +6950,8 @@
   "producer_history_sources": "出典",
   "producer_history_correct": "沿革の訂正を提案",
   "producer_history_return": "元の沿革に戻る",
+  "producer_history_previous": "前へ",
+  "producer_history_first": "最初のページ",
   "producer_history_more": "次のページ",
   "producer_history_follow": "組織を選ぶ",
   "producer_history_draft": "下書き",
