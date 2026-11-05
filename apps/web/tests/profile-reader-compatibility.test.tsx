@@ -505,6 +505,48 @@ test('the connected Profile and Public activity journey shares safe reads and pe
     await resolveWrite(uncertainWrite, { ok: false, status: 503, message: '', failure: { status: 503 } });
     expect(writableEditor.snapshot().attempt).toBe(originalAttempt);
     expect(writableEditor.snapshot().phase).toBe('uncertain');
+    await act(async () => {
+      writableEditor.edit({ displayName: 'Later name' });
+      writableEditor.edit({
+        displayName: originalAttempt.before.displayName,
+        publicViews: { ...nativeProfile.publicViews, reviews: false },
+      });
+    });
+    const matchingRead = readRequests.length;
+    const matchingReload = writableEditor.reload();
+    await until(() => readRequests.length === matchingRead + 1, 'the matching current-profile read');
+    const matchingCurrent = {
+      ...originalAttempt.after,
+      links: [{ label: 'Newer site', url: 'https://newer.example.test' }],
+    };
+    await resolveRead(matchingRead, successRead(matchingCurrent));
+    await matchingReload;
+    expect([
+      writableEditor.snapshot().attempt,
+      writableEditor.snapshot().acknowledged,
+      writableEditor.snapshot().phase,
+      writableEditor.snapshot().known?.displayName,
+      writableEditor.snapshot().draft?.displayName,
+      writableEditor.snapshot().draft?.links,
+      host.textContent?.includes(m.settings_profile_save_unknown()),
+      !host.textContent?.includes(m.settings_saved()),
+      button(m.settings_profile_save_activity()).disabled,
+    ]).toEqual([
+      originalAttempt,
+      false,
+      'uncertain',
+      originalAttempt.after.displayName,
+      originalAttempt.before.displayName,
+      matchingCurrent.links,
+      true,
+      true,
+      true,
+    ]);
+    await act(async () => {
+      await writableEditor.submit('views');
+      await writableEditor.submit('profile');
+    });
+    expect([saveRequests.length, writableEditor.snapshot().attempt]).toEqual([uncertainWrite + 1, originalAttempt]);
     const refusalRead = readRequests.length;
     const refusalReload = writableEditor.reload();
     await until(() => readRequests.length === refusalRead + 1, 'a current read refusal');
