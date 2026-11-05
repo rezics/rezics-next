@@ -543,7 +543,9 @@ function conflictMetrics(db: Database, start: string, end: string, limit: number
     )${attemptProjection}
     SELECT * FROM outcome_projection ${attemptUnion}
   `)
-    .all(...(hasAttempts ? [start, end, limit + 1, end, start, end, limit + 1, end] : [start, end, limit + 1, end])) as {
+    .all(
+      ...(hasAttempts ? [start, end, limit + 1, end, start, end, limit + 1, end] : [start, end, limit + 1, end]),
+    ) as {
     source: 'outcome' | 'attempt';
     task_id: string;
     attempt: number;
