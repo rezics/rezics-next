@@ -16,7 +16,8 @@ export const archiveRecoverySender = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    if (!await prepareExpectedReader(request, env as Partial<SessionEnv>, data)) throw new Error('Archive viewer changed');
+    if (!(await prepareExpectedReader(request, env as Partial<SessionEnv>, data)))
+      throw new Error('Archive viewer changed');
     return await captureEntryRestoreCredential(request, env as Partial<SessionEnv>);
   });
 
@@ -27,10 +28,23 @@ type Input = Command & ExpectedReader & { sender?: string };
 // The server-function request is an HTTP boundary. Native routes validate operation operands;
 // the archive itself travels as untouched text to the existing decoder.
 function validate(input: unknown): Input {
-  if (!validExpectedReader(input) || !('operation' in input) || !('args' in input) || !Array.isArray(input.args)) throw new Error('Invalid archive command');
-  const operations: Operation[] = ['upload', 'status', 'preview', 'review', 'apply', 'results', 'cancel', 'prune', 'entry', 'label'];
+  if (!validExpectedReader(input) || !('operation' in input) || !('args' in input) || !Array.isArray(input.args))
+    throw new Error('Invalid archive command');
+  const operations: Operation[] = [
+    'upload',
+    'status',
+    'preview',
+    'review',
+    'apply',
+    'results',
+    'cancel',
+    'prune',
+    'entry',
+    'label',
+  ];
   if (!operations.includes(input.operation as Operation)) throw new Error('Invalid archive operation');
-  if ('sender' in input && (typeof input.sender !== 'string' || input.sender.length > 3200)) throw new Error('Invalid archive sender');
+  if ('sender' in input && (typeof input.sender !== 'string' || input.sender.length > 3200))
+    throw new Error('Invalid archive sender');
   return input as Input;
 }
 
@@ -39,21 +53,32 @@ export const archiveRecoveryCall = createServerFn({ method: 'POST' })
   .handler(async ({ data }) => {
     setResponseHeader('cache-control', 'private, no-store');
     const request = getRequest();
-    if (!await prepareExpectedReader(request, env as Partial<SessionEnv>, data)) throw new Error('Archive viewer changed');
+    if (!(await prepareExpectedReader(request, env as Partial<SessionEnv>, data)))
+      throw new Error('Archive viewer changed');
     const authorization = await originalEntryRestoreCredential(request, env as Partial<SessionEnv>, data.sender);
     if (!authorization) throw new Error('Archive sender changed');
     const port = archiveRecoveryNative(kernelClient(), authorization);
     // Keep dispatch concrete so the generated publisher remains the only transport authority.
     switch (data.operation) {
-      case 'upload': return port.upload(...data.args);
-      case 'status': return port.status(...data.args);
-      case 'preview': return port.preview(...data.args);
-      case 'review': return port.review(...data.args);
-      case 'apply': return port.apply(...data.args);
-      case 'results': return port.results(...data.args);
-      case 'cancel': return port.cancel(...data.args);
-      case 'prune': return port.prune(...data.args);
-      case 'entry': return port.entry(...data.args);
-      case 'label': return port.label(...data.args);
+      case 'upload':
+        return port.upload(...data.args);
+      case 'status':
+        return port.status(...data.args);
+      case 'preview':
+        return port.preview(...data.args);
+      case 'review':
+        return port.review(...data.args);
+      case 'apply':
+        return port.apply(...data.args);
+      case 'results':
+        return port.results(...data.args);
+      case 'cancel':
+        return port.cancel(...data.args);
+      case 'prune':
+        return port.prune(...data.args);
+      case 'entry':
+        return port.entry(...data.args);
+      case 'label':
+        return port.label(...data.args);
     }
   });

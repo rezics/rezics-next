@@ -2,16 +2,24 @@ import type { KernelClient } from '@rezics/client';
 
 export type GeneratedArchiveRecoveryMethod = Extract<keyof KernelClient, 'libraryArchiveMerges'>;
 type ArchiveOwner = ReturnType<KernelClient['libraryArchiveMerges']>;
-type Data<Call extends (...args: never[]) => unknown> = NonNullable<Awaited<ReturnType<Call>> extends { data: infer T } ? T : never>;
+type Data<Call extends (...args: never[]) => unknown> = NonNullable<
+  Awaited<ReturnType<Call>> extends { data: infer T } ? T : never
+>;
 export type NativeArchiveStatus = Data<ArchiveOwner['get']>;
 export type NativeArchivePreview = Data<ArchiveOwner['preview']['get']>;
 export type NativeArchiveResults = Data<ArchiveOwner['results']['get']>;
 export type NativeArchiveReview = Data<ArchiveOwner['review']['patch']>;
 export type NativeArchiveApply = Data<ArchiveOwner['apply']['post']>;
-export type ArchiveReviewItem = Extract<Parameters<ArchiveOwner['review']['patch']>[0]['items'][number], { kind: 'entry' | 'label' | 'assignment' }>;
+export type ArchiveReviewItem = Extract<
+  Parameters<ArchiveOwner['review']['patch']>[0]['items'][number],
+  { kind: 'entry' | 'label' | 'assignment' }
+>;
 export type ArchiveConfirmation = Parameters<ArchiveOwner['apply']['post']>[0];
 export type ArchiveRow = NativeArchivePreview['records'][number];
-export type ArchiveReply<T> = { kind: 'ok'; value: T } | { kind: 'refused'; status: number; code: string } | { kind: 'uncertain' };
+export type ArchiveReply<T> =
+  | { kind: 'ok'; value: T }
+  | { kind: 'refused'; status: number; code: string }
+  | { kind: 'uncertain' };
 export const archiveUploadBytes = 34 * 1024 * 1024;
 
 export function archiveRecoveryAdmission(): { available: true } {
@@ -20,12 +28,18 @@ export function archiveRecoveryAdmission(): { available: true } {
 
 /** The installed native client owns every DTO and all file validation. */
 export function archiveRecoveryNative(client: KernelClient, authorization: string) {
-  const options = (signal?: AbortSignal) => ({ headers: { authorization }, fetch: { ...(signal === undefined ? {} : { signal }), cache: 'no-store' as const } });
-  async function receive<T>(call: () => Promise<{ data: T | null; error: unknown; status: number }>): Promise<ArchiveReply<T>> {
+  const options = (signal?: AbortSignal) => ({
+    headers: { authorization },
+    fetch: { ...(signal === undefined ? {} : { signal }), cache: 'no-store' as const },
+  });
+  async function receive<T>(
+    call: () => Promise<{ data: T | null; error: unknown; status: number }>,
+  ): Promise<ArchiveReply<T>> {
     // Only a transport failure creates uncertainty. Unexpected programming errors still throw.
     let result;
-    try { result = await call(); }
-    catch (error) {
+    try {
+      result = await call();
+    } catch (error) {
       if (archiveTransportLost(error)) return { kind: 'uncertain' };
       throw error;
     }
@@ -33,7 +47,10 @@ export function archiveRecoveryNative(client: KernelClient, authorization: strin
       if (result.status === 0 || result.status >= 500) return { kind: 'uncertain' };
       const error = result.error;
       const value = typeof error === 'object' && error !== null && 'value' in error ? error.value : null;
-      const code = typeof value === 'object' && value !== null && 'code' in value && typeof value.code === 'string' ? value.code : 'request_refused';
+      const code =
+        typeof value === 'object' && value !== null && 'code' in value && typeof value.code === 'string'
+          ? value.code
+          : 'request_refused';
       return { kind: 'refused', status: result.status, code };
     }
     return { kind: 'ok', value: result.data! };
@@ -47,7 +64,9 @@ export function archiveRecoveryNative(client: KernelClient, authorization: strin
       return receive(() => client.libraryArchiveMerges({ id }).get(options(signal)));
     },
     preview(id: string, after = -1, signal?: AbortSignal) {
-      return receive(() => client.libraryArchiveMerges({ id }).preview.get({ ...options(signal), query: { after, limit: 100 } }));
+      return receive(() =>
+        client.libraryArchiveMerges({ id }).preview.get({ ...options(signal), query: { after, limit: 100 } }),
+      );
     },
     review(id: string, items: ArchiveReviewItem[], signal?: AbortSignal) {
       return receive(() => client.libraryArchiveMerges({ id }).review.patch({ items }, options(signal)));
@@ -56,7 +75,9 @@ export function archiveRecoveryNative(client: KernelClient, authorization: strin
       return receive(() => client.libraryArchiveMerges({ id }).apply.post(confirmation, options(signal)));
     },
     results(id: string, after = -1, signal?: AbortSignal) {
-      return receive(() => client.libraryArchiveMerges({ id }).results.get({ ...options(signal), query: { after, limit: 100 } }));
+      return receive(() =>
+        client.libraryArchiveMerges({ id }).results.get({ ...options(signal), query: { after, limit: 100 } }),
+      );
     },
     cancel(id: string, signal?: AbortSignal) {
       return receive(() => client.libraryArchiveMerges({ id }).delete(undefined, options(signal)));
@@ -68,7 +89,9 @@ export function archiveRecoveryNative(client: KernelClient, authorization: strin
       return receive(() => client.libraryEntries({ subjectId }).get({ ...options(signal), query: { view: 'FULL' } }));
     },
     label(labelId: string, signal?: AbortSignal) {
-      return receive(() => client.libraryLabelAssignments.get({ ...options(signal), query: { labelId, view: 'FULL', limit: 1 } }));
+      return receive(() =>
+        client.libraryLabelAssignments.get({ ...options(signal), query: { labelId, view: 'FULL', limit: 1 } }),
+      );
     },
   };
 }
@@ -76,5 +99,10 @@ export type ArchiveRecoveryPort = ReturnType<typeof archiveRecoveryNative>;
 
 /** Fetch's documented network failures can follow a committed native effect. */
 export function archiveTransportLost(error: unknown): boolean {
-  return error instanceof TypeError && ['fetch failed', 'Failed to fetch', 'Load failed', 'NetworkError when attempting to fetch resource.'].includes(error.message);
+  return (
+    error instanceof TypeError &&
+    ['fetch failed', 'Failed to fetch', 'Load failed', 'NetworkError when attempting to fetch resource.'].includes(
+      error.message,
+    )
+  );
 }

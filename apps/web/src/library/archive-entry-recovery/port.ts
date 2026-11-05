@@ -6,9 +6,14 @@ export async function browserArchiveRecoveryPort(expected: ExpectedReader): Prom
   const { archiveRecoverySender, archiveRecoveryCall } = await import('./server');
   const headers = { 'X-CSRF-Token': expected.expectedCredential };
   const sender = await archiveRecoverySender({ data: expected, headers });
-  function call<K extends keyof ArchiveRecoveryPort>(operation: K, args: Parameters<ArchiveRecoveryPort[K]>): ReturnType<ArchiveRecoveryPort[K]> {
-    const data = { ...expected, ...(sender === undefined ? {} : { sender }), operation, args } as NonNullable<Parameters<typeof archiveRecoveryCall>[0]>['data'];
-    return archiveRecoveryCall({ data, headers }).catch(error => {
+  function call<K extends keyof ArchiveRecoveryPort>(
+    operation: K,
+    args: Parameters<ArchiveRecoveryPort[K]>,
+  ): ReturnType<ArchiveRecoveryPort[K]> {
+    const data = { ...expected, ...(sender === undefined ? {} : { sender }), operation, args } as NonNullable<
+      Parameters<typeof archiveRecoveryCall>[0]
+    >['data'];
+    return archiveRecoveryCall({ data, headers }).catch((error) => {
       if (archiveTransportLost(error)) return { kind: 'uncertain' as const };
       throw error;
     }) as ReturnType<ArchiveRecoveryPort[K]>;

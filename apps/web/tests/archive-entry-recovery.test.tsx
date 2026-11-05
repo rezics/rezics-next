@@ -8,12 +8,24 @@ import { libraryNavigation } from '../src/library/navigation';
 import { m } from '../src/paraglide/messages.js';
 import { getLocale, locales, overwriteGetLocale } from '../src/paraglide/runtime.js';
 
-const binding = { viewer: 'owner', credentialEpoch: 'epoch', csrfEpoch: 'epoch', source: 'archive', route: '/library/recover-archive', locale: 'en', exposure: 'open' };
+const binding = {
+  viewer: 'owner',
+  credentialEpoch: 'epoch',
+  csrfEpoch: 'epoch',
+  source: 'archive',
+  route: '/library/recover-archive',
+  locale: 'en',
+  exposure: 'open',
+};
 
 test('Library offers a distinct signed-in archive recovery destination beside export and provider imports', () => {
-  expect(libraryNavigation.find(item => item.href === '/library/recover-archive')).toMatchObject({ signedIn: true, match: 'exact', group: 'personal' });
-  expect(libraryNavigation.some(item => item.href === '/library/export')).toBe(true);
-  expect(libraryNavigation.some(item => item.href === '/library/import-mal')).toBe(true);
+  expect(libraryNavigation.find((item) => item.href === '/library/recover-archive')).toMatchObject({
+    signedIn: true,
+    match: 'exact',
+    group: 'personal',
+  });
+  expect(libraryNavigation.some((item) => item.href === '/library/export')).toBe(true);
+  expect(libraryNavigation.some((item) => item.href === '/library/import-mal')).toBe(true);
 });
 
 test('Every locale mounts native file admission and explains the supported branch and limits', () => {
@@ -25,7 +37,12 @@ test('Every locale mounts native file admission and explains the supported branc
       overwriteGetLocale(() => locale);
       const html = renderToStaticMarkup(<ArchiveEntryRecoveryView journey={journey} />);
       const escaped = (text: string) => renderToStaticMarkup(<span>{text}</span>).slice(6, -7);
-      for (const text of [m.library_archive_entry_upload_help(), m.library_archive_entry_scope(), m.library_archive_deliberate()]) expect(html).toContain(escaped(text));
+      for (const text of [
+        m.library_archive_entry_upload_help(),
+        m.library_archive_entry_scope(),
+        m.library_archive_deliberate(),
+      ])
+        expect(html).toContain(escaped(text));
       expect(html).toMatch(/<input[^>]*type="file"/);
       expect(html).not.toMatch(/<input[^>]*type="file"[^>]*\sdisabled=""/);
       expect(html).toContain('aria-describedby="archive-file-help"');
@@ -34,5 +51,8 @@ test('Every locale mounts native file admission and explains the supported branc
       expect(html).toContain(`href="/${locale}/library/export"`);
       expect(html).not.toContain('data-upload-id');
     }
-  } finally { journey.retire(); overwriteGetLocale(previous); }
+  } finally {
+    journey.retire();
+    overwriteGetLocale(previous);
+  }
 });

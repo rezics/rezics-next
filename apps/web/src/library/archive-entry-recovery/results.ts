@@ -52,8 +52,20 @@ export function selectedArchiveRecoveryResults(
   const rows: SelectedResult[] = [];
   for (const row of page.results) {
     if (selected.get(row.ordinal) !== row.section) continue;
-    const labelId = row.status === 'acknowledged' && row.section === 'labels' && row.result?.effect === 'label.create' && typeof row.result.labelId === 'string' ? row.result.labelId : undefined;
-    rows.push({ ordinal: row.ordinal, section: row.section, status: row.status, subjectId: destination(row), ...(labelId === undefined ? {} : { labelId }) });
+    const labelId =
+      row.status === 'acknowledged' &&
+      row.section === 'labels' &&
+      row.result?.effect === 'label.create' &&
+      typeof row.result.labelId === 'string'
+        ? row.result.labelId
+        : undefined;
+    rows.push({
+      ordinal: row.ordinal,
+      section: row.section,
+      status: row.status,
+      subjectId: destination(row),
+      ...(labelId === undefined ? {} : { labelId }),
+    });
   }
   const context: ResultContext = { uploadId: page.uploadId, state: page.state, next: page.next };
   return ownRecoveryPage({ rows, context });

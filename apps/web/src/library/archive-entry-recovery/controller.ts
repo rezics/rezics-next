@@ -15,9 +15,19 @@ import { ArchiveRecoveryVisit, type RecoveryBinding, type RecoveryRequest } from
 
 type ResultPage = ReturnType<typeof selectedArchiveRecoveryResults>;
 type Confirmation = { uploadId: string; body: ArchiveConfirmation };
-type Visit = ArchiveRecoveryVisit<NativeArchiveStatus, ArchiveRow, ArchiveReviewItem, Confirmation, ResultPage['rows'][number], Omit<NativeArchivePreview, 'records'>, ResultPage['context']>;
-const sectionOf = (choice: ArchiveReviewItem): RecoverySection => choice.kind === 'entry' ? 'entries' : choice.kind === 'label' ? 'labels' : 'assignments';
-export const supportedRecoverySection = (section: string): section is RecoverySection => ['entries', 'labels', 'assignments'].includes(section);
+type Visit = ArchiveRecoveryVisit<
+  NativeArchiveStatus,
+  ArchiveRow,
+  ArchiveReviewItem,
+  Confirmation,
+  ResultPage['rows'][number],
+  Omit<NativeArchivePreview, 'records'>,
+  ResultPage['context']
+>;
+const sectionOf = (choice: ArchiveReviewItem): RecoverySection =>
+  choice.kind === 'entry' ? 'entries' : choice.kind === 'label' ? 'labels' : 'assignments';
+export const supportedRecoverySection = (section: string): section is RecoverySection =>
+  ['entries', 'labels', 'assignments'].includes(section);
 
 export class ArchiveEntryRecoveryJourney {
   readonly visit: Visit;
@@ -39,11 +49,29 @@ export class ArchiveEntryRecoveryJourney {
     this.#port = port;
     this.visit = new ArchiveRecoveryVisit(current, deadline, now);
   }
-  subscribe = (listener: () => void) => { this.#listeners.add(listener); return () => { this.#listeners.delete(listener); }; };
-  #emit() { if (!this.#retired) for (const listener of this.#listeners) listener(); }
+  subscribe = (listener: () => void) => {
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+    };
+  };
+  #emit() {
+    if (!this.#retired) for (const listener of this.#listeners) listener();
+  }
   snapshot() {
     const state = this.visit.state;
-    return { state, busy: this.#busy, notice: this.#notice, reviewed: state?.review ? this.#reviewed : [], readback: state ? this.#readback : null, uploadUncertain: this.#pendingUpload !== null, retryOriginal: !!state && (['uncertain', 'recoverable'].includes(state.phase) || state.phase === 'cancelling' && this.#cancelNeedsReconcile) };
+    return {
+      state,
+      busy: this.#busy,
+      notice: this.#notice,
+      reviewed: state?.review ? this.#reviewed : [],
+      readback: state ? this.#readback : null,
+      uploadUncertain: this.#pendingUpload !== null,
+      retryOriginal:
+        !!state &&
+        (['uncertain', 'recoverable'].includes(state.phase) ||
+          (state.phase === 'cancelling' && this.#cancelNeedsReconcile)),
+    };
   }
   retire() {
     this.#retired = true;
@@ -54,15 +82,22 @@ export class ArchiveEntryRecoveryJourney {
     this.#readback = null;
     this.#listeners.clear();
   }
-  #current() { return !this.#retired && this.visit.state !== null; }
+  #current() {
+    return !this.#retired && this.visit.state !== null;
+  }
   #feedback(reply: ArchiveReply<unknown>) {
-    this.#notice = reply.kind === 'uncertain' ? 'uncertain' : reply.kind === 'refused' ? `${reply.status}:${reply.code}` : '';
+    this.#notice =
+      reply.kind === 'uncertain' ? 'uncertain' : reply.kind === 'refused' ? `${reply.status}:${reply.code}` : '';
   }
   #retainAcknowledged(page: ResultPage): ResultPage {
     const state = this.visit.state!;
     const previous = state.results?.context.uploadId === page.context.uploadId ? state.results.rows : [];
-    const accepted = previous.filter(row => row.status === 'acknowledged' && state.choices.some(choice => choice.ordinal === row.ordinal && choice.section === row.section));
-    const rows = new Map(page.rows.map(row => [row.ordinal, row]));
+    const accepted = previous.filter(
+      (row) =>
+        row.status === 'acknowledged' &&
+        state.choices.some((choice) => choice.ordinal === row.ordinal && choice.section === row.section),
+    );
+    const rows = new Map(page.rows.map((row) => [row.ordinal, row]));
     // A later supplied page cannot erase matching receipts already acknowledged for this selection.
     for (const row of accepted) rows.set(row.ordinal, row);
     return { rows: [...rows.values()], context: page.context };
@@ -71,13 +106,21 @@ export class ArchiveEntryRecoveryJourney {
     this.#busy = true;
     this.#notice = '';
     this.#emit();
-    try { await action(); }
-    finally { this.#busy = false; this.#emit(); }
+    try {
+      await action();
+    } finally {
+      this.#busy = false;
+      this.#emit();
+    }
   }
 
   /** File size is checked before reading; the native decoder alone interprets the contents. */
   async upload(file: File) {
-    if (file.size > archiveUploadBytes) { this.#notice = 'file_too_large'; this.#emit(); return; }
+    if (file.size > archiveUploadBytes) {
+      this.#notice = 'file_too_large';
+      this.#emit();
+      return;
+    }
     const request = this.visit.startUpload();
     this.#cancelRequest = null;
     this.#cancelAcknowledged = false;
@@ -91,7 +134,9 @@ export class ArchiveEntryRecoveryJourney {
       await this.#sendUpload();
     });
   }
-  async retryUpload() { await this.#run(() => this.#sendUpload()); }
+  async retryUpload() {
+    await this.#run(() => this.#sendUpload());
+  }
   async #sendUpload() {
     const original = this.#pendingUpload!;
     const reply = await this.#port.upload(original.text, original.key, original.request.signal);
@@ -104,15 +149,20 @@ export class ArchiveEntryRecoveryJourney {
     this.#evidenceId = status.uploadId;
     if (!this.visit.admitUpload(original.request, status.uploadId, status, Date.parse(status.expiresAt))) return;
     clearTimeout(this.#expiry);
-    this.#expiry = setTimeout(() => {
-      void this.visit.state;
-      this.#readback = null;
-      this.#reviewed = [];
-      this.#emit();
-    }, Math.max(0, Date.parse(status.expiresAt) - Date.now()));
+    this.#expiry = setTimeout(
+      () => {
+        void this.visit.state;
+        this.#readback = null;
+        this.#reviewed = [];
+        this.#emit();
+      },
+      Math.max(0, Date.parse(status.expiresAt) - Date.now()),
+    );
     await this.#page(-1);
   }
-  async page(after = -1) { await this.#run(() => this.#page(after)); }
+  async page(after = -1) {
+    await this.#run(() => this.#page(after));
+  }
   async #page(after: number) {
     const request = this.visit.startPage();
     const reply = await this.#port.preview(this.visit.state!.upload!.id, after, request.signal);
@@ -128,17 +178,27 @@ export class ArchiveEntryRecoveryJourney {
     this.#reviewed = [];
     this.#emit();
   }
-  unselect(ordinal: number) { this.visit.unselect(ordinal); this.#emit(); }
+  unselect(ordinal: number) {
+    this.visit.unselect(ordinal);
+    this.#emit();
+  }
   async review() {
     const request = this.visit.startReview();
     const state = this.visit.state!;
     await this.#run(async () => {
-      const reply = await this.#port.review(state.upload!.id, state.choices.map(({ choice }) => choice), request.signal);
+      const reply = await this.#port.review(
+        state.upload!.id,
+        state.choices.map(({ choice }) => choice),
+        request.signal,
+      );
       if (!this.#current() || request.signal.aborted) return;
       this.#feedback(reply);
       if (reply.kind !== 'ok') return;
       this.#reviewed = reply.value.reviewed;
-      this.visit.admitReview(request, { uploadId: state.upload!.id, body: { items: reply.value.reviewed.map(({ ordinal, reviewRevision }) => ({ ordinal, reviewRevision })) } });
+      this.visit.admitReview(request, {
+        uploadId: state.upload!.id,
+        body: { items: reply.value.reviewed.map(({ ordinal, reviewRevision }) => ({ ordinal, reviewRevision })) },
+      });
       // Replace only the displayed native page, including its exact immutable review and conflicts.
       const first = state.page?.rows[0]?.ordinal;
       if (first !== undefined) await this.#page(first - 1);
@@ -154,15 +214,35 @@ export class ArchiveEntryRecoveryJourney {
       const cancelling = this.visit.state!.phase === 'cancelling';
       if (reply.kind !== 'ok') {
         const replay = replaying || cancelling || this.#notice === 'uncertain';
-        this.visit.settleApply(original.request, replay ? 'uncertain' : reply.kind === 'refused' && reply.status === 409 ? 'stale' : 'failed');
+        this.visit.settleApply(
+          original.request,
+          replay ? 'uncertain' : reply.kind === 'refused' && reply.status === 409 ? 'stale' : 'failed',
+        );
         return;
       }
       const state = this.visit.state!;
-      const results = selectedArchiveRecoveryResults({ uploadId: reply.value.uploadId, state: cancelling ? 'cancelled' : 'ready', results: reply.value.applied.map(row => ({ ...row, section: state.choices.find(choice => choice.ordinal === row.ordinal)!.section })), next: null }, state.choices);
-      const unresolved = reply.value.applied.some(row => row.status === 'applying');
-      const changed = reply.value.applied.some(row => ['current_conflict', 'unresolved', 'unsupported'].includes(row.status));
+      const results = selectedArchiveRecoveryResults(
+        {
+          uploadId: reply.value.uploadId,
+          state: cancelling ? 'cancelled' : 'ready',
+          results: reply.value.applied.map((row) => ({
+            ...row,
+            section: state.choices.find((choice) => choice.ordinal === row.ordinal)!.section,
+          })),
+          next: null,
+        },
+        state.choices,
+      );
+      const unresolved = reply.value.applied.some((row) => row.status === 'applying');
+      const changed = reply.value.applied.some((row) =>
+        ['current_conflict', 'unresolved', 'unsupported'].includes(row.status),
+      );
       if (cancelling && !unresolved) this.#cancelNeedsReconcile = false;
-      this.visit.settleApply(original.request, unresolved ? 'recoverable' : changed && !cancelling ? 'stale' : 'complete', this.#retainAcknowledged(results));
+      this.visit.settleApply(
+        original.request,
+        unresolved ? 'recoverable' : changed && !cancelling ? 'stale' : 'complete',
+        this.#retainAcknowledged(results),
+      );
       if (unresolved) this.#notice = 'uncertain';
       if (this.#cancelRequest && this.#cancelAcknowledged) this.visit.admitCancel(this.#cancelRequest);
     });
@@ -174,7 +254,11 @@ export class ArchiveEntryRecoveryJourney {
       const reply = await this.#port.results(state.upload!.id, after, request.signal);
       if (!this.#current() || request.signal.aborted) return;
       this.#feedback(reply);
-      if (reply.kind === 'ok') this.visit.admitResults(request, this.#retainAcknowledged(selectedArchiveRecoveryResults(reply.value, state.choices)));
+      if (reply.kind === 'ok')
+        this.visit.admitResults(
+          request,
+          this.#retainAcknowledged(selectedArchiveRecoveryResults(reply.value, state.choices)),
+        );
     });
   }
   async status() {
@@ -188,7 +272,8 @@ export class ArchiveEntryRecoveryJourney {
     });
   }
   async cancel() {
-    if (!this.#cancelRequest) this.#cancelNeedsReconcile = ['applying', 'uncertain', 'recoverable'].includes(this.visit.state!.phase);
+    if (!this.#cancelRequest)
+      this.#cancelNeedsReconcile = ['applying', 'uncertain', 'recoverable'].includes(this.visit.state!.phase);
     const request = this.#cancelRequest ?? this.visit.startCancel();
     this.#cancelRequest = request;
     const id = this.visit.state!.upload!.id;
@@ -196,11 +281,14 @@ export class ArchiveEntryRecoveryJourney {
     const reply = await this.#port.cancel(id, request.signal);
     if (!this.#current() || request.signal.aborted) return;
     this.#feedback(reply);
-    if (reply.kind === 'ok') { this.#cancelAcknowledged = true; this.visit.admitCancel(request); }
+    if (reply.kind === 'ok') {
+      this.#cancelAcknowledged = true;
+      this.visit.admitCancel(request);
+    }
     this.#emit();
   }
   async readCurrent(ordinal: number) {
-    const row = this.visit.state!.results!.rows.find(row => row.ordinal === ordinal)!;
+    const row = this.visit.state!.results!.rows.find((row) => row.ordinal === ordinal)!;
     const uploadId = this.visit.state!.upload?.id;
     await this.#run(async () => {
       const reply = row.subjectId ? await this.#port.entry(row.subjectId) : await this.#port.label(row.labelId!);
