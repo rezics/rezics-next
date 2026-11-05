@@ -22,7 +22,7 @@ const authorizationQuery =
 
 type Call = { method: string; url: string; cookie: string; contentType: string; body: string };
 const calls: Call[] = [];
-let signInStatus: 200 | 401 | 429 | 503 = 200;
+let signInStatus: 200 | 401 | 403 | 429 | 503 = 200;
 const retryAfter = 37;
 
 // Copied from session.test.ts's fake OpenID provider, reduced to Auth's browser HTTP contract.
@@ -59,9 +59,9 @@ const fake = Bun.serve({
       }
       if (signInStatus === 429) headers.set('retry-after', String(retryAfter));
       return Response.json(
-        {
-          error: signInStatus === 503 ? 'unavailable' : 'authentication_denied',
-        },
+        signInStatus === 403
+          ? { error: 'account_suspended', code: 'ACCOUNT_SUSPENDED' }
+          : { error: signInStatus === 503 ? 'unavailable' : 'authentication_denied' },
         { status: signInStatus, headers },
       );
     }
@@ -272,9 +272,9 @@ test(
 );
 
 test(
-  'a refused sign-in keeps the email, clears the password and says why',
+  'a refused, suspended, throttled or unavailable sign-in keeps the email and clears the password',
   async () => {
-    for (const status of [401, 429, 503] as const) {
+    for (const status of [401, 403, 429, 503] as const) {
       signInStatus = status;
       calls.length = 0;
       const { page, urls } = await open();
@@ -313,7 +313,7 @@ test(
         expect(signIns().length).toBe(1);
         submitted(signIns()[0]);
         const message = (await alert.innerText()).trim();
-        if (status === 401) {
+        if (status === 401 || status === 403) {
           expect(message).toMatch(/email\s+or\s+password/i);
           expect(message).toMatch(/incorrect|wrong|invalid/i);
           expect(message).not.toMatch(

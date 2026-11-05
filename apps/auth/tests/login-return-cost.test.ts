@@ -23,3 +23,20 @@ test('password phase observation adds no Auth calls and bounded history cannot b
     fetch.mockRestore();
   }
 });
+
+test('native suspension records a known refusal in the original password attempt', async () => {
+  const request = spyOn(globalThis, 'fetch').mockResolvedValue(
+    Response.json({ error: 'account_suspended', code: 'ACCOUNT_SUSPENDED' }, { status: 403 }),
+  );
+  const phases: string[] = [];
+  try {
+    expect(await signIn('private@example.test', 'private-password', (phase) => phases.push(phase))).toEqual({
+      ok: false,
+      reason: 'suspended',
+    });
+    expect(phases).toEqual(['dispatched', 'refused']);
+    expect(request).toHaveBeenCalledTimes(1);
+  } finally {
+    request.mockRestore();
+  }
+});
