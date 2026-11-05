@@ -21,7 +21,7 @@ function EntryOperation({
   children,
 }: {
   operation: 'library_entry.delete' | 'library_entry.restore';
-  admitted?: boolean;
+  admitted?: boolean | undefined;
   children: ReactNode;
 }) {
   return admitted ? children : <Exposure operation={operation}>{children}</Exposure>;
@@ -48,7 +48,7 @@ export function EntryUndoForm({
 }: EntryFormContext & {
   undo: LibraryRestoreReceipt;
   retry?: boolean;
-  admitted?: boolean;
+  admitted?: boolean | undefined;
   onSubmit?: FormEventHandler<HTMLFormElement>;
   disabled?: boolean;
 }) {
@@ -94,7 +94,7 @@ export function EntryRemoveForm({
   incarnationId?: string | null;
   idempotencyKey: string;
   credential?: string | undefined;
-  admitted?: boolean;
+  admitted?: boolean | undefined;
   disabled?: boolean;
 }) {
   const client = useContext(QueryClientContext);
