@@ -1,3 +1,4 @@
+import './support/ensure-document.ts';
 import { expect, mock, test } from 'bun:test';
 import { dirname } from 'node:path';
 import { act, createElement as h } from 'react';

@@ -1,3 +1,4 @@
+import './support/ensure-document.ts';
 import { expect, mock, test } from 'bun:test';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
