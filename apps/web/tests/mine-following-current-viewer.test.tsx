@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { act } from 'react';
 import * as start from '../.storybook/react-start';
 import type { MineFollowingRead } from '../src/library/mine-following-actions';
+import type { FollowingKind } from '../src/library/following-kind-navigation/address';
 import type { FollowWriteInput, FollowWriteResult } from '../src/library/follow-records';
 import type { SessionEnv } from '../src/session/client';
 
@@ -173,10 +174,12 @@ const loaded = (
   cursor: string | null,
   title: string,
   next: string | null = `${subject}-next`,
+  kind: FollowingKind = 'all',
 ): MineFollowingRead => ({
   subject,
   cursor,
   locale: 'en',
+  kind,
   page: {
     signedIn: true,
     follows: [
@@ -552,10 +555,10 @@ test('Following recovery stays page-local through terminal pages, last-row remov
   const followActions = await import('../src/library/follow-actions');
   const { m } = await import('../src/paraglide/messages.js');
   const { getLocale } = await import('../src/paraglide/runtime.js');
-  const reads: (ReturnType<typeof deferred<MineFollowingRead>> & { cursor?: string })[] = [];
+  const reads: (ReturnType<typeof deferred<MineFollowingRead>> & { cursor?: string; kind?: FollowingKind })[] = [];
   const writes: ReturnType<typeof deferred<FollowWriteResult>>[] = [];
   const read = spyOn(actions, 'readMineFollowingForViewer').mockImplementation(({ data }) => {
-    const call = { ...deferred<MineFollowingRead>(), cursor: data.cursor };
+    const call = { ...deferred<MineFollowingRead>(), cursor: data.cursor, kind: data.kind };
     reads.push(call);
     return call.promise;
   });
@@ -593,6 +596,10 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     [...host.querySelectorAll<HTMLAnchorElement>('nav a')].find(
       (link) => link.textContent === m.library_collections_first_page(),
     );
+  const link = (label: string) =>
+    [...host.querySelectorAll<HTMLAnchorElement>('nav a')].find((item) => item.textContent === label);
+  const previous = () => link(m.following_navigation_previous());
+  const next = () => link(m.library_collection_more());
   const expectPageEmpty = () => {
     expect(host.querySelector('[data-slot="list-row"]')).toBeNull();
     expect(host.textContent).toContain(m.library_following_page_empty());
@@ -643,6 +650,7 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     expect(reads).toHaveLength(1);
     await settle(reads[0]!, initial);
     expect(host.textContent).toContain('Last visible row');
+    expect(previous()).toBeUndefined(); // A direct cursor visit does not invent an in-app predecessor.
     expect(restart()).toBeDefined(); // Populated later pages also have a way back.
     const beforeRemoval = reads.length;
     await remove();
@@ -681,7 +689,9 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     expect(host.textContent).toContain('Reset first-page row');
     expect(router.state.location.search).toEqual({ cursor: 'expired/page+' });
     const oldRestart = restart()!;
-    const oldNext = host.querySelector<HTMLAnchorElement>('nav a')!;
+    const oldNext = [...host.querySelectorAll<HTMLAnchorElement>('nav a')].find(
+      (link) => link.textContent === m.library_collection_more(),
+    )!;
     expect(new URL(oldNext.href).searchParams.get('cursor')).toBe('bounded/next+');
     await remove();
     const oldRemoval = writes.at(-1)!;
@@ -719,6 +729,131 @@ test('Following recovery stays page-local through terminal pages, last-row remov
     expectPageEmpty();
     expect(host.textContent).toContain(m.library_collections_cursor_reset());
     expect(host.textContent).not.toContain(m.library_follow_removed());
+
+    const subjectKind = link(m.following_kind_subject());
+    expect(subjectKind).toBeDefined();
+    await act(async () => {
+      subjectKind!.click();
+      await tick();
+    });
+    expect(router.state.location.search).toEqual({ kind: 'subject' });
+    expect(reads.at(-1)!.cursor).toBeUndefined();
+    expect(reads.at(-1)!.kind).toBe('subject');
+    const subjectFirst = loaded('B', null, 'Subject first window', 'subject-next', 'subject');
+    subjectFirst.page.follows[0]!.idempotencyKey = crypto.randomUUID();
+    await settle(reads.at(-1)!, subjectFirst);
+    expect(previous()).toBeUndefined();
+
+    await remove();
+    const pendingRemoval = writes.at(-1)!;
+    const beforeBlockedMove = reads.length;
+    const blockedNext = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === m.library_collection_more(),
+    )!;
+    const blockedKind = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === m.following_kind_subject(),
+    )!;
+    expect(blockedNext.disabled).toBe(true);
+    expect(blockedKind.disabled).toBe(true);
+    await act(async () => {
+      blockedNext.click();
+      blockedKind.click();
+      await tick();
+    });
+    expect(router.state.location.search).toEqual({ kind: 'subject' });
+    expect(reads).toHaveLength(beforeBlockedMove);
+    expect(host.textContent).toContain(m.following_navigation_recover_removal());
+    expect([...host.querySelectorAll<HTMLButtonElement>('button')].some((button) => button.disabled)).toBe(true);
+    await settle(pendingRemoval, { ok: false, reason: 'unavailable' });
+    expect(host.textContent).toContain(m.following_navigation_recover_removal());
+    await remove();
+    const exactRetry = writes.at(-1)!;
+    expect(exactRetry.input).toEqual(pendingRemoval.input);
+    await settle(exactRetry, { ok: true, following: false });
+    expect(host.textContent).not.toContain(m.following_navigation_recover_removal());
+    const firstPageNext = next()!;
+    const beforeDuplicate = reads.length;
+    await act(async () => {
+      firstPageNext.click();
+      firstPageNext.click();
+      await tick();
+    });
+    expect(reads).toHaveLength(beforeDuplicate + 1);
+    expect(reads.at(-1)!.cursor).toBe('subject-next');
+    expect(reads.at(-1)!.kind).toBe('subject');
+    const subjectSecond = loaded('B', 'subject-next', 'Subject sparse window', 'subject-third', 'subject');
+    subjectSecond.page.follows = [];
+    await settle(reads.at(-1)!, subjectSecond);
+    expect(host.textContent).toContain(m.library_following_page_empty());
+    expect(next()).toBeDefined();
+    expect(new URL(previous()!.href).searchParams.has('cursor')).toBe(false);
+
+    const secondNext = next()!;
+    await act(async () => {
+      secondNext.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 }));
+      await tick();
+    });
+    expect(reads.at(-1)!.cursor).toBe('subject-third');
+    const wrongThird = loaded('B', 'wrong-third', 'Wrong cursor response', null, 'subject');
+    await settle(reads.at(-1)!, wrongThird);
+    expect(host.textContent).toContain(m.library_follow_unavailable());
+    const retryButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === m.library_follow_retry(),
+    )!;
+    await act(async () => {
+      retryButton.click();
+      await tick();
+    });
+    expect(reads.at(-1)!.cursor).toBe('subject-third');
+    expect(reads.at(-1)!.kind).toBe('subject');
+    const subjectThird = loaded('B', 'subject-third', 'Subject terminal window', null, 'subject');
+    subjectThird.page.follows = [];
+    await settle(reads.at(-1)!, subjectThird);
+    expect(host.textContent).toContain(m.library_following_page_empty());
+    expect(next()).toBeUndefined();
+    expect(previous()).toBeDefined();
+
+    await act(async () => {
+      previous()!.click();
+      await tick();
+    });
+    expect(reads.at(-1)!.cursor).toBe('subject-next');
+    const returnedSecond = loaded('B', 'subject-next', 'Subject sparse window', 'subject-third', 'subject');
+    returnedSecond.page.follows = [];
+    await settle(reads.at(-1)!, returnedSecond);
+    expect(new URL(restart()!.href).searchParams.has('cursor')).toBe(false);
+
+    await act(async () => {
+      restart()!.click();
+      await tick();
+    });
+    expect(router.state.location.search).toEqual({ kind: 'subject' });
+    expect(reads.at(-1)!.cursor).toBeUndefined();
+    const afterFirst = loaded('B', null, 'Subject first after First', 'subject-next', 'subject');
+    await settle(reads.at(-1)!, afterFirst);
+    expect(previous()).toBeUndefined();
+    expect(window.document.activeElement?.tagName).toBe('H1'); // Keyboard Next focuses the accepted page heading.
+
+    const beforeBack = reads.length;
+    await act(async () => {
+      router.history.back();
+      await tick();
+    });
+    expect(router.state.location.search).toEqual({ cursor: 'subject-next', kind: 'subject' });
+    if (reads.length > beforeBack) {
+      const backRead = loaded('B', 'subject-next', 'Browser Back page', 'subject-third', 'subject');
+      backRead.page.follows = [];
+      await settle(reads.at(-1)!, backRead);
+    }
+    expect(previous()).toBeUndefined();
+    const beforeForward = reads.length;
+    await act(async () => {
+      router.history.forward();
+      await tick();
+    });
+    expect(router.state.location.search).toEqual({ kind: 'subject' });
+    if (reads.length > beforeForward) await settle(reads.at(-1)!, afterFirst);
+
     await act(async () => {
       client.setQueryData(sessionQuery.queryKey, { state: 'signed-out', subject: null, csrfToken: null });
       await tick();
