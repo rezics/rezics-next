@@ -2437,7 +2437,7 @@ candidate and authority and retains its existing draft/uncertain-command recover
 Decision: supplied-name return uses one bounded browser history value and the existing validated same-locale `via`
 address; filters stay out of URLs, and changed caller, Context or release refuses restoration.
 The shared handoff restores the expanded disclosure, mounted language groups, group/row window, filter and Terms
-focus on work and people names, plus the work Sources focus anchor. Its binding includes Subject, actual Context, selected Realm, locale,
+focus on work and people names, plus the Sources focus anchor. Its binding includes Subject, actual Context, selected Realm, locale,
 release/revision and browser session-cache incarnation metadata (including weak query identity, so replacing a cache entry cannot revive a return); it contains no credentials or editing state.
 A returned fresh page may restore the view, but a mounted retired source object never becomes current again,
 including A-to-B-to-A, locale replacement and session refresh. Late copy and advice callbacks cannot update it.
@@ -2539,9 +2539,30 @@ bounded mounted-operation authority read once per visit and once per explicit re
 signed-out advice leave public names and Sources usable. The existing Terms owner reads its original Subject and
 retains its own candidate, command and draft state; the names projection is never a replacement edit payload.
 
-People names use the same bounded names-return handoff as work names, through the existing page Context link
-adapter for Terms and Sources. Their profile, local grouping/filtering/copying and original Terms recovery remain
-the consumer's existing presentation; the shared adapter grants no work type identity or correction authority.
+Decision: Person/Character names preserve the native selected Context in the validated return address and capture
+Realm from the installed page link's final address. Sources and Terms remain unsupported for a non-Global selected
+Context; the names stay readable and no Global visit opens implicitly.
+
+The original address fields are locale, Subject UUID/slug, native `context`, final `realm` when selected, and
+`#supplied-names`. Destination `via` contains that address, without a nested return or copied spellings. Sources
+accepts `realm` and `via`, but no selected-Context input; Terms accepts `via` and reads Global with fresh authority.
+The entry explains that limit. The installed `NamesHandoff` and `PeopleNamesView.captureSourcesVisit` carry the
+query (250 UTF-16 units), page, expansion, at most eight group descriptors and Sources/Terms focus through ordinary
+history. The whole closed descriptor is charged in UTF-8 by `namesReturn` against 8,192 bytes, tighter than the
+shared return address's 32,768-character limit; the destination search budget adds encoded `via` to its fixed
+2,048-character allowance. The final Realm is included in real hrefs before modifier/new-tab activation.
+
+Fresh native admission precedes restoration. Subject/type, actual Context, release/revision, locale and observed
+caller bind the visit; reading/release/reader replacements retire old controls permanently. Changed bindings show
+current names and recovery, while missing history metadata explicitly restarts the local view. No provider,
+spelling or old authorized payload enters a locator. Filtering/copying adds no read; supported advice retains its
+single independent explicit retry. Unsupported Contexts make no Global advice read.
+
+The installed shared focus grammar is only `terms | sources`; exact surviving-name focus and protection against
+stealing an already connected control's focus require its original owner's additive hook. The Sources owner's
+plain `returnTo` anchor still transfers no history metadata: explicit return and a new tab restart honestly; Back
+can restore a current finite window. That state-transfer seam remains with Sources. The Person/Character consumer
+does not add another handoff, source read or Terms authority implementation.
 
 ## Choose a supplied work synopsis
 

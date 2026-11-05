@@ -9585,6 +9585,8 @@
   "producer_history_retired_explanation": "This correction no longer has a current reading. A command already sent may still have taken effect; its outcome may be unknown. Nothing will be resent from this retired correction.",
   "producer_history_slice_lost": "The original slice is no longer available here. Read again before deliberately starting another correction.",
   "producer_history_retired_close": "Dismiss retired correction",
+  "people_names_context_unsupported": "Sources and Terms do not support this selected Context. Current names remain readable; no separate Global visit has been opened.",
+  "people_names_destination_scope": "Terms opens a separate Global reading and checks current editing authority there. Sources reads its selected Realm; it does not attribute a spelling to a provider.",
   "people_names_heading": "Supplied names and aliases",
   "people_names_selected": "Selected page label:",
   "people_names_fallback": "The page uses this supplied fallback label:",

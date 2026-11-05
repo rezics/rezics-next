@@ -9489,6 +9489,8 @@
   "producer_history_retired_explanation": "Esta corrección ya no tiene una lectura vigente. Una orden ya enviada puede haber surtido efecto; su resultado puede ser desconocido. No se reenviará nada desde esta corrección retirada.",
   "producer_history_slice_lost": "El segmento original ya no está disponible aquí. Vuelve a leer antes de iniciar deliberadamente otra corrección.",
   "producer_history_retired_close": "Cerrar corrección retirada",
+  "people_names_context_unsupported": "Las fuentes y la edición de nombres no admiten este contexto. Los nombres actuales siguen disponibles; no se ha abierto otra vista global.",
+  "people_names_destination_scope": "La edición de nombres abre otra vista global y comprueba allí los permisos actuales. Las fuentes se leen en el Realm seleccionado y no atribuyen una grafía a un proveedor.",
   "people_names_heading": "Nombres y alias proporcionados",
   "people_names_selected": "Etiqueta seleccionada para la página:",
   "people_names_fallback": "La página usa esta etiqueta proporcionada en un idioma alternativo:",
