@@ -41,6 +41,13 @@ import { CharacterOverview } from './showcase-people/character';
 import { OrganizationOverview } from '../catalogue/organization-reader/overview';
 import { ProducerHistoryEntry } from '../catalogue/producer-history/entry';
 import { AlbumProfileEntry } from '../catalogue/album-profile-entry';
+import {
+  albumCurrentVisitSourceAddress,
+  createAlbumCurrentVisitLink,
+  type AlbumCurrentReading,
+  type AlbumCurrentVisitOrigin,
+} from '../catalogue/album-current-visit-model';
+import { AlbumCurrentVisitReturn } from '../catalogue/album-current-visit';
 import { SubjectTermsEntry } from '../catalogue/subject-terms-entry';
 import { PublicationEditorEntry } from '../catalogue/publication-editor-entry';
 import type { SubjectRead, KernelClient } from '@rezics/client';
@@ -369,6 +376,10 @@ function subjectPageRealm(page: SubjectPageData): string | undefined {
   return page.requestedRealm ?? (page.context?.population.kind === 'realm' ? page.context.population.id : undefined);
 }
 
+function validateAlbumReturnAddress(value: unknown, locale: string) {
+  return subjectVisitReturn(value, locale);
+}
+
 export function subjectPageJsonLd(
   page: SubjectPageData,
   locale: string,
@@ -665,6 +676,66 @@ export function SubjectPage({
     read && !page.account
       ? subjectHref({ id: read.subject.id, label: subjectPageTitle(page, locale) }, locale)
       : undefined;
+  const albumContextId = read ? (page.context?.id ?? read.subject.context) : undefined;
+  const albumPopulation = page.context?.population.kind ?? (albumContextId === candidateContext ? 'global' : undefined);
+  const albumContext =
+    read && albumContextId && albumPopulation
+      ? {
+          id: albumContextId,
+          population: albumPopulation,
+          ...(realm ? { realm } : {}),
+          ...(page.context?.population.kind === 'realm'
+            ? { label: page.context.population.title }
+            : albumPopulation === 'global'
+              ? { label: m.subject_context_global({}, { locale: locale as never }) }
+              : {}),
+        }
+      : undefined;
+  const albumOrigin: AlbumCurrentVisitOrigin | undefined =
+    read && read.subject.type === 'schema:MusicAlbum' && albumContext
+      ? {
+          version: 1,
+          subject: { id: read.subject.id, type: 'schema:MusicAlbum', label: subjectPageTitle(page, locale) },
+          address: currentHref ? albumCurrentVisitSourceAddress(currentHref) : '',
+          locale,
+          context: albumContext,
+          ...(page.catalogue?.digest ? { release: page.catalogue.digest } : {}),
+          ...(page.requestedReader ? { reader: page.requestedReader } : {}),
+        }
+      : undefined;
+  const albumVisit =
+    read && workAddress && read.subject.type === 'schema:MusicAlbum'
+      ? createAlbumCurrentVisitLink(
+          `${workAddress.href}/album`,
+          albumOrigin,
+          locale,
+          validateAlbumReturnAddress,
+        ).token
+      : undefined;
+  const albumCurrent = useMemo<AlbumCurrentReading | undefined>(
+    () =>
+      read && read.subject.type === 'schema:MusicAlbum' && albumContext
+        ? {
+            subjectId: read.subject.id,
+            locale,
+            context: albumContext,
+            ...(page.catalogue?.digest ? { release: page.catalogue.digest } : {}),
+            ...(page.requestedReader ? { reader: page.requestedReader } : {}),
+            address: currentHref ? albumCurrentVisitSourceAddress(currentHref) : '',
+          }
+        : undefined,
+    [
+      read?.subject.id,
+      read?.subject.type,
+      locale,
+      albumContext?.id,
+      albumContext?.population,
+      albumContext?.realm,
+      page.catalogue?.digest,
+      page.requestedReader,
+      currentHref,
+    ],
+  );
   const workWindows = useMemo(() => profileRelationWindows(page), [page]);
   const workReturn = workAddress ? contextHref(workAddress.href, realm) : undefined;
   const workRelationsHref =
@@ -756,10 +827,14 @@ export function SubjectPage({
               locale={locale}
             />
           )}
-          {read.subject.type === 'schema:MusicAlbum' &&
-            (page.context?.id ?? read.subject.context) === candidateContext && (
-              <AlbumProfileEntry id={read.subject.id} label={subjectPageTitle(page, locale)} locale={locale} />
-            )}
+          {read.subject.type === 'schema:MusicAlbum' && (
+            <AlbumProfileEntry
+              id={read.subject.id}
+              label={subjectPageTitle(page, locale)}
+              locale={locale}
+              visit={albumVisit}
+            />
+          )}
           {read.subject.type === 'schema:Recipe' && (
             <RecipeEditorEntry
               id={read.subject.id}
@@ -783,15 +858,25 @@ export function SubjectPage({
       <>
         {existingActions}
         {read && !page.account && realm && (
-          <GameProfileEntry
-            id={read.subject.id}
-            type={read.subject.type}
-            label={subjectPageTitle(page, locale)}
-            locale={locale}
-            context={page.context?.id ?? read.subject.context}
-            realm={realm}
-            release={page.catalogue?.digest}
-          />
+          <>
+            <GameProfileEntry
+              id={read.subject.id}
+              type={read.subject.type}
+              label={subjectPageTitle(page, locale)}
+              locale={locale}
+              context={page.context?.id ?? read.subject.context}
+              realm={realm}
+              release={page.catalogue?.digest}
+            />
+            {read.subject.type === 'schema:MusicAlbum' && (
+              <AlbumProfileEntry
+                id={read.subject.id}
+                label={subjectPageTitle(page, locale)}
+                locale={locale}
+                visit={albumVisit}
+              />
+            )}
+          </>
         )}
       </>
     );
@@ -896,6 +981,9 @@ export function SubjectPage({
           {...(!page.account && renderedActions ? { headerActions: renderedActions } : {})}
         >
           <div className="flex w-full flex-col gap-8">
+            {read && !page.account && read.subject.type === 'schema:MusicAlbum' && (
+              <AlbumCurrentVisitReturn locale={locale} current={albumCurrent} validateAddress={validateAlbumReturnAddress} />
+            )}
             {literarySubject && (overview || view === 'contents' || view === 'editions') ? (
               <LiteraryReaderEntry
                 work={literarySubject}

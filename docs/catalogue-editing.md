@@ -1058,8 +1058,10 @@ captures.
 
 The existing catalogue creation row offers **Create album** at `/{locale}/catalogue/album`. An admitted album's
 current reader and compact work frame offer **Edit album profile** through the existing Contribute menu at
-`/{locale}/subjects/{id}/{slug}/album`, only when the current native Context is Global and no Realm is selected.
-The shared destination descriptor also preserves the menu's exact signed-out return address.
+`/{locale}/subjects/{id}/{slug}/album`. A public-origin entry first retains that disclosed reading as bounded
+intent and shows its Subject and resolved Context. It stays read-only until the person chooses the named Global
+correction action. A legacy direct Album route remains a Global correction visit. The shared destination descriptor
+also preserves the menu's exact signed-out return address.
 These private, noindex pages retain the exact native subject ID and `schema:MusicAlbum` Type. Canonical slug
 corrections keep that identity; a different resolved ID is not silently edited. Realm/context addresses do not
 fall through to a Global write.
@@ -1106,6 +1108,16 @@ intact. Blank values do not imply clearing. An original summary is a separate au
 language and licence. Successful proposals remain awaiting review; neither a proposal nor an aggregate submit
 claims publication. Exact returned subject/candidate IDs lead to the actual native reader or review. Failed
 creation readback retains the created ID and retries the read rather than creating again.
+
+Decision: a public Album entry carries one closed origin descriptor of at most 2,048 encoded UTF-8 bytes and no
+assertion locator. It shows the source address and resolved Context without mounting correction; only a deliberate
+Global choice starts a fresh correction visit. Return reads the original public Subject/Realm again and restores
+focus only when Subject, Context, locale, reader observation and released definition still match. A general entry
+uses the current occurrence choices in the existing FactField and relation editor; labels and equal values never
+identify an assertion. Descriptor loss or unsupported origin offers an explicit current Global restart. Existing
+candidate, evidence and relation windows remain unchanged. The mounted current correction example is
+`album-current-visit.stories.tsx`; `album-current-visit.test.tsx` covers the public entry, deliberate choice,
+distinct current occurrences and return-focus cancellation.
 
 ### Create a MusicAlbum work
 

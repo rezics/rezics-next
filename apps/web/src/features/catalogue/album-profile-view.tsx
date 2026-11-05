@@ -205,7 +205,7 @@ function AlbumProfileLive({
         admitted &&
         (read.public && editors ? (
           <AlbumCorrections
-            initial={{ ...read, public: read.public, source: null }}
+            initial={read.correction ?? { ...read, public: read.public, source: null }}
             locale={locale}
             enabled={session === 'signed-in'}
             search={search}

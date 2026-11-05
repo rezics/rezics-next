@@ -14,7 +14,16 @@ import { readCorrection, readCorrectionReview, confirmCorrection } from './state
 import { submitFactCorrection } from './subject-facts-actions';
 import type { AlbumTransport } from './album-profile';
 
-function AlbumProfileSessionLive({ id, locale }: { id?: string; locale: string }) {
+function AlbumProfileSessionLive({
+  id,
+  locale,
+  currentVisit = false,
+}: {
+  id?: string;
+  locale: string;
+  /** A named Global transition obtains current correction reading and advice on mount. */
+  currentVisit?: boolean;
+}) {
   const editorWork = useCatalogueLifetime('transport');
   const { state } = useSession();
   const router = useRouter();
@@ -24,12 +33,21 @@ function AlbumProfileSessionLive({ id, locale }: { id?: string; locale: string }
   );
   const transport = useMemo<AlbumTransport>(
     () => ({
-      load: () => loadAlbumProfile({ data: id }),
+      load: async () => {
+        if (!id || !currentVisit) return loadAlbumProfile({ data: id });
+        const correction = await readCorrection({
+          data: editorRequest({ id }, editorWork),
+          headers: csrfHeaders(),
+        });
+        return correction.ok
+          ? { ok: true, release: correction.release, public: correction.public, correction }
+          : correction;
+      },
       create: (data) => createCatalogueAlbum({ data: editorRequest(data, editorWork), headers: csrfHeaders() }),
       read: (data: string) => readCreatedCatalogueSubject({ data }),
       eligibility: () => readCatalogueCreateEligibility(),
     }),
-    [id, editorWork],
+    [id, currentVisit, editorWork],
   );
   const editors = useMemo<AlbumEditors | undefined>(
     () =>
