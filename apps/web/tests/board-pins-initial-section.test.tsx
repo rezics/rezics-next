@@ -2,7 +2,6 @@ import { expect, mock, test } from 'bun:test';
 import { createElement, Fragment } from 'react';
 import { renderToStaticMarkup, renderToString } from 'react-dom/server';
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router';
-import type { KernelClient } from '@rezics/client';
 import { createKernelClient } from '@rezics/client';
 import { loadBoardPageWithAuthors } from '../src/identity/page-loaders';
 import { createStoryRecordedKernelFetch } from '../src/kernel/fake';
@@ -25,7 +24,7 @@ import {
   type BoardPinProducer,
   type BoardPinSender,
 } from '../src/threads/board-pins/contract';
-import { nativeBoardThreadPin, nativeBoardThreads } from '../src/threads/board-pins/native';
+import { changeBoardPinRequest } from '../src/threads/board-pins/native';
 
 const sender: BoardPinSender = { subject: 'moderator-subject', csrfToken: 'original-csrf' };
 
@@ -163,12 +162,35 @@ test('pin confirmation names the discussion and does not leak credentials', () =
   expect(html).not.toContain('01a17a3b-09b4-77bf-a24b-1234ebeab5c6');
 });
 
-test('native pin methods stay unavailable when the generated board resource is absent', () => {
-  const client = { boards: () => ({ get() {}, reports: {} }) } as unknown as KernelClient;
-  const boardId = '01a17a3b-09b4-77bf-a24b-1234ebeab5b3';
-  const threadId = '01a17a3b-09b4-77bf-a24b-1234ebeab5b4';
-  expect(nativeBoardThreads(client, boardId)).toBeUndefined();
-  expect(nativeBoardThreadPin(client, boardId, threadId)).toBeUndefined();
+test('installed pin callable sends the original command and keeps transport uncertainty distinct from session denial', async () => {
+  const command = {
+    boardId: '01a17a3b-09b4-77bf-a24b-1234ebeab5b3',
+    threadId: '01a17a3b-09b4-77bf-a24b-1234ebeab5b4',
+    action: 'unpin' as const,
+    key: '01a17a3b-09b4-77bf-a24b-1234ebeab5b5',
+  };
+  const requests: Request[] = [];
+  const client = createKernelClient('https://kernel.test', {
+    fetch: (async (input, init) => {
+      requests.push(new Request(input, init));
+      return Response.json({ ...command, pinned: false, pinPosition: null });
+    }) as typeof fetch,
+  });
+  const request = new Request('https://site.test', { headers: { authorization: 'Bearer original' } });
+  expect(await changeBoardPinRequest(command, request, {}, client, true)).toMatchObject({
+    state: 'applied',
+    thread: { pinned: false, actions: ['pin'] },
+  });
+  expect(requests[0]!.url).toBe(`https://kernel.test/v1/boards/${command.boardId}/threads/${command.threadId}/pin`);
+  expect(requests[0]!.headers.get('authorization')).toBe('Bearer original');
+  expect(requests[0]!.headers.get('idempotency-key')).toBe(JSON.stringify(command.key));
+  expect(await requests[0]!.json()).toEqual({ pinned: false });
+  const forbidden = new Request('https://site.test', {
+    method: 'POST',
+    headers: { cookie: '__Host-rezics_session=invalid', origin: 'https://foreign.test' },
+  });
+  expect(await changeBoardPinRequest(command, forbidden, {}, client, true)).toEqual({ state: 'denied' });
+  expect(requests).toHaveLength(1);
 });
 
 test('applied pin commands require the native identity and reject a sixth slot', () => {
