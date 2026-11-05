@@ -34,7 +34,9 @@ mock.module('../src/features/catalogue/source-concept-explorer/actions', () => (
     return new Promise<never>(() => {});
   }),
 }));
+const subjectQueries = await import('../src/features/pages/subject-queries');
 mock.module('../src/features/pages/subject-queries', () => ({
+  ...subjectQueries,
   subjectReaderQuery: (_id: string, _locale: string, scope: { reader: string; admission: number }) => ({
     queryKey: ['concept-public-origin-reader', scope.reader, scope.admission],
     queryFn: async () => ({ reader: scope.reader, preferences: undefined }),
