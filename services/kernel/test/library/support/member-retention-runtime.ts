@@ -1,3 +1,4 @@
+import { observeMemberRetentionExecution } from '../../../src/library/member-retention-bounds.ts';
 import { readFileSync } from 'node:fs';
 import { createPool } from '../../../src/database/pool.ts';
 import { libraryWorkModule } from '../../../src/library/work-module.ts';
@@ -27,24 +28,29 @@ if (import.meta.main) {
       }
     });
   }
-  const work = await composeWork([libraryWorkModule], {
-    pool,
-    client,
-    databaseUrl: process.env.DATABASE_URL!,
-    executorId,
-    clock: () => new Date(Number(readFileSync(timePath, 'utf8'))),
-    env: {},
-  });
-  await work.launch();
-  console.log('worker-ready');
-  process.once(
-    'SIGTERM',
-    () =>
-      void (async () => {
-        await work.shutdown();
-        await client.close();
-        await pool.end();
-        process.exit(0);
-      })(),
+  await observeMemberRetentionExecution(
+    (execution) => console.log('retention-execution ' + JSON.stringify(execution)),
+    async () => {
+      const work = await composeWork([libraryWorkModule], {
+        pool,
+        client,
+        databaseUrl: process.env.DATABASE_URL!,
+        executorId,
+        clock: () => new Date(Number(readFileSync(timePath, 'utf8'))),
+        env: {},
+      });
+      await work.launch();
+      console.log('worker-ready');
+      process.once(
+        'SIGTERM',
+        () =>
+          void (async () => {
+            await work.shutdown();
+            await client.close();
+            await pool.end();
+            process.exit(0);
+          })(),
+      );
+    },
   );
 }

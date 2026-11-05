@@ -273,6 +273,7 @@ const directory = resolve(import.meta.dir, '../../../../.temp/member-retention',
 const clockPath = resolve(directory, 'clock');
 type MemberRuntime = {
   process: ReturnType<typeof Bun.spawn>;
+  executions(): MemberRetentionExecution[];
   until(marker: string): Promise<void>;
   stop(signal: 'SIGKILL' | 'SIGTERM'): Promise<void>;
 };
@@ -288,6 +289,12 @@ function runtime(mode: string): MemberRuntime {
   });
   const child = {
     process,
+    executions() {
+      return output
+        .split('\n')
+        .filter((line) => line.startsWith('retention-execution '))
+        .map((line) => JSON.parse(line.slice('retention-execution '.length)) as MemberRetentionExecution);
+    },
     async until(marker: string) {
       const deadline = Date.now() + 120000;
       while (!output.includes(marker)) {
@@ -366,6 +373,18 @@ test('native member purge is exact episode bounded and never decrements public l
   await gone(m);
   expect((await m.parent()).memberCount).toBe(1);
   await parked.stop('SIGTERM');
+  const executions = parked.executions();
+  const purgeAttempt = executions.find((execution) => execution.operation === 'purge-attempt')!;
+  expect(purgeAttempt.identity?.deletionId).toBe(d1.deletionId);
+  const pages = executions.filter((execution) => execution.operation === 'page-complete');
+  const segments = executions.filter((execution) => execution.operation === 'segment-complete');
+  expect(pages.some((page) => withinCeiling(purgeAttempt.total, page.total))).toBe(true);
+  expect(segments.some((segment) => pages.every((page) => withinCeiling(page.total, segment.total)))).toBe(true);
+  for (const execution of [...pages, ...segments]) {
+    expect(Object.keys(execution.total).sort()).toEqual([...BOUND_AXES].sort());
+    expect(withinCeiling(execution.native, execution.total)).toBe(true);
+    expect(execution.total.engineRequests).toBe(0);
+  }
 
   // Active public parents retain only structural identity when an independent child
   // expires. The surviving duplicate keeps its Collection in the public listing once.
