@@ -157,10 +157,10 @@ export function PaymentReferenceDraftNavigation({
       });
     };
     window.addEventListener('beforeunload', beforeUnload);
-    window.addEventListener('click', documentLink);
+    window.addEventListener('click', documentLink, true);
     return () => {
       window.removeEventListener('beforeunload', beforeUnload);
-      window.removeEventListener('click', documentLink);
+      window.removeEventListener('click', documentLink, true);
     };
   }, [active, departure]);
 

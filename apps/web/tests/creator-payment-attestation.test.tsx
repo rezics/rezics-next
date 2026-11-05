@@ -399,12 +399,14 @@ test('the actual statement Refresh asks before reloading, and discarding the dra
     )!;
     expect(refresh.href).toBe(`https://site.test${href}`);
     const clickRefresh = async () =>
-      await act(async () =>
-        refresh.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })),
-      );
+      await act(async () => {
+        refresh.click();
+        await Promise.resolve();
+      });
 
     await clickRefresh();
-    expect(dialog()?.textContent).toContain(m.payment_reference_draft_navigation_title());
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.textContent).toContain(m.payment_reference_draft_navigation_title());
     expect(field.getAttribute('aria-invalid')).toBe('false');
     await act(async () => button(m.payment_reference_draft_navigation_stay()).click());
     expect(field.value).toBe(input.paidReference);
@@ -428,10 +430,9 @@ test('the actual statement Refresh asks before reloading, and discarding the dra
       rerenderSession();
     });
     await act(async () => {
-      const click = () =>
-        refresh.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
-      click();
-      click();
+      refresh.click();
+      refresh.click();
+      await Promise.resolve();
     });
     expect(dialog()).not.toBeNull();
     await act(async () => button(m.payment_reference_draft_navigation_discard()).click());
