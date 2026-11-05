@@ -106,9 +106,9 @@ selected-space failures remain failures. This reconciliation adds no Space polic
 The Web adapter's generated `KernelClient.libraryContinue.get` uses one `{ limit: 6, view: 'FULL', cursor? }`
 request. Missing, null, withheld, mismatched or malformed supplied summaries remain unavailable presentation,
 never successful empty results. The fake's retained entry/session summaries are illustrative DTO inputs, not
-native Continue responses or evidence of Source readiness. Decision: the fake uses only exact supplied summary
-IDs and fields; unrecorded headers stay null, and Space population or signed pagination without recordings stays
-unavailable rather than being simulated. Web owns the existing Progress route captures; exact native recordings
+native Continue responses or evidence of Source readiness. The fake uses only exact supplied summary IDs and
+fields; unrecorded headers stay null, and unrecorded Space population or signed pagination stays unavailable rather
+than simulated. Web owns the existing Progress route captures; exact native recordings
 remain unavailable until supplied by that owner. PatternStory plus AppShell Continue presentations at `/library/continue` map supplied recorded sessions and constructed empty, no-progress, unavailable, preparing, unknown and denied states for shared-shell review; they are not the actual route or native proof.
 
 `state` is an exact data ID, not a kernel enum. `subjectId` is canonical. BASIC_SESSION reuses the existing HTTP
