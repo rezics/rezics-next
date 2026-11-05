@@ -28,6 +28,12 @@ test('every attempt-ending failure and landing refusal has a non-empty priced gu
   expect(GUARDS['dev-landing-schema'].repair).toContain('original worker session');
   expect(GUARDS['dev-landing-schema'].repair).toContain('Cost target: <30000ms');
   expect(GUARDS['dev-landing-schema'].repair).toContain('Measured fresh throwaway database: 9173ms');
+  expect(GUARDS['dev-landing-kernel-import'].defect).toContain('TDZ import cycle');
+  expect(GUARDS['dev-landing-kernel-import'].defect).toContain('query-key');
+  expect(GUARDS['dev-landing-kernel-import'].repair).toContain('original worker session');
+  expect(GUARDS['dev-landing-kernel-import'].repair).toContain('server.ts');
+  expect(GUARDS['dev-landing-kernel-import'].repair).toContain('worker.ts');
+  expect(GUARDS['dev-landing-kernel-import'].repair).toContain('Cost target: <60000ms');
   expect(GUARDS['undeclared-risk-area'].defect).toContain('undeclared production change');
   expect(GUARDS['scope-failed'].defect).toContain('matched a protected production risk area');
   expect(GUARDS['scope-failed'].defect).not.toContain('unsafe source change');

@@ -1805,20 +1805,35 @@ export class WorkerJob implements GateOutcomeSink {
     const record = store.record(ref);
     if (!record) throw new Error('dev landing compiler handback requires a settled worker record');
     const schemaRepair = handoff.guard === 'dev-landing-schema';
+    const kernelImportRepair = handoff.guard === 'dev-landing-kernel-import';
+    const location = `${handoff.diagnostic.file ?? handoff.typescriptFiles[0]}${handoff.diagnostic.line ? `:${handoff.diagnostic.line}` : ''}${handoff.diagnostic.column ? `:${handoff.diagnostic.column}` : ''}`;
     const diagnostic = [
       schemaRepair
         ? `Schema dump regeneration rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
-        : `Bun rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`,
+        : kernelImportRepair
+          ? `Kernel entry import rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`
+          : `Bun rejected dev candidate ${handoff.candidate} based on ${handoff.base}.`,
       `Original source commit: ${handoff.sourceCommit}. Task ${handoff.taskId} attempt ${handoff.attempt}.`,
       schemaRepair
         ? `Regeneration error: ${handoff.diagnostic.message}`
-        : `Compiler error: ${handoff.diagnostic.file ?? handoff.typescriptFiles[0]}${handoff.diagnostic.line ? `:${handoff.diagnostic.line}` : ''}${handoff.diagnostic.column ? `:${handoff.diagnostic.column}` : ''}: ${handoff.diagnostic.message}`,
-      `${schemaRepair ? 'Retained regeneration log' : 'Retained compiler log'}: ${handoff.logPath}`,
+        : kernelImportRepair
+          ? `Import error (${handoff.entryPoint ?? 'services/kernel/src/server.ts'}): ${location}: ${handoff.diagnostic.message}`
+          : `Compiler error: ${location}: ${handoff.diagnostic.message}`,
+      schemaRepair
+        ? `Retained regeneration log: ${handoff.logPath}`
+        : kernelImportRepair
+          ? `Retained import log: ${handoff.logPath}`
+          : `Retained compiler log: ${handoff.logPath}`,
+      kernelImportRepair && handoff.argv?.length ? `Argv: ${JSON.stringify(handoff.argv)}` : '',
       schemaRepair
         ? `Changed files: ${handoff.changedFiles.join(', ')}`
-        : `Changed TypeScript files: ${handoff.typescriptFiles.join(', ')}`,
+        : kernelImportRepair
+          ? `Changed Kernel source files: ${handoff.typescriptFiles.join(', ')}`
+          : `Changed TypeScript files: ${handoff.typescriptFiles.join(', ')}`,
       `Repair ${schemaRepair ? 'the migration' : 'this source'} in place, then return through normal landing preparation in this same task session.`,
-    ].join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
     let schedule = false;
     store.write(ref, () => {
       if (store.events(ref.taskId, ref.attempt).some((event) => event.kind === 'dev-landing-transpile-returned'))
@@ -1838,7 +1853,7 @@ export class WorkerJob implements GateOutcomeSink {
       recordFlow(store.db, {
         ...ref,
         stage: 'landing',
-        action: 'dev-transpile',
+        action: kernelImportRepair ? 'dev-kernel-import' : 'dev-transpile',
         at: new Date().toISOString(),
         detail: JSON.stringify({
           outcome: 'repair-handback',
@@ -1846,10 +1861,16 @@ export class WorkerJob implements GateOutcomeSink {
           candidate: handoff.candidate,
           changedFileCount: handoff.changedFiles.length,
           typescriptFileCount: handoff.typescriptFiles.length,
+          kernelFileCount: kernelImportRepair ? handoff.typescriptFiles.length : undefined,
           elapsedMs: handoff.elapsedMs,
+          setupMs: handoff.setupMs ?? null,
+          importMs: handoff.importMs ?? null,
+          cleanupMs: handoff.cleanupMs ?? null,
           logPath: handoff.logPath,
           diagnostic: handoff.diagnostic,
           sourceCommit: handoff.sourceCommit,
+          entryPoint: handoff.entryPoint,
+          argv: handoff.argv,
         }),
       });
       if (task.state === 'landing') store.updateTask(ref, (current) => (current.state = 'ready'));
@@ -1906,6 +1927,20 @@ export class WorkerJob implements GateOutcomeSink {
           action: 'dev-transpile',
           at: new Date().toISOString(),
           detail: JSON.stringify(outcome.devTranspile),
+        });
+      }
+      if (
+        outcome.devKernelImport &&
+        !store.events(outcome.taskId, outcome.attempt).some((event) => event.kind === 'dev-landing-kernel-import-recorded')
+      ) {
+        store.event(outcome, 'dev-landing-kernel-import-recorded', outcome.devKernelImport);
+        recordFlow(store.db, {
+          taskId: outcome.taskId,
+          attempt: outcome.attempt,
+          stage: 'landing',
+          action: 'dev-kernel-import',
+          at: new Date().toISOString(),
+          detail: JSON.stringify(outcome.devKernelImport),
         });
       }
       record.diffLines = outcome.diffLines;

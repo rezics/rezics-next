@@ -602,6 +602,7 @@ test('the combined dev candidate is transpiled once with all changed TypeScript 
     const events = readFlow(h.store.db).filter((event) => event.action === 'dev-transpile');
     expect(events).toHaveLength(1);
     expect(flowReport(events, readFlowTasks(h.store.db)).devTranspile.successfulChecks).toBe(1);
+    expect(flowReport(readFlow(h.store.db), readFlowTasks(h.store.db)).devKernelImport.successfulChecks).toBe(0);
   } finally {
     h.dispose();
   }
@@ -754,3 +755,171 @@ test('a migration on a dev landing publishes its regenerated schema dump, and a 
     h.dispose();
   }
 }, 120_000);
+
+const KERNEL_IMPORT_STAND_IN = [
+  "import { appendFileSync } from 'node:fs';",
+  'export async function withThrowawayDatabase(work) {',
+  "  if (process.env.KERNEL_IMPORT_RUNS) appendFileSync(process.env.KERNEL_IMPORT_RUNS, 'run\\n');",
+  "  return work({ ...process.env, DATABASE_URL: 'postgres://rezics:rezics@127.0.0.1:59999/rezics?sslmode=disable', KERNEL_DATABASE_CONTAINER: 'fixture' });",
+  '}',
+].join('\n');
+
+function seedKernelImportFixture(h: ReturnType<typeof integrationHarness>, server: string, worker: string) {
+  h.advanceDev('services/kernel/scripts/derived.ts', `${KERNEL_IMPORT_STAND_IN}\n`);
+  h.advanceDev('services/kernel/src/server.ts', server);
+  h.advanceDev('services/kernel/src/worker.ts', worker);
+}
+
+test('a Kernel-source TDZ on a dev landing returns to the original session and publishes after repair', async () => {
+  const h = integrationHarness();
+  const file = 'services/kernel/src/cycle-a.ts';
+  let resumedSession: string | undefined;
+  let repairPrompt = '';
+  const script = `
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const { spawnSync } = require('node:child_process');
+    const file = ${JSON.stringify(file)};
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, process.env.GOAL_ATTEMPT === '1'
+      ? "import { b } from './cycle-b.ts';\\nexport const a = b + 1;\\n"
+      : 'export const a = 1;\\n');
+    if (spawnSync('git', ['add', '--', file], { stdio: 'ignore' }).status !== 0 || spawnSync('git', ['commit', '-qm', 'Worker kernel source']).status !== 0) process.exit(2);
+    console.log(JSON.stringify({ type: 'thread.started', thread_id: 'kernel-import-repair-session' }));
+    console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'RESULT: success' } }));
+    console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 10, output_tokens: 2 } }));
+  `;
+  const adapter = {
+    ...codexAdapter,
+    start() {
+      return [process.execPath, ['-e', script]] as [string, string[]];
+    },
+    resume(options: Parameters<NonNullable<typeof codexAdapter.resume>>[0]) {
+      resumedSession = options.session;
+      repairPrompt = options.prompt;
+      return [process.execPath, ['-e', script]] as [string, string[]];
+    },
+  };
+  try {
+    h.settings.integration.devLandingChecks = false;
+    seedKernelImportFixture(
+      h,
+      "import { a } from './cycle-a.ts';\nexport const server = a;\n",
+      "export const worker = true;\n",
+    );
+    h.advanceDev('services/kernel/src/cycle-a.ts', 'export const a = 1;\n');
+    h.advanceDev('services/kernel/src/cycle-b.ts', "import { a } from './cycle-a.ts';\nexport const b = a + 1;\n");
+    h.ensureDev();
+    const runs = join(h.root, '.temp', 'kernel-import-runs.log');
+    mkdirSync(join(h.root, '.temp'), { recursive: true });
+    process.env.KERNEL_IMPORT_RUNS = runs;
+    const task = h.dispatch(file);
+    await withAgentAdapter(adapter, async () => {
+      await h.start(task);
+      await h.train();
+      expect(resumedSession).toBe('kernel-import-repair-session');
+      expect(repairPrompt).toContain('Kernel entry import rejected dev candidate');
+      expect(repairPrompt).toContain('Retained import log:');
+      expect(h.store.task(task.id).currentAttempt).toBe(2);
+      await h.train();
+    });
+    expect(h.store.events(task.id, 1).some((event) => event.kind === 'dev-landing-transpile-returned')).toBe(true);
+    expect(h.store.record({ taskId: task.id, attempt: 1 })?.guardIds).toContain('dev-landing-kernel-import');
+    expect(h.store.events(task.id, 1).filter((event) => event.kind === 'gate-outcome')).toHaveLength(0);
+    expect(h.store.attempt({ taskId: task.id, attempt: 1 }).state).toBe('superseded');
+    expect(h.store.task(task.id).state).toBe('integrated');
+    expect(git(h.root, 'show', `dev:${file}`)).toBe('export const a = 1;\n');
+    const outcome = h.outcomes.find((item) => item.taskId === task.id && item.passed)!;
+    expect(outcome.devKernelImport).toMatchObject({ outcome: 'passed' });
+    const price = flowReport(readFlow(h.store.db), readFlowTasks(h.store.db));
+    expect(price.devKernelImport).toMatchObject({ successfulChecks: 1, repairHandbacks: 1 });
+  } finally {
+    delete process.env.KERNEL_IMPORT_RUNS;
+    h.dispose();
+  }
+}, 60_000);
+
+test('a combined Kernel-source candidate runs one import phase, and a replayed candidate is imported again', async () => {
+  const h = integrationHarness();
+  try {
+    h.settings.integration.devLandingChecks = false;
+    h.settings.integration.batchSize = 2;
+    seedKernelImportFixture(h, 'export const server = true;\n', 'export const worker = true;\n');
+    h.ensureDev();
+    const runs = join(h.root, '.temp', 'kernel-import-runs.log');
+    mkdirSync(join(h.root, '.temp'), { recursive: true });
+    writeFileSync(runs, '');
+    process.env.KERNEL_IMPORT_RUNS = runs;
+    const entries = ['services/kernel/src/member-a.ts', 'services/kernel/src/member-b.ts'];
+    const tasks = entries.map((path) => h.dispatch(path));
+    for (const [index, task] of tasks.entries()) {
+      writeFileSync(
+        join(task.worktree, '.temp/worker-plan.json'),
+        JSON.stringify({ file: entries[index]!, content: `export const member${index} = ${index};\n` }),
+      );
+      await h.start(task);
+    }
+    await h.train();
+    const combined = h.outcomes.find((outcome) => outcome.devKernelImport);
+    expect(combined?.devKernelImport).toMatchObject({ outcome: 'passed', kernelFileCount: 2 });
+    expect(readFileSync(runs, 'utf8').trim().split('\n')).toEqual(['run']);
+    writeFileSync(runs, '');
+    const replay = h.dispatch('services/kernel/src/replay.ts');
+    writeFileSync(
+      join(replay.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({ file: 'services/kernel/src/replay.ts', content: 'export const replayed = true;\n' }),
+    );
+    await h.start(replay);
+    let moved = false;
+    const trainRun = new MergeTrain({
+      ...h.settings,
+      queue: h.queue,
+      fence: h.store,
+      sink: {
+        onGateOutcome(outcome) {
+          h.outcomes.push(outcome);
+          h.job.onGateOutcome(outcome);
+        },
+        onDevLandingTranspileHandoff(handoff) {
+          h.job.onDevLandingTranspileHandoff(handoff);
+        },
+      },
+      beforeIntegrationAdvance() {
+        if (moved) return;
+        moved = true;
+        h.advanceDev('services/kernel/src/replay-peer.ts', 'export const peer = true;\n');
+      },
+    });
+    await trainRun.run();
+    await h.job.drain();
+    expect(moved).toBe(true);
+    expect(readFileSync(runs, 'utf8').trim().split('\n').length).toBeGreaterThanOrEqual(1);
+    const replayed = h.outcomes.find((item) => item.taskId === replay.id && item.passed)!;
+    expect(replayed.devKernelImport).toMatchObject({ outcome: 'passed' });
+  } finally {
+    delete process.env.KERNEL_IMPORT_RUNS;
+    h.dispose();
+  }
+}, 60_000);
+
+test('control-plane Kernel-source landings on dev run the same candidate-scoped import', async () => {
+  const h = integrationHarness();
+  try {
+    h.settings.integration.devLandingChecks = false;
+    seedKernelImportFixture(h, 'export const server = true;\n', 'export const worker = true;\n');
+    h.ensureDev();
+    const path = 'services/kernel/src/control-plane-entry.ts';
+    const task = h.dispatch(path, [], ['true'], 'control-plane');
+    writeFileSync(
+      join(task.worktree, '.temp/worker-plan.json'),
+      JSON.stringify({ file: path, content: 'export const controlPlaneKernel = true;\n' }),
+    );
+    await h.start(task);
+    await h.train();
+    const outcome = h.outcomes.find((item) => item.taskId === task.id && item.passed)!;
+    expect(outcome.devKernelImport).toMatchObject({ outcome: 'passed', kernelFileCount: 1 });
+    expect(git(h.root, 'show', `dev:${path}`)).toBe('export const controlPlaneKernel = true;\n');
+  } finally {
+    h.dispose();
+  }
+}, 60_000);
