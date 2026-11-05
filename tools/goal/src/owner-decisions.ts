@@ -282,7 +282,7 @@ export function prepareOwnerDecisionPrompt(
     Buffer.byteLength(`${prompt}\n\n${block}`) <= policy.brief.bytes;
   const header = `Owner decision ${decision.id} from authenticated manager ${decision.managerId}: this prompt carries the decision.`;
   const summary = `Decision: ${decision.summary}`;
-  // A summary that does not fit is replaced by a pointer to a file holding the whole decision, so no decision refuses launch.
+  // A summary that does not fit becomes a pointer to the decision file, so no decision refuses a launch.
   const pointer = `${DECISION_FILE_DIRECTORY}/${decision.sequence}.md`;
   let lines: string[];
   let file: OwnerDecisionFile | undefined;
