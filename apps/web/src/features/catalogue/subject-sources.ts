@@ -1,3 +1,4 @@
+import { synopsisVisit } from '../pages/subject-summary-reading/visit';
 import { actionState, type ConceptViewerActions } from './source-concept-explorer';
 import type { KernelClient, SubjectRead } from '@rezics/client';
 import { pickLanguage } from '@rezics/composition';
@@ -37,6 +38,7 @@ export type SourceField = {
   compareHref?: string;
 };
 export type SourcesPageData = {
+  selectedSynopsis?: 'matched' | 'changed' | 'missing' | 'unsupported' | 'unavailable';
   realm?: string | undefined;
   context?: import('@rezics/composition').SelectedContext | undefined;
   viewer?: { state: 'public' | 'signed-in' | 'signed-out'; actions: ConceptViewerActions };
@@ -75,11 +77,17 @@ export function explainSubjectSources(
   read: Pick<SubjectRead, 'subject' | 'related'> & {
     summary?: SubjectRead['summary'] | undefined;
     account?: SubjectRead['account'];
+    selectedSynopsis?: SubjectRead['selectedSynopsis'];
   },
   locale: string,
   definitions?: SourceDefinitions,
 ): SourcesPageData {
-  const { subject } = read;
+  const exact = read.selectedSynopsis;
+  const subject = exact ? {
+    ...read.subject,
+    statements: exact.kind === 'matched' ? { 'schema:abstract': [exact.fact] } : {},
+    sourceRecords: [],
+  } : read.subject;
   const actions = actionState({ ...read, account: read.account ?? null });
   const original = originalLanguage(subject);
   const title = pageText(subject.labels, locale, original);
@@ -112,10 +120,10 @@ export function explainSubjectSources(
         ? [value.content.language]
         : [],
     );
-    const language = pickLanguage(languages, locale, original);
+    const language = exact?.kind === 'matched' ? undefined : pickLanguage(languages, locale, original);
     selected = selected.filter(
       ({ property, value }) =>
-        property.data_type !== 'document' || !isRecord(value.content) || value.content.language === language,
+        exact?.kind === 'matched' || property.data_type !== 'document' || !isRecord(value.content) || value.content.language === language,
     );
     const facts = selected.flatMap((statement): SourceFact[] => {
       const locator = statement.property.data_type === 'document' || statement.property.data_type === 'media';
@@ -176,6 +184,7 @@ export function explainSubjectSources(
     });
   }
   return {
+    ...(exact ? { selectedSynopsis: exact.kind } : {}),
     viewer: { state: 'public', actions },
     id: subject.id,
     title,
@@ -185,7 +194,7 @@ export function explainSubjectSources(
     fields,
     related,
     sources: {
-      credit: read.summary?.cover?.credit ?? null,
+      credit: exact ? null : read.summary?.cover?.credit ?? null,
       // Native selected support owns this list. Citations above remain per field;
       // a record in this list grants neither field support nor prose/cover rights.
       records: subject.sourceRecords
@@ -229,12 +238,22 @@ export async function readSubjectSources(
   locale: string,
   definitions?: SourceDefinitions | Promise<SourceDefinitions | undefined>,
   includeViewerActions = false,
+  returnTo?: string,
 ): Promise<SourcesResult> {
   if (!uuid.test(id)) return { kind: 'missing' };
+  const visit = synopsisVisit(returnTo, id, locale);
+  if (visit.kind === 'invalid') return { kind: 'invalid' };
+  const selection = visit.kind === 'selected' ? visit.selection : undefined;
+  if (selection && (!selection.release || selection.realm)) return { kind: 'conflict' };
+  const selectedSynopsis = selection ? JSON.stringify({
+    statement: selection.candidateId, document: selection.documentId, digest: selection.digest,
+    language: selection.language, context: selection.context, release: selection.release,
+  }) : undefined;
   try {
-    const query = { language: locale, includeViewerActions };
+    const query = { language: locale, includeViewerActions, ...(selectedSynopsis ? { selectedSynopsis } : {}) };
     let current = await client.subjects({ id }).get({ query, fetch: { redirect: 'manual', cache: 'no-store' } });
     let expected = id;
+    if (current.status === 308 && selection) return { kind: 'conflict' };
     if (current.status === 308) {
       const body = current.data ?? current.error?.value;
       const moved = body && 'redirect' in body ? body.redirect : undefined;
@@ -246,6 +265,7 @@ export async function readSubjectSources(
     }
     if (current.status !== 200 || !current.data) return failure(current.status);
     if (current.data.subject.id !== expected) return { kind: 'unavailable' };
+    if (selection && !current.data.selectedSynopsis) return { kind: 'unavailable' };
     const page = explainSubjectSources(current.data, locale, await definitions);
     if (includeViewerActions && page.viewer) page.viewer.state = 'signed-in';
     return { kind: 'ready', page };
