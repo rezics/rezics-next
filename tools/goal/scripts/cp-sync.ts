@@ -9,6 +9,12 @@
 import { readScriptPolicy, scriptPolicy, withScriptPolicy } from '../src/script-policy.ts';
 import { defaultPolicy, type ControlPolicy } from '../src/policy.ts';
 import { RESIDENT_CODE_UNITS } from '../src/service.ts';
+import {
+  planCpSyncRefs,
+  publishCpSyncRefs,
+  type CpSyncRefTransactionContext,
+  type RefUpdate,
+} from '../src/cp-sync-ref-transaction.ts';
 import { Database } from 'bun:sqlite';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -281,13 +287,6 @@ function commitTree(cwd: string, tree: string, parents: readonly string[], messa
   return git(cwd, 'commit-tree', tree, ...parents.flatMap((parent) => ['-p', parent]), '-m', message);
 }
 
-type RefUpdate = { ref: string; previous: string; next: string };
-
-function transaction(cwd: string, updates: readonly RefUpdate[]): Result {
-  const input = updates.map((update) => `update ${update.ref} ${update.next} ${update.previous}\n`).join('');
-  return run(cwd, ['update-ref', '-m', 'cp-sync', '--stdin'], { input });
-}
-
 /** The single checkout that has main checked out, which runs the live control plane. */
 export function findMainCheckout(cwd: string): string {
   const listing = git(cwd, 'worktree', 'list', '--porcelain');
@@ -324,6 +323,29 @@ function assertCheckoutReady(checkout: string, expectedHead: string, paths: read
           '\n',
         )}${dirty.length > scriptPolicy().cpSync.dirtyPaths ? `\n  ... ${dirty.length - scriptPolicy().cpSync.dirtyPaths} more` : ''}`,
     );
+}
+
+function refTransactionContext(checkout: string): CpSyncRefTransactionContext {
+  return {
+    checkout,
+    main: MAIN,
+    dev: DEV,
+    stabilize: STABILIZE,
+    conflictPathLimit: scriptPolicy().cpSync.conflictPaths,
+    git: (...args) => git(checkout, ...args),
+    run: (args, options) => run(checkout, args, options),
+    head: (branch) => head(checkout, branch),
+    isAncestor: (ancestor, descendant) => isAncestor(checkout, ancestor, descendant),
+    changedPaths: (from, to, paths) => changedPaths(checkout, from, to, paths),
+    replacePaths: (base, source, paths) => replacePaths(checkout, base, source, paths),
+    commitTree: (tree, parents, message) => commitTree(checkout, tree, parents, message),
+    assertCheckoutReady: (expectedHead, paths) => assertCheckoutReady(checkout, expectedHead, paths),
+    refuse: (message) => {
+      throw new Refusal(message);
+    },
+    short,
+    redact,
+  };
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -745,110 +767,6 @@ export function rollbackTarget(history: readonly HistoryEntry[]): HistoryEntry |
 // ---------------------------------------------------------------------------------------------------------------
 // Publication
 
-type Plan = { updates: RefUpdate[]; warnings: string[] };
-
-/**
- * Main gets `next`; stabilize (when present) and dev merge it so main stays inside both and promotion can still
- * fast-forward. Dev keeps its own tree: everything the new main commit holds is already on dev (a sync) or is a
- * main-only emergency measure dev supersedes (a rollback). Stabilize takes the control-plane paths from main.
- */
-function plan(
-  cwd: string,
-  mode: 'sync' | 'rollback',
-  previous: string,
-  next: string,
-  paths: readonly string[],
-  source?: string,
-): Plan {
-  const updates: RefUpdate[] = [{ ref: `refs/heads/${MAIN}`, previous, next }];
-  const warnings: string[] = [];
-  const dev = head(cwd, DEV);
-  if (!dev) throw new Refusal(`Branch ${DEV} does not exist.`);
-  if (source && !isAncestor(cwd, source, dev))
-    throw new Refusal(`${DEV} no longer contains the synced source ${short(source)}; run again.`);
-  let devParent = next;
-  const stabilize = head(cwd, STABILIZE);
-  if (stabilize && !isAncestor(cwd, next, stabilize)) {
-    let keep = false;
-    if (mode === 'sync') {
-      const own = changedPaths(cwd, git(cwd, 'merge-base', stabilize, source!), stabilize, paths);
-      if (own.length)
-        throw new Refusal(
-          `${STABILIZE} changed ${own.slice(0, scriptPolicy().cpSync.conflictPaths).join(', ')} without ${DEV}; syncing would drop those changes.`,
-        );
-    } else if (changedPaths(cwd, previous, stabilize, paths).length) {
-      keep = true;
-      warnings.push(
-        `${STABILIZE} has newer control-plane code than main; it keeps it, so its next promotion republishes it.`,
-      );
-    }
-    const tree = keep ? git(cwd, 'rev-parse', `${stabilize}^{tree}`) : replacePaths(cwd, stabilize, next, paths);
-    const merged = commitTree(cwd, tree, [stabilize, next], `Merge ${MAIN} into ${STABILIZE}`);
-    updates.push({ ref: `refs/heads/${STABILIZE}`, previous: stabilize, next: merged });
-    if (isAncestor(cwd, stabilize, dev)) devParent = merged;
-  }
-  if (!isAncestor(cwd, devParent, dev)) {
-    const from = devParent === next ? MAIN : STABILIZE;
-    const merged = commitTree(
-      cwd,
-      git(cwd, 'rev-parse', `${dev}^{tree}`),
-      [dev, devParent],
-      `Merge ${from} into ${DEV}`,
-    );
-    updates.push({ ref: `refs/heads/${DEV}`, previous: dev, next: merged });
-  }
-  return { updates, warnings };
-}
-
-/**
- * Moves the main checkout's index and files first, then the refs, so a control-plane process that restarts in
- * between loads the new code and only restarts once more; a failed transaction moves the files back.
- */
-function publish(
-  checkout: string,
-  mode: 'sync' | 'rollback',
-  previous: string,
-  next: string,
-  paths: readonly string[],
-  source: string | undefined,
-  print: (line: string) => void,
-): Plan {
-  assertCheckoutReady(checkout, previous, paths);
-  const moved = run(checkout, ['read-tree', '-m', '-u', previous, next]);
-  if (moved.status !== 0)
-    throw new Refusal(`Could not update the main checkout's files: ${redact(moved.stderr.trim())}`);
-  let published: Plan | undefined;
-  let failure = '';
-  try {
-    for (let attempt = 0; attempt < 5 && !published; attempt++) {
-      if (head(checkout, MAIN) !== previous) {
-        failure = `${MAIN} moved during publication`;
-        break;
-      }
-      const candidate = plan(checkout, mode, previous, next, paths, source);
-      const result = transaction(checkout, candidate.updates);
-      if (result.status === 0) published = candidate;
-      else failure = redact(result.stderr.trim());
-    }
-  } finally {
-    if (!published) {
-      const back = run(checkout, ['read-tree', '-m', '-u', next, previous]);
-      if (back.status !== 0)
-        print(
-          `cp-sync: could not restore the main checkout's files; run \`git -C ${checkout} read-tree -m -u ${next} ${previous}\`: ${redact(back.stderr.trim())}`,
-        );
-    }
-  }
-  if (!published) throw new Refusal(`No ref moved: ${failure}`);
-  if (
-    git(checkout, 'rev-parse', 'HEAD') !== next ||
-    run(checkout, ['diff', '--quiet', 'HEAD', '--', ...paths]).status !== 0 ||
-    run(checkout, ['diff', '--cached', '--quiet', 'HEAD', '--', ...paths]).status !== 0
-  )
-    print(`cp-sync: WARNING: the main checkout does not match ${short(next)} under ${paths.join(', ')}; inspect it.`);
-  return published;
-}
-
 /** Reinstalls dependencies in the main checkout where a synced manifest or lockfile changed. */
 async function reinstall(
   checkout: string,
@@ -1118,6 +1036,7 @@ export async function sync(options: Options = {}): Promise<number> {
       const print = options.print ?? ((line: string) => console.log(redact(line)));
       const now = (options.now ?? (() => new Date()))();
       const checkout = findMainCheckout(options.cwd ?? process.cwd());
+      const refs = refTransactionContext(checkout);
       const state = join(checkout, '.temp/goal');
       const main = head(checkout, MAIN)!;
       const source = head(checkout, DEV);
@@ -1291,7 +1210,7 @@ export async function sync(options: Options = {}): Promise<number> {
         print(`cp-sync: checks passed (${verdict.reason}); sync commit ${short(commit)}`);
 
         if (options.dryRun) {
-          const preview = plan(checkout, 'sync', main, commit, paths, source);
+          const preview = planCpSyncRefs(refs, 'sync', main, commit, paths, source);
           for (const update of preview.updates)
             print(`cp-sync: would move ${update.ref} ${short(update.previous)} -> ${short(update.next)}`);
           for (const warning of preview.warnings) print(`cp-sync: ${warning}`);
@@ -1303,7 +1222,7 @@ export async function sync(options: Options = {}): Promise<number> {
         print('cp-sync: observing resident workers and gate outcomes for ten minutes before publication.');
         const before = await resident.observe(checkout);
         publicationStarted = true;
-        const published = publish(checkout, 'sync', main, commit, paths, source, print);
+        const published = publishCpSyncRefs(refs, 'sync', main, commit, paths, source, print);
         try {
           const ref = (name: string) => published.updates.find((update) => update.ref === `refs/heads/${name}`);
           const pair = (update: RefUpdate | undefined) =>
@@ -1376,6 +1295,7 @@ export async function rollback(options: Options = {}): Promise<number> {
       const print = options.print ?? ((line: string) => console.log(redact(line)));
       const now = (options.now ?? (() => new Date()))();
       const checkout = findMainCheckout(options.cwd ?? process.cwd());
+      const refs = refTransactionContext(checkout);
       const state = join(checkout, '.temp/goal');
       const historyFile = join(state, 'cp-sync-history.log');
       const history = readHistory(historyFile);
@@ -1422,12 +1342,12 @@ export async function rollback(options: Options = {}): Promise<number> {
         );
         if (options.dryRun) {
           assertCheckoutReady(checkout, current, paths);
-          for (const update of plan(checkout, 'rollback', current, commit, paths).updates)
+          for (const update of planCpSyncRefs(refs, 'rollback', current, commit, paths).updates)
             print(`cp-sync: would move ${update.ref} ${short(update.previous)} -> ${short(update.next)}`);
           print('cp-sync: dry run; no ref or checkout moved.');
           return 0;
         }
-        const published = publish(checkout, 'rollback', current, commit, paths, undefined, print);
+        const published = publishCpSyncRefs(refs, 'rollback', current, commit, paths, undefined, print);
         moved = true;
         rollbackHead = commit;
         appendHistory(historyFile, {
@@ -1465,7 +1385,7 @@ export async function rollback(options: Options = {}): Promise<number> {
           [failed],
           `control-plane: restore running host code ${short(current)}`,
         );
-        publish(checkout, 'rollback', failed, restored, paths, undefined, print);
+        publishCpSyncRefs(refs, 'rollback', failed, restored, paths, undefined, print);
         const logs = join(state, 'cp-sync', `${stamp(now)}-recovery`);
         try {
           mkdirSync(logs, { recursive: true });

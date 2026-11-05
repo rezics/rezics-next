@@ -2405,6 +2405,8 @@ captured values: `main` to the sync commit, `stabilize` (when present) to a merg
 control-plane paths, and `dev` to a merge that keeps dev's tree. Main stays inside stabilize and dev, so promotion
 still fast-forwards and the next sync finds main inside dev. A failed transaction moves the files back.
 (`git merge --ff-only` cannot do this step: once the ref has moved, the checkout's HEAD already names the new commit.)
+Decision: Sync, forward rollback and resident-host recovery share the same ref planner and publisher; stale compares
+re-plan from current branch heads, and failed publication restores the main checkout's files.
 Running processes hand over on the new `main:tools/goal` as after any control-plane release. If
 `tools/goal/package.json` or its lockfile changed, cp-sync reinstalls in the main checkout. Each sync appends the
 previous and new main, stabilize and dev heads to `.temp/goal/cp-sync-history.log`.
