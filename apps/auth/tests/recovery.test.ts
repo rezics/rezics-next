@@ -255,7 +255,18 @@ async function startForm(page: Page) {
 
 async function completeForm(page: Page) {
   const password = page.getByLabel(/new password/i);
-  await password.waitFor({ state: 'visible' });
+  try {
+    await password.waitFor({ state: 'visible' });
+  } catch (cause) {
+    throw new Error(
+      `Recovery completion form unavailable: ${JSON.stringify({
+        url: page.url(),
+        body: (await page.locator('body').innerText()).slice(0, 800),
+        routes: calls.map(({ method, url }) => ({ method, path: new URL(url, fake.url).pathname })),
+      })}`,
+      { cause },
+    );
+  }
   expect(await password.count(), 'recovery completion has a labelled new password field').toBe(1);
   return { password, submit: page.getByRole('button', { name: 'Update password', exact: true }) };
 }
