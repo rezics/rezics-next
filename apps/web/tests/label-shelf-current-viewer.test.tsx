@@ -163,6 +163,7 @@ test('The actual named-label Library renders private FULL assignments and remove
   const { createMemoryHistory, createRootRouteWithContext, createRouter, Outlet, RouterProvider } =
     await import('@tanstack/react-router');
   const { sessionQuery, exposureQuery } = await import('../src/session/query');
+  const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
   const shelfReaders = await import('../src/library/label-shelf-read');
   const { loadCurrentLabelShelfPage, loadLabelShelfPage } = shelfReaders;
   let receive = (page: CurrentLabelShelfData): CurrentLabelShelfData => page;
@@ -241,6 +242,17 @@ test('The actual named-label Library renders private FULL assignments and remove
   };
   const observe = (state: string, subject: string | null, token = subject ? csrf(subject) : null) => {
     flushSync(() => client.setQueryData(sessionQuery.queryKey, { state, subject, csrfToken: token }));
+  };
+  const expose = (groups: string[]) => {
+    flushSync(() => {
+      client.setQueryData(exposureQuery.queryKey, groups);
+      const snapshot = viewerExposureLifetime(client).getSnapshot();
+      if (snapshot.state === 'signed-in')
+        client.setQueryData(viewerExposureQuery(snapshot.observation).queryKey, {
+          subject: snapshot.observation.subject,
+          admitted: groups,
+        });
+    });
   };
   const settle = async () => {
     await act(async () => {
@@ -333,15 +345,10 @@ test('The actual named-label Library renders private FULL assignments and remove
     expect(reading()!.innerHTML).not.toContain('credential-a');
     expect(reads).toHaveLength(readsBeforeReading);
     const lateClose = host.querySelector<HTMLButtonElement>('[data-received-close]')!;
-    flushSync(() =>
-      client.setQueryData(
-        exposureQuery.queryKey,
-        admitted.filter((group) => group !== 'library_label.unassign'),
-      ),
-    );
+    expose(admitted.filter((group) => group !== 'library_label.unassign'));
     expect(reading()).not.toBeNull();
     expect(host.querySelector('[data-received-assignment-trigger]')).not.toBeNull();
-    flushSync(() => client.setQueryData(exposureQuery.queryKey, admitted));
+    expose(admitted);
     const undoForm = host.querySelector<HTMLFormElement>('[data-label-undo]')!;
     const blockedSubmit = new window.Event('submit', { bubbles: true, cancelable: true });
     undoForm.dispatchEvent(blockedSubmit);
@@ -400,15 +407,10 @@ test('The actual named-label Library renders private FULL assignments and remove
     await settle();
     visible(B);
     for (const group of admitted.slice(0, 3)) {
-      flushSync(() =>
-        client.setQueryData(
-          exposureQuery.queryKey,
-          admitted.filter((value) => value !== group),
-        ),
-      );
+      expose(admitted.filter((value) => value !== group));
       absent();
-      flushSync(() => client.setQueryData(exposureQuery.queryKey, admitted));
-      absent();
+      expose(admitted);
+      visible(B); // Healthy re-admission retains the accepted payload for this same viewer and address.
       await settle();
       visible(B);
     }
