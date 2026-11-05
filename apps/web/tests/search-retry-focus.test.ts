@@ -29,7 +29,7 @@ const { createRoot } = await import('react-dom/client');
 const queryClient = new QueryClient();
 const withQueryClient = (child: ReactNode) => createElement(QueryClientProvider, { client: queryClient }, child);
 const { SearchPage } = await import('../src/search/search');
-const { searchRetryFocusTarget } = await import('../src/search/search-retry-focus');
+const { searchRetryFocusTarget, searchRetryOwnerCurrent } = await import('../src/search/search-retry-focus');
 const { setLocale } = await import('../src/paraglide/runtime.js');
 const { m } = await import('../src/paraglide/messages.js');
 const require = createRequire(import.meta.url);
@@ -102,7 +102,7 @@ function emptyRecoveryPage(status: 'preparing' | 'unavailable' | 'ready', query 
 
 async function activate(value: HTMLButtonElement) {
   value.focus();
-  expect(document.activeElement).toBe(value);
+  expect(document.activeElement === value).toBe(true);
   await act(async () => user.keyboard('{Enter}'));
 }
 
@@ -129,7 +129,7 @@ test('keyboard result Retry restores the current region or surviving action with
   expect(host.querySelector('[data-search-recovery="loading"]')).not.toBeNull();
   expect(retry()).toBeUndefined();
   await show(page({ status: 'ready' }, readyDiscovery));
-  expect(document.activeElement).toBe(region());
+  expect(document.activeElement === region()).toBe(true);
   expect(host.querySelector('[data-slot="discovery-results"]')).not.toBeNull();
 
   await show(page({ status: 'unavailable' }));
@@ -137,21 +137,21 @@ test('keyboard result Retry restores the current region or surviving action with
   await show(page({ status: 'loading' }));
   await show(page({ status: 'ready' }, emptyDiscovery));
   expect(region().getAttribute('aria-label')).toBe(m.search_results());
-  expect(document.activeElement).toBe(region());
+  expect(document.activeElement === region()).toBe(true);
   expect(host.textContent).toContain(m.search_no_results());
 
   await show(page({ status: 'unavailable' }));
   await activate(retry()!);
   await show(page({ status: 'loading' }));
   await show(page({ status: 'unavailable' }));
-  expect(document.activeElement).toBe(retry());
+  expect(document.activeElement === retry()).toBe(true);
 
   await activate(retry()!);
   await show(page({ status: 'loading' }));
   const elsewhere = host.querySelector<HTMLButtonElement>('[data-move-focus]')!;
   elsewhere.focus();
   await show(page({ status: 'ready' }, readyDiscovery));
-  expect(document.activeElement).toBe(elsewhere);
+  expect(document.activeElement === elsewhere).toBe(true);
 });
 
 test('native empty Retry focuses the current recovery action after its exact request settles', async () => {
@@ -166,17 +166,17 @@ test('native empty Retry focuses the current recovery action after its exact req
   await activate(retry()!);
   expect(retries).toBe(1);
   await show(emptyRecoveryPage('unavailable'));
-  expect(document.activeElement).not.toBe(retry());
+  expect(document.activeElement === retry()).toBe(false);
 
   await activate(retry()!);
   await show(page({ status: 'loading' }));
   await show(emptyRecoveryPage('unavailable'));
-  expect(document.activeElement).toBe(retry());
+  expect(document.activeElement === retry()).toBe(true);
 
   await activate(retry()!);
   await show(page({ status: 'loading' }));
   await show(emptyRecoveryPage('unavailable', 'Later'), { query: 'Later' });
-  expect(document.activeElement).not.toBe(retry());
+  expect(document.activeElement === retry()).toBe(false);
 });
 
 test('retired query, session and unmounted retries do not move focus', async () => {
@@ -185,13 +185,13 @@ test('retired query, session and unmounted retries do not move focus', async () 
   await activate(retry()!);
   await show(page({ status: 'loading' }), { session: 'one' });
   await show(page({ status: 'ready' }, readyDiscovery, 'Later'), { query: 'Later', session: 'one' });
-  expect(document.activeElement).not.toBe(region());
+  expect(document.activeElement === region()).toBe(false);
 
   await show(page({ status: 'unavailable' }), { session: 'one' });
   await activate(retry()!);
   await show(page({ status: 'loading' }), { session: 'one' });
   await show(page({ status: 'ready' }, readyDiscovery), { session: 'two' });
-  expect(document.activeElement).not.toBe(region());
+  expect(document.activeElement === region()).toBe(false);
 
   await show(page({ status: 'unavailable' }));
   await activate(retry()!);
@@ -208,14 +208,15 @@ test('a settled retry restores only the same owner while the reader stayed', () 
   const owner = { scope: JSON.stringify({ query: 'Mira', facets: {} }), locale: 'en', session: 'one' };
   const pending = { owner, source, moved: false, retrying: false };
   const args = { pending, current: owner, settled: true, active: source, retry: retryButton, region: results };
-  expect(searchRetryFocusTarget(args)).toBe(retryButton);
+  expect(searchRetryFocusTarget(args) === retryButton).toBe(true);
   expect(searchRetryFocusTarget({ ...args, current: { ...owner, locale: 'zh-Hans' } })).toBeNull();
   expect(searchRetryFocusTarget({ ...args, current: { ...owner, session: 'two' } })).toBeNull();
+  expect(searchRetryOwnerCurrent(owner, { ...owner, checkpoint: 'new-page' })).toBe(false);
   expect(searchRetryFocusTarget({ ...args, current: { ...owner, observation: {} } })).toBeNull();
   expect(searchRetryFocusTarget({ ...args, pending: { ...pending, moved: true } })).toBeNull();
   expect(searchRetryFocusTarget({ ...args, active: results })).toBeNull();
   retryButton.remove();
-  expect(searchRetryFocusTarget({ ...args, retry: retryButton })).toBe(results);
+  expect(searchRetryFocusTarget({ ...args, retry: retryButton }) === results).toBe(true);
   source.remove();
   results.remove();
 });

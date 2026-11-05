@@ -6,6 +6,7 @@ export type SearchRetryOwner = {
   scope: string;
   locale: string;
   session: string | null;
+  checkpoint?: string | undefined;
   observation?: object | undefined;
 };
 
@@ -14,6 +15,7 @@ export function searchRetryOwnerCurrent(pending: SearchRetryOwner, current: Sear
     pending.scope === current.scope &&
     pending.locale === current.locale &&
     pending.session === current.session &&
+    pending.checkpoint === current.checkpoint &&
     pending.observation === current.observation
   );
 }
@@ -82,7 +84,7 @@ export function useSearchRetryFocus(current: SearchRetryOwner, settled: boolean)
       request.retrying = true;
       return;
     }
-    if (request.owner.observation !== current.observation) {
+    if (!searchRetryOwnerCurrent(request.owner, current)) {
       if (!request.retrying) {
         clear();
         return;
@@ -109,7 +111,7 @@ export function useSearchRetryFocus(current: SearchRetryOwner, settled: boolean)
       clear();
       const document = source.ownerDocument;
       const request = {
-        owner: { scope: current.scope, locale: current.locale, session: current.session },
+        owner: { ...current },
         source,
         moved: false,
         retrying: false,
