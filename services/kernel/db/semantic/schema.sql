@@ -3415,6 +3415,39 @@ END $$;
 
 
 --
+-- Name: retain_public_filter_publication(); Type: FUNCTION; Schema: semantic; Owner: -
+--
+
+CREATE FUNCTION semantic.retain_public_filter_publication() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF OLD.publication_job IS NOT NULL THEN
+    IF TG_OP='DELETE' THEN
+      RAISE EXCEPTION 'Original Source publication requires native retirement' USING ERRCODE='23514';
+    END IF;
+    IF (NEW.publication_job,NEW.publication_observation,NEW.publication_execution,
+        NEW.bootstrap,NEW.read_definition,NEW.consumer,NEW.snapshot_kind,NEW.native_snapshot::text,
+        NEW.owner_epoch,NEW.source_position,NEW.coverage_generation,NEW.coverage_root,NEW.coverage_sealed)
+      IS DISTINCT FROM
+       (OLD.publication_job,OLD.publication_observation,OLD.publication_execution,
+        OLD.bootstrap,OLD.read_definition,OLD.consumer,OLD.snapshot_kind,OLD.native_snapshot::text,
+        OLD.owner_epoch,OLD.source_position,OLD.coverage_generation,OLD.coverage_root,OLD.coverage_sealed) THEN
+      RAISE EXCEPTION 'Original Source publication operands are immutable' USING ERRCODE='23514';
+    END IF;
+  END IF;
+  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+  IF NEW.publication_job IS NOT NULL AND
+    (NEW.snapshot_kind<>'prepared' OR NOT NEW.coverage_sealed
+      OR NEW.state NOT IN ('begun','adopted','aborting','aborted')
+      OR (NEW.queried IS NOT NULL AND NEW.queried<>NEW.publication_observation)) THEN
+    RAISE EXCEPTION 'Source publication requires its original prepared observation' USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END $$;
+
+
+--
 -- Name: retain_public_filter_repair_ack(); Type: FUNCTION; Schema: semantic; Owner: -
 --
 
@@ -7591,6 +7624,9 @@ CREATE TABLE semantic.public_filter_bootstrap (
     coverage_after integer DEFAULT 0 NOT NULL,
     coverage_root text,
     coverage_sealed boolean DEFAULT false NOT NULL,
+    publication_job uuid,
+    publication_observation text,
+    publication_execution text,
     CONSTRAINT public_filter_bootstrap_account_after_check CHECK (((account_after >= 0) AND (account_after <= 4096))),
     CONSTRAINT public_filter_bootstrap_complete_coverage CHECK (((NOT coverage_sealed) OR ((coverage_after = 4096) AND (coverage_generation IS NOT NULL) AND (coverage_root IS NOT NULL)))),
     CONSTRAINT public_filter_bootstrap_consumer_check CHECK ((octet_length(consumer) <= 16384)),
@@ -7598,6 +7634,7 @@ CREATE TABLE semantic.public_filter_bootstrap (
     CONSTRAINT public_filter_bootstrap_coverage_generation_check CHECK ((coverage_generation >= 0)),
     CONSTRAINT public_filter_bootstrap_coverage_root_check CHECK ((coverage_root ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT public_filter_bootstrap_owner_epoch_check CHECK ((owner_epoch > 0)),
+    CONSTRAINT public_filter_bootstrap_publication_tuple CHECK ((((publication_job IS NULL) AND (publication_observation IS NULL) AND (publication_execution IS NULL)) OR ((publication_job IS NOT NULL) AND (publication_observation IS NOT NULL) AND (publication_execution IS NOT NULL) AND ((octet_length(publication_observation) >= 1) AND (octet_length(publication_observation) <= 4096)) AND ((octet_length(publication_execution) >= 1) AND (octet_length(publication_execution) <= 4096))))),
     CONSTRAINT public_filter_bootstrap_snapshot_kind_check CHECK ((snapshot_kind = ANY (ARRAY['pit'::text, 'prepared'::text]))),
     CONSTRAINT public_filter_bootstrap_state_check CHECK ((state = ANY (ARRAY['capturing'::text, 'begun'::text, 'adopted'::text, 'aborting'::text, 'aborted'::text])))
 );
@@ -11988,6 +12025,13 @@ CREATE UNIQUE INDEX public_filter_bootstrap_capture ON semantic.public_filter_bo
 
 
 --
+-- Name: public_filter_bootstrap_publication_job; Type: INDEX; Schema: semantic; Owner: -
+--
+
+CREATE UNIQUE INDEX public_filter_bootstrap_publication_job ON semantic.public_filter_bootstrap USING btree (partition_no, publication_job) WHERE (publication_job IS NOT NULL);
+
+
+--
 -- Name: public_filter_key_enrollment_window; Type: INDEX; Schema: semantic; Owner: -
 --
 
@@ -14227,6 +14271,13 @@ CREATE CONSTRAINT TRIGGER provider_review_queue_capture AFTER INSERT OR UPDATE O
 --
 
 CREATE TRIGGER public_filter_bootstrap_baseline_seal BEFORE UPDATE ON semantic.public_filter_bootstrap FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_baseline_seal();
+
+
+--
+-- Name: public_filter_bootstrap public_filter_bootstrap_publication_immutable; Type: TRIGGER; Schema: semantic; Owner: -
+--
+
+CREATE TRIGGER public_filter_bootstrap_publication_immutable BEFORE DELETE OR UPDATE ON semantic.public_filter_bootstrap FOR EACH ROW EXECUTE FUNCTION semantic.retain_public_filter_publication();
 
 
 --
