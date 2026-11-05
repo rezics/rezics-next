@@ -245,6 +245,7 @@ const { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterC
 const { within, userEvent } = await import('storybook/test');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
+const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
 setLocale('en', { reload: false });
 const settle = async (action: () => void) =>
   act(async () => {
@@ -272,11 +273,25 @@ async function mount(initial = detail(), hydrate = false, observed = viewer(init
   cache.setQueryData(['session'], current);
   cache.setQueryData(['exposure', 'viewer'], ['reading_progress']);
   cache.setQueryData(['exposure', 'anonymous'], ['reading_progress']);
+  let operations = ['reading_progress'];
+  const lifetime = viewerExposureLifetime(cache);
+  const expose = () => {
+    const state = lifetime.getSnapshot();
+    if (state.state === 'signed-in')
+      cache.setQueryData(viewerExposureQuery(state.observation).queryKey, {
+        subject: state.observation.subject,
+        admitted: operations,
+      });
+  };
+  const releaseExposure = lifetime.subscribe(expose);
+  expose();
   const route = createRootRoute();
   let loaders = 0;
   const { Route } = await import('../src/routes/library/progress.$id');
   const routedDetail = Route.update({
     getParentRoute: () => route,
+    path: '/library/progress/$id',
+    id: '/library/progress/$id',
     beforeLoad: async () => {},
     loader: async () => {
       loaders++;
@@ -347,11 +362,14 @@ async function mount(initial = detail(), hydrate = false, observed = viewer(init
         current = options.session;
         request = requestFor('POST');
         cache.setQueryData(['session'], current);
+        expose();
       }
       if (options.page) loaded = options.page;
       if (options.address) at = options.address;
-      if (options.admitted !== undefined)
-        cache.setQueryData(['exposure', 'viewer'], options.admitted ? ['reading_progress'] : []);
+      if (options.admitted !== undefined) {
+        operations = options.admitted ? ['reading_progress'] : [];
+        expose();
+      }
       root.render(tree(options.visible ?? true));
     });
   const body = within(document.body);
@@ -409,6 +427,7 @@ async function mount(initial = detail(), hydrate = false, observed = viewer(init
     close: async () => {
       await settle(() => root.unmount());
       host.remove();
+      releaseExposure();
       cache.clear();
       read.mockRestore();
       navigate.mockRestore();
@@ -750,7 +769,7 @@ test('actual combined server export uses each reader preparation exactly once an
   expect(await actualDetail({ data: address })).toEqual({ state: 'refused', viewer: null, address });
   request = requestFor();
   preparations = [{ status: 'unavailable' }, { status: 'absent' }];
-  await expect(actualDetail({ data: address })).rejects.toMatchObject({ problem: { code: 'dependency_unavailable' } });
+  await expect(actualDetail({ data: address })).rejects.toMatchObject({ problem: { code: 'session_unavailable' } });
   preparations = [];
   readFailure = Response.json({ code: 'not_found' }, { status: 404 });
   await expect(actualDetail({ data: address })).rejects.toMatchObject({ isNotFound: true });
@@ -781,16 +800,17 @@ test('routed detail traverses independent native windows, retries an exact faile
       });
       await userEvent.setup({ document }).click(region(section).getByRole('link', { name: label, exact: true }));
     });
-  const admit = async (empty = false, restart?: 'changes' | 'units') => {
+  const admit = async (empty = false) => {
     const at = h.reads.at(-1)!.data;
-    const p = detail('A', at);
-    p.progress.session.changesNext = at.changes === 'third-changes' ? null : 'third-changes';
-    p.progress.session.unitsNext = at.units === 'third-units' ? null : 'third-units';
+    const p = detail('A', at, 8);
+    p.progress.session.changesNext =
+      at.changes === address.changes ? 'next-changes' : at.changes === 'next-changes' ? 'third-changes' : null;
+    p.progress.session.unitsNext =
+      at.units === address.units ? 'next-units' : at.units === 'next-units' ? 'third-units' : null;
     if (empty) {
       p.progress.session.changes = [];
       p.progress.session.units = [];
     }
-    if (restart) delete p.progress[restart === 'changes' ? 'changesCursor' : 'unitsCursor'];
     await h.resolveRead(p);
   };
   try {
@@ -847,16 +867,14 @@ test('a native section restart clears only its predecessors; replacement retires
   const h = await mount(detail(), false, viewer(), true);
   const more = async (section: 'changes' | 'units') =>
     act(async () =>
-      userEvent
-        .setup({ document })
-        .click(
-          within(
-            h.body.getByRole('region', {
-              name: section === 'changes' ? m.library_progress_changes() : m.library_progress_units(),
-              exact: true,
-            }),
-          ).getByRole('link', { name: m.library_progress_more() }),
-        ),
+      userEvent.setup({ document }).click(
+        within(
+          h.body.getByRole('region', {
+            name: section === 'changes' ? m.library_progress_changes() : m.library_progress_units(),
+            exact: true,
+          }),
+        ).getByRole('link', { name: m.library_progress_more() }),
+      ),
     );
   try {
     await more('units');
