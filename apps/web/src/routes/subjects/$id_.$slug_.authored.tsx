@@ -124,7 +124,7 @@ function AuthoredRoute(): ReactElement {
   const selectedVia = synopsis.kind === 'selected' ? via : undefined;
   const failureIdentity = JSON.stringify([id, locale, property, selectedVia, invalid, unsupported]);
   const failureHeading = useRef<HTMLHeadingElement>(null);
-  const focusedFailure = useRef<string>();
+  const focusedFailure = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!invalid && !unsupported) return;
     const target = failureHeading.current;
