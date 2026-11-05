@@ -36,7 +36,7 @@ const sectionOf = (choice: ArchiveReviewItem): RecoverySection => {
       return 'annotations';
     case 'journal':
       return 'journals';
-    case 'provenance':
+    case 'observation':
       return 'provenance';
   }
 };

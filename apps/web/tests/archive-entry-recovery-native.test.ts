@@ -241,12 +241,14 @@ test('Account, credential, CSRF, source, route, locale, admission, expiry and up
     replace(binding);
     expect(visit.state).toBeNull();
   }
-  const { visit, replace } = fixture();
-  const pending = visit.startPage();
-  replace({ ...binding, admission: 'admission-b' });
-  replace({ ...binding, admission: 'admission-a-after-b' });
-  expect(visit.admitPage(pending, page([]))).toBe(false);
-  expect(visit.state).toBeNull();
+  {
+    const { visit, replace } = fixture();
+    const pending = visit.startPage();
+    replace({ ...binding, admission: 'admission-b' });
+    replace({ ...binding, admission: 'admission-a-after-b' });
+    expect(visit.admitPage(pending, page([]))).toBe(false);
+    expect(visit.state).toBeNull();
+  }
   const { visit, expire } = fixture();
   const pending = visit.startPage();
   const replacement = visit.startUpload();
