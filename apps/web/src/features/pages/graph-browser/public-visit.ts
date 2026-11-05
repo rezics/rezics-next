@@ -203,11 +203,7 @@ export function parseGraphPublicVisit(
 
   const params = new URLSearchParams(search);
   const keys = [...params.keys()];
-  if (
-    keys.some((key) => !routeKeys.has(key)) ||
-    new Set(keys).size !== keys.length ||
-    !validSelectors(params)
-  )
+  if (keys.some((key) => !routeKeys.has(key)) || new Set(keys).size !== keys.length || !validSelectors(params))
     return { kind: 'invalid' };
 
   const rawOrigin = params.get('origin');

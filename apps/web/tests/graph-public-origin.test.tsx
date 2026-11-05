@@ -143,9 +143,8 @@ test('the production graph route gates unsupported origins and a fresh Global ch
   const { createRoot } = await import('react-dom/client');
   const { waitFor } = await import(createRequire(require.resolve('storybook/test')).resolve('@testing-library/dom'));
   const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-  const { Outlet, createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import(
-    '@tanstack/react-router'
-  );
+  const { Outlet, createMemoryHistory, createRootRoute, createRouter, RouterProvider } =
+    await import('@tanstack/react-router');
   const { setLocale } = await import('../src/paraglide/runtime');
   const { Route } = await import('../src/routes/subjects/$id_.$slug.graph');
   setLocale('en', { reload: false });
@@ -306,7 +305,14 @@ test('the graph route rejects conflicting, foreign, recursive and encoded-overfl
   expect(parse(href, otherSubject)).toEqual({ kind: 'invalid' });
   expect(parse(href, subject, 'ja')).toEqual({ kind: 'invalid' });
   expect(parseGraphPublicVisit(query, '', subject, 'en', path.replace('/en/', '/ja/'))).toEqual({ kind: 'invalid' });
-  expect(parse(graphPublicOriginHref(base, { ...observed, returnHref: `${publicReturn}?via=${encodeURIComponent(publicReturn)}` }))).toEqual({
+  expect(
+    parse(
+      graphPublicOriginHref(base, {
+        ...observed,
+        returnHref: `${publicReturn}?via=${encodeURIComponent(publicReturn)}`,
+      }),
+    ),
+  ).toEqual({
     kind: 'invalid',
   });
   expect(graphPublicIntentFits('界'.repeat(700))).toBe(false);

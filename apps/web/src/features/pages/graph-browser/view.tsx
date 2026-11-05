@@ -603,10 +603,7 @@ export function GraphBrowserPage({
         graphPath,
         {
           property: (routeTarget.property ?? '').split(',').filter(Boolean),
-          direction:
-            routeTarget.direction === 'out' || routeTarget.direction === 'in'
-              ? routeTarget.direction
-              : 'both',
+          direction: routeTarget.direction === 'out' || routeTarget.direction === 'in' ? routeTarget.direction : 'both',
           depth: routeTarget.depth === 2 ? 2 : 1,
         },
         requestedSelection(routeTarget),

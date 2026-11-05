@@ -1,10 +1,6 @@
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import { m } from '../../../paraglide/messages.js';
-import {
-  graphGlobalVisitHref,
-  graphPublicVisitUnsupported,
-  type GraphPublicVisit,
-} from './public-visit';
+import { graphGlobalVisitHref, graphPublicVisitUnsupported, type GraphPublicVisit } from './public-visit';
 
 export function GraphPublicVisitNotice({
   locale,

@@ -70,13 +70,7 @@ function GraphRoute() {
   const graphPath = graphPublicPath(location.pathname, locale);
   const visit = parseGraphPublicVisit(location.searchStr, location.hash, id, locale, graphPath);
   if (visit?.kind === 'invalid' || graphPublicVisitUnsupported(visit))
-    return (
-      <GraphPublicVisitNotice
-        locale={locale}
-        path={graphPath}
-        visit={visit ?? { kind: 'invalid' }}
-      />
-    );
+    return <GraphPublicVisitNotice locale={locale} path={graphPath} visit={visit ?? { kind: 'invalid' }} />;
   function updateGraphState(state: GraphBrowserRouteState) {
     return navigate({ search: (previous) => ({ ...previous, ...state }) });
   }
