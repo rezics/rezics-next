@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from '@tanstack/react-router';
-import { useId, useLayoutEffect, useRef, useSyncExternalStore, type MouseEvent } from 'react';
+import { useId, useLayoutEffect, useRef, useSyncExternalStore, type ComponentProps, type MouseEvent } from 'react';
 import { ContentItemHeading } from '@rezics/ui/content-item';
 import { buttonVariants } from '@rezics/ui/shadcn/button';
 import type { SubjectRead } from '@rezics/client';
@@ -72,6 +72,26 @@ function statementOf(read: SubjectRead, occurrence: ScreenCurrentOccurrence): St
     : undefined;
 }
 
+function ScreenPart({
+  part,
+  read,
+  locale,
+}: {
+  part: ComponentProps<typeof CandidateValue>['snak'];
+  read: SubjectRead;
+  locale: string;
+}) {
+  return (
+    <CandidateValue
+      snak={part}
+      related={read.related}
+      subject={read.subject.id}
+      documents={'documents' in read ? read.documents : undefined}
+      locale={locale}
+    />
+  );
+}
+
 function ScreenOccurrence({
   statement,
   property,
@@ -129,7 +149,7 @@ function ScreenOccurrence({
             return (
               <div key={`${part.property.id}:${index}`} className="min-w-0 space-y-1">
                 <dt lang={label.lang ?? undefined} className="text-sm text-muted-foreground">{label.text}</dt>
-            <dd><ScreenPart part={part} read={{ ok: true, release, public: read }} locale={locale} /></dd>
+                <dd><ScreenPart part={part} read={read} locale={locale} /></dd>
               </div>
             );
           })}
@@ -147,7 +167,7 @@ function ScreenOccurrence({
                   return (
                     <div key={`${part.property.id}:${index}`} className="min-w-0 space-y-1">
                       <dt lang={label.lang ?? undefined} className="text-sm text-muted-foreground">{label.text}</dt>
-                      <dd><ScreenPart part={part} read={{ ok: true, release, public: read }} locale={locale} /></dd>
+                      <dd><ScreenPart part={part} read={read} locale={locale} /></dd>
                     </div>
                   );
                 })}
