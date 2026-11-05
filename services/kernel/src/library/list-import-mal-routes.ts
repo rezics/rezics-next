@@ -103,17 +103,10 @@ export function malImportRoutes(
   },
 ) {
   const service = () => {
-    const access = deps.access(),
-      votes = createVoteCommands({
-        pool: deps.pool,
-        access,
-        ...(deps.clock === undefined ? {} : { clock: deps.clock }),
-      });
+    const access = deps.access();
     return createMalImport({
       ...deps,
       access,
-      readScoreQuestion: (actor, questionId) => votes.readRatingQuestion(actor, questionId),
-      readOwnScoreVote: (actor, questionId, targetId) => votes.readOwnVote(actor, questionId, targetId),
     });
   };
   async function safe<T>(body: () => Promise<T>): Promise<T> {
