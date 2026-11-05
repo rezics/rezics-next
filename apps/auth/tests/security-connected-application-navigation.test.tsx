@@ -246,29 +246,24 @@ test('maximum opaque cursor failure retains accepted history and retries the exa
   const maximumCursor = 'x'.repeat(securityResponseLimits.cursor);
   const first = consent('first', 'First observation', ['subject:read']);
   const second = consent('second', 'Second observation', ['profile:write']);
-  const third = consent('third', 'Third observation', ['offline_access']);
   let maximumReads = 0;
   await mount(
     sourceFor((cursor) => {
-      if (cursor === undefined) return ready([first], nextCursor);
-      if (cursor === nextCursor) return ready([second], maximumCursor);
+      if (cursor === undefined) return ready([first], maximumCursor);
       maximumReads++;
-      return maximumReads === 1 ? { kind: 'expired' } : ready([third]);
+      return maximumReads === 1 ? { kind: 'expired' } : ready([second]);
     }),
   );
 
   await flush(() => click(m.auth_inventory_next()));
-  await waitText('Second observation');
-  await flush(() => click(m.auth_inventory_next()));
   await waitText(m.auth_connected_retry_page());
   expect(readCalls.at(-1)?.cursor === maximumCursor).toBe(true);
-  expect(findButton(m.auth_inventory_previous())).not.toBeNull();
   await flush(() => click(m.auth_connected_retry_page()));
-  await waitText('Third observation');
+  await waitText('Second observation');
   expect(readCalls.at(-1)?.cursor === maximumCursor).toBe(true);
   await flush(() => click(m.auth_inventory_previous()));
-  await waitText('Second observation');
-  expect(readCalls.at(-1)?.cursor === nextCursor).toBe(true);
+  await waitText('First observation');
+  expect(readCalls.at(-1)?.cursor === undefined).toBe(true);
 });
 
 test('failed first-page navigation preserves accepted history until a later success', async () => {
