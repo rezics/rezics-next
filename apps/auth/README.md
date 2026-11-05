@@ -110,6 +110,17 @@ or a required preference write. Native/browser and integrated acceptance remain 
 
 ## Sign-in
 
+Decision: introduce the shared fixed-profile receiver before migrating installed sign-in callers and fixtures.
+`src/sign-in-transport.ts` receives the closed native options, SessionProof and error contracts defined under
+[Passkeys and credential freshness](../../services/auth/README.md#passkeys-and-credential-freshness).
+Each request has one five-second lifetime through fetch and streamed bounded body completion; cancellation and
+abort-ignoring transports settle at that same deadline. It preserves same-origin cookies, no-store and redirect
+rejection, and performs no retry or additional native read. Lost/malformed/excess replies remain unavailable;
+only a complete proof bound to the submitted profile and password/passkey method acknowledges authentication.
+Installed callers and their four-minute shared options cache still use the existing transport pending the
+continuation migration; these receiver tests alone establish neither installed return custody nor real-browser
+or native authenticator acceptance.
+
 The sign-in page first reads `POST /signin/page` with only its current route query; the entered email is never sent to
 this read. Auth returns the installed password and passkey methods, the current viewer from the existing native session
 authority, and a bounded same-origin continuation. A signed-in visitor sees the account's own email as a private label
