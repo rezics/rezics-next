@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { EditorialEntry } from '../src/features/catalogue/editorial-entry';
 import {
+  identifierInspectionHref,
   identifierOriginHref,
   identifierReviewHref,
   identifierRouteHref,
@@ -76,10 +77,15 @@ test('bounded visit parsing keeps candidate review separate and rejects malforme
   });
   expect(parseIdentifierCurrentVisit(`?originContext=${candidateContext}&originRealm=${realm}`)).toBeNull();
   expect(parseIdentifierCurrentVisit(`?originRealm=${realm}&originRealm=${realm}`)).toBeNull();
-  expect(
-    parseIdentifierCurrentVisit(
-      `?reviewProperty=schema%3Aisbn&candidate=${candidate}&inspectProperty=schema%3Aisbn&inspectStatement=${candidate}`,
-    ),
-  ).toBeNull();
+  const inspected = identifierInspectionHref(review, { property: 'schema:isbn', statement: candidate });
+  expect(parseIdentifierCurrentVisit(new URL(inspected, 'https://rezics.test').search)).toMatchObject({
+    initialReview: { property: 'schema:isbn', candidate },
+    initialInspection: { property: 'schema:isbn', statement: candidate },
+  });
+  expect(identifierReviewHref(inspected, 'schema:url', candidate)).not.toContain('inspectStatement');
+  expect(parseIdentifierCurrentVisit(`?inspectProperty=schema:isbn`)).toBeNull();
+  expect(parseIdentifierCurrentVisit(`?inspectProperty=schema:isbn&inspectStatement=${candidate}&inspectStatement=${candidate}`)).toBeNull();
+  expect(parseIdentifierCurrentVisit(`?${'界'.repeat(700)}`)).toBeNull();
+  expect(() => identifierInspectionHref(review, { property: '界'.repeat(256), statement: candidate })).toThrow(RangeError);
   expect(parseIdentifierCurrentVisit(`?originContext=${realmContext}&padding=${'x'.repeat(2048)}`)).toBeNull();
 });

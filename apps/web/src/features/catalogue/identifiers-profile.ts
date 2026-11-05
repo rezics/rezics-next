@@ -3,7 +3,7 @@ import { correctionProperty } from './statement-editor';
 import type { FactsCurrent } from './subject-facts';
 
 /** Effective native datatypes and code patterns, in Type order; never a provider inventory. */
-export function identifierProperties(release: Release, type: string): string[] {
+export function identifierProperties(release: Pick<Release, 'types' | 'properties'>, type: string): string[] {
   return (release.types[type]?.properties ?? []).filter((id) => {
     if (!correctionProperty(release, type, id)) return false;
     const property = release.properties[id]!;

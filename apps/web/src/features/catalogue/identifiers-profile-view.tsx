@@ -9,7 +9,7 @@ import type { EditorRead } from './statement-editor';
 import type { FactsTransport } from './subject-facts';
 import { SubjectFacts } from './subject-facts-view';
 import { identifierFields } from './identifiers-profile';
-import type { IdentifierVisitOrigin } from './identifier-current-visit';
+import type { IdentifierInspection, IdentifierVisitOrigin } from './identifier-current-visit';
 import { identifierOriginHref, identifierReviewHref } from './identifier-current-visit';
 import { candidateContext } from '../../subject/candidates';
 import { subjectHref } from '../../subject/subject-href';
@@ -22,6 +22,8 @@ export type IdentifiersProfileProps = {
   review: (property: string, session?: string) => CandidateTransport;
   initialReview?: { property: string; candidate: string } | undefined;
   origin?: IdentifierVisitOrigin | undefined;
+  initialInspection?: IdentifierInspection | undefined;
+  onReviewIntent?: (() => void) | undefined;
   editorHref?: string | undefined;
   originHref?: string | undefined;
   globalHref?: string | undefined;
@@ -37,6 +39,7 @@ function IdentifiersProfileLive({
   transport,
   review,
   initialReview,
+  onReviewIntent,
   origin,
   editorHref,
   originHref,
@@ -101,6 +104,7 @@ function IdentifiersProfileLive({
             initialReview={initialReview}
             profile={{
               properties: identifierFields,
+              onReviewIntent,
               title: m.identifiers_title({}, o),
               intro: m.identifiers_intro({}, o),
               empty: m.identifiers_empty({}, o),

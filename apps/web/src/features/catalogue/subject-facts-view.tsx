@@ -88,6 +88,7 @@ export type FactsProfile = {
   publicHref?: string | undefined;
   /** Optional review address projection for profiles with a bounded visit origin. */
   reviewHref?: ((property: string, candidate: string) => string) | undefined;
+  onReviewIntent?: (() => void) | undefined;
 };
 export { FactField };
 function ExactReview({
@@ -1054,7 +1055,10 @@ function SubjectFactsLive({
                         onChange={change}
                         onDiscard={discard}
                         onReview={(address) => {
-                          if (lifetime.active()) setReviewing(address);
+                          if (lifetime.active()) {
+                            profile?.onReviewIntent?.();
+                            setReviewing(address);
+                          }
                         }}
                         onReuse={(index) => {
                           if (!lifetime.active() || !editable()) return;

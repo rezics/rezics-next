@@ -2,7 +2,7 @@ import { candidateContext } from '../../subject/candidates';
 import { keepSearch, subjectHref, type SubjectHrefInput } from '../../subject/subject-href';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const allowed = new Set(['originContext', 'originRealm', 'reviewProperty', 'candidate']);
+const allowed = new Set(['originContext', 'originRealm', 'reviewProperty', 'candidate', 'inspectProperty', 'inspectStatement']);
 
 export type IdentifierVisitOrigin = {
   context?: string;
@@ -12,9 +12,12 @@ export type IdentifierVisitOrigin = {
   kind: 'global' | 'realm' | 'unsupported';
 };
 
+export type IdentifierInspection = { property: string; statement: string };
+
 export type IdentifierCurrentVisit = {
   origin?: IdentifierVisitOrigin;
   initialReview?: { property: string; candidate: string };
+  initialInspection?: IdentifierInspection;
 };
 
 export type IdentifierVisitSelection = {
@@ -45,6 +48,15 @@ export function parseIdentifierCurrentVisit(search: string): IdentifierCurrentVi
   )
     return null;
 
+  const inspectProperty = params.get('inspectProperty') ?? undefined;
+  const inspectStatement = params.get('inspectStatement') ?? undefined;
+  if (
+    (inspectProperty !== undefined &&
+      (!inspectProperty.trim() || inspectProperty.length > 256 || /[\u0000-\u001f\u007f]/u.test(inspectProperty))) ||
+    (inspectStatement !== undefined && !uuid.test(inspectStatement)) ||
+    (inspectProperty === undefined) !== (inspectStatement === undefined)
+  ) return null;
+
   const hasOrigin = context !== undefined || realm !== undefined;
   const origin: IdentifierVisitOrigin | undefined = hasOrigin
     ? {
@@ -55,6 +67,7 @@ export function parseIdentifierCurrentVisit(search: string): IdentifierCurrentVi
     : undefined;
   return {
     ...(origin ? { origin } : {}),
+    ...(inspectProperty && inspectStatement ? { initialInspection: { property: inspectProperty, statement: inspectStatement } } : {}),
     ...(reviewProperty && candidate ? { initialReview: { property: reviewProperty, candidate } } : {}),
   };
 }
@@ -81,13 +94,21 @@ export function identifierRouteHref(
   locale: string,
   id: string,
   slug: string,
-  visit: Pick<IdentifierCurrentVisit, 'origin'>,
+  visit: IdentifierCurrentVisit,
 ) {
   const base = `/${encodeURIComponent(locale)}/subjects/${encodeURIComponent(id)}/${slug}/identifiers`;
   const params = new URLSearchParams();
   if (visit.origin?.context) params.set('originContext', visit.origin.context);
   if (visit.origin?.realm) params.set('originRealm', visit.origin.realm);
-  const query = params.toString();
+  if (visit.initialReview) {
+    params.set('reviewProperty', visit.initialReview.property);
+    params.set('candidate', visit.initialReview.candidate);
+  }
+  if (visit.initialInspection) {
+    params.set('inspectProperty', visit.initialInspection.property);
+    params.set('inspectStatement', visit.initialInspection.statement);
+  }
+  const query = boundedIdentifierQuery(params);
   return query ? keepSearch(base, query) : base;
 }
 
@@ -102,7 +123,25 @@ export function identifierReviewHref(editorHref: string, property: string, candi
   const [pathAndSearch, hash = ''] = editorHref.split('#', 2);
   const [path, search = ''] = pathAndSearch!.split('?', 2);
   const params = new URLSearchParams(search);
+  params.delete('inspectProperty');
+  params.delete('inspectStatement');
   params.set('reviewProperty', property);
   params.set('candidate', candidate);
-  return keepSearch(path!, params.toString(), hash);
+  return keepSearch(path!, boundedIdentifierQuery(params), hash);
+}
+
+/** One exact occurrence, never a value lookup; preserve the independent review pair and origin. */
+export function identifierInspectionHref(editorHref: string, inspection: IdentifierInspection) {
+  const url = new URL(editorHref, 'https://rezics.invalid');
+  url.searchParams.set('inspectProperty', inspection.property);
+  url.searchParams.set('inspectStatement', inspection.statement);
+  const query = boundedIdentifierQuery(url.searchParams);
+  return keepSearch(url.pathname, query, url.hash);
+}
+
+function boundedIdentifierQuery(params: URLSearchParams): string {
+  const query = params.toString();
+  if (query.length > 2048 || new TextEncoder().encode(query).byteLength > 2048)
+    throw new RangeError('Identifier visit search exceeds 2,048 characters or bytes');
+  return query;
 }
