@@ -58,7 +58,7 @@ admission/publication and refuse unsupported coverage. Adopted evidence:
 [reviewed identity atomic boundary](../../../../docs/research/merge-reviewed-identity-atomic-boundary.md).
 
 Optional expectedIdentity.endpoints is a strict pair bound to subjects BEFORE sorting/hashing. Endpoint has
-subject UUID, positive safe all-kind revision, positive decimal securityRevision, source bangumi/vndb,
+subject UUID, positive safe all-kind revision, positive decimal securityRevision, source bangumi/vndb or their exact bangumi_cross_media/vndb_cross_media claim aliases,
 externalId, claimTransactionId UUID, property and value. Bangumi person:N maps to wdt:P6298=N; VNDB sN to
 wdt:P3180=sN, using canonical positive numbers. externalId/value each spend at most 255 UTF-8 bytes;
 expectation spends at most 4096 bytes. Same/cross-provider pairs are legal. Evidence fixes Person/Global,
