@@ -10,6 +10,7 @@ import { CollectionMemberOccurrenceDetails } from '../src/library/collection-mem
 
 mock.module('@tanstack/react-start', () => start);
 mock.module('@tanstack/react-start/server', () => ({
+  ...start,
   getRequest: () => new Request('https://site.test/en/collections/mixed'),
   setResponseHeader() {},
   setResponseStatus() {},
