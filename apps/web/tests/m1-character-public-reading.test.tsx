@@ -3,12 +3,56 @@ import { act, createElement } from 'react';
 import { createRequire } from 'node:module';
 import { fromPlainText, serializeDocument } from '@rezics/document';
 import { createHash } from 'node:crypto';
+import type { KernelClient } from '@rezics/client';
 import * as start from '../.storybook/react-start';
 import { peopleFactsExample } from '../src/features/catalogue/people-facts/examples';
+import definitions from '../../../packages/definitions/release/rezics.json';
+import type { GuideRelease } from '../src/features/catalogue/definition-guide';
 
 mock.module('cloudflare:workers', () => ({ env: {} }));
 mock.module('@tanstack/react-start', () => start);
 const { CharacterReader } = await import('../src/features/pages/showcase-people/character');
+
+test('the Character voice stream uses the released P453 slot key and keeps P725 target as performer', async () => {
+  const { connectionStreams, readConnectionStream } = await import('../src/features/pages/subject-connections');
+  const id = '01a1a7f2-b438-779d-be96-aa19ca250569';
+  const release = definitions as unknown as GuideRelease;
+  const stream = connectionStreams(release, 'wd:Q95074', id, 'en').find((item) => item.property === 'wdt:P725');
+  expect(stream).toMatchObject({
+    key: 'in:wdt:P725:qualified',
+    direction: 'in',
+    group: 'credits',
+    filter: id,
+    qualifier: 'wdt:P453',
+  });
+  const requests: unknown[] = [];
+  const client = {
+    subjects: () => ({
+      links: {
+        get: async (options: unknown) => {
+          requests.push(options);
+          return {
+            status: 200,
+            data: { links: [], next: null, freshness: { consistency: 'eventual', target_seconds: 10, caught_up: true } },
+          };
+        },
+      },
+    }),
+  } as unknown as KernelClient;
+  const result = await readConnectionStream(
+    client,
+    { id, locale: 'en' },
+    stream!,
+    undefined,
+    undefined,
+    undefined,
+    { calls: 0, values: 0, bytes: 0 },
+  );
+  expect(result.ok).toBe(true);
+  expect(requests[0]).toMatchObject({
+    query: { property: 'wdt:P725', filter: id, qualifier: 'wdt:P453', limit: 12 },
+  });
+});
 
 test('the mounted Character profile uses exact native documents and withholds mismatched or unavailable bodies', async () => {
   const fixture = peopleFactsExample(true);

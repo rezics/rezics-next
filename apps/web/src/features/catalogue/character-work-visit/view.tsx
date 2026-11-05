@@ -7,7 +7,7 @@ import type { ConnectionSection } from '../../pages/subject-connections';
 import type { ConnectionReturnWindow } from '../../pages/subject-visit-navigation';
 import { connectionReturnHref, withSubjectVisitReturn } from '../../pages/subject-visit-navigation';
 import { valueExplanationHref } from '../value-explanation';
-import { type Snak } from '../../pages/shared';
+import { isRecord, type Snak } from '../../pages/shared';
 import { relationTargetHref } from '../../pages/edition-work';
 import { characterWorkRows, type CharacterWorkKind, type CharacterWorkRow } from './model';
 
@@ -29,6 +29,8 @@ export function CharacterWorkRows({
   const rows = characterWorkRows(current, value.subject!, value.locale, value.reader.spoilerLevel);
   const o = { locale: value.locale as never };
   const raw = current.section.ok ? current.section.body.links : undefined;
+  const freshness = current.section.ok && isRecord(current.section.body) ? current.section.body.freshness : undefined;
+  const partial = isRecord(freshness) && freshness.caught_up === false;
   return (
     <div className="min-w-0 space-y-6" data-slot="character-work-visit">
       {rows.map((row, index) => (
@@ -42,6 +44,7 @@ export function CharacterWorkRows({
         />
       ))}
       {Array.isArray(raw) && raw.length > rows.length && <p role="status">{m.character_work_unavailable({}, o)}</p>}
+      {partial && <p role="status">{m.character_work_unavailable({}, o)}</p>}
     </div>
   );
 }

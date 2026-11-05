@@ -41,7 +41,7 @@ const stream = (voice = false): ConnectionStream => ({
   label: voice ? 'Voice performances' : 'Work appearances',
   forwardLabel: voice ? 'Voice actor' : 'Character',
   language: 'en',
-  ...(voice ? { filter: id(1) } : {}),
+  ...(voice ? { filter: id(1), qualifier: 'wdt:P453' } : {}),
 });
 function row(n = 10, voice = false) {
   return {
