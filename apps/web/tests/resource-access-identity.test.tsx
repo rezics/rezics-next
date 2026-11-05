@@ -283,7 +283,7 @@ test('unavailable reload and current grant/permission retirement remove stale id
   await show(<ResourceAccessPage initial={{ status: 'unavailable' }} io={io} />);
   const canvas = within(host);
   expect(canvas.getByRole('alert').textContent).toBe(m.access_unavailable());
-  await act(async () => user.click(canvas.getByRole('button', { name: m.access_reload() })));
+  await act(async () => user.click(canvas.getByRole('button', { name: m.access_retry_page() })));
   await act(async () => finish!(current));
   await selectTransfer();
   expect(canvas.getByRole('heading', { name: m.access_transfer_owner() })).toBeTruthy();
