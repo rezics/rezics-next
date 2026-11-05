@@ -5,7 +5,7 @@ import { openDb } from './db.ts';
 import { completedUtcHour, renderHourlyEfficiencyReport, sendHourlyEfficiencyReport } from './efficiency-report.ts';
 import { recordFlow } from './flow.ts';
 import { SqliteLandingQueue } from './land.ts';
-import { WorkerStore } from './store.ts';
+import { WorkerStore, workerRecordEndedAtExpression } from './store.ts';
 import { temporaryDirectory } from './test-support.ts';
 
 function fixture() {
@@ -103,10 +103,51 @@ test('hourly report uses timestamped outcomes and leaves missing lifecycle evide
     expect(report).toContain('Last useful landing: unknown');
     expect(report).toContain('Current waits: unknown (current task state unavailable).');
     expect(report).toContain('Promotion: unknown (promotion state unavailable).');
+    expect(report).toContain('Guard endings in bucket: unknown (attempt history unavailable).');
     expect(report).toContain('Recorded usage: unknown (attempt history unavailable)');
   } finally {
     db.close();
     empty.close();
+  }
+});
+
+test('guard endings use the record timestamp and an indexed bucket despite growing history', async () => {
+  const h = fixture();
+  const bucket = '2026-10-31T01:00:00.000Z';
+  const end = '2026-10-31T02:00:00.000Z';
+  try {
+    task(h.db, 'guarded', 'stopped', 'fixture');
+    const record = h.db.query('INSERT INTO worker_records(task_id,attempt,body) VALUES (?,?,?)');
+    h.db.query('INSERT INTO worker_attempts(task_id,attempt,body) VALUES (?,?,?)').run(
+      'guarded',
+      1,
+      JSON.stringify({ taskId: 'guarded', attempt: 1, endedAt: end }),
+    );
+    record.run(
+      'guarded',
+      1,
+      JSON.stringify({ taskId: 'guarded', attempt: 1, endedAt: '2026-10-31T01:30:00.000Z', guardIds: ['environment'] }),
+    );
+    const before = await renderHourlyEfficiencyReport(h.db, { bucket });
+    for (let attempt = 2; attempt < 1002; attempt++)
+      record.run('guarded', attempt, JSON.stringify({ endedAt: '2020-01-01T00:00:00.000Z', guardIds: ['new-failure'] }));
+    record.run('guarded', 1002, 'not json');
+    record.run('guarded', 1003, JSON.stringify({ endedAt: 'invalid', guardIds: ['question'] }));
+    record.run('guarded', 1004, JSON.stringify({ endedAt: '2026-10-31T01:45:00.000Z' }));
+    const after = await renderHourlyEfficiencyReport(h.db, { bucket });
+    const plan = h.db
+      .query(
+        `EXPLAIN QUERY PLAN SELECT body FROM worker_records INDEXED BY worker_records_ended_at
+         WHERE ${workerRecordEndedAtExpression} >= ? AND ${workerRecordEndedAtExpression} < ?`,
+      )
+      .all(bucket, end) as { detail: string }[];
+    expect(after).toBe(before);
+    expect(after).toContain('Guard endings in bucket: environment 1.');
+    expect(plan.map(({ detail }) => detail).join(' ')).toContain(
+      'SEARCH worker_records USING INDEX worker_records_ended_at',
+    );
+  } finally {
+    h.close();
   }
 });
 
