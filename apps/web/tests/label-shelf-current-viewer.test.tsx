@@ -769,7 +769,7 @@ test('The actual named-label Library renders private FULL assignments and remove
 
     hold = null;
     const replacementLabel = id(805);
-    const replacementSearch = new URLSearchParams(secondSearch);
+    const replacementSearch = new URLSearchParams(new URL(nextMore.href).searchParams);
     replacementSearch.set('label', replacementLabel);
     await act(async () => {
       await navigate(replacementSearch);
