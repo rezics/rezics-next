@@ -225,8 +225,8 @@ test('mounted menu and production relation route gate unsupported origins before
     expect(getLocale()).toBe('en');
     await renderMenu();
     await act(async () => user.click(within(host).getByRole('button', { name: m.contribute_title() })));
-    await act(async () => user.hover(within(host).getByText(m.contribute_edit())));
-    const menuRelation = await waitFor(() => within(host).getByRole('menuitem', { name: m.relation_title() }));
+    await act(async () => user.hover(within(window.document.body).getByText(m.contribute_edit())));
+    const menuRelation = await waitFor(() => within(window.document.body).getByRole('menuitem', { name: m.relation_title() }));
     expect(menuRelation.getAttribute('href')).toBe(originHref);
     await navigate(menuRelation.getAttribute('href')!);
     await waitFor(() => expect(host.textContent).toContain('Subject heading'));

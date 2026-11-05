@@ -20,7 +20,6 @@ import { viewTabLabels } from '../src/features/pages/route-support';
 import { catalogueSourcesFixture, sourceDefinitions } from '../src/kernel/fake/catalogue-sources';
 import { readSubjectSources } from '../src/features/catalogue/subject-sources';
 import { SubjectSourcesPage } from '../src/features/catalogue/subject-sources-page';
-import { parseRelationPublicVisit } from '../src/features/catalogue/relation-public-visit';
 
 const address = { id: '00000000-0000-4000-8000-00000000c001', label: 'A / multilingual title', locale: 'en' };
 const context = '00000000-0000-4000-8000-00000000c002';
@@ -68,30 +67,13 @@ test('caller availability and unrelated native actions survive grouping without 
   expect(catalogueEntries.recipe({ locale: 'en' }).href).toBe('/en/catalogue/recipe');
 });
 
-test('review preserves the actual selected Context; relation origin retains its admitted Realm and return', () => {
-  const realm = '00000000-0000-4000-8000-00000000c003';
-  const extra = subjectContributionEntries({ ...address, context, realm });
-  expect(extra.slice(1).map(({ href }) => href)).toEqual([
+test('review preserves the actual selected Context; relations preserve Realm; Sources and Changes remain ordinary readers', () => {
+  const extra = subjectContributionEntries({ ...address, context, realm: 'example-realm' });
+  expect(extra.map(({ href }) => href)).toEqual([
+    `${base}/relation-edit?realm=example-realm`,
     `${base}/context-review?context=${context}`,
     `${base}/sources`,
   ]);
-  expect(
-    parseRelationPublicVisit(
-      new URL(extra[0]!.href, 'https://site.test').search,
-      address.id,
-      address.locale,
-      `${base}/relation-edit`,
-    ),
-  ).toEqual({
-    kind: 'origin',
-    origin: {
-      subject: address.id,
-      context,
-      realm,
-      locale: address.locale,
-      returnHref: `${base}?realm=${realm}#connections`,
-    },
-  });
   const menu = contributionMenu([...collectEditorialEntries(children).entries, ...extra], 'en', false);
   expect(menu.map((group) => group.type === 'submenu' && group.entries.length)).toEqual([2, 5, 1, 2]);
   expect(subjectContributionEntries(address).some((entry) => entry.group === 'review')).toBe(false);
