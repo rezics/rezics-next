@@ -49,17 +49,6 @@ export function sameNotifications(a: NotificationPreferences, b: NotificationPre
   return Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([key, value]) => b[key] === value);
 }
 
-function intentSince(
-  before: NotificationPatch | undefined,
-  after: NotificationPatch | undefined,
-): NotificationPatch | undefined {
-  if (after === undefined || (after === null && before === null)) return undefined;
-  if (after === null) return null;
-  const previous = before !== undefined && before !== null ? before : {};
-  const later = Object.fromEntries(Object.entries(after).filter(([kind, enabled]) => previous[kind] !== enabled));
-  return Object.keys(later).length ? later : undefined;
-}
-
 export function admittedOptionalKind(page: PreferencePage, kind: string): boolean {
   return page.kinds.some((entry) => entry.kind === kind && entry.optional);
 }
@@ -124,10 +113,13 @@ export class NotificationEditor {
   private state: NotificationEditorState;
   private listeners = new Set<() => void>();
   private versionFloor = 0;
+  // Deliberate edits after dispatch survive even when toggled back to the submitted value.
+  private laterIntent: NotificationPatch | undefined;
   private disposed = false;
   dispose = () => {
     if (this.disposed) return;
     this.disposed = true;
+    this.laterIntent = undefined;
     this.state = {
       known: { notifications: {}, version: 0, page: { version: 0, kinds: [], actions: [] } },
       currentAdvice: null,
@@ -201,6 +193,7 @@ export class NotificationEditor {
   private adoptPage(page: PreferencePage, preserveDraft: boolean, phase: NotificationEditorState['phase']) {
     const known = snapshotFrom(page);
     const intent = preserveDraft ? this.state.intent : undefined;
+    this.laterIntent = undefined;
     const draft = projectOptionalIntent(known, intent);
     const edited = intent !== undefined || !sameNotifications(draft, known.notifications);
     this.confirm(known);
@@ -237,7 +230,8 @@ export class NotificationEditor {
   }
   private reviewConfirmed(page: PreferencePage, confirmation: ConfirmedReceipt) {
     const known = snapshotFrom(page);
-    const laterIntent = intentSince(confirmation.attempt.intent, this.state.intent);
+    const laterIntent = this.laterIntent;
+    this.laterIntent = undefined;
     const intent = laterIntent;
     const draft = projectOptionalIntent(known, laterIntent);
     const newer = known.version > confirmation.receipt.version;
@@ -270,6 +264,7 @@ export class NotificationEditor {
       ['conflict', 'review', 'reloading'].includes(this.state.phase) ||
       (this.state.readOrigin !== null && this.state.phase === 'failed');
     if (!local && (!preferencePageAllows(page, 'edit') || this.waitingForCommand())) return;
+    if (this.state.pending || this.state.confirmedReceipt) this.laterIntent = { ...this.laterIntent, [kind]: enabled };
     this.update({
       draft: { ...this.state.draft, [kind]: enabled },
       intent: { ...this.state.intent, [kind]: enabled },
@@ -285,6 +280,11 @@ export class NotificationEditor {
     if (intent === undefined || intent === null || !(kind in intent)) return;
     const next = { ...intent };
     delete next[kind];
+    if (this.laterIntent) {
+      const later = { ...this.laterIntent };
+      delete later[kind];
+      this.laterIntent = Object.keys(later).length ? later : undefined;
+    }
     const intentNext: NotificationPatch | undefined = Object.keys(next).length ? next : undefined;
     const draft = projectOptionalIntent(this.state.known, intentNext);
     const edited = intentNext !== undefined || !sameNotifications(draft, this.state.known.notifications);
@@ -355,6 +355,7 @@ export class NotificationEditor {
         : this.state.intent === undefined
           ? undefined
           : Object.freeze({ ...this.state.intent });
+    this.laterIntent = undefined;
     this.update({
       pending: Object.freeze({ input, draft: Object.freeze({ ...this.state.draft }), intent }),
       phase: 'saving',
@@ -430,9 +431,9 @@ export class NotificationEditor {
     }
     const receipt = snapshotFrom(result.page);
     if (!recovering) {
-      const edited = !sameNotifications(this.state.draft, attempt.draft);
       const stale = receipt.version < this.minimumVersion();
-      const laterIntent = intentSince(attempt.intent, this.state.intent);
+      const laterIntent = this.laterIntent;
+      this.laterIntent = undefined;
       // This command is confirmed, but a later shared version makes its values historical.
       this.confirm(receipt);
       const draft = projectOptionalIntent(receipt, laterIntent);
@@ -440,7 +441,7 @@ export class NotificationEditor {
         pending: null,
         draft,
         intent: laterIntent,
-        phase: stale ? 'conflict' : edited ? 'review' : 'saved',
+        phase: stale ? 'conflict' : laterIntent !== undefined ? 'review' : 'saved',
         readOrigin: null,
         readReason: undefined,
         readFailure: undefined,

@@ -5,7 +5,7 @@ import { Field, FieldContent, FieldTitle } from '@rezics/ui/shadcn/field';
 import { Switch } from '@rezics/ui/shadcn/switch';
 import { m } from '../paraglide/messages.js';
 import { ProfileFeedback } from './profile';
-import { profileChanges, profilePatchAdmitted } from './profile-data';
+import { profileChanges, profilePatchAdmitted, profileFieldAdmitted } from './profile-data';
 import type { ProfileEditor } from './profile-write';
 import { useProfileEditor } from './profile-write-query';
 import { usePreferenceRetry } from './preference-failure-retry';
@@ -40,8 +40,6 @@ export function PublicViewsCard({
         })
       : {};
   const changed = Object.keys(viewsPatch).length > 0;
-  const admitted = (field: 'publicViews' | 'speakersListed') =>
-    state.editing === undefined || (!!state.editing && field in state.editing.fields);
   const canSubmitPatch = changed && profilePatchAdmitted(viewsPatch, state.editing);
   return (
     <Card>
@@ -72,7 +70,7 @@ export function PublicViewsCard({
                   <Switch
                     id={`${ids}-${view}`}
                     checked={profile.publicViews[view]}
-                    disabled={closed || busy || !admitted('publicViews')}
+                    disabled={closed || busy || !profileFieldAdmitted('publicViews', state.editing, view)}
                     onCheckedChange={(checked) => {
                       editor.edit({ publicViews: { ...profile.publicViews, [view]: checked } });
                     }}
@@ -89,7 +87,7 @@ export function PublicViewsCard({
                   <Switch
                     id={`${ids}-speakers`}
                     checked={profile.speakersListed === true}
-                    disabled={closed || busy || !admitted('speakersListed')}
+                    disabled={closed || busy || !profileFieldAdmitted('speakersListed', state.editing)}
                     onCheckedChange={(checked) => {
                       editor.edit({ speakersListed: checked });
                     }}
