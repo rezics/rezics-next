@@ -75,6 +75,7 @@ mock.module('@tanstack/react-start/server', () => ({
   getRequest: () => currentRequest,
   setResponseHeader: (name: string, value: string) => headers.set(name, value),
 }));
+const { viewerExposureLifetime, viewerExposureQuery } = await import('../src/kernel/viewer-exposure');
 const reads = await import('../src/checkout/creator-statements');
 const { m } = await import('../src/paraglide/messages.js');
 const { setLocale } = await import('../src/paraglide/runtime.js');
@@ -365,7 +366,22 @@ test('mounted actual routes keep only current viewer/address data across hydrati
           client.setQueryData(['session'], session);
           cachedSession = { ...session };
         }
-        client.setQueryData(['exposure', 'viewer'], admitted ? ['selling'] : []);
+        const observation = viewerExposureLifetime(client).getSnapshot();
+        if (observation.state === 'signed-in') {
+          const options = viewerExposureQuery(observation.observation);
+          const value = {
+            subject: observation.observation.subject,
+            admitted: admitted ? ['selling'] : [],
+          };
+          const current = client.getQueryData<typeof value>(options.queryKey);
+          if (
+            !current ||
+            current.subject !== value.subject ||
+            current.admitted.length !== value.admitted.length ||
+            current.admitted.some((group, index) => group !== value.admitted[index])
+          )
+            client.setQueryData(options.queryKey, value);
+        }
         client.setQueryData(['exposure', 'anonymous'], []);
         setLocale(locale, { reload: false });
         root?.render(tree());
